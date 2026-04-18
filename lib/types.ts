@@ -10,11 +10,6 @@ export interface Equipment {
   iso_photo_url: string | null
   placard_url: string | null
   signed_placard_url: string | null
-  energy_tag: string | null
-  iso_description: string | null
-  iso_procedure: string | null
-  lockout_device: string | null
-  verification_method: string | null
   notes: string | null
   verified: boolean
   verified_date: string | null
