@@ -9,6 +9,7 @@ import EquipmentTable from '@/components/EquipmentTable'
 import ReviewModal from '@/components/ReviewModal'
 import { Button } from '@/components/ui/button'
 import { useReviews } from '@/hooks/useReviews'
+import { stampSignature, downloadPdf } from '@/lib/pdfUtils'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
@@ -18,9 +19,10 @@ export default function DepartmentDetailPage() {
   const params = useParams()
   const dept   = decodeURIComponent(params.dept as string)
 
-  const [equipment, setEquipment] = useState<Equipment[]>([])
-  const [loading, setLoading]     = useState(true)
-  const [showModal, setShowModal] = useState(false)
+  const [equipment, setEquipment]   = useState<Equipment[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [showModal, setShowModal]   = useState(false)
+  const [signing, setSigning]       = useState(false)
 
   const { reviews, fetchReviews, submitReview } = useReviews(dept)
 
@@ -35,6 +37,43 @@ export default function DepartmentDetailPage() {
       })
     fetchReviews()
   }, [dept, fetchReviews])
+
+  async function handleApproved(signatureDataUrl: string, reviewerName: string, signedAt: string) {
+    const targets = equipment.filter(e => e.placard_url)
+    if (!targets.length) return
+    setSigning(true)
+    try {
+      for (const eq of targets) {
+        try {
+          const bytes       = await stampSignature(eq.placard_url!, signatureDataUrl, reviewerName, signedAt)
+          const storagePath = `signed-placards/${eq.equipment_id}_${Date.now()}.pdf`
+          const { error: upErr } = await supabase.storage
+            .from('loto-photos')
+            .upload(storagePath, bytes, { contentType: 'application/pdf', upsert: true })
+          if (!upErr) {
+            const { data: { publicUrl } } = supabase.storage.from('loto-photos').getPublicUrl(storagePath)
+            await supabase.from('loto_equipment')
+              .update({ signed_placard_url: publicUrl })
+              .eq('equipment_id', eq.equipment_id)
+          }
+        } catch { /* skip individual failures */ }
+      }
+      // Refresh equipment list to pick up signed_placard_url
+      const { data } = await supabase.from('loto_equipment').select('*').eq('department', dept)
+      if (data) setEquipment(data as Equipment[])
+
+      // Download merged signed PDF for the reviewer
+      const { mergePdfs } = await import('@/lib/pdfUtils')
+      const { data: fresh } = await supabase.from('loto_equipment').select('*').eq('department', dept)
+      const urls = (fresh as Equipment[] ?? targets).map(e => e.signed_placard_url ?? e.placard_url).filter(Boolean) as string[]
+      if (urls.length) {
+        const merged = await mergePdfs(urls)
+        downloadPdf(merged, `${dept}-signed-placards.pdf`)
+      }
+    } finally {
+      setSigning(false)
+    }
+  }
 
   const complete = equipment.filter(e => e.photo_status === 'complete').length
   const pct      = equipment.length > 0 ? Math.round((complete / equipment.length) * 100) : 0
@@ -70,8 +109,12 @@ export default function DepartmentDetailPage() {
               <p className="text-[11px] text-slate-400">{formatDate(latest.created_at)}</p>
             </div>
           )}
-          <Button onClick={() => setShowModal(true)} className="bg-brand-navy hover:bg-brand-navy/90 text-white text-sm font-semibold">
-            ✍ Sign Off
+          <Button
+            onClick={() => setShowModal(true)}
+            disabled={signing}
+            className="bg-brand-navy hover:bg-brand-navy/90 text-white text-sm font-semibold disabled:opacity-50"
+          >
+            {signing ? 'Signing…' : '✍ Sign Off'}
           </Button>
         </div>
       </div>
@@ -116,6 +159,7 @@ export default function DepartmentDetailPage() {
           department={dept}
           onSubmit={submitReview}
           onClose={() => setShowModal(false)}
+          onApproved={handleApproved}
         />
       )}
     </div>

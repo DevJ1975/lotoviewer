@@ -13,6 +13,7 @@ function makeEquipment(overrides: Partial<Equipment> = {}): Equipment {
     photo_status: 'complete', has_equip_photo: true, has_iso_photo: false,
     equip_photo_url: null, iso_photo_url: null,
     placard_url: 'https://example.com/placard-001.pdf',
+    signed_placard_url: null,
     notes: null, verified: false, ...overrides,
   }
 }
@@ -70,7 +71,7 @@ describe('PrintQueuePage', () => {
     render(<PrintQueuePage />)
     await waitFor(() => screen.getByText('Print Queue'))
     expect(screen.getByRole('button', { name: /Print Selected/ })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /Download All/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Download Selected/ })).toBeDisabled()
   })
 
   describe('selection', () => {

@@ -12,9 +12,10 @@ interface Props {
     approved: boolean
   }) => Promise<{ error: unknown }>
   onClose: () => void
+  onApproved?: (signatureDataUrl: string, reviewerName: string, signedAt: string) => void
 }
 
-export default function ReviewModal({ department, onSubmit, onClose }: Props) {
+export default function ReviewModal({ department, onSubmit, onClose, onApproved }: Props) {
   const [name, setName]         = useState('')
   const [email, setEmail]       = useState('')
   const [notes, setNotes]       = useState('')
@@ -46,11 +47,15 @@ export default function ReviewModal({ department, onSubmit, onClose }: Props) {
     if (err) {
       setError((err as Error)?.message ?? 'Submission failed. Please try again.')
     } else {
+      if (approved && onApproved) {
+        const signedAt = new Date().toISOString()
+        onApproved(sigRef.current?.toDataURL() ?? '', name.trim(), signedAt)
+      }
       setDone(true)
       setTimeout(onClose, 1800)
     }
     setSubmitting(false)
-  }, [name, email, notes, approved, sigEmpty, onSubmit, onClose])
+  }, [name, email, notes, approved, sigEmpty, onSubmit, onClose, onApproved])
 
   const canSubmit = name.trim().length > 0 && !sigEmpty && !submitting
 

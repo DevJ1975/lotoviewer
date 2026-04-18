@@ -9,6 +9,7 @@ export interface Equipment {
   equip_photo_url: string | null
   iso_photo_url: string | null
   placard_url: string | null
+  signed_placard_url: string | null
   notes: string | null
   verified: boolean
   verified_date: string | null

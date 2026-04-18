@@ -3,8 +3,9 @@
 import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
 
 export interface SignaturePadRef {
-  isEmpty: () => boolean
-  clear: () => void
+  isEmpty:    () => boolean
+  clear:      () => void
+  toDataURL:  () => string
 }
 
 interface Props {
@@ -95,7 +96,8 @@ const SignaturePad = forwardRef<SignaturePadRef, Props>(function SignaturePad({ 
   }, [onMouseDown, onMouseMove, onMouseUp, onTouchStart, onTouchMove])
 
   useImperativeHandle(ref, () => ({
-    isEmpty: () => !hasDrawn.current,
+    isEmpty:   () => !hasDrawn.current,
+    toDataURL: () => canvasRef.current?.toDataURL('image/png') ?? '',
     clear: () => {
       const canvas = canvasRef.current; if (!canvas) return
       canvas.getContext('2d')!.clearRect(0, 0, canvas.width, canvas.height)
