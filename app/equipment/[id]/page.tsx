@@ -11,23 +11,21 @@ import { useToast } from '@/hooks/useToast'
 import type { Equipment } from '@/lib/types'
 
 export default function EquipmentDetailPage() {
-  const { id }      = useParams<{ id: string }>()
+  const { id }       = useParams<{ id: string }>()
   const searchParams = useSearchParams()
   const router       = useRouter()
   const equipmentId  = decodeURIComponent(id)
+  const fromUrl      = searchParams.get('from') ?? '/'
 
-  const prevId  = searchParams.get('prev')
-  const nextId  = searchParams.get('next')
-  const fromUrl = searchParams.get('from') ?? '/'
+  const [equipment, setEquipment]   = useState<Equipment | null>(null)
+  const [loading, setLoading]       = useState(true)
+  const [notFound, setNotFound]     = useState(false)
+  const [prevId, setPrevId]         = useState<string | null>(null)
+  const [nextId, setNextId]         = useState<string | null>(null)
 
   function navTo(targetId: string) {
-    const params = new URLSearchParams(searchParams.toString())
-    router.push(`/equipment/${encodeURIComponent(targetId)}?${params.toString()}`)
+    router.push(`/equipment/${encodeURIComponent(targetId)}?from=${encodeURIComponent(fromUrl)}`)
   }
-
-  const [equipment, setEquipment] = useState<Equipment | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [notFound, setNotFound] = useState(false)
 
   const [description, setDescription]   = useState('')
   const [notes, setNotes]               = useState('')
@@ -45,11 +43,29 @@ export default function EquipmentDetailPage() {
 
     if (error || !data) {
       setNotFound(true)
-    } else {
-      setEquipment(data as Equipment)
-      setDescription(data.description ?? '')
-      setNotes(data.notes ?? '')
+      setLoading(false)
+      return
     }
+
+    const eq = data as Equipment
+    setEquipment(eq)
+    setDescription(eq.description ?? '')
+    setNotes(eq.notes ?? '')
+
+    // Fetch the full ordered list for this department to compute prev/next
+    const { data: siblings } = await supabase
+      .from('loto_equipment')
+      .select('equipment_id')
+      .eq('department', eq.department)
+      .order('equipment_id', { ascending: true })
+
+    if (siblings) {
+      const ids = siblings.map((r: { equipment_id: string }) => r.equipment_id)
+      const idx = ids.indexOf(equipmentId)
+      setPrevId(idx > 0 ? ids[idx - 1] : null)
+      setNextId(idx < ids.length - 1 ? ids[idx + 1] : null)
+    }
+
     setLoading(false)
   }, [equipmentId])
 

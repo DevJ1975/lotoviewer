@@ -163,15 +163,9 @@ export default function EquipmentTable({ equipment }: Props) {
                 </TableCell>
               </TableRow>
             ) : (
-              pagedRows.map((eq, i) => {
-                const globalIdx = (page - 1) * PAGE_SIZE + i
-                const prev = filtered[globalIdx - 1]?.equipment_id
-                const next = filtered[globalIdx + 1]?.equipment_id
-                const params = new URLSearchParams()
-                if (prev) params.set('prev', prev)
-                if (next) params.set('next', next)
-                params.set('from', `/departments/${encodeURIComponent(eq.department)}`)
-                const href = `/equipment/${encodeURIComponent(eq.equipment_id)}?${params.toString()}`
+              pagedRows.map(eq => {
+                const from = `/departments/${encodeURIComponent(eq.department)}`
+                const href = `/equipment/${encodeURIComponent(eq.equipment_id)}?from=${encodeURIComponent(from)}`
                 return (
                   <TableRow key={eq.equipment_id} className="hover:bg-slate-50">
                     <TableCell className="font-mono text-sm font-medium">
