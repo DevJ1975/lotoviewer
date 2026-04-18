@@ -18,7 +18,9 @@ const MAX_FILE_BYTES = 10_000_000 // 10 MB
 export default function PhotoUploadZone({ equipmentId, type, label, existingUrl, onSuccess }: Props) {
   const { upload, status, url, errorMsg, reset } = usePhotoUpload(equipmentId, type)
   const { online } = useNetworkStatus()
-  const [dragOver, setDragOver] = useState(false)
+  const [dragOver, setDragOver]         = useState(false)
+  const [validating, setValidating]     = useState(false)
+  const [validationError, setValidationError] = useState<string | null>(null)
   const browseRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
 
@@ -27,10 +29,10 @@ export default function PhotoUploadZone({ equipmentId, type, label, existingUrl,
   }, [status, url, onSuccess])
 
   const displayUrl = url ?? existingUrl
-  const isBusy     = status === 'compressing' || status === 'uploading'
+  const isBusy     = validating || status === 'compressing' || status === 'uploading'
   const isBlocked  = !online || isBusy
 
-  function handleFile(file: File) {
+  async function handleFile(file: File) {
     if (!online) return
     if (!file.type.match(/^image\/(jpeg|png)$/)) {
       alert('Only JPEG and PNG files are accepted.')
@@ -40,6 +42,25 @@ export default function PhotoUploadZone({ equipmentId, type, label, existingUrl,
       alert('File must be under 10 MB.')
       return
     }
+
+    setValidating(true)
+    setValidationError(null)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('type', type)
+      const res  = await fetch('/api/validate-photo', { method: 'POST', body: fd })
+      const json = await res.json() as { valid?: boolean; reason?: string; error?: string }
+      if (!json.valid) {
+        setValidationError(json.reason ?? 'Photo does not appear to show the correct subject.')
+        return
+      }
+    } catch {
+      // If validation call fails (e.g. offline mid-check), allow upload to proceed
+    } finally {
+      setValidating(false)
+    }
+
     upload(file)
   }
 
@@ -97,7 +118,7 @@ export default function PhotoUploadZone({ equipmentId, type, label, existingUrl,
             </div>
           )}
 
-          {(status === 'idle' || status === 'success') && online && (
+          {(status === 'idle' || status === 'success') && online && !validating && !validationError && (
             <>
               <p className="text-sm font-medium text-slate-600 mb-3">Drop photo here or:</p>
               <div className="flex gap-2">
@@ -120,10 +141,25 @@ export default function PhotoUploadZone({ equipmentId, type, label, existingUrl,
             </>
           )}
 
+          {validating                && <Spinner label="Checking photo…" />}
           {status === 'compressing' && <Spinner label="Compressing…" />}
           {status === 'uploading'   && <Spinner label="Uploading…" />}
 
-          {status === 'error' && (
+          {validationError && (
+            <div className="text-center px-6">
+              <p className="text-rose-500 text-sm font-medium mb-1">Photo rejected</p>
+              <p className="text-xs text-slate-400 mb-3">{validationError}</p>
+              <button
+                type="button"
+                onClick={() => setValidationError(null)}
+                className="text-xs text-brand-navy font-semibold hover:underline"
+              >
+                Try a different photo
+              </button>
+            </div>
+          )}
+
+          {status === 'error' && !validationError && (
             <div className="text-center px-6">
               <p className="text-rose-500 text-sm font-medium mb-1">Upload failed</p>
               <p className="text-xs text-slate-400 mb-3">{errorMsg}</p>
