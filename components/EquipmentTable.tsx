@@ -163,41 +163,48 @@ export default function EquipmentTable({ equipment }: Props) {
                 </TableCell>
               </TableRow>
             ) : (
-              pagedRows.map(eq => (
-                <TableRow key={eq.equipment_id} className="hover:bg-slate-50">
-                  <TableCell className="font-mono text-sm font-medium">
-                    <Link
-                      href={`/equipment/${encodeURIComponent(eq.equipment_id)}`}
-                      className="text-brand-navy hover:underline"
-                    >
-                      {eq.equipment_id}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-sm">{eq.description}</TableCell>
-                  <TableCell><StatusBadge status={eq.photo_status} /></TableCell>
-                  <TableCell>
-                    <span className="text-xs text-gray-500">
-                      {[eq.has_equip_photo && 'Equipment', eq.has_iso_photo && 'ISO']
-                        .filter(Boolean)
-                        .join(', ') || '—'}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {eq.placard_url ? (
-                      <a
-                        href={eq.placard_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline text-sm"
-                      >
-                        View PDF
-                      </a>
-                    ) : (
-                      <span className="text-gray-300 text-sm">—</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))
+              pagedRows.map((eq, i) => {
+                const globalIdx = (page - 1) * PAGE_SIZE + i
+                const prev = filtered[globalIdx - 1]?.equipment_id
+                const next = filtered[globalIdx + 1]?.equipment_id
+                const params = new URLSearchParams()
+                if (prev) params.set('prev', prev)
+                if (next) params.set('next', next)
+                params.set('from', `/departments/${encodeURIComponent(eq.department)}`)
+                const href = `/equipment/${encodeURIComponent(eq.equipment_id)}?${params.toString()}`
+                return (
+                  <TableRow key={eq.equipment_id} className="hover:bg-slate-50">
+                    <TableCell className="font-mono text-sm font-medium">
+                      <Link href={href} className="text-brand-navy hover:underline">
+                        {eq.equipment_id}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-sm">{eq.description}</TableCell>
+                    <TableCell><StatusBadge status={eq.photo_status} /></TableCell>
+                    <TableCell>
+                      <span className="text-xs text-gray-500">
+                        {[eq.has_equip_photo && 'Equipment', eq.has_iso_photo && 'ISO']
+                          .filter(Boolean)
+                          .join(', ') || '—'}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {eq.placard_url ? (
+                        <a
+                          href={eq.placard_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline text-sm"
+                        >
+                          View PDF
+                        </a>
+                      ) : (
+                        <span className="text-gray-300 text-sm">—</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )
+              })
             )}
           </TableBody>
         </Table>

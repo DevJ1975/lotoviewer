@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import StatusBadge from '@/components/StatusBadge'
@@ -11,8 +11,19 @@ import { useToast } from '@/hooks/useToast'
 import type { Equipment } from '@/lib/types'
 
 export default function EquipmentDetailPage() {
-  const { id } = useParams<{ id: string }>()
-  const equipmentId = decodeURIComponent(id)
+  const { id }      = useParams<{ id: string }>()
+  const searchParams = useSearchParams()
+  const router       = useRouter()
+  const equipmentId  = decodeURIComponent(id)
+
+  const prevId  = searchParams.get('prev')
+  const nextId  = searchParams.get('next')
+  const fromUrl = searchParams.get('from') ?? '/'
+
+  function navTo(targetId: string) {
+    const params = new URLSearchParams(searchParams.toString())
+    router.push(`/equipment/${encodeURIComponent(targetId)}?${params.toString()}`)
+  }
 
   const [equipment, setEquipment] = useState<Equipment | null>(null)
   const [loading, setLoading] = useState(true)
@@ -87,14 +98,37 @@ export default function EquipmentDetailPage() {
 
   return (
     <div className="space-y-8 max-w-4xl">
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-sm text-slate-400">
-        <Link href="/" className="hover:text-slate-600 transition-colors">Dashboard</Link>
-        <span>/</span>
-        <Link href={`/departments/${encodeURIComponent(equipment.department)}`} className="hover:text-slate-600 transition-colors">{equipment.department}</Link>
-        <span>/</span>
-        <span className="text-slate-700 font-medium font-mono">{equipmentId}</span>
-      </nav>
+      {/* Breadcrumb + prev/next nav */}
+      <div className="flex items-center justify-between gap-4">
+        <nav className="flex items-center gap-2 text-sm text-slate-400">
+          <Link href="/" className="hover:text-slate-600 transition-colors">Dashboard</Link>
+          <span>/</span>
+          <Link href={fromUrl} className="hover:text-slate-600 transition-colors">{equipment.department}</Link>
+          <span>/</span>
+          <span className="text-slate-700 font-medium font-mono">{equipmentId}</span>
+        </nav>
+
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => prevId && navTo(prevId)}
+            disabled={!prevId}
+            title={prevId ? `Previous: ${prevId}` : 'No previous'}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            ← {prevId ?? ''}
+          </button>
+          <button
+            type="button"
+            onClick={() => nextId && navTo(nextId)}
+            disabled={!nextId}
+            title={nextId ? `Next: ${nextId}` : 'No next'}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            {nextId ?? ''} →
+          </button>
+        </div>
+      </div>
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start gap-4">
