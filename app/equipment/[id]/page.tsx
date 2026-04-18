@@ -130,7 +130,7 @@ export default function EquipmentDetailPage() {
             onClick={() => prevId && navTo(prevId)}
             disabled={!prevId}
             title={prevId ? `Previous: ${prevId}` : 'No previous'}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-emerald-600 bg-emerald-600 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             ← {prevId ?? ''}
           </button>
@@ -139,7 +139,7 @@ export default function EquipmentDetailPage() {
             onClick={() => nextId && navTo(nextId)}
             disabled={!nextId}
             title={nextId ? `Next: ${nextId}` : 'No next'}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-emerald-600 bg-emerald-600 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             {nextId ?? ''} →
           </button>
