@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from 'next'
 import { Inter, Geist_Mono } from 'next/font/google'
 import Link from 'next/link'
 import GlobalSearch from '@/components/GlobalSearch'
-import OfflineBanner from '@/components/OfflineBanner'
 import { UploadQueueProvider } from '@/components/UploadQueueProvider'
 import { SessionProvider } from '@/components/SessionProvider'
 import './globals.css'
@@ -59,7 +58,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
           </div>
         </header>
-        <OfflineBanner />
         <main>
           {children}
         </main>
