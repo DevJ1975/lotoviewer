@@ -62,6 +62,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main>
           {children}
         </main>
+        <footer className="bg-white border-t border-slate-200 py-3 text-center text-xs text-slate-500">
+          Developed by Jamil Jones · Copyright 2026
+        </footer>
         </UploadQueueProvider>
         </SessionProvider>
       </body>

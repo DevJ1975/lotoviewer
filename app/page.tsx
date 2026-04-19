@@ -13,7 +13,7 @@ import { useSession } from '@/components/SessionProvider'
 export default function HomePage() {
   return (
     <Suspense fallback={
-      <div className="flex items-center justify-center h-[calc(100vh-3.5rem)]">
+      <div className="flex items-center justify-center h-[calc(100vh-6rem)]">
         <div className="w-10 h-10 border-4 border-brand-navy border-t-transparent rounded-full animate-spin" />
       </div>
     }>
@@ -82,7 +82,7 @@ function HomeDashboard() {
 
   if (loadError) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-3.5rem)]">
+      <div className="flex items-center justify-center h-[calc(100vh-6rem)]">
         <div className="text-center px-6 max-w-sm">
           <div className="w-14 h-14 rounded-full bg-rose-100 flex items-center justify-center text-2xl mx-auto mb-3">⚠</div>
           <p className="text-sm font-semibold text-slate-700 mb-1">Could not load equipment</p>
@@ -101,14 +101,14 @@ function HomeDashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-3.5rem)]">
+      <div className="flex items-center justify-center h-[calc(100vh-6rem)]">
         <div className="w-10 h-10 border-4 border-brand-navy border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col lg:flex-row h-[calc(100vh-3.5rem)]">
+    <div className="flex flex-col lg:flex-row h-[calc(100vh-6rem)]">
       <DashboardSidebar
         equipment={equipment}
         selectedDept={selectedDept}
