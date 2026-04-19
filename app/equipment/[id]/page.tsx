@@ -168,9 +168,7 @@ function EquipmentDetail() {
       <PlacardDetailsSheet
         open={detailsOpen}
         onClose={() => setDetailsOpen(false)}
-        equipmentId={equipmentId}
-        description={equipment.description}
-        notes={equipment.notes ?? ''}
+        equipment={equipment}
         onSaved={(description, notes) => setEquipment(prev => prev ? { ...prev, description, notes: notes || null } : prev)}
         onToast={showToast}
       />
@@ -178,7 +176,7 @@ function EquipmentDetail() {
       <EditStepsSheet
         open={stepsOpen}
         onClose={() => setStepsOpen(false)}
-        equipmentId={equipmentId}
+        equipment={equipment}
         steps={steps}
         onSaved={setSteps}
         onToast={showToast}

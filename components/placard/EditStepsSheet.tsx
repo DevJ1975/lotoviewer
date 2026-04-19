@@ -4,18 +4,21 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { energyCodeFor } from '@/lib/energyCodes'
 import { Sheet } from '@/components/ui/sheet'
-import type { LotoEnergyStep } from '@/lib/types'
+import AiAssistButton from '@/components/AiAssistButton'
+import type { Equipment, LotoEnergyStep } from '@/lib/types'
 
 interface Props {
   open:         boolean
   onClose:      () => void
-  equipmentId:  string
+  equipment:    Equipment
   steps:        LotoEnergyStep[]
   onSaved:      (updated: LotoEnergyStep[]) => void
   onToast:      (msg: string, kind: 'success' | 'error') => void
 }
 
-export default function EditStepsSheet({ open, onClose, equipmentId, steps, onSaved, onToast }: Props) {
+export default function EditStepsSheet({ open, onClose, equipment, steps, onSaved, onToast }: Props) {
+  const equipmentId = equipment.equipment_id
+  const aiContext = { equipment_id: equipment.equipment_id, description: equipment.description, department: equipment.department }
   const [draft, setDraft]   = useState<LotoEnergyStep[]>(steps)
   const [saving, setSaving] = useState(false)
 
@@ -85,9 +88,63 @@ export default function EditStepsSheet({ open, onClose, equipmentId, steps, onSa
                   <span className="text-sm font-semibold text-slate-700">Step {step.step_number}</span>
                 </div>
 
-                <FieldArea label="Tag & Description" value={step.tag_description ?? ''} onChange={v => patch(step.id, { tag_description: v })} rows={2} />
-                <FieldArea label="Isolation Procedure & Lockout Devices" value={step.isolation_procedure ?? ''} onChange={v => patch(step.id, { isolation_procedure: v })} rows={3} />
-                <FieldArea label="Method of Verification" value={step.method_of_verification ?? ''} onChange={v => patch(step.id, { method_of_verification: v })} rows={2} />
+                <FieldArea
+                  label="Tag & Description"
+                  value={step.tag_description ?? ''}
+                  onChange={v => patch(step.id, { tag_description: v })}
+                  rows={2}
+                  ai={
+                    <AiAssistButton
+                      field="tag_description"
+                      currentValue={step.tag_description ?? ''}
+                      equipment={aiContext}
+                      context={{ energy_type: step.energy_type, step_number: step.step_number }}
+                      onAccept={v => patch(step.id, { tag_description: v })}
+                      onError={m => onToast(m, 'error')}
+                    />
+                  }
+                />
+                <FieldArea
+                  label="Isolation Procedure & Lockout Devices"
+                  value={step.isolation_procedure ?? ''}
+                  onChange={v => patch(step.id, { isolation_procedure: v })}
+                  rows={3}
+                  ai={
+                    <AiAssistButton
+                      field="isolation_procedure"
+                      currentValue={step.isolation_procedure ?? ''}
+                      equipment={aiContext}
+                      context={{
+                        energy_type: step.energy_type,
+                        step_number: step.step_number,
+                        tag_description: step.tag_description ?? undefined,
+                      }}
+                      onAccept={v => patch(step.id, { isolation_procedure: v })}
+                      onError={m => onToast(m, 'error')}
+                    />
+                  }
+                />
+                <FieldArea
+                  label="Method of Verification"
+                  value={step.method_of_verification ?? ''}
+                  onChange={v => patch(step.id, { method_of_verification: v })}
+                  rows={2}
+                  ai={
+                    <AiAssistButton
+                      field="method_of_verification"
+                      currentValue={step.method_of_verification ?? ''}
+                      equipment={aiContext}
+                      context={{
+                        energy_type: step.energy_type,
+                        step_number: step.step_number,
+                        tag_description: step.tag_description ?? undefined,
+                        isolation_procedure: step.isolation_procedure ?? undefined,
+                      }}
+                      onAccept={v => patch(step.id, { method_of_verification: v })}
+                      onError={m => onToast(m, 'error')}
+                    />
+                  }
+                />
               </div>
             )
           })}
@@ -116,10 +173,16 @@ export default function EditStepsSheet({ open, onClose, equipmentId, steps, onSa
   )
 }
 
-function FieldArea({ label, value, onChange, rows }: { label: string; value: string; onChange: (v: string) => void; rows: number }) {
+function FieldArea({
+  label, value, onChange, rows, ai,
+}: {
+  label: string; value: string; onChange: (v: string) => void; rows: number; ai?: React.ReactNode;
+}) {
   return (
     <div className="space-y-1.5">
-      <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{label}</label>
+      <div className="flex items-center justify-between">
+        <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{label}</label>
+      </div>
       <textarea
         rows={rows}
         value={value}
@@ -127,6 +190,7 @@ function FieldArea({ label, value, onChange, rows }: { label: string; value: str
         aria-label={label}
         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
       />
+      {ai}
     </div>
   )
 }
