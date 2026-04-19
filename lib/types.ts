@@ -11,6 +11,8 @@ export interface Equipment {
   placard_url: string | null
   signed_placard_url: string | null
   notes: string | null
+  notes_es: string | null
+  spanish_reviewed: boolean
   verified: boolean
   verified_date: string | null
   verified_by: string | null
@@ -19,6 +21,19 @@ export interface Equipment {
   needs_verification: boolean
   created_at: string | null
   updated_at: string | null
+}
+
+export interface LotoEnergyStep {
+  id: string
+  equipment_id: string
+  energy_type: string
+  step_number: number
+  tag_description: string | null
+  isolation_procedure: string | null
+  method_of_verification: string | null
+  tag_description_es: string | null
+  isolation_procedure_es: string | null
+  method_of_verification_es: string | null
 }
 
 export interface LotoReview {

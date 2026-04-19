@@ -7,8 +7,12 @@ import { supabase } from '@/lib/supabase'
 import StatusBadge from '@/components/StatusBadge'
 import PhotoUploadZone from '@/components/PhotoUploadZone'
 import Toast from '@/components/Toast'
+import EnergyStepsSection from '@/components/EnergyStepsSection'
+import SpanishTranslationSheet from '@/components/SpanishTranslationSheet'
 import { useToast } from '@/hooks/useToast'
-import type { Equipment } from '@/lib/types'
+import type { Equipment, LotoEnergyStep } from '@/lib/types'
+import { generatePlacardPdf } from '@/lib/pdfPlacard'
+import { downloadPdf } from '@/lib/pdfUtils'
 
 export default function EquipmentDetailPage() {
   const { id }       = useParams<{ id: string }>()
@@ -17,22 +21,26 @@ export default function EquipmentDetailPage() {
   const equipmentId  = decodeURIComponent(id)
   const fromUrl      = searchParams.get('from') ?? '/'
 
-  const [equipment, setEquipment]   = useState<Equipment | null>(null)
-  const [loading, setLoading]       = useState(true)
-  const [notFound, setNotFound]     = useState(false)
-  const [prevId, setPrevId]         = useState<string | null>(null)
-  const [nextId, setNextId]         = useState<string | null>(null)
-
-  function navTo(targetId: string) {
-    router.push(`/equipment/${encodeURIComponent(targetId)}?from=${encodeURIComponent(fromUrl)}`)
-  }
+  const [equipment, setEquipment]       = useState<Equipment | null>(null)
+  const [steps, setSteps]               = useState<LotoEnergyStep[]>([])
+  const [loading, setLoading]           = useState(true)
+  const [notFound, setNotFound]         = useState(false)
+  const [prevId, setPrevId]             = useState<string | null>(null)
+  const [nextId, setNextId]             = useState<string | null>(null)
 
   const [description, setDescription]   = useState('')
   const [notes, setNotes]               = useState('')
   const [saving, setSaving]             = useState(false)
   const [dirty, setDirty]               = useState(false)
 
+  const [spanishOpen, setSpanishOpen]   = useState(false)
+  const [generating, setGenerating]     = useState(false)
+
   const { toast, showToast, clearToast } = useToast()
+
+  function navTo(targetId: string) {
+    router.push(`/equipment/${encodeURIComponent(targetId)}?from=${encodeURIComponent(fromUrl)}`)
+  }
 
   const load = useCallback(async () => {
     const { data, error } = await supabase
@@ -52,13 +60,21 @@ export default function EquipmentDetailPage() {
     setDescription(eq.description ?? '')
     setNotes(eq.notes ?? '')
 
-    // Fetch the full ordered list for this department to compute prev/next
+    // Energy steps
+    const { data: stepRows } = await supabase
+      .from('loto_energy_steps')
+      .select('*')
+      .eq('equipment_id', equipmentId)
+      .order('energy_type', { ascending: true })
+      .order('step_number', { ascending: true })
+    if (stepRows) setSteps(stepRows as LotoEnergyStep[])
+
+    // Prev/next within department
     const { data: siblings } = await supabase
       .from('loto_equipment')
       .select('equipment_id')
       .eq('department', eq.department)
       .order('equipment_id', { ascending: true })
-
     if (siblings) {
       const ids = siblings.map((r: { equipment_id: string }) => r.equipment_id)
       const idx = ids.indexOf(equipmentId)
@@ -71,7 +87,6 @@ export default function EquipmentDetailPage() {
 
   useEffect(() => { load() }, [load])
 
-  // Track edits
   useEffect(() => {
     if (!equipment) return
     setDirty(description !== equipment.description || notes !== (equipment.notes ?? ''))
@@ -95,12 +110,51 @@ export default function EquipmentDetailPage() {
     setSaving(false)
   }
 
+  function handleSpanishSaved(notesEs: string, reviewed: boolean, updatedSteps: LotoEnergyStep[]) {
+    setSteps(updatedSteps)
+    setEquipment(prev => prev ? { ...prev, notes_es: notesEs, spanish_reviewed: reviewed } : prev)
+  }
+
+  async function handleGeneratePlacard() {
+    if (!equipment) return
+    setGenerating(true)
+    try {
+      const bytes = await generatePlacardPdf({ equipment, steps })
+
+      // Download locally
+      downloadPdf(bytes, `${equipment.equipment_id}_placard.pdf`)
+
+      // Upload to Supabase storage (path uses equipment_id — encoded by storage SDK)
+      const storagePath = `${equipment.equipment_id}/${equipment.equipment_id}_placard.pdf`
+      const { error: upErr } = await supabase.storage
+        .from('loto-photos')
+        .upload(storagePath, bytes, { contentType: 'application/pdf', upsert: true })
+      if (upErr) {
+        showToast(`Placard downloaded. Upload failed: ${upErr.message}`, 'error')
+        return
+      }
+
+      const { data: { publicUrl } } = supabase.storage.from('loto-photos').getPublicUrl(storagePath)
+      const { error: patchErr } = await supabase
+        .from('loto_equipment')
+        .update({ placard_url: publicUrl, updated_at: new Date().toISOString() })
+        .eq('equipment_id', equipment.equipment_id)
+
+      if (patchErr) {
+        showToast(`Placard saved but URL update failed: ${patchErr.message}`, 'error')
+      } else {
+        setEquipment(prev => prev ? { ...prev, placard_url: publicUrl } : prev)
+        showToast('Placard generated and saved.', 'success')
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Placard generation failed.', 'error')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-48 text-slate-400 text-sm">
-        Loading…
-      </div>
-    )
+    return <div className="flex items-center justify-center h-48 text-slate-400 text-sm">Loading…</div>
   }
 
   if (notFound || !equipment) {
@@ -113,7 +167,7 @@ export default function EquipmentDetailPage() {
   }
 
   return (
-    <div className="space-y-8 max-w-4xl">
+    <div className="space-y-8 max-w-5xl">
       {/* Breadcrumb + prev/next nav */}
       <div className="flex items-center justify-between gap-4">
         <nav className="flex items-center gap-2 text-sm text-slate-400">
@@ -155,16 +209,33 @@ export default function EquipmentDetailPage() {
           </div>
           <p className="text-sm text-slate-500">{equipment.department}</p>
         </div>
-        {equipment.placard_url && (
-          <a
-            href={equipment.placard_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-navy border border-brand-navy/30 rounded-lg px-3 py-2 hover:bg-brand-navy/5 transition-colors whitespace-nowrap"
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setSpanishOpen(true)}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold border border-slate-200 rounded-lg px-3 py-2 hover:bg-slate-50 transition-colors whitespace-nowrap"
           >
-            📄 View Placard PDF
-          </a>
-        )}
+            Español {equipment.spanish_reviewed && <span className="text-emerald-600">✓</span>}
+          </button>
+          <button
+            type="button"
+            onClick={handleGeneratePlacard}
+            disabled={generating}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold bg-brand-navy text-white rounded-lg px-3 py-2 hover:bg-brand-navy/90 disabled:opacity-50 transition-colors whitespace-nowrap"
+          >
+            {generating ? 'Generating…' : '📄 Generate Placard'}
+          </button>
+          {equipment.placard_url && (
+            <a
+              href={equipment.placard_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-navy border border-brand-navy/30 rounded-lg px-3 py-2 hover:bg-brand-navy/5 transition-colors whitespace-nowrap"
+            >
+              View Placard
+            </a>
+          )}
+        </div>
       </div>
 
       {/* Editable fields */}
@@ -206,6 +277,7 @@ export default function EquipmentDetailPage() {
             )}
           </div>
           <button
+            type="button"
             onClick={handleSave}
             disabled={!dirty || saving}
             className="px-4 py-2 rounded-lg bg-brand-navy text-white text-sm font-semibold disabled:opacity-40 hover:bg-brand-navy/90 transition-colors"
@@ -215,7 +287,7 @@ export default function EquipmentDetailPage() {
         </div>
       </div>
 
-      {/* Photo upload zones */}
+      {/* Photos */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
         <h2 className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 mb-5">Photos</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -235,6 +307,25 @@ export default function EquipmentDetailPage() {
           />
         </div>
       </div>
+
+      {/* Energy steps */}
+      <EnergyStepsSection
+        equipmentId={equipmentId}
+        steps={steps}
+        onChange={setSteps}
+        onToast={showToast}
+      />
+
+      <SpanishTranslationSheet
+        open={spanishOpen}
+        onClose={() => setSpanishOpen(false)}
+        equipmentId={equipmentId}
+        notesEs={equipment.notes_es ?? ''}
+        reviewed={equipment.spanish_reviewed ?? false}
+        steps={steps}
+        onSaved={handleSpanishSaved}
+        onToast={showToast}
+      />
 
       {toast && <Toast {...toast} onClose={clearToast} />}
     </div>
