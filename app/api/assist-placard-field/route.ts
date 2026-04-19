@@ -1,32 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { NextRequest, NextResponse } from 'next/server'
 import { energyCodeFor } from '@/lib/energyCodes'
-
-const client = new Anthropic()
-
-export type FieldType =
-  | 'description'
-  | 'notes'
-  | 'tag_description'
-  | 'isolation_procedure'
-  | 'method_of_verification'
-
-export interface AssistRequest {
-  field:        FieldType
-  currentValue: string
-  equipment: {
-    equipment_id: string
-    description:  string
-    department:   string
-  }
-  // For energy step fields
-  energy_type?: string
-  step_number?: number
-  // Optional sibling values on the same step for better context
-  tag_description?:        string
-  isolation_procedure?:    string
-  method_of_verification?: string
-}
+import type { AssistRequest } from '@/lib/assistTypes'
 
 function buildPrompt(req: AssistRequest): string {
   const { field, currentValue, equipment } = req
@@ -65,12 +40,18 @@ Respond ONLY with the improved/generated value as plain text. No preamble, no ma
 }
 
 export async function POST(req: NextRequest) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error('[assist-placard-field] ANTHROPIC_API_KEY is not set')
+    return NextResponse.json({ error: 'AI is not configured on the server.' }, { status: 503 })
+  }
+
   try {
     const body = (await req.json()) as AssistRequest
     if (!body.field || !body.equipment) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
     }
 
+    const client = new Anthropic()
     const message = await client.messages.create({
       model:      'claude-sonnet-4-6',
       max_tokens: 512,
@@ -83,7 +64,8 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ suggestion: text })
   } catch (err) {
+    const msg = err instanceof Error ? err.message : 'AI assist failed'
     console.error('[assist-placard-field]', err)
-    return NextResponse.json({ error: 'AI assist failed' }, { status: 500 })
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { AssistRequest, FieldType } from '@/app/api/assist-placard-field/route'
+import type { AssistRequest, AssistResponse, FieldType } from '@/lib/assistTypes'
 
 interface Props {
   field:        FieldType
@@ -41,12 +41,16 @@ export default function AiAssistButton({ field, currentValue, equipment, context
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(body),
       })
-      if (!res.ok) throw new Error('AI request failed')
-      const json = await res.json() as { suggestion?: string; error?: string }
-      if (!json.suggestion) throw new Error(json.error ?? 'No suggestion')
+      const json = await res.json().catch(() => null) as (AssistResponse & { error?: string }) | null
+      if (!res.ok || !json?.suggestion) {
+        const serverMsg = json?.error
+        console.error('[AiAssistButton] request failed', res.status, serverMsg)
+        throw new Error(serverMsg ?? `Request failed (${res.status})`)
+      }
       setSuggestion(json.suggestion)
-    } catch {
-      onError?.('AI assist unavailable. Please try again.')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'AI assist unavailable.'
+      onError?.(`AI assist: ${msg}`)
     } finally {
       setLoading(false)
     }

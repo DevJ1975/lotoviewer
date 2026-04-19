@@ -26,7 +26,19 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
   const [uploadState, setUploadState] = useState<UploadState>('idle')
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
-  // Generate + upload whenever the modal opens for a given equipment
+  // Capture latest callbacks + data in refs so the effect only re-fires when
+  // the modal opens (not on every parent render that gives us new closures).
+  const onSavedRef   = useRef(onSaved)
+  const onErrorRef   = useRef(onError)
+  const stepsRef     = useRef(steps)
+  const equipmentRef = useRef(equipment)
+  onSavedRef.current   = onSaved
+  onErrorRef.current   = onError
+  stepsRef.current     = steps
+  equipmentRef.current = equipment
+
+  const equipmentId = equipment.equipment_id
+
   useEffect(() => {
     if (!open) return
 
@@ -39,7 +51,7 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
 
     ;(async () => {
       try {
-        const bytes = await generatePlacardPdf({ equipment, steps })
+        const bytes = await generatePlacardPdf({ equipment: equipmentRef.current, steps: stepsRef.current })
         if (cancelled) return
 
         const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' })
@@ -48,31 +60,30 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
         setPdfUrl(objUrl)
         setGenerating(false)
 
-        // Upload to Supabase in the background
         setUploadState('uploading')
-        const sanitized  = sanitize(equipment.equipment_id)
+        const sanitized  = sanitize(equipmentId)
         const storagePath = `${sanitized}/${sanitized}_placard.pdf`
         const { error: upErr } = await supabase.storage
           .from('loto-photos')
           .upload(storagePath, bytes, { contentType: 'application/pdf', upsert: true })
         if (cancelled) return
-        if (upErr) { setUploadState('error'); onError?.('Could not save placard to cloud.'); return }
+        if (upErr) { setUploadState('error'); onErrorRef.current?.('Could not save placard to cloud.'); return }
 
         const { data: { publicUrl } } = supabase.storage.from('loto-photos').getPublicUrl(storagePath)
         const { error: patchErr } = await supabase
           .from('loto_equipment')
           .update({ placard_url: publicUrl, updated_at: new Date().toISOString() })
-          .eq('equipment_id', equipment.equipment_id)
+          .eq('equipment_id', equipmentId)
         if (cancelled) return
-        if (patchErr) { setUploadState('error'); onError?.('Placard saved but record update failed.'); return }
+        if (patchErr) { setUploadState('error'); onErrorRef.current?.('Placard saved but record update failed.'); return }
 
         setUploadState('saved')
-        onSaved?.(publicUrl)
+        onSavedRef.current?.(publicUrl)
       } catch {
         if (!cancelled) {
           setGenerating(false)
           setUploadState('error')
-          onError?.('Could not generate placard.')
+          onErrorRef.current?.('Could not generate placard.')
         }
       }
     })()
@@ -81,7 +92,10 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
       cancelled = true
       if (objUrl) URL.revokeObjectURL(objUrl)
     }
-  }, [open, equipment, steps, onSaved, onError])
+    // Only re-run when modal opens/closes or equipment changes — NOT on every
+    // render when parent passes fresh callback closures.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, equipmentId])
 
   // Escape closes the modal
   useEffect(() => {
