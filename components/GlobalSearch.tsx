@@ -19,23 +19,33 @@ export default function GlobalSearch() {
   const containerRef          = useRef<HTMLDivElement>(null)
   const inputRef              = useRef<HTMLInputElement>(null)
 
+  const reqToken = useRef(0)
+
   useEffect(() => {
-    if (debouncedQuery.trim().length < 2) {
+    // Strip chars that would break PostgREST .or() parsing (, ( )) or act as
+    // ILIKE wildcards (% _ \). Safer than escaping and preserves most useful input.
+    const sanitized = debouncedQuery.replace(/[%_\\,()]/g, ' ').trim()
+
+    if (sanitized.length < 2) {
       setResults([])
       setOpen(false)
       return
     }
+
+    const myReq = ++reqToken.current
     setLoading(true)
     supabase
       .from('loto_equipment')
       .select('equipment_id, description, department, photo_status')
       .or(
-        `equipment_id.ilike.%${debouncedQuery}%,` +
-        `description.ilike.%${debouncedQuery}%,` +
-        `department.ilike.%${debouncedQuery}%`
+        `equipment_id.ilike.%${sanitized}%,` +
+        `description.ilike.%${sanitized}%,` +
+        `department.ilike.%${sanitized}%`
       )
       .limit(8)
       .then(({ data }) => {
+        // Drop stale results if a newer query has fired since
+        if (myReq !== reqToken.current) return
         setResults((data as SearchResult[]) ?? [])
         setOpen(true)
         setLoading(false)

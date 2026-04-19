@@ -1,14 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import type { Equipment } from '@/lib/types'
 import EquipmentTable from '@/components/EquipmentTable'
 import ReviewModal from '@/components/ReviewModal'
+import Toast from '@/components/Toast'
 import { Button } from '@/components/ui/button'
 import { useReviews } from '@/hooks/useReviews'
+import { useToast } from '@/hooks/useToast'
 import { stampSignature, downloadPdf } from '@/lib/pdfUtils'
 
 function formatDate(iso: string) {
@@ -23,6 +25,10 @@ export default function DepartmentDetailPage() {
   const [loading, setLoading]       = useState(true)
   const [showModal, setShowModal]   = useState(false)
   const [signing, setSigning]       = useState(false)
+  const mountedRef                  = useRef(true)
+  const { toast, showToast, clearToast } = useToast()
+
+  useEffect(() => () => { mountedRef.current = false }, [])
 
   const { reviews, fetchReviews, submitReview } = useReviews(dept)
 
@@ -42,36 +48,53 @@ export default function DepartmentDetailPage() {
     const targets = equipment.filter(e => e.placard_url)
     if (!targets.length) return
     setSigning(true)
+    let signed = 0, failed = 0
     try {
       for (const eq of targets) {
+        if (!mountedRef.current) return  // user left the page
         try {
           const bytes       = await stampSignature(eq.placard_url!, signatureDataUrl, reviewerName, signedAt)
           const storagePath = `signed-placards/${eq.equipment_id}_${Date.now()}.pdf`
           const { error: upErr } = await supabase.storage
             .from('loto-photos')
             .upload(storagePath, bytes, { contentType: 'application/pdf', upsert: true })
-          if (!upErr) {
-            const { data: { publicUrl } } = supabase.storage.from('loto-photos').getPublicUrl(storagePath)
-            await supabase.from('loto_equipment')
-              .update({ signed_placard_url: publicUrl })
-              .eq('equipment_id', eq.equipment_id)
-          }
-        } catch { /* skip individual failures */ }
+          if (upErr) { failed++; continue }
+          const { data: { publicUrl } } = supabase.storage.from('loto-photos').getPublicUrl(storagePath)
+          const { error: patchErr } = await supabase.from('loto_equipment')
+            .update({ signed_placard_url: publicUrl })
+            .eq('equipment_id', eq.equipment_id)
+          if (patchErr) failed++
+          else signed++
+        } catch {
+          failed++
+        }
       }
+
+      if (!mountedRef.current) return
+
       // Refresh equipment list to pick up signed_placard_url
-      const { data } = await supabase.from('loto_equipment').select('*').eq('department', dept)
-      if (data) setEquipment(data as Equipment[])
+      const { data: fresh } = await supabase.from('loto_equipment').select('*').eq('department', dept)
+      if (fresh && mountedRef.current) setEquipment(fresh as Equipment[])
 
       // Download merged signed PDF for the reviewer
-      const { mergePdfs } = await import('@/lib/pdfUtils')
-      const { data: fresh } = await supabase.from('loto_equipment').select('*').eq('department', dept)
       const urls = (fresh as Equipment[] ?? targets).map(e => e.signed_placard_url ?? e.placard_url).filter(Boolean) as string[]
       if (urls.length) {
-        const merged = await mergePdfs(urls)
-        downloadPdf(merged, `${dept}-signed-placards.pdf`)
+        try {
+          const { mergePdfs } = await import('@/lib/pdfUtils')
+          const merged = await mergePdfs(urls)
+          downloadPdf(merged, `${dept}-signed-placards.pdf`)
+        } catch { /* merge or download failed — non-critical, signing already done */ }
       }
+
+      if (failed > 0 && mountedRef.current) {
+        showToast(`Signed ${signed} placard${signed === 1 ? '' : 's'}, ${failed} failed. Check your connection and try again.`, 'error')
+      } else if (mountedRef.current) {
+        showToast(`Signed ${signed} placard${signed === 1 ? '' : 's'}.`, 'success')
+      }
+    } catch {
+      if (mountedRef.current) showToast('Could not complete sign-off. Please try again.', 'error')
     } finally {
-      setSigning(false)
+      if (mountedRef.current) setSigning(false)
     }
   }
 
@@ -162,6 +185,8 @@ export default function DepartmentDetailPage() {
           onApproved={handleApproved}
         />
       )}
+
+      {toast && <Toast {...toast} onClose={clearToast} />}
     </div>
   )
 }

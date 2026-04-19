@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 interface Props {
   open:     boolean
@@ -11,17 +11,32 @@ interface Props {
   widthClass?: string
 }
 
+// Reference counter for body scroll lock so nested/overlapping sheets don't
+// release the lock while another sheet is still open.
+let scrollLockCount = 0
+function acquireScrollLock() {
+  if (scrollLockCount === 0) document.body.style.overflow = 'hidden'
+  scrollLockCount++
+}
+function releaseScrollLock() {
+  scrollLockCount = Math.max(0, scrollLockCount - 1)
+  if (scrollLockCount === 0) document.body.style.overflow = ''
+}
+
 export function Sheet({ open, onClose, title, subtitle, children, widthClass = 'max-w-2xl' }: Props) {
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
   useEffect(() => {
     if (!open) return
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onCloseRef.current() }
     document.addEventListener('keydown', onKey)
-    document.body.style.overflow = 'hidden'
+    acquireScrollLock()
     return () => {
       document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = ''
+      releaseScrollLock()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { ToastState } from '@/hooks/useToast'
 
 interface Props extends ToastState {
@@ -8,10 +8,15 @@ interface Props extends ToastState {
 }
 
 export default function Toast({ message, type, onClose }: Props) {
+  // Ref holds the latest onClose so the auto-dismiss timer isn't reset
+  // every time the parent re-renders with a new inline closure.
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
   useEffect(() => {
-    const timer = setTimeout(onClose, 3500)
+    const timer = setTimeout(() => onCloseRef.current(), 3500)
     return () => clearTimeout(timer)
-  }, [onClose])
+  }, [message, type])
 
   return (
     <div

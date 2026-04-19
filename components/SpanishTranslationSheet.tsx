@@ -71,8 +71,13 @@ export default function SpanishTranslationSheet({
         .eq('id', row.id)
     )
 
-    const results = await Promise.all([equipPromise, ...stepPromises])
-    const anyError = results.some(r => r.error)
+    // allSettled so one network failure doesn't crash the whole flow.
+    // We treat both rejections and Supabase-reported errors as failures.
+    const settled = await Promise.allSettled([equipPromise, ...stepPromises])
+    const anyError = settled.some(r =>
+      r.status === 'rejected' ||
+      (r.status === 'fulfilled' && (r.value as { error?: unknown } | null)?.error)
+    )
 
     if (anyError) {
       onToast('Could not save all translations. Check your connection and try again.', 'error')

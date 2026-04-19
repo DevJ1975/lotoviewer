@@ -18,7 +18,12 @@ interface Props {
 
 function exportCsv(rows: Equipment[]) {
   const headers = ['Equipment ID', 'Description', 'Department', 'Status', 'Equipment Photo', 'ISO Photo', 'Placard URL']
-  const escape  = (v: string) => `"${v.replace(/"/g, '""')}"`
+  // Defend against CSV injection (Excel/Sheets/Numbers treat cells starting with
+  // = + - @ \t \r as formulas). Prefix such values with a single quote.
+  const escape = (v: string) => {
+    const safe = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v
+    return `"${safe.replace(/"/g, '""')}"`
+  }
   const body    = rows.map(e => [
     e.equipment_id,
     e.description,

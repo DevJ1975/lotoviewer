@@ -69,16 +69,22 @@ export async function stampSignature(
 
 export async function mergePdfs(urls: string[]): Promise<Uint8Array> {
   const merged = await PDFDocument.create()
+  let added = 0
   for (const url of urls) {
     try {
       const res   = await fetch(url)
+      if (!res.ok) continue
       const bytes = await res.arrayBuffer()
       const doc   = await PDFDocument.load(bytes)
       const pages = await merged.copyPages(doc, doc.getPageIndices())
       pages.forEach(p => merged.addPage(p))
+      added++
     } catch {
       // skip inaccessible PDFs
     }
+  }
+  if (added === 0) {
+    throw new Error('None of the source PDFs could be loaded.')
   }
   return merged.save()
 }
@@ -92,5 +98,7 @@ export function downloadPdf(bytes: Uint8Array, filename: string) {
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
-  setTimeout(() => URL.revokeObjectURL(url), 100)
+  // 60s is plenty for any reasonable download dialog + transfer time.
+  // Browser will GC the blob eventually even if we don't revoke.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
