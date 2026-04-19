@@ -1,24 +1,45 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { Suspense, useEffect, useState, useCallback, useMemo } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import type { Equipment, DepartmentStats } from '@/lib/types'
-import StatsCards from '@/components/StatsCards'
-import ProgressRing from '@/components/ProgressRing'
-import DepartmentChart from '@/components/DepartmentChart'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { buildDeptStats } from '@/lib/utils'
+import type { Equipment } from '@/lib/types'
+import DashboardSidebar     from '@/components/dashboard/DashboardSidebar'
+import EquipmentListPanel   from '@/components/dashboard/EquipmentListPanel'
+import PlacardDetailPanel   from '@/components/dashboard/PlacardDetailPanel'
 
 export default function HomePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-[calc(100vh-3.5rem)]">
+        <div className="w-10 h-10 border-4 border-brand-navy border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <HomeDashboard />
+    </Suspense>
+  )
+}
+
+function HomeDashboard() {
   const [equipment, setEquipment] = useState<Equipment[]>([])
-  const [loading, setLoading] = useState(true)
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [loading, setLoading]     = useState(true)
+  const [loadError, setLoadError] = useState(false)
+
+  const router        = useRouter()
+  const searchParams  = useSearchParams()
+  const selectedDept  = searchParams.get('dept')
+  const selectedEqId  = searchParams.get('eq')
 
   const fetchData = useCallback(async () => {
-    const { data } = await supabase.from('loto_equipment').select('*')
-    if (data) {
+    const { data, error } = await supabase
+      .from('loto_equipment')
+      .select('*')
+      .order('equipment_id', { ascending: true })
+    if (error) {
+      setLoadError(true)
+    } else if (data) {
       setEquipment(data as Equipment[])
-      setLastUpdated(new Date())
+      setLoadError(false)
     }
     setLoading(false)
   }, [])
@@ -31,81 +52,68 @@ export default function HomePage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'loto_equipment' }, fetchData)
       .subscribe()
 
-    const interval = setInterval(fetchData, 30_000)
-
-    return () => {
-      supabase.removeChannel(channel)
-      clearInterval(interval)
-    }
+    return () => { supabase.removeChannel(channel) }
   }, [fetchData])
 
-  const total    = equipment.length
-  const complete = equipment.filter(e => e.photo_status === 'complete').length
-  const partial  = equipment.filter(e => e.photo_status === 'partial').length
-  const missing  = equipment.filter(e => e.photo_status === 'missing').length
-  const pct      = total > 0 ? (complete / total) * 100 : 0
-  const deptStats = buildDeptStats(equipment).sort((a, b) => a.department.localeCompare(b.department))
+  const selectedEquipment = useMemo(
+    () => equipment.find(e => e.equipment_id === selectedEqId) ?? null,
+    [equipment, selectedEqId],
+  )
 
-  if (loading) {
+  function setUrlState(next: { dept?: string | null; eq?: string | null }) {
+    const params = new URLSearchParams(searchParams.toString())
+    if (next.dept === null) params.delete('dept')
+    else if (next.dept)     params.set('dept', next.dept)
+    if (next.eq === null)   params.delete('eq')
+    else if (next.eq)       params.set('eq', next.eq)
+    const qs = params.toString()
+    router.replace(qs ? `/?${qs}` : '/')
+  }
+
+  const handleSelectDept  = (dept: string | null) => setUrlState({ dept, eq: null })
+  const handleSelectEquip = (id: string)          => setUrlState({ eq: id })
+
+  if (loadError) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-gray-500 text-sm">Loading LOTO data…</p>
+      <div className="flex items-center justify-center h-[calc(100vh-3.5rem)]">
+        <div className="text-center px-6 max-w-sm">
+          <div className="w-14 h-14 rounded-full bg-rose-100 flex items-center justify-center text-2xl mx-auto mb-3">⚠</div>
+          <p className="text-sm font-semibold text-slate-700 mb-1">Could not load equipment</p>
+          <p className="text-xs text-slate-400 mb-4">Please check your connection and try again.</p>
+          <button
+            type="button"
+            onClick={() => { setLoading(true); setLoadError(false); fetchData() }}
+            className="px-4 py-2 rounded-lg bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 transition-colors"
+          >
+            Retry
+          </button>
         </div>
       </div>
     )
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-3.5rem)]">
+        <div className="w-10 h-10 border-4 border-brand-navy border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Live LOTO Status</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Auto-refreshes every 30 s via Supabase Realtime
-            {lastUpdated && <> · Last updated {lastUpdated.toLocaleTimeString()}</>}
-          </p>
-        </div>
-        <span className="flex items-center gap-2 text-xs text-green-600 font-medium">
-          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          Live
-        </span>
-      </div>
-
-      <StatsCards total={total} complete={complete} partial={partial} missing={missing} />
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="flex items-center justify-center py-6">
-          <CardContent className="flex flex-col items-center gap-4 p-6">
-            <ProgressRing value={pct} size={200} label="Overall Complete" sublabel={`${complete} of ${total}`} />
-            <div className="flex gap-4 text-xs text-gray-500">
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Complete
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> Partial
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Missing
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">Completion by Department</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {deptStats.length > 0 ? (
-              <DepartmentChart data={deptStats} />
-            ) : (
-              <p className="text-gray-400 text-sm py-8 text-center">No department data available.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+    <div className="flex flex-col lg:flex-row h-[calc(100vh-3.5rem)]">
+      <DashboardSidebar
+        equipment={equipment}
+        selectedDept={selectedDept}
+        onSelectDept={handleSelectDept}
+      />
+      <EquipmentListPanel
+        equipment={equipment}
+        selectedDept={selectedDept}
+        selectedEqId={selectedEqId}
+        onSelectEquip={handleSelectEquip}
+      />
+      <PlacardDetailPanel equipment={selectedEquipment} loading={false} />
     </div>
   )
 }

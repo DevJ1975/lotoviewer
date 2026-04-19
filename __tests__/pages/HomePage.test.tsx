@@ -4,6 +4,11 @@ import { supabase } from '@/lib/supabase'
 import HomePage from '@/app/page'
 import type { Equipment } from '@/lib/types'
 
+vi.mock('next/navigation', () => ({
+  useRouter:       () => ({ replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}))
+
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     from: vi.fn(),
@@ -12,29 +17,24 @@ vi.mock('@/lib/supabase', () => ({
   },
 }))
 
-vi.mock('recharts', () => ({
-  ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  BarChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Bar: () => null, XAxis: () => null, YAxis: () => null,
-  CartesianGrid: () => null, Tooltip: () => null, Legend: () => null,
-}))
-
 function makeChain(data: Equipment[]) {
   const chain: Record<string, unknown> = {
     then: (resolve?: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
       Promise.resolve({ data, error: null }).then(resolve, reject),
   }
   chain.select = vi.fn().mockReturnValue(chain)
+  chain.order  = vi.fn().mockReturnValue(chain)
   return chain
 }
 
 function makeEquipment(overrides: Partial<Equipment> = {}): Equipment {
   return {
-    equipment_id: 'EQ-001', description: 'Motor', department: 'Alpha',
+    equipment_id: 'EQ-001', description: 'Motor (Main Pump)', department: 'Alpha',
     photo_status: 'complete', has_equip_photo: true, has_iso_photo: false,
     equip_photo_url: null, iso_photo_url: null, placard_url: null,
-    notes: null, verified: false, ...overrides,
-  }
+    signed_placard_url: null, notes: null, notes_es: null, spanish_reviewed: false,
+    verified: false, ...overrides,
+  } as Equipment
 }
 
 const mockEquipment: Equipment[] = [
@@ -43,42 +43,65 @@ const mockEquipment: Equipment[] = [
   makeEquipment({ equipment_id: 'EQ-003', photo_status: 'missing',  department: 'Beta'  }),
 ]
 
-describe('HomePage', () => {
+describe('HomePage dashboard', () => {
   beforeEach(() => {
     vi.mocked(supabase.from).mockReturnValue(makeChain(mockEquipment) as ReturnType<typeof supabase.from>)
   })
 
   it('shows loading spinner while data is pending', () => {
-    // Never-resolving promise to lock component in loading state
-    const hangingChain = { select: vi.fn(), then: () => new Promise(() => {}) }
-    hangingChain.select = vi.fn().mockReturnValue(hangingChain)
-    vi.mocked(supabase.from).mockReturnValue(hangingChain as ReturnType<typeof supabase.from>)
+    const hanging: Record<string, unknown> = { then: () => new Promise(() => {}) }
+    hanging.select = vi.fn().mockReturnValue(hanging)
+    hanging.order  = vi.fn().mockReturnValue(hanging)
+    vi.mocked(supabase.from).mockReturnValue(hanging as ReturnType<typeof supabase.from>)
     render(<HomePage />)
     expect(document.querySelector('.animate-spin')).toBeInTheDocument()
   })
 
-  it('shows "Live LOTO Status" heading after data loads', async () => {
+  it('shows the "All Equipment" row in the sidebar', async () => {
     render(<HomePage />)
-    await waitFor(() => expect(screen.getByText('Live LOTO Status')).toBeInTheDocument())
+    // Appears both in sidebar and center column header
+    await waitFor(() => expect(screen.getAllByText('All Equipment').length).toBeGreaterThanOrEqual(1))
   })
 
-  it('shows "Live" indicator', async () => {
+  it('shows the overall progress label', async () => {
     render(<HomePage />)
-    await waitFor(() => screen.getByText('Live'))
+    await waitFor(() => screen.getByText('Overall Progress'))
   })
 
-  it('renders all four stat card labels', async () => {
+  it('lists all departments in the sidebar', async () => {
     render(<HomePage />)
-    await waitFor(() => screen.getByText('Total Equipment'))
-    // "Complete", "Partial", "Missing" appear in both StatsCards and the ring legend
-    expect(screen.getAllByText('Complete').length).toBeGreaterThanOrEqual(1)
+    await waitFor(() => screen.getByText('Alpha'))
+    expect(screen.getByText('Beta')).toBeInTheDocument()
+  })
+
+  it('renders stat chips Total / Done / Partial / Missing', async () => {
+    render(<HomePage />)
+    await waitFor(() => screen.getByText('Total'))
+    expect(screen.getByText('Done')).toBeInTheDocument()
+    // "Partial" and "Missing" appear in both stat chips and status pills
     expect(screen.getAllByText('Partial').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Missing').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('shows "No department data available." when equipment list is empty', async () => {
-    vi.mocked(supabase.from).mockReturnValue(makeChain([]) as ReturnType<typeof supabase.from>)
+  it('renders equipment IDs in the center list', async () => {
     render(<HomePage />)
-    await waitFor(() => screen.getByText('No department data available.'))
+    await waitFor(() => screen.getByText('EQ-001'))
+    expect(screen.getByText('EQ-002')).toBeInTheDocument()
+    expect(screen.getByText('EQ-003')).toBeInTheDocument()
+  })
+
+  it('shows the "select equipment" placeholder in the right panel', async () => {
+    render(<HomePage />)
+    await waitFor(() => screen.getByText('Select an equipment item'))
+  })
+
+  it('renders Retry button on load error', async () => {
+    const errChain: Record<string, unknown> = { then: (r?: (v: unknown) => unknown) => Promise.resolve({ data: null, error: new Error('x') }).then(r) }
+    errChain.select = vi.fn().mockReturnValue(errChain)
+    errChain.order  = vi.fn().mockReturnValue(errChain)
+    vi.mocked(supabase.from).mockReturnValue(errChain as ReturnType<typeof supabase.from>)
+    render(<HomePage />)
+    await waitFor(() => screen.getByText('Could not load equipment'))
+    expect(screen.getByText('Retry')).toBeInTheDocument()
   })
 })
