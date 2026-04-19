@@ -1,5 +1,6 @@
 import { PDFDocument, PDFFont, PDFPage, RGB, StandardFonts, degrees, rgb } from 'pdf-lib'
 import { ENERGY_CODES, energyCodeFor, hexToRgb01 } from '@/lib/energyCodes'
+import { PLACARD_TEXT } from '@/lib/placardText'
 import type { Equipment, LotoEnergyStep } from '@/lib/types'
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -18,36 +19,7 @@ const COLOR_ROW_ALT     = rgb(0.96, 0.97, 0.99)
 const COLOR_TABLE_BORDER = rgb(0.82, 0.85, 0.90)
 const COLOR_SLATE_TEXT  = rgb(0.15, 0.18, 0.23)
 
-// ── Default text ────────────────────────────────────────────────────────────
-const DEFAULT_WARNING_EN_HEADER = 'DANGER — KEEP AWAY! HAZARDOUS VOLTAGE AND MOVING PARTS'
-const DEFAULT_WARNING_ES_HEADER = '¡MANTÉNGASE ALEJADO! VOLTAJE PELIGROSO Y PIEZAS EN MOVIMIENTO'
-const DEFAULT_NOTES_EN = 'This equipment must be locked out and tagged out before servicing or maintenance. Follow the procedure below to isolate all energy sources.'
-const DEFAULT_NOTES_ES = 'Este equipo debe bloquearse y etiquetarse antes de darle servicio o mantenimiento. Siga el procedimiento a continuación para aislar todas las fuentes de energía.'
-
-const PURPOSE_EN = 'This procedure establishes the minimum requirements for lockout of energy-isolating devices. It ensures equipment is stopped, isolated from all potentially hazardous energy sources, and locked out before any servicing or maintenance activities are performed.'
-const PURPOSE_ES = 'Este procedimiento establece los requisitos mínimos para el bloqueo de los dispositivos de aislamiento de energía. Garantiza que el equipo se detenga, se aísle de todas las fuentes de energía potencialmente peligrosas y se bloquee antes de realizar actividades de servicio o mantenimiento.'
-
-const STEPS_EN = [
-  'Notify all affected employees.',
-  'Shut down the equipment using normal stop procedures.',
-  'Isolate all energy sources at the disconnect.',
-  'Apply personal lockout/tagout devices.',
-  'Release or block stored energy.',
-  'Verify isolation — test for zero energy state.',
-  'Remove devices only when work is complete.',
-]
-const STEPS_ES = [
-  'Notifique a todos los empleados afectados.',
-  'Apague el equipo usando los procedimientos normales.',
-  'Aísle todas las fuentes de energía en el desconectador.',
-  'Aplique los dispositivos personales de bloqueo/etiquetado.',
-  'Libere o bloquee la energía almacenada.',
-  'Verifique el aislamiento — pruebe el estado de energía cero.',
-  'Retire los dispositivos solo cuando el trabajo esté completo.',
-]
-
-const SIG_LABELS_EN = ['Signature', 'Date', 'Department', 'See PM Store in PT folder']
-const SIG_LABELS_ES = ['Firma',     'Fecha', 'Departamento', 'Ver PM Store en carpeta PT']
+// (All text strings come from PLACARD_TEXT — see lib/placardText.ts)
 
 // ── Text helpers ────────────────────────────────────────────────────────────
 function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
@@ -168,9 +140,7 @@ export function drawPlacardPage(
     x: 20, y: Y_YELLOW_BOT + 16, size: 13, font: bold, color: COLOR_YELLOW_BAND,
   })
   // Title centered
-  const title = isEn
-    ? 'LOCKOUT / TAGOUT PROCEDURE'
-    : 'PROCEDIMIENTO DE BLOQUEO/ETIQUETADO'
+  const title = PLACARD_TEXT.title[language]
   const titleW = bold.widthOfTextAtSize(title, 17)
   page.drawText(title, {
     x: (PAGE_W - titleW) / 2, y: Y_YELLOW_BOT + 15,
@@ -201,7 +171,7 @@ export function drawPlacardPage(
     x: 0, y: Y_BLUE_BOT, width: PAGE_W, height: 20,
     color: COLOR_BLUE_BAR,
   })
-  const equipLabel = isEn ? 'EQUIPMENT: ' : 'EQUIPO: '
+  const equipLabel = `${PLACARD_TEXT.equipmentLabel[language]} `
   const equipLabelW = bold.widthOfTextAtSize(equipLabel, 11)
   page.drawText(equipLabel, {
     x: MARGIN, y: Y_BLUE_BOT + 6, size: 11, font: bold, color: COLOR_NAVY_HEADER,
@@ -212,11 +182,11 @@ export function drawPlacardPage(
     x: MARGIN + equipLabelW, y: Y_BLUE_BOT + 6,
     size: 11, font: regular, color: COLOR_SLATE_TEXT,
   })
-  // Equipment ID right-aligned
-  const idText = equipment.equipment_id
-  const idW = bold.widthOfTextAtSize(idText, 11)
-  page.drawText(idText, {
-    x: PAGE_W - idW - MARGIN, y: Y_BLUE_BOT + 6,
+  // Department right-aligned
+  const deptText = equipment.department
+  const deptW = bold.widthOfTextAtSize(deptText, 11)
+  page.drawText(deptText, {
+    x: PAGE_W - deptW - MARGIN, y: Y_BLUE_BOT + 6,
     size: 11, font: bold, color: COLOR_NAVY_HEADER,
   })
 
@@ -225,15 +195,15 @@ export function drawPlacardPage(
     x: 0, y: Y_RED_BOT, width: PAGE_W, height: 30,
     color: COLOR_RED_BLOCK,
   })
-  const warnHeader = isEn ? DEFAULT_WARNING_EN_HEADER : DEFAULT_WARNING_ES_HEADER
+  const warnHeader = PLACARD_TEXT.warningHeader[language]
   const warnW = bold.widthOfTextAtSize(warnHeader, 10)
   page.drawText(warnHeader, {
     x: (PAGE_W - warnW) / 2, y: Y_RED_BOT + 18,
     size: 10, font: bold, color: COLOR_WHITE,
   })
   const notesText = (isEn
-    ? (equipment.notes?.trim() ? equipment.notes : DEFAULT_NOTES_EN)
-    : (equipment.notes_es?.trim() ? equipment.notes_es : DEFAULT_NOTES_ES)) as string
+    ? (equipment.notes?.trim()    ? equipment.notes    : PLACARD_TEXT.warningFallback.en)
+    : (equipment.notes_es?.trim() ? equipment.notes_es : PLACARD_TEXT.warningFallback.es)) as string
   const notesLines = wrapText(notesText, regular, 8, PAGE_W - 40)
   page.drawText(notesLines[0] ?? '', {
     x: 20, y: Y_RED_BOT + 6,
@@ -246,21 +216,21 @@ export function drawPlacardPage(
   const colR_W = PAGE_W - colR_X - MARGIN
   const COLS_TOP = Y_RED_BOT - 4
   // Left heading
-  page.drawText(isEn ? 'PURPOSE' : 'PROPÓSITO', {
+  page.drawText(PLACARD_TEXT.purposeHeader[language], {
     x: MARGIN, y: COLS_TOP - 10,
     size: 9, font: bold, color: COLOR_NAVY_HEADER,
   })
-  drawWrapped(page, isEn ? PURPOSE_EN : PURPOSE_ES, {
+  drawWrapped(page, PLACARD_TEXT.purposeBody[language], {
     x: MARGIN, y: COLS_TOP - 22,
     maxWidth: colL_W, font: regular, size: 8,
     color: COLOR_SLATE_TEXT, lineHeight: 10, maxLines: 6,
   })
   // Right heading
-  page.drawText(isEn ? 'GENERAL STEPS' : 'PASOS GENERALES', {
+  page.drawText(PLACARD_TEXT.stepsHeader[language], {
     x: colR_X, y: COLS_TOP - 10,
     size: 9, font: bold, color: COLOR_NAVY_HEADER,
   })
-  const steps_list = isEn ? STEPS_EN : STEPS_ES
+  const steps_list = PLACARD_TEXT.steps[language]
   let stepY = COLS_TOP - 22
   for (let i = 0; i < steps_list.length; i++) {
     if (stepY < Y_COLS_BOT + 4) break
@@ -305,7 +275,7 @@ export function drawPlacardPage(
     x: 0, y: Y_NAVYHDR_BOT, width: PAGE_W, height: 13,
     color: COLOR_NAVY_HEADER,
   })
-  const sectionTitle = isEn ? 'EQUIPMENT & ISOLATION PHOTOS' : 'FOTOS DEL EQUIPO Y AISLAMIENTO'
+  const sectionTitle = PLACARD_TEXT.sectionHeader[language]
   page.drawText(sectionTitle, {
     x: MARGIN, y: Y_NAVYHDR_BOT + 3,
     size: 9, font: bold, color: COLOR_WHITE,
@@ -349,8 +319,8 @@ export function drawPlacardPage(
       size: 7.5, font: bold, color: COLOR_NAVY_HEADER,
     })
   }
-  drawPhotoSlot(photoLX, equipImage, isEn ? 'EQUIPMENT' : 'EQUIPO')
-  drawPhotoSlot(photoRX, isoImage,   isEn ? 'ISOLATION / DISCONNECT' : 'AISLAMIENTO / DESCONEXIÓN')
+  drawPhotoSlot(photoLX, equipImage, PLACARD_TEXT.photoCaptions[language].equipment.toUpperCase())
+  drawPhotoSlot(photoRX, isoImage,   PLACARD_TEXT.photoCaptions[language].isolation.toUpperCase())
 
   // ── 8. Energy steps table ────────────────────────────────────────────────
   const tableTop    = Y_PHOTOS_BOT
@@ -366,9 +336,7 @@ export function drawPlacardPage(
     x: MARGIN, y: hdrY, width: PAGE_W - MARGIN * 2, height: hdrH,
     color: COLOR_NAVY_HEADER,
   })
-  const hdr1 = isEn ? 'Energy Tag & Description'      : 'Etiqueta y Descripción'
-  const hdr2 = isEn ? 'Isolation & Lockout Devices'    : 'Aislamiento y Dispositivos'
-  const hdr3 = isEn ? 'Method of Verification'         : 'Método de Verificación'
+  const [hdr1, hdr2, hdr3] = PLACARD_TEXT.tableHeaders[language]
   page.drawText(hdr1, { x: MARGIN + 6, y: hdrY + 4, size: 8, font: bold, color: COLOR_WHITE })
   page.drawText(hdr2, { x: MARGIN + colBadgeW + 6, y: hdrY + 4, size: 8, font: bold, color: COLOR_WHITE })
   page.drawText(hdr3, { x: MARGIN + colBadgeW + col1W + 6, y: hdrY + 4, size: 8, font: bold, color: COLOR_WHITE })
@@ -442,7 +410,7 @@ export function drawPlacardPage(
   }
 
   if (steps.length === 0) {
-    const emptyMsg = isEn ? 'No energy steps defined.' : 'No hay pasos de energía definidos.'
+    const emptyMsg = PLACARD_TEXT.noSteps[language]
     const w = regular.widthOfTextAtSize(emptyMsg, 10)
     page.drawText(emptyMsg, {
       x: (PAGE_W - w) / 2, y: dataTop - 30,
@@ -463,7 +431,7 @@ export function drawPlacardPage(
     color: rgb(0.97, 0.97, 0.98),
     borderColor: COLOR_TABLE_BORDER, borderWidth: 0.5,
   })
-  const sigLabels = isEn ? SIG_LABELS_EN : SIG_LABELS_ES
+  const sigLabels = PLACARD_TEXT.signature[language]
   const sigColW = PAGE_W / 4
   for (let i = 0; i < 4; i++) {
     const sx = i * sigColW + MARGIN

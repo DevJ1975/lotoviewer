@@ -113,7 +113,7 @@ function HomeDashboard() {
         selectedEqId={selectedEqId}
         onSelectEquip={handleSelectEquip}
       />
-      <PlacardDetailPanel equipment={selectedEquipment} loading={false} />
+      <PlacardDetailPanel equipment={selectedEquipment} />
     </div>
   )
 }
