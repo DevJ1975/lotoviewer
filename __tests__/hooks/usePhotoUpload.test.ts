@@ -32,6 +32,7 @@ function setupStorageMock(uploadError: Error | null = null) {
 
 function setupDbMock(selectError: Error | null = null, updateError: Error | null = null) {
   vi.mocked(supabase.from)
+    // 1. Initial SELECT for current URLs
     .mockImplementationOnce(() => ({
       select: vi.fn().mockReturnValue({
         eq: vi.fn().mockReturnValue({
@@ -42,9 +43,24 @@ function setupDbMock(selectError: Error | null = null, updateError: Error | null
         }),
       }),
     } as unknown as ReturnType<typeof supabase.from>))
+    // 2. UPDATE with new URL + status
     .mockImplementationOnce(() => ({
       update: vi.fn().mockReturnValue({
         eq: vi.fn().mockResolvedValue({ error: updateError }),
+      }),
+    } as unknown as ReturnType<typeof supabase.from>))
+    // 3. Reconcile SELECT after patch (returns matching state so no extra write)
+    .mockImplementation(() => ({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({
+            data: { equip_photo_url: null, iso_photo_url: null, photo_status: 'missing' },
+            error: null,
+          }),
+        }),
+      }),
+      update: vi.fn().mockReturnValue({
+        eq: vi.fn().mockResolvedValue({ error: null }),
       }),
     } as unknown as ReturnType<typeof supabase.from>))
 }

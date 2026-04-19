@@ -82,6 +82,23 @@ export function usePhotoUpload(equipmentId: string, type: UploadType) {
 
       if (patchError) throw new Error(patchError.message)
 
+      // Reconcile photo_status against the latest URLs in case another
+      // upload (live or queued) wrote concurrently between our SELECT + UPDATE.
+      const { data: fresh } = await supabase
+        .from('loto_equipment')
+        .select('equip_photo_url, iso_photo_url, photo_status')
+        .eq('equipment_id', equipmentId)
+        .single()
+      if (fresh) {
+        const actualStatus = computePhotoStatusFromUrls(fresh.equip_photo_url, fresh.iso_photo_url)
+        if (fresh.photo_status !== actualStatus) {
+          await supabase
+            .from('loto_equipment')
+            .update({ photo_status: actualStatus, updated_at: new Date().toISOString() })
+            .eq('equipment_id', equipmentId)
+        }
+      }
+
       setUrl(publicUrl)
       setStatus('success')
       return publicUrl

@@ -30,10 +30,12 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
   // the modal opens (not on every parent render that gives us new closures).
   const onSavedRef   = useRef(onSaved)
   const onErrorRef   = useRef(onError)
+  const onCloseRef   = useRef(onClose)
   const stepsRef     = useRef(steps)
   const equipmentRef = useRef(equipment)
   onSavedRef.current   = onSaved
   onErrorRef.current   = onError
+  onCloseRef.current   = onClose
   stepsRef.current     = steps
   equipmentRef.current = equipment
 
@@ -100,14 +102,14 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
   // Escape closes the modal
   useEffect(() => {
     if (!open) return
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onCloseRef.current() }
     document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = ''
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 

@@ -81,6 +81,23 @@ async function uploadOne(item: QueuedUpload): Promise<void> {
     })
     .eq('equipment_id', item.equipmentId)
   if (patchErr) throw new Error(patchErr.message)
+
+  // Reconcile: re-read URLs and correct photo_status if another concurrent
+  // upload (live or queue) wrote between our SELECT and UPDATE.
+  const { data: fresh } = await supabase
+    .from('loto_equipment')
+    .select('equip_photo_url, iso_photo_url, photo_status')
+    .eq('equipment_id', item.equipmentId)
+    .single()
+  if (fresh) {
+    const actualStatus = computePhotoStatusFromUrls(fresh.equip_photo_url, fresh.iso_photo_url)
+    if (fresh.photo_status !== actualStatus) {
+      await supabase
+        .from('loto_equipment')
+        .update({ photo_status: actualStatus, updated_at: new Date().toISOString() })
+        .eq('equipment_id', item.equipmentId)
+    }
+  }
 }
 
 export function UploadQueueProvider({ children }: { children: React.ReactNode }) {

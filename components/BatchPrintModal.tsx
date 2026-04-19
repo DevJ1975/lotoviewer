@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { generateBatchPlacardPdf } from '@/lib/pdfPlacard'
 import { downloadPdf } from '@/lib/pdfUtils'
@@ -20,6 +20,14 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
   const [phase, setPhase]         = useState<'idle' | 'fetching' | 'rendering' | 'done' | 'error'>('idle')
   const [errorMsg, setErrorMsg]   = useState<string | null>(null)
 
+  // Ref keeps onClose current without forcing the keydown effect to re-bind
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
+  // Track timers so we can clear them on unmount / re-open
+  const autoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (autoCloseTimer.current) clearTimeout(autoCloseTimer.current) }, [])
+
   const departments = useMemo(
     () => [...new Set(equipment.map(e => e.department))].filter(Boolean).sort((a, b) => a.localeCompare(b)),
     [equipment],
@@ -27,6 +35,7 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
 
   useEffect(() => {
     if (open) {
+      if (autoCloseTimer.current) { clearTimeout(autoCloseTimer.current); autoCloseTimer.current = null }
       setDept(initialDepartment ?? '')
       setBusy(false)
       setPhase('idle')
@@ -37,14 +46,14 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
 
   useEffect(() => {
     if (!open) return
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && !busy) onClose() }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && !busy) onCloseRef.current() }
     document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = ''
     }
-  }, [open, busy, onClose])
+  }, [open, busy])
 
   const deptEquipment = useMemo(
     () => (dept ? equipment.filter(e => e.department === dept) : []),
@@ -87,7 +96,8 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
 
       downloadPdf(bytes, `${dept}_LOTO_Placards.pdf`)
       setPhase('done')
-      setTimeout(() => { if (!busy) return; onClose() }, 900)
+      if (autoCloseTimer.current) clearTimeout(autoCloseTimer.current)
+      autoCloseTimer.current = setTimeout(() => onCloseRef.current(), 900)
     } catch {
       setPhase('error')
       setErrorMsg('Could not generate batch PDF. Please try again.')
