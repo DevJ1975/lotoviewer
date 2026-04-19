@@ -29,9 +29,25 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
   const [localPreview, setLocalPreview] = useState<string | null>(null)
   const [justQueued, setJustQueued] = useState(false)
 
+  // Keep latest callback refs so the success effect doesn't re-fire when the
+  // parent passes new inline closures — would cause an infinite re-render loop.
+  const onSuccessRef = useRef(onSuccess)
+  const onErrorRef   = useRef(onError)
+  onSuccessRef.current = onSuccess
+  onErrorRef.current   = onError
+
+  // Fire success callback only when status/url transitions — NOT when the
+  // parent hands us a new closure reference.
+  const firedSuccessForRef = useRef<string | null>(null)
   useEffect(() => {
-    if (status === 'success' && url && onSuccess) onSuccess(url)
-  }, [status, url, onSuccess])
+    if (status === 'success' && url && firedSuccessForRef.current !== url) {
+      firedSuccessForRef.current = url
+      onSuccessRef.current?.(url)
+    }
+    if (status !== 'success') {
+      firedSuccessForRef.current = null
+    }
+  }, [status, url])
 
   // Revoke blob URL when component unmounts or preview replaced
   useEffect(() => {
@@ -49,9 +65,9 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
     try {
       await enqueue({ equipmentId, type, blob })
       setJustQueued(true)
-      onSuccess?.('Upload queued — will sync when online.')
+      onSuccessRef.current?.('Upload queued — will sync when online.')
     } catch {
-      onError?.('Upload failed. Changes saved locally and queued for your next sync.')
+      onErrorRef.current?.('Upload failed. Changes saved locally and queued for your next sync.')
     } finally {
       setQueueing(false)
     }
@@ -59,11 +75,11 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
 
   async function handleFile(file: File) {
     if (!file.type.match(/^image\/(jpeg|png)$/)) {
-      onError?.('Only JPEG and PNG files are accepted.')
+      onErrorRef.current?.('Only JPEG and PNG files are accepted.')
       return
     }
     if (file.size > MAX_FILE_BYTES) {
-      onError?.('File must be under 10 MB.')
+      onErrorRef.current?.('File must be under 10 MB.')
       return
     }
 
@@ -77,7 +93,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
         const res  = await fetch('/api/validate-photo', { method: 'POST', body: fd })
         const json = await res.json() as { valid?: boolean; reason?: string }
         if (json && json.valid === false) {
-          onError?.(json.reason ?? 'Photo does not appear to show the correct subject.')
+          onErrorRef.current?.(json.reason ?? 'Photo does not appear to show the correct subject.')
           setValidating(false)
           return
         }
@@ -93,7 +109,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
     try {
       compressed = await compressImage(file, 1_000_000)
     } catch {
-      onError?.('Could not compress photo. Please try another.')
+      onErrorRef.current?.('Could not compress photo. Please try another.')
       return
     }
 
