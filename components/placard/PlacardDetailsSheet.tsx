@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Sheet } from '@/components/ui/sheet'
-import AiAssistButton from '@/components/AiAssistButton'
 import type { Equipment } from '@/lib/types'
 
 interface Props {
@@ -18,7 +17,6 @@ export default function PlacardDetailsSheet({ open, onClose, equipment, onSaved,
   const equipmentId = equipment.equipment_id
   const description = equipment.description
   const notes       = equipment.notes ?? ''
-  const aiContext = { equipment_id: equipment.equipment_id, description: equipment.description, department: equipment.department }
   const [draftDesc, setDraftDesc]   = useState(description)
   const [draftNotes, setDraftNotes] = useState(notes)
   const [saving, setSaving]         = useState(false)
@@ -62,13 +60,6 @@ export default function PlacardDetailsSheet({ open, onClose, equipment, onSaved,
             onChange={e => setDraftDesc(e.target.value)}
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
           />
-          <AiAssistButton
-            field="description"
-            currentValue={draftDesc}
-            equipment={aiContext}
-            onAccept={setDraftDesc}
-            onError={m => onToast(m, 'error')}
-          />
         </div>
 
         <div className="space-y-1.5">
@@ -81,13 +72,6 @@ export default function PlacardDetailsSheet({ open, onClose, equipment, onSaved,
             value={draftNotes}
             onChange={e => setDraftNotes(e.target.value)}
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
-          />
-          <AiAssistButton
-            field="notes"
-            currentValue={draftNotes}
-            equipment={aiContext}
-            onAccept={setDraftNotes}
-            onError={m => onToast(m, 'error')}
           />
         </div>
       </div>

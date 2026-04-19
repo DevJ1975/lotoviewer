@@ -52,6 +52,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <GlobalSearch />
               <nav className="flex items-center gap-0.5">
                 <NavLink href="/">Dashboard</NavLink>
+                <NavLink href="/status">Status</NavLink>
                 <NavLink href="/departments">Departments</NavLink>
                 <NavLink href="/print">Print Queue</NavLink>
               </nav>
