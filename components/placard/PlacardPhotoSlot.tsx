@@ -3,6 +3,9 @@
 import { useRef, useState, useEffect } from 'react'
 import Image from 'next/image'
 import { usePhotoUpload, type UploadType } from '@/hooks/usePhotoUpload'
+import { useNetworkStatus } from '@/hooks/useNetworkStatus'
+import { useUploadQueue } from '@/components/UploadQueueProvider'
+import { compressImage } from '@/lib/imageUtils'
 
 interface Props {
   equipmentId: string
@@ -17,16 +20,42 @@ const MAX_FILE_BYTES = 10_000_000
 
 export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl, onSuccess, onError }: Props) {
   const { upload, status, url, errorMsg, reset } = usePhotoUpload(equipmentId, type)
+  const { online } = useNetworkStatus()
+  const { enqueue, queuedKeys } = useUploadQueue()
+
   const fileRef = useRef<HTMLInputElement>(null)
-  const [validating, setValidating]     = useState(false)
+  const [validating, setValidating] = useState(false)
+  const [queueing, setQueueing]     = useState(false)
+  const [localPreview, setLocalPreview] = useState<string | null>(null)
+  const [justQueued, setJustQueued] = useState(false)
 
   useEffect(() => {
     if (status === 'success' && url && onSuccess) onSuccess(url)
-    if (status === 'error'   && errorMsg && onError) onError(errorMsg)
-  }, [status, url, errorMsg, onSuccess, onError])
+  }, [status, url, onSuccess])
 
-  const displayUrl = url ?? existingUrl
-  const isBusy     = validating || status === 'compressing' || status === 'uploading'
+  // Revoke blob URL when component unmounts or preview replaced
+  useEffect(() => {
+    return () => { if (localPreview) URL.revokeObjectURL(localPreview) }
+  }, [localPreview])
+
+  const isQueuedForThisSlot = queuedKeys.has(`${equipmentId}:${type}`)
+  const displayUrl  = url ?? localPreview ?? existingUrl
+  const isBusy      = validating || queueing || status === 'compressing' || status === 'uploading'
+  const showQueued  = (justQueued || isQueuedForThisSlot) && !url
+  const showError   = status === 'error' && !justQueued
+
+  async function enqueueCompressed(blob: Blob) {
+    setQueueing(true)
+    try {
+      await enqueue({ equipmentId, type, blob })
+      setJustQueued(true)
+      onSuccess?.('Upload queued — will sync when online.')
+    } catch {
+      onError?.('Upload failed. Changes saved locally and queued for your next sync.')
+    } finally {
+      setQueueing(false)
+    }
+  }
 
   async function handleFile(file: File) {
     if (!file.type.match(/^image\/(jpeg|png)$/)) {
@@ -38,34 +67,59 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
       return
     }
 
-    setValidating(true)
-    try {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('type', type)
-      const res  = await fetch('/api/validate-photo', { method: 'POST', body: fd })
-      const json = await res.json() as { valid?: boolean; reason?: string }
-      if (json && json.valid === false) {
-        onError?.(json.reason ?? 'Photo does not appear to show the correct subject.')
-        return
+    // Validate subject (skip if offline — don't waste time)
+    if (online) {
+      setValidating(true)
+      try {
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('type', type)
+        const res  = await fetch('/api/validate-photo', { method: 'POST', body: fd })
+        const json = await res.json() as { valid?: boolean; reason?: string }
+        if (json && json.valid === false) {
+          onError?.(json.reason ?? 'Photo does not appear to show the correct subject.')
+          setValidating(false)
+          return
+        }
+      } catch {
+        // Validation unreachable — proceed anyway
+      } finally {
+        setValidating(false)
       }
-    } catch {
-      // If validation unreachable, allow upload
-    } finally {
-      setValidating(false)
     }
 
-    upload(file)
+    // Compress locally so we have a bounded Blob for both upload and queue
+    let compressed: File
+    try {
+      compressed = await compressImage(file, 1_000_000)
+    } catch {
+      onError?.('Could not compress photo. Please try another.')
+      return
+    }
+
+    // Store a preview so the slot shows the image immediately
+    setLocalPreview(URL.createObjectURL(compressed))
+
+    if (!online) {
+      await enqueueCompressed(compressed)
+      return
+    }
+
+    // Attempt live upload via the hook (will retry with exponential backoff)
+    const publicUrl = await upload(compressed)
+
+    if (!publicUrl) {
+      // Upload failed online — queue for later
+      await enqueueCompressed(compressed)
+    }
   }
 
   return (
     <div className="flex flex-col h-full">
-      {/* Caption bar */}
       <div className="bg-[#214487] text-white text-[11px] font-bold uppercase tracking-wider px-2 py-1 text-center">
         {label}
       </div>
 
-      {/* Photo slot */}
       <button
         type="button"
         onClick={() => !isBusy && fileRef.current?.click()}
@@ -88,7 +142,11 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
                 Replace
               </span>
             </div>
-            {status === 'success' && (
+            {showQueued ? (
+              <span className="absolute top-1.5 right-1.5 bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow flex items-center gap-1">
+                ☁︎ Queued
+              </span>
+            ) : status === 'success' && (
               <span className="absolute top-1.5 right-1.5 bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
                 ✓ Saved
               </span>
@@ -98,10 +156,12 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
             <div className="w-7 h-7 border-[3px] border-brand-navy/30 border-t-brand-navy rounded-full animate-spin" />
             <p className="text-xs text-slate-500 font-medium">
-              {validating ? 'Checking…' : status === 'compressing' ? 'Compressing…' : 'Uploading…'}
+              {validating  ? 'Checking…'  :
+               queueing    ? 'Queueing…'  :
+               status === 'compressing' ? 'Compressing…' : 'Uploading…'}
             </p>
           </div>
-        ) : status === 'error' ? (
+        ) : showError ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-3 text-center">
             <p className="text-rose-500 text-xs font-semibold">Upload failed</p>
             <p className="text-[11px] text-slate-400 line-clamp-2">{errorMsg}</p>

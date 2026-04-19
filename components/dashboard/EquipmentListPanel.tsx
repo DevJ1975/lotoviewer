@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import type { Equipment } from '@/lib/types'
 import { useDebounce } from '@/hooks/useDebounce'
+import { useUploadQueue } from '@/components/UploadQueueProvider'
 
 type StatusFilter = 'all' | 'needs-photo' | 'missing' | 'partial' | 'complete'
 type SortKey      = 'id' | 'status'
@@ -30,6 +31,12 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
   const [filter, setFilter]   = useState<StatusFilter>('all')
   const [sort, setSort]       = useState<SortKey>('id')
   const debounced = useDebounce(search, 300)
+  const { queuedKeys } = useUploadQueue()
+  const queuedEquipmentIds = useMemo(() => {
+    const ids = new Set<string>()
+    queuedKeys.forEach(k => { ids.add(k.split(':')[0]) })
+    return ids
+  }, [queuedKeys])
 
   // First narrow to dept (doesn't affect filter chip counts for dept-scoped view)
   const deptScoped = useMemo(
@@ -186,6 +193,11 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
                             <div className="text-xs text-slate-500 truncate">{shortName(eq.description)}</div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
+                            {queuedEquipmentIds.has(eq.equipment_id) && (
+                              <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 rounded-full px-1.5 py-0.5" title="Upload queued">
+                                ☁︎ Queued
+                              </span>
+                            )}
                             <span className="text-[10px] font-semibold text-slate-500 tabular-nums bg-slate-100 rounded-full px-1.5 py-0.5">
                               {photoCount}/2
                             </span>

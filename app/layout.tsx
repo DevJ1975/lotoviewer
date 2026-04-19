@@ -3,6 +3,7 @@ import { Inter, Geist_Mono } from 'next/font/google'
 import Link from 'next/link'
 import GlobalSearch from '@/components/GlobalSearch'
 import OfflineBanner from '@/components/OfflineBanner'
+import { UploadQueueProvider } from '@/components/UploadQueueProvider'
 import './globals.css'
 
 const inter    = Inter({ variable: '--font-inter', subsets: ['latin'], display: 'swap' })
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full bg-slate-50">
+        <UploadQueueProvider>
         <header className="bg-brand-navy border-b border-white/10 sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-14">
@@ -59,6 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main>
           {children}
         </main>
+        </UploadQueueProvider>
       </body>
     </html>
   )
