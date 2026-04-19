@@ -8,6 +8,7 @@ interface Props {
   equipment:      Equipment[]
   selectedDept:   string | null
   onSelectDept:   (dept: string | null) => void
+  onBatchPrint:   () => void
 }
 
 interface DeptRow {
@@ -17,7 +18,7 @@ interface DeptRow {
   pct:      number
 }
 
-export default function DashboardSidebar({ equipment, selectedDept, onSelectDept }: Props) {
+export default function DashboardSidebar({ equipment, selectedDept, onSelectDept, onBatchPrint }: Props) {
   const { total, complete, partial, missing, pct, departments } = useMemo(() => {
     const deptMap = new Map<string, { total: number; complete: number }>()
     let complete = 0, partial = 0, missing = 0
@@ -49,7 +50,18 @@ export default function DashboardSidebar({ equipment, selectedDept, onSelectDept
       <div className="p-4 border-b border-slate-100">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Overall Progress</span>
-          <span className="text-xs font-bold text-slate-700 tabular-nums">{pct}%</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onBatchPrint}
+              title="Batch print by department"
+              aria-label="Batch print by department"
+              className="text-slate-400 hover:text-brand-navy hover:bg-slate-100 rounded-md w-6 h-6 flex items-center justify-center transition-colors"
+            >
+              🖨
+            </button>
+            <span className="text-xs font-bold text-slate-700 tabular-nums">{pct}%</span>
+          </div>
         </div>
         <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
           <div

@@ -6,13 +6,12 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import Toast from '@/components/Toast'
 import PlacardView from '@/components/placard/PlacardView'
+import PlacardPdfPreview from '@/components/placard/PlacardPdfPreview'
 import PlacardDetailsSheet from '@/components/placard/PlacardDetailsSheet'
 import EditStepsSheet from '@/components/placard/EditStepsSheet'
 import SpanishTranslationSheet from '@/components/SpanishTranslationSheet'
 import { useToast } from '@/hooks/useToast'
 import type { Equipment, LotoEnergyStep } from '@/lib/types'
-import { generatePlacardPdf } from '@/lib/pdfPlacard'
-import { downloadPdf } from '@/lib/pdfUtils'
 
 export default function EquipmentDetailPage() {
   return (
@@ -39,7 +38,7 @@ function EquipmentDetail() {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [stepsOpen, setStepsOpen]     = useState(false)
   const [spanishOpen, setSpanishOpen] = useState(false)
-  const [generating, setGenerating]   = useState(false)
+  const [pdfOpen, setPdfOpen]         = useState(false)
 
   const { toast, showToast, clearToast } = useToast()
 
@@ -94,39 +93,8 @@ function EquipmentDetail() {
     if (data) setEquipment(data as Equipment)
   }
 
-  async function handleGeneratePlacard() {
-    if (!equipment) return
-    setGenerating(true)
-    try {
-      const bytes = await generatePlacardPdf({ equipment, steps })
-      downloadPdf(bytes, `${equipment.equipment_id}_LOTO_Placard.pdf`)
-
-      const storagePath = `${equipment.equipment_id}/${equipment.equipment_id}_placard.pdf`
-      const { error: upErr } = await supabase.storage
-        .from('loto-photos')
-        .upload(storagePath, bytes, { contentType: 'application/pdf', upsert: true })
-      if (upErr) {
-        showToast('Placard downloaded. Could not save to cloud — please try again.', 'error')
-        return
-      }
-
-      const { data: { publicUrl } } = supabase.storage.from('loto-photos').getPublicUrl(storagePath)
-      const { error: patchErr } = await supabase
-        .from('loto_equipment')
-        .update({ placard_url: publicUrl, updated_at: new Date().toISOString() })
-        .eq('equipment_id', equipment.equipment_id)
-
-      if (patchErr) {
-        showToast('Placard saved but record update failed. Please try again.', 'error')
-      } else {
-        setEquipment(prev => prev ? { ...prev, placard_url: publicUrl } : prev)
-        showToast('Placard generated and saved.', 'success')
-      }
-    } catch {
-      showToast('Could not generate placard. Please try again.', 'error')
-    } finally {
-      setGenerating(false)
-    }
+  function handleOpenPdf() {
+    setPdfOpen(true)
   }
 
   if (loading) {
@@ -169,8 +137,8 @@ function EquipmentDetail() {
           <ToolbarButton onClick={() => setSpanishOpen(true)}>
             {equipment.spanish_reviewed ? <><span className="text-emerald-500">✓</span> Español</> : 'Español'}
           </ToolbarButton>
-          <ToolbarButton onClick={handleGeneratePlacard} disabled={generating} primary>
-            {generating ? 'Generating…' : '📄 Generate PDF'}
+          <ToolbarButton onClick={handleOpenPdf} primary>
+            📄 Generate PDF
           </ToolbarButton>
 
           <div className="flex items-center gap-1 ml-1">
@@ -224,6 +192,15 @@ function EquipmentDetail() {
           setEquipment(prev => prev ? { ...prev, notes_es: notesEs, spanish_reviewed: reviewed } : prev)
         }}
         onToast={showToast}
+      />
+
+      <PlacardPdfPreview
+        open={pdfOpen}
+        onClose={() => setPdfOpen(false)}
+        equipment={equipment}
+        steps={steps}
+        onSaved={publicUrl => setEquipment(prev => prev ? { ...prev, placard_url: publicUrl } : prev)}
+        onError={msg => showToast(msg, 'error')}
       />
 
       {toast && <Toast {...toast} onClose={clearToast} />}

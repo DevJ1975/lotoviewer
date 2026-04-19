@@ -7,6 +7,7 @@ import type { Equipment } from '@/lib/types'
 import DashboardSidebar     from '@/components/dashboard/DashboardSidebar'
 import EquipmentListPanel   from '@/components/dashboard/EquipmentListPanel'
 import PlacardDetailPanel   from '@/components/dashboard/PlacardDetailPanel'
+import BatchPrintModal      from '@/components/BatchPrintModal'
 
 export default function HomePage() {
   return (
@@ -24,6 +25,7 @@ function HomeDashboard() {
   const [equipment, setEquipment] = useState<Equipment[]>([])
   const [loading, setLoading]     = useState(true)
   const [loadError, setLoadError] = useState(false)
+  const [batchOpen, setBatchOpen] = useState(false)
 
   const router        = useRouter()
   const searchParams  = useSearchParams()
@@ -106,6 +108,7 @@ function HomeDashboard() {
         equipment={equipment}
         selectedDept={selectedDept}
         onSelectDept={handleSelectDept}
+        onBatchPrint={() => setBatchOpen(true)}
       />
       <EquipmentListPanel
         equipment={equipment}
@@ -114,6 +117,13 @@ function HomeDashboard() {
         onSelectEquip={handleSelectEquip}
       />
       <PlacardDetailPanel equipment={selectedEquipment} />
+
+      <BatchPrintModal
+        open={batchOpen}
+        onClose={() => setBatchOpen(false)}
+        equipment={equipment}
+        initialDepartment={selectedDept}
+      />
     </div>
   )
 }

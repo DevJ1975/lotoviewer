@@ -464,17 +464,18 @@ export function drawPlacardPage(
   }
 }
 
-// ── Top-level generator ─────────────────────────────────────────────────────
+// ── Top-level generators ───────────────────────────────────────────────────
 export interface GeneratePlacardArgs {
   equipment: Equipment
   steps:     LotoEnergyStep[]
 }
 
-export async function generatePlacardPdf({ equipment, steps }: GeneratePlacardArgs): Promise<Uint8Array> {
-  const pdfDoc = await PDFDocument.create()
-  const regular = await pdfDoc.embedFont(StandardFonts.Helvetica)
-  const bold    = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
-
+async function addPlacardPages(
+  pdfDoc: PDFDocument,
+  fonts: { regular: PDFFont; bold: PDFFont },
+  equipment: Equipment,
+  steps: LotoEnergyStep[],
+) {
   const [equipImage, isoImage] = await Promise.all([
     fetchAndEmbedImage(pdfDoc, equipment.equip_photo_url),
     fetchAndEmbedImage(pdfDoc, equipment.iso_photo_url),
@@ -482,19 +483,44 @@ export async function generatePlacardPdf({ equipment, steps }: GeneratePlacardAr
 
   const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
-  // Page 1 — English
   const pageEn = pdfDoc.addPage([PAGE_W, PAGE_H])
-  drawPlacardPage(pageEn, { regular, bold }, {
+  drawPlacardPage(pageEn, fonts, {
     language: 'en', equipment, steps, equipImage, isoImage, dateStr,
     draft: false,
   })
 
-  // Page 2 — Spanish
   const pageEs = pdfDoc.addPage([PAGE_W, PAGE_H])
-  drawPlacardPage(pageEs, { regular, bold }, {
+  drawPlacardPage(pageEs, fonts, {
     language: 'es', equipment, steps, equipImage, isoImage, dateStr,
     draft: equipment.spanish_reviewed === false,
   })
+}
 
+export async function generatePlacardPdf({ equipment, steps }: GeneratePlacardArgs): Promise<Uint8Array> {
+  const pdfDoc = await PDFDocument.create()
+  const regular = await pdfDoc.embedFont(StandardFonts.Helvetica)
+  const bold    = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+  await addPlacardPages(pdfDoc, { regular, bold }, equipment, steps)
+  return pdfDoc.save()
+}
+
+export interface BatchItem {
+  equipment: Equipment
+  steps:     LotoEnergyStep[]
+}
+
+export async function generateBatchPlacardPdf(
+  items: BatchItem[],
+  onProgress?: (done: number, total: number) => void,
+): Promise<Uint8Array> {
+  const pdfDoc  = await PDFDocument.create()
+  const regular = await pdfDoc.embedFont(StandardFonts.Helvetica)
+  const bold    = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+  const fonts   = { regular, bold }
+
+  for (let i = 0; i < items.length; i++) {
+    await addPlacardPages(pdfDoc, fonts, items[i].equipment, items[i].steps)
+    onProgress?.(i + 1, items.length)
+  }
   return pdfDoc.save()
 }
