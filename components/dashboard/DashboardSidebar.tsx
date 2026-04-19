@@ -3,12 +3,24 @@
 import { useMemo } from 'react'
 import type { Equipment } from '@/lib/types'
 import { computePhotoStatusFromEquipment } from '@/lib/photoStatus'
+import { useSession } from '@/components/SessionProvider'
 
 interface Props {
   equipment:      Equipment[]
   selectedDept:   string | null
+  selectedEqId:   string | null
   onSelectDept:   (dept: string | null) => void
+  onSelectEquip:  (id: string) => void
   onBatchPrint:   () => void
+}
+
+function shortName(description: string): string {
+  const m = description.match(/\(([^)]+)\)/)
+  return m ? m[1].split(' - ')[0] : description
+}
+
+function statusDotClass(status: Equipment['photo_status']) {
+  return status === 'complete' ? 'bg-emerald-500' : status === 'partial' ? 'bg-amber-400' : 'bg-rose-500'
 }
 
 interface DeptRow {
@@ -18,7 +30,12 @@ interface DeptRow {
   pct:      number
 }
 
-export default function DashboardSidebar({ equipment, selectedDept, onSelectDept, onBatchPrint }: Props) {
+export default function DashboardSidebar({ equipment, selectedDept, selectedEqId, onSelectDept, onSelectEquip, onBatchPrint }: Props) {
+  const { recents } = useSession()
+  const recentEquipment = useMemo(() => {
+    const byId = new Map(equipment.map(e => [e.equipment_id, e]))
+    return recents.map(id => byId.get(id)).filter(Boolean) as Equipment[]
+  }, [recents, equipment])
   const { total, complete, partial, missing, pct, departments } = useMemo(() => {
     const deptMap = new Map<string, { total: number; complete: number }>()
     let complete = 0, partial = 0, missing = 0
@@ -116,6 +133,35 @@ export default function DashboardSidebar({ equipment, selectedDept, onSelectDept
             </div>
           </button>
         ))}
+
+        {recentEquipment.length > 0 && (
+          <div className="border-t-2 border-slate-100 mt-2">
+            <p className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+              Recently Visited
+            </p>
+            <ul>
+              {recentEquipment.map(eq => (
+                <li key={eq.equipment_id}>
+                  <button
+                    type="button"
+                    onClick={() => onSelectEquip(eq.equipment_id)}
+                    className={`w-full text-left px-4 py-2 border-b border-slate-50 transition-colors ${
+                      selectedEqId === eq.equipment_id ? 'bg-brand-navy/5' : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${statusDotClass(eq.photo_status)} shrink-0`} />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-mono text-xs font-bold text-brand-navy truncate">{eq.equipment_id}</p>
+                        <p className="text-[11px] text-slate-400 truncate">{shortName(eq.description)}</p>
+                      </div>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </aside>
   )

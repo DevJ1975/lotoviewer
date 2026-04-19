@@ -75,7 +75,7 @@ export default function SpanishTranslationSheet({
     const anyError = results.some(r => r.error)
 
     if (anyError) {
-      onToast('Some Spanish fields failed to save.', 'error')
+      onToast('Could not save all translations. Check your connection and try again.', 'error')
     } else {
       onSaved(draftNotes, draftReviewed, draftSteps)
       onToast('Spanish translations saved.', 'success')

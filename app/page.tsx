@@ -8,6 +8,7 @@ import DashboardSidebar     from '@/components/dashboard/DashboardSidebar'
 import EquipmentListPanel   from '@/components/dashboard/EquipmentListPanel'
 import PlacardDetailPanel   from '@/components/dashboard/PlacardDetailPanel'
 import BatchPrintModal      from '@/components/BatchPrintModal'
+import { useSession } from '@/components/SessionProvider'
 
 export default function HomePage() {
   return (
@@ -31,6 +32,7 @@ function HomeDashboard() {
   const searchParams  = useSearchParams()
   const selectedDept  = searchParams.get('dept')
   const selectedEqId  = searchParams.get('eq')
+  const { recordVisit } = useSession()
 
   const fetchData = useCallback(async () => {
     const { data, error } = await supabase
@@ -73,7 +75,10 @@ function HomeDashboard() {
   }
 
   const handleSelectDept  = (dept: string | null) => setUrlState({ dept, eq: null })
-  const handleSelectEquip = (id: string)          => setUrlState({ eq: id })
+  const handleSelectEquip = (id: string) => {
+    recordVisit(id)
+    setUrlState({ eq: id })
+  }
 
   if (loadError) {
     return (
@@ -107,7 +112,9 @@ function HomeDashboard() {
       <DashboardSidebar
         equipment={equipment}
         selectedDept={selectedDept}
+        selectedEqId={selectedEqId}
         onSelectDept={handleSelectDept}
+        onSelectEquip={handleSelectEquip}
         onBatchPrint={() => setBatchOpen(true)}
       />
       <EquipmentListPanel

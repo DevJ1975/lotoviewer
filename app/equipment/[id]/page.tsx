@@ -10,6 +10,7 @@ import PlacardPdfPreview from '@/components/placard/PlacardPdfPreview'
 import PlacardDetailsSheet from '@/components/placard/PlacardDetailsSheet'
 import EditStepsSheet from '@/components/placard/EditStepsSheet'
 import SpanishTranslationSheet from '@/components/SpanishTranslationSheet'
+import { useSession } from '@/components/SessionProvider'
 import { useToast } from '@/hooks/useToast'
 import type { Equipment, LotoEnergyStep } from '@/lib/types'
 
@@ -41,6 +42,9 @@ function EquipmentDetail() {
   const [pdfOpen, setPdfOpen]         = useState(false)
 
   const { toast, showToast, clearToast } = useToast()
+  const { recordVisit } = useSession()
+
+  useEffect(() => { if (equipmentId) recordVisit(equipmentId) }, [equipmentId, recordVisit])
 
   const load = useCallback(async () => {
     const { data, error } = await supabase

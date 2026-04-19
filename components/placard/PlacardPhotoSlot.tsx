@@ -19,7 +19,7 @@ interface Props {
 const MAX_FILE_BYTES = 10_000_000
 
 export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl, onSuccess, onError }: Props) {
-  const { upload, status, url, errorMsg, reset } = usePhotoUpload(equipmentId, type)
+  const { upload, status, url, reset } = usePhotoUpload(equipmentId, type)
   const { online } = useNetworkStatus()
   const { enqueue, queuedKeys } = useUploadQueue()
 
@@ -164,7 +164,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
         ) : showError ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-3 text-center">
             <p className="text-rose-500 text-xs font-semibold">Upload failed</p>
-            <p className="text-[11px] text-slate-400 line-clamp-2">{errorMsg}</p>
+            <p className="text-[11px] text-slate-400">Please try again.</p>
             <button
               type="button"
               onClick={e => { e.stopPropagation(); reset() }}

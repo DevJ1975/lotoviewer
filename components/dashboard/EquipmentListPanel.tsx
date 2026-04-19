@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import type { Equipment } from '@/lib/types'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useUploadQueue } from '@/components/UploadQueueProvider'
+import { useSession } from '@/components/SessionProvider'
 
 type StatusFilter = 'all' | 'needs-photo' | 'missing' | 'partial' | 'complete'
 type SortKey      = 'id' | 'status'
@@ -31,7 +32,8 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
   const [filter, setFilter]   = useState<StatusFilter>('all')
   const [sort, setSort]       = useState<SortKey>('id')
   const debounced = useDebounce(search, 300)
-  const { queuedKeys } = useUploadQueue()
+  const { queuedKeys }         = useUploadQueue()
+  const { flags, toggleFlag }  = useSession()
   const queuedEquipmentIds = useMemo(() => {
     const ids = new Set<string>()
     queuedKeys.forEach(k => { ids.add(k.split(':')[0]) })
@@ -176,11 +178,11 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
                   const photoCount = (eq.has_equip_photo ? 1 : 0) + (eq.has_iso_photo ? 1 : 0)
                   return (
                     <li key={eq.equipment_id}>
-                      <button
-                        type="button"
+                      <div
                         onClick={() => onSelectEquip(eq.equipment_id)}
-                        className={`w-full text-left px-4 py-3 border-b border-slate-100 transition-colors ${
-                          isSelected ? 'bg-brand-navy/5' : 'bg-white hover:bg-slate-50'
+                        onContextMenu={e => { e.preventDefault(); toggleFlag(eq.equipment_id) }}
+                        className={`w-full text-left px-4 py-3 border-b border-slate-100 transition-colors cursor-pointer group ${
+                          isSelected ? 'bg-brand-navy/5' : flags.has(eq.equipment_id) ? 'bg-orange-50/60 hover:bg-orange-50' : 'bg-white hover:bg-slate-50'
                         }`}
                       >
                         <div className="flex items-center gap-3">
@@ -202,9 +204,22 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
                               {photoCount}/2
                             </span>
                             <StatusPill status={eq.photo_status} />
+                            <button
+                              type="button"
+                              onClick={e => { e.stopPropagation(); toggleFlag(eq.equipment_id) }}
+                              aria-label={flags.has(eq.equipment_id) ? 'Unflag' : 'Flag for follow-up'}
+                              title={flags.has(eq.equipment_id) ? 'Unflag' : 'Flag for follow-up'}
+                              className={`text-sm w-6 h-6 flex items-center justify-center rounded transition-all ${
+                                flags.has(eq.equipment_id)
+                                  ? 'text-orange-500 opacity-100'
+                                  : 'text-slate-300 opacity-0 group-hover:opacity-100 hover:text-orange-500'
+                              }`}
+                            >
+                              🚩
+                            </button>
                           </div>
                         </div>
-                      </button>
+                      </div>
                     </li>
                   )
                 })}

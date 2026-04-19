@@ -45,7 +45,7 @@ export default function ReviewModal({ department, onSubmit, onClose, onApproved 
       approved,
     })
     if (err) {
-      setError((err as Error)?.message ?? 'Submission failed. Please try again.')
+      setError('Could not submit review. Check your connection and try again.')
     } else {
       if (approved && onApproved) {
         const signedAt = new Date().toISOString()
