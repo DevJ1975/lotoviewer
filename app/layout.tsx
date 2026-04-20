@@ -55,6 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <NavLink href="/status">Status</NavLink>
                 <NavLink href="/departments">Departments</NavLink>
                 <NavLink href="/print">Print Queue</NavLink>
+                <NavLink href="/import">Import</NavLink>
               </nav>
             </div>
           </div>
