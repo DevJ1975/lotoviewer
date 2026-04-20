@@ -2,18 +2,22 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { Pencil } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { DepartmentStats, LotoReview } from '@/lib/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { buildDeptStats } from '@/lib/utils'
+import { applyRenameToStats, applyRenameToReviews } from '@/lib/departments'
+import RenameDepartmentModal from '@/components/RenameDepartmentModal'
 
 type LatestReviewMap = Record<string, LotoReview>
 
 export default function DepartmentsPage() {
-  const [stats, setStats]     = useState<DepartmentStats[]>([])
+  const [stats, setStats]                 = useState<DepartmentStats[]>([])
   const [latestReviews, setLatestReviews] = useState<LatestReviewMap>({})
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading]             = useState(true)
+  const [renamingDept, setRenamingDept]   = useState<string | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -38,6 +42,11 @@ export default function DepartmentsPage() {
       setLoading(false)
     })
   }, [])
+
+  const handleRenamed = (oldName: string, newName: string) => {
+    setStats(prev => applyRenameToStats(prev, oldName, newName).sort((a, b) => b.total - a.total))
+    setLatestReviews(prev => applyRenameToReviews(prev, oldName, newName))
+  }
 
   if (loading) {
     return (
@@ -72,7 +81,21 @@ export default function DepartmentsPage() {
                 <CardContent className="p-5 space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <h2 className="font-semibold text-slate-800 leading-tight text-[15px]">{s.department}</h2>
-                    <span className={`text-lg font-bold shrink-0 tabular-nums ${pctColor}`}>{s.pct}%</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={e => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setRenamingDept(s.department)
+                        }}
+                        className="p-1 rounded-md text-slate-300 hover:text-slate-700 hover:bg-slate-100 focus:text-slate-700 focus:bg-slate-100 transition-colors"
+                        aria-label={`Rename ${s.department}`}
+                        title="Rename department"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <span className={`text-lg font-bold tabular-nums ${pctColor}`}>{s.pct}%</span>
+                    </div>
                   </div>
 
                   <Progress value={s.pct} className={`h-1.5 ${barClass}`} />
@@ -101,6 +124,14 @@ export default function DepartmentsPage() {
           )
         })}
       </div>
+
+      {renamingDept && (
+        <RenameDepartmentModal
+          currentName={renamingDept}
+          onClose={() => setRenamingDept(null)}
+          onRenamed={newName => handleRenamed(renamingDept, newName)}
+        />
+      )}
     </div>
   )
 }
