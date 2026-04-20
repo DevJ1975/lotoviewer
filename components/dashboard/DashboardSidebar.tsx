@@ -1,17 +1,23 @@
 'use client'
 
 import { useMemo } from 'react'
+import { Printer } from 'lucide-react'
 import type { Equipment } from '@/lib/types'
 import { computePhotoStatusFromEquipment } from '@/lib/photoStatus'
 import { useSession } from '@/components/SessionProvider'
+import StatusReportButton from '@/components/equipment/StatusReportButton'
+import ExportCsvButton    from '@/components/equipment/ExportCsvButton'
+import AddEquipmentButton from '@/components/equipment/AddEquipmentButton'
 
 interface Props {
-  equipment:      Equipment[]
-  selectedDept:   string | null
-  selectedEqId:   string | null
-  onSelectDept:   (dept: string | null) => void
-  onSelectEquip:  (id: string) => void
-  onBatchPrint:   () => void
+  equipment:        Equipment[]
+  selectedDept:     string | null
+  selectedEqId:     string | null
+  onSelectDept:     (dept: string | null) => void
+  onSelectEquip:    (id: string) => void
+  onBatchPrint:     () => void
+  onEquipmentAdded: (row: Equipment) => void
+  decommissioned:   ReadonlySet<string>
 }
 
 function shortName(description: string): string {
@@ -30,7 +36,7 @@ interface DeptRow {
   pct:      number
 }
 
-export default function DashboardSidebar({ equipment, selectedDept, selectedEqId, onSelectDept, onSelectEquip, onBatchPrint }: Props) {
+export default function DashboardSidebar({ equipment, selectedDept, selectedEqId, onSelectDept, onSelectEquip, onBatchPrint, onEquipmentAdded, decommissioned }: Props) {
   const { recents } = useSession()
   const recentEquipment = useMemo(() => {
     const byId = new Map(equipment.map(e => [e.equipment_id, e]))
@@ -63,22 +69,27 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
 
   return (
     <aside className="shrink-0 w-full lg:w-72 bg-white border-r border-slate-100 flex flex-col">
+      {/* Action toolbar */}
+      <div className="px-3 py-2 border-b border-slate-100 flex items-center gap-1">
+        <StatusReportButton equipment={equipment} decommissioned={decommissioned} />
+        <ExportCsvButton    equipment={equipment} decommissioned={decommissioned} />
+        <AddEquipmentButton equipment={equipment} onAdded={onEquipmentAdded} />
+        <button
+          type="button"
+          onClick={onBatchPrint}
+          title="Batch print by department"
+          aria-label="Batch print by department"
+          className="text-slate-400 hover:text-brand-navy hover:bg-slate-100 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
+        >
+          <Printer className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
       {/* Completion summary */}
       <div className="p-4 border-b border-slate-100">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Overall Progress</span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onBatchPrint}
-              title="Batch print by department"
-              aria-label="Batch print by department"
-              className="text-slate-400 hover:text-brand-navy hover:bg-slate-100 rounded-md w-6 h-6 flex items-center justify-center transition-colors"
-            >
-              🖨
-            </button>
-            <span className="text-xs font-bold text-slate-700 tabular-nums">{pct}%</span>
-          </div>
+          <span className="text-xs font-bold text-slate-700 tabular-nums">{pct}%</span>
         </div>
         <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
           <div

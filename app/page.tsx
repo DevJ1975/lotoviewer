@@ -28,6 +28,9 @@ function HomeDashboard() {
   const [loadError, setLoadError] = useState(false)
   const [batchOpen, setBatchOpen] = useState(false)
 
+  // Decommissioned tracking is scaffolded for a future column; empty for now.
+  const decommissioned = useMemo(() => new Set<string>(), [])
+
   const router        = useRouter()
   const searchParams  = useSearchParams()
   const selectedDept  = searchParams.get('dept')
@@ -116,6 +119,12 @@ function HomeDashboard() {
         onSelectDept={handleSelectDept}
         onSelectEquip={handleSelectEquip}
         onBatchPrint={() => setBatchOpen(true)}
+        decommissioned={decommissioned}
+        onEquipmentAdded={row =>
+          setEquipment(prev =>
+            [...prev, row].sort((a, b) => a.equipment_id.localeCompare(b.equipment_id)),
+          )
+        }
       />
       <EquipmentListPanel
         equipment={equipment}
