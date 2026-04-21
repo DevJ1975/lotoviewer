@@ -39,12 +39,13 @@ export default function StatusPage() {
     }
   }, [fetchData])
 
-  const total    = equipment.length
-  const complete = equipment.filter(e => e.photo_status === 'complete').length
-  const partial  = equipment.filter(e => e.photo_status === 'partial').length
-  const missing  = equipment.filter(e => e.photo_status === 'missing').length
+  const active   = equipment.filter(e => !e.decommissioned)
+  const total    = active.length
+  const complete = active.filter(e => e.photo_status === 'complete').length
+  const partial  = active.filter(e => e.photo_status === 'partial').length
+  const missing  = active.filter(e => e.photo_status === 'missing').length
   const pct      = total > 0 ? (complete / total) * 100 : 0
-  const deptStats = buildDeptStats(equipment).sort((a, b) => a.department.localeCompare(b.department))
+  const deptStats = buildDeptStats(active).sort((a, b) => a.department.localeCompare(b.department))
 
   if (loading) {
     return (

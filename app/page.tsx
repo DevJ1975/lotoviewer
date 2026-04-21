@@ -28,8 +28,13 @@ function HomeDashboard() {
   const [loadError, setLoadError] = useState(false)
   const [batchOpen, setBatchOpen] = useState(false)
 
-  // Decommissioned tracking is scaffolded for a future column; empty for now.
-  const decommissioned = useMemo(() => new Set<string>(), [])
+  // Derived from the `decommissioned` column on loto_equipment.
+  // Consumed by the sidebar (for per-department totals), the list (to hide retired rows),
+  // and the status report / CSV export (to exclude them from counts).
+  const decommissioned = useMemo(
+    () => new Set(equipment.filter(e => e.decommissioned).map(e => e.equipment_id)),
+    [equipment],
+  )
 
   const router        = useRouter()
   const searchParams  = useSearchParams()
@@ -131,6 +136,7 @@ function HomeDashboard() {
         selectedDept={selectedDept}
         selectedEqId={selectedEqId}
         onSelectEquip={handleSelectEquip}
+        decommissioned={decommissioned}
       />
       <PlacardDetailPanel equipment={selectedEquipment} />
 

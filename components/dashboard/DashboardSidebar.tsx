@@ -45,8 +45,11 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
   const { total, complete, partial, missing, pct, departments } = useMemo(() => {
     const deptMap = new Map<string, { total: number; complete: number }>()
     let complete = 0, partial = 0, missing = 0
+    let total = 0
 
     for (const e of equipment) {
+      if (decommissioned.has(e.equipment_id)) continue
+      total++
       const status = computePhotoStatusFromEquipment(e)
       if (status === 'complete') complete++
       else if (status === 'partial') partial++
@@ -58,14 +61,13 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
       deptMap.set(e.department, d)
     }
 
-    const total = equipment.length
     const pct   = total === 0 ? 0 : Math.round((complete / total) * 100)
     const departments: DeptRow[] = [...deptMap.entries()]
       .map(([name, v]) => ({ name, total: v.total, complete: v.complete, pct: v.total === 0 ? 0 : Math.round((v.complete / v.total) * 100) }))
       .sort((a, b) => a.name.localeCompare(b.name))
 
     return { total, complete, partial, missing, pct, departments }
-  }, [equipment])
+  }, [equipment, decommissioned])
 
   return (
     <aside className="shrink-0 w-full lg:w-72 bg-white border-r border-slate-100 flex flex-col">

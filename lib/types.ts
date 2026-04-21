@@ -19,6 +19,7 @@ export interface Equipment {
   needs_equip_photo: boolean
   needs_iso_photo: boolean
   needs_verification: boolean
+  decommissioned: boolean
   created_at: string | null
   updated_at: string | null
 }

@@ -14,6 +14,7 @@ interface Props {
   selectedDept:   string | null
   selectedEqId:   string | null
   onSelectEquip:  (id: string) => void
+  decommissioned: ReadonlySet<string>
 }
 
 const STATUS_RANK: Record<Equipment['photo_status'], number> = { missing: 0, partial: 1, complete: 2 }
@@ -27,7 +28,7 @@ function needsPhoto(e: Equipment): boolean {
   return (e.needs_equip_photo && !e.has_equip_photo) || (e.needs_iso_photo && !e.has_iso_photo)
 }
 
-export default function EquipmentListPanel({ equipment, selectedDept, selectedEqId, onSelectEquip }: Props) {
+export default function EquipmentListPanel({ equipment, selectedDept, selectedEqId, onSelectEquip, decommissioned }: Props) {
   const [search, setSearch]   = useState('')
   const [filter, setFilter]   = useState<StatusFilter>('all')
   const [sort, setSort]       = useState<SortKey>('id')
@@ -40,11 +41,13 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
     return ids
   }, [queuedKeys])
 
-  // First narrow to dept (doesn't affect filter chip counts for dept-scoped view)
-  const deptScoped = useMemo(
-    () => (selectedDept ? equipment.filter(e => e.department === selectedDept) : equipment),
-    [equipment, selectedDept],
-  )
+  // Drop decommissioned rows first, then narrow to dept.
+  // (Filter chip counts are computed off the search-scoped list below, so this
+  // flows through consistently.)
+  const deptScoped = useMemo(() => {
+    const active = equipment.filter(e => !decommissioned.has(e.equipment_id))
+    return selectedDept ? active.filter(e => e.department === selectedDept) : active
+  }, [equipment, selectedDept, decommissioned])
 
   // Counts per filter, respecting current dept and search
   const searchScoped = useMemo(() => {
