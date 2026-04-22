@@ -84,19 +84,25 @@ export default function DecommissionPage() {
     ))
     setPending(prev => { const s = new Set(prev); s.add(id); return s })
 
-    const { error } = await supabase
+    // .select() forces Supabase to return the updated rows. Without it, a
+    // zero-row UPDATE (RLS denial, expired JWT, stale schema cache) silently
+    // returns { error: null, data: null } — the UI looks fine but nothing
+    // persists. Checking data.length distinguishes "saved" from "swallowed."
+    const { data, error } = await supabase
       .from('loto_equipment')
       .update({ decommissioned: next })
       .eq('equipment_id', id)
+      .select('equipment_id')
 
     setPending(prev => { const s = new Set(prev); s.delete(id); return s })
 
-    if (error) {
-      // Rollback to the opposite of next (since that was the prior state).
+    const failed = error != null || !data || data.length === 0
+    if (failed) {
       setEquipment(prev => prev.map(eq =>
         eq.equipment_id === id ? { ...eq, decommissioned: !next } : eq,
       ))
-      return error.message
+      if (error) return error.message
+      return 'Write was rejected (0 rows affected). Check you are signed in.'
     }
     return null
   }, [])
@@ -104,31 +110,70 @@ export default function DecommissionPage() {
   // Bulk apply — set the same `next` value for every selected id, with a
   // single optimistic patch and one round-trip per row. Reports the per-row
   // result count via toast and clears selection on completion.
+  // Visible-only selection. `selected` is kept as a persistent Set across
+  // searches, but bulk actions must only ever touch rows the user can
+  // currently see — otherwise typing a search can invisibly bulk-update rows
+  // that are filtered out of view. visibleIds comes from orderedIds (the
+  // flattened grouped list), which is what the rendered DOM shows.
+  const visibleIds = useMemo(() => new Set(orderedIds), [orderedIds])
+  const effectiveSelected = useMemo(
+    () => new Set([...selected].filter(id => visibleIds.has(id))),
+    [selected, visibleIds],
+  )
+
   const bulkApply = useCallback(async (next: boolean) => {
     if (bulkBusy) return
-    const ids = [...selected]
+    // Snapshot the id set into a Set as well — every optimistic/rollback
+    // branch reads from it via closure, and we must not let subsequent
+    // `selected` mutations (user taps more rows while PATCH is in flight)
+    // change the rows we're acting on mid-operation.
+    const ids    = [...effectiveSelected]
+    const idsSet = new Set(ids)
     if (ids.length === 0) return
     setBulkBusy(true)
     haptic('tap')
 
     setEquipment(prev => prev.map(eq =>
-      selected.has(eq.equipment_id) ? { ...eq, decommissioned: next } : eq,
+      idsSet.has(eq.equipment_id) ? { ...eq, decommissioned: next } : eq,
     ))
 
-    const { error } = await supabase
+    // See setDecommissionedRaw for why .select() matters — otherwise an RLS
+    // denial or expired session returns "success" with 0 rows written.
+    const { data, error } = await supabase
       .from('loto_equipment')
       .update({ decommissioned: next })
       .in('equipment_id', ids)
+      .select('equipment_id')
 
     setBulkBusy(false)
 
-    if (error) {
-      // Rollback the optimistic change.
+    const failed = error != null || !data || data.length === 0
+    if (failed) {
       setEquipment(prev => prev.map(eq =>
-        selected.has(eq.equipment_id) ? { ...eq, decommissioned: !next } : eq,
+        idsSet.has(eq.equipment_id) ? { ...eq, decommissioned: !next } : eq,
       ))
       haptic('error')
-      showToast(`Bulk update failed: ${error.message}`, 'error')
+      const msg = error
+        ? error.message
+        : 'Write was rejected (0 rows affected). Check you are signed in.'
+      showToast(`Bulk update failed: ${msg}`, 'error')
+      return
+    }
+
+    if (data.length < ids.length) {
+      // Partial success — reconcile local state with the server's answer.
+      const savedIds = new Set(data.map(r => r.equipment_id))
+      setEquipment(prev => prev.map(eq =>
+        idsSet.has(eq.equipment_id) && !savedIds.has(eq.equipment_id)
+          ? { ...eq, decommissioned: !next }
+          : eq,
+      ))
+      haptic('error')
+      showToast(
+        `Saved ${data.length} of ${ids.length}. ${ids.length - data.length} rejected.`,
+        'error',
+      )
+      setSelected(new Set())
       return
     }
 
@@ -137,20 +182,33 @@ export default function DecommissionPage() {
       `${ids.length} item${ids.length === 1 ? '' : 's'} ${next ? 'decommissioned' : 'restored'}.`,
       'success',
       { label: 'Undo', onClick: async () => {
-        // Reapply the previous state to the same ids.
         setEquipment(prev => prev.map(eq =>
           ids.includes(eq.equipment_id) ? { ...eq, decommissioned: !next } : eq,
         ))
-        await supabase
+        const { data: undoData, error: undoErr } = await supabase
           .from('loto_equipment')
           .update({ decommissioned: !next })
           .in('equipment_id', ids)
+          .select('equipment_id')
+        if (undoErr || !undoData || undoData.length === 0) {
+          // Undo bounced too — put the optimistic state back and tell the user.
+          setEquipment(prev => prev.map(eq =>
+            ids.includes(eq.equipment_id) ? { ...eq, decommissioned: next } : eq,
+          ))
+          showToast('Undo failed. Original change kept.', 'error')
+        }
       } },
     )
-  }, [bulkBusy, selected, showToast])
+  }, [bulkBusy, effectiveSelected, showToast])
 
   const toggle = useCallback(async (id: string) => {
+    // Block if this row has an individual PATCH already in flight, OR if a
+    // bulk op is running and this row is in that bulk set. Without the second
+    // check, tapping the row's body (not its checkbox) while a bulk PATCH is
+    // in flight would fire a concurrent individual PATCH on the same row,
+    // and the later response wins — race.
     if (pending.has(id)) return
+    if (bulkBusy && selected.has(id)) return
     const current = equipment.find(e => e.equipment_id === id)
     if (!current) return
     const previous = current.decommissioned
@@ -166,9 +224,18 @@ export default function DecommissionPage() {
     showToast(
       next ? `${id} decommissioned.` : `${id} restored.`,
       'success',
-      { label: 'Undo', onClick: () => { setDecommissionedRaw(id, previous) } },
+      { label: 'Undo', onClick: async () => {
+        // Undo runs the same write path, so surface its failures too —
+        // otherwise a silently-rejected undo looks like the action didn't
+        // undo, which is the exact symptom that started this bug hunt.
+        const undoErr = await setDecommissionedRaw(id, previous)
+        if (undoErr) {
+          haptic('error')
+          showToast(`Undo failed: ${undoErr}`, 'error')
+        }
+      } },
     )
-  }, [pending, equipment, setDecommissionedRaw, showToast])
+  }, [pending, bulkBusy, selected, equipment, setDecommissionedRaw, showToast])
 
   const focusRow = (id: string) => {
     rowRefs.current.get(id)?.focus()
@@ -327,7 +394,16 @@ export default function DecommissionPage() {
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
           <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3 flex-wrap">
-            <span className="text-sm font-semibold tabular-nums">{selected.size} selected</span>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold tabular-nums">
+                {effectiveSelected.size} selected
+              </span>
+              {selected.size > effectiveSelected.size && (
+                <span className="text-[11px] text-white/60 tabular-nums">
+                  ({selected.size - effectiveSelected.size} hidden by search)
+                </span>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setSelected(new Set())}
@@ -339,7 +415,7 @@ export default function DecommissionPage() {
             <div className="flex-1" />
             <button
               type="button"
-              disabled={bulkBusy}
+              disabled={bulkBusy || effectiveSelected.size === 0}
               onClick={() => bulkApply(true)}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-500 text-amber-950 text-sm font-bold disabled:opacity-50 hover:bg-amber-400 transition-colors min-h-[40px]"
             >
@@ -348,7 +424,7 @@ export default function DecommissionPage() {
             </button>
             <button
               type="button"
-              disabled={bulkBusy}
+              disabled={bulkBusy || effectiveSelected.size === 0}
               onClick={() => bulkApply(false)}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white/10 text-white text-sm font-bold disabled:opacity-50 hover:bg-white/20 transition-colors min-h-[40px]"
             >
