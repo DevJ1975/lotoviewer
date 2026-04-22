@@ -100,11 +100,13 @@ export default function DecommissionPage() {
     // verify the persisted value matches what we asked for: if a trigger or
     // BEFORE UPDATE rule overrode our value, we catch it here instead of at
     // the next page refresh.
+    console.log('[decommission] PATCH start', { id, next })
     const { data, error } = await supabase
       .from('loto_equipment')
       .update({ decommissioned: next })
       .eq('equipment_id', id)
       .select('equipment_id, decommissioned')
+    console.log('[decommission] PATCH result', { id, next, data, error })
 
     setPending(prev => { const s = new Set(prev); s.delete(id); return s })
 
@@ -241,17 +243,19 @@ export default function DecommissionPage() {
   }, [bulkBusy, effectiveSelected, showToast])
 
   const toggle = useCallback(async (id: string) => {
+    console.log('[decommission] toggle invoked', { id })
     // Block if this row has an individual PATCH already in flight, OR if a
     // bulk op is running and this row is in that bulk set. Without the second
     // check, tapping the row's body (not its checkbox) while a bulk PATCH is
     // in flight would fire a concurrent individual PATCH on the same row,
     // and the later response wins — race.
-    if (pending.has(id)) return
-    if (bulkBusy && selected.has(id)) return
+    if (pending.has(id)) { console.log('[decommission] skip — already pending', id); return }
+    if (bulkBusy && selected.has(id)) { console.log('[decommission] skip — bulk busy', id); return }
     const current = equipment.find(e => e.equipment_id === id)
-    if (!current) return
+    if (!current) { console.log('[decommission] skip — not in local state', id); return }
     const previous = current.decommissioned
     const next     = !previous
+    console.log('[decommission] flipping', { id, previous, next })
     haptic('tap')
 
     const error = await setDecommissionedRaw(id, next)

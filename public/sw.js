@@ -6,7 +6,7 @@
 //
 // Bump CACHE_VERSION whenever the strategies change so old SW clients clear
 // their stores cleanly via the activate handler.
-const CACHE_VERSION = 'v2'
+const CACHE_VERSION = 'v3'
 const STATIC_CACHE  = `loto-static-${CACHE_VERSION}`
 const HTML_CACHE    = `loto-html-${CACHE_VERSION}`
 const IMAGE_CACHE   = `loto-images-${CACHE_VERSION}`
