@@ -4,6 +4,10 @@ import Link from 'next/link'
 import GlobalSearch from '@/components/GlobalSearch'
 import { UploadQueueProvider } from '@/components/UploadQueueProvider'
 import { SessionProvider } from '@/components/SessionProvider'
+import { AuthProvider } from '@/components/AuthProvider'
+import AuthGate from '@/components/AuthGate'
+import Greeting from '@/components/Greeting'
+import UserMenu from '@/components/UserMenu'
 import './globals.css'
 
 const inter    = Inter({ variable: '--font-inter', subsets: ['latin'], display: 'swap' })
@@ -36,12 +40,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full bg-slate-50">
+        <AuthProvider>
         <SessionProvider>
         <UploadQueueProvider>
+        <AuthGate>
         <header className="bg-brand-navy border-b border-white/10 sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-14">
-              <Link href="/" className="flex items-center gap-2.5">
+            <div className="flex items-center justify-between h-14 gap-4">
+              <Link href="/" className="flex items-center gap-2.5 shrink-0">
                 <div className="w-7 h-7 rounded-md flex items-center justify-center font-bold text-xs bg-brand-yellow text-brand-navy tracking-tight">
                   SL
                 </div>
@@ -58,6 +64,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <NavLink href="/import">Import</NavLink>
                 <NavLink href="/decommission">Decommission</NavLink>
               </nav>
+              <div className="flex items-center gap-3 shrink-0">
+                <Greeting className="hidden md:inline-flex text-white/80" />
+                <UserMenu />
+              </div>
             </div>
           </div>
         </header>
@@ -67,8 +77,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <footer className="bg-white border-t border-slate-200 py-3 text-center text-xs text-slate-500">
           Developed by Jamil Jones · Copyright 2026
         </footer>
+        </AuthGate>
         </UploadQueueProvider>
         </SessionProvider>
+        </AuthProvider>
       </body>
     </html>
   )

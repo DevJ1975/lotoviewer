@@ -1,0 +1,109 @@
+'use client'
+
+import { Suspense, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Loader2, Lock, Mail } from 'lucide-react'
+import { useAuth } from '@/components/AuthProvider'
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>}>
+      <LoginForm />
+    </Suspense>
+  )
+}
+
+function LoginForm() {
+  const router = useRouter()
+  const search = useSearchParams()
+  const next   = search.get('next') || '/'
+  const { userId, profile, loading, signIn } = useAuth()
+
+  const [email, setEmail]       = useState('')
+  const [password, setPassword] = useState('')
+  const [busy, setBusy]         = useState(false)
+  const [error, setError]       = useState<string | null>(null)
+
+  // If already signed in, bounce away from /login.
+  useEffect(() => {
+    if (loading) return
+    if (!userId) return
+    if (profile?.must_change_password) router.replace('/welcome')
+    else router.replace(next)
+  }, [loading, userId, profile, next, router])
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    const { error } = await signIn(email.trim(), password)
+    setBusy(false)
+    if (error) setError(error)
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+      <form
+        onSubmit={onSubmit}
+        className="w-full max-w-sm bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-6 space-y-5"
+      >
+        <div className="text-center space-y-1">
+          <h1 className="text-xl font-bold text-slate-900">LOTO Placard System</h1>
+          <p className="text-sm text-slate-500">Sign in to continue</p>
+        </div>
+
+        <div className="space-y-3">
+          <label className="block">
+            <span className="text-xs font-semibold text-slate-600">Email</span>
+            <div className="relative mt-1">
+              <Mail className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              />
+            </div>
+          </label>
+
+          <label className="block">
+            <span className="text-xs font-semibold text-slate-600">Password</span>
+            <div className="relative mt-1">
+              <Lock className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="password"
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              />
+            </div>
+          </label>
+        </div>
+
+        {error && (
+          <p className="text-sm font-medium text-rose-700 bg-rose-50 rounded-lg px-3 py-2">
+            {error}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={busy || !email || !password}
+          className="w-full py-2.5 rounded-lg bg-brand-navy text-white text-sm font-semibold disabled:opacity-40 hover:bg-brand-navy/90 transition-colors flex items-center justify-center gap-2"
+        >
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {busy ? 'Signing in…' : 'Sign in'}
+        </button>
+
+        <p className="text-xs text-slate-400 text-center">
+          Access is by invitation only. Contact your administrator if you need an account.
+        </p>
+      </form>
+    </div>
+  )
+}
