@@ -27,6 +27,34 @@ export async function requestPersistentStorage(): Promise<boolean> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Haptic feedback
+// ─────────────────────────────────────────────────────────────────────────────
+// Tiny vibration bursts that make button presses feel tactile on Android.
+// iOS Safari ignores navigator.vibrate entirely (by design); harmless there.
+// Named presets keep call sites terse and consistent.
+export type Haptic = 'tap' | 'success' | 'error' | 'select'
+
+const PATTERNS: Record<Haptic, number | number[]> = {
+  tap:     10,
+  select:  5,
+  success: [10, 40, 10],
+  error:   [30, 50, 30],
+}
+
+export function haptic(kind: Haptic = 'tap'): void {
+  try {
+    if (typeof navigator === 'undefined') return
+    const nav = navigator as Navigator & {
+      vibrate?: (pattern: number | readonly number[]) => boolean
+    }
+    if (typeof nav.vibrate !== 'function') return
+    nav.vibrate(PATTERNS[kind])
+  } catch {
+    /* some browsers throw when the page isn't visible — ignore */
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Wake Lock
 // ─────────────────────────────────────────────────────────────────────────────
 // Keeps the screen on during a long-running task (PDF generation, photo

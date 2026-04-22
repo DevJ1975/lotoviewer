@@ -7,6 +7,13 @@ import { Menu, X } from 'lucide-react'
 import GlobalSearch from '@/components/GlobalSearch'
 import Greeting from '@/components/Greeting'
 import UserMenu from '@/components/UserMenu'
+import OfflineBanner from '@/components/OfflineBanner'
+import PwaRegister from '@/components/PwaRegister'
+import InstallPrompt from '@/components/InstallPrompt'
+import UpdateBanner from '@/components/UpdateBanner'
+import UnloadGuard from '@/components/UnloadGuard'
+import IdleLogout from '@/components/IdleLogout'
+import StorageQuotaBanner from '@/components/StorageQuotaBanner'
 import { useAuth } from '@/components/AuthProvider'
 import { requestPersistentStorage } from '@/lib/platform'
 
@@ -48,7 +55,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
     if (userId) requestPersistentStorage()
   }, [userId])
 
-  if (hideChrome) return <>{children}</>
+  if (hideChrome) return <><PwaRegister />{children}</>
 
   return (
     <>
@@ -128,7 +135,14 @@ export default function AppChrome({ children }: { children: ReactNode }) {
         )}
       </header>
 
+      <PwaRegister />
+      <OfflineBanner />
+      <StorageQuotaBanner />
       <main>{children}</main>
+      <InstallPrompt />
+      <UpdateBanner />
+      <UnloadGuard />
+      <IdleLogout />
 
       <footer
         className="bg-white border-t border-slate-200 py-3 text-center text-xs text-slate-500"

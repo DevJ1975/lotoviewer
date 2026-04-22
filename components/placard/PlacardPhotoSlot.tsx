@@ -6,6 +6,7 @@ import { usePhotoUpload, type UploadType } from '@/hooks/usePhotoUpload'
 import { useNetworkStatus } from '@/hooks/useNetworkStatus'
 import { useUploadQueue } from '@/components/UploadQueueProvider'
 import { compressImage } from '@/lib/imageUtils'
+import { haptic } from '@/lib/platform'
 
 interface Props {
   equipmentId: string
@@ -42,6 +43,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
   useEffect(() => {
     if (status === 'success' && url && firedSuccessForRef.current !== url) {
       firedSuccessForRef.current = url
+      haptic('success')
       onSuccessRef.current?.(url)
     }
     if (status !== 'success') {

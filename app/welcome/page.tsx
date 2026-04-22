@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, User as UserIcon, Lock } from 'lucide-react'
+import { Loader2, User as UserIcon } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import PasswordField from '@/components/PasswordField'
 
 export default function WelcomePage() {
   const router = useRouter()
@@ -98,32 +99,26 @@ export default function WelcomePage() {
 
           <label className="block">
             <span className="text-xs font-semibold text-slate-600">New password</span>
-            <div className="relative mt-1">
-              <Lock className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="password"
+            <div className="mt-1">
+              <PasswordField
                 required
                 minLength={8}
                 autoComplete="new-password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
               />
             </div>
           </label>
 
           <label className="block">
             <span className="text-xs font-semibold text-slate-600">Confirm password</span>
-            <div className="relative mt-1">
-              <Lock className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="password"
+            <div className="mt-1">
+              <PasswordField
                 required
                 minLength={8}
                 autoComplete="new-password"
                 value={confirm}
                 onChange={e => setConfirm(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
               />
             </div>
           </label>

@@ -5,6 +5,7 @@ import { SessionProvider } from '@/components/SessionProvider'
 import { AuthProvider } from '@/components/AuthProvider'
 import AuthGate from '@/components/AuthGate'
 import AppChrome from '@/components/AppChrome'
+import IosSplashLinks from '@/components/IosSplashLinks'
 import './globals.css'
 
 const inter    = Inter({ variable: '--font-inter', subsets: ['latin'], display: 'swap' })
@@ -14,10 +15,8 @@ export const metadata: Metadata = {
   title: 'Soteria LOTO Dashboard',
   description: 'Real-time LOTO placard completion status',
   manifest: '/manifest.json',
-  icons: {
-    icon:  '/icons/icon-192.svg',
-    apple: '/icons/icon-192.svg',
-  },
+  // Icons come from app/icon.tsx and app/apple-icon.tsx — Next auto-emits
+  // <link rel="icon"> and <link rel="apple-touch-icon"> for those files.
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -41,6 +40,9 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${geistMono.variable} h-full antialiased`}>
+      <head>
+        <IosSplashLinks />
+      </head>
       <body className="min-h-full bg-slate-50">
         <AuthProvider>
           <SessionProvider>

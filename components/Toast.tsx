@@ -7,30 +7,48 @@ interface Props extends ToastState {
   onClose: () => void
 }
 
-export default function Toast({ message, type, onClose }: Props) {
-  // Ref holds the latest onClose so the auto-dismiss timer isn't reset
-  // every time the parent re-renders with a new inline closure.
+const STYLE = {
+  success: 'bg-emerald-500 text-white',
+  error:   'bg-rose-500 text-white',
+  info:    'bg-slate-800 text-white',
+} as const
+
+const ICON = { success: '✓', error: '✗', info: 'ⓘ' } as const
+
+// Auto-dismisses after 3.5s, or 6s when an inline action is present so the
+// user has time to read + click "Undo". Refs keep the timer stable across
+// parent re-renders that hand us a fresh onClose closure.
+export default function Toast({ message, type, action, onClose }: Props) {
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
 
   useEffect(() => {
-    const timer = setTimeout(() => onCloseRef.current(), 3500)
+    const timeout = action ? 6000 : 3500
+    const timer = setTimeout(() => onCloseRef.current(), timeout)
     return () => clearTimeout(timer)
-  }, [message, type])
+  }, [message, type, action])
 
   return (
     <div
       role="status"
       aria-live="polite"
-      className={`fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-sm font-medium animate-in slide-in-from-bottom-2 duration-200 ${
-        type === 'success' ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'
-      }`}
+      className={`fixed bottom-6 right-6 left-6 sm:left-auto z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium animate-in slide-in-from-bottom-2 duration-200 ${STYLE[type]}`}
+      style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
     >
-      <span className="text-base leading-none">{type === 'success' ? '✓' : '✗'}</span>
-      <span>{message}</span>
+      <span className="text-base leading-none">{ICON[type]}</span>
+      <span className="flex-1">{message}</span>
+      {action && (
+        <button
+          type="button"
+          onClick={() => { action.onClick(); onClose() }}
+          className="font-bold uppercase tracking-wider text-xs px-2 py-1 rounded-md bg-white/15 hover:bg-white/25 transition-colors"
+        >
+          {action.label}
+        </button>
+      )}
       <button
         onClick={onClose}
-        className="ml-1 text-white/70 hover:text-white leading-none"
+        className="text-white/70 hover:text-white leading-none"
         aria-label="Dismiss"
       >
         ×

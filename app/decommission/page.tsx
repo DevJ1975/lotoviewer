@@ -2,18 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Archive, ArrowLeft, Check, Loader2, Search } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowLeft, Check, Loader2, Search, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Equipment } from '@/lib/types'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useToast } from '@/hooks/useToast'
 import Toast from '@/components/Toast'
+import { haptic } from '@/lib/platform'
 
 export default function DecommissionPage() {
   const [equipment, setEquipment] = useState<Equipment[]>([])
   const [loading, setLoading]     = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [pending, setPending]     = useState<ReadonlySet<string>>(new Set())
+  const [selected, setSelected]   = useState<ReadonlySet<string>>(new Set())
+  const [bulkBusy, setBulkBusy]   = useState(false)
   const [search, setSearch]       = useState('')
   const debounced                 = useDebounce(search, 200)
   const { toast, showToast, clearToast } = useToast()
@@ -71,46 +74,101 @@ export default function DecommissionPage() {
 
   const rowRefs = useRef<Map<string, HTMLDivElement | null>>(new Map())
 
-  const toggle = useCallback(async (id: string) => {
-    if (pending.has(id)) return
-
-    let previous: boolean | undefined
-    let next: boolean | undefined
-
-    setEquipment(prev => prev.map(eq => {
-      if (eq.equipment_id !== id) return eq
-      previous = eq.decommissioned
-      next     = !eq.decommissioned
-      return { ...eq, decommissioned: next }
-    }))
-
-    if (previous === undefined || next === undefined) return
-
-    setPending(prev => {
-      const s = new Set(prev)
-      s.add(id)
-      return s
-    })
+  // Internal: optimistic update + persist + rollback. Pure side effect with
+  // a known `next` value — caller is responsible for tracking the previous
+  // value (read from current state) for undo. Setter callback runs twice
+  // under React Strict Mode, so we don't read state from inside it.
+  const setDecommissionedRaw = useCallback(async (id: string, next: boolean): Promise<string | null> => {
+    setEquipment(prev => prev.map(eq =>
+      eq.equipment_id === id ? { ...eq, decommissioned: next } : eq,
+    ))
+    setPending(prev => { const s = new Set(prev); s.add(id); return s })
 
     const { error } = await supabase
       .from('loto_equipment')
       .update({ decommissioned: next })
       .eq('equipment_id', id)
 
-    setPending(prev => {
-      const s = new Set(prev)
-      s.delete(id)
-      return s
-    })
+    setPending(prev => { const s = new Set(prev); s.delete(id); return s })
 
     if (error) {
-      // Rollback
+      // Rollback to the opposite of next (since that was the prior state).
       setEquipment(prev => prev.map(eq =>
-        eq.equipment_id === id ? { ...eq, decommissioned: previous! } : eq,
+        eq.equipment_id === id ? { ...eq, decommissioned: !next } : eq,
       ))
-      showToast(`Could not update ${id}: ${error.message}`, 'error')
+      return error.message
     }
-  }, [pending, showToast])
+    return null
+  }, [])
+
+  // Bulk apply — set the same `next` value for every selected id, with a
+  // single optimistic patch and one round-trip per row. Reports the per-row
+  // result count via toast and clears selection on completion.
+  const bulkApply = useCallback(async (next: boolean) => {
+    if (bulkBusy) return
+    const ids = [...selected]
+    if (ids.length === 0) return
+    setBulkBusy(true)
+    haptic('tap')
+
+    setEquipment(prev => prev.map(eq =>
+      selected.has(eq.equipment_id) ? { ...eq, decommissioned: next } : eq,
+    ))
+
+    const { error } = await supabase
+      .from('loto_equipment')
+      .update({ decommissioned: next })
+      .in('equipment_id', ids)
+
+    setBulkBusy(false)
+
+    if (error) {
+      // Rollback the optimistic change.
+      setEquipment(prev => prev.map(eq =>
+        selected.has(eq.equipment_id) ? { ...eq, decommissioned: !next } : eq,
+      ))
+      haptic('error')
+      showToast(`Bulk update failed: ${error.message}`, 'error')
+      return
+    }
+
+    setSelected(new Set())
+    showToast(
+      `${ids.length} item${ids.length === 1 ? '' : 's'} ${next ? 'decommissioned' : 'restored'}.`,
+      'success',
+      { label: 'Undo', onClick: async () => {
+        // Reapply the previous state to the same ids.
+        setEquipment(prev => prev.map(eq =>
+          ids.includes(eq.equipment_id) ? { ...eq, decommissioned: !next } : eq,
+        ))
+        await supabase
+          .from('loto_equipment')
+          .update({ decommissioned: !next })
+          .in('equipment_id', ids)
+      } },
+    )
+  }, [bulkBusy, selected, showToast])
+
+  const toggle = useCallback(async (id: string) => {
+    if (pending.has(id)) return
+    const current = equipment.find(e => e.equipment_id === id)
+    if (!current) return
+    const previous = current.decommissioned
+    const next     = !previous
+    haptic('tap')
+
+    const error = await setDecommissionedRaw(id, next)
+    if (error) {
+      haptic('error')
+      showToast(`Could not update ${id}: ${error}`, 'error')
+      return
+    }
+    showToast(
+      next ? `${id} decommissioned.` : `${id} restored.`,
+      'success',
+      { label: 'Undo', onClick: () => { setDecommissionedRaw(id, previous) } },
+    )
+  }, [pending, equipment, setDecommissionedRaw, showToast])
 
   const focusRow = (id: string) => {
     rowRefs.current.get(id)?.focus()
@@ -242,7 +300,13 @@ export default function DecommissionPage() {
                     <DecommRow
                       eq={eq}
                       pending={pending.has(eq.equipment_id)}
+                      isSelected={selected.has(eq.equipment_id)}
                       onToggle={() => toggle(eq.equipment_id)}
+                      onSelectChange={chk => setSelected(prev => {
+                        const s = new Set(prev)
+                        if (chk) s.add(eq.equipment_id); else s.delete(eq.equipment_id)
+                        return s
+                      })}
                       onKeyDown={e => onRowKeyDown(e, eq.equipment_id)}
                       registerRef={el => { rowRefs.current.set(eq.equipment_id, el) }}
                     />
@@ -254,7 +318,48 @@ export default function DecommissionPage() {
         </div>
       )}
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={clearToast} />}
+      {/* Sticky bulk-actions bar — appears whenever rows are selected */}
+      {selected.size > 0 && (
+        <div
+          role="toolbar"
+          aria-label="Bulk actions"
+          className="fixed left-0 right-0 bottom-0 z-40 bg-brand-navy text-white shadow-2xl border-t border-white/10"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        >
+          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-semibold tabular-nums">{selected.size} selected</span>
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              className="text-white/70 hover:text-white text-xs flex items-center gap-1"
+              aria-label="Clear selection"
+            >
+              <X className="h-3.5 w-3.5" /> Clear
+            </button>
+            <div className="flex-1" />
+            <button
+              type="button"
+              disabled={bulkBusy}
+              onClick={() => bulkApply(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-500 text-amber-950 text-sm font-bold disabled:opacity-50 hover:bg-amber-400 transition-colors min-h-[40px]"
+            >
+              {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
+              Decommission
+            </button>
+            <button
+              type="button"
+              disabled={bulkBusy}
+              onClick={() => bulkApply(false)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white/10 text-white text-sm font-bold disabled:opacity-50 hover:bg-white/20 transition-colors min-h-[40px]"
+            >
+              {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArchiveRestore className="h-4 w-4" />}
+              Restore
+            </button>
+          </div>
+        </div>
+      )}
+
+      {toast && <Toast {...toast} onClose={clearToast} />}
     </div>
   )
 }
@@ -278,14 +383,16 @@ function CounterTile({ value, label, valueClass, bgClass }: CounterTileProps) {
 }
 
 interface DecommRowProps {
-  eq:          Equipment
-  pending:     boolean
-  onToggle:    () => void
-  onKeyDown:   (e: React.KeyboardEvent<HTMLDivElement>) => void
-  registerRef: (el: HTMLDivElement | null) => void
+  eq:             Equipment
+  pending:        boolean
+  isSelected:     boolean
+  onToggle:       () => void
+  onSelectChange: (selected: boolean) => void
+  onKeyDown:      (e: React.KeyboardEvent<HTMLDivElement>) => void
+  registerRef:    (el: HTMLDivElement | null) => void
 }
 
-function DecommRow({ eq, pending, onToggle, onKeyDown, registerRef }: DecommRowProps) {
+function DecommRow({ eq, pending, isSelected, onToggle, onSelectChange, onKeyDown, registerRef }: DecommRowProps) {
   const checked = eq.decommissioned
   return (
     <div
@@ -297,10 +404,23 @@ function DecommRow({ eq, pending, onToggle, onKeyDown, registerRef }: DecommRowP
       tabIndex={0}
       onClick={onToggle}
       onKeyDown={onKeyDown}
-      className={`flex items-center gap-3 px-4 py-3.5 min-h-[56px] cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/30 focus-visible:ring-inset ${
-        checked ? 'bg-amber-50/30 hover:bg-amber-50/60' : 'hover:bg-slate-50'
+      className={`flex items-center gap-3 px-3 sm:px-4 py-3.5 min-h-[56px] cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/30 focus-visible:ring-inset ${
+        isSelected ? 'bg-brand-navy/5 hover:bg-brand-navy/10' : checked ? 'bg-amber-50/30 hover:bg-amber-50/60' : 'hover:bg-slate-50'
       }`}
     >
+      {/* Multi-select checkbox — clicking it does NOT toggle decommissioned */}
+      <label
+        onClick={e => e.stopPropagation()}
+        className="shrink-0 flex items-center justify-center h-9 w-9 -my-2 -ml-2 cursor-pointer"
+      >
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={e => onSelectChange(e.target.checked)}
+          aria-label={`Select ${eq.equipment_id}`}
+          className="h-4 w-4 rounded border-slate-300 text-brand-navy focus:ring-brand-navy/30"
+        />
+      </label>
       <span
         aria-hidden="true"
         className={`shrink-0 h-5 w-5 rounded border flex items-center justify-center transition-colors ${

@@ -10,6 +10,9 @@ interface Props {
   steps:     LotoEnergyStep[]
   onPhotoSuccess?: (msg: string) => void
   onPhotoError?:   (msg: string) => void
+  // Fires with the photo type whenever a slot reports a successful save —
+  // lets the parent implement behaviors like auto-advance after capture.
+  onPhotoSaved?:   (type: 'equip' | 'iso') => void
 }
 
 // ── Color palette matching physical placard ────────────────────────────────
@@ -32,7 +35,7 @@ function EnergyBadge({ code }: { code: string }) {
   )
 }
 
-export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoError }: Props) {
+export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoError, onPhotoSaved }: Props) {
   const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
   const lang: 'en' = 'en'
   const notes = equipment.notes?.trim() ? equipment.notes : PLACARD_TEXT.warningFallback.en
@@ -122,7 +125,7 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
             type="EQUIP"
             label={PLACARD_TEXT.photoCaptions[lang].equipment}
             existingUrl={equipment.equip_photo_url}
-            onSuccess={() => onPhotoSuccess?.('Equipment photo saved.')}
+            onSuccess={() => { onPhotoSuccess?.('Equipment photo saved.'); onPhotoSaved?.('equip') }}
             onError={onPhotoError}
           />
         </div>
@@ -132,7 +135,7 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
             type="ISO"
             label={PLACARD_TEXT.photoCaptions[lang].isolation}
             existingUrl={equipment.iso_photo_url}
-            onSuccess={() => onPhotoSuccess?.('Isolation photo saved.')}
+            onSuccess={() => { onPhotoSuccess?.('Isolation photo saved.'); onPhotoSaved?.('iso') }}
             onError={onPhotoError}
           />
         </div>

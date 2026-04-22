@@ -145,12 +145,30 @@ export function UploadQueueProvider({ children }: { children: React.ReactNode })
     return { ok, failed }
   }, [refresh])
 
-  // Initial load + sync attempt when online events fire
+  // Initial load + drain triggers. iOS Safari has no Background Sync API,
+  // so we lean on every "the user is back" signal we can:
+  //   - online        → just got connectivity back
+  //   - focus         → switched back to this tab
+  //   - visibilitychange → standalone PWA returned to foreground (iPad wake)
+  // Each event tries to drain the queue. syncNow is a no-op if empty or
+  // already syncing, so the duplicate triggers are cheap.
   useEffect(() => {
     refresh()
-    function onOnline() { syncNow() }
-    window.addEventListener('online', onOnline)
-    return () => window.removeEventListener('online', onOnline)
+    const drain = () => {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return
+      syncNow()
+    }
+    const onVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') drain()
+    }
+    window.addEventListener('online',  drain)
+    window.addEventListener('focus',   drain)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('online',  drain)
+      window.removeEventListener('focus',   drain)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [refresh, syncNow])
 
   const queuedKeys = new Set(queue.map(q => `${q.equipmentId}:${q.type}`))

@@ -3,7 +3,10 @@
   "short_name": "Soteria LOTO",
   "description": "Real-time LOTO placard completion tracking",
   "start_url": "/",
+  "scope": "/",
+  "id": "/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#1B3A6B",
   "theme_color": "#1B3A6B",
   "icons": [
@@ -19,5 +22,11 @@
       "type": "image/svg+xml",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "shortcuts": [
+    { "name": "Dashboard",     "url": "/",             "description": "Open the equipment dashboard" },
+    { "name": "Status",        "url": "/status",       "description": "View live completion status" },
+    { "name": "Decommission",  "url": "/decommission", "description": "Retire equipment" }
+  ],
+  "categories": ["productivity", "utilities", "business"]
 }

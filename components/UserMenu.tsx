@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ChevronDown, LogOut, Shield, UserRound } from 'lucide-react'
+import { ChevronDown, History, LogOut, Shield, UserRound } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 
 export default function UserMenu() {
@@ -43,14 +43,24 @@ export default function UserMenu() {
             <div className="truncate">{email}</div>
           </div>
           {profile?.is_admin && (
-            <Link
-              href="/admin/users"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              <Shield className="h-4 w-4 text-slate-400" />
-              User Management
-            </Link>
+            <>
+              <Link
+                href="/admin/users"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <Shield className="h-4 w-4 text-slate-400" />
+                User Management
+              </Link>
+              <Link
+                href="/admin/audit"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <History className="h-4 w-4 text-slate-400" />
+                Audit Log
+              </Link>
+            </>
           )}
           <Link
             href="/welcome"

@@ -61,6 +61,26 @@ export default function GlobalSearch() {
     return () => document.removeEventListener('mousedown', handleMouseDown)
   }, [])
 
+  // Global keyboard shortcuts: ⌘/Ctrl+K, or "/" while not typing in another
+  // input. Focuses + selects so the user can immediately type or replace.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const isMeta = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k'
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName
+      const inEditable = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable
+      const isSlash = e.key === '/' && !inEditable
+      if (!isMeta && !isSlash) return
+      e.preventDefault()
+      const el = inputRef.current
+      if (!el) return
+      el.focus()
+      el.select()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const navigate = useCallback((id: string) => {
     router.push(`/equipment/${encodeURIComponent(id)}`)
     setQuery('')

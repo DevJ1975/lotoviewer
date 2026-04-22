@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useState, useCallback, useMemo } from 'react'
+import { Suspense, useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Equipment } from '@/lib/types'
@@ -9,6 +9,7 @@ import DashboardSidebar     from '@/components/dashboard/DashboardSidebar'
 import EquipmentListPanel   from '@/components/dashboard/EquipmentListPanel'
 import PlacardDetailPanel   from '@/components/dashboard/PlacardDetailPanel'
 import BatchPrintModal      from '@/components/BatchPrintModal'
+import { DashboardSkeleton } from '@/components/Skeleton'
 import { useSession } from '@/components/SessionProvider'
 
 export default function HomePage() {
@@ -78,6 +79,17 @@ function HomeDashboard() {
     return () => { supabase.removeChannel(channel) }
   }, [fetchData])
 
+  // iPads suspend backgrounded tabs aggressively — when the user comes back,
+  // the realtime channel may have missed events. A single refetch on
+  // visibility return guarantees the dashboard is up to date.
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === 'visible') fetchData()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [fetchData])
+
   const selectedEquipment = useMemo(
     () => equipment.find(e => e.equipment_id === selectedEqId) ?? null,
     [equipment, selectedEqId],
@@ -93,11 +105,67 @@ function HomeDashboard() {
     router.replace(qs ? `/?${qs}` : '/')
   }
 
-  const handleSelectDept  = (dept: string | null) => setUrlState({ dept, eq: null })
+  // Pending auto-advance timer — held in a ref so we can cancel it whenever
+  // the user takes a manual action (selecting a different item, switching
+  // departments, or unmounting). Without this, an in-flight timer would
+  // bump the user away from a screen they just chose.
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelPendingAdvance = useCallback(() => {
+    if (advanceTimer.current) { clearTimeout(advanceTimer.current); advanceTimer.current = null }
+  }, [])
+  useEffect(() => () => cancelPendingAdvance(), [cancelPendingAdvance])
+
+  const handleSelectDept  = (dept: string | null) => {
+    cancelPendingAdvance()
+    setUrlState({ dept, eq: null })
+  }
   const handleSelectEquip = (id: string) => {
+    cancelPendingAdvance()
     recordVisit(id)
     setUrlState({ eq: id })
   }
+
+  // After a photo save, if the currently selected equipment no longer needs
+  // a photo (both required slots filled), auto-advance to the next needs-
+  // photo item in the active view after a brief pause so the user sees the
+  // success indicator. Cancels itself if the user navigates manually.
+  const handlePhotoSaved = useCallback((type: 'equip' | 'iso') => {
+    if (!selectedEqId) return
+    const current = equipment.find(e => e.equipment_id === selectedEqId)
+    if (!current) return
+
+    // Optimistically mark the photo as present so the "still needs photo"
+    // check below is accurate before realtime catches up.
+    const after = {
+      ...current,
+      has_equip_photo: type === 'equip' ? true : current.has_equip_photo,
+      has_iso_photo:   type === 'iso'   ? true : current.has_iso_photo,
+    }
+    const stillNeedsEquip = after.needs_equip_photo && !after.has_equip_photo
+    const stillNeedsIso   = after.needs_iso_photo   && !after.has_iso_photo
+    if (stillNeedsEquip || stillNeedsIso) return
+
+    // Find the next item in this dept (or globally if none selected) that
+    // still needs a photo and isn't decommissioned.
+    const scope = selectedDept
+      ? equipment.filter(e => e.department === selectedDept)
+      : equipment
+    const sorted = [...scope].sort((a, b) => a.equipment_id.localeCompare(b.equipment_id))
+    const idx = sorted.findIndex(e => e.equipment_id === selectedEqId)
+    const rotated = idx >= 0 ? [...sorted.slice(idx + 1), ...sorted.slice(0, idx)] : sorted
+    const nextNeedsPhoto = rotated.find(e =>
+      !decommissioned.has(e.equipment_id)
+      && ((e.needs_equip_photo && !e.has_equip_photo) || (e.needs_iso_photo && !e.has_iso_photo)),
+    )
+    if (!nextNeedsPhoto) return
+
+    cancelPendingAdvance()
+    advanceTimer.current = setTimeout(() => {
+      advanceTimer.current = null
+      handleSelectEquip(nextNeedsPhoto.equipment_id)
+    }, 1200)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEqId, selectedDept, equipment, decommissioned, cancelPendingAdvance])
 
   if (loadError) {
     return (
@@ -118,13 +186,7 @@ function HomeDashboard() {
     )
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-6rem)]">
-        <div className="w-10 h-10 border-4 border-brand-navy border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
+  if (loading) return <DashboardSkeleton />
 
   return (
     <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-6rem)]">
@@ -149,7 +211,7 @@ function HomeDashboard() {
         onSelectEquip={handleSelectEquip}
         decommissioned={decommissioned}
       />
-      <PlacardDetailPanel equipment={selectedEquipment} />
+      <PlacardDetailPanel equipment={selectedEquipment} onPhotoSaved={handlePhotoSaved} />
 
       <BatchPrintModal
         open={batchOpen}

@@ -10,9 +10,12 @@ import type { Equipment, LotoEnergyStep } from '@/lib/types'
 
 interface Props {
   equipment: Equipment | null
+  // Fires with the photo type when a slot reports a successful save — used
+  // by the parent dashboard to auto-advance to the next needs-photo item.
+  onPhotoSaved?: (type: 'equip' | 'iso') => void
 }
 
-export default function PlacardDetailPanel({ equipment }: Props) {
+export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
   const [steps, setSteps]     = useState<LotoEnergyStep[]>([])
   const [loading, setLoading] = useState(false)
   const { toast, showToast, clearToast } = useToast()
@@ -70,6 +73,7 @@ export default function PlacardDetailPanel({ equipment }: Props) {
             steps={steps}
             onPhotoSuccess={msg => showToast(msg, 'success')}
             onPhotoError={msg => showToast(msg, 'error')}
+            onPhotoSaved={onPhotoSaved}
           />
         )}
       </div>
