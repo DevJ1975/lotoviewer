@@ -41,11 +41,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   const fetchProfile = useCallback(async (uid: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', uid)
       .maybeSingle()
+    // Log failure modes explicitly — silent profile fetch failures have
+    // caused multiple "why is the admin menu hidden?" incidents.
+    if (error) {
+      console.error('[auth] profile fetch error', error)
+    } else if (!data) {
+      console.warn('[auth] no profile row for user', uid, '— admin/first-login flows will not fire')
+    }
     setProfileState((data ?? null) as Profile | null)
   }, [])
 
