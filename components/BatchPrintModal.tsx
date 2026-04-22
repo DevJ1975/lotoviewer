@@ -2,8 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { generateBatchPlacardPdf } from '@/lib/pdfPlacard'
-import { downloadPdf } from '@/lib/pdfUtils'
 import type { Equipment, LotoEnergyStep } from '@/lib/types'
 
 interface Props {
@@ -72,25 +70,35 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
     setErrorMsg(null)
 
     try {
-      // Fetch all steps in parallel
-      const stepResults = await Promise.all(
-        deptEquipment.map(eq =>
-          supabase
-            .from('loto_energy_steps')
-            .select('*')
-            .eq('equipment_id', eq.equipment_id)
-            .order('energy_type', { ascending: true })
-            .order('step_number', { ascending: true })
-        )
-      )
+      // One query for all dept equipment — previously fired N requests in parallel.
+      const equipmentIds = deptEquipment.map(eq => eq.equipment_id)
+      const { data: allSteps, error: stepsError } = await supabase
+        .from('loto_energy_steps')
+        .select('*')
+        .in('equipment_id', equipmentIds)
+        .order('energy_type', { ascending: true })
+        .order('step_number', { ascending: true })
+      if (stepsError) throw stepsError
 
-      const items = deptEquipment.map((eq, i) => ({
+      const stepsByEquipment = new Map<string, LotoEnergyStep[]>()
+      for (const step of (allSteps as LotoEnergyStep[] | null) ?? []) {
+        const list = stepsByEquipment.get(step.equipment_id) ?? []
+        list.push(step)
+        stepsByEquipment.set(step.equipment_id, list)
+      }
+
+      const items = deptEquipment.map(eq => ({
         equipment: eq,
-        steps:     (stepResults[i].data as LotoEnergyStep[] | null) ?? [],
+        steps:     stepsByEquipment.get(eq.equipment_id) ?? [],
       }))
 
       setPhase('rendering')
-      const bytes = await generateBatchPlacardPdf(items, (done, total) => {
+      // Lazy-load pdf-lib here — only needed when the user actually generates.
+      const [{ generateBatchPlacardPdf }, { downloadPdf }] = await Promise.all([
+        import('@/lib/pdfPlacard'),
+        import('@/lib/pdfUtils'),
+      ])
+      const bytes = await generateBatchPlacardPdf(items, (done: number, total: number) => {
         setProgress(Math.round((done / total) * 100))
       })
 

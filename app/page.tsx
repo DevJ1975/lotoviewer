@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Equipment } from '@/lib/types'
+import { reconcileEquipment, type RealtimePayload } from '@/lib/equipmentReconcile'
 import DashboardSidebar     from '@/components/dashboard/DashboardSidebar'
 import EquipmentListPanel   from '@/components/dashboard/EquipmentListPanel'
 import PlacardDetailPanel   from '@/components/dashboard/PlacardDetailPanel'
@@ -59,9 +60,19 @@ function HomeDashboard() {
   useEffect(() => {
     fetchData()
 
+    // Reconcile realtime events in-memory instead of refetching the whole
+    // table on every change — matters once equipment count grows past a few
+    // hundred rows. DELETE/INSERT payloads carry the full row; UPDATE carries
+    // the new record. Order is preserved by equipment_id on insert.
     const channel = supabase
       .channel('loto_equipment_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'loto_equipment' }, fetchData)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'loto_equipment' },
+        (payload: RealtimePayload) => {
+          setEquipment((prev: Equipment[]) => reconcileEquipment(prev, payload))
+        },
+      )
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }

@@ -2,8 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { generatePlacardPdf } from '@/lib/pdfPlacard'
-import { downloadPdf } from '@/lib/pdfUtils'
 import type { Equipment, LotoEnergyStep } from '@/lib/types'
 
 interface Props {
@@ -53,6 +51,8 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
 
     ;(async () => {
       try {
+        // Lazy-load pdf-lib — only needed when the preview actually opens.
+        const { generatePlacardPdf } = await import('@/lib/pdfPlacard')
         const bytes = await generatePlacardPdf({ equipment: equipmentRef.current, steps: stepsRef.current })
         if (cancelled) return
 
@@ -113,8 +113,10 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
 
   if (!open) return null
 
-  function handleDownload() {
-    if (pdfBytes) downloadPdf(pdfBytes, `${equipment.equipment_id}_LOTO_Placard.pdf`)
+  async function handleDownload() {
+    if (!pdfBytes) return
+    const { downloadPdf } = await import('@/lib/pdfUtils')
+    downloadPdf(pdfBytes, `${equipment.equipment_id}_LOTO_Placard.pdf`)
   }
 
   function handlePrint() {

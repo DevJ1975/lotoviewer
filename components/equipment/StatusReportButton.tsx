@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { FileText, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Equipment, LotoReview } from '@/lib/types'
-import { generateStatusReport, downloadStatusReport } from '@/lib/report'
 
 interface Props {
   equipment:      Equipment[]
@@ -26,6 +25,9 @@ export default function StatusReportButton({ equipment, decommissioned }: Props)
         .limit(500)
       if (fetchErr) throw new Error(fetchErr.message)
 
+      // Lazy-load the PDF generator (pdf-lib is ~300KB min-gzipped) — the
+      // status report is a rare action, no reason to ship it on first paint.
+      const { generateStatusReport, downloadStatusReport } = await import('@/lib/report')
       const bytes = await generateStatusReport({
         equipment,
         decommissioned,

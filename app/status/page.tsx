@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Equipment } from '@/lib/types'
 import StatsCards from '@/components/StatsCards'
@@ -39,13 +39,27 @@ export default function StatusPage() {
     }
   }, [fetchData])
 
-  const active   = equipment.filter(e => !e.decommissioned)
-  const total    = active.length
-  const complete = active.filter(e => e.photo_status === 'complete').length
-  const partial  = active.filter(e => e.photo_status === 'partial').length
-  const missing  = active.filter(e => e.photo_status === 'missing').length
-  const pct      = total > 0 ? (complete / total) * 100 : 0
-  const deptStats = buildDeptStats(active).sort((a, b) => a.department.localeCompare(b.department))
+  // Single pass over equipment to compute all stats — previously 4 separate
+  // .filter() scans of the same array.
+  const { total, complete, partial, missing, pct, active } = useMemo(() => {
+    const active: Equipment[] = []
+    let complete = 0, partial = 0, missing = 0
+    for (const e of equipment) {
+      if (e.decommissioned) continue
+      active.push(e)
+      if (e.photo_status === 'complete') complete++
+      else if (e.photo_status === 'partial') partial++
+      else missing++
+    }
+    const total = active.length
+    const pct   = total > 0 ? (complete / total) * 100 : 0
+    return { total, complete, partial, missing, pct, active }
+  }, [equipment])
+
+  const deptStats = useMemo(
+    () => buildDeptStats(active).sort((a, b) => a.department.localeCompare(b.department)),
+    [active],
+  )
 
   if (loading) {
     return (

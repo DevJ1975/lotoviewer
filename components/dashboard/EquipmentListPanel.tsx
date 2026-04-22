@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useState, type MouseEvent } from 'react'
 import type { Equipment } from '@/lib/types'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useUploadQueue } from '@/components/UploadQueueProvider'
@@ -35,6 +35,10 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
   const debounced = useDebounce(search, 300)
   const { queuedKeys }         = useUploadQueue()
   const { flags, toggleFlag }  = useSession()
+
+  // Stable handlers so memoized rows don't re-render when parent state flips.
+  const handleSelect = useCallback((id: string) => onSelectEquip(id), [onSelectEquip])
+  const handleToggleFlag = useCallback((id: string) => toggleFlag(id), [toggleFlag])
   const queuedEquipmentIds = useMemo(() => {
     const ids = new Set<string>()
     queuedKeys.forEach(k => { ids.add(k.split(':')[0]) })
@@ -176,56 +180,17 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
                 </div>
               )}
               <ul>
-                {group.rows.map(eq => {
-                  const isSelected = eq.equipment_id === selectedEqId
-                  const photoCount = (eq.has_equip_photo ? 1 : 0) + (eq.has_iso_photo ? 1 : 0)
-                  return (
-                    <li key={eq.equipment_id}>
-                      <div
-                        onClick={() => onSelectEquip(eq.equipment_id)}
-                        onContextMenu={e => { e.preventDefault(); toggleFlag(eq.equipment_id) }}
-                        className={`w-full text-left px-4 py-3 border-b border-slate-100 transition-colors cursor-pointer group ${
-                          isSelected ? 'bg-brand-navy/5' : flags.has(eq.equipment_id) ? 'bg-orange-50/60 hover:bg-orange-50' : 'bg-white hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <StatusDot status={eq.photo_status} />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-sm font-bold text-brand-navy truncate">{eq.equipment_id}</span>
-                              {eq.verified && <span className="text-emerald-500 text-xs" title="Verified">✓</span>}
-                            </div>
-                            <div className="text-xs text-slate-500 truncate">{shortName(eq.description)}</div>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {queuedEquipmentIds.has(eq.equipment_id) && (
-                              <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 rounded-full px-1.5 py-0.5" title="Upload queued">
-                                ☁︎ Queued
-                              </span>
-                            )}
-                            <span className="text-[10px] font-semibold text-slate-500 tabular-nums bg-slate-100 rounded-full px-1.5 py-0.5">
-                              {photoCount}/2
-                            </span>
-                            <StatusPill status={eq.photo_status} />
-                            <button
-                              type="button"
-                              onClick={e => { e.stopPropagation(); toggleFlag(eq.equipment_id) }}
-                              aria-label={flags.has(eq.equipment_id) ? 'Unflag' : 'Flag for follow-up'}
-                              title={flags.has(eq.equipment_id) ? 'Unflag' : 'Flag for follow-up'}
-                              className={`text-sm w-6 h-6 flex items-center justify-center rounded transition-all ${
-                                flags.has(eq.equipment_id)
-                                  ? 'text-orange-500 opacity-100'
-                                  : 'text-slate-300 opacity-0 group-hover:opacity-100 hover:text-orange-500'
-                              }`}
-                            >
-                              🚩
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </li>
-                  )
-                })}
+                {group.rows.map(eq => (
+                  <EquipmentRow
+                    key={eq.equipment_id}
+                    eq={eq}
+                    isSelected={eq.equipment_id === selectedEqId}
+                    isFlagged={flags.has(eq.equipment_id)}
+                    isQueued={queuedEquipmentIds.has(eq.equipment_id)}
+                    onSelect={handleSelect}
+                    onToggleFlag={handleToggleFlag}
+                  />
+                ))}
               </ul>
             </div>
           ))
@@ -248,4 +213,72 @@ function StatusPill({ status }: { status: Equipment['photo_status'] }) {
       : 'bg-rose-50 text-rose-700'
   return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${style}`}>{status}</span>
 }
+
+interface EquipmentRowProps {
+  eq:           Equipment
+  isSelected:   boolean
+  isFlagged:    boolean
+  isQueued:     boolean
+  onSelect:     (id: string) => void
+  onToggleFlag: (id: string) => void
+}
+
+// Memoized so that unrelated parent state changes (search, sort, filter) do not
+// re-render every row. A full list of ~1000 equipment reduces from ~1000
+// reconciles per keystroke to near-zero.
+const EquipmentRow = memo(function EquipmentRow({ eq, isSelected, isFlagged, isQueued, onSelect, onToggleFlag }: EquipmentRowProps) {
+  const photoCount = (eq.has_equip_photo ? 1 : 0) + (eq.has_iso_photo ? 1 : 0)
+  const handleClick = () => onSelect(eq.equipment_id)
+  const handleContext = (e: MouseEvent) => { e.preventDefault(); onToggleFlag(eq.equipment_id) }
+  const handleFlagClick = (e: MouseEvent) => { e.stopPropagation(); onToggleFlag(eq.equipment_id) }
+  // content-visibility skips layout+paint for off-screen rows — near-virtualization
+  // without a dep. intrinsic-size matches the row's rendered height (~68px) so
+  // the scrollbar stays correct.
+  return (
+    <li style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 68px' }}>
+      <div
+        onClick={handleClick}
+        onContextMenu={handleContext}
+        className={`w-full text-left px-4 py-3 border-b border-slate-100 transition-colors cursor-pointer group ${
+          isSelected ? 'bg-brand-navy/5' : isFlagged ? 'bg-orange-50/60 hover:bg-orange-50' : 'bg-white hover:bg-slate-50'
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          <StatusDot status={eq.photo_status} />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-sm font-bold text-brand-navy truncate">{eq.equipment_id}</span>
+              {eq.verified && <span className="text-emerald-500 text-xs" title="Verified">✓</span>}
+            </div>
+            <div className="text-xs text-slate-500 truncate">{shortName(eq.description)}</div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {isQueued && (
+              <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 rounded-full px-1.5 py-0.5" title="Upload queued">
+                ☁︎ Queued
+              </span>
+            )}
+            <span className="text-[10px] font-semibold text-slate-500 tabular-nums bg-slate-100 rounded-full px-1.5 py-0.5">
+              {photoCount}/2
+            </span>
+            <StatusPill status={eq.photo_status} />
+            <button
+              type="button"
+              onClick={handleFlagClick}
+              aria-label={isFlagged ? 'Unflag' : 'Flag for follow-up'}
+              title={isFlagged ? 'Unflag' : 'Flag for follow-up'}
+              className={`text-sm w-6 h-6 flex items-center justify-center rounded transition-all ${
+                isFlagged
+                  ? 'text-orange-500 opacity-100'
+                  : 'text-slate-300 opacity-0 group-hover:opacity-100 hover:text-orange-500'
+              }`}
+            >
+              🚩
+            </button>
+          </div>
+        </div>
+      </div>
+    </li>
+  )
+})
 

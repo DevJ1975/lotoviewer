@@ -11,7 +11,6 @@ import Toast from '@/components/Toast'
 import { Button } from '@/components/ui/button'
 import { useReviews } from '@/hooks/useReviews'
 import { useToast } from '@/hooks/useToast'
-import { stampSignature, downloadPdf } from '@/lib/pdfUtils'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
@@ -49,6 +48,8 @@ export default function DepartmentDetailPage() {
     if (!targets.length) return
     setSigning(true)
     let signed = 0, failed = 0
+    // Lazy-load pdf-lib helpers — only the reviewer flow needs them.
+    const { stampSignature, downloadPdf } = await import('@/lib/pdfUtils')
     try {
       for (const eq of targets) {
         if (!mountedRef.current) return  // user left the page
