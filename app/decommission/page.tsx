@@ -11,14 +11,15 @@ import Toast from '@/components/Toast'
 import { haptic } from '@/lib/platform'
 
 export default function DecommissionPage() {
-  const [equipment, setEquipment] = useState<Equipment[]>([])
-  const [loading, setLoading]     = useState(true)
-  const [loadError, setLoadError] = useState(false)
-  const [pending, setPending]     = useState<ReadonlySet<string>>(new Set())
-  const [selected, setSelected]   = useState<ReadonlySet<string>>(new Set())
-  const [bulkBusy, setBulkBusy]   = useState(false)
-  const [search, setSearch]       = useState('')
-  const debounced                 = useDebounce(search, 200)
+  const [equipment, setEquipment]     = useState<Equipment[]>([])
+  const [loading, setLoading]         = useState(true)
+  const [loadError, setLoadError]     = useState(false)
+  const [schemaError, setSchemaError] = useState(false)
+  const [pending, setPending]         = useState<ReadonlySet<string>>(new Set())
+  const [selected, setSelected]       = useState<ReadonlySet<string>>(new Set())
+  const [bulkBusy, setBulkBusy]       = useState(false)
+  const [search, setSearch]           = useState('')
+  const debounced                     = useDebounce(search, 200)
   const { toast, showToast, clearToast } = useToast()
 
   const fetchData = useCallback(async () => {
@@ -27,9 +28,17 @@ export default function DecommissionPage() {
       .select('*')
       .order('equipment_id', { ascending: true })
     if (error) {
+      console.error('[decommission] fetch failed', error)
       setLoadError(true)
     } else if (data) {
-      setEquipment(data as Equipment[])
+      // Hard schema check: if the `decommissioned` column is missing from the
+      // DB or PostgREST's schema cache, every row comes back without the
+      // property and counters look fine (all "active") — but writes then
+      // silently do nothing. Detect it up front so the user can't be fooled.
+      const rows = data as Equipment[]
+      const missing = rows.length > 0 && rows.every(r => !('decommissioned' in r))
+      setSchemaError(missing)
+      setEquipment(rows)
       setLoadError(false)
     }
     setLoading(false)
@@ -87,22 +96,42 @@ export default function DecommissionPage() {
     // .select() forces Supabase to return the updated rows. Without it, a
     // zero-row UPDATE (RLS denial, expired JWT, stale schema cache) silently
     // returns { error: null, data: null } — the UI looks fine but nothing
-    // persists. Checking data.length distinguishes "saved" from "swallowed."
+    // persists. Selecting BOTH equipment_id AND decommissioned lets us also
+    // verify the persisted value matches what we asked for: if a trigger or
+    // BEFORE UPDATE rule overrode our value, we catch it here instead of at
+    // the next page refresh.
     const { data, error } = await supabase
       .from('loto_equipment')
       .update({ decommissioned: next })
       .eq('equipment_id', id)
-      .select('equipment_id')
+      .select('equipment_id, decommissioned')
 
     setPending(prev => { const s = new Set(prev); s.delete(id); return s })
 
-    const failed = error != null || !data || data.length === 0
-    if (failed) {
+    if (error) {
+      console.error('[decommission] write failed', { id, next, error })
       setEquipment(prev => prev.map(eq =>
         eq.equipment_id === id ? { ...eq, decommissioned: !next } : eq,
       ))
-      if (error) return error.message
+      return error.message
+    }
+    if (!data || data.length === 0) {
+      console.error('[decommission] write returned 0 rows', { id, next })
+      setEquipment(prev => prev.map(eq =>
+        eq.equipment_id === id ? { ...eq, decommissioned: !next } : eq,
+      ))
       return 'Write was rejected (0 rows affected). Check you are signed in.'
+    }
+    const stored = (data[0] as { decommissioned?: boolean }).decommissioned
+    if (stored !== next) {
+      // Server accepted the request but the stored value does not match —
+      // a trigger reverted it, or the column is missing from the schema
+      // cache and Postgres silently ignored it.
+      console.error('[decommission] value mismatch — server stored', stored, 'not', next)
+      setEquipment(prev => prev.map(eq =>
+        eq.equipment_id === id ? { ...eq, decommissioned: stored ?? !next } : eq,
+      ))
+      return `Server saved decommissioned=${stored} (expected ${next}). Run migration 002 or reload the Supabase schema cache.`
     }
     return null
   }, [])
@@ -139,16 +168,18 @@ export default function DecommissionPage() {
 
     // See setDecommissionedRaw for why .select() matters — otherwise an RLS
     // denial or expired session returns "success" with 0 rows written.
+    // Also select `decommissioned` so we can verify the stored value matches.
     const { data, error } = await supabase
       .from('loto_equipment')
       .update({ decommissioned: next })
       .in('equipment_id', ids)
-      .select('equipment_id')
+      .select('equipment_id, decommissioned')
 
     setBulkBusy(false)
 
     const failed = error != null || !data || data.length === 0
     if (failed) {
+      console.error('[decommission] bulk write failed', { ids, next, error })
       setEquipment(prev => prev.map(eq =>
         idsSet.has(eq.equipment_id) ? { ...eq, decommissioned: !next } : eq,
       ))
@@ -160,17 +191,25 @@ export default function DecommissionPage() {
       return
     }
 
-    if (data.length < ids.length) {
-      // Partial success — reconcile local state with the server's answer.
-      const savedIds = new Set(data.map(r => r.equipment_id))
+    // Reconcile against BOTH row count and stored value. A row is "saved"
+    // only if it came back AND the returned decommissioned value matches
+    // what we tried to write. Otherwise we consider it rejected.
+    const savedIds = new Set(
+      data
+        .filter(r => (r as { decommissioned?: boolean }).decommissioned === next)
+        .map(r => r.equipment_id),
+    )
+    if (savedIds.size < ids.length) {
+      console.error('[decommission] bulk partial/mismatch', { ids, saved: [...savedIds], returned: data })
       setEquipment(prev => prev.map(eq =>
         idsSet.has(eq.equipment_id) && !savedIds.has(eq.equipment_id)
           ? { ...eq, decommissioned: !next }
           : eq,
       ))
       haptic('error')
+      const rejected = ids.length - savedIds.size
       showToast(
-        `Saved ${data.length} of ${ids.length}. ${ids.length - data.length} rejected.`,
+        `Saved ${savedIds.size} of ${ids.length}. ${rejected} rejected (check schema / RLS).`,
         'error',
       )
       setSelected(new Set())
@@ -307,6 +346,24 @@ export default function DecommissionPage() {
           </div>
         </div>
       </header>
+
+      {schemaError && (
+        <div role="alert" className="rounded-xl border-2 border-rose-300 bg-rose-50 p-4 text-sm text-rose-900 space-y-2">
+          <p className="font-bold flex items-center gap-2">
+            <span>⚠</span> Database schema is out of date
+          </p>
+          <p>
+            The <code className="px-1 py-0.5 rounded bg-rose-100 font-mono text-xs">decommissioned</code> column
+            isn&apos;t being returned for any equipment row. Decommission writes will not persist until this is fixed.
+          </p>
+          <p className="text-xs">
+            Open the Supabase SQL editor and run{' '}
+            <code className="px-1 py-0.5 rounded bg-rose-100 font-mono">migrations/002_decommissioned_and_indexes.sql</code>,
+            then reload PostgREST&apos;s schema cache with{' '}
+            <code className="px-1 py-0.5 rounded bg-rose-100 font-mono">NOTIFY pgrst, &apos;reload schema&apos;;</code>
+          </p>
+        </div>
+      )}
 
       {/* Counter tiles */}
       <div className="grid grid-cols-3 gap-3">
