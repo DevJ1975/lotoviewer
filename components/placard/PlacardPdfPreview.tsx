@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useWakeLock } from '@/hooks/useWakeLock'
 import type { Equipment, LotoEnergyStep } from '@/lib/types'
 
 interface Props {
@@ -22,6 +23,9 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
   const [pdfUrl, setPdfUrl]       = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
   const [uploadState, setUploadState] = useState<UploadState>('idle')
+  // Keep the screen awake while the placard is generating or uploading so
+  // a tablet doesn't doze and drop the upload mid-flight.
+  useWakeLock(open && (generating || uploadState === 'uploading'))
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   // Capture latest callbacks + data in refs so the effect only re-fires when

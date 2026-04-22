@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useWakeLock } from '@/hooks/useWakeLock'
 import type { Equipment, LotoEnergyStep } from '@/lib/types'
 
 interface Props {
@@ -17,6 +18,9 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
   const [progress, setProgress]   = useState(0)
   const [phase, setPhase]         = useState<'idle' | 'fetching' | 'rendering' | 'done' | 'error'>('idle')
   const [errorMsg, setErrorMsg]   = useState<string | null>(null)
+  // Batch placard PDFs can take 30–60s for a full department. Hold the
+  // screen awake so the tablet doesn't sleep mid-render.
+  useWakeLock(open && busy)
 
   // Ref keeps onClose current without forcing the keydown effect to re-bind
   const onCloseRef = useRef(onClose)

@@ -8,6 +8,7 @@ import GlobalSearch from '@/components/GlobalSearch'
 import Greeting from '@/components/Greeting'
 import UserMenu from '@/components/UserMenu'
 import { useAuth } from '@/components/AuthProvider'
+import { requestPersistentStorage } from '@/lib/platform'
 
 const PUBLIC_PATHS = new Set(['/login', '/welcome'])
 
@@ -39,6 +40,13 @@ export default function AppChrome({ children }: { children: ReactNode }) {
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = prev }
   }, [menuOpen])
+
+  // Ask the browser to keep our IndexedDB / Cache Storage alive under
+  // storage pressure. Fire once per session after the user is authenticated
+  // — pre-login this would be noise.
+  useEffect(() => {
+    if (userId) requestPersistentStorage()
+  }, [userId])
 
   if (hideChrome) return <>{children}</>
 
