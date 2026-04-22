@@ -127,7 +127,7 @@ function HomeDashboard() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row h-[calc(100vh-6rem)]">
+    <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-6rem)]">
       <DashboardSidebar
         equipment={equipment}
         selectedDept={selectedDept}

@@ -143,7 +143,7 @@ jamil@trainovations.com`
               value={fullName}
               onChange={e => setFullName(e.target.value)}
               placeholder="Jane Doe"
-              className="w-full mt-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full mt-1 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             />
           </label>
           <label className="block">
