@@ -29,7 +29,6 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
   const [queueing, setQueueing]     = useState(false)
   const [compressing, setCompressing] = useState(false)
   const [localPreview, setLocalPreview] = useState<string | null>(null)
-  const [justQueued, setJustQueued] = useState(false)
 
   // Keep latest callback refs so the success effect doesn't re-fire when the
   // parent passes new inline closures — would cause an infinite re-render loop.
@@ -57,17 +56,25 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
     return () => { if (localPreview) URL.revokeObjectURL(localPreview) }
   }, [localPreview])
 
+  // "Queued" is driven entirely by the live queue state in UploadQueueProvider.
+  // Previously we also tracked a one-way `justQueued` flag that never reset,
+  // which left the badge reading "☁︎ Queued" on photos that had already
+  // synced. Since `enqueue()` awaits the queue refresh before resolving,
+  // queuedKeys already reflects the new entry by the time this re-renders —
+  // no separate flag needed.
   const isQueuedForThisSlot = queuedKeys.has(`${equipmentId}:${type}`)
   const displayUrl  = url ?? localPreview ?? existingUrl
   const isBusy      = validating || queueing || compressing || status === 'uploading'
-  const showQueued  = (justQueued || isQueuedForThisSlot) && !url
-  const showError   = status === 'error' && !justQueued
+  const showQueued  = isQueuedForThisSlot && !url
+  // Once the photo is safely in the offline queue, hide the live-upload
+  // error surface — the queue drain will retry it and "Upload failed"
+  // would be misleading.
+  const showError   = status === 'error' && !isQueuedForThisSlot
 
   async function enqueueCompressed(blob: Blob) {
     setQueueing(true)
     try {
       await enqueue({ equipmentId, type, blob })
-      setJustQueued(true)
       onSuccessRef.current?.('Upload queued — will sync when online.')
     } catch {
       onErrorRef.current?.('Upload failed. Changes saved locally and queued for your next sync.')
@@ -85,6 +92,14 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
       onErrorRef.current?.('File must be under 10 MB.')
       return
     }
+
+    // Show the raw file as a preview immediately — without this, the user
+    // stares at a spinner for ~500ms-2s while validation + compression run,
+    // with no visual confirmation of what they just selected. The preview
+    // is swapped for the EXIF-corrected compressed blob when that's ready.
+    // CSS image-orientation:from-image on the <Image> keeps raw-file
+    // orientation correct in the meantime.
+    setLocalPreview(URL.createObjectURL(file))
 
     // Validate subject (skip if offline — don't waste time)
     if (online) {
@@ -155,33 +170,53 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
         aria-label={`Upload ${label}`}
         className="flex-1 relative bg-slate-50 border-2 border-slate-200 border-t-0 overflow-hidden group disabled:cursor-wait"
       >
-        {displayUrl && !isBusy ? (
+        {displayUrl ? (
           <>
             <Image
               src={displayUrl}
               alt={label}
               fill
               sizes="(max-width: 768px) 100vw, 50vw"
-              className="object-cover"
+              className={`object-cover transition-opacity duration-150 ${isBusy ? 'opacity-40' : 'opacity-100'}`}
               style={{ imageOrientation: 'from-image' }}
               unoptimized
             />
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-              <span className="opacity-0 group-hover:opacity-100 bg-white/95 text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm transition-opacity">
-                Replace
-              </span>
-            </div>
-            {showQueued ? (
+            {isBusy ? (
+              // Busy overlay on top of the preview, so the user keeps seeing
+              // what they picked during validation/compression/upload.
+              // Previously the spinner replaced the image, hiding their
+              // selection for 500ms–2s after a file pick.
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/30 backdrop-blur-[1px]">
+                <div className="w-7 h-7 border-[3px] border-brand-navy/30 border-t-brand-navy rounded-full animate-spin" />
+                <p className="text-xs text-slate-700 font-semibold drop-shadow-sm">
+                  {validating  ? 'Checking…'  :
+                   queueing    ? 'Queueing…'  :
+                   compressing ? 'Compressing…' : 'Uploading…'}
+                </p>
+              </div>
+            ) : (
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                <span className="opacity-0 group-hover:opacity-100 bg-white/95 text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm transition-opacity">
+                  Replace
+                </span>
+              </div>
+            )}
+            {!isBusy && showQueued && (
               <span className="absolute top-1.5 right-1.5 bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow flex items-center gap-1">
                 ☁︎ Queued
               </span>
-            ) : status === 'success' && (
+            )}
+            {!isBusy && !showQueued && status === 'success' && (
               <span className="absolute top-1.5 right-1.5 bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
                 ✓ Saved
               </span>
             )}
           </>
         ) : isBusy ? (
+          // No preview yet (empty slot, just-picked file still being read).
+          // Rare — setLocalPreview runs synchronously on file pick, so this
+          // path only shows for edge cases where the busy state kicks in
+          // before a preview is available.
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
             <div className="w-7 h-7 border-[3px] border-brand-navy/30 border-t-brand-navy rounded-full animate-spin" />
             <p className="text-xs text-slate-500 font-medium">
