@@ -20,13 +20,21 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
   const [loading, setLoading] = useState(false)
   const { toast, showToast, clearToast } = useToast()
 
+  // Depend only on the equipment_id, NOT the whole equipment object.
+  // `equipment` changes reference on every realtime tick (the parent's
+  // selectedEquipment useMemo re-runs whenever ANY row in the dashboard
+  // updates), and the previous `[equipment]` dep re-fetched steps from
+  // the DB on every such tick even though nothing about the steps
+  // changed. Scoping to the id makes the effect re-fire only when the
+  // user selects a different item — which is the real invalidation.
+  const equipmentId = equipment?.equipment_id
   useEffect(() => {
-    if (!equipment) { setSteps([]); return }
+    if (!equipmentId) { setSteps([]); return }
     setLoading(true)
     supabase
       .from('loto_energy_steps')
       .select('*')
-      .eq('equipment_id', equipment.equipment_id)
+      .eq('equipment_id', equipmentId)
       .order('energy_type', { ascending: true })
       .order('step_number', { ascending: true })
       .then(({ data, error }) => {
@@ -36,20 +44,20 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
         // (RLS, auth, network).
         if (error) {
           console.error('[placard] energy-steps fetch failed', {
-            equipmentId: equipment.equipment_id,
+            equipmentId,
             error,
             message: error.message,
           })
         } else {
           console.info('[placard] energy-steps fetched', {
-            equipmentId: equipment.equipment_id,
+            equipmentId,
             count: data?.length ?? 0,
           })
         }
         if (data) setSteps(data as LotoEnergyStep[])
         setLoading(false)
       })
-  }, [equipment])
+  }, [equipmentId])
 
   if (!equipment) {
     return (
