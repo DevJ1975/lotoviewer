@@ -122,10 +122,16 @@ describe('computePhotoStatusFromUrls', () => {
 // ── computePhotoStatusFromEquipment ─────────────────────────────────────────
 
 describe('computePhotoStatusFromEquipment', () => {
+  // These tests use needs_*=true (both photos required) to exercise the
+  // "classic" behavior. Specs for rows where fewer photos are required
+  // live in the 'with needs flags' block below.
+  const bothRequired = { needs_equip_photo: true, needs_iso_photo: true } as const
+
   it('complete when both URL fields are set', () => {
     expect(computePhotoStatusFromEquipment({
       equip_photo_url: 'https://cdn.example.com/equip.jpg',
       iso_photo_url:   'https://cdn.example.com/iso.jpg',
+      ...bothRequired,
     })).toBe('complete')
   })
 
@@ -133,6 +139,7 @@ describe('computePhotoStatusFromEquipment', () => {
     expect(computePhotoStatusFromEquipment({
       equip_photo_url: 'https://cdn.example.com/equip.jpg',
       iso_photo_url:   null,
+      ...bothRequired,
     })).toBe('partial')
   })
 
@@ -140,6 +147,7 @@ describe('computePhotoStatusFromEquipment', () => {
     expect(computePhotoStatusFromEquipment({
       equip_photo_url: null,
       iso_photo_url:   'https://cdn.example.com/iso.jpg',
+      ...bothRequired,
     })).toBe('partial')
   })
 
@@ -147,6 +155,7 @@ describe('computePhotoStatusFromEquipment', () => {
     expect(computePhotoStatusFromEquipment({
       equip_photo_url: null,
       iso_photo_url:   null,
+      ...bothRequired,
     })).toBe('missing')
   })
 
@@ -154,6 +163,7 @@ describe('computePhotoStatusFromEquipment', () => {
     expect(computePhotoStatusFromEquipment({
       equip_photo_url: '',
       iso_photo_url:   '',
+      ...bothRequired,
     })).toBe('missing')
   })
 
@@ -161,6 +171,101 @@ describe('computePhotoStatusFromEquipment', () => {
     expect(computePhotoStatusFromEquipment({
       equip_photo_url: 'https://cdn.example.com/equip.jpg',
       iso_photo_url:   '',
+      needs_equip_photo: true,
+      needs_iso_photo:   true,
     })).toBe('partial')
+  })
+})
+
+// ── needs_*_photo — required-slot aware status ──────────────────────────────
+// Equipment that only needs one photo reaches "complete" as soon as that
+// required photo is uploaded. The slot that isn't required shouldn't block
+// the row from counting as done.
+
+describe('computePhotoStatus with needs flags', () => {
+  it('complete when only equip is required and equip is present', () => {
+    expect(computePhotoStatus(true, false, /* needsEquip */ true, /* needsIso */ false))
+      .toBe('complete')
+  })
+
+  it('complete when only iso is required and iso is present', () => {
+    expect(computePhotoStatus(false, true, false, true)).toBe('complete')
+  })
+
+  it('complete when nothing is required even if both are missing', () => {
+    expect(computePhotoStatus(false, false, false, false)).toBe('complete')
+  })
+
+  it('still partial when equip is required but missing, even if iso is present', () => {
+    expect(computePhotoStatus(false, true, true, false)).toBe('partial')
+  })
+
+  it('missing when required slot is empty and no photos exist at all', () => {
+    expect(computePhotoStatus(false, false, true, false)).toBe('missing')
+  })
+
+  it('defaults to needs=true (backward compat) when flags are omitted', () => {
+    expect(computePhotoStatus(true, false)).toBe('partial')
+    expect(computePhotoStatus(true, true)).toBe('complete')
+  })
+})
+
+describe('computePhotoStatusFromUrls with needs flags', () => {
+  it('complete for equip-only equipment once equip URL is set', () => {
+    expect(computePhotoStatusFromUrls(
+      'https://cdn.example.com/equip.jpg',
+      null,
+      /* needsEquip */ true,
+      /* needsIso   */ false,
+    )).toBe('complete')
+  })
+
+  it('complete for iso-only equipment once iso URL is set', () => {
+    expect(computePhotoStatusFromUrls(null, 'https://cdn.example.com/iso.jpg', false, true))
+      .toBe('complete')
+  })
+
+  it('missing for equip-only equipment while equip URL is absent', () => {
+    expect(computePhotoStatusFromUrls(null, null, true, false)).toBe('missing')
+  })
+
+  it('partial when required slot is empty but the non-required slot has a photo', () => {
+    // equip is required and missing; iso is NOT required but has a photo —
+    // row isn't complete because required slot is still empty.
+    expect(computePhotoStatusFromUrls(null, 'https://cdn.example.com/iso.jpg', true, false))
+      .toBe('partial')
+  })
+
+  it('treats whitespace-only URL as empty even when the slot is required', () => {
+    expect(computePhotoStatusFromUrls('   ', null, true, false)).toBe('missing')
+  })
+})
+
+describe('computePhotoStatusFromEquipment with needs flags', () => {
+  it('complete for equipment that only needs an equip photo and has one', () => {
+    expect(computePhotoStatusFromEquipment({
+      equip_photo_url:   'https://cdn.example.com/equip.jpg',
+      iso_photo_url:     null,
+      needs_equip_photo: true,
+      needs_iso_photo:   false,
+    })).toBe('complete')
+  })
+
+  it('complete for equipment that needs no photos at all', () => {
+    expect(computePhotoStatusFromEquipment({
+      equip_photo_url:   null,
+      iso_photo_url:     null,
+      needs_equip_photo: false,
+      needs_iso_photo:   false,
+    })).toBe('complete')
+  })
+
+  it('missing for equip-only equipment when equip URL is null', () => {
+    expect(computePhotoStatusFromEquipment({
+      equip_photo_url:   null,
+      iso_photo_url:     null,
+      needs_equip_photo: true,
+      needs_iso_photo:   false,
+    })).toBe('missing')
   })
 })

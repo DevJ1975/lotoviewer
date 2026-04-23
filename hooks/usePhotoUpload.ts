@@ -54,9 +54,11 @@ export function usePhotoUpload(equipmentId: string, type: UploadType) {
       // Query the URL columns — they are the ground truth for whether a photo exists.
       // Boolean flags (has_equip_photo / has_iso_photo) can drift after migrations or
       // manual DB edits, so status is derived from actual URL presence instead.
+      // needs_*_photo flags let us mark "complete" for equipment that only requires
+      // one of the two photos.
       const { data: current, error: selectError } = await supabase
         .from('loto_equipment')
-        .select('equip_photo_url, iso_photo_url')
+        .select('equip_photo_url, iso_photo_url, needs_equip_photo, needs_iso_photo')
         .eq('equipment_id', equipmentId)
         .single()
 
@@ -64,7 +66,12 @@ export function usePhotoUpload(equipmentId: string, type: UploadType) {
 
       const newEquipUrl = type === 'EQUIP' ? publicUrl : (current?.equip_photo_url ?? null)
       const newIsoUrl   = type === 'ISO'   ? publicUrl : (current?.iso_photo_url   ?? null)
-      const newStatus   = computePhotoStatusFromUrls(newEquipUrl, newIsoUrl)
+      const newStatus   = computePhotoStatusFromUrls(
+        newEquipUrl,
+        newIsoUrl,
+        current?.needs_equip_photo,
+        current?.needs_iso_photo,
+      )
 
       const urlField = type === 'EQUIP' ? 'equip_photo_url' : 'iso_photo_url'
       const hasField = type === 'EQUIP' ? 'has_equip_photo' : 'has_iso_photo'
@@ -85,11 +92,16 @@ export function usePhotoUpload(equipmentId: string, type: UploadType) {
       // upload (live or queued) wrote concurrently between our SELECT + UPDATE.
       const { data: fresh } = await supabase
         .from('loto_equipment')
-        .select('equip_photo_url, iso_photo_url, photo_status')
+        .select('equip_photo_url, iso_photo_url, photo_status, needs_equip_photo, needs_iso_photo')
         .eq('equipment_id', equipmentId)
         .single()
       if (fresh) {
-        const actualStatus = computePhotoStatusFromUrls(fresh.equip_photo_url, fresh.iso_photo_url)
+        const actualStatus = computePhotoStatusFromUrls(
+          fresh.equip_photo_url,
+          fresh.iso_photo_url,
+          fresh.needs_equip_photo,
+          fresh.needs_iso_photo,
+        )
         if (fresh.photo_status !== actualStatus) {
           await supabase
             .from('loto_equipment')
