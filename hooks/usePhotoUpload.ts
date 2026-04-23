@@ -2,11 +2,10 @@
 
 import { useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { compressImage } from '@/lib/imageUtils'
 import { computePhotoStatusFromUrls } from '@/lib/photoStatus'
 
 export type UploadType = 'EQUIP' | 'ISO'
-export type UploadStatus = 'idle' | 'compressing' | 'uploading' | 'success' | 'error'
+export type UploadStatus = 'idle' | 'uploading' | 'success' | 'error'
 
 const RETRY_DELAYS_MS = [1_000, 2_000, 4_000]
 
@@ -33,22 +32,22 @@ export function usePhotoUpload(equipmentId: string, type: UploadType) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [attempt, setAttempt]   = useState(0)
 
+  // Caller passes an already-compressed File (see PlacardPhotoSlot) — the
+  // hook does not re-compress. Re-compressing would double-encode and
+  // degrade quality for no gain since the caller needs a compressed blob
+  // anyway for the offline upload queue.
   const upload = useCallback(async (file: File): Promise<string | null> => {
-    setStatus('compressing')
+    setStatus('uploading')
     setErrorMsg(null)
     setAttempt(a => a + 1)
 
     try {
-      const compressed  = await compressImage(file, 1_000_000)
-
-      setStatus('uploading')
-
       const sanitized   = equipmentId.replace(/[^a-zA-Z0-9_-]/g, '_')
       const timestamp   = Date.now()
       const storagePath = `${sanitized}/${equipmentId}_${type}_${timestamp}.jpg`
       const bucket      = supabase.storage.from('loto-photos')
 
-      await retryStorageUpload(bucket, storagePath, compressed, { contentType: 'image/jpeg', upsert: false })
+      await retryStorageUpload(bucket, storagePath, file, { contentType: 'image/jpeg', upsert: false })
 
       const { data: { publicUrl } } = bucket.getPublicUrl(storagePath)
 

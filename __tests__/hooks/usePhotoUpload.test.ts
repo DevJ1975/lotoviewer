@@ -2,17 +2,12 @@ import { renderHook, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { usePhotoUpload } from '@/hooks/usePhotoUpload'
 import { supabase } from '@/lib/supabase'
-import * as imageUtils from '@/lib/imageUtils'
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     from: vi.fn(),
     storage: { from: vi.fn() },
   },
-}))
-
-vi.mock('@/lib/imageUtils', () => ({
-  compressImage: vi.fn(async (file: File) => file),
 }))
 
 const TEST_URL = 'https://cdn.example.com/photo.jpg'
@@ -80,7 +75,6 @@ describe('usePhotoUpload', () => {
   beforeEach(() => {
     vi.resetAllMocks()
     vi.useFakeTimers()
-    vi.mocked(imageUtils.compressImage).mockImplementation(async (f) => f)
   })
 
   afterEach(() => {
@@ -199,18 +193,6 @@ describe('usePhotoUpload', () => {
     const returned = await runUpload(result.current.upload)
 
     expect(returned).toBeNull()
-  })
-
-  // ── Compression failure ───────────────────────────────────────────────────
-
-  it('enters error state when image compression throws', async () => {
-    vi.mocked(imageUtils.compressImage).mockRejectedValue(new Error('Canvas unavailable'))
-    const { result } = renderHook(() => usePhotoUpload('EQ-001', 'EQUIP'))
-
-    await runUpload(result.current.upload)
-
-    expect(result.current.status).toBe('error')
-    expect(result.current.errorMsg).toBe('Canvas unavailable')
   })
 
   // ── Reset ─────────────────────────────────────────────────────────────────

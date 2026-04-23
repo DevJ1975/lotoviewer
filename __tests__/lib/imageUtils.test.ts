@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { computeTargetDimensions } from '@/lib/imageUtils'
 
 describe('computeTargetDimensions', () => {
@@ -87,13 +87,6 @@ function installDocMock(canvas: ReturnType<typeof makeCanvasMock>['canvas']) {
 }
 
 describe('compressImage', () => {
-  beforeEach(async () => {
-    // Reset the WebP feature-detect cache between specs so each test starts
-    // from a clean state — WebP output vs. JPEG output changes assertions.
-    const m = await import('@/lib/imageUtils')
-    m._resetWebPCache()
-  })
-
   // ── EXIF orientation — the core reason this fix exists ──────────────────
 
   it('calls createImageBitmap with imageOrientation: from-image', async () => {
@@ -230,32 +223,22 @@ describe('compressImage', () => {
 
   // ── Encoding format & filename ──────────────────────────────────────────
 
-  it('renames the file extension to .jpg when WebP is unsupported', async () => {
+  it('always outputs JPEG, renaming the extension to .jpg', async () => {
+    // JPEG (not WebP) is deliberate — pdf-lib's embedJpg cannot decode WebP,
+    // so WebP output would break placard PDF generation.
     installBitmapMock(800, 600)
     const { canvas } = makeCanvasMock()
-    // toDataURL returns PNG by default → WebP feature-detect says "no WebP".
     installDocMock(canvas)
 
     const { compressImage } = await import('@/lib/imageUtils')
-    const file = new File([new Uint8Array(2_000_000)], 'photo.HEIC', { type: 'image/heic' })
-    const result = await compressImage(file)
+    const heicFile = new File([new Uint8Array(2_000_000)], 'photo.HEIC', { type: 'image/heic' })
+    const result = await compressImage(heicFile)
 
     expect(result.name).toBe('photo.jpg')
     expect(result.type).toBe('image/jpeg')
-  })
-
-  it('renames the file extension to .webp when WebP is supported', async () => {
-    installBitmapMock(800, 600)
-    const { canvas } = makeCanvasMock()
-    canvas.toDataURL = vi.fn(() => 'data:image/webp;base64,xyz')
-    installDocMock(canvas)
-
-    const { compressImage } = await import('@/lib/imageUtils')
-    const file = new File([new Uint8Array(2_000_000)], 'photo.jpg', { type: 'image/jpeg' })
-    const result = await compressImage(file)
-
-    expect(result.name).toBe('photo.webp')
-    expect(result.type).toBe('image/webp')
+    // Verify toBlob was invoked with the jpeg mime, not webp.
+    const toBlobMimes = canvas.toBlob.mock.calls.map((c: unknown[]) => c[1])
+    expect(toBlobMimes.every((m: unknown) => m === 'image/jpeg')).toBe(true)
   })
 
   // ── Quality loop ────────────────────────────────────────────────────────
@@ -364,54 +347,5 @@ describe('compressImage', () => {
     await expect(compressImage(file)).rejects.toThrow()
 
     expect(close).toHaveBeenCalledTimes(1)
-  })
-})
-
-describe('supportsWebP', () => {
-  beforeEach(async () => {
-    const m = await import('@/lib/imageUtils')
-    m._resetWebPCache()
-  })
-
-  it('returns false when toDataURL does not yield a webp data URL', async () => {
-    vi.stubGlobal('document', {
-      createElement: vi.fn(() => ({
-        width: 0, height: 0,
-        toDataURL: vi.fn(() => 'data:image/png;base64,xyz'),
-      })),
-    })
-    const { supportsWebP } = await import('@/lib/imageUtils')
-    expect(supportsWebP()).toBe(false)
-  })
-
-  it('returns true when toDataURL yields a webp data URL', async () => {
-    vi.stubGlobal('document', {
-      createElement: vi.fn(() => ({
-        width: 0, height: 0,
-        toDataURL: vi.fn(() => 'data:image/webp;base64,xyz'),
-      })),
-    })
-    const { supportsWebP } = await import('@/lib/imageUtils')
-    expect(supportsWebP()).toBe(true)
-  })
-
-  it('caches the result across calls', async () => {
-    const toDataURL = vi.fn(() => 'data:image/webp;base64,')
-    vi.stubGlobal('document', {
-      createElement: vi.fn(() => ({ width: 0, height: 0, toDataURL })),
-    })
-    const { supportsWebP } = await import('@/lib/imageUtils')
-    supportsWebP()
-    supportsWebP()
-    supportsWebP()
-    expect(toDataURL).toHaveBeenCalledTimes(1)
-  })
-
-  it('falls back to false when probing throws', async () => {
-    vi.stubGlobal('document', {
-      createElement: vi.fn(() => { throw new Error('no canvas') }),
-    })
-    const { supportsWebP } = await import('@/lib/imageUtils')
-    expect(supportsWebP()).toBe(false)
   })
 })

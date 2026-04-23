@@ -27,6 +27,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
   const fileRef = useRef<HTMLInputElement>(null)
   const [validating, setValidating] = useState(false)
   const [queueing, setQueueing]     = useState(false)
+  const [compressing, setCompressing] = useState(false)
   const [localPreview, setLocalPreview] = useState<string | null>(null)
   const [justQueued, setJustQueued] = useState(false)
 
@@ -58,7 +59,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
 
   const isQueuedForThisSlot = queuedKeys.has(`${equipmentId}:${type}`)
   const displayUrl  = url ?? localPreview ?? existingUrl
-  const isBusy      = validating || queueing || status === 'compressing' || status === 'uploading'
+  const isBusy      = validating || queueing || compressing || status === 'uploading'
   const showQueued  = (justQueued || isQueuedForThisSlot) && !url
   const showError   = status === 'error' && !justQueued
 
@@ -106,13 +107,22 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
       }
     }
 
-    // Compress locally so we have a bounded Blob for both upload and queue
+    // Compress locally so we have a bounded Blob for both upload and queue.
+    // The upload hook does NOT re-compress — we own compression here so it
+    // runs exactly once regardless of online/offline path.
     let compressed: File
+    setCompressing(true)
     try {
       compressed = await compressImage(file, 1_000_000)
-    } catch {
+    } catch (err) {
+      // Log the real error for field-device debugging; surface a friendly
+      // message to the user. Matches the pattern from the upload-queue
+      // debug commit — stop swallowing decode failures silently.
+      console.error('[photo] compress failed', err)
       onErrorRef.current?.('Could not compress photo. Please try another.')
       return
+    } finally {
+      setCompressing(false)
     }
 
     // Store a preview so the slot shows the image immediately
@@ -177,7 +187,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
             <p className="text-xs text-slate-500 font-medium">
               {validating  ? 'Checking…'  :
                queueing    ? 'Queueing…'  :
-               status === 'compressing' ? 'Compressing…' : 'Uploading…'}
+               compressing ? 'Compressing…' : 'Uploading…'}
             </p>
           </div>
         ) : showError ? (
