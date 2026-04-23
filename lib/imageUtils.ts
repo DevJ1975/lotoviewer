@@ -34,55 +34,29 @@ export function _resetWebPCache(): void {
   cachedSupportsWebP = null
 }
 
-// Landscape normalization — equipment placards and dashboard thumbnails look
-// uniform when every stored photo is horizontal. If a photo is portrait we
-// rotate it 90° clockwise; if it's already landscape or square we leave it.
-// Callers can pass forceLandscape=false to opt out.
+// Every upload is decoded through createImageBitmap with
+// imageOrientation: 'from-image' so EXIF orientation is baked into the
+// pixel data before the canvas re-encode. Without it, phone photos whose
+// bytes are landscape but whose EXIF says "rotate 90°" land sideways in
+// storage (canvas drawImage ignores EXIF) and stay sideways in generated
+// PDFs (pdf-lib embeds raw bytes and never consults EXIF).
 //
-// Decoding via createImageBitmap with imageOrientation: 'from-image' bakes
-// the EXIF orientation tag into the pixel data. Without it, phone photos
-// whose bytes are landscape but whose EXIF says "rotate 90°" land sideways
-// once drawn to a canvas (canvas ignores EXIF).
-export async function compressImage(
-  file: File,
-  maxBytes = 1_000_000,
-  forceLandscape = true,
-): Promise<File> {
-  // Fast path: caller doesn't care about orientation AND the file is already
-  // under the size budget. Skips the load/decode/encode round-trip entirely.
-  // Note: this intentionally skips EXIF normalization too — only used by
-  // callers who don't need uniform orientation.
-  if (!forceLandscape && file.size <= maxBytes) return file
-
+// Photos keep their natural, EXIF-corrected orientation — portrait stays
+// portrait, landscape stays landscape. The placard/thumbnail slots use
+// object-cover so mixed orientations still fill the slot visually. The
+// previous forceLandscape behavior rotated portrait photos 90° for slot
+// uniformity, but made tall subjects (equipment, panels) appear sideways.
+export async function compressImage(file: File, maxBytes = 1_000_000): Promise<File> {
   const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
 
   try {
-    const isPortrait = bitmap.height > bitmap.width
-    const rotate     = forceLandscape && isPortrait
-
-    // Second fast path: small AND already landscape (or rotation disabled).
-    // Avoids re-encoding a perfectly fine photo.
-    if (file.size <= maxBytes && !rotate) return file
-
-    // After rotation the rendered width/height swap.
-    const sourceW = rotate ? bitmap.height : bitmap.width
-    const sourceH = rotate ? bitmap.width  : bitmap.height
-
-    const dims = computeTargetDimensions(sourceW, sourceH)
+    const dims = computeTargetDimensions(bitmap.width, bitmap.height)
     const canvas = document.createElement('canvas')
     canvas.width = dims.width
     canvas.height = dims.height
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('Canvas 2D context not available')
-    if (rotate) {
-      // Rotate origin → 90° clockwise around (dims.width, 0).
-      ctx.translate(dims.width, 0)
-      ctx.rotate(Math.PI / 2)
-      // After rotation, canvas coordinates become (sourceH, sourceW).
-      ctx.drawImage(bitmap, 0, 0, dims.height, dims.width)
-    } else {
-      ctx.drawImage(bitmap, 0, 0, dims.width, dims.height)
-    }
+    ctx.drawImage(bitmap, 0, 0, dims.width, dims.height)
 
     // Prefer WebP — typically 25–35% smaller than JPEG at equivalent quality.
     // Falls back to JPEG on the rare browser that can't encode WebP.
@@ -94,9 +68,6 @@ export async function compressImage(
     const tryQuality = (q: number) =>
       new Promise<Blob | null>(res => canvas.toBlob(res, mime, q))
 
-    // If we're here only for rotation (file already small enough), the first
-    // quality step's output is virtually always under maxBytes — the loop is
-    // a safety net for the dimension-resize case.
     for (const q of QUALITY_STEPS) {
       const blob = await tryQuality(q)
       if (blob && blob.size <= maxBytes) {
