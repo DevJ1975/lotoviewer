@@ -62,12 +62,26 @@ function EquipmentDetail() {
     const eq = data as Equipment
     setEquipment(eq)
 
-    const { data: stepRows } = await supabase
+    const { data: stepRows, error: stepErr } = await supabase
       .from('loto_energy_steps')
       .select('*')
       .eq('equipment_id', equipmentId)
       .order('energy_type', { ascending: true })
       .order('step_number', { ascending: true })
+    // Surface fetch failures so "No energy steps defined" can be traced
+    // back to auth / RLS / network rather than looking like empty data.
+    if (stepErr) {
+      console.error('[equipment] energy-steps fetch failed', {
+        equipmentId,
+        error:   stepErr,
+        message: stepErr.message,
+      })
+    } else {
+      console.info('[equipment] energy-steps fetched', {
+        equipmentId,
+        count: stepRows?.length ?? 0,
+      })
+    }
     if (stepRows) setSteps(stepRows as LotoEnergyStep[])
 
     const { data: siblings } = await supabase

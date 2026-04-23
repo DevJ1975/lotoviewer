@@ -29,7 +29,23 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
       .eq('equipment_id', equipment.equipment_id)
       .order('energy_type', { ascending: true })
       .order('step_number', { ascending: true })
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        // Log the fetch result so "No energy steps defined" distinguishes
+        // between "query ran, returned nothing" (data mismatch — check the
+        // equipment_id column in loto_energy_steps) and "query failed"
+        // (RLS, auth, network).
+        if (error) {
+          console.error('[placard] energy-steps fetch failed', {
+            equipmentId: equipment.equipment_id,
+            error,
+            message: error.message,
+          })
+        } else {
+          console.info('[placard] energy-steps fetched', {
+            equipmentId: equipment.equipment_id,
+            count: data?.length ?? 0,
+          })
+        }
         if (data) setSteps(data as LotoEnergyStep[])
         setLoading(false)
       })
