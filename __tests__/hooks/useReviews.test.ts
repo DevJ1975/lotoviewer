@@ -35,7 +35,7 @@ describe('useReviews', () => {
   // ── Initial state ─────────────────────────────────────────────────────────
 
   it('starts with empty reviews and loading false', () => {
-    vi.mocked(supabase.from).mockReturnValue(makeFetchChain([]) as ReturnType<typeof supabase.from>)
+    vi.mocked(supabase.from).mockReturnValue(makeFetchChain([]) as unknown as ReturnType<typeof supabase.from>)
     const { result } = renderHook(() => useReviews('Electrical'))
     expect(result.current.reviews).toHaveLength(0)
     expect(result.current.loading).toBe(false)
@@ -45,7 +45,7 @@ describe('useReviews', () => {
 
   it('populates reviews after successful fetch', async () => {
     vi.mocked(supabase.from).mockReturnValue(
-      makeFetchChain([BASE_REVIEW]) as ReturnType<typeof supabase.from>
+      makeFetchChain([BASE_REVIEW]) as unknown as ReturnType<typeof supabase.from>
     )
     const { result } = renderHook(() => useReviews('Electrical'))
 
@@ -58,7 +58,7 @@ describe('useReviews', () => {
 
   it('leaves reviews empty when fetch returns null (offline / DB error)', async () => {
     vi.mocked(supabase.from).mockReturnValue(
-      makeFetchChain(null, new Error('Failed to fetch')) as ReturnType<typeof supabase.from>
+      makeFetchChain(null, new Error('Failed to fetch')) as unknown as ReturnType<typeof supabase.from>
     )
     const { result } = renderHook(() => useReviews('Electrical'))
 
@@ -76,7 +76,7 @@ describe('useReviews', () => {
     chain.eq     = vi.fn().mockReturnValue(chain)
     chain.order  = vi.fn().mockReturnValue(chain)
     chain.limit  = vi.fn().mockReturnValue(pending)
-    vi.mocked(supabase.from).mockReturnValue(chain as ReturnType<typeof supabase.from>)
+    vi.mocked(supabase.from).mockReturnValue(chain as unknown as ReturnType<typeof supabase.from>)
 
     const { result } = renderHook(() => useReviews('Electrical'))
 
@@ -95,7 +95,7 @@ describe('useReviews', () => {
 
   it('queries with the correct department', async () => {
     const chain = makeFetchChain([])
-    vi.mocked(supabase.from).mockReturnValue(chain as ReturnType<typeof supabase.from>)
+    vi.mocked(supabase.from).mockReturnValue(chain as unknown as ReturnType<typeof supabase.from>)
 
     const { result } = renderHook(() => useReviews('Maintenance'))
     await act(async () => { await result.current.fetchReviews() })
@@ -108,8 +108,8 @@ describe('useReviews', () => {
   it('prepends new review to list on successful submit', async () => {
     const existingReview = { ...BASE_REVIEW, id: 'r0', created_at: '2024-12-01T00:00:00Z' }
     vi.mocked(supabase.from)
-      .mockImplementationOnce(() => makeFetchChain([existingReview]) as ReturnType<typeof supabase.from>)
-      .mockImplementationOnce(() => makeSubmitChain(BASE_REVIEW) as ReturnType<typeof supabase.from>)
+      .mockImplementationOnce(() => makeFetchChain([existingReview]) as unknown as ReturnType<typeof supabase.from>)
+      .mockImplementationOnce(() => makeSubmitChain(BASE_REVIEW) as unknown as ReturnType<typeof supabase.from>)
 
     const { result } = renderHook(() => useReviews('Electrical'))
     await act(async () => { await result.current.fetchReviews() })
@@ -123,7 +123,7 @@ describe('useReviews', () => {
 
   it('returns null error on successful submit', async () => {
     vi.mocked(supabase.from).mockReturnValue(
-      makeSubmitChain(BASE_REVIEW) as ReturnType<typeof supabase.from>
+      makeSubmitChain(BASE_REVIEW) as unknown as ReturnType<typeof supabase.from>
     )
     const { result } = renderHook(() => useReviews('Electrical'))
 
@@ -137,7 +137,7 @@ describe('useReviews', () => {
 
   it('returns error and does NOT update list when submit fails (offline simulation)', async () => {
     vi.mocked(supabase.from).mockReturnValue(
-      makeSubmitChain(null, new Error('Failed to fetch')) as ReturnType<typeof supabase.from>
+      makeSubmitChain(null, new Error('Failed to fetch')) as unknown as ReturnType<typeof supabase.from>
     )
     const { result } = renderHook(() => useReviews('Electrical'))
 
@@ -151,7 +151,7 @@ describe('useReviews', () => {
 
   it('returns error when Supabase returns 503 (DB unavailable)', async () => {
     vi.mocked(supabase.from).mockReturnValue(
-      makeSubmitChain(null, new Error('Service Unavailable')) as ReturnType<typeof supabase.from>
+      makeSubmitChain(null, new Error('Service Unavailable')) as unknown as ReturnType<typeof supabase.from>
     )
     const { result } = renderHook(() => useReviews('Electrical'))
 
@@ -164,8 +164,8 @@ describe('useReviews', () => {
 
   it('does not modify reviews list on submit error (idempotent failure)', async () => {
     vi.mocked(supabase.from)
-      .mockImplementationOnce(() => makeFetchChain([BASE_REVIEW]) as ReturnType<typeof supabase.from>)
-      .mockImplementationOnce(() => makeSubmitChain(null, new Error('Network error')) as ReturnType<typeof supabase.from>)
+      .mockImplementationOnce(() => makeFetchChain([BASE_REVIEW]) as unknown as ReturnType<typeof supabase.from>)
+      .mockImplementationOnce(() => makeSubmitChain(null, new Error('Network error')) as unknown as ReturnType<typeof supabase.from>)
 
     const { result } = renderHook(() => useReviews('Electrical'))
     await act(async () => { await result.current.fetchReviews() })

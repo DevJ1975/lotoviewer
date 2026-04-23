@@ -20,9 +20,12 @@ function makeEquipment(overrides: Partial<Equipment> = {}): Equipment {
     equipment_id: 'EQ-001', description: 'Conveyor Motor', department: 'Mechanical',
     photo_status: 'complete', has_equip_photo: true, has_iso_photo: false,
     equip_photo_url: null, iso_photo_url: null, placard_url: null,
-    notes: null, verified: false, prefix: null,
+    signed_placard_url: null,
+    notes: null, notes_es: null, spanish_reviewed: false,
+    verified: false, prefix: null,
     verified_date: null, verified_by: null,
     needs_equip_photo: false, needs_iso_photo: false, needs_verification: false,
+    decommissioned: false,
     created_at: null, updated_at: null,
     ...overrides,
   }
@@ -49,8 +52,8 @@ const mockEquipment: Equipment[] = [
 describe('DepartmentDetailPage', () => {
   beforeEach(() => {
     vi.mocked(supabase.from).mockImplementation((table: string) => {
-      if (table === 'loto_reviews') return makeChain([]) as ReturnType<typeof supabase.from>
-      return makeChain(mockEquipment) as ReturnType<typeof supabase.from>
+      if (table === 'loto_reviews') return makeChain([]) as unknown as ReturnType<typeof supabase.from>
+      return makeChain(mockEquipment) as unknown as ReturnType<typeof supabase.from>
     })
   })
 
@@ -60,7 +63,7 @@ describe('DepartmentDetailPage', () => {
     hangingChain.eq     = vi.fn().mockReturnValue(hangingChain)
     hangingChain.order  = vi.fn().mockReturnValue(hangingChain)
     hangingChain.limit  = vi.fn().mockReturnValue(hangingChain)
-    vi.mocked(supabase.from).mockReturnValue(hangingChain as ReturnType<typeof supabase.from>)
+    vi.mocked(supabase.from).mockReturnValue(hangingChain as unknown as ReturnType<typeof supabase.from>)
     render(<DepartmentDetailPage />)
     expect(document.querySelector('.animate-spin')).toBeInTheDocument()
   })
@@ -99,8 +102,8 @@ describe('DepartmentDetailPage', () => {
 
   it('shows empty table message when department has no equipment', async () => {
     vi.mocked(supabase.from).mockImplementation((table: string) => {
-      if (table === 'loto_reviews') return makeChain([]) as ReturnType<typeof supabase.from>
-      return makeChain([]) as ReturnType<typeof supabase.from>
+      if (table === 'loto_reviews') return makeChain([]) as unknown as ReturnType<typeof supabase.from>
+      return makeChain([]) as unknown as ReturnType<typeof supabase.from>
     })
     render(<DepartmentDetailPage />)
     await waitFor(() => screen.getByText('No equipment found.'))

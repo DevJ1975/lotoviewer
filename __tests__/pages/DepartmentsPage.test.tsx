@@ -37,8 +37,8 @@ const mockRows: Row[] = [
 describe('DepartmentsPage', () => {
   beforeEach(() => {
     vi.mocked(supabase.from).mockImplementation((table: string) => {
-      if (table === 'loto_reviews') return makeChain([]) as ReturnType<typeof supabase.from>
-      return makeChain(mockRows) as ReturnType<typeof supabase.from>
+      if (table === 'loto_reviews') return makeChain([]) as unknown as ReturnType<typeof supabase.from>
+      return makeChain(mockRows) as unknown as ReturnType<typeof supabase.from>
     })
   })
 
@@ -47,7 +47,7 @@ describe('DepartmentsPage', () => {
     hangingChain.select = vi.fn().mockReturnValue(hangingChain)
     hangingChain.order  = vi.fn().mockReturnValue(hangingChain)
     hangingChain.limit  = vi.fn().mockReturnValue(hangingChain)
-    vi.mocked(supabase.from).mockReturnValue(hangingChain as ReturnType<typeof supabase.from>)
+    vi.mocked(supabase.from).mockReturnValue(hangingChain as unknown as ReturnType<typeof supabase.from>)
     render(<DepartmentsPage />)
     expect(document.querySelector('.animate-spin')).toBeInTheDocument()
   })
@@ -89,7 +89,7 @@ describe('DepartmentsPage', () => {
 
   it('shows empty state gracefully when no data', async () => {
     vi.mocked(supabase.from).mockImplementation(() =>
-      makeChain([]) as ReturnType<typeof supabase.from>
+      makeChain([]) as unknown as ReturnType<typeof supabase.from>
     )
     render(<DepartmentsPage />)
     await waitFor(() => screen.getByText(/0 departments/))

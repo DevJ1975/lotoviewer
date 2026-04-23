@@ -287,7 +287,7 @@ describe('compressImage', () => {
   it('throws when the canvas 2D context is unavailable', async () => {
     installBitmapMock(800, 600)
     const { canvas } = makeCanvasMock()
-    canvas.getContext = vi.fn(() => null)
+    canvas.getContext = vi.fn(() => null) as unknown as typeof canvas.getContext
     installDocMock(canvas)
 
     const { compressImage } = await import('@/lib/imageUtils')
@@ -339,7 +339,7 @@ describe('compressImage', () => {
   it('releases the ImageBitmap via close() even when the canvas context fails', async () => {
     const { close } = installBitmapMock(800, 600)
     const { canvas } = makeCanvasMock()
-    canvas.getContext = vi.fn(() => null)
+    canvas.getContext = vi.fn(() => null) as unknown as typeof canvas.getContext
     installDocMock(canvas)
 
     const { compressImage } = await import('@/lib/imageUtils')

@@ -21,7 +21,7 @@ function setupStorageMock(uploadError: Error | null = null) {
     upload:       vi.fn().mockResolvedValue({ error: uploadError }),
     getPublicUrl: vi.fn().mockReturnValue({ data: { publicUrl: TEST_URL } }),
   }
-  vi.mocked(supabase.storage.from).mockReturnValue(bucket as ReturnType<typeof supabase.storage.from>)
+  vi.mocked(supabase.storage.from).mockReturnValue(bucket as unknown as ReturnType<typeof supabase.storage.from>)
   return bucket
 }
 
@@ -155,7 +155,7 @@ describe('usePhotoUpload', () => {
         .mockResolvedValue({ error: null }),
       getPublicUrl: vi.fn().mockReturnValue({ data: { publicUrl: TEST_URL } }),
     }
-    vi.mocked(supabase.storage.from).mockReturnValue(bucket as ReturnType<typeof supabase.storage.from>)
+    vi.mocked(supabase.storage.from).mockReturnValue(bucket as unknown as ReturnType<typeof supabase.storage.from>)
     setupDbMock()
     const { result } = renderHook(() => usePhotoUpload('EQ-001', 'EQUIP'))
 

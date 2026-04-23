@@ -10,11 +10,18 @@ vi.mock('@/lib/supabase', () => ({ supabase: { from: vi.fn() } }))
 function makeEquipment(overrides: Partial<Equipment> = {}): Equipment {
   return {
     equipment_id: 'EQ-001', description: 'Conveyor Motor', department: 'Mech',
+    prefix: null,
     photo_status: 'complete', has_equip_photo: true, has_iso_photo: false,
     equip_photo_url: null, iso_photo_url: null,
     placard_url: 'https://example.com/placard-001.pdf',
     signed_placard_url: null,
-    notes: null, verified: false, ...overrides,
+    notes: null, notes_es: null, spanish_reviewed: false,
+    verified: false,
+    verified_date: null, verified_by: null,
+    needs_equip_photo: true, needs_iso_photo: true, needs_verification: false,
+    decommissioned: false,
+    created_at: null, updated_at: null,
+    ...overrides,
   }
 }
 
@@ -37,7 +44,7 @@ const mockEquipment: Equipment[] = [
 
 describe('PrintQueuePage', () => {
   beforeEach(() => {
-    vi.mocked(supabase.from).mockReturnValue(makeChain(mockEquipment) as ReturnType<typeof supabase.from>)
+    vi.mocked(supabase.from).mockReturnValue(makeChain(mockEquipment) as unknown as ReturnType<typeof supabase.from>)
   })
 
   it('shows loading spinner while fetching', () => {
@@ -45,7 +52,7 @@ describe('PrintQueuePage', () => {
     hangingChain.select = vi.fn().mockReturnValue(hangingChain)
     hangingChain.not    = vi.fn().mockReturnValue(hangingChain)
     hangingChain.order  = vi.fn().mockReturnValue(hangingChain)
-    vi.mocked(supabase.from).mockReturnValue(hangingChain as ReturnType<typeof supabase.from>)
+    vi.mocked(supabase.from).mockReturnValue(hangingChain as unknown as ReturnType<typeof supabase.from>)
     render(<PrintQueuePage />)
     expect(document.querySelector('.animate-spin')).toBeInTheDocument()
   })

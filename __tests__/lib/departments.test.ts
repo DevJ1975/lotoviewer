@@ -27,7 +27,7 @@ describe('renameDepartment', () => {
 
   it('issues a single bulk update on loto_equipment with the trimmed name', async () => {
     const chain = makeUpdateChain(null)
-    vi.mocked(supabase.from).mockReturnValue(chain as ReturnType<typeof supabase.from>)
+    vi.mocked(supabase.from).mockReturnValue(chain as unknown as ReturnType<typeof supabase.from>)
 
     await renameDepartment('Electrical', '  Electric  ')
 
@@ -48,7 +48,7 @@ describe('renameDepartment', () => {
 
   it('throws an Error with the supabase message on failure', async () => {
     const chain = makeUpdateChain({ message: 'permission denied' })
-    vi.mocked(supabase.from).mockReturnValue(chain as ReturnType<typeof supabase.from>)
+    vi.mocked(supabase.from).mockReturnValue(chain as unknown as ReturnType<typeof supabase.from>)
 
     await expect(renameDepartment('A', 'B')).rejects.toThrow('permission denied')
   })

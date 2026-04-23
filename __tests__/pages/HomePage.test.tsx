@@ -45,14 +45,14 @@ const mockEquipment: Equipment[] = [
 
 describe('HomePage dashboard', () => {
   beforeEach(() => {
-    vi.mocked(supabase.from).mockReturnValue(makeChain(mockEquipment) as ReturnType<typeof supabase.from>)
+    vi.mocked(supabase.from).mockReturnValue(makeChain(mockEquipment) as unknown as ReturnType<typeof supabase.from>)
   })
 
   it('shows loading spinner while data is pending', () => {
     const hanging: Record<string, unknown> = { then: () => new Promise(() => {}) }
     hanging.select = vi.fn().mockReturnValue(hanging)
     hanging.order  = vi.fn().mockReturnValue(hanging)
-    vi.mocked(supabase.from).mockReturnValue(hanging as ReturnType<typeof supabase.from>)
+    vi.mocked(supabase.from).mockReturnValue(hanging as unknown as ReturnType<typeof supabase.from>)
     render(<HomePage />)
     expect(document.querySelector('.animate-spin')).toBeInTheDocument()
   })
@@ -99,7 +99,7 @@ describe('HomePage dashboard', () => {
     const errChain: Record<string, unknown> = { then: (r?: (v: unknown) => unknown) => Promise.resolve({ data: null, error: new Error('x') }).then(r) }
     errChain.select = vi.fn().mockReturnValue(errChain)
     errChain.order  = vi.fn().mockReturnValue(errChain)
-    vi.mocked(supabase.from).mockReturnValue(errChain as ReturnType<typeof supabase.from>)
+    vi.mocked(supabase.from).mockReturnValue(errChain as unknown as ReturnType<typeof supabase.from>)
     render(<HomePage />)
     await waitFor(() => screen.getByText('Could not load equipment'))
     expect(screen.getByText('Retry')).toBeInTheDocument()
