@@ -10,6 +10,15 @@ import { useToast } from '@/hooks/useToast'
 import Toast from '@/components/Toast'
 import { haptic } from '@/lib/platform'
 
+// Module-level marker so we can tell if the latest build actually loaded in
+// the browser. If this line doesn't appear in the console on page load, the
+// user is running stale JS (stale Vercel edge cache, SW cache, or browser
+// HTTP cache). Bump the tag when touching this file.
+if (typeof window !== 'undefined') {
+  // eslint-disable-next-line no-console
+  console.log('[decommission] module loaded', { build: 'a81665c+1' })
+}
+
 export default function DecommissionPage() {
   const [equipment, setEquipment]     = useState<Equipment[]>([])
   const [loading, setLoading]         = useState(true)
