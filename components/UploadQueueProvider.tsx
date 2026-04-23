@@ -132,9 +132,16 @@ export function UploadQueueProvider({ children }: { children: React.ReactNode })
           await uploadOne(item)
           await removeFromQueue(item.id)
           ok++
-        } catch {
+        } catch (err) {
           failed++
-          // Leave in queue on failure
+          // Leave in queue on failure. Log the actual cause so field users can
+          // tell us what's blocking uploads without needing a dev to repro.
+          console.error('[upload-queue] sync failed', {
+            equipmentId: item.equipmentId,
+            type:        item.type,
+            error:       err,
+            message:     err instanceof Error ? err.message : String(err),
+          })
         }
       }
       await refresh()
