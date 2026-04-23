@@ -163,7 +163,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${statusDotClass(eq.photo_status)} shrink-0`} />
+                      <span className={`w-2 h-2 rounded-full ${statusDotClass(computePhotoStatusFromEquipment(eq))} shrink-0`} />
                       <div className="min-w-0 flex-1">
                         <p className="font-mono text-xs font-bold text-brand-navy truncate">{eq.equipment_id}</p>
                         <p className="text-[11px] text-slate-400 truncate">{shortName(eq.description)}</p>

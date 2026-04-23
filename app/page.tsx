@@ -95,15 +95,23 @@ function HomeDashboard() {
     [equipment, selectedEqId],
   )
 
-  function setUrlState(next: { dept?: string | null; eq?: string | null }) {
-    const params = new URLSearchParams(searchParams.toString())
+  // Hold searchParams in a ref so setUrlState can be useCallback-stable
+  // across renders. Without this, selection callbacks allocated a new
+  // reference on every realtime tick (which updates `equipment` and re-runs
+  // HomeDashboard) — blowing up the memoization inside EquipmentListPanel
+  // and forcing every row to re-render on every DB change.
+  const searchParamsRef = useRef(searchParams)
+  searchParamsRef.current = searchParams
+
+  const setUrlState = useCallback((next: { dept?: string | null; eq?: string | null }) => {
+    const params = new URLSearchParams(searchParamsRef.current.toString())
     if (next.dept === null) params.delete('dept')
     else if (next.dept)     params.set('dept', next.dept)
     if (next.eq === null)   params.delete('eq')
     else if (next.eq)       params.set('eq', next.eq)
     const qs = params.toString()
     router.replace(qs ? `/?${qs}` : '/')
-  }
+  }, [router])
 
   // Pending auto-advance timer — held in a ref so we can cancel it whenever
   // the user takes a manual action (selecting a different item, switching
@@ -115,15 +123,24 @@ function HomeDashboard() {
   }, [])
   useEffect(() => () => cancelPendingAdvance(), [cancelPendingAdvance])
 
-  const handleSelectDept  = (dept: string | null) => {
+  const handleSelectDept = useCallback((dept: string | null) => {
     cancelPendingAdvance()
     setUrlState({ dept, eq: null })
-  }
-  const handleSelectEquip = (id: string) => {
+  }, [cancelPendingAdvance, setUrlState])
+
+  const handleSelectEquip = useCallback((id: string) => {
     cancelPendingAdvance()
     recordVisit(id)
     setUrlState({ eq: id })
-  }
+  }, [cancelPendingAdvance, recordVisit, setUrlState])
+
+  const handleEquipmentAdded = useCallback((row: Equipment) => {
+    setEquipment(prev =>
+      [...prev, row].sort((a, b) => a.equipment_id.localeCompare(b.equipment_id)),
+    )
+  }, [])
+
+  const openBatch = useCallback(() => setBatchOpen(true), [])
 
   // After a photo save, if the currently selected equipment no longer needs
   // a photo (both required slots filled), auto-advance to the next needs-
@@ -196,13 +213,9 @@ function HomeDashboard() {
         selectedEqId={selectedEqId}
         onSelectDept={handleSelectDept}
         onSelectEquip={handleSelectEquip}
-        onBatchPrint={() => setBatchOpen(true)}
+        onBatchPrint={openBatch}
         decommissioned={decommissioned}
-        onEquipmentAdded={row =>
-          setEquipment(prev =>
-            [...prev, row].sort((a, b) => a.equipment_id.localeCompare(b.equipment_id)),
-          )
-        }
+        onEquipmentAdded={handleEquipmentAdded}
       />
       <EquipmentListPanel
         equipment={equipment}

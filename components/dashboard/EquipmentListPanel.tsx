@@ -5,6 +5,7 @@ import type { Equipment } from '@/lib/types'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useUploadQueue } from '@/components/UploadQueueProvider'
 import { useSession } from '@/components/SessionProvider'
+import { computePhotoStatusFromEquipment, type PhotoStatus } from '@/lib/photoStatus'
 
 type StatusFilter = 'all' | 'needs-photo' | 'missing' | 'partial' | 'complete'
 type SortKey      = 'id' | 'status'
@@ -17,7 +18,7 @@ interface Props {
   decommissioned: ReadonlySet<string>
 }
 
-const STATUS_RANK: Record<Equipment['photo_status'], number> = { missing: 0, partial: 1, complete: 2 }
+const STATUS_RANK: Record<PhotoStatus, number> = { missing: 0, partial: 1, complete: 2 }
 
 function shortName(description: string): string {
   const m = description.match(/\(([^)]+)\)/)
@@ -45,6 +46,18 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
     return ids
   }, [queuedKeys])
 
+  // Status is computed from URLs + needs_*_photo flags, not read from the
+  // stored photo_status column. The stored column can drift if needs flags
+  // change without a corresponding re-upload, or if an offline upload hasn't
+  // drained yet. Computing here keeps counts, filters, sort, and row pills
+  // consistent with each other and with the sidebar (which also computes).
+  const statusById = useMemo(() => {
+    const m = new Map<string, PhotoStatus>()
+    for (const e of equipment) m.set(e.equipment_id, computePhotoStatusFromEquipment(e))
+    return m
+  }, [equipment])
+  const statusOf = useCallback((e: Equipment): PhotoStatus => statusById.get(e.equipment_id) ?? 'missing', [statusById])
+
   // Drop decommissioned rows first, then narrow to dept.
   // (Filter chip counts are computed off the search-scoped list below, so this
   // flows through consistently.)
@@ -67,33 +80,33 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
   const counts = useMemo(() => ({
     all:           searchScoped.length,
     'needs-photo': searchScoped.filter(needsPhoto).length,
-    missing:       searchScoped.filter(e => e.photo_status === 'missing').length,
-    partial:       searchScoped.filter(e => e.photo_status === 'partial').length,
-    complete:      searchScoped.filter(e => e.photo_status === 'complete').length,
-  }), [searchScoped])
+    missing:       searchScoped.filter(e => statusOf(e) === 'missing').length,
+    partial:       searchScoped.filter(e => statusOf(e) === 'partial').length,
+    complete:      searchScoped.filter(e => statusOf(e) === 'complete').length,
+  }), [searchScoped, statusOf])
 
   const filtered = useMemo(() => {
     switch (filter) {
       case 'needs-photo': return searchScoped.filter(needsPhoto)
-      case 'missing':     return searchScoped.filter(e => e.photo_status === 'missing')
-      case 'partial':     return searchScoped.filter(e => e.photo_status === 'partial')
-      case 'complete':    return searchScoped.filter(e => e.photo_status === 'complete')
+      case 'missing':     return searchScoped.filter(e => statusOf(e) === 'missing')
+      case 'partial':     return searchScoped.filter(e => statusOf(e) === 'partial')
+      case 'complete':    return searchScoped.filter(e => statusOf(e) === 'complete')
       default:            return searchScoped
     }
-  }, [searchScoped, filter])
+  }, [searchScoped, filter, statusOf])
 
   const sorted = useMemo(() => {
     const rows = [...filtered]
     if (sort === 'status') {
       rows.sort((a, b) => {
-        const d = STATUS_RANK[a.photo_status] - STATUS_RANK[b.photo_status]
+        const d = STATUS_RANK[statusOf(a)] - STATUS_RANK[statusOf(b)]
         return d !== 0 ? d : a.equipment_id.localeCompare(b.equipment_id)
       })
     } else {
       rows.sort((a, b) => a.equipment_id.localeCompare(b.equipment_id))
     }
     return rows
-  }, [filtered, sort])
+  }, [filtered, sort, statusOf])
 
   // Group by department when viewing "All"
   const grouped = useMemo(() => {
@@ -184,6 +197,7 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
                   <EquipmentRow
                     key={eq.equipment_id}
                     eq={eq}
+                    status={statusOf(eq)}
                     isSelected={eq.equipment_id === selectedEqId}
                     isFlagged={flags.has(eq.equipment_id)}
                     isQueued={queuedEquipmentIds.has(eq.equipment_id)}
@@ -200,12 +214,12 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
   )
 }
 
-function StatusDot({ status }: { status: Equipment['photo_status'] }) {
+function StatusDot({ status }: { status: PhotoStatus }) {
   const cls = status === 'complete' ? 'bg-emerald-500' : status === 'partial' ? 'bg-amber-400' : 'bg-rose-500'
   return <span className={`w-2.5 h-2.5 rounded-full ${cls} shrink-0`} aria-label={status} />
 }
 
-function StatusPill({ status }: { status: Equipment['photo_status'] }) {
+function StatusPill({ status }: { status: PhotoStatus }) {
   const style = status === 'complete'
     ? 'bg-emerald-50 text-emerald-700'
     : status === 'partial'
@@ -216,6 +230,7 @@ function StatusPill({ status }: { status: Equipment['photo_status'] }) {
 
 interface EquipmentRowProps {
   eq:           Equipment
+  status:       PhotoStatus
   isSelected:   boolean
   isFlagged:    boolean
   isQueued:     boolean
@@ -226,8 +241,11 @@ interface EquipmentRowProps {
 // Memoized so that unrelated parent state changes (search, sort, filter) do not
 // re-render every row. A full list of ~1000 equipment reduces from ~1000
 // reconciles per keystroke to near-zero.
-const EquipmentRow = memo(function EquipmentRow({ eq, isSelected, isFlagged, isQueued, onSelect, onToggleFlag }: EquipmentRowProps) {
-  const photoCount = (eq.has_equip_photo ? 1 : 0) + (eq.has_iso_photo ? 1 : 0)
+const EquipmentRow = memo(function EquipmentRow({ eq, status, isSelected, isFlagged, isQueued, onSelect, onToggleFlag }: EquipmentRowProps) {
+  // Count photos by URL presence so the "1/2" chip stays in sync with the
+  // status pill/dot (both derived from URLs). The has_*_photo booleans
+  // occasionally drift from the URL columns after migrations.
+  const photoCount = (eq.equip_photo_url?.trim() ? 1 : 0) + (eq.iso_photo_url?.trim() ? 1 : 0)
   const handleClick = () => onSelect(eq.equipment_id)
   const handleContext = (e: MouseEvent) => { e.preventDefault(); onToggleFlag(eq.equipment_id) }
   const handleFlagClick = (e: MouseEvent) => { e.stopPropagation(); onToggleFlag(eq.equipment_id) }
@@ -244,7 +262,7 @@ const EquipmentRow = memo(function EquipmentRow({ eq, isSelected, isFlagged, isQ
         }`}
       >
         <div className="flex items-center gap-3">
-          <StatusDot status={eq.photo_status} />
+          <StatusDot status={status} />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="font-mono text-sm font-bold text-brand-navy truncate">{eq.equipment_id}</span>
@@ -261,7 +279,7 @@ const EquipmentRow = memo(function EquipmentRow({ eq, isSelected, isFlagged, isQ
             <span className="text-[10px] font-semibold text-slate-500 tabular-nums bg-slate-100 rounded-full px-1.5 py-0.5">
               {photoCount}/2
             </span>
-            <StatusPill status={eq.photo_status} />
+            <StatusPill status={status} />
             <button
               type="button"
               onClick={handleFlagClick}
