@@ -52,3 +52,21 @@ export function computePhotoStatusFromEquipment(
     eq.needs_iso_photo,
   )
 }
+
+// True iff the equipment has at least one required slot still empty.
+// Uses URL presence (not has_*_photo booleans) so it stays in lockstep
+// with computePhotoStatus — otherwise "Needs Photo" chip counts could
+// disagree with "Missing + Partial" after a boolean/URL drift.
+//
+// Invariant (for a single row):
+//   needsPhoto(eq) === (computePhotoStatusFromEquipment(eq) !== 'complete')
+//
+// That gives the aggregate invariant for any list:
+//   needs-photo count = all count - complete count
+export function needsPhoto(
+  eq: Pick<Equipment, 'equip_photo_url' | 'iso_photo_url' | 'needs_equip_photo' | 'needs_iso_photo'>
+): boolean {
+  const hasEquip = Boolean(eq.equip_photo_url?.trim())
+  const hasIso   = Boolean(eq.iso_photo_url?.trim())
+  return (eq.needs_equip_photo && !hasEquip) || (eq.needs_iso_photo && !hasIso)
+}

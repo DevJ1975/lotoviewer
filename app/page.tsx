@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Equipment } from '@/lib/types'
 import { reconcileEquipment, type RealtimePayload } from '@/lib/equipmentReconcile'
+import { needsPhoto } from '@/lib/photoStatus'
 import DashboardSidebar     from '@/components/dashboard/DashboardSidebar'
 import EquipmentListPanel   from '@/components/dashboard/EquipmentListPanel'
 import PlacardDetailPanel   from '@/components/dashboard/PlacardDetailPanel'
@@ -151,19 +152,19 @@ function HomeDashboard() {
     const current = equipment.find(e => e.equipment_id === selectedEqId)
     if (!current) return
 
-    // Optimistically mark the photo as present so the "still needs photo"
-    // check below is accurate before realtime catches up.
-    const after = {
-      ...current,
-      has_equip_photo: type === 'equip' ? true : current.has_equip_photo,
-      has_iso_photo:   type === 'iso'   ? true : current.has_iso_photo,
-    }
-    const stillNeedsEquip = after.needs_equip_photo && !after.has_equip_photo
-    const stillNeedsIso   = after.needs_iso_photo   && !after.has_iso_photo
+    // "Does the current row still need a photo after this save?" Uses URL
+    // presence for the slot we didn't just save (to stay consistent with
+    // computePhotoStatusFromEquipment) and optimistic `true` for the slot
+    // we did (URL hasn't landed from the hook yet).
+    const afterHasEquip = type === 'equip' ? true : Boolean(current.equip_photo_url?.trim())
+    const afterHasIso   = type === 'iso'   ? true : Boolean(current.iso_photo_url?.trim())
+    const stillNeedsEquip = current.needs_equip_photo && !afterHasEquip
+    const stillNeedsIso   = current.needs_iso_photo   && !afterHasIso
     if (stillNeedsEquip || stillNeedsIso) return
 
     // Find the next item in this dept (or globally if none selected) that
-    // still needs a photo and isn't decommissioned.
+    // still needs a photo and isn't decommissioned. URL presence matches
+    // the list-panel's "Needs Photo" filter — same invariant.
     const scope = selectedDept
       ? equipment.filter(e => e.department === selectedDept)
       : equipment
@@ -171,8 +172,7 @@ function HomeDashboard() {
     const idx = sorted.findIndex(e => e.equipment_id === selectedEqId)
     const rotated = idx >= 0 ? [...sorted.slice(idx + 1), ...sorted.slice(0, idx)] : sorted
     const nextNeedsPhoto = rotated.find(e =>
-      !decommissioned.has(e.equipment_id)
-      && ((e.needs_equip_photo && !e.has_equip_photo) || (e.needs_iso_photo && !e.has_iso_photo)),
+      !decommissioned.has(e.equipment_id) && needsPhoto(e),
     )
     if (!nextNeedsPhoto) return
 

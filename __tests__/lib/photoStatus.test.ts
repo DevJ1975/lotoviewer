@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { computePhotoStatus, computePhotoStatusFromUrls, computePhotoStatusFromEquipment } from '@/lib/photoStatus'
+import { computePhotoStatus, computePhotoStatusFromUrls, computePhotoStatusFromEquipment, needsPhoto } from '@/lib/photoStatus'
+import type { Equipment } from '@/lib/types'
 
 // ── computePhotoStatus (boolean API) ────────────────────────────────────────
 
@@ -269,3 +270,163 @@ describe('computePhotoStatusFromEquipment with needs flags', () => {
     })).toBe('missing')
   })
 })
+
+// ── needsPhoto (required-slot-empty predicate) ──────────────────────────────
+
+describe('needsPhoto', () => {
+  it('false when all required slots have URLs', () => {
+    expect(needsPhoto({
+      equip_photo_url:   'https://cdn.example.com/e.jpg',
+      iso_photo_url:     'https://cdn.example.com/i.jpg',
+      needs_equip_photo: true,
+      needs_iso_photo:   true,
+    })).toBe(false)
+  })
+
+  it('true when a required slot has no URL', () => {
+    expect(needsPhoto({
+      equip_photo_url:   null,
+      iso_photo_url:     'https://cdn.example.com/i.jpg',
+      needs_equip_photo: true,
+      needs_iso_photo:   true,
+    })).toBe(true)
+  })
+
+  it('false when the only empty slot is not required', () => {
+    expect(needsPhoto({
+      equip_photo_url:   'https://cdn.example.com/e.jpg',
+      iso_photo_url:     null,
+      needs_equip_photo: true,
+      needs_iso_photo:   false,
+    })).toBe(false)
+  })
+
+  it('false when nothing is required, even if both slots are empty', () => {
+    expect(needsPhoto({
+      equip_photo_url:   null,
+      iso_photo_url:     null,
+      needs_equip_photo: false,
+      needs_iso_photo:   false,
+    })).toBe(false)
+  })
+
+  it('treats whitespace-only URL as empty', () => {
+    expect(needsPhoto({
+      equip_photo_url:   '   ',
+      iso_photo_url:     null,
+      needs_equip_photo: true,
+      needs_iso_photo:   false,
+    })).toBe(true)
+  })
+})
+
+// ── Count invariants — these are what the dashboard relies on ───────────────
+//
+// For any equipment list L:
+//   |all|      = |missing| + |partial| + |complete|    (disjoint coverage)
+//   |needs-photo| = |all| - |complete|                 (complement of complete)
+//   |needs-photo| = |missing| + |partial|              (equivalent form)
+//
+// Breaking these makes chip counts look inconsistent — e.g. "All (50)"
+// vs. "Missing (10) Partial (15) Complete (20)" summing to 45, or
+// "Complete (20)" + "Needs Photo (32)" summing to more than 50. These
+// specs exercise a mixed-shape fixture to verify the math.
+
+describe('count invariants across a realistic mix', () => {
+  // One row per important case — covers needs=true/false combinations,
+  // URL presence permutations, and the stale-boolean drift scenario.
+  const fixture: Equipment[] = [
+    // 1. both required, both uploaded → complete
+    row('A', { equip_photo_url: 'e', iso_photo_url: 'i', needs_equip_photo: true, needs_iso_photo: true }),
+    // 2. both required, only equip → partial
+    row('B', { equip_photo_url: 'e', iso_photo_url: null, needs_equip_photo: true, needs_iso_photo: true }),
+    // 3. both required, none → missing
+    row('C', { equip_photo_url: null, iso_photo_url: null, needs_equip_photo: true, needs_iso_photo: true }),
+    // 4. only equip required, equip uploaded → complete (the bug fix target)
+    row('D', { equip_photo_url: 'e', iso_photo_url: null, needs_equip_photo: true, needs_iso_photo: false }),
+    // 5. only equip required, nothing → missing
+    row('E', { equip_photo_url: null, iso_photo_url: null, needs_equip_photo: true, needs_iso_photo: false }),
+    // 6. only iso required, iso uploaded → complete
+    row('F', { equip_photo_url: null, iso_photo_url: 'i', needs_equip_photo: false, needs_iso_photo: true }),
+    // 7. only iso required, only non-required equip uploaded → partial
+    //    (required iso slot is empty; extra equip photo counts toward "hasEquip" but doesn't satisfy any requirement)
+    row('G', { equip_photo_url: 'e', iso_photo_url: null, needs_equip_photo: false, needs_iso_photo: true }),
+    // 8. nothing required → complete (vacuously)
+    row('H', { equip_photo_url: null, iso_photo_url: null, needs_equip_photo: false, needs_iso_photo: false }),
+    // 9. stale-boolean drift — has_*_photo false but URL present. Status
+    //    should trust URLs and count this as complete, not "needs photo".
+    row('I', {
+      equip_photo_url: 'e', iso_photo_url: 'i',
+      needs_equip_photo: true, needs_iso_photo: true,
+      has_equip_photo: false, has_iso_photo: false,
+    }),
+  ]
+
+  const countsByStatus = fixture.reduce((acc, eq) => {
+    const s = computePhotoStatusFromEquipment(eq)
+    acc[s]++
+    return acc
+  }, { missing: 0, partial: 0, complete: 0 } as Record<'missing' | 'partial' | 'complete', number>)
+
+  const needsPhotoCount = fixture.filter(needsPhoto).length
+
+  it('every row maps to exactly one of missing / partial / complete', () => {
+    expect(countsByStatus.missing + countsByStatus.partial + countsByStatus.complete)
+      .toBe(fixture.length)
+  })
+
+  it('needs-photo count equals (all - complete)', () => {
+    expect(needsPhotoCount).toBe(fixture.length - countsByStatus.complete)
+  })
+
+  it('needs-photo count equals (missing + partial)', () => {
+    expect(needsPhotoCount).toBe(countsByStatus.missing + countsByStatus.partial)
+  })
+
+  it('produces the specific expected counts on the mixed fixture', () => {
+    // 5 complete: A, D, F, H, I (I is the stale-boolean-drift case)
+    // 2 partial:  B, G
+    // 2 missing:  C, E
+    expect(countsByStatus).toEqual({ missing: 2, partial: 2, complete: 5 })
+    expect(needsPhotoCount).toBe(4)
+  })
+
+  it('needsPhoto(row) is the negation of complete for every row', () => {
+    // This is the per-row invariant the aggregate ones rest on.
+    for (const eq of fixture) {
+      const isComplete = computePhotoStatusFromEquipment(eq) === 'complete'
+      expect(needsPhoto(eq)).toBe(!isComplete)
+    }
+  })
+})
+
+// Minimal Equipment factory — fills in non-status fields with harmless
+// defaults so tests only have to mention the columns they care about.
+function row(id: string, overrides: Partial<Equipment>): Equipment {
+  return {
+    equipment_id: id,
+    description: id,
+    department: 'X',
+    prefix: null,
+    photo_status: 'missing',
+    has_equip_photo: false,
+    has_iso_photo: false,
+    equip_photo_url: null,
+    iso_photo_url: null,
+    placard_url: null,
+    signed_placard_url: null,
+    notes: null,
+    notes_es: null,
+    spanish_reviewed: false,
+    verified: false,
+    verified_date: null,
+    verified_by: null,
+    needs_equip_photo: true,
+    needs_iso_photo: true,
+    needs_verification: false,
+    decommissioned: false,
+    created_at: null,
+    updated_at: null,
+    ...overrides,
+  }
+}

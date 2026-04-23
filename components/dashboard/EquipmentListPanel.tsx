@@ -5,7 +5,7 @@ import type { Equipment } from '@/lib/types'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useUploadQueue } from '@/components/UploadQueueProvider'
 import { useSession } from '@/components/SessionProvider'
-import { computePhotoStatusFromEquipment, type PhotoStatus } from '@/lib/photoStatus'
+import { computePhotoStatusFromEquipment, needsPhoto, type PhotoStatus } from '@/lib/photoStatus'
 
 type StatusFilter = 'all' | 'needs-photo' | 'missing' | 'partial' | 'complete'
 type SortKey      = 'id' | 'status'
@@ -23,10 +23,6 @@ const STATUS_RANK: Record<PhotoStatus, number> = { missing: 0, partial: 1, compl
 function shortName(description: string): string {
   const m = description.match(/\(([^)]+)\)/)
   return m ? m[1].split(' - ')[0] : description
-}
-
-function needsPhoto(e: Equipment): boolean {
-  return (e.needs_equip_photo && !e.has_equip_photo) || (e.needs_iso_photo && !e.has_iso_photo)
 }
 
 export default function EquipmentListPanel({ equipment, selectedDept, selectedEqId, onSelectEquip, decommissioned }: Props) {
