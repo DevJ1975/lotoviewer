@@ -153,6 +153,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
               fill
               sizes="(max-width: 768px) 100vw, 50vw"
               className="object-cover"
+              style={{ imageOrientation: 'from-image' }}
               unoptimized
             />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">

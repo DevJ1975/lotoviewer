@@ -61,20 +61,13 @@ function makeCanvasMock() {
   return { canvas, ctx }
 }
 
-function installImageMock(naturalWidth: number, naturalHeight: number) {
-  vi.stubGlobal('Image', class {
-    onload: (() => void) | null = null
-    naturalWidth = naturalWidth
-    naturalHeight = naturalHeight
-    set src(_: string) { setTimeout(() => this.onload?.(), 0) }
-  })
-}
-
-function installUrlMock() {
-  vi.stubGlobal('URL', {
-    createObjectURL: vi.fn(() => 'blob:mock'),
-    revokeObjectURL: vi.fn(),
-  })
+// createImageBitmap is called with { imageOrientation: 'from-image' } so EXIF
+// rotation is baked in by the decoder. Tests simulate the post-decode bitmap
+// dimensions directly.
+function installBitmapMock(width: number, height: number) {
+  const close = vi.fn()
+  vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width, height, close })))
+  return { close }
 }
 
 function installDocMock(canvas: ReturnType<typeof makeCanvasMock>['canvas']) {
@@ -83,7 +76,6 @@ function installDocMock(canvas: ReturnType<typeof makeCanvasMock>['canvas']) {
 
 describe('compressImage (canvas mock)', () => {
   beforeEach(async () => {
-    installUrlMock()
     // Reset the WebP feature-detect cache between specs so each test starts
     // from a clean state.
     const m = await import('@/lib/imageUtils')
@@ -91,7 +83,7 @@ describe('compressImage (canvas mock)', () => {
   })
 
   it('skips load entirely when forceLandscape is off and file is small', async () => {
-    installImageMock(800, 600)
+    installBitmapMock(800, 600)
     const { canvas } = makeCanvasMock()
     installDocMock(canvas)
 
@@ -105,7 +97,7 @@ describe('compressImage (canvas mock)', () => {
   })
 
   it('returns original small landscape file even with forceLandscape=true (no re-encode)', async () => {
-    installImageMock(800, 600)
+    installBitmapMock(800, 600)
     const { canvas } = makeCanvasMock()
     installDocMock(canvas)
 
@@ -118,7 +110,7 @@ describe('compressImage (canvas mock)', () => {
   })
 
   it('rotates a small portrait file even though it is under maxBytes', async () => {
-    installImageMock(600, 800)  // portrait
+    installBitmapMock(600, 800)  // portrait
     const { canvas, ctx } = makeCanvasMock()
     installDocMock(canvas)
 
@@ -137,7 +129,7 @@ describe('compressImage (canvas mock)', () => {
   })
 
   it('does NOT rotate landscape files even when oversized', async () => {
-    installImageMock(800, 600)
+    installBitmapMock(800, 600)
     const { canvas, ctx } = makeCanvasMock()
     installDocMock(canvas)
 
@@ -154,7 +146,7 @@ describe('compressImage (canvas mock)', () => {
   })
 
   it('does NOT rotate square files', async () => {
-    installImageMock(1000, 1000)
+    installBitmapMock(1000, 1000)
     const { canvas, ctx } = makeCanvasMock()
     installDocMock(canvas)
 
@@ -166,7 +158,7 @@ describe('compressImage (canvas mock)', () => {
   })
 
   it('respects forceLandscape=false: portrait file is not rotated', async () => {
-    installImageMock(600, 800)  // portrait
+    installBitmapMock(600, 800)  // portrait
     const { canvas, ctx } = makeCanvasMock()
     installDocMock(canvas)
 
@@ -181,7 +173,7 @@ describe('compressImage (canvas mock)', () => {
   })
 
   it('renames the file extension to match the chosen output mime', async () => {
-    installImageMock(800, 600)
+    installBitmapMock(800, 600)
     const { canvas } = makeCanvasMock()
     installDocMock(canvas)
 
