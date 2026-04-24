@@ -245,6 +245,22 @@ describe('compressImage', () => {
     expect(toBlobMimes.every((m: unknown) => m === 'image/jpeg')).toBe(true)
   })
 
+  it('appends .jpg when the source file has no extension', async () => {
+    // iOS drag-and-drop and some native share sheets hand over files with a
+    // MIME type but no extension. The resulting File must still carry a .jpg
+    // name so downstream (Supabase storage URL inference, browser saves,
+    // pdf-lib's filename hints) sees something sensible.
+    installBitmapMock(800, 600)
+    const { canvas } = makeCanvasMock()
+    installDocMock(canvas)
+
+    const { compressImage } = await import('@/lib/imageUtils')
+    const file = new File([new Uint8Array(500)], 'IMG_0001', { type: 'image/jpeg' })
+    const result = await compressImage(file)
+
+    expect(result.name).toBe('IMG_0001.jpg')
+  })
+
   // ── Quality loop ────────────────────────────────────────────────────────
 
   it('accepts the first quality step that fits under maxBytes', async () => {

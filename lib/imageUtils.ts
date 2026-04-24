@@ -8,6 +8,17 @@ export function isHeic(file: File): boolean {
       || name.endsWith('.heic') || name.endsWith('.heif')
 }
 
+// Normalize any filename to end with .jpg. Both heicToJpeg and compressImage
+// always produce JPEG bytes, so the filename needs to match. Preserves
+// mid-filename dots (IMG.2024.heic → IMG.2024.jpg), leaves existing .jpg
+// names untouched to avoid photo.jpg.jpg double extensions, and handles
+// extension-less files (iOS drag-and-drop sometimes omits the extension).
+function toJpgName(name: string): string {
+  if (/\.jpg$/i.test(name)) return name
+  if (/\.[^.]+$/.test(name)) return name.replace(/\.[^.]+$/, '.jpg')
+  return `${name}.jpg`
+}
+
 // Decode a HEIC/HEIF file through the browser's native decoder and
 // re-encode as JPEG so the rest of the pipeline (Claude validation,
 // compressImage, pdf-lib embedJpg) can work with it. Relies on
@@ -31,12 +42,7 @@ export async function heicToJpeg(file: File): Promise<File> {
     ctx.drawImage(bitmap, 0, 0)
     const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/jpeg', 0.92))
     if (!blob) throw new Error('HEIC decode produced no JPEG blob')
-    const jpegName = file.name.replace(/\.(heic|heif)$/i, '.jpg')
-    // If the original filename had no extension at all, tack one on.
-    const finalName = jpegName === file.name && !jpegName.toLowerCase().endsWith('.jpg')
-      ? `${jpegName}.jpg`
-      : jpegName
-    return new File([blob], finalName, { type: 'image/jpeg' })
+    return new File([blob], toJpgName(file.name), { type: 'image/jpeg' })
   } finally {
     bitmap.close()
   }
@@ -80,7 +86,7 @@ export async function compressImage(file: File, maxBytes = 1_000_000): Promise<F
     if (!ctx) throw new Error('Canvas 2D context not available')
     ctx.drawImage(bitmap, 0, 0, dims.width, dims.height)
 
-    const outputName = file.name.replace(/\.[^.]+$/, '.jpg')
+    const outputName = toJpgName(file.name)
     const tryQuality = (q: number) =>
       new Promise<Blob | null>(res => canvas.toBlob(res, 'image/jpeg', q))
 
