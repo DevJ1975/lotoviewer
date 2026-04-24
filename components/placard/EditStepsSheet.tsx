@@ -238,14 +238,22 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
               <div key={draft.key} className="rounded-xl border border-slate-100 p-4 space-y-3">
                 <div className="flex items-center gap-2 pb-2 border-b border-slate-50">
                   {isNew ? (
+                    // Colored <select> so picking the energy type looks like
+                    // the badges on existing rows — the closed control takes
+                    // on the same hex/textHex the saved badge would have.
+                    // The dropdown popup itself is OS-rendered and can't be
+                    // color-styled cross-browser, which is fine.
                     <select
                       value={draft.energy_type}
                       onChange={e => changeEnergyType(draft.key, e.target.value)}
                       aria-label="Energy type"
-                      className="rounded-md border border-slate-200 px-2 py-1 text-[11px] font-semibold focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+                      style={{ backgroundColor: hex, color: textHex }}
+                      className="rounded-md px-2 py-0.5 text-[11px] font-bold focus:outline-none focus:ring-2 focus:ring-brand-navy/30 cursor-pointer border-0"
                     >
                       {ENERGY_CODES.map(c => (
-                        <option key={c.code} value={c.code}>{c.code} — {c.labelEn}</option>
+                        <option key={c.code} value={c.code} style={{ backgroundColor: '#fff', color: '#1a1a1a' }}>
+                          {c.code} — {c.labelEn}
+                        </option>
                       ))}
                     </select>
                   ) : (
