@@ -1,7 +1,7 @@
 {
-  "name": "Soteria LOTO Dashboard",
-  "short_name": "Soteria LOTO",
-  "description": "Real-time LOTO placard completion tracking",
+  "name": "Soteria LOTO Pro",
+  "short_name": "Soteria LOTO Pro",
+  "description": "Soteria LOTO Pro — real-time placard completion tracking for field teams",
   "start_url": "/",
   "scope": "/",
   "id": "/",

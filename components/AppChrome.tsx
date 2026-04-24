@@ -81,7 +81,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
                 SL
               </div>
               <span className="hidden xs:inline sm:inline text-white font-semibold text-[15px] tracking-tight truncate">
-                Soteria <span className="text-brand-yellow font-bold">LOTO</span>
+                Soteria <span className="text-brand-yellow font-bold">LOTO Pro</span>
               </span>
             </Link>
 

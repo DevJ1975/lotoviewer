@@ -6,7 +6,7 @@
 //
 // Bump CACHE_VERSION whenever the strategies change so old SW clients clear
 // their stores cleanly via the activate handler.
-const CACHE_VERSION = 'v3'
+const CACHE_VERSION = 'v4'
 const STATIC_CACHE  = `loto-static-${CACHE_VERSION}`
 const HTML_CACHE    = `loto-html-${CACHE_VERSION}`
 const IMAGE_CACHE   = `loto-images-${CACHE_VERSION}`
@@ -124,7 +124,7 @@ async function networkFirst(request, cacheName) {
       '<!doctype html><meta charset="utf-8"><title>Offline</title>' +
       '<style>body{font:14px system-ui;padding:2rem;text-align:center;color:#475569}</style>' +
       '<h1 style="color:#1B3A6B">You\'re offline</h1>' +
-      '<p>The LOTO app will be available when you reconnect.</p>',
+      '<p>Soteria LOTO Pro will be available when you reconnect.</p>',
       { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 503 },
     )
   }

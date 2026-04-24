@@ -1,4 +1,4 @@
-# Soteria LOTO Dashboard — Overview
+# Soteria LOTO Pro — Overview
 
 ## Tech Stack
 

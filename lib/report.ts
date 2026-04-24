@@ -134,7 +134,7 @@ function drawExecutiveSummary(
 
   // ── Header band (yellow, navy text)
   page.drawRectangle({ x: 0, y: PAGE_H - 60, width: PAGE_W, height: 60, color: C.yellow })
-  page.drawText('LOTO PLACARD STATUS REPORT', {
+  page.drawText('SOTERIA LOTO PRO — PLACARD STATUS REPORT', {
     x: MARGIN, y: PAGE_H - 32, size: 16, font: bold, color: C.navy,
   })
   const subtitle = `${data.facility}  ·  ${data.generatedAt.toLocaleString()}`
