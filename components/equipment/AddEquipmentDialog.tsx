@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Equipment } from '@/lib/types'
 import { useDebounce } from '@/hooks/useDebounce'
+import { useFormDraft } from '@/hooks/useFormDraft'
 
 interface Props {
   equipment: Equipment[]
@@ -11,21 +12,51 @@ interface Props {
   onAdded:   (row: Equipment) => void
 }
 
+interface DraftState {
+  equipmentId: string
+  description: string
+  department:  string
+  prefix:      string
+  // True if the user explicitly edited prefix — persisted so restoring
+  // a draft doesn't let the auto-derive useEffect overwrite the user's
+  // intent on re-open.
+  prefixDirty: boolean
+  needsEquip:  boolean
+  needsIso:    boolean
+  notes:       string
+}
+
+const DEFAULT_DRAFT: DraftState = {
+  equipmentId: '', description: '', department: '', prefix: '',
+  prefixDirty: false, needsEquip: true, needsIso: true, notes: '',
+}
+
+const DRAFT_KEY = 'loto:addEquipmentDraft'
+
 function derivePrefix(equipmentId: string): string {
   return equipmentId.includes('-') ? equipmentId.split('-')[0] : equipmentId
 }
 
+function draftHasContent(d: DraftState): boolean {
+  // Used to decide whether the "Restored your draft" banner is worth
+  // showing. An all-defaults draft technically restores but isn't
+  // anything the user would notice losing.
+  return d.equipmentId.trim() !== ''
+      || d.description.trim() !== ''
+      || d.department.trim() !== ''
+      || d.notes.trim() !== ''
+      || d.prefixDirty
+}
+
 export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Props) {
-  const [equipmentId,  setEquipmentId]  = useState('')
-  const [description,  setDescription]  = useState('')
-  const [department,   setDepartment]   = useState('')
-  const [prefix,       setPrefix]       = useState('')
-  const [prefixDirty,  setPrefixDirty]  = useState(false)
-  const [needsEquip,   setNeedsEquip]   = useState(true)
-  const [needsIso,     setNeedsIso]     = useState(true)
-  const [notes,        setNotes]        = useState('')
-  const [submitting,   setSubmitting]   = useState(false)
-  const [serverError,  setServerError]  = useState<string | null>(null)
+  const [draft, setDraft, clearDraft, wasRestored] =
+    useFormDraft<DraftState>(DRAFT_KEY, DEFAULT_DRAFT)
+
+  const [submitting,  setSubmitting]  = useState(false)
+  const [serverError, setServerError] = useState<string | null>(null)
+  const [draftDismissed, setDraftDismissed] = useState(false)
+
+  const showDraftBanner = wasRestored && draftHasContent(draft) && !draftDismissed
 
   const existingIds = useMemo(
     () => new Set(equipment.map(e => e.equipment_id)),
@@ -38,13 +69,17 @@ export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Prop
   }, [equipment])
 
   // Debounced uniqueness check for inline error display
-  const debouncedId = useDebounce(equipmentId.trim(), 300)
+  const debouncedId = useDebounce(draft.equipmentId.trim(), 300)
   const duplicate   = debouncedId.length > 0 && existingIds.has(debouncedId)
 
   // Auto-derive prefix from equipment_id unless the user has edited it
   useEffect(() => {
-    if (!prefixDirty) setPrefix(derivePrefix(equipmentId.trim()))
-  }, [equipmentId, prefixDirty])
+    if (draft.prefixDirty) return
+    const derived = derivePrefix(draft.equipmentId.trim())
+    if (derived !== draft.prefix) {
+      setDraft(d => ({ ...d, prefix: derived }))
+    }
+  }, [draft.equipmentId, draft.prefixDirty, draft.prefix, setDraft])
 
   // Close on Escape
   useEffect(() => {
@@ -55,10 +90,10 @@ export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Prop
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose, submitting])
 
-  const trimmedId   = equipmentId.trim()
-  const trimmedDesc = description.trim()
-  const trimmedDept = department.trim()
-  const trimmedPrefix = prefix.trim() || derivePrefix(trimmedId)
+  const trimmedId     = draft.equipmentId.trim()
+  const trimmedDesc   = draft.description.trim()
+  const trimmedDept   = draft.department.trim()
+  const trimmedPrefix = draft.prefix.trim() || derivePrefix(trimmedId)
 
   const canSubmit =
     trimmedId.length > 0 &&
@@ -77,9 +112,9 @@ export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Prop
       description:        trimmedDesc,
       department:         trimmedDept,
       prefix:             trimmedPrefix,
-      needs_equip_photo:  needsEquip,
-      needs_iso_photo:    needsIso,
-      notes:              notes.trim() || null,
+      needs_equip_photo:  draft.needsEquip,
+      needs_iso_photo:    draft.needsIso,
+      notes:              draft.notes.trim() || null,
       has_equip_photo:    false,
       has_iso_photo:      false,
       photo_status:       'missing' as const,
@@ -100,9 +135,20 @@ export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Prop
       return
     }
 
+    // Successful save — drop the draft so reopening the dialog starts
+    // fresh. Submission is the only action that should auto-clear the
+    // draft; cancel/Esc intentionally keeps it so accidental dismissals
+    // are recoverable.
+    clearDraft()
     onAdded(data as Equipment)
     onClose()
-  }, [canSubmit, trimmedId, trimmedDesc, trimmedDept, trimmedPrefix, needsEquip, needsIso, notes, onAdded, onClose])
+  }, [canSubmit, trimmedId, trimmedDesc, trimmedDept, trimmedPrefix, draft, clearDraft, onAdded, onClose])
+
+  const handleStartOver = useCallback(() => {
+    clearDraft()
+    setDraftDismissed(true)
+    setServerError(null)
+  }, [clearDraft])
 
   return (
     <div
@@ -128,12 +174,33 @@ export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Prop
 
         {/* Body */}
         <div className="px-6 py-5 space-y-4">
+          {showDraftBanner && (
+            <div
+              role="status"
+              className="flex items-center justify-between gap-3 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-lg"
+            >
+              <span>We restored your unsaved draft from earlier.</span>
+              <button
+                type="button"
+                onClick={handleStartOver}
+                disabled={submitting}
+                className="font-semibold uppercase tracking-wider text-[11px] text-amber-800 hover:text-amber-950 transition-colors disabled:opacity-50"
+              >
+                Start over
+              </button>
+            </div>
+          )}
+
           {/* Equipment ID */}
           <Field label="Equipment ID" required>
             <input
               type="text"
-              value={equipmentId}
-              onChange={e => { setEquipmentId(e.target.value); setServerError(null) }}
+              value={draft.equipmentId}
+              onChange={e => {
+                const v = e.target.value
+                setDraft(d => ({ ...d, equipmentId: v }))
+                setServerError(null)
+              }}
               disabled={submitting}
               autoFocus
               placeholder="e.g. 321-MX-01"
@@ -150,8 +217,11 @@ export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Prop
           <Field label="Description" required>
             <input
               type="text"
-              value={description}
-              onChange={e => setDescription(e.target.value)}
+              value={draft.description}
+              onChange={e => {
+                const v = e.target.value
+                setDraft(d => ({ ...d, description: v }))
+              }}
               disabled={submitting}
               placeholder="Full machine description"
               className={inputCls(false)}
@@ -162,8 +232,11 @@ export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Prop
           <Field label="Department" required>
             <input
               type="text"
-              value={department}
-              onChange={e => setDepartment(e.target.value)}
+              value={draft.department}
+              onChange={e => {
+                const v = e.target.value
+                setDraft(d => ({ ...d, department: v }))
+              }}
               list="dept-suggestions"
               disabled={submitting}
               placeholder="Type or pick a department"
@@ -178,8 +251,11 @@ export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Prop
           <Field label="Prefix">
             <input
               type="text"
-              value={prefix}
-              onChange={e => { setPrefix(e.target.value); setPrefixDirty(true) }}
+              value={draft.prefix}
+              onChange={e => {
+                const v = e.target.value
+                setDraft(d => ({ ...d, prefix: v, prefixDirty: true }))
+              }}
               disabled={submitting}
               placeholder="Auto-derived from Equipment ID"
               className={inputCls(false)}
@@ -190,14 +266,14 @@ export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Prop
           <div className="grid grid-cols-2 gap-3">
             <Toggle
               label="Needs Equipment Photo"
-              checked={needsEquip}
-              onChange={setNeedsEquip}
+              checked={draft.needsEquip}
+              onChange={v => setDraft(d => ({ ...d, needsEquip: v }))}
               disabled={submitting}
             />
             <Toggle
               label="Needs Isolation Photo"
-              checked={needsIso}
-              onChange={setNeedsIso}
+              checked={draft.needsIso}
+              onChange={v => setDraft(d => ({ ...d, needsIso: v }))}
               disabled={submitting}
             />
           </div>
@@ -205,8 +281,11 @@ export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Prop
           {/* Notes */}
           <Field label="Notes">
             <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
+              value={draft.notes}
+              onChange={e => {
+                const v = e.target.value
+                setDraft(d => ({ ...d, notes: v }))
+              }}
               disabled={submitting}
               rows={2}
               placeholder="Optional"
