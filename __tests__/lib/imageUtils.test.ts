@@ -1,5 +1,9 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { computeTargetDimensions, isHeic } from '@/lib/imageUtils'
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 describe('computeTargetDimensions', () => {
   it('returns original dimensions when both are under maxDim', () => {
@@ -388,5 +392,248 @@ describe('isHeic', () => {
 
   it('is case-insensitive on both MIME and extension', () => {
     expect(isHeic(heic('PHOTO.HEIC', 'IMAGE/HEIC'))).toBe(true)
+  })
+})
+
+// ── heicToJpeg — native-browser HEIC decode ────────────────────────────────
+// This is Stage 1 of the HEIC pipeline: Safari-native decode → JPEG so the
+// rest of the pipeline (Claude validation, compressImage, pdf-lib embedJpg)
+// never sees HEIC bytes. The orientation fix hinges on passing
+// `imageOrientation: 'from-image'` to createImageBitmap so the decoded pixels
+// are already right-side up before we re-encode to JPEG.
+describe('heicToJpeg', () => {
+  // ── Right-side-up: the non-negotiable invariant ───────────────────────────
+
+  it('calls createImageBitmap with imageOrientation: from-image', async () => {
+    const { impl } = installBitmapMock(800, 600)
+    const { canvas } = makeCanvasMock()
+    installDocMock(canvas)
+
+    const { heicToJpeg } = await import('@/lib/imageUtils')
+    const file = new File(['x'.repeat(100)], 'photo.heic', { type: 'image/heic' })
+    await heicToJpeg(file)
+
+    expect(impl).toHaveBeenCalledTimes(1)
+    expect(impl).toHaveBeenCalledWith(file, { imageOrientation: 'from-image' })
+  })
+
+  it('sizes the canvas from the EXIF-corrected bitmap dimensions', async () => {
+    // iPhone HEIC stored as 4032×3024 bytes with EXIF "rotate 90° CW" →
+    // createImageBitmap with imageOrientation: 'from-image' returns 3024×4032.
+    // If we sized the canvas from file metadata instead of the bitmap, the
+    // decoded pixels would be cropped or stretched sideways.
+    installBitmapMock(3024, 4032)
+    const { canvas, ctx } = makeCanvasMock()
+    installDocMock(canvas)
+
+    const { heicToJpeg } = await import('@/lib/imageUtils')
+    const file = new File([new Uint8Array(500_000)], 'IMG_0001.heic', { type: 'image/heic' })
+    await heicToJpeg(file)
+
+    expect(canvas.width).toBe(3024)
+    expect(canvas.height).toBe(4032)
+    expect(ctx.drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0)
+    // No manual rotate/translate — the orientation is already baked in.
+    expect(ctx.rotate).not.toHaveBeenCalled()
+    expect(ctx.translate).not.toHaveBeenCalled()
+  })
+
+  // ── Output format: JPEG at quality 0.92 ───────────────────────────────────
+
+  it('encodes the output as image/jpeg at quality 0.92', async () => {
+    installBitmapMock(800, 600)
+    const { canvas } = makeCanvasMock()
+    installDocMock(canvas)
+
+    const { heicToJpeg } = await import('@/lib/imageUtils')
+    const file = new File(['x'.repeat(100)], 'photo.heic', { type: 'image/heic' })
+    await heicToJpeg(file)
+
+    expect(canvas.toBlob).toHaveBeenCalledTimes(1)
+    const args = canvas.toBlob.mock.calls[0] as unknown as [unknown, string, number]
+    expect(args[1]).toBe('image/jpeg')
+    expect(args[2]).toBe(0.92)
+  })
+
+  it('returns a File with image/jpeg type regardless of input MIME', async () => {
+    installBitmapMock(800, 600)
+    const { canvas } = makeCanvasMock()
+    installDocMock(canvas)
+
+    const { heicToJpeg } = await import('@/lib/imageUtils')
+    const file = new File(['x'.repeat(100)], 'photo.heic', { type: 'image/heic' })
+    const result = await heicToJpeg(file)
+
+    expect(result).toBeInstanceOf(File)
+    expect(result.type).toBe('image/jpeg')
+  })
+
+  // ── Filename rewriting ────────────────────────────────────────────────────
+
+  it('renames .heic to .jpg', async () => {
+    installBitmapMock(800, 600)
+    const { canvas } = makeCanvasMock()
+    installDocMock(canvas)
+
+    const { heicToJpeg } = await import('@/lib/imageUtils')
+    const result = await heicToJpeg(new File(['x'], 'IMG_0001.heic', { type: 'image/heic' }))
+
+    expect(result.name).toBe('IMG_0001.jpg')
+  })
+
+  it('renames .HEIC (uppercase) to .jpg — iOS Camera Roll often uses uppercase', async () => {
+    installBitmapMock(800, 600)
+    const { canvas } = makeCanvasMock()
+    installDocMock(canvas)
+
+    const { heicToJpeg } = await import('@/lib/imageUtils')
+    const result = await heicToJpeg(new File(['x'], 'IMG_0001.HEIC', { type: 'image/heic' }))
+
+    expect(result.name).toBe('IMG_0001.jpg')
+  })
+
+  it('renames .heif to .jpg', async () => {
+    installBitmapMock(800, 600)
+    const { canvas } = makeCanvasMock()
+    installDocMock(canvas)
+
+    const { heicToJpeg } = await import('@/lib/imageUtils')
+    const result = await heicToJpeg(new File(['x'], 'panel.heif', { type: 'image/heif' }))
+
+    expect(result.name).toBe('panel.jpg')
+  })
+
+  it('appends .jpg when the source file has no extension', async () => {
+    // Some iOS drag-and-drop sources deliver a File with no extension and
+    // only a MIME hint; we still need a valid .jpg filename downstream.
+    installBitmapMock(800, 600)
+    const { canvas } = makeCanvasMock()
+    installDocMock(canvas)
+
+    const { heicToJpeg } = await import('@/lib/imageUtils')
+    const result = await heicToJpeg(new File(['x'], 'IMG_0001', { type: 'image/heic' }))
+
+    expect(result.name).toBe('IMG_0001.jpg')
+  })
+
+  // ── Error paths (Chrome / Firefox / corrupt input / unusable canvas) ──────
+
+  it('propagates createImageBitmap rejection — this is how Chrome/Firefox signal "HEIC not supported"', async () => {
+    // PlacardPhotoSlot catches this rejection and surfaces a user-friendly
+    // "switch your iPhone to Most Compatible" message. If this contract
+    // changes, the placard's error UX silently breaks.
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => {
+      throw new Error('The source image could not be decoded')
+    }))
+    const { canvas } = makeCanvasMock()
+    installDocMock(canvas)
+
+    const { heicToJpeg } = await import('@/lib/imageUtils')
+    const file = new File([new Uint8Array(100)], 'photo.heic', { type: 'image/heic' })
+
+    await expect(heicToJpeg(file)).rejects.toThrow('could not be decoded')
+  })
+
+  it('throws a clear error when the canvas 2D context is unavailable', async () => {
+    installBitmapMock(800, 600)
+    const { canvas } = makeCanvasMock()
+    canvas.getContext = vi.fn(() => null) as unknown as typeof canvas.getContext
+    installDocMock(canvas)
+
+    const { heicToJpeg } = await import('@/lib/imageUtils')
+    const file = new File(['x'], 'photo.heic', { type: 'image/heic' })
+
+    await expect(heicToJpeg(file)).rejects.toThrow('Canvas 2D context not available')
+  })
+
+  it('throws a clear error when toBlob yields a null blob', async () => {
+    installBitmapMock(800, 600)
+    const { canvas } = makeCanvasMock({ toBlobOutputs: [null] })
+    installDocMock(canvas)
+
+    const { heicToJpeg } = await import('@/lib/imageUtils')
+    const file = new File(['x'], 'photo.heic', { type: 'image/heic' })
+
+    await expect(heicToJpeg(file)).rejects.toThrow('HEIC decode produced no JPEG blob')
+  })
+
+  // ── Resource cleanup — bitmap.close() is in a finally block ───────────────
+
+  it('releases the ImageBitmap via close() on success', async () => {
+    const { close } = installBitmapMock(800, 600)
+    const { canvas } = makeCanvasMock()
+    installDocMock(canvas)
+
+    const { heicToJpeg } = await import('@/lib/imageUtils')
+    await heicToJpeg(new File(['x'], 'photo.heic', { type: 'image/heic' }))
+
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  it('releases the ImageBitmap via close() when the canvas context is unavailable', async () => {
+    const { close } = installBitmapMock(800, 600)
+    const { canvas } = makeCanvasMock()
+    canvas.getContext = vi.fn(() => null) as unknown as typeof canvas.getContext
+    installDocMock(canvas)
+
+    const { heicToJpeg } = await import('@/lib/imageUtils')
+    await expect(
+      heicToJpeg(new File(['x'], 'photo.heic', { type: 'image/heic' })),
+    ).rejects.toThrow()
+
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  it('releases the ImageBitmap via close() when toBlob fails', async () => {
+    const { close } = installBitmapMock(800, 600)
+    const { canvas } = makeCanvasMock({ toBlobOutputs: [null] })
+    installDocMock(canvas)
+
+    const { heicToJpeg } = await import('@/lib/imageUtils')
+    await expect(
+      heicToJpeg(new File(['x'], 'photo.heic', { type: 'image/heic' })),
+    ).rejects.toThrow()
+
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  // ── Wiring correctness ────────────────────────────────────────────────────
+
+  it('passes the decoded bitmap (not the File) to ctx.drawImage', async () => {
+    // Guards against a regression where drawImage receives something other
+    // than the EXIF-corrected bitmap — e.g., the raw File. Canvas2D would
+    // silently no-op on a File and produce a blank JPEG, so the output
+    // would be the right shape but entirely white.
+    const close = vi.fn()
+    const bitmap = { width: 800, height: 600, close }
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => bitmap))
+    const { canvas, ctx } = makeCanvasMock()
+    installDocMock(canvas)
+
+    const { heicToJpeg } = await import('@/lib/imageUtils')
+    await heicToJpeg(new File(['x'], 'photo.heic', { type: 'image/heic' }))
+
+    expect(ctx.drawImage).toHaveBeenCalledTimes(1)
+    expect(ctx.drawImage).toHaveBeenCalledWith(bitmap, 0, 0)
+  })
+
+  it("returns a File whose bytes are the encoder's JPEG blob", async () => {
+    // Confirms the File wraps the actual blob produced by toBlob, not an
+    // empty placeholder. Without this, a bug that returned `new File([], ...)`
+    // would still satisfy every earlier name/type/size-agnostic assertion.
+    const jpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10])
+    const encodedBlob = new Blob([jpegBytes], { type: 'image/jpeg' })
+    installBitmapMock(800, 600)
+    const { canvas } = makeCanvasMock({ toBlobOutputs: [encodedBlob] })
+    installDocMock(canvas)
+
+    const { heicToJpeg } = await import('@/lib/imageUtils')
+    const result = await heicToJpeg(
+      new File(['x'], 'photo.heic', { type: 'image/heic' }),
+    )
+
+    expect(result.size).toBe(jpegBytes.byteLength)
+    const roundTripped = new Uint8Array(await result.arrayBuffer())
+    expect(Array.from(roundTripped)).toEqual(Array.from(jpegBytes))
   })
 })
