@@ -16,47 +16,69 @@ interface Props {
 }
 
 export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
-  const [steps, setSteps]     = useState<LotoEnergyStep[]>([])
-  const [loading, setLoading] = useState(false)
-  const { toast, showToast, clearToast } = useToast()
+  const [steps, setSteps]                 = useState<LotoEnergyStep[]>([])
+  const [fullEquipment, setFullEquipment] = useState<Equipment | null>(null)
+  const [loading, setLoading]             = useState(false)
+  const { toast, showToast, clearToast }  = useToast()
 
   // Depend only on the equipment_id, NOT the whole equipment object.
   // `equipment` changes reference on every realtime tick (the parent's
   // selectedEquipment useMemo re-runs whenever ANY row in the dashboard
-  // updates), and the previous `[equipment]` dep re-fetched steps from
-  // the DB on every such tick even though nothing about the steps
-  // changed. Scoping to the id makes the effect re-fire only when the
+  // updates). Scoping to the id makes the effect re-fire only when the
   // user selects a different item — which is the real invalidation.
+  //
+  // We also re-fetch the FULL equipment row here because the dashboard list
+  // omits large text fields (notes, notes_es, internal_notes) from its SELECT
+  // for bandwidth reasons. The placard view needs notes to render the red
+  // warning block correctly, so it's owned here not inherited.
   const equipmentId = equipment?.equipment_id
   useEffect(() => {
-    if (!equipmentId) { setSteps([]); return }
+    if (!equipmentId) {
+      setSteps([])
+      setFullEquipment(null)
+      return
+    }
     setLoading(true)
-    supabase
-      .from('loto_energy_steps')
-      .select('*')
-      .eq('equipment_id', equipmentId)
-      .order('energy_type', { ascending: true })
-      .order('step_number', { ascending: true })
-      .then(({ data, error }) => {
-        // Log the fetch result so "No energy steps defined" distinguishes
-        // between "query ran, returned nothing" (data mismatch — check the
-        // equipment_id column in loto_energy_steps) and "query failed"
-        // (RLS, auth, network).
-        if (error) {
-          console.error('[placard] energy-steps fetch failed', {
-            equipmentId,
-            error,
-            message: error.message,
-          })
-        } else {
-          console.info('[placard] energy-steps fetched', {
-            equipmentId,
-            count: data?.length ?? 0,
-          })
-        }
-        if (data) setSteps(data as LotoEnergyStep[])
-        setLoading(false)
-      })
+    let cancelled = false
+    Promise.all([
+      supabase
+        .from('loto_equipment')
+        .select('*')
+        .eq('equipment_id', equipmentId)
+        .single(),
+      supabase
+        .from('loto_energy_steps')
+        .select('*')
+        .eq('equipment_id', equipmentId)
+        .order('energy_type', { ascending: true })
+        .order('step_number', { ascending: true }),
+    ]).then(([eqRes, stepRes]) => {
+      if (cancelled) return
+      if (eqRes.error) {
+        console.error('[placard] equipment fetch failed', {
+          equipmentId,
+          error:   eqRes.error,
+          message: eqRes.error.message,
+        })
+      } else if (eqRes.data) {
+        setFullEquipment(eqRes.data as Equipment)
+      }
+      if (stepRes.error) {
+        console.error('[placard] energy-steps fetch failed', {
+          equipmentId,
+          error:   stepRes.error,
+          message: stepRes.error.message,
+        })
+      } else {
+        console.info('[placard] energy-steps fetched', {
+          equipmentId,
+          count: stepRes.data?.length ?? 0,
+        })
+      }
+      if (stepRes.data) setSteps(stepRes.data as LotoEnergyStep[])
+      setLoading(false)
+    })
+    return () => { cancelled = true }
   }, [equipmentId])
 
   if (!equipment) {
@@ -93,7 +115,7 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
           <div className="flex items-center justify-center h-40 text-slate-400 text-sm">Loading…</div>
         ) : (
           <PlacardView
-            equipment={equipment}
+            equipment={fullEquipment ?? equipment}
             steps={steps}
             onPhotoSuccess={msg => showToast(msg, 'success')}
             onPhotoError={msg => showToast(msg, 'error')}

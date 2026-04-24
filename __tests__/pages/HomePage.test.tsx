@@ -54,7 +54,8 @@ describe('HomePage dashboard', () => {
     hanging.order  = vi.fn().mockReturnValue(hanging)
     vi.mocked(supabase.from).mockReturnValue(hanging as unknown as ReturnType<typeof supabase.from>)
     render(<HomePage />)
-    expect(document.querySelector('.animate-spin')).toBeInTheDocument()
+    // DashboardSkeleton uses animate-pulse (shimmer) rather than a spinner.
+    expect(document.querySelector('.animate-pulse')).toBeInTheDocument()
   })
 
   it('shows the "All Equipment" row in the sidebar', async () => {

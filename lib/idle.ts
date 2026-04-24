@@ -25,7 +25,7 @@ export function computeIdleState(
   const idleFor = Math.max(0, now - lastActivityAt)
   if (idleFor >= idleMs) return { kind: 'expired' }
   const remainingMs = idleMs - idleFor
-  if (remainingMs > warningMs) return { kind: 'active' }
+  if (remainingMs >= warningMs) return { kind: 'active' }
   // Floor + clamp to 1 so the user always sees "1s" rather than "0s" before
   // the next tick triggers expiry.
   const secondsLeft = Math.max(1, Math.ceil(remainingMs / 1000))

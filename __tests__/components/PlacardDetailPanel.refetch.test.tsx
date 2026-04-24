@@ -24,10 +24,22 @@ import type { Equipment } from '@/lib/types'
 const thenSpy = vi.fn()
 
 vi.mock('@/lib/supabase', () => {
+  // .single() is used for the equipment row fetch (returns a single object),
+  // while the steps fetch chains through .order() twice and awaits the builder
+  // directly. Both paths funnel through `thenSpy` so we can count total
+  // round-trips regardless of which query variant fired.
+  const singleThenable = {
+    then: (onFulfilled: (v: { data: unknown; error: null }) => void) => {
+      thenSpy()
+      onFulfilled({ data: {}, error: null })
+      return Promise.resolve()
+    },
+  }
   const chain = {
     select: vi.fn().mockReturnThis(),
     eq:     vi.fn().mockReturnThis(),
     order:  vi.fn().mockReturnThis(),
+    single: vi.fn(() => singleThenable),
     then:   (onFulfilled: (v: { data: unknown[]; error: null }) => void) => {
       thenSpy()
       onFulfilled({ data: [], error: null })
@@ -86,7 +98,10 @@ describe('PlacardDetailPanel — re-fetch invariants', () => {
     await act(async () => {
       render(<PlacardDetailPanel equipment={makeEquipment()} />)
     })
-    expect(thenSpy).toHaveBeenCalledTimes(1)
+    // Two queries per selection: the full equipment row (detail panel owns
+    // notes/internal_notes since the dashboard's SELECT omits them) + its
+    // energy_steps. Both resolve via the shared mock chain's `then` hook.
+    expect(thenSpy).toHaveBeenCalledTimes(2)
   })
 
   it('does NOT re-fetch when the parent passes a new object for the same row', async () => {
@@ -107,8 +122,9 @@ describe('PlacardDetailPanel — re-fetch invariants', () => {
       rerender(<PlacardDetailPanel equipment={makeEquipment()} />)
     })
 
-    // Still exactly one fetch from the initial mount.
-    expect(thenSpy).toHaveBeenCalledTimes(1)
+    // Still exactly the two initial fetches — no duplicate work on same-id
+    // rerenders regardless of how many times the parent re-renders.
+    expect(thenSpy).toHaveBeenCalledTimes(2)
   })
 
   it('DOES re-fetch when selection changes to a different equipment_id', async () => {
@@ -118,19 +134,23 @@ describe('PlacardDetailPanel — re-fetch invariants', () => {
       rerender(<PlacardDetailPanel equipment={makeEquipment({ equipment_id: 'EQ-002' })} />)
     })
 
-    // One fetch on mount + one on selection change.
-    expect(thenSpy).toHaveBeenCalledTimes(2)
+    // Two fetches (equipment + steps) per selection × two selections = 4.
+    expect(thenSpy).toHaveBeenCalledTimes(4)
   })
 
   it('clears steps and does NOT fetch when equipment becomes null', async () => {
-    const { rerender } = render(<PlacardDetailPanel equipment={makeEquipment()} />)
-    expect(thenSpy).toHaveBeenCalledTimes(1)
+    let rerender!: (ui: React.ReactElement) => void
+    await act(async () => {
+      const r = render(<PlacardDetailPanel equipment={makeEquipment()} />)
+      rerender = r.rerender
+    })
+    expect(thenSpy).toHaveBeenCalledTimes(2)
 
     await act(async () => {
       rerender(<PlacardDetailPanel equipment={null} />)
     })
 
-    // Still just the initial fetch — deselection should not trigger a new one.
-    expect(thenSpy).toHaveBeenCalledTimes(1)
+    // Still just the initial two fetches — deselection should not trigger new ones.
+    expect(thenSpy).toHaveBeenCalledTimes(2)
   })
 })

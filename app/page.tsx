@@ -13,6 +13,57 @@ import BatchPrintModal      from '@/components/BatchPrintModal'
 import { DashboardSkeleton } from '@/components/Skeleton'
 import { useSession } from '@/components/SessionProvider'
 
+// ── Perf: narrow SELECT for the dashboard list ────────────────────────────
+// The sidebar + list + reconciliation only need these columns. `notes`,
+// `notes_es`, and `internal_notes` are potentially multi-kB per row; dropping
+// them here cuts the initial payload roughly in half at 700+ rows. The detail
+// panel re-fetches the full row (with notes) when the user selects an item.
+const LIST_COLUMNS = [
+  'equipment_id', 'description', 'department', 'prefix',
+  'photo_status',
+  'has_equip_photo', 'has_iso_photo',
+  'equip_photo_url', 'iso_photo_url',
+  'placard_url', 'signed_placard_url',
+  'needs_equip_photo', 'needs_iso_photo', 'needs_verification',
+  'verified', 'verified_date', 'verified_by',
+  'decommissioned', 'spanish_reviewed',
+  'created_at', 'updated_at',
+].join(', ')
+
+// Fill in the columns we didn't fetch so the Equipment type is satisfied.
+// Detail views re-fetch the full row — these nulls are placeholders, not
+// authoritative data.
+function fromListRow(row: Record<string, unknown>): Equipment {
+  return {
+    ...(row as unknown as Equipment),
+    notes:          null,
+    notes_es:       null,
+    internal_notes: null,
+  }
+}
+
+// ── Perf: stale-while-revalidate cache ────────────────────────────────────
+// iPads reload the PWA often; this lets the dashboard paint instantly from
+// the last fresh snapshot while a background fetch reconciles any drift.
+const CACHE_KEY = 'loto:equip-list:v1'
+
+function readCache(): Equipment[] | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { savedAt?: number; rows?: Equipment[] }
+    return Array.isArray(parsed.rows) ? parsed.rows : null
+  } catch { return null }
+}
+
+function writeCache(rows: Equipment[]) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(CACHE_KEY, JSON.stringify({ savedAt: Date.now(), rows }))
+  } catch { /* quota / private mode — non-fatal */ }
+}
+
 export default function HomePage() {
   return (
     <Suspense fallback={
@@ -48,15 +99,45 @@ function HomeDashboard() {
   const fetchData = useCallback(async () => {
     const { data, error } = await supabase
       .from('loto_equipment')
-      .select('*')
+      .select(LIST_COLUMNS)
       .order('equipment_id', { ascending: true })
     if (error) {
       setLoadError(true)
     } else if (data) {
-      setEquipment(data as Equipment[])
+      const rows = (data as unknown as Record<string, unknown>[]).map(fromListRow)
+      setEquipment(rows)
+      writeCache(rows)
       setLoadError(false)
     }
     setLoading(false)
+  }, [])
+
+  // Hydrate from localStorage synchronously on mount so the first paint
+  // shows the last-known data instantly while the network request flies.
+  // Running this in useEffect (not useState initializer) avoids SSR
+  // hydration mismatches — server renders empty, client hydrates empty,
+  // then we swap in the cache.
+  useEffect(() => {
+    const cached = readCache()
+    if (cached && cached.length > 0) {
+      setEquipment(cached)
+      setLoading(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Debounce realtime events with requestAnimationFrame. A CSV import or
+  // bulk update can fire dozens of postgres_changes events in a burst —
+  // running reconcile + re-render per event spikes the UI. Coalescing into
+  // one update per frame keeps scroll and input responsive.
+  const pendingPayloads = useRef<RealtimePayload[]>([])
+  const rafHandle       = useRef<number | null>(null)
+  const flushPending    = useCallback(() => {
+    rafHandle.current = null
+    const pending = pendingPayloads.current
+    pendingPayloads.current = []
+    if (pending.length === 0) return
+    setEquipment((prev: Equipment[]) => pending.reduce(reconcileEquipment, prev))
   }, [])
 
   useEffect(() => {
@@ -65,20 +146,30 @@ function HomeDashboard() {
     // Reconcile realtime events in-memory instead of refetching the whole
     // table on every change — matters once equipment count grows past a few
     // hundred rows. DELETE/INSERT payloads carry the full row; UPDATE carries
-    // the new record. Order is preserved by equipment_id on insert.
+    // the new record.
     const channel = supabase
       .channel('loto_equipment_changes')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'loto_equipment' },
         (payload: RealtimePayload) => {
-          setEquipment((prev: Equipment[]) => reconcileEquipment(prev, payload))
+          pendingPayloads.current.push(payload)
+          if (rafHandle.current == null) {
+            rafHandle.current = requestAnimationFrame(flushPending)
+          }
         },
       )
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
-  }, [fetchData])
+    return () => {
+      supabase.removeChannel(channel)
+      if (rafHandle.current != null) {
+        cancelAnimationFrame(rafHandle.current)
+        rafHandle.current = null
+      }
+      pendingPayloads.current = []
+    }
+  }, [fetchData, flushPending])
 
   // iPads suspend backgrounded tabs aggressively — when the user comes back,
   // the realtime channel may have missed events. A single refetch on
