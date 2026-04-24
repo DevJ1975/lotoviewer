@@ -417,6 +417,7 @@ function row(id: string, overrides: Partial<Equipment>): Equipment {
     signed_placard_url: null,
     notes: null,
     notes_es: null,
+    internal_notes: null,
     spanish_reviewed: false,
     verified: false,
     verified_date: null,
