@@ -149,8 +149,8 @@ function EquipmentDetail() {
 
         <div className="flex items-center gap-1.5 flex-wrap">
           <ToolbarButton onClick={() => setDetailsOpen(true)}>✎ Edit Details</ToolbarButton>
-          <ToolbarButton onClick={() => setStepsOpen(true)} disabled={steps.length === 0}>
-            ⚡ Edit Steps
+          <ToolbarButton onClick={() => setStepsOpen(true)}>
+            ⚡ {steps.length === 0 ? 'Add Steps' : 'Edit Steps'}
           </ToolbarButton>
           <ToolbarButton onClick={() => setSpanishOpen(true)}>
             {equipment.spanish_reviewed ? <><span className="text-emerald-500">✓</span> Español</> : 'Español'}
