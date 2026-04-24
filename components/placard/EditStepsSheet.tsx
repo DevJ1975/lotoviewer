@@ -58,12 +58,17 @@ function makeNewKey(): string {
 
 export default function EditStepsSheet({ open, onClose, equipment, steps, onSaved, onToast }: Props) {
   const equipmentId = equipment.equipment_id
-  const [drafts, setDrafts] = useState<Draft[]>([])
-  const [saving, setSaving] = useState(false)
+  const [drafts, setDrafts]         = useState<Draft[]>([])
+  const [saving, setSaving]         = useState(false)
+  const [aiOpen, setAiOpen]         = useState(false)
+  const [aiContext, setAiContext]   = useState('')
+  const [generating, setGenerating] = useState(false)
 
   useEffect(() => {
     if (!open) return
     setDrafts(steps.map(toDraft))
+    setAiOpen(false)
+    setAiContext('')
   }, [open, steps])
 
   function patch(key: string, updates: Partial<Draft>) {
@@ -97,6 +102,66 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
 
   function removeNew(key: string) {
     setDrafts(prev => prev.filter(d => d.key !== key))
+  }
+
+  async function handleGenerate() {
+    setGenerating(true)
+    try {
+      const res = await fetch('/api/generate-loto-steps', {
+        method:  'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          equipment_id:    equipment.equipment_id,
+          description:     equipment.description,
+          department:      equipment.department,
+          notes:           equipment.notes,
+          context:         aiContext.trim() || undefined,
+          equip_photo_url: equipment.equip_photo_url,
+          iso_photo_url:   equipment.iso_photo_url,
+        }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Could not reach the AI service.' }))
+        onToast(body.error ?? 'Could not generate steps.', 'error')
+        return
+      }
+      const json = await res.json() as {
+        steps: Array<{
+          energy_type:            string
+          tag_description:        string
+          isolation_procedure:    string
+          method_of_verification: string
+        }>
+      }
+      // Append as new drafts. step_number is computed per energy_type in the
+      // current draft list so generated steps slot in without colliding with
+      // whatever the user already had.
+      setDrafts(prev => {
+        const next = [...prev]
+        for (const s of json.steps) {
+          next.push({
+            key:                    makeNewKey(),
+            energy_type:            s.energy_type,
+            step_number:            nextStepNumber(next, s.energy_type),
+            tag_description:        s.tag_description,
+            isolation_procedure:    s.isolation_procedure,
+            method_of_verification: s.method_of_verification,
+          })
+        }
+        return next
+      })
+      setAiOpen(false)
+      setAiContext('')
+      onToast(
+        `Generated ${json.steps.length} step${json.steps.length === 1 ? '' : 's'}. Review each one before saving.`,
+        'success',
+      )
+    } catch (err) {
+      console.error('[generate]', err)
+      onToast('Could not reach the AI service.', 'error')
+    } finally {
+      setGenerating(false)
+    }
   }
 
   async function handleSave() {
@@ -218,6 +283,59 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
 
   return (
     <Sheet open={open} onClose={() => !saving && onClose()} title="Edit Energy Steps" subtitle={equipmentId}>
+      {/* ── AI generator ───────────────────────────────────────────────────
+          Produces draft "New" rows the user reviews and saves. Kept
+          collapsed by default so it never surprises users who just want
+          to edit manually. */}
+      <div className="mb-4 rounded-xl border border-violet-100 bg-violet-50/60 p-3 space-y-2">
+        {aiOpen ? (
+          <>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-violet-900">✨ Generate steps with AI</span>
+              <button
+                type="button"
+                onClick={() => { setAiOpen(false); setAiContext('') }}
+                disabled={generating}
+                className="text-[11px] text-slate-500 hover:text-slate-700"
+              >
+                Cancel
+              </button>
+            </div>
+            <textarea
+              rows={2}
+              value={aiContext}
+              onChange={e => setAiContext(e.target.value)}
+              disabled={generating}
+              placeholder="Optional — anything not obvious from the photos (e.g. 'has a separate pneumatic supply at the back')"
+              className="w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400 disabled:opacity-60"
+            />
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] text-violet-900/80 leading-snug">
+                AI suggestions — qualified personnel must review before use.
+              </p>
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={generating}
+                className="shrink-0 px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-semibold hover:bg-violet-700 transition-colors disabled:opacity-50"
+              >
+                {generating ? 'Generating…' : 'Generate'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAiOpen(true)}
+            disabled={saving}
+            className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-violet-700 hover:text-violet-900 py-1"
+          >
+            <span>✨</span>
+            <span>Generate steps with AI</span>
+          </button>
+        )}
+      </div>
+
       {drafts.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-8 text-center">
           <p className="text-sm text-slate-500">No energy steps defined yet.</p>
