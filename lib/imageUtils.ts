@@ -1,3 +1,47 @@
+// Detect HEIC/HEIF by MIME type OR extension. iOS sets image/heic on
+// most pickers, but some drag-and-drop sources set a generic MIME and
+// rely on the filename — hence both checks.
+export function isHeic(file: File): boolean {
+  const type = file.type.toLowerCase()
+  const name = file.name.toLowerCase()
+  return type === 'image/heic' || type === 'image/heif'
+      || name.endsWith('.heic') || name.endsWith('.heif')
+}
+
+// Decode a HEIC/HEIF file through the browser's native decoder and
+// re-encode as JPEG so the rest of the pipeline (Claude validation,
+// compressImage, pdf-lib embedJpg) can work with it. Relies on
+// createImageBitmap decoding HEIC, which Safari on iPadOS 17+ /
+// macOS 14+ does natively. Chrome / Firefox currently throw, and
+// PlacardPhotoSlot surfaces a friendly error directing the user to
+// switch iOS camera format or pick a JPEG.
+//
+// Quality 0.92 is high enough to avoid visible JPEG artifacts; the
+// output then flows through compressImage which may re-encode it
+// at a lower quality to hit the target size cap. Two encodes per
+// HEIC is acceptable — it only happens when the user picks HEIC.
+export async function heicToJpeg(file: File): Promise<File> {
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = bitmap.width
+    canvas.height = bitmap.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Canvas 2D context not available')
+    ctx.drawImage(bitmap, 0, 0)
+    const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/jpeg', 0.92))
+    if (!blob) throw new Error('HEIC decode produced no JPEG blob')
+    const jpegName = file.name.replace(/\.(heic|heif)$/i, '.jpg')
+    // If the original filename had no extension at all, tack one on.
+    const finalName = jpegName === file.name && !jpegName.toLowerCase().endsWith('.jpg')
+      ? `${jpegName}.jpg`
+      : jpegName
+    return new File([blob], finalName, { type: 'image/jpeg' })
+  } finally {
+    bitmap.close()
+  }
+}
+
 export function computeTargetDimensions(
   width: number,
   height: number,

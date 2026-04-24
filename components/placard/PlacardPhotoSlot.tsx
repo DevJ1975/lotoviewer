@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { usePhotoUpload, type UploadType } from '@/hooks/usePhotoUpload'
 import { useNetworkStatus } from '@/hooks/useNetworkStatus'
 import { useUploadQueue } from '@/components/UploadQueueProvider'
-import { compressImage } from '@/lib/imageUtils'
+import { compressImage, heicToJpeg, isHeic } from '@/lib/imageUtils'
 import { haptic } from '@/lib/platform'
 
 interface Props {
@@ -83,22 +83,54 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
     }
   }
 
-  async function handleFile(file: File) {
-    if (!file.type.match(/^image\/(jpeg|png)$/)) {
-      onErrorRef.current?.('Only JPEG and PNG files are accepted.')
+  async function handleFile(originalFile: File) {
+    // Accept JPEG/PNG for all platforms plus HEIC/HEIF for iOS devices.
+    // iOS photo-library picks default to HEIC; the camera capture path
+    // usually delivers JPEG. HEIC is pre-converted below before the rest
+    // of the pipeline runs, because neither Claude vision (validation)
+    // nor pdf-lib (PDF embed) can read HEIC directly.
+    const isAccepted = /^image\/(jpeg|png|heic|heif)$/.test(originalFile.type)
+                    || /\.(heic|heif)$/i.test(originalFile.name)
+    if (!isAccepted) {
+      onErrorRef.current?.('Only JPEG, PNG, and HEIC files are accepted.')
       return
     }
-    if (file.size > MAX_FILE_BYTES) {
+    if (originalFile.size > MAX_FILE_BYTES) {
       onErrorRef.current?.('File must be under 10 MB.')
       return
     }
 
-    // Show the raw file as a preview immediately — without this, the user
-    // stares at a spinner for ~500ms-2s while validation + compression run,
-    // with no visual confirmation of what they just selected. The preview
-    // is swapped for the EXIF-corrected compressed blob when that's ready.
-    // CSS image-orientation:from-image on the <Image> keeps raw-file
-    // orientation correct in the meantime.
+    // Pre-convert HEIC to JPEG so validation + compression see a format
+    // everything downstream can handle. Relies on the browser's native
+    // HEIC decoder (Safari on iPadOS 17+ / macOS 14+ has one; Chrome and
+    // Firefox currently don't). On browsers without native support,
+    // createImageBitmap throws and we surface a friendly "switch iOS to
+    // Most Compatible" message instead of a vague "Wrong subject" error
+    // from Claude later.
+    let file = originalFile
+    if (isHeic(originalFile)) {
+      setCompressing(true)
+      try {
+        file = await heicToJpeg(originalFile)
+      } catch (err) {
+        console.error('[photo] HEIC decode failed', err)
+        onErrorRef.current?.(
+          'Could not read this HEIC photo in the browser. ' +
+          'On iPhone: Settings → Camera → Formats → Most Compatible, then retake.',
+        )
+        setCompressing(false)
+        return
+      } finally {
+        setCompressing(false)
+      }
+    }
+
+    // Show the (possibly-converted) file as a preview immediately — without
+    // this, the user stares at a spinner for ~500ms-2s while validation +
+    // compression run, with no visual confirmation of what they just
+    // selected. Preview is swapped for the EXIF-corrected compressed blob
+    // when compressImage finishes. CSS image-orientation:from-image on
+    // the <Image> keeps raw-file orientation correct in the meantime.
     setLocalPreview(URL.createObjectURL(file))
 
     // Validate subject (skip if offline — don't waste time)
@@ -249,7 +281,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
       <input
         ref={fileRef}
         type="file"
-        accept="image/jpeg,image/png"
+        accept="image/jpeg,image/png,image/heic,image/heif,.heic,.heif"
         capture="environment"
         aria-label={`Upload ${label}`}
         className="sr-only"

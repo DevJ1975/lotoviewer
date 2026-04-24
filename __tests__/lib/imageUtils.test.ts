@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { computeTargetDimensions } from '@/lib/imageUtils'
+import { computeTargetDimensions, isHeic } from '@/lib/imageUtils'
 
 describe('computeTargetDimensions', () => {
   it('returns original dimensions when both are under maxDim', () => {
@@ -347,5 +347,46 @@ describe('compressImage', () => {
     await expect(compressImage(file)).rejects.toThrow()
 
     expect(close).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ── isHeic — HEIC/HEIF detection by MIME and extension ──────────────────────
+
+describe('isHeic', () => {
+  const heic = (name: string, type: string) => new File(['x'], name, { type })
+
+  it('detects image/heic MIME', () => {
+    expect(isHeic(heic('photo.heic', 'image/heic'))).toBe(true)
+  })
+
+  it('detects image/heif MIME', () => {
+    expect(isHeic(heic('photo.heif', 'image/heif'))).toBe(true)
+  })
+
+  it('detects .heic extension even when MIME is generic', () => {
+    // iOS drag-and-drop sometimes delivers a HEIC file with an empty
+    // or application/octet-stream MIME — fall back to the extension.
+    expect(isHeic(heic('vacation.HEIC', ''))).toBe(true)
+    expect(isHeic(heic('panel.heic', 'application/octet-stream'))).toBe(true)
+  })
+
+  it('detects .heif extension', () => {
+    expect(isHeic(heic('diagram.HEIF', ''))).toBe(true)
+  })
+
+  it('does not flag JPEG or PNG', () => {
+    expect(isHeic(heic('shot.jpg', 'image/jpeg'))).toBe(false)
+    expect(isHeic(heic('shot.png', 'image/png'))).toBe(false)
+  })
+
+  it('does not flag a file whose name coincidentally contains "heic"', () => {
+    // Name must END with .heic / .heif — a substring match would be a
+    // false positive on "heic-tool.pdf" or similar.
+    expect(isHeic(heic('heic-note.pdf', 'application/pdf'))).toBe(false)
+    expect(isHeic(heic('the-heic.txt.zip', 'application/zip'))).toBe(false)
+  })
+
+  it('is case-insensitive on both MIME and extension', () => {
+    expect(isHeic(heic('PHOTO.HEIC', 'IMAGE/HEIC'))).toBe(true)
   })
 })
