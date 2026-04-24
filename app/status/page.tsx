@@ -8,6 +8,8 @@ import ProgressRing from '@/components/ProgressRing'
 import DepartmentChart from '@/components/DepartmentChart'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { buildDeptStats } from '@/lib/utils'
+import { useVisibilityRefetch } from '@/hooks/useVisibilityRefetch'
+import { StatusSkeleton } from '@/components/Skeleton'
 
 export default function StatusPage() {
   const [equipment, setEquipment]     = useState<Equipment[]>([])
@@ -39,6 +41,11 @@ export default function StatusPage() {
     }
   }, [fetchData])
 
+  // The 30 s poll + realtime channel keep this view fresh on an open tab,
+  // but both are missed while the tab is suspended (iPad backgrounded for
+  // minutes to hours). Visibility refetch closes that gap on return.
+  useVisibilityRefetch(fetchData)
+
   // Single pass over equipment to compute all stats — previously 4 separate
   // .filter() scans of the same array.
   const { total, complete, partial, missing, pct, active } = useMemo(() => {
@@ -61,16 +68,7 @@ export default function StatusPage() {
     [active],
   )
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-gray-500 text-sm">Loading LOTO data…</p>
-        </div>
-      </div>
-    )
-  }
+  if (loading) return <StatusSkeleton />
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">

@@ -21,6 +21,62 @@ export function EquipmentRowSkeleton() {
   )
 }
 
+// Composed skeleton for /decommission. Mirrors header + 3 counter tiles +
+// search + grouped list so the layout doesn't snap on hydration.
+export function DecommissionSkeleton() {
+  return (
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
+      <div className="space-y-2">
+        <Skeleton className="h-6 w-48" />
+        <Skeleton className="h-3.5 w-64" />
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-24 rounded-xl" />
+        ))}
+      </div>
+      <Skeleton className="h-10 w-full rounded-lg" />
+      <div className="rounded-xl bg-white ring-1 ring-slate-200 overflow-hidden">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="px-4 py-3.5 border-t border-slate-100 first:border-t-0 flex items-center gap-3">
+            <Skeleton className="h-4 w-4 rounded shrink-0" />
+            <Skeleton className="h-5 w-5 rounded shrink-0" />
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <Skeleton className="h-3.5 w-28" />
+              <Skeleton className="h-3 w-56" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Composed skeleton for /status. Mirrors the header, four stat cards, and
+// the two-up ring + chart row.
+export function StatusSkeleton() {
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="h-3.5 w-56" />
+        </div>
+        <Skeleton className="h-4 w-14 rounded-full" />
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-24 rounded-xl" />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Skeleton className="h-72 rounded-xl" />
+        <Skeleton className="h-72 rounded-xl lg:col-span-2" />
+      </div>
+    </div>
+  )
+}
+
 // Composed skeleton for the home dashboard's three-pane layout. Mirrors the
 // final shape so the user sees structure first, content second.
 export function DashboardSkeleton() {

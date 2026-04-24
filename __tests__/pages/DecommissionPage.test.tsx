@@ -126,14 +126,16 @@ beforeEach(() => {
 
 // ─── Load states ─────────────────────────────────────────────────────────────
 describe('DecommissionPage — load states', () => {
-  it('renders loading spinner while fetch is pending', () => {
+  it('renders a skeleton while fetch is pending', () => {
     const hanging: Record<string, unknown> = { then: () => new Promise(() => {}) }
     const order = vi.fn().mockReturnValue(hanging)
     const selectFetch = vi.fn().mockReturnValue({ order })
     vi.mocked(supabase.from).mockReturnValue({ select: selectFetch } as unknown as ReturnType<typeof supabase.from>)
 
     render(<DecommissionPage />)
-    expect(document.querySelector('.animate-spin')).toBeInTheDocument()
+    // DecommissionSkeleton renders pulsing slate blocks (animate-pulse), not
+    // a spinner — the shimmer signals structure-first loading.
+    expect(document.querySelector('.animate-pulse')).toBeInTheDocument()
   })
 
   it('shows error UI and a working Retry button on fetch failure', async () => {

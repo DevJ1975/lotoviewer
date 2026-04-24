@@ -7,8 +7,11 @@ import { supabase } from '@/lib/supabase'
 import type { Equipment } from '@/lib/types'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useToast } from '@/hooks/useToast'
+import { useVisibilityRefetch } from '@/hooks/useVisibilityRefetch'
 import Toast from '@/components/Toast'
 import { haptic } from '@/lib/platform'
+import { DecommissionSkeleton } from '@/components/Skeleton'
+import { isOffline, OFFLINE_WRITE_MESSAGE } from '@/lib/netGuard'
 
 // Module-level marker so we can tell if the latest build actually loaded in
 // the browser. If this line doesn't appear in the console on page load, the
@@ -54,6 +57,7 @@ export default function DecommissionPage() {
   }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
+  useVisibilityRefetch(fetchData)
 
   const active = equipment.filter(e => !e.decommissioned).length
   const decommissionedCount = equipment.length - active
@@ -170,6 +174,11 @@ export default function DecommissionPage() {
     const ids    = [...effectiveSelected]
     const idsSet = new Set(ids)
     if (ids.length === 0) return
+    if (isOffline()) {
+      haptic('error')
+      showToast(OFFLINE_WRITE_MESSAGE, 'error')
+      return
+    }
     setBulkBusy(true)
     haptic('tap')
 
@@ -260,6 +269,11 @@ export default function DecommissionPage() {
     // and the later response wins — race.
     if (pending.has(id)) { console.log('[decommission] skip — already pending', id); return }
     if (bulkBusy && selected.has(id)) { console.log('[decommission] skip — bulk busy', id); return }
+    if (isOffline()) {
+      haptic('error')
+      showToast(OFFLINE_WRITE_MESSAGE, 'error')
+      return
+    }
     const current = equipment.find(e => e.equipment_id === id)
     if (!current) { console.log('[decommission] skip — not in local state', id); return }
     const previous = current.decommissioned
@@ -329,13 +343,7 @@ export default function DecommissionPage() {
     )
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-10 h-10 border-4 border-brand-navy border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
+  if (loading) return <DecommissionSkeleton />
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Sheet } from '@/components/ui/sheet'
 import type { Equipment } from '@/lib/types'
+import { isOffline, OFFLINE_WRITE_MESSAGE } from '@/lib/netGuard'
 
 type PlacardPatch = {
   description:    string
@@ -37,6 +38,10 @@ export default function PlacardDetailsSheet({ open, onClose, equipment, onSaved,
   }, [open, description, notes, internalNotes])
 
   async function handleSave() {
+    if (isOffline()) {
+      onToast(OFFLINE_WRITE_MESSAGE, 'error')
+      return
+    }
     setSaving(true)
     const patch: PlacardPatch = {
       description:    draftDesc.trim() || description,

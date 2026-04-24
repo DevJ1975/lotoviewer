@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Pencil } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -10,6 +10,7 @@ import { Progress } from '@/components/ui/progress'
 import { buildDeptStats } from '@/lib/utils'
 import { applyRenameToStats, applyRenameToReviews } from '@/lib/departments'
 import RenameDepartmentModal from '@/components/RenameDepartmentModal'
+import { useVisibilityRefetch } from '@/hooks/useVisibilityRefetch'
 
 type LatestReviewMap = Record<string, LotoReview>
 
@@ -19,8 +20,8 @@ export default function DepartmentsPage() {
   const [loading, setLoading]             = useState(true)
   const [renamingDept, setRenamingDept]   = useState<string | null>(null)
 
-  useEffect(() => {
-    Promise.all([
+  const fetchData = useCallback(async () => {
+    const [equipRes, reviewRes] = await Promise.all([
       supabase
         .from('loto_equipment')
         .select('department, photo_status'),
@@ -29,19 +30,21 @@ export default function DepartmentsPage() {
         .select('*')
         .order('created_at', { ascending: false })
         .limit(200),
-    ]).then(([equipRes, reviewRes]) => {
-      if (equipRes.data) setStats(buildDeptStats(equipRes.data).sort((a, b) => b.total - a.total))
+    ])
+    if (equipRes.data) setStats(buildDeptStats(equipRes.data).sort((a, b) => b.total - a.total))
 
-      // Keep only the most recent review per department
-      const map: LatestReviewMap = {}
-      for (const r of (reviewRes.data ?? []) as LotoReview[]) {
-        if (!map[r.department]) map[r.department] = r
-      }
-      setLatestReviews(map)
+    // Keep only the most recent review per department
+    const map: LatestReviewMap = {}
+    for (const r of (reviewRes.data ?? []) as LotoReview[]) {
+      if (!map[r.department]) map[r.department] = r
+    }
+    setLatestReviews(map)
 
-      setLoading(false)
-    })
+    setLoading(false)
   }, [])
+
+  useEffect(() => { fetchData() }, [fetchData])
+  useVisibilityRefetch(fetchData)
 
   const handleRenamed = (oldName: string, newName: string) => {
     setStats(prev => applyRenameToStats(prev, oldName, newName).sort((a, b) => b.total - a.total))

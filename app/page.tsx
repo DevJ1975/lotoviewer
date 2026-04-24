@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import type { Equipment } from '@/lib/types'
 import { reconcileEquipment, type RealtimePayload } from '@/lib/equipmentReconcile'
 import { needsPhoto } from '@/lib/photoStatus'
+import { useVisibilityRefetch } from '@/hooks/useVisibilityRefetch'
 import DashboardSidebar     from '@/components/dashboard/DashboardSidebar'
 import EquipmentListPanel   from '@/components/dashboard/EquipmentListPanel'
 import PlacardDetailPanel   from '@/components/dashboard/PlacardDetailPanel'
@@ -171,16 +172,7 @@ function HomeDashboard() {
     }
   }, [fetchData, flushPending])
 
-  // iPads suspend backgrounded tabs aggressively — when the user comes back,
-  // the realtime channel may have missed events. A single refetch on
-  // visibility return guarantees the dashboard is up to date.
-  useEffect(() => {
-    function onVisible() {
-      if (document.visibilityState === 'visible') fetchData()
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [fetchData])
+  useVisibilityRefetch(fetchData)
 
   const selectedEquipment = useMemo(
     () => equipment.find(e => e.equipment_id === selectedEqId) ?? null,
