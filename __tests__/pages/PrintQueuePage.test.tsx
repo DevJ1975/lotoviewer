@@ -15,7 +15,7 @@ function makeEquipment(overrides: Partial<Equipment> = {}): Equipment {
     equip_photo_url: null, iso_photo_url: null,
     placard_url: 'https://example.com/placard-001.pdf',
     signed_placard_url: null,
-    notes: null, notes_es: null, spanish_reviewed: false,
+    notes: null, notes_es: null, internal_notes: null, spanish_reviewed: false,
     verified: false,
     verified_date: null, verified_by: null,
     needs_equip_photo: true, needs_iso_photo: true, needs_verification: false,

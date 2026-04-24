@@ -32,7 +32,7 @@ function makeEquipment(overrides: Partial<Equipment> = {}): Equipment {
     equipment_id: 'EQ-001', description: 'Motor (Main Pump)', department: 'Alpha',
     photo_status: 'complete', has_equip_photo: true, has_iso_photo: false,
     equip_photo_url: null, iso_photo_url: null, placard_url: null,
-    signed_placard_url: null, notes: null, notes_es: null, spanish_reviewed: false,
+    signed_placard_url: null, notes: null, notes_es: null, internal_notes: null, spanish_reviewed: false,
     verified: false, ...overrides,
   } as Equipment
 }

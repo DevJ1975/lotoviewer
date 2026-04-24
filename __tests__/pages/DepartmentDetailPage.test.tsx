@@ -21,7 +21,7 @@ function makeEquipment(overrides: Partial<Equipment> = {}): Equipment {
     photo_status: 'complete', has_equip_photo: true, has_iso_photo: false,
     equip_photo_url: null, iso_photo_url: null, placard_url: null,
     signed_placard_url: null,
-    notes: null, notes_es: null, spanish_reviewed: false,
+    notes: null, notes_es: null, internal_notes: null, spanish_reviewed: false,
     verified: false, prefix: null,
     verified_date: null, verified_by: null,
     needs_equip_photo: false, needs_iso_photo: false, needs_verification: false,

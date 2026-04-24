@@ -5,43 +5,56 @@ import { supabase } from '@/lib/supabase'
 import { Sheet } from '@/components/ui/sheet'
 import type { Equipment } from '@/lib/types'
 
+type PlacardPatch = {
+  description:    string
+  notes:          string | null
+  internal_notes: string | null
+}
+
 interface Props {
   open:         boolean
   onClose:      () => void
   equipment:    Equipment
-  onSaved:      (description: string, notes: string) => void
+  onSaved:      (patch: PlacardPatch) => void
   onToast:      (msg: string, kind: 'success' | 'error') => void
 }
 
 export default function PlacardDetailsSheet({ open, onClose, equipment, onSaved, onToast }: Props) {
-  const equipmentId = equipment.equipment_id
-  const description = equipment.description
-  const notes       = equipment.notes ?? ''
-  const [draftDesc, setDraftDesc]   = useState(description)
-  const [draftNotes, setDraftNotes] = useState(notes)
-  const [saving, setSaving]         = useState(false)
+  const equipmentId   = equipment.equipment_id
+  const description   = equipment.description
+  const notes         = equipment.notes ?? ''
+  const internalNotes = equipment.internal_notes ?? ''
+  const [draftDesc, setDraftDesc]                   = useState(description)
+  const [draftNotes, setDraftNotes]                 = useState(notes)
+  const [draftInternalNotes, setDraftInternalNotes] = useState(internalNotes)
+  const [saving, setSaving]                         = useState(false)
 
   useEffect(() => {
     if (!open) return
     setDraftDesc(description)
     setDraftNotes(notes)
-  }, [open, description, notes])
+    setDraftInternalNotes(internalNotes)
+  }, [open, description, notes, internalNotes])
 
   async function handleSave() {
     setSaving(true)
+    const patch: PlacardPatch = {
+      description:    draftDesc.trim() || description,
+      notes:          draftNotes.trim() || null,
+      internal_notes: draftInternalNotes.trim() || null,
+    }
     const { error } = await supabase
       .from('loto_equipment')
       .update({
-        description: draftDesc.trim() || description,
-        notes:       draftNotes.trim() || null,
-        updated_at:  new Date().toISOString(),
+        ...patch,
+        updated_at: new Date().toISOString(),
       })
       .eq('equipment_id', equipmentId)
 
     if (error) {
       onToast('Could not save. Check your connection and try again.', 'error')
     } else {
-      onSaved(draftDesc.trim() || description, draftNotes.trim())
+      onSaved(patch)
       onToast('Changes saved.', 'success')
       onClose()
     }
@@ -72,6 +85,20 @@ export default function PlacardDetailsSheet({ open, onClose, equipment, onSaved,
             value={draftNotes}
             onChange={e => setDraftNotes(e.target.value)}
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-slate-600" htmlFor="plc-internal-notes">
+            Internal notes <span className="text-slate-400 font-normal">(private — never printed on the placard)</span>
+          </label>
+          <textarea
+            id="plc-internal-notes"
+            rows={4}
+            value={draftInternalNotes}
+            onChange={e => setDraftInternalNotes(e.target.value)}
+            placeholder="Visible to staff in the app only. Won't appear on the PDF or printed placard."
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors placeholder:text-slate-400"
           />
         </div>
       </div>

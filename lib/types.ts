@@ -12,6 +12,7 @@ export interface Equipment {
   signed_placard_url: string | null
   notes: string | null
   notes_es: string | null
+  internal_notes: string | null
   spanish_reviewed: boolean
   verified: boolean
   verified_date: string | null

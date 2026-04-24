@@ -183,7 +183,7 @@ function EquipmentDetail() {
         open={detailsOpen}
         onClose={() => setDetailsOpen(false)}
         equipment={equipment}
-        onSaved={(description, notes) => setEquipment(prev => prev ? { ...prev, description, notes: notes || null } : prev)}
+        onSaved={patch => setEquipment(prev => prev ? { ...prev, ...patch } : prev)}
         onToast={showToast}
       />
 
