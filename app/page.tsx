@@ -14,35 +14,6 @@ import BatchPrintModal      from '@/components/BatchPrintModal'
 import { DashboardSkeleton } from '@/components/Skeleton'
 import { useSession } from '@/components/SessionProvider'
 
-// ── Perf: narrow SELECT for the dashboard list ────────────────────────────
-// The sidebar + list + reconciliation only need these columns. `notes`,
-// `notes_es`, and `internal_notes` are potentially multi-kB per row; dropping
-// them here cuts the initial payload roughly in half at 700+ rows. The detail
-// panel re-fetches the full row (with notes) when the user selects an item.
-const LIST_COLUMNS = [
-  'equipment_id', 'description', 'department', 'prefix',
-  'photo_status',
-  'has_equip_photo', 'has_iso_photo',
-  'equip_photo_url', 'iso_photo_url',
-  'placard_url', 'signed_placard_url',
-  'needs_equip_photo', 'needs_iso_photo', 'needs_verification',
-  'verified', 'verified_date', 'verified_by',
-  'decommissioned', 'spanish_reviewed',
-  'created_at', 'updated_at',
-].join(', ')
-
-// Fill in the columns we didn't fetch so the Equipment type is satisfied.
-// Detail views re-fetch the full row — these nulls are placeholders, not
-// authoritative data.
-function fromListRow(row: Record<string, unknown>): Equipment {
-  return {
-    ...(row as unknown as Equipment),
-    notes:          null,
-    notes_es:       null,
-    internal_notes: null,
-  }
-}
-
 // ── Perf: stale-while-revalidate cache ────────────────────────────────────
 // iPads reload the PWA often; this lets the dashboard paint instantly from
 // the last fresh snapshot while a background fetch reconciles any drift.
@@ -98,14 +69,26 @@ function HomeDashboard() {
   const { recordVisit } = useSession()
 
   const fetchData = useCallback(async () => {
+    // Rolled back from a narrow column list to `*` after a SELECT with an
+    // explicit projection started returning "Could not load equipment" —
+    // one of the columns we named likely isn't in the live schema. Logging
+    // the error here so the exact PostgREST message surfaces in the console
+    // next time rather than a silent error-branch flip. We can re-try a
+    // narrow projection once we know which column was the offender.
     const { data, error } = await supabase
       .from('loto_equipment')
-      .select(LIST_COLUMNS)
+      .select('*')
       .order('equipment_id', { ascending: true })
     if (error) {
+      console.error('[home] loto_equipment fetch failed', {
+        message: error.message,
+        details: error.details,
+        hint:    error.hint,
+        code:    error.code,
+      })
       setLoadError(true)
     } else if (data) {
-      const rows = (data as unknown as Record<string, unknown>[]).map(fromListRow)
+      const rows = data as Equipment[]
       setEquipment(rows)
       writeCache(rows)
       setLoadError(false)
