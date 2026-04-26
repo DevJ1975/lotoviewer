@@ -16,6 +16,32 @@
 -- is there. uuid[] → text[] casts each uuid to its string form;
 -- jsonb → text[] takes string elements as text and stringifies objects
 -- so nothing is lost.
+--
+-- Implementation note: Postgres rejects `array(SELECT ...)` subqueries
+-- inside ALTER TABLE ... USING (`0A000: cannot use subquery in transform
+-- expression`). The uuid[] → text[] case sidesteps this with a direct
+-- ::text[] cast since uuid is castable to text element-wise. The jsonb
+-- case uses a session-scoped helper (pg_temp.*) so the USING clause is
+-- a single function call rather than a subquery.
+
+-- Session-scoped helper: convert a jsonb array of strings/objects to a
+-- text[]. Auto-dropped at session end (pg_temp).
+create or replace function pg_temp._jsonb_to_text_array(j jsonb)
+  returns text[]
+  language sql
+  immutable
+as $$
+  select coalesce(
+    array_agg(
+      case jsonb_typeof(elem)
+        when 'string' then elem #>> '{}'
+        else elem::text
+      end
+    ),
+    '{}'::text[]
+  )
+  from jsonb_array_elements(coalesce(j, '[]'::jsonb)) elem
+$$;
 
 do $$
 begin
@@ -29,8 +55,7 @@ begin
   ) = '_uuid' then
     alter table public.loto_confined_space_permits
       alter column attendants drop default,
-      alter column attendants type text[]
-        using array(select x::text from unnest(attendants) x),
+      alter column attendants type text[] using attendants::text[],
       alter column attendants set default '{}'::text[],
       alter column attendants set not null;
     raise notice '[010] converted attendants uuid[] -> text[]';
@@ -46,8 +71,7 @@ begin
   ) = '_uuid' then
     alter table public.loto_confined_space_permits
       alter column entrants drop default,
-      alter column entrants type text[]
-        using array(select x::text from unnest(entrants) x),
+      alter column entrants type text[] using entrants::text[],
       alter column entrants set default '{}'::text[],
       alter column entrants set not null;
     raise notice '[010] converted entrants uuid[] -> text[]';
@@ -55,9 +79,9 @@ begin
 
   -- ── isolation_measures  jsonb → text[] ────────────────────────────────
   -- Existing rows can carry either an array of strings or an array of
-  -- structured objects. The conversion handles both: string elements
-  -- come through as their text value; non-string elements are
-  -- JSON-stringified so nothing silently disappears.
+  -- structured objects. The pg_temp helper handles both: string elements
+  -- come through as their text value; non-string elements are JSON-
+  -- stringified so nothing silently disappears.
   if (
     select data_type
       from information_schema.columns
@@ -68,20 +92,7 @@ begin
     alter table public.loto_confined_space_permits
       alter column isolation_measures drop default,
       alter column isolation_measures type text[]
-        using (
-          case
-            when isolation_measures is null
-              or jsonb_typeof(isolation_measures) <> 'array'
-            then '{}'::text[]
-            else array(
-              select case jsonb_typeof(elem)
-                when 'string' then elem #>> '{}'
-                else elem::text
-              end
-              from jsonb_array_elements(isolation_measures) elem
-            )
-          end
-        ),
+        using pg_temp._jsonb_to_text_array(isolation_measures),
       alter column isolation_measures set default '{}'::text[],
       alter column isolation_measures set not null;
     raise notice '[010] converted isolation_measures jsonb -> text[]';
