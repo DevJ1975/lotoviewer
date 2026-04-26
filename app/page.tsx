@@ -1,303 +1,405 @@
 'use client'
 
-import { Suspense, useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSnow, MapPin, Sun, Wind } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import type { Equipment } from '@/lib/types'
-import { reconcileEquipment, type RealtimePayload } from '@/lib/equipmentReconcile'
-import { needsPhoto } from '@/lib/photoStatus'
-import { useVisibilityRefetch } from '@/hooks/useVisibilityRefetch'
-import DashboardSidebar     from '@/components/dashboard/DashboardSidebar'
-import EquipmentListPanel   from '@/components/dashboard/EquipmentListPanel'
-import PlacardDetailPanel   from '@/components/dashboard/PlacardDetailPanel'
-import BatchPrintModal      from '@/components/BatchPrintModal'
-import { DashboardSkeleton } from '@/components/Skeleton'
-import { useSession } from '@/components/SessionProvider'
+import { useAuth } from '@/components/AuthProvider'
+import { timeOfDayGreeting } from '@/components/Greeting'
+import { getModules, getChildren } from '@/lib/features'
+import { permitCountdown } from '@/lib/permitStatus'
+import type { ConfinedSpacePermit } from '@/lib/types'
 
-// ── Perf: stale-while-revalidate cache ────────────────────────────────────
-// iPads reload the PWA often; this lets the dashboard paint instantly from
-// the last fresh snapshot while a background fetch reconciles any drift.
-const CACHE_KEY = 'loto:equip-list:v1'
+// Home screen — the landing page after login. Replaces the old LOTO
+// dashboard (which moved to /loto). The job here is orientation: greet
+// the user, anchor them in time/place, surface today's safety state at
+// a glance, and route them into a module.
+//
+// All numbers are real reads against the live tables. Coming-soon
+// modules render a "—" with a Coming Soon pill rather than fake data,
+// so the demo accurately advertises what ships when we connect the
+// near-miss / hot-work / JHA flows.
 
-function readCache(): Equipment[] | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = window.localStorage.getItem(CACHE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as { savedAt?: number; rows?: Equipment[] }
-    return Array.isArray(parsed.rows) ? parsed.rows : null
-  } catch { return null }
+const WEATHER_FETCH_MS = 30 * 60 * 1000   // refresh every 30 min
+const CLOCK_TICK_MS    = 30 * 1000        // 30s clock update is plenty for a home screen
+
+interface Weather {
+  temperatureF: number
+  windMph:      number
+  code:         number
+  fetchedAt:    number
 }
 
-function writeCache(rows: Equipment[]) {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(CACHE_KEY, JSON.stringify({ savedAt: Date.now(), rows }))
-  } catch { /* quota / private mode — non-fatal */ }
+interface SafetyMetrics {
+  activePermits:  number
+  peopleInSpaces: number
+  expiredPermits: number
+  totalEquipment: number
+  loading:        boolean
 }
 
 export default function HomePage() {
+  const { profile, email } = useAuth()
+  const firstName = (profile?.full_name?.trim().split(/\s+/)[0]) || (email?.split('@')[0]) || 'there'
+
+  const [now, setNow] = useState<Date>(() => new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), CLOCK_TICK_MS)
+    return () => clearInterval(id)
+  }, [])
+
+  const greeting = useMemo(() => timeOfDayGreeting(now), [now])
+  const dateLabel = useMemo(() =>
+    now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }),
+  [now])
+  const timeLabel = useMemo(() =>
+    now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
+  [now])
+
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center h-[calc(100vh-6rem)]">
-        <div className="w-10 h-10 border-4 border-brand-navy border-t-transparent rounded-full animate-spin" />
-      </div>
-    }>
-      <HomeDashboard />
-    </Suspense>
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <Hero greeting={greeting} firstName={firstName} dateLabel={dateLabel} timeLabel={timeLabel} />
+      <SafetyMetricsRow />
+      <ModulesGrid />
+      <ComingSoonStrip />
+    </div>
   )
 }
 
-function HomeDashboard() {
-  const [equipment, setEquipment] = useState<Equipment[]>([])
-  const [loading, setLoading]     = useState(true)
-  const [loadError, setLoadError] = useState(false)
-  const [batchOpen, setBatchOpen] = useState(false)
+// ── Hero — greeting + clock + weather ─────────────────────────────────────
 
-  // Derived from the `decommissioned` column on loto_equipment.
-  // Consumed by the sidebar (for per-department totals), the list (to hide retired rows),
-  // and the status report / CSV export (to exclude them from counts).
-  const decommissioned = useMemo(
-    () => new Set(equipment.filter(e => e.decommissioned).map(e => e.equipment_id)),
-    [equipment],
-  )
-
-  const router        = useRouter()
-  const searchParams  = useSearchParams()
-  const selectedDept  = searchParams.get('dept')
-  const selectedEqId  = searchParams.get('eq')
-  const { recordVisit } = useSession()
-
-  const fetchData = useCallback(async () => {
-    // Rolled back from a narrow column list to `*` after a SELECT with an
-    // explicit projection started returning "Could not load equipment" —
-    // one of the columns we named likely isn't in the live schema. Logging
-    // the error here so the exact PostgREST message surfaces in the console
-    // next time rather than a silent error-branch flip. We can re-try a
-    // narrow projection once we know which column was the offender.
-    const { data, error } = await supabase
-      .from('loto_equipment')
-      .select('*')
-      .order('equipment_id', { ascending: true })
-    if (error) {
-      console.error('[home] loto_equipment fetch failed', {
-        message: error.message,
-        details: error.details,
-        hint:    error.hint,
-        code:    error.code,
-      })
-      setLoadError(true)
-    } else if (data) {
-      const rows = data as Equipment[]
-      setEquipment(rows)
-      writeCache(rows)
-      setLoadError(false)
-    }
-    setLoading(false)
-  }, [])
-
-  // Hydrate from localStorage synchronously on mount so the first paint
-  // shows the last-known data instantly while the network request flies.
-  // Running this in useEffect (not useState initializer) avoids SSR
-  // hydration mismatches — server renders empty, client hydrates empty,
-  // then we swap in the cache.
-  useEffect(() => {
-    const cached = readCache()
-    if (cached && cached.length > 0) {
-      setEquipment(cached)
-      setLoading(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Debounce realtime events with requestAnimationFrame. A CSV import or
-  // bulk update can fire dozens of postgres_changes events in a burst —
-  // running reconcile + re-render per event spikes the UI. Coalescing into
-  // one update per frame keeps scroll and input responsive.
-  const pendingPayloads = useRef<RealtimePayload[]>([])
-  const rafHandle       = useRef<number | null>(null)
-  const flushPending    = useCallback(() => {
-    rafHandle.current = null
-    const pending = pendingPayloads.current
-    pendingPayloads.current = []
-    if (pending.length === 0) return
-    setEquipment((prev: Equipment[]) => pending.reduce(reconcileEquipment, prev))
-  }, [])
-
-  useEffect(() => {
-    fetchData()
-
-    // Reconcile realtime events in-memory instead of refetching the whole
-    // table on every change — matters once equipment count grows past a few
-    // hundred rows. DELETE/INSERT payloads carry the full row; UPDATE carries
-    // the new record.
-    const channel = supabase
-      .channel('loto_equipment_changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'loto_equipment' },
-        (payload: RealtimePayload) => {
-          pendingPayloads.current.push(payload)
-          if (rafHandle.current == null) {
-            rafHandle.current = requestAnimationFrame(flushPending)
-          }
-        },
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-      if (rafHandle.current != null) {
-        cancelAnimationFrame(rafHandle.current)
-        rafHandle.current = null
-      }
-      pendingPayloads.current = []
-    }
-  }, [fetchData, flushPending])
-
-  useVisibilityRefetch(fetchData)
-
-  const selectedEquipment = useMemo(
-    () => equipment.find(e => e.equipment_id === selectedEqId) ?? null,
-    [equipment, selectedEqId],
-  )
-
-  // Hold searchParams in a ref so setUrlState can be useCallback-stable
-  // across renders. Without this, selection callbacks allocated a new
-  // reference on every realtime tick (which updates `equipment` and re-runs
-  // HomeDashboard) — blowing up the memoization inside EquipmentListPanel
-  // and forcing every row to re-render on every DB change.
-  const searchParamsRef = useRef(searchParams)
-  searchParamsRef.current = searchParams
-
-  const setUrlState = useCallback((next: { dept?: string | null; eq?: string | null }) => {
-    const params = new URLSearchParams(searchParamsRef.current.toString())
-    if (next.dept === null) params.delete('dept')
-    else if (next.dept)     params.set('dept', next.dept)
-    if (next.eq === null)   params.delete('eq')
-    else if (next.eq)       params.set('eq', next.eq)
-    const qs = params.toString()
-    router.replace(qs ? `/?${qs}` : '/')
-  }, [router])
-
-  // Pending auto-advance timer — held in a ref so we can cancel it whenever
-  // the user takes a manual action (selecting a different item, switching
-  // departments, or unmounting). Without this, an in-flight timer would
-  // bump the user away from a screen they just chose.
-  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const cancelPendingAdvance = useCallback(() => {
-    if (advanceTimer.current) { clearTimeout(advanceTimer.current); advanceTimer.current = null }
-  }, [])
-  useEffect(() => () => cancelPendingAdvance(), [cancelPendingAdvance])
-
-  const handleSelectDept = useCallback((dept: string | null) => {
-    cancelPendingAdvance()
-    setUrlState({ dept, eq: null })
-  }, [cancelPendingAdvance, setUrlState])
-
-  const handleSelectEquip = useCallback((id: string) => {
-    cancelPendingAdvance()
-    recordVisit(id)
-    setUrlState({ eq: id })
-  }, [cancelPendingAdvance, recordVisit, setUrlState])
-
-  const handleEquipmentAdded = useCallback((row: Equipment) => {
-    setEquipment(prev =>
-      [...prev, row].sort((a, b) => a.equipment_id.localeCompare(b.equipment_id)),
-    )
-  }, [])
-
-  const openBatch = useCallback(() => setBatchOpen(true), [])
-
-  // After a photo save, if the currently selected equipment no longer needs
-  // a photo (both required slots filled), auto-advance to the next needs-
-  // photo item in the active view after a brief pause so the user sees the
-  // success indicator. Cancels itself if the user navigates manually.
-  const handlePhotoSaved = useCallback((type: 'equip' | 'iso') => {
-    if (!selectedEqId) return
-    const current = equipment.find(e => e.equipment_id === selectedEqId)
-    if (!current) return
-
-    // "Does the current row still need a photo after this save?" Uses URL
-    // presence for the slot we didn't just save (to stay consistent with
-    // computePhotoStatusFromEquipment) and optimistic `true` for the slot
-    // we did (URL hasn't landed from the hook yet).
-    const afterHasEquip = type === 'equip' ? true : Boolean(current.equip_photo_url?.trim())
-    const afterHasIso   = type === 'iso'   ? true : Boolean(current.iso_photo_url?.trim())
-    const stillNeedsEquip = current.needs_equip_photo && !afterHasEquip
-    const stillNeedsIso   = current.needs_iso_photo   && !afterHasIso
-    if (stillNeedsEquip || stillNeedsIso) return
-
-    // Find the next item in this dept (or globally if none selected) that
-    // still needs a photo and isn't decommissioned. URL presence matches
-    // the list-panel's "Needs Photo" filter — same invariant.
-    const scope = selectedDept
-      ? equipment.filter(e => e.department === selectedDept)
-      : equipment
-    const sorted = [...scope].sort((a, b) => a.equipment_id.localeCompare(b.equipment_id))
-    const idx = sorted.findIndex(e => e.equipment_id === selectedEqId)
-    const rotated = idx >= 0 ? [...sorted.slice(idx + 1), ...sorted.slice(0, idx)] : sorted
-    const nextNeedsPhoto = rotated.find(e =>
-      !decommissioned.has(e.equipment_id) && needsPhoto(e),
-    )
-    if (!nextNeedsPhoto) return
-
-    cancelPendingAdvance()
-    advanceTimer.current = setTimeout(() => {
-      advanceTimer.current = null
-      handleSelectEquip(nextNeedsPhoto.equipment_id)
-    }, 1200)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedEqId, selectedDept, equipment, decommissioned, cancelPendingAdvance])
-
-  if (loadError) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-6rem)]">
-        <div className="text-center px-6 max-w-sm">
-          <div className="w-14 h-14 rounded-full bg-rose-100 flex items-center justify-center text-2xl mx-auto mb-3">⚠</div>
-          <p className="text-sm font-semibold text-slate-700 mb-1">Could not load equipment</p>
-          <p className="text-xs text-slate-400 mb-4">Please check your connection and try again.</p>
-          <button
-            type="button"
-            onClick={() => { setLoading(true); setLoadError(false); fetchData() }}
-            className="px-4 py-2 rounded-lg bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 transition-colors"
-          >
-            Retry
-          </button>
+function Hero({
+  greeting, firstName, dateLabel, timeLabel,
+}: { greeting: string; firstName: string; dateLabel: string; timeLabel: string }) {
+  return (
+    <section className="bg-gradient-to-br from-brand-navy to-[#1a3470] text-white rounded-2xl p-6 sm:p-8 shadow-md">
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-6 items-end">
+        <div>
+          <p className="text-2xl sm:text-3xl font-bold tracking-tight">
+            {greeting}, <span className="text-brand-yellow">{firstName}</span>
+          </p>
+          <p className="text-sm sm:text-base text-white/80 mt-2">{dateLabel}</p>
+          <p className="text-3xl sm:text-4xl font-mono font-bold mt-1 tabular-nums">{timeLabel}</p>
         </div>
+        <WeatherCard />
+      </div>
+    </section>
+  )
+}
+
+// ── Weather card — Open-Meteo (no API key needed) ─────────────────────────
+
+function WeatherCard() {
+  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null)
+  const [locationName, setLocationName] = useState<string | null>(null)
+  const [weather, setWeather] = useState<Weather | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  // Geolocation — ask once, fall back gracefully if denied. We don't
+  // store the coords; if the user revokes permission later, the next
+  // mount just shows the no-location fallback again.
+  useEffect(() => {
+    if (!('geolocation' in navigator)) {
+      setError('Location not available on this device')
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos => setCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      err => setError(err.code === err.PERMISSION_DENIED ? 'Allow location for local weather' : 'Could not get location'),
+      { timeout: 8000, maximumAge: 10 * 60 * 1000 },
+    )
+  }, [])
+
+  const fetchWeather = useCallback(async () => {
+    if (!coords) return
+    try {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&current=temperature_2m,weather_code,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph`
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`Weather API ${res.status}`)
+      const json = await res.json() as { current: { temperature_2m: number; weather_code: number; wind_speed_10m: number } }
+      setWeather({
+        temperatureF: Math.round(json.current.temperature_2m),
+        windMph:      Math.round(json.current.wind_speed_10m),
+        code:         json.current.weather_code,
+        fetchedAt:    Date.now(),
+      })
+    } catch (err) {
+      console.error('[home] weather fetch failed', err)
+      setError('Weather unavailable')
+    }
+  }, [coords])
+
+  // Reverse-geocode for a friendly location name. Open-Meteo also has a
+  // separate geocoding endpoint but BigDataCloud's reverse is free + no
+  // key for the locality tier.
+  useEffect(() => {
+    if (!coords) return
+    const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${coords.lat}&longitude=${coords.lon}&localityLanguage=en`
+    fetch(url)
+      .then(r => r.ok ? r.json() : null)
+      .then((j: { city?: string; locality?: string; principalSubdivisionCode?: string } | null) => {
+        if (!j) return
+        const city = j.city || j.locality
+        const state = j.principalSubdivisionCode?.split('-').pop()
+        if (city && state) setLocationName(`${city}, ${state}`)
+        else if (city) setLocationName(city)
+      })
+      .catch(() => { /* ignore — we'll just skip the location label */ })
+  }, [coords])
+
+  useEffect(() => {
+    fetchWeather()
+    if (!coords) return
+    const id = setInterval(fetchWeather, WEATHER_FETCH_MS)
+    return () => clearInterval(id)
+  }, [coords, fetchWeather])
+
+  if (error && !weather) {
+    return (
+      <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 min-w-[200px]">
+        <p className="text-xs text-white/60 uppercase tracking-widest font-bold">Weather</p>
+        <p className="text-sm text-white/80 mt-1">{error}</p>
       </div>
     )
   }
 
-  if (loading) return <DashboardSkeleton />
+  if (!weather) {
+    return (
+      <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 min-w-[200px]">
+        <p className="text-xs text-white/60 uppercase tracking-widest font-bold">Weather</p>
+        <p className="text-sm text-white/80 mt-1">Loading…</p>
+      </div>
+    )
+  }
 
+  const { Icon, label } = weatherIconForCode(weather.code)
   return (
-    <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-6rem)]">
-      <DashboardSidebar
-        equipment={equipment}
-        selectedDept={selectedDept}
-        selectedEqId={selectedEqId}
-        onSelectDept={handleSelectDept}
-        onSelectEquip={handleSelectEquip}
-        onBatchPrint={openBatch}
-        decommissioned={decommissioned}
-        onEquipmentAdded={handleEquipmentAdded}
-      />
-      <EquipmentListPanel
-        equipment={equipment}
-        selectedDept={selectedDept}
-        selectedEqId={selectedEqId}
-        onSelectEquip={handleSelectEquip}
-        decommissioned={decommissioned}
-      />
-      <PlacardDetailPanel equipment={selectedEquipment} onPhotoSaved={handlePhotoSaved} />
-
-      <BatchPrintModal
-        open={batchOpen}
-        onClose={() => setBatchOpen(false)}
-        equipment={equipment}
-        initialDepartment={selectedDept}
-      />
+    <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 min-w-[200px]">
+      <div className="flex items-center gap-3">
+        <Icon className="h-10 w-10 text-brand-yellow shrink-0" />
+        <div>
+          <p className="text-3xl font-bold tabular-nums">{weather.temperatureF}°F</p>
+          <p className="text-xs text-white/80">{label}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-3 mt-3 text-[11px] text-white/70">
+        <span className="inline-flex items-center gap-1"><Wind className="h-3 w-3" /> {weather.windMph} mph</span>
+        {locationName && (
+          <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> {locationName}</span>
+        )}
+      </div>
     </div>
   )
 }
+
+// WMO weather code to icon + short label. The Open-Meteo docs list the
+// full table; we collapse to the buckets a user would actually distinguish
+// at a glance.
+function weatherIconForCode(code: number): { Icon: typeof Sun; label: string } {
+  if (code === 0)                       return { Icon: Sun,            label: 'Clear' }
+  if (code <= 3)                        return { Icon: Cloud,          label: 'Partly cloudy' }
+  if (code === 45 || code === 48)       return { Icon: CloudFog,       label: 'Fog' }
+  if (code >= 51 && code <= 57)         return { Icon: CloudDrizzle,   label: 'Drizzle' }
+  if (code >= 61 && code <= 67)         return { Icon: CloudRain,      label: 'Rain' }
+  if (code >= 71 && code <= 77)         return { Icon: CloudSnow,      label: 'Snow' }
+  if (code >= 80 && code <= 82)         return { Icon: CloudRain,      label: 'Showers' }
+  if (code >= 85 && code <= 86)         return { Icon: CloudSnow,      label: 'Snow showers' }
+  if (code >= 95)                       return { Icon: CloudLightning, label: 'Thunderstorm' }
+  return                                       { Icon: Cloud,          label: 'Cloudy' }
+}
+
+// ── Safety metrics — real reads ───────────────────────────────────────────
+
+function SafetyMetricsRow() {
+  const [m, setM] = useState<SafetyMetrics>({
+    activePermits: 0, peopleInSpaces: 0, expiredPermits: 0, totalEquipment: 0, loading: true,
+  })
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const [permitRes, equipRes] = await Promise.all([
+        supabase
+          .from('loto_confined_space_permits')
+          .select('expires_at, canceled_at, entry_supervisor_signature_at, entrants')
+          .is('canceled_at', null)
+          .not('entry_supervisor_signature_at', 'is', null),
+        supabase
+          .from('loto_equipment')
+          .select('equipment_id', { count: 'exact', head: true })
+          .eq('decommissioned', false),
+      ])
+
+      if (cancelled) return
+
+      const permits = (permitRes.data ?? []) as Pick<ConfinedSpacePermit, 'expires_at' | 'canceled_at' | 'entry_supervisor_signature_at' | 'entrants'>[]
+      const nowMs = Date.now()
+      let active = 0, people = 0, expired = 0
+      for (const p of permits) {
+        const c = permitCountdown(p, nowMs)
+        if (c.expired) {
+          expired += 1
+        } else {
+          active += 1
+          people += p.entrants.length
+        }
+      }
+
+      setM({
+        activePermits:  active,
+        peopleInSpaces: people,
+        expiredPermits: expired,
+        totalEquipment: equipRes.count ?? 0,
+        loading:        false,
+      })
+    }
+    load()
+    return () => { cancelled = true }
+  }, [])
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-base font-bold text-slate-900">Today's safety</h2>
+        <p className="text-[11px] text-slate-400">Real-time</p>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Metric
+          label="Permits Active"
+          value={m.loading ? '—' : String(m.activePermits)}
+          tone={m.activePermits > 0 ? 'safe' : 'neutral'}
+          href="/confined-spaces/status"
+        />
+        <Metric
+          label="People In Spaces"
+          value={m.loading ? '—' : String(m.peopleInSpaces)}
+          tone="neutral"
+          href="/confined-spaces/status"
+        />
+        <Metric
+          label="Expired — Verify Evac"
+          value={m.loading ? '—' : String(m.expiredPermits)}
+          tone={m.expiredPermits > 0 ? 'critical' : 'neutral'}
+          href="/confined-spaces/status"
+        />
+        <Metric
+          label="LOTO Equipment"
+          value={m.loading ? '—' : String(m.totalEquipment)}
+          tone="neutral"
+          href="/loto"
+        />
+      </div>
+
+      {/* Coming-soon metrics — surfaced so the home looks complete on demo
+          day but accurately marked as not-yet-live. */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <Metric label="Near-Miss Reports"  value="—" tone="coming" comingSoon />
+        <Metric label="Open Hot-Work Permits" value="—" tone="coming" comingSoon />
+        <Metric label="Open JHAs"          value="—" tone="coming" comingSoon />
+      </div>
+    </section>
+  )
+}
+
+function Metric({
+  label, value, tone, href, comingSoon,
+}: {
+  label:       string
+  value:       string
+  tone:        'safe' | 'critical' | 'neutral' | 'coming'
+  href?:       string
+  comingSoon?: boolean
+}) {
+  const cls =
+    tone === 'critical' ? 'bg-rose-50 border-rose-200'
+  : tone === 'safe'     ? 'bg-emerald-50 border-emerald-200'
+  : tone === 'coming'   ? 'bg-slate-50 border-dashed border-slate-300'
+  :                       'bg-white border-slate-200'
+
+  const valueCls =
+    tone === 'critical' ? 'text-rose-700'
+  : tone === 'safe'     ? 'text-emerald-700'
+  : tone === 'coming'   ? 'text-slate-400'
+  :                       'text-slate-900'
+
+  const inner = (
+    <>
+      <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 flex items-center gap-2">
+        {label}
+        {comingSoon && (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800">
+            Soon
+          </span>
+        )}
+      </p>
+      <p className={`text-3xl font-black tabular-nums mt-1 ${valueCls}`}>{value}</p>
+    </>
+  )
+
+  if (href && !comingSoon) {
+    return (
+      <Link href={href} className={`rounded-xl border ${cls} p-4 hover:shadow-sm transition-shadow block`}>
+        {inner}
+      </Link>
+    )
+  }
+
+  return <div className={`rounded-xl border ${cls} p-4`}>{inner}</div>
+}
+
+// ── Module navigation tiles ────────────────────────────────────────────────
+
+function ModulesGrid() {
+  // Only "live" modules (skip Coming Soon — those have their own strip
+  // below). getModules('safety') returns LOTO + Confined Spaces + the
+  // three coming-soon entries; filter to clickable ones.
+  const modules = getModules('safety').filter(m => !m.comingSoon)
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-base font-bold text-slate-900">Jump in</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {modules.map(m => {
+          const childCount = getChildren(m.id).length
+          return (
+            <Link
+              key={m.id}
+              href={m.href!}
+              className="bg-white border border-slate-200 rounded-xl p-5 hover:border-brand-navy hover:shadow-md transition-all group"
+            >
+              <p className="text-lg font-bold text-slate-900 group-hover:text-brand-navy transition-colors">{m.name}</p>
+              <p className="text-xs text-slate-500 mt-1 leading-snug">{m.description}</p>
+              {childCount > 0 && (
+                <p className="text-[11px] text-slate-400 mt-3">
+                  {childCount} sub-page{childCount === 1 ? '' : 's'} →
+                </p>
+              )}
+            </Link>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+// ── Coming-soon strip ──────────────────────────────────────────────────────
+
+function ComingSoonStrip() {
+  const upcoming = getModules('safety').filter(m => m.comingSoon)
+  if (upcoming.length === 0) return null
+
+  return (
+    <section className="rounded-xl border border-dashed border-violet-200 bg-violet-50/40 p-4 space-y-2">
+      <p className="text-[11px] font-bold uppercase tracking-widest text-violet-800">Coming Soon</p>
+      <div className="flex flex-wrap gap-3">
+        {upcoming.map(m => (
+          <div key={m.id} className="flex-1 min-w-[200px]">
+            <p className="text-sm font-semibold text-slate-800">{m.name}</p>
+            <p className="text-[11px] text-slate-500 leading-snug">{m.description}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+

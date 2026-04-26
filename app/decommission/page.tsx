@@ -350,9 +350,9 @@ export default function DecommissionPage() {
       <header className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Link
-            href="/"
+            href="/loto"
             className="text-slate-400 hover:text-brand-navy transition-colors"
-            aria-label="Back to dashboard"
+            aria-label="Back to LOTO dashboard"
           >
             <ArrowLeft className="h-5 w-5" />
           </Link>

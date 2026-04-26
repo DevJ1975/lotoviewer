@@ -123,7 +123,7 @@ function EquipmentDetail() {
     return (
       <div className="text-center py-24">
         <p className="text-slate-500 text-lg font-medium mb-4">Equipment not found</p>
-        <Link href="/" className="text-brand-navy text-sm font-semibold hover:underline">← Back to Dashboard</Link>
+        <Link href="/loto" className="text-brand-navy text-sm font-semibold hover:underline">← Back to LOTO Dashboard</Link>
       </div>
     )
   }

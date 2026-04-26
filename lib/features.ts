@@ -61,7 +61,7 @@ export const FEATURES: FeatureDef[] = [
     id:          'loto',
     name:        'LOTO',
     description: 'Lockout/Tagout equipment + placards',
-    href:        '/',
+    href:        '/loto',
     category:    'safety',
     enabled:     true,
     comingSoon:  false,

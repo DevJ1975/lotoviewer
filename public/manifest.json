@@ -24,9 +24,9 @@
     }
   ],
   "shortcuts": [
-    { "name": "Dashboard",     "url": "/",             "description": "Open the equipment dashboard" },
-    { "name": "Status",        "url": "/status",       "description": "View live completion status" },
-    { "name": "Decommission",  "url": "/decommission", "description": "Retire equipment" }
+    { "name": "Home",            "url": "/",                          "description": "Open the home screen" },
+    { "name": "LOTO Dashboard",  "url": "/loto",                      "description": "Lockout/Tagout equipment dashboard" },
+    { "name": "Permit Status",   "url": "/confined-spaces/status",    "description": "Live confined-space permit board" }
   ],
   "categories": ["productivity", "utilities", "business"]
 }
