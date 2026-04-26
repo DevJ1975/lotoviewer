@@ -190,6 +190,17 @@ export const FEATURES: FeatureDef[] = [
     enabled:     true,
     comingSoon:  false,
   },
+
+  // ── Admin / configuration ───────────────────────────────────────────────
+  {
+    id:          'admin-webhooks',
+    name:        'Webhooks',
+    description: 'Outbound HTTP POST on permit + test lifecycle',
+    href:        '/admin/webhooks',
+    category:    'admin',
+    enabled:     true,
+    comingSoon:  false,
+  },
 ]
 
 // ─── Lookups ───────────────────────────────────────────────────────────────

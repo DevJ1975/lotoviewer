@@ -152,16 +152,14 @@ describe('getModules', () => {
     expect(ids).not.toContain('cs-status-board')
   })
 
-  it('returns an empty array for a category that has only children (or none)', () => {
-    // 'admin' is currently empty — admin pages live at /admin/* but aren't
-    // registered as drawer modules. The reports category gained the EHS
-    // Scorecard, so we assert against the catalog directly there.
-    expect(getModules('admin')).toEqual([])
-  })
-
   it('surfaces top-level reports modules (currently the EHS Scorecard)', () => {
     const ids = getModules('reports').map(m => m.id)
     expect(ids).toContain('reports-scorecard')
+  })
+
+  it('surfaces top-level admin modules (currently Webhooks)', () => {
+    const ids = getModules('admin').map(m => m.id)
+    expect(ids).toContain('admin-webhooks')
   })
 })
 

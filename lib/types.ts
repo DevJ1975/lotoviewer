@@ -192,6 +192,30 @@ export interface GasMeter {
   updated_at:           string
 }
 
+// Outbound webhook subscription (migration 013). Each row receives the
+// events listed in `events[]` whenever the corresponding lifecycle
+// transition fires on the permit / test tables.
+export type WebhookEvent =
+  | 'permit.created'
+  | 'permit.signed'
+  | 'permit.canceled'
+  | 'test.recorded'
+  | 'test.failed'
+
+export interface WebhookSubscription {
+  id:         string
+  name:       string
+  url:        string
+  // Optional shared secret — when present the dispatcher signs the body
+  // with HMAC-SHA256 and adds an X-Soteria-Signature header.
+  secret:     string | null
+  events:     WebhookEvent[]
+  active:     boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type AtmosphericTestKind = 'pre_entry' | 'periodic' | 'post_alarm'
 
 export interface AtmosphericTest {
