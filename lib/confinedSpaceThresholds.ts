@@ -100,7 +100,14 @@ export type PermitState = 'pending_signature' | 'active' | 'expired' | 'canceled
 export function permitState(p: Pick<ConfinedSpacePermit, 'canceled_at' | 'entry_supervisor_signature_at' | 'expires_at'>): PermitState {
   if (p.canceled_at) return 'canceled'
   if (!p.entry_supervisor_signature_at) return 'pending_signature'
-  if (new Date(p.expires_at) < new Date()) return 'expired'
+  // A malformed expires_at string parses to NaN, and NaN-vs-now comparisons
+  // are always false — so the previous form silently classified corrupted
+  // dates as 'active' and they would never expire. Treat unparseable
+  // timestamps as expired (fail-closed): worst-case the supervisor cancels
+  // and re-issues, vs. an "active" permit that should have ended hours ago.
+  const expiresMs = new Date(p.expires_at).getTime()
+  if (Number.isNaN(expiresMs))     return 'expired'
+  if (expiresMs < Date.now())      return 'expired'
   return 'active'
 }
 
