@@ -11,6 +11,7 @@ import type {
   ConfinedSpacePermit,
 } from '@/lib/types'
 import { permitState, SITE_DEFAULTS } from '@/lib/confinedSpaceThresholds'
+import SpacePhotoSlot from '@/components/confined/SpacePhotoSlot'
 
 // Detail page for a single confined space. Read-mostly with an "Edit"
 // affordance opening an inline form. Recent permits load from
@@ -122,6 +123,25 @@ export default function ConfinedSpaceDetailPage() {
           <p className="text-xs text-slate-500"><span className="font-semibold">Entry:</span> {space.entry_dimensions}</p>
         )}
       </header>
+
+      <Section title="Photos" hint="Feed the AI hazard suggester — interior shots make the biggest difference">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <SpacePhotoSlot
+            spaceId={space.space_id}
+            slot="exterior"
+            label="Exterior / Approach"
+            existingUrl={space.equip_photo_url}
+            onUploaded={(url) => setSpace(prev => prev ? { ...prev, equip_photo_url: url } : prev)}
+          />
+          <SpacePhotoSlot
+            spaceId={space.space_id}
+            slot="interior"
+            label="Interior / Manway"
+            existingUrl={space.interior_photo_url}
+            onUploaded={(url) => setSpace(prev => prev ? { ...prev, interior_photo_url: url } : prev)}
+          />
+        </div>
+      </Section>
 
       <Section title="Known Hazards">
         {space.known_hazards.length === 0 ? (
