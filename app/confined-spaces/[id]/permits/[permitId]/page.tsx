@@ -164,6 +164,14 @@ export default function PermitDetailPage() {
       setServerError('Pre-entry test does not meet acceptable thresholds — entry cannot be authorized.')
       return
     }
+    // §1910.146(f)(11) — rescue service must be identified on the permit
+    // before entry is authorized. Require name + at least one contact path
+    // (phone for outside service, ETA for an in-house team).
+    const r = permit!.rescue_service
+    if (!r?.name?.trim() || (!r?.phone?.trim() && r?.eta_minutes == null)) {
+      setServerError('Rescue service is incomplete — name and either a phone number or ETA are required before signing (§1910.146(f)(11)).')
+      return
+    }
     setSigning(true)
     setServerError(null)
     const now = new Date().toISOString()
@@ -356,6 +364,7 @@ export default function PermitDetailPage() {
         <CancelDialog
           permit={permit}
           initialReason={cancelInitialReason}
+          hasPreEntryTest={!!preEntryTest}
           onClose={() => setCancelOpen(false)}
           onCanceled={(updated) => {
             setPermit(updated)
@@ -624,19 +633,27 @@ function NumInput({ label, value, onChange, step }: { label: string; value: stri
 // ── Cancel dialog ──────────────────────────────────────────────────────────
 
 interface CancelProps {
-  permit:        ConfinedSpacePermit
-  initialReason: CancelReason
-  onClose:       () => void
-  onCanceled:    (updated: ConfinedSpacePermit) => void
+  permit:          ConfinedSpacePermit
+  initialReason:   CancelReason
+  // Whether a pre_entry atmospheric test exists on this permit. Drives the
+  // §1910.146(d)(5) compliance warning — closing out a permit that never
+  // had a pre-entry test is non-compliant and the supervisor should know.
+  hasPreEntryTest: boolean
+  onClose:         () => void
+  onCanceled:      (updated: ConfinedSpacePermit) => void
 }
 
-function CancelDialog({ permit, initialReason, onClose, onCanceled }: CancelProps) {
+function CancelDialog({ permit, initialReason, hasPreEntryTest, onClose, onCanceled }: CancelProps) {
   const [reason, setReason]       = useState<CancelReason>(initialReason)
   const [notes, setNotes]         = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError]         = useState<string | null>(null)
 
   const requiresNotes = reason !== 'task_complete'
+  // Surface the missing-pre-entry-test warning whenever it applies, not just
+  // for `expired`. A `task_complete` cancellation on a permit that never had
+  // a pre-entry test is just as non-compliant.
+  const showPreEntryWarning = !hasPreEntryTest
 
   async function submit() {
     if (requiresNotes && !notes.trim()) {
@@ -712,6 +729,17 @@ function CancelDialog({ permit, initialReason, onClose, onCanceled }: CancelProp
             />
           </label>
         </div>
+
+        {showPreEntryWarning && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+            <p className="font-bold mb-0.5">No pre-entry test on record</p>
+            <p>
+              §1910.146(d)(5) requires an atmospheric test before entry. This permit will
+              close with that gap on the audit trail — note the disposition above so a
+              future inspector understands why.
+            </p>
+          </div>
+        )}
 
         {error && <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-md px-3 py-2">{error}</p>}
 

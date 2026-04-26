@@ -9,7 +9,10 @@ import {
 import { useAuth } from '@/components/AuthProvider'
 import { timeOfDayGreeting } from '@/components/Greeting'
 import { getModules } from '@/lib/features'
-import { fetchHomeMetrics, type HomeMetrics, type ActivePermitSummary, type ActivityEvent } from '@/lib/homeMetrics'
+import {
+  fetchHomeMetrics,
+  type HomeMetrics, type ActivePermitSummary, type ActivityEvent, type PermitAlertSummary,
+} from '@/lib/homeMetrics'
 import { permitCountdown, type CountdownTone } from '@/lib/permitStatus'
 
 // Home screen — the landing page after login.
@@ -75,6 +78,13 @@ export default function HomePage() {
 
       {metrics && metrics.expiredPermitCount > 0 && (
         <CriticalAlertBanner count={metrics.expiredPermitCount} />
+      )}
+
+      {metrics && (metrics.expiringSoonPermits.length > 0 || metrics.pendingStalePermits.length > 0) && (
+        <ConfinedSpaceAlertsCard
+          expiringSoon={metrics.expiringSoonPermits}
+          pendingStale={metrics.pendingStalePermits}
+        />
       )}
 
       <QuickActions />
@@ -248,6 +258,92 @@ function CriticalAlertBanner({ count }: { count: number }) {
       </div>
     </Link>
   )
+}
+
+// ── Confined-space alerts card ────────────────────────────────────────────
+//
+// Sits below the critical alert banner (expired permits) but above the KPI
+// strip. Only renders when there's at least one alert — empty state would
+// be noise on a busy iPad.
+
+function ConfinedSpaceAlertsCard({
+  expiringSoon, pendingStale,
+}: { expiringSoon: PermitAlertSummary[]; pendingStale: PermitAlertSummary[] }) {
+  return (
+    <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {expiringSoon.length > 0 && (
+        <AlertList
+          tone="amber"
+          icon={<AlertTriangle className="h-5 w-5" />}
+          title={`${expiringSoon.length} permit${expiringSoon.length === 1 ? '' : 's'} expiring soon`}
+          subtitle="Less than 2 hours left — confirm task complete and cancel."
+          rows={expiringSoon.slice(0, 3).map(p => ({
+            href:  `/confined-spaces/${encodeURIComponent(p.spaceId)}/permits/${p.id}`,
+            label: p.serial,
+            sub:   `${p.spaceId} · ${p.minutes} min left`,
+          }))}
+        />
+      )}
+      {pendingStale.length > 0 && (
+        <AlertList
+          tone="slate"
+          icon={<FileText className="h-5 w-5" />}
+          title={`${pendingStale.length} draft${pendingStale.length === 1 ? '' : 's'} pending signature`}
+          subtitle="Open >2 hours — sign or abandon so the audit trail stays clean."
+          rows={pendingStale.slice(0, 3).map(p => ({
+            href:  `/confined-spaces/${encodeURIComponent(p.spaceId)}/permits/${p.id}`,
+            label: p.serial,
+            sub:   `${p.spaceId} · ${humanizeMinutes(p.minutes)} old`,
+          }))}
+        />
+      )}
+    </section>
+  )
+}
+
+function AlertList({
+  tone, icon, title, subtitle, rows,
+}: {
+  tone:     'amber' | 'slate'
+  icon:     React.ReactNode
+  title:    string
+  subtitle: string
+  rows:     Array<{ href: string; label: string; sub: string }>
+}) {
+  const toneCls = tone === 'amber'
+    ? 'bg-amber-50 border-amber-200 text-amber-900'
+    : 'bg-slate-50 border-slate-200 text-slate-800'
+  return (
+    <div className={`rounded-xl border ${toneCls} p-4 space-y-3`}>
+      <header className="flex items-start gap-2">
+        <span className="shrink-0 mt-0.5">{icon}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold">{title}</p>
+          <p className="text-[11px] opacity-80">{subtitle}</p>
+        </div>
+      </header>
+      <ul className="space-y-1">
+        {rows.map(r => (
+          <li key={r.href}>
+            <Link
+              href={r.href}
+              className="flex items-center justify-between gap-2 text-xs bg-white/70 hover:bg-white rounded-md px-2 py-1.5 transition-colors"
+            >
+              <span className="font-mono font-semibold tracking-wider truncate">{r.label}</span>
+              <span className="text-[11px] opacity-70 truncate">{r.sub}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function humanizeMinutes(min: number): string {
+  if (min < 60) return `${min}m`
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return m === 0 ? `${h}h` : `${h}h ${m}m`
 }
 
 // ── Quick actions ─────────────────────────────────────────────────────────

@@ -324,8 +324,35 @@ function EditDetailsDialog({ space, onClose, onSaved, onDeleted }: EditProps) {
   }
 
   async function handleDecommission() {
-    if (!confirm(`Decommission ${space.space_id}? It will hide from the list but stay in the database for retention.`)) return
+    setServerError(null)
     setSubmitting(true)
+    // Hard gate: never let a supervisor hide a space while a permit is
+    // signed-not-canceled on it. Entrants could literally still be inside.
+    // We surface the blocking permits' serials so they know what to clear.
+    const { data: blockers, error: blockerErr } = await supabase
+      .from('loto_confined_space_permits')
+      .select('serial')
+      .eq('space_id', space.space_id)
+      .is('canceled_at', null)
+      .not('entry_supervisor_signature_at', 'is', null)
+      .limit(5)
+    if (blockerErr) {
+      setServerError(blockerErr.message)
+      setSubmitting(false)
+      return
+    }
+    if (blockers && blockers.length > 0) {
+      const serials = blockers.map(b => b.serial).filter(Boolean).join(', ')
+      setServerError(
+        `Cannot decommission — ${blockers.length} permit${blockers.length === 1 ? '' : 's'} still active or expired-uncancelled (${serials}). Cancel them first.`,
+      )
+      setSubmitting(false)
+      return
+    }
+    if (!confirm(`Decommission ${space.space_id}? It will hide from the list but stay in the database for retention.`)) {
+      setSubmitting(false)
+      return
+    }
     const { error } = await supabase
       .from('loto_confined_spaces')
       .update({ decommissioned: true, updated_at: new Date().toISOString() })

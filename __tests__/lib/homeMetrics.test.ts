@@ -4,9 +4,14 @@ import {
   linkForAuditEvent,
   partitionPermits,
   summarizeMetricsFromRows,
+  findExpiringSoon,
+  findPendingStale,
+  EXPIRING_SOON_MIN,
+  PENDING_STALE_MIN,
   type AuditLogRow,
   type EquipmentPhotoStatusRow,
   type PermitSummaryRow,
+  type PendingPermitRow,
 } from '@/lib/homeMetrics'
 
 const NOW = new Date('2026-04-26T12:00:00Z').getTime()
@@ -406,6 +411,38 @@ describe('summarizeMetricsFromRows', () => {
     })
   })
 
+  it('flags active permits expiring within EXPIRING_SOON_MIN', () => {
+    const m = summarizeMetricsFromRows({
+      permits: [
+        permit({ id: 'soon', expires_at: new Date(NOW + 30 * 60_000).toISOString() }),     // 30 min
+        permit({ id: 'safe', expires_at: new Date(NOW + 6 * 3600_000).toISOString() }),    // 6 h
+      ],
+      equipRows: [], audits: [], spaceDescById: new Map(), nowMs: NOW,
+    })
+    expect(m.expiringSoonPermits.map(p => p.id)).toEqual(['soon'])
+  })
+
+  it('flags pending-signature permits older than PENDING_STALE_MIN', () => {
+    const stale: PendingPermitRow = {
+      id:                            'stale',
+      serial:                        'CSP-20260426-0099',
+      space_id:                      'CS-FERM-A',
+      started_at:                    new Date(NOW - 3 * 3600_000).toISOString(),
+      canceled_at:                   null,
+      entry_supervisor_signature_at: null,
+    }
+    const fresh: PendingPermitRow = {
+      ...stale,
+      id:        'fresh',
+      started_at: new Date(NOW - 30 * 60_000).toISOString(),
+    }
+    const m = summarizeMetricsFromRows({
+      permits: [], pending: [stale, fresh],
+      equipRows: [], audits: [], spaceDescById: new Map(), nowMs: NOW,
+    })
+    expect(m.pendingStalePermits.map(p => p.id)).toEqual(['stale'])
+  })
+
   it('preserves input order of audit rows (caller orders DESC)', () => {
     const audits: AuditLogRow[] = [
       { id: 3, table_name: 'loto_equipment', operation: 'INSERT', row_pk: null, old_row: null, new_row: null, created_at: '2026-04-26T11:30:00Z' },
@@ -416,5 +453,95 @@ describe('summarizeMetricsFromRows', () => {
       permits: [], equipRows: [], audits, spaceDescById: new Map(), nowMs: NOW,
     })
     expect(m.recentActivity.map(e => e.id)).toEqual([3, 2, 1])
+  })
+})
+
+// ── findExpiringSoon ────────────────────────────────────────────────────────
+
+describe('findExpiringSoon', () => {
+  it('returns nothing when all permits have plenty of headroom', () => {
+    const out = findExpiringSoon(
+      [permit({ id: 'a', expires_at: new Date(NOW + 6 * 3600_000).toISOString() })],
+      NOW, EXPIRING_SOON_MIN,
+    )
+    expect(out).toEqual([])
+  })
+
+  it('returns permits within the threshold sorted soonest-first', () => {
+    const out = findExpiringSoon(
+      [
+        permit({ id: 'b', expires_at: new Date(NOW + 90 * 60_000).toISOString() }),
+        permit({ id: 'a', expires_at: new Date(NOW + 15 * 60_000).toISOString() }),
+        permit({ id: 'c', expires_at: new Date(NOW + 5  * 3600_000).toISOString() }),
+      ],
+      NOW, EXPIRING_SOON_MIN,
+    )
+    expect(out.map(p => p.id)).toEqual(['a', 'b'])
+  })
+
+  it('skips permits already past expiry — those are the "expired" alert, not "expiring soon"', () => {
+    const out = findExpiringSoon(
+      [permit({ id: 'past', expires_at: new Date(NOW - 5 * 60_000).toISOString() })],
+      NOW, EXPIRING_SOON_MIN,
+    )
+    expect(out).toEqual([])
+  })
+
+  it('synthesizes a fallback serial when the row has none (pre-migration-011 data)', () => {
+    const out = findExpiringSoon(
+      [permit({ id: '12345678-aaaa-bbbb-cccc-dddddddddddd', serial: null, expires_at: new Date(NOW + 60 * 60_000).toISOString() })],
+      NOW, EXPIRING_SOON_MIN,
+    )
+    expect(out[0].serial).toBe('permit-12345678')
+  })
+})
+
+// ── findPendingStale ───────────────────────────────────────────────────────
+
+describe('findPendingStale', () => {
+  function pending(partial: Partial<PendingPermitRow>): PendingPermitRow {
+    return {
+      id:                            'pending-1',
+      serial:                        'CSP-20260426-0099',
+      space_id:                      'CS-FERM-A',
+      started_at:                    new Date(NOW - 30 * 60_000).toISOString(),
+      canceled_at:                   null,
+      entry_supervisor_signature_at: null,
+      ...partial,
+    }
+  }
+
+  it('returns nothing when all drafts are fresh', () => {
+    expect(findPendingStale([pending({})], NOW, PENDING_STALE_MIN)).toEqual([])
+  })
+
+  it('flags drafts older than the threshold', () => {
+    const out = findPendingStale(
+      [pending({ id: 'old', started_at: new Date(NOW - 4 * 3600_000).toISOString() })],
+      NOW, PENDING_STALE_MIN,
+    )
+    expect(out.map(p => p.id)).toEqual(['old'])
+  })
+
+  it('orders oldest first so the supervisor sees the most-stale draft on top', () => {
+    const out = findPendingStale(
+      [
+        pending({ id: 'younger', started_at: new Date(NOW - 3 * 3600_000).toISOString() }),
+        pending({ id: 'older',   started_at: new Date(NOW - 8 * 3600_000).toISOString() }),
+      ],
+      NOW, PENDING_STALE_MIN,
+    )
+    expect(out.map(p => p.id)).toEqual(['older', 'younger'])
+  })
+
+  it('defensively skips signed or canceled rows even if the caller passed them', () => {
+    const out = findPendingStale(
+      [
+        pending({ id: 'signed',   started_at: new Date(NOW - 4 * 3600_000).toISOString(), entry_supervisor_signature_at: '2026-04-26T11:00:00Z' }),
+        pending({ id: 'canceled', started_at: new Date(NOW - 4 * 3600_000).toISOString(), canceled_at: '2026-04-26T11:30:00Z' }),
+      ],
+      NOW, PENDING_STALE_MIN,
+    )
+    expect(out).toEqual([])
   })
 })

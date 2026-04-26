@@ -40,6 +40,18 @@ export interface PermitSummaryRow {
   attendants:                      string[]
 }
 
+// Lean shape for the pending-signature feed — drafts the supervisor created
+// but never signed. We only need started_at to age them; the rest is for
+// link rendering on the home alerts card.
+export interface PendingPermitRow {
+  id:                              string
+  serial:                          string | null
+  space_id:                        string
+  started_at:                      string
+  canceled_at:                     string | null
+  entry_supervisor_signature_at:   string | null
+}
+
 export interface ActivePermitSummary {
   id:               string
   serial:           string
@@ -50,19 +62,42 @@ export interface ActivePermitSummary {
   attendants:       string[]
 }
 
+// Compact shape for the home "alerts" card — same fields whether the
+// alert is "expiring soon" or "pending too long," with `minutesUntilDue`
+// being negative on overdue. Keeps the home rendering uniform.
+export interface PermitAlertSummary {
+  id:               string
+  serial:           string
+  spaceId:          string
+  // For expiring-soon: minutes until expires_at. For pending-stale:
+  // minutes since started_at (always positive — the pending alert fires
+  // when this exceeds the threshold).
+  minutes:          number
+}
+
 export interface EquipmentPhotoStatusRow {
   photo_status: 'missing' | 'partial' | 'complete'
 }
 
 export interface HomeMetrics {
-  activePermits:      ActivePermitSummary[]   // top 3 by soonest expiry
-  activePermitCount:  number
-  expiredPermitCount: number                  // signed, not canceled, past expires_at
-  peopleInSpaces:     number                  // sum of entrants across active permits
-  totalEquipment:     number
-  photoCompletionPct: number                  // 0-100, integer rounded
-  recentActivity:     ActivityEvent[]
+  activePermits:        ActivePermitSummary[]   // top 3 by soonest expiry
+  activePermitCount:    number
+  expiredPermitCount:   number                  // signed, not canceled, past expires_at
+  peopleInSpaces:       number                  // sum of entrants across active permits
+  totalEquipment:       number
+  photoCompletionPct:   number                  // 0-100, integer rounded
+  recentActivity:       ActivityEvent[]
+  // Active permits with < EXPIRING_SOON_MIN remaining. Empty when none.
+  expiringSoonPermits:  PermitAlertSummary[]
+  // Pending-signature permits older than PENDING_STALE_MIN — drafts the
+  // supervisor opened and walked away from. Empty when none.
+  pendingStalePermits:  PermitAlertSummary[]
 }
+
+// Thresholds for the home alerts card. Surfaced as exported constants so
+// tests and UI label strings stay in sync ("Expiring in <2h", etc.).
+export const EXPIRING_SOON_MIN = 120  // < 2 hours remaining triggers the alert
+export const PENDING_STALE_MIN = 120  // pending > 2 hours triggers the alert
 
 // ── Pure helpers (testable without supabase) ──────────────────────────────
 
@@ -199,13 +234,69 @@ export function partitionPermits(permits: PermitSummaryRow[], nowMs: number): {
   return { active, expired }
 }
 
+// Active permits whose expires_at is within `thresholdMin` of nowMs. Driven
+// by elapsed minutes, not absolute timestamps, so the home stays accurate
+// across DST transitions. Sorted by minutes-remaining ascending — the most
+// urgent first.
+export function findExpiringSoon(
+  active: PermitSummaryRow[],
+  nowMs: number,
+  thresholdMin: number,
+): PermitAlertSummary[] {
+  const out: PermitAlertSummary[] = []
+  for (const p of active) {
+    const expMs = new Date(p.expires_at).getTime()
+    if (Number.isNaN(expMs)) continue
+    const minutes = (expMs - nowMs) / 60_000
+    if (minutes <= 0 || minutes > thresholdMin) continue
+    out.push({
+      id:      p.id,
+      serial:  p.serial ?? `permit-${p.id.slice(0, 8)}`,
+      spaceId: p.space_id,
+      minutes: Math.round(minutes),
+    })
+  }
+  return out.sort((a, b) => a.minutes - b.minutes)
+}
+
+// Pending-signature permits older than `thresholdMin`. Filters out anything
+// already signed or canceled defensively even though the caller's query
+// should be doing that already.
+export function findPendingStale(
+  pending: PendingPermitRow[],
+  nowMs: number,
+  thresholdMin: number,
+): PermitAlertSummary[] {
+  const out: PermitAlertSummary[] = []
+  for (const p of pending) {
+    if (p.canceled_at) continue
+    if (p.entry_supervisor_signature_at) continue
+    const startedMs = new Date(p.started_at).getTime()
+    if (Number.isNaN(startedMs)) continue
+    const minutes = (nowMs - startedMs) / 60_000
+    if (minutes < thresholdMin) continue
+    out.push({
+      id:      p.id,
+      serial:  p.serial ?? `permit-${p.id.slice(0, 8)}`,
+      spaceId: p.space_id,
+      minutes: Math.round(minutes),
+    })
+  }
+  // Oldest stale draft first — that's the most likely to be abandoned.
+  return out.sort((a, b) => b.minutes - a.minutes)
+}
+
 // Compose the metrics object from already-fetched rows. Pure — no I/O.
 // Caller does the supabase reads and hands the rows in; tests skip the
 // DB entirely and just feed fixtures.
 export function summarizeMetricsFromRows({
-  permits, equipRows, audits, spaceDescById, nowMs,
+  permits, pending = [], equipRows, audits, spaceDescById, nowMs,
 }: {
   permits:       PermitSummaryRow[]
+  // Optional so callers / fixtures that don't care about the pending-stale
+  // alert (the original test suite, for example) don't have to thread it
+  // through. Defaults to an empty array — no pending alerts.
+  pending?:      PendingPermitRow[]
   equipRows:    EquipmentPhotoStatusRow[]
   audits:       AuditLogRow[]
   spaceDescById: Map<string, string>
@@ -245,14 +336,19 @@ export function summarizeMetricsFromRows({
     link:        linkForAuditEvent(a),
   }))
 
+  const expiringSoonPermits = findExpiringSoon(active, nowMs, EXPIRING_SOON_MIN)
+  const pendingStalePermits = findPendingStale(pending, nowMs, PENDING_STALE_MIN)
+
   return {
-    activePermits:      top3,
-    activePermitCount:  active.length,
-    expiredPermitCount: expired.length,
+    activePermits:        top3,
+    activePermitCount:    active.length,
+    expiredPermitCount:   expired.length,
     peopleInSpaces,
-    totalEquipment:     total,
+    totalEquipment:       total,
     photoCompletionPct,
     recentActivity,
+    expiringSoonPermits,
+    pendingStalePermits,
   }
 }
 
@@ -266,7 +362,7 @@ export function summarizeMetricsFromRows({
 export async function fetchHomeMetrics(): Promise<HomeMetrics> {
   const nowMs = Date.now()
 
-  const [permitsRes, equipRes, auditRes] = await Promise.all([
+  const [permitsRes, pendingRes, equipRes, auditRes] = await Promise.all([
     supabase
       .from('loto_confined_space_permits')
       .select('id, serial, space_id, expires_at, canceled_at, entry_supervisor_signature_at, entrants, attendants')
@@ -274,6 +370,13 @@ export async function fetchHomeMetrics(): Promise<HomeMetrics> {
       .not('entry_supervisor_signature_at', 'is', null)
       .order('expires_at', { ascending: true })
       .limit(50),  // generous cap; we sort + filter further client-side
+    supabase
+      .from('loto_confined_space_permits')
+      .select('id, serial, space_id, started_at, canceled_at, entry_supervisor_signature_at')
+      .is('canceled_at', null)
+      .is('entry_supervisor_signature_at', null)
+      .order('started_at', { ascending: true })
+      .limit(50),
     supabase
       .from('loto_equipment')
       .select('photo_status')
@@ -286,6 +389,7 @@ export async function fetchHomeMetrics(): Promise<HomeMetrics> {
   ])
 
   const permits   = (permitsRes.data ?? []) as PermitSummaryRow[]
+  const pending   = (pendingRes.data ?? []) as PendingPermitRow[]
   const equipRows = (equipRes.data   ?? []) as EquipmentPhotoStatusRow[]
   const audits    = (auditRes.data   ?? []) as AuditLogRow[]
 
@@ -310,5 +414,5 @@ export async function fetchHomeMetrics(): Promise<HomeMetrics> {
     }
   }
 
-  return summarizeMetricsFromRows({ permits, equipRows, audits, spaceDescById, nowMs })
+  return summarizeMetricsFromRows({ permits, pending, equipRows, audits, spaceDescById, nowMs })
 }
