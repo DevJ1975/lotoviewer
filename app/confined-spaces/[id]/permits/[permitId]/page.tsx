@@ -52,6 +52,9 @@ export default function PermitDetailPage() {
   const [signing, setSigning]   = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
   const [cancelOpen, setCancelOpen] = useState(false)
+  // Bias the cancel dialog toward prohibited_condition when the user opens
+  // it from the evacuation banner (vs. the regular Cancel button).
+  const [cancelInitialReason, setCancelInitialReason] = useState<CancelReason>('task_complete')
 
   const load = useCallback(async () => {
     const [spaceRes, permitRes, testsRes] = await Promise.all([
@@ -85,6 +88,16 @@ export default function PermitDetailPage() {
     () => preEntryTest ? evaluateTest(preEntryTest, thresholds).status : 'unknown' as ReadingStatus,
     [preEntryTest, thresholds],
   )
+
+  // Prohibited-condition watchdog: tests are sorted newest-first, so a
+  // failing tests[0] on an active permit means the most recent reading
+  // crossed a threshold. §1910.146(e)(5)(ii) requires immediate evacuation
+  // and permit cancellation. We surface a red banner — but don't auto-
+  // cancel, because meter glitches happen and the supervisor must own the
+  // call to evacuate.
+  const latestTest         = tests[0] ?? null
+  const latestStatus       = latestTest ? evaluateTest(latestTest, thresholds).status : null
+  const showEvacuationAlert = permit.entry_supervisor_signature_at && !permit.canceled_at && latestStatus === 'fail'
 
   if (loading) {
     return <div className="max-w-3xl mx-auto px-4 py-10 text-center text-sm text-slate-400">Loading…</div>
@@ -200,6 +213,23 @@ export default function PermitDetailPage() {
         </Section>
       )}
 
+      {showEvacuationAlert && latestTest && (
+        <div className="bg-rose-600 text-white rounded-xl px-4 py-3 space-y-2 ring-2 ring-rose-300 ring-offset-2">
+          <p className="text-[11px] font-bold uppercase tracking-widest opacity-90">⚠ Prohibited condition detected</p>
+          <p className="text-sm">
+            Most recent reading at <strong>{new Date(latestTest.tested_at).toLocaleTimeString()}</strong> exceeds
+            acceptable thresholds. OSHA §1910.146(e)(5)(ii) requires immediate evacuation and permit cancellation.
+          </p>
+          <button
+            type="button"
+            onClick={() => { setCancelInitialReason('prohibited_condition'); setCancelOpen(true) }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-rose-700 text-sm font-bold hover:bg-rose-50 transition-colors"
+          >
+            Evacuate &amp; cancel permit →
+          </button>
+        </div>
+      )}
+
       <Section title={`Atmospheric Tests${tests.length > 0 ? ` (${tests.length})` : ''}`}>
         {state !== 'canceled' && state !== 'expired' && (
           <NewTestForm
@@ -246,7 +276,7 @@ export default function PermitDetailPage() {
         <div className="flex items-center justify-end">
           <button
             type="button"
-            onClick={() => setCancelOpen(true)}
+            onClick={() => { setCancelInitialReason('task_complete'); setCancelOpen(true) }}
             className="px-4 py-2 rounded-lg border border-rose-200 text-sm font-semibold text-rose-700 hover:bg-rose-50 transition-colors"
           >
             Cancel permit
@@ -257,6 +287,7 @@ export default function PermitDetailPage() {
       {cancelOpen && permit && (
         <CancelDialog
           permit={permit}
+          initialReason={cancelInitialReason}
           onClose={() => setCancelOpen(false)}
           onCanceled={(updated) => {
             setPermit(updated)
@@ -525,13 +556,14 @@ function NumInput({ label, value, onChange, step }: { label: string; value: stri
 // ── Cancel dialog ──────────────────────────────────────────────────────────
 
 interface CancelProps {
-  permit:     ConfinedSpacePermit
-  onClose:    () => void
-  onCanceled: (updated: ConfinedSpacePermit) => void
+  permit:        ConfinedSpacePermit
+  initialReason: CancelReason
+  onClose:       () => void
+  onCanceled:    (updated: ConfinedSpacePermit) => void
 }
 
-function CancelDialog({ permit, onClose, onCanceled }: CancelProps) {
-  const [reason, setReason]       = useState<CancelReason>('task_complete')
+function CancelDialog({ permit, initialReason, onClose, onCanceled }: CancelProps) {
+  const [reason, setReason]       = useState<CancelReason>(initialReason)
   const [notes, setNotes]         = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError]         = useState<string | null>(null)
