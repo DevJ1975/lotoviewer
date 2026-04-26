@@ -58,11 +58,35 @@ create trigger trg_set_permit_serial
   before insert on public.loto_confined_space_permits
   for each row execute function public.set_permit_serial();
 
--- Backfill any pre-existing rows. After the backfill we can mark the
--- column NOT NULL and add the unique index.
-update public.loto_confined_space_permits
-   set serial = public.next_permit_serial(started_at)
- where serial is null;
+-- Backfill any pre-existing rows using a per-day ROW_NUMBER window.
+--
+-- Why not call next_permit_serial(started_at) here directly? That
+-- function does a SELECT max(serial) inside a stable function called
+-- once per UPDATE row — but a set-based UPDATE in Postgres reads from
+-- the table snapshot BEFORE the update, so every backfilled row sees
+-- the same max (initially NULL → 0001) and they all collide on the
+-- unique index. ROW_NUMBER over a date-partitioned window numbers
+-- rows consistently in a single set-based pass.
+--
+-- Idempotent: re-running this against an already-numbered table is a
+-- no-op via the WHERE clause that skips rows whose serial already
+-- matches what the window would assign. Also recovers from a
+-- partially-applied earlier version of this migration that produced
+-- duplicate serials — those rows get re-numbered here.
+with numbered as (
+  select id,
+         'CSP-' || to_char(started_at, 'YYYYMMDD') || '-' ||
+         lpad(row_number() over (
+           partition by date_trunc('day', started_at)
+           order by started_at, id
+         )::text, 4, '0') as new_serial
+    from public.loto_confined_space_permits
+)
+update public.loto_confined_space_permits p
+   set serial = n.new_serial
+  from numbered n
+ where p.id = n.id
+   and (p.serial is null or p.serial <> n.new_serial);
 
 -- Unique constraint catches the (rare) race between two concurrent
 -- inserts on the same day — second one will retry on app side.
