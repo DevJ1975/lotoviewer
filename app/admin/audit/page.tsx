@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, History, Loader2, Search } from 'lucide-react'
+import { ArrowLeft, Download, History, Loader2, Search } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
 
@@ -96,7 +96,18 @@ export default function AuditLogPage() {
         </div>
       </header>
 
-      {/* Filters */}
+      {/* Filters + export */}
+      <div className="flex items-center justify-end">
+        <button
+          type="button"
+          onClick={() => downloadAuditCsv(filtered)}
+          disabled={filtered.length === 0}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Export {filtered.length} row{filtered.length === 1 ? '' : 's'} (CSV)
+        </button>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-3">
         <div className="relative">
           <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -181,6 +192,42 @@ export default function AuditLogPage() {
       </section>
     </div>
   )
+}
+
+// CSV export of the currently-filtered rows. Inspectors and §147 annual
+// audits routinely ask for "all changes touching X table over period Y" —
+// the page already supports the filtering, so the export is a one-click
+// formalization of whatever the admin is currently looking at. old_row /
+// new_row are stringified jsonb columns; downstream tooling (Excel / a
+// data-warehouse stage) parses them with a JSON column transform.
+function downloadAuditCsv(rows: AuditRow[]): void {
+  const header = ['id','created_at','actor_email','table_name','operation','row_pk','old_row','new_row']
+  // RFC 4180-ish escape: wrap in quotes if a comma, quote, or newline
+  // shows up; double up internal quotes. JSON.stringify on a row object
+  // is already quoted text, so the CSV cell wraps it once more.
+  const escape = (val: unknown): string => {
+    const s = val == null ? '' : typeof val === 'string' ? val : JSON.stringify(val)
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+  const lines = [
+    header.join(','),
+    ...rows.map(r => [
+      r.id, r.created_at, r.actor_email ?? '', r.table_name, r.operation,
+      r.row_pk ?? '', r.old_row, r.new_row,
+    ].map(escape).join(',')),
+  ]
+  const csv = lines.join('\r\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  const a = document.createElement('a')
+  a.href     = url
+  a.download = `audit-log-${stamp}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
 function DiffBlock({ label, value }: { label: string; value: unknown }) {

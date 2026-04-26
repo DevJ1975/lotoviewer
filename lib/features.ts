@@ -176,6 +176,20 @@ export const FEATURES: FeatureDef[] = [
     enabled:     true,
     comingSoon:  true,
   },
+
+  // ── Reports / oversight ─────────────────────────────────────────────────
+  // The scorecard is the cross-module trend view aimed at safety directors.
+  // Admin-gated at the route level — the drawer surfaces it here so admins
+  // can find it; non-admins who land on the route see "Admins only."
+  {
+    id:          'reports-scorecard',
+    name:        'EHS Scorecard',
+    description: 'Trends across permits, atmospheric tests, and equipment',
+    href:        '/admin/scorecard',
+    category:    'reports',
+    enabled:     true,
+    comingSoon:  false,
+  },
 ]
 
 // ─── Lookups ───────────────────────────────────────────────────────────────
