@@ -129,6 +129,10 @@ export type CancelReason =
 
 export interface ConfinedSpacePermit {
   id:                              string
+  // Human-readable serial CSP-YYYYMMDD-NNNN populated by a BEFORE INSERT
+  // trigger (migration 011). Used on the printed permit, the QR code,
+  // and the status board for traceability.
+  serial:                          string
   space_id:                        string
   purpose:                         string
   started_at:                      string

@@ -17,16 +17,23 @@ import { effectiveThresholds, SITE_DEFAULTS } from '@/lib/confinedSpaceThreshold
 // Defaults pre-fill from the space (hazards, isolation hint, dept) so the
 // 90% case is a few targeted edits rather than re-typing everything.
 
-// 8 hours covers the majority of a single shift; OSHA only requires that
-// the duration not exceed task time, which the supervisor can shorten.
-const DEFAULT_DURATION_HOURS = 8
+// Site policy and schema CHECK (migration 011) cap permit duration at one
+// shift. OSHA wants permits to "not exceed task time" — capping at 8h
+// forces a cancel + re-issue (and thus a fresh atmospheric test) for
+// longer work, which is the safety win.
+const MAX_PERMIT_HOURS = 8
 
+function pad(n: number): string { return String(n).padStart(2, '0') }
+function toLocalInput(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
 function defaultExpiresAt(): string {
   const d = new Date()
-  d.setHours(d.getHours() + DEFAULT_DURATION_HOURS)
-  // datetime-local needs YYYY-MM-DDTHH:MM in local time, no timezone suffix.
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  d.setHours(d.getHours() + MAX_PERMIT_HOURS)
+  return toLocalInput(d)
+}
+function maxExpiresAt(): string {
+  return defaultExpiresAt()
 }
 
 // Splits a multiline textarea on newlines, trims, drops empties.
@@ -114,9 +121,14 @@ export default function NewPermitPage() {
   const trimmedPurpose = purpose.trim()
   const expiresDate    = expiresAt ? new Date(expiresAt) : null
   const validExpiry    = expiresDate && !Number.isNaN(expiresDate.getTime()) && expiresDate.getTime() > Date.now()
+  // Site policy: max 8h. Schema enforces this via CHECK so the form is
+  // a friendly first line of defense — without this clamp the user gets
+  // a 400 from Postgres only on submit.
+  const exceedsMax = validExpiry && (expiresDate!.getTime() - Date.now()) > MAX_PERMIT_HOURS * 3600_000
   const errors: string[] = []
   if (!trimmedPurpose)            errors.push('Purpose is required.')
   if (!validExpiry)                errors.push('Expiration must be a valid future date/time.')
+  if (exceedsMax)                  errors.push(`Permits cannot exceed ${MAX_PERMIT_HOURS} hours. Cancel and re-issue with a fresh atmospheric test for longer work.`)
   if (entrantList.length === 0)    errors.push('At least one authorized entrant is required.')
   if (attendantList.length === 0)  errors.push('At least one attendant is required (§1910.146(i)).')
   if (!userId)                     errors.push('You must be logged in to create a permit.')
@@ -308,10 +320,11 @@ export default function NewPermitPage() {
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
           />
         </Field>
-        <Field label="Permit expires" required hint="Cannot exceed expected task time per §(f)(3)">
+        <Field label="Permit expires" required hint={`Capped at ${MAX_PERMIT_HOURS} hours per §(f)(3) + site policy`}>
           <input
             type="datetime-local"
             value={expiresAt}
+            max={maxExpiresAt()}
             onChange={e => setExpiresAt(e.target.value)}
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
           />

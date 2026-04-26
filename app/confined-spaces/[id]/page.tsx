@@ -184,6 +184,8 @@ export default function ConfinedSpaceDetailPage() {
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-slate-800 truncate">{p.purpose}</p>
                       <p className="text-[11px] text-slate-500">
+                        <span className="font-mono font-bold tracking-wider text-slate-600">{p.serial}</span>
+                        {' · '}
                         {new Date(p.started_at).toLocaleString()}
                         {p.canceled_at && <> · <span className="font-semibold text-slate-700">canceled</span> ({p.cancel_reason})</>}
                       </p>
