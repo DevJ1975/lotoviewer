@@ -210,6 +210,15 @@ export const FEATURES: FeatureDef[] = [
     enabled:     true,
     comingSoon:  false,
   },
+  {
+    id:          'settings-notifications',
+    name:        'Notifications',
+    description: 'Enable Web Push for permit + atmospheric-test alerts',
+    href:        '/settings/notifications',
+    category:    'admin',
+    enabled:     true,
+    comingSoon:  false,
+  },
 ]
 
 // ─── Lookups ───────────────────────────────────────────────────────────────

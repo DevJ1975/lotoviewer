@@ -10,7 +10,10 @@
 // dashboard. PWA clients on iPad were serving the cached old / shell from
 // v4. Bumping the version forces the activate handler to evict stale
 // caches on next launch.
-const CACHE_VERSION = 'v5'
+// v6 (2026-04-27) — added Web Push handlers (push + notificationclick).
+// Bumping the version so existing PWA clients re-register the worker
+// and pick up the new event listeners.
+const CACHE_VERSION = 'v6'
 const STATIC_CACHE  = `loto-static-${CACHE_VERSION}`
 const HTML_CACHE    = `loto-html-${CACHE_VERSION}`
 const IMAGE_CACHE   = `loto-images-${CACHE_VERSION}`
@@ -148,4 +151,54 @@ async function staleWhileRevalidate(request, cacheName) {
 // to skip waiting on demand (used after the user clicks "Update available").
 self.addEventListener('message', event => {
   if (event.data === 'SKIP_WAITING') self.skipWaiting()
+})
+
+// ── Web Push (migration 016) ──────────────────────────────────────────────
+//
+// Payload shape (sent by /api/push/dispatch):
+//   { title: string, body: string, url?: string, tag?: string }
+//
+// `tag` deduplicates notifications — pushing two events for the same
+// permit collapses to a single notification on iOS / Android instead of
+// stacking. `url` is the deep-link to open when the user taps; defaults
+// to '/' if absent. The whole handler is wrapped so a malformed payload
+// still produces a generic notification rather than dropping silently.
+self.addEventListener('push', event => {
+  let payload = { title: 'Soteria FIELD', body: 'New notification', url: '/', tag: undefined }
+  try {
+    if (event.data) {
+      const parsed = event.data.json()
+      payload = { ...payload, ...parsed }
+    }
+  } catch {
+    // Non-JSON payload — fall through with the defaults above.
+  }
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body:   payload.body,
+      tag:    payload.tag,
+      data:   { url: payload.url },
+      icon:   '/icon',
+      badge:  '/icon',
+    }),
+  )
+})
+
+// Open the deep link from the notification when tapped. If a Soteria tab
+// is already open, focus it and navigate; otherwise open a new one.
+self.addEventListener('notificationclick', event => {
+  event.notification.close()
+  const url = event.notification.data?.url ?? '/'
+  event.waitUntil((async () => {
+    const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    for (const c of all) {
+      if (c.url.includes(self.location.origin)) {
+        await c.focus()
+        // Navigate the focused tab to the deep link.
+        if (c.navigate) { try { await c.navigate(url) } catch { /* ignore */ } }
+        return
+      }
+    }
+    if (self.clients.openWindow) await self.clients.openWindow(url)
+  })())
 })
