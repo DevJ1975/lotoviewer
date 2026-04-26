@@ -114,16 +114,6 @@ export interface ConfinedSpace {
   updated_at:             string
 }
 
-// Free-form because OSHA doesn't enumerate isolation methods. Common shapes:
-//   { type: 'LOTO',        ref: 'EQ-123' }
-//   { type: 'ventilation', method: 'forced air' }
-//   { type: 'purging',     medium: 'N2' }
-//   { type: 'flushing',    medium: 'water' }
-export type IsolationMeasure = {
-  type:    string
-  [key: string]: string | number | boolean | null
-}
-
 export interface RescueService {
   name?:         string
   phone?:        string
@@ -146,10 +136,10 @@ export interface ConfinedSpacePermit {
   canceled_at:                     string | null
   entry_supervisor_id:             string
   entry_supervisor_signature_at:   string | null
-  attendants:                      string[]   // profile ids
-  entrants:                        string[]   // profile ids
+  attendants:                      string[]   // names per §(f)(5)
+  entrants:                        string[]   // names per §(f)(4)
   hazards_present:                 string[]
-  isolation_measures:              IsolationMeasure[]
+  isolation_measures:              string[]   // human-readable lines per §(f)(8)
   acceptable_conditions_override:  AcceptableConditions | null
   rescue_service:                  RescueService
   communication_method:            string | null

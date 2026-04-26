@@ -89,14 +89,19 @@ create table if not exists public.loto_confined_space_permits (
   -- A drawn-signature flow can layer on top later without a schema change.
   entry_supervisor_id             uuid not null references public.profiles(id) on delete restrict,
   entry_supervisor_signature_at   timestamptz,
-  -- §1910.146(f)(4)(5) — rosters. uuid arrays referencing profiles. Postgres
-  -- doesn't enforce FK on array elements, so the app layer must validate.
-  attendants                      uuid[] not null default '{}',
-  entrants                        uuid[] not null default '{}',
+  -- §1910.146(f)(4)(5) — rosters by name, not user id. Field entrants /
+  -- attendants typically don't have app accounts (no email, no login); the
+  -- OSHA requirement is "named or roster-linked," not "linked to an HR
+  -- system." The app layer validates non-empty entries on signing.
+  attendants                      text[] not null default '{}',
+  entrants                        text[] not null default '{}',
   -- §1910.146(f)(7)
   hazards_present                 text[] not null default '{}',
-  -- §1910.146(f)(8) — `[{type: 'LOTO', ref: 'EQ-123'}, {type: 'ventilation', method: 'forced air'}]`
-  isolation_measures              jsonb not null default '[]'::jsonb,
+  -- §1910.146(f)(8) — human-readable isolation steps. Free-form strings
+  -- like "LOTO on EQ-123 main disconnect", "Forced-air ventilation @ 200
+  -- CFM". Could promote to structured objects later if the AI suggester
+  -- benefits, but flat strings render fine on the printed permit.
+  isolation_measures              text[] not null default '{}',
   -- §1910.146(f)(9) — same shape as loto_confined_spaces.acceptable_conditions
   acceptable_conditions_override  jsonb,
   -- §1910.146(f)(11) — `{name, phone, eta_minutes, equipment: text[]}`
