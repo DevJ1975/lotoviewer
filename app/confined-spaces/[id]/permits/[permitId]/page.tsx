@@ -89,9 +89,8 @@ export default function PermitDetailPage() {
   // and permit cancellation. We surface a red banner — but don't auto-
   // cancel, because meter glitches happen and the supervisor must own the
   // call to evacuate.
-  const latestTest         = tests[0] ?? null
-  const latestStatus       = latestTest ? evaluateTest(latestTest, thresholds).status : null
-  const showEvacuationAlert = permit.entry_supervisor_signature_at && !permit.canceled_at && latestStatus === 'fail'
+  const latestTest   = tests[0] ?? null
+  const latestStatus = latestTest ? evaluateTest(latestTest, thresholds).status : null
 
   if (loading) {
     return <div className="max-w-3xl mx-auto px-4 py-10 text-center text-sm text-slate-400">Loading…</div>
@@ -106,6 +105,11 @@ export default function PermitDetailPage() {
       </div>
     )
   }
+
+  // Computed AFTER the null-guard so `permit` is narrowed to non-null. The
+  // reads here would type-check above too if we used `permit?.x`, but the
+  // narrow form keeps the intent obvious — alert depends on a real permit.
+  const showEvacuationAlert = permit.entry_supervisor_signature_at && !permit.canceled_at && latestStatus === 'fail'
 
   // ── sign & activate ──────────────────────────────────────────────────────
   async function handleSign() {
