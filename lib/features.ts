@@ -11,8 +11,14 @@
 // admin UI to manage that table is a separate slice and lives outside this
 // file; this file remains the source of truth for what features *exist*.
 //
-// The drawer reads from FEATURES via getFeatures(category) and useFeature(id)
-// so the UI is one render away from any flag flip.
+// The drawer reads from FEATURES via getModules / getChildren so the UI is
+// one render away from any flag flip.
+//
+// Nesting: a feature with `parent: 'someModuleId'` is rendered as a child
+// of that module in the drawer (indented under an expandable group). A
+// feature without `parent` is a top-level module. Modules with children
+// get a chevron toggle; the module name itself is a Link to the module's
+// home page (its href).
 
 export type FeatureCategory = 'safety' | 'reports' | 'admin'
 
@@ -32,22 +38,86 @@ export interface FeatureDef {
   // of `enabled`: a coming-soon feature is "enabled" in the sense that
   // the team wants to advertise it, but it isn't reachable.
   comingSoon:  boolean
+  // Optional parent module ID. When set, this feature renders as an
+  // indented child under its parent in the drawer. Example: 'status'
+  // (LOTO Status Report) has parent: 'loto'. The parent's category
+  // wins for grouping purposes — children inherit it for the lookup
+  // helpers below.
+  parent?:     string
 }
 
 // ─── The catalog ───────────────────────────────────────────────────────────
-// Order within a category determines drawer order. New features get
-// appended; reordering here reorders the UI immediately.
+// Order within a category determines drawer order; order within a parent
+// determines child order. New features get appended; reordering here
+// reorders the UI immediately.
 export const FEATURES: FeatureDef[] = [
-  // Safety
+  // ── LOTO module + sub-pages ─────────────────────────────────────────────
+  // The "LOTO" row navigates to /, the equipment dashboard. Status,
+  // Departments, Print Queue, Import, and Decommission all operate on the
+  // same loto_equipment table — modeling them as children of the LOTO
+  // module makes the navigation intent obvious instead of scattering them
+  // across "Reports" and "Admin" buckets.
   {
     id:          'loto',
-    name:        'LOTO Dashboard',
-    description: 'Lockout/Tagout placards and energy isolation steps',
+    name:        'LOTO',
+    description: 'Lockout/Tagout equipment + placards',
     href:        '/',
     category:    'safety',
     enabled:     true,
     comingSoon:  false,
   },
+  {
+    id:          'loto-status',
+    name:        'Status Report',
+    description: 'Photo + verification status by department',
+    href:        '/status',
+    category:    'safety',
+    parent:      'loto',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'loto-departments',
+    name:        'Departments',
+    description: 'Per-department equipment lists',
+    href:        '/departments',
+    category:    'safety',
+    parent:      'loto',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'loto-print',
+    name:        'Print Queue',
+    description: 'Batch print placard PDFs',
+    href:        '/print',
+    category:    'safety',
+    parent:      'loto',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'loto-import',
+    name:        'Import Equipment',
+    description: 'CSV bulk-seed for LOTO equipment',
+    href:        '/import',
+    category:    'safety',
+    parent:      'loto',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'loto-decommission',
+    name:        'Decommission',
+    description: 'Mark equipment as retired',
+    href:        '/decommission',
+    category:    'safety',
+    parent:      'loto',
+    enabled:     true,
+    comingSoon:  false,
+  },
+
+  // ── Confined Spaces module + sub-pages ──────────────────────────────────
   {
     id:          'confined-spaces',
     name:        'Confined Spaces',
@@ -58,14 +128,27 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
   },
   {
-    id:          'permit-status-board',
+    id:          'cs-status-board',
     name:        'Permit Status Board',
     description: 'Live big-monitor view of active permits + countdown timers',
     href:        '/confined-spaces/status',
     category:    'safety',
+    parent:      'confined-spaces',
     enabled:     true,
     comingSoon:  false,
   },
+  {
+    id:          'cs-import',
+    name:        'Import Spaces',
+    description: 'CSV bulk-seed for confined-space inventory',
+    href:        '/confined-spaces/import',
+    category:    'safety',
+    parent:      'confined-spaces',
+    enabled:     true,
+    comingSoon:  false,
+  },
+
+  // ── Coming-soon modules ─────────────────────────────────────────────────
   {
     id:          'near-miss',
     name:        'Near-Miss Reporting',
@@ -92,55 +175,6 @@ export const FEATURES: FeatureDef[] = [
     category:    'safety',
     enabled:     true,
     comingSoon:  true,
-  },
-
-  // Reports
-  {
-    id:          'status',
-    name:        'Status Report',
-    description: 'Photo + verification status by department',
-    href:        '/status',
-    category:    'reports',
-    enabled:     true,
-    comingSoon:  false,
-  },
-  {
-    id:          'departments',
-    name:        'Departments',
-    description: 'Per-department equipment lists',
-    href:        '/departments',
-    category:    'reports',
-    enabled:     true,
-    comingSoon:  false,
-  },
-  {
-    id:          'print-queue',
-    name:        'Print Queue',
-    description: 'Batch print placard PDFs',
-    href:        '/print',
-    category:    'reports',
-    enabled:     true,
-    comingSoon:  false,
-  },
-
-  // Admin
-  {
-    id:          'import',
-    name:        'Import Equipment',
-    description: 'CSV bulk-seed for LOTO equipment',
-    href:        '/import',
-    category:    'admin',
-    enabled:     true,
-    comingSoon:  false,
-  },
-  {
-    id:          'decommission',
-    name:        'Decommission',
-    description: 'Mark equipment as retired',
-    href:        '/decommission',
-    category:    'admin',
-    enabled:     true,
-    comingSoon:  false,
   },
 ]
 
@@ -174,8 +208,23 @@ export function isFeatureAccessible(id: string): boolean {
   return f.enabled && !f.comingSoon && f.href !== null
 }
 
+// All enabled features in the category — flat. Includes both modules
+// and their children. Used by tests that verify catalog membership.
 export function getFeaturesByCategory(category: FeatureCategory): FeatureDef[] {
   return FEATURES.filter(f => f.category === category && f.enabled)
+}
+
+// Top-level modules in the category — features without a parent. The
+// drawer iterates these to render the outer rows; each module's children
+// are fetched via getChildren(moduleId).
+export function getModules(category: FeatureCategory): FeatureDef[] {
+  return FEATURES.filter(f => f.category === category && f.enabled && !f.parent)
+}
+
+// Children of a module. Coming-Soon entries are rare here but allowed
+// (they'd render as disabled child rows). Returns in registry order.
+export function getChildren(parentId: string): FeatureDef[] {
+  return FEATURES.filter(f => f.parent === parentId && f.enabled)
 }
 
 // ─── Multi-tenant resolver hook ────────────────────────────────────────────

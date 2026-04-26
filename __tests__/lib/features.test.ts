@@ -5,6 +5,8 @@ import {
   isFeatureEnabled,
   isFeatureAccessible,
   getFeaturesByCategory,
+  getModules,
+  getChildren,
   resolveFeatureFlags,
   type FeatureCategory,
 } from '@/lib/features'
@@ -63,7 +65,12 @@ describe('isFeatureAccessible', () => {
   it('returns true for live features that have a route', () => {
     expect(isFeatureAccessible('loto')).toBe(true)
     expect(isFeatureAccessible('confined-spaces')).toBe(true)
-    expect(isFeatureAccessible('status')).toBe(true)
+    expect(isFeatureAccessible('loto-status')).toBe(true)
+  })
+
+  it('returns true for child features (they share the same accessibility check)', () => {
+    expect(isFeatureAccessible('loto-import')).toBe(true)
+    expect(isFeatureAccessible('cs-status-board')).toBe(true)
   })
 
   it('returns false for coming-soon features even though they are enabled', () => {
@@ -80,7 +87,7 @@ describe('isFeatureAccessible', () => {
   })
 })
 
-// ── getFeaturesByCategory — drawer's grouping data source ──────────────────
+// ── getFeaturesByCategory — flat list (modules + children together) ────────
 
 describe('getFeaturesByCategory', () => {
   it('returns all enabled features in a category, preserving registry order', () => {
@@ -88,8 +95,14 @@ describe('getFeaturesByCategory', () => {
     const ids = safety.map(f => f.id)
     expect(ids).toEqual([
       'loto',
+      'loto-status',
+      'loto-departments',
+      'loto-print',
+      'loto-import',
+      'loto-decommission',
       'confined-spaces',
-      'permit-status-board',
+      'cs-status-board',
+      'cs-import',
       'near-miss',
       'hot-work',
       'jha',
@@ -103,19 +116,75 @@ describe('getFeaturesByCategory', () => {
   })
 
   it('returns an empty array for a category with no enabled features', () => {
-    // No feature is in a hypothetical "ghost" category — type-narrow with
-    // a cast so the test still type-checks against the union.
     expect(getFeaturesByCategory('ghost' as FeatureCategory)).toEqual([])
   })
 
-  it('every category lookup is a strict subset of FEATURES', () => {
+  it('every category lookup combined covers all enabled features exactly once', () => {
     const all = new Set<string>()
     for (const cat of CATEGORIES) {
       for (const f of getFeaturesByCategory(cat)) all.add(f.id)
     }
-    // Should be at most the size of the enabled subset.
     const enabledCount = FEATURES.filter(f => f.enabled).length
     expect(all.size).toBe(enabledCount)
+  })
+})
+
+// ── getModules — top-level rows in the drawer ──────────────────────────────
+
+describe('getModules', () => {
+  it('returns only top-level features (no parent) for a category', () => {
+    const ids = getModules('safety').map(m => m.id)
+    expect(ids).toEqual([
+      'loto',
+      'confined-spaces',
+      'near-miss',
+      'hot-work',
+      'jha',
+    ])
+  })
+
+  it('excludes child features even though they share the parent\'s category', () => {
+    const ids = getModules('safety').map(m => m.id)
+    // Sub-pages that live under loto / confined-spaces must NOT appear as
+    // top-level rows — they'd duplicate every nav entry otherwise.
+    expect(ids).not.toContain('loto-status')
+    expect(ids).not.toContain('loto-departments')
+    expect(ids).not.toContain('cs-status-board')
+  })
+
+  it('returns an empty array for a category that has only children (or none)', () => {
+    expect(getModules('reports')).toEqual([])
+    expect(getModules('admin')).toEqual([])
+  })
+})
+
+// ── getChildren — sub-pages under a module ─────────────────────────────────
+
+describe('getChildren', () => {
+  it('returns the children of a module in registry order', () => {
+    const ids = getChildren('loto').map(c => c.id)
+    expect(ids).toEqual([
+      'loto-status',
+      'loto-departments',
+      'loto-print',
+      'loto-import',
+      'loto-decommission',
+    ])
+  })
+
+  it('returns the children of confined-spaces module', () => {
+    const ids = getChildren('confined-spaces').map(c => c.id)
+    expect(ids).toEqual(['cs-status-board', 'cs-import'])
+  })
+
+  it('returns an empty array for a leaf module (coming-soon entries have none)', () => {
+    expect(getChildren('near-miss')).toEqual([])
+    expect(getChildren('hot-work')).toEqual([])
+    expect(getChildren('jha')).toEqual([])
+  })
+
+  it('returns an empty array for an unknown module id', () => {
+    expect(getChildren('does-not-exist')).toEqual([])
   })
 })
 
@@ -137,18 +206,11 @@ describe('resolveFeatureFlags', () => {
   })
 
   it('ignores the tenantId arg (today) without throwing', async () => {
-    // Future implementation will look up tenant_features rows; today the
-    // arg is accepted and ignored. Guarantees the call signature is
-    // already in place so callers can be wired before the multi-tenant
-    // backend lands.
     await expect(resolveFeatureFlags('any-tenant-uuid')).resolves.toBeInstanceOf(Map)
   })
 })
 
 // ── Registry invariants — protect against accidental drift ─────────────────
-// These don't test a function; they test the static FEATURES catalog. If
-// someone edits lib/features.ts in a way that breaks the model, the test
-// fails immediately rather than the bug surfacing as a confusing UX.
 
 describe('FEATURES registry invariants', () => {
   it('every feature id is unique', () => {
@@ -158,9 +220,6 @@ describe('FEATURES registry invariants', () => {
   })
 
   it('every coming-soon feature has href=null', () => {
-    // The contract: coming-soon features can't have a route yet, otherwise
-    // the drawer's disabled-styling lies (the user could just URL-bar to
-    // it). Catch this at test time.
     for (const f of FEATURES) {
       if (f.comingSoon) {
         expect(f.href, `${f.id} is comingSoon but has href=${f.href}`).toBeNull()
@@ -169,8 +228,6 @@ describe('FEATURES registry invariants', () => {
   })
 
   it('every live (enabled, not coming-soon) feature has a non-null href', () => {
-    // Inverse invariant: a "live" feature without a route would render in
-    // the drawer as a non-clickable item with no Coming-Soon explanation.
     for (const f of FEATURES) {
       if (f.enabled && !f.comingSoon) {
         expect(f.href, `${f.id} is live but has no href`).not.toBeNull()
@@ -186,10 +243,41 @@ describe('FEATURES registry invariants', () => {
   })
 
   it('every feature has non-empty name and description', () => {
-    // Drawer renders both — empty strings would just look like a bug.
     for (const f of FEATURES) {
       expect(f.name.trim().length, `${f.id}.name is empty`).toBeGreaterThan(0)
       expect(f.description.trim().length, `${f.id}.description is empty`).toBeGreaterThan(0)
+    }
+  })
+
+  // ─ Nesting invariants ───────────────────────────────────────────────────
+  // The parent field gates the entire two-level drawer. Bad data here =
+  // orphaned items, infinite loops, or duplicate rows.
+
+  it('every feature with parent points at a real, top-level module', () => {
+    const ids = new Set(FEATURES.map(f => f.id))
+    const parents = new Set(FEATURES.filter(f => !f.parent).map(f => f.id))
+    for (const f of FEATURES) {
+      if (!f.parent) continue
+      expect(ids, `${f.id}.parent="${f.parent}" doesn't exist`).toContain(f.parent)
+      expect(parents, `${f.id}.parent="${f.parent}" is itself a child — no nested submenus allowed`).toContain(f.parent)
+    }
+  })
+
+  it('a child inherits its parent\'s category (drawer groups by category)', () => {
+    // The drawer renders modules under their category and pulls children
+    // via getChildren(moduleId). If a child had a different category, it
+    // would never appear because the drawer only walks each module within
+    // its own category.
+    for (const f of FEATURES) {
+      if (!f.parent) continue
+      const parent = FEATURES.find(p => p.id === f.parent)!
+      expect(f.category, `${f.id}.category="${f.category}" but parent ${parent.id}.category="${parent.category}"`).toBe(parent.category)
+    }
+  })
+
+  it('no parent references its own id (defensive — no self-loops)', () => {
+    for (const f of FEATURES) {
+      if (f.parent) expect(f.parent).not.toBe(f.id)
     }
   })
 })
