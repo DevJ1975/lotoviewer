@@ -42,8 +42,19 @@ const FAINT   = rgb(0.96, 0.97, 0.99)
 // or the AI suggester routinely contains O₂, H₂S, CO₂ (subscripts at U+2082)
 // and would crash render with "WinAnsi cannot encode '₂'". Map to ASCII
 // before any drawText / widthOfTextAtSize call.
-function sanitizeForWinAnsi(s: string): string {
+// Exported so the unit tests in __tests__/lib/pdfPermit.test.ts can pin
+// the WinAnsi-safe substitution table — a regression here turned out to
+// crash the entire PDF generator in production once.
+// Chars in WinAnsi's 0x80-0x9F range that the engine CAN render even
+// though they're outside Latin-1. Preserved by the catch-all so a pasted
+// bullet (•), trademark (™), or currency (€) survives. Smart quotes /
+// em-dash / ellipsis are normalized to ASCII earlier in the pipeline.
+const WINANSI_HIGH_KEEP = '€‚ƒ„†‡ˆ‰Š‹ŒŽ•˜™š›œžŸ'
+
+export function sanitizeForWinAnsi(s: string): string {
   if (!s) return s
+  // Built per call (cheap; the kept chars are a fixed string).
+  const stripOther = new RegExp(`[^\\x00-\\xFF\\n\\r\\t${WINANSI_HIGH_KEEP}]`, 'g')
   return s
     .replace(/[₀-₉]/g, c => String.fromCharCode(0x30 + (c.charCodeAt(0) - 0x2080))) // ₀-₉
     .replace(/[⁰⁴-⁹]/g, c => String.fromCharCode(0x30 + (c.charCodeAt(0) - 0x2070))) // ⁰ ⁴-⁹
@@ -57,7 +68,7 @@ function sanitizeForWinAnsi(s: string): string {
     .replace(/…/g, '...')                                                // …
     .replace(/[–—]/g, '-')                                          // – —
     .replace(/[×]/g, 'x')                                                // × (in WinAnsi but normalize)
-    .replace(/[^\x00-\xFF\n\r\t]/g, '?')                                      // strip anything else
+    .replace(stripOther, '?')                                            // strip anything else (preserve WinAnsi 0x80-0x9F)
 }
 
 function wrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {

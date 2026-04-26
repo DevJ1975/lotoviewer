@@ -3,7 +3,9 @@ import type { Equipment, LotoReview } from './types'
 
 // ------------------------------ types ------------------------------
 
-interface DeptStats {
+// Exported so the unit tests in __tests__/lib/report.test.ts can assert
+// the aggregator's output shape directly. Internally still the same row.
+export interface DeptStats {
   dept:        string
   total:       number
   complete:    number
@@ -43,7 +45,10 @@ const MARGIN  = 36
 
 // ------------------------------ stat aggregation ------------------------------
 
-function latestApprovedReviewByDept(reviews: LotoReview[]): Map<string, LotoReview> {
+// Exported for unit testing — stable across PDF layout tweaks because
+// the aggregation has its own correctness criteria (most-recent-approved
+// review wins per dept; unapproved reviews never count).
+export function latestApprovedReviewByDept(reviews: LotoReview[]): Map<string, LotoReview> {
   const map = new Map<string, LotoReview>()
   // The reviews list may arrive unsorted; pick the newest approved per dept.
   for (const r of reviews) {
@@ -56,7 +61,8 @@ function latestApprovedReviewByDept(reviews: LotoReview[]): Map<string, LotoRevi
   return map
 }
 
-function computeDeptStats(active: Equipment[], reviews: LotoReview[]): DeptStats[] {
+// Exported for unit testing — pure aggregator, no PDF dependency.
+export function computeDeptStats(active: Equipment[], reviews: LotoReview[]): DeptStats[] {
   const latest = latestApprovedReviewByDept(reviews)
   const byDept = new Map<string, Equipment[]>()
   for (const eq of active) {
