@@ -20,12 +20,13 @@ import { requestPersistentStorage } from '@/lib/platform'
 const PUBLIC_PATHS = new Set(['/login', '/welcome'])
 
 const NAV_LINKS: { href: string; label: string }[] = [
-  { href: '/',             label: 'Dashboard' },
-  { href: '/status',       label: 'Status' },
-  { href: '/departments',  label: 'Departments' },
-  { href: '/print',        label: 'Print Queue' },
-  { href: '/import',       label: 'Import' },
-  { href: '/decommission', label: 'Decommission' },
+  { href: '/',                 label: 'Dashboard' },
+  { href: '/confined-spaces',  label: 'Confined Spaces' },
+  { href: '/status',           label: 'Status' },
+  { href: '/departments',      label: 'Departments' },
+  { href: '/print',            label: 'Print Queue' },
+  { href: '/import',           label: 'Import' },
+  { href: '/decommission',     label: 'Decommission' },
 ]
 
 // Wraps the app shell (header, footer) so it only renders on authenticated
