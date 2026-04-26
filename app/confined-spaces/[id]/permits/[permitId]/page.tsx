@@ -14,9 +14,11 @@ import type {
 } from '@/lib/types'
 import {
   effectiveThresholds,
+  evaluateChannel,
   evaluateTest,
   permitState,
   type ReadingStatus,
+  type ThresholdSet,
 } from '@/lib/confinedSpaceThresholds'
 import { CANCEL_REASON_LABELS } from '@/lib/confinedSpaceLabels'
 
@@ -293,6 +295,7 @@ export default function PermitDetailPage() {
             permitId={permitId}
             userId={userId}
             kindHint={preEntryTest ? 'periodic' : 'pre_entry'}
+            thresholds={thresholds}
             onSaved={(t) => setTests(prev => [t, ...prev])}
           />
         )}
@@ -501,12 +504,13 @@ function ChannelStat({ label, value, unit, status }: { label: string; value: num
 // ── New test inline form ───────────────────────────────────────────────────
 
 function NewTestForm({
-  permitId, userId, kindHint, onSaved,
+  permitId, userId, kindHint, thresholds, onSaved,
 }: {
-  permitId: string
-  userId:   string | null
-  kindHint: AtmosphericTestKind
-  onSaved:  (test: AtmosphericTest) => void
+  permitId:   string
+  userId:     string | null
+  kindHint:   AtmosphericTestKind
+  thresholds: ThresholdSet
+  onSaved:    (test: AtmosphericTest) => void
 }) {
   const [kind, setKind]                 = useState<AtmosphericTestKind>(kindHint)
   const [o2, setO2]                     = useState('')
@@ -527,6 +531,15 @@ function NewTestForm({
     const n = Number(t)
     return Number.isNaN(n) ? null : n
   }
+
+  // Live per-channel pass/fail so the tester can see whether a reading is
+  // acceptable BEFORE submitting. evaluateChannel returns 'unknown' for
+  // empty/non-numeric values, which keeps the input neutral until the
+  // tester actually types something.
+  const o2Status  = evaluateChannel('o2',  num(o2),  thresholds)
+  const lelStatus = evaluateChannel('lel', num(lel), thresholds)
+  const h2sStatus = evaluateChannel('h2s', num(h2s), thresholds)
+  const coStatus  = evaluateChannel('co',  num(co),  thresholds)
 
   async function submit() {
     if (!userId) { setError('You must be logged in.'); return }
@@ -577,11 +590,21 @@ function NewTestForm({
           <option value="post_alarm">Post-alarm</option>
         </select>
       </div>
+      {/* Threshold legend right above the inputs so the tester doesn't have
+          to remember §(d)(5) numbers or open another tab. Same numbers the
+          row is evaluated against — they tick if the supervisor edits the
+          permit's acceptable_conditions_override. */}
+      <p className="text-[10px] text-slate-500">
+        Acceptable: O₂ {thresholds.o2_min}–{thresholds.o2_max}%
+        {' · '}LEL &lt;{thresholds.lel_max}%
+        {' · '}H₂S &lt;{thresholds.h2s_max} ppm
+        {' · '}CO &lt;{thresholds.co_max} ppm
+      </p>
       <div className="grid grid-cols-4 gap-2">
-        <NumInput label="O₂ (%)"  value={o2}  onChange={setO2}  step="0.1" />
-        <NumInput label="LEL (%)" value={lel} onChange={setLel} step="0.1" />
-        <NumInput label="H₂S (ppm)" value={h2s} onChange={setH2s} step="0.1" />
-        <NumInput label="CO (ppm)"  value={co}  onChange={setCo}  step="0.1" />
+        <NumInput label="O₂ (%)"    value={o2}  onChange={setO2}  step="0.1" status={o2Status}  />
+        <NumInput label="LEL (%)"   value={lel} onChange={setLel} step="0.1" status={lelStatus} />
+        <NumInput label="H₂S (ppm)" value={h2s} onChange={setH2s} step="0.1" status={h2sStatus} />
+        <NumInput label="CO (ppm)"  value={co}  onChange={setCo}  step="0.1" status={coStatus}  />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <input
@@ -614,17 +637,38 @@ function NewTestForm({
   )
 }
 
-function NumInput({ label, value, onChange, step }: { label: string; value: string; onChange: (v: string) => void; step?: string }) {
+function NumInput({
+  label, value, onChange, step, status,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  step?: string
+  // 'unknown' = empty / not yet typed → neutral; 'pass'/'fail' tint the
+  // border AND the label so the cue carries on a tester glancing at the
+  // form from arm's length on a noisy plant floor.
+  status?: ReadingStatus
+}) {
+  const borderCls = status === 'fail'
+    ? 'border-rose-400 ring-2 ring-rose-200 bg-rose-50/40'
+    : status === 'pass'
+    ? 'border-emerald-400 ring-2 ring-emerald-200 bg-emerald-50/40'
+    : 'border-slate-200 bg-white'
+  const labelCls = status === 'fail'
+    ? 'text-rose-700'
+    : status === 'pass'
+    ? 'text-emerald-700'
+    : 'text-slate-500'
   return (
     <label className="flex flex-col gap-0.5">
-      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</span>
+      <span className={`text-[10px] font-semibold uppercase tracking-wide ${labelCls}`}>{label}</span>
       <input
         type="number"
         step={step}
         inputMode="decimal"
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+        className={`rounded-lg border px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy ${borderCls}`}
       />
     </label>
   )

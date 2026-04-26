@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import type { ConfinedSpace, ConfinedSpaceClassification, ConfinedSpaceType } from '@/lib/types'
 import { SPACE_TYPE_LABELS, CLASSIFICATION_LABELS } from '@/lib/confinedSpaceLabels'
+import { DepartmentPicker } from '@/components/DepartmentPicker'
 
 // First slice of the Confined Space module per OSHA 29 CFR 1910.146.
 // Single-pane list view with a department filter and an inline "Add space"
@@ -32,6 +33,7 @@ export default function ConfinedSpacesPage() {
   const [loading, setLoading]     = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [filterDept, setFilterDept] = useState<string | null>(null)
+  const [query, setQuery]         = useState('')
   const [addOpen, setAddOpen]     = useState(false)
 
   const load = useCallback(async () => {
@@ -58,10 +60,21 @@ export default function ConfinedSpacesPage() {
     return [...set].sort((a, b) => a.localeCompare(b))
   }, [spaces])
 
-  const visible = useMemo(
-    () => filterDept ? spaces.filter(s => s.department === filterDept) : spaces,
-    [spaces, filterDept],
-  )
+  // Combined dept-filter + free-text search. The text search matches
+  // space_id, description, and department case-insensitively — the three
+  // fields a supervisor is likely to remember when hunting for a space.
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return spaces.filter(s => {
+      if (filterDept && s.department !== filterDept) return false
+      if (!q) return true
+      return (
+        s.space_id.toLowerCase().includes(q) ||
+        s.description.toLowerCase().includes(q) ||
+        s.department.toLowerCase().includes(q)
+      )
+    })
+  }, [spaces, filterDept, query])
 
   if (loadError) {
     return (
@@ -105,6 +118,32 @@ export default function ConfinedSpacesPage() {
         </div>
       </header>
 
+      {/* Search bar — visible whenever there's at least one space, since
+          a single-row inventory still benefits from the affordance and a
+          supervisor with 50+ rows depends on it. */}
+      {spaces.length > 0 && (
+        <div className="relative">
+          <input
+            type="search"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search by ID, description, or department…"
+            className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+          />
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">⌕</span>
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-sm px-1"
+            >
+              ×
+            </button>
+          )}
+        </div>
+      )}
+
       {departments.length > 1 && (
         <div className="flex flex-wrap gap-1.5">
           <DeptChip label="All" active={filterDept === null} onClick={() => setFilterDept(null)} />
@@ -118,8 +157,17 @@ export default function ConfinedSpacesPage() {
         <div className="py-12 text-center text-sm text-slate-400">Loading…</div>
       ) : visible.length === 0 ? (
         <div className="py-12 text-center space-y-2">
-          <p className="text-sm font-semibold text-slate-700">No confined spaces yet.</p>
-          <p className="text-xs text-slate-400">Add your first space to start managing entry permits.</p>
+          {spaces.length === 0 ? (
+            <>
+              <p className="text-sm font-semibold text-slate-700">No confined spaces yet.</p>
+              <p className="text-xs text-slate-400">Add your first space to start managing entry permits.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-slate-700">No spaces match your filter.</p>
+              <p className="text-xs text-slate-400">Try a different search term or clear the department filter.</p>
+            </>
+          )}
         </div>
       ) : (
         <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white overflow-hidden">
@@ -280,17 +328,12 @@ function AddSpaceDialog({ existingIds, knownDepartments, onClose, onAdded }: Add
           </Field>
 
           <Field label="Department">
-            <input
-              type="text"
+            <DepartmentPicker
               value={department}
-              onChange={e => setDepartment(e.target.value)}
-              list="cs-depts"
+              onChange={setDepartment}
+              knownDepartments={knownDepartments}
               placeholder="Packaging"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             />
-            <datalist id="cs-depts">
-              {knownDepartments.map(d => <option key={d} value={d} />)}
-            </datalist>
           </Field>
 
           <div className="grid grid-cols-2 gap-3">

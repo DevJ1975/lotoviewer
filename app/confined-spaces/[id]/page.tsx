@@ -13,6 +13,7 @@ import type {
 import { permitState, SITE_DEFAULTS } from '@/lib/confinedSpaceThresholds'
 import { SPACE_TYPE_LABELS, CLASSIFICATION_LABELS } from '@/lib/confinedSpaceLabels'
 import SpacePhotoSlot from '@/components/confined/SpacePhotoSlot'
+import { DepartmentPicker } from '@/components/DepartmentPicker'
 
 // Detail page for a single confined space. Read-mostly with an "Edit"
 // affordance opening an inline form.
@@ -292,6 +293,27 @@ function EditDetailsDialog({ space, onClose, onSaved, onDeleted }: EditProps) {
   const [internalNotes, setInternalNotes]   = useState(space.internal_notes ?? '')
   const [submitting, setSubmitting]         = useState(false)
   const [serverError, setServerError]       = useState<string | null>(null)
+  const [knownDepartments, setKnownDepartments] = useState<string[]>([space.department])
+
+  // Pull every department in use so the picker can offer a "switch to an
+  // existing one" path. The list view does this on render but the detail
+  // page mounts the dialog directly, so we have to fetch our own set.
+  useEffect(() => {
+    let cancelled = false
+    supabase
+      .from('loto_confined_spaces')
+      .select('department')
+      .eq('decommissioned', false)
+      .then(({ data }) => {
+        if (cancelled || !data) return
+        const set = new Set<string>([space.department])
+        for (const row of data as { department: string }[]) {
+          if (row.department) set.add(row.department)
+        }
+        setKnownDepartments([...set].sort((a, b) => a.localeCompare(b)))
+      })
+    return () => { cancelled = true }
+  }, [space.department])
 
   async function handleSave() {
     setSubmitting(true)
@@ -392,11 +414,11 @@ function EditDetailsDialog({ space, onClose, onSaved, onDeleted }: EditProps) {
           </Field>
 
           <Field label="Department">
-            <input
-              type="text"
+            <DepartmentPicker
               value={department}
-              onChange={e => setDepartment(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              onChange={setDepartment}
+              knownDepartments={knownDepartments}
+              placeholder={space.department}
             />
           </Field>
 
