@@ -6,7 +6,11 @@
 //
 // Bump CACHE_VERSION whenever the strategies change so old SW clients clear
 // their stores cleanly via the activate handler.
-const CACHE_VERSION = 'v4'
+// v5 (2026-04-26) — / is now a home screen rather than the LOTO equipment
+// dashboard. PWA clients on iPad were serving the cached old / shell from
+// v4. Bumping the version forces the activate handler to evict stale
+// caches on next launch.
+const CACHE_VERSION = 'v5'
 const STATIC_CACHE  = `loto-static-${CACHE_VERSION}`
 const HTML_CACHE    = `loto-html-${CACHE_VERSION}`
 const IMAGE_CACHE   = `loto-images-${CACHE_VERSION}`
