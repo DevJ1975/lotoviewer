@@ -1,0 +1,319 @@
+'use client'
+
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { supabase } from '@/lib/supabase'
+import type { ConfinedSpace, ConfinedSpacePermit, AtmosphericTest } from '@/lib/types'
+import {
+  permitCountdown,
+  summarize,
+} from '@/lib/permitStatus'
+import {
+  effectiveThresholds,
+  evaluateTest,
+  type ReadingStatus,
+} from '@/lib/confinedSpaceThresholds'
+
+// Big-monitor status board for active permits. Designed for a 55"+ TV
+// hung in a control room — dark background, large fonts, high-contrast
+// counters. Auto-refreshes data every 30 seconds and ticks the per-permit
+// countdown every second so the timer is always live.
+//
+// Pertinent at-a-glance info (top headline tiles):
+//   • PERMITS ACTIVE — total signed, not expired, not canceled
+//   • CLOSE TO EXPIRY — ≤ 2 hours remaining
+//   • PEOPLE IN SPACES — sum of entrants across active permits
+//
+// Per-permit card:
+//   • Serial (huge mono)
+//   • Space ID + description
+//   • Live countdown (huge, color-coded by remaining time)
+//   • Entrants list with count
+//   • Attendant(s)
+//   • Latest atmospheric reading status
+//
+// A separate "EXPIRED — NEEDS CANCELLATION" panel surfaces signed permits
+// past expires_at but not yet canceled. Per OSHA §1910.146(e)(5),
+// expiration alone isn't a cancellation — the supervisor must verify
+// evacuation and formally cancel. Putting these on the board makes that
+// task visible.
+
+const REFRESH_MS = 30_000   // data refetch
+const TICK_MS    = 1000     // countdown tick
+
+interface PermitWithSpace extends ConfinedSpacePermit {
+  space?: ConfinedSpace
+  latestTest?: AtmosphericTest | null
+}
+
+export default function PermitStatusBoard() {
+  const [permits, setPermits] = useState<PermitWithSpace[]>([])
+  const [loading, setLoading] = useState(true)
+  const [now, setNow]         = useState<number>(() => Date.now())
+  const [lastRefresh, setLastRefresh] = useState<number>(() => Date.now())
+
+  const load = useCallback(async () => {
+    // Pull every signed, not-canceled permit. We filter expired ones
+    // client-side so we can still surface them on the "needs cancellation"
+    // panel below. canceled rows are dropped at the DB layer.
+    const { data: permitRows } = await supabase
+      .from('loto_confined_space_permits')
+      .select('*')
+      .is('canceled_at', null)
+      .not('entry_supervisor_signature_at', 'is', null)
+      .order('expires_at', { ascending: true })
+
+    const ps = (permitRows ?? []) as ConfinedSpacePermit[]
+
+    if (ps.length === 0) {
+      setPermits([])
+      setLoading(false)
+      setLastRefresh(Date.now())
+      return
+    }
+
+    const spaceIds = [...new Set(ps.map(p => p.space_id))]
+    const permitIds = ps.map(p => p.id)
+
+    const [spacesRes, testsRes] = await Promise.all([
+      supabase.from('loto_confined_spaces').select('*').in('space_id', spaceIds),
+      supabase.from('loto_atmospheric_tests').select('*').in('permit_id', permitIds).order('tested_at', { ascending: false }),
+    ])
+
+    const spaces = (spacesRes.data ?? []) as ConfinedSpace[]
+    const tests  = (testsRes.data  ?? []) as AtmosphericTest[]
+
+    const spaceById = new Map(spaces.map(s => [s.space_id, s]))
+    const latestTestByPermit = new Map<string, AtmosphericTest>()
+    for (const t of tests) {
+      // tests are sorted desc — first hit per permit_id wins
+      if (!latestTestByPermit.has(t.permit_id)) latestTestByPermit.set(t.permit_id, t)
+    }
+
+    setPermits(ps.map(p => ({
+      ...p,
+      space:      spaceById.get(p.space_id),
+      latestTest: latestTestByPermit.get(p.id) ?? null,
+    })))
+    setLoading(false)
+    setLastRefresh(Date.now())
+  }, [])
+
+  // Initial load + 30s refetch
+  useEffect(() => {
+    load()
+    const id = setInterval(load, REFRESH_MS)
+    return () => clearInterval(id)
+  }, [load])
+
+  // 1s tick for the live countdowns. Cheap — just bumps `now` so the
+  // memoized derived state recomputes.
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), TICK_MS)
+    return () => clearInterval(id)
+  }, [])
+
+  const summary = useMemo(() => summarize(permits, now), [permits, now])
+
+  const active = useMemo(
+    () => permits
+      .filter(p => !permitCountdown(p, now).expired)
+      .sort((a, b) => new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime()),
+    [permits, now],
+  )
+  const expired = useMemo(
+    () => permits.filter(p => permitCountdown(p, now).expired),
+    [permits, now],
+  )
+
+  return (
+    <div className="min-h-[calc(100vh-6rem)] bg-slate-950 text-white px-4 sm:px-8 py-6 space-y-6">
+      <header className="flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
+            Permit Status Board
+          </h1>
+          <p className="text-sm text-slate-400 mt-1">
+            Live status of permit-required confined-space entries · OSHA 29 CFR 1910.146
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-3xl sm:text-4xl font-mono font-bold">
+            {new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </p>
+          <p className="text-[11px] text-slate-500">
+            Refreshed {Math.max(0, Math.floor((now - lastRefresh) / 1000))}s ago · auto every 30s
+          </p>
+        </div>
+      </header>
+
+      {/* Headline tiles */}
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Headline label="Permits Active"        value={summary.active}        tone="info" />
+        <Headline label="Close to Expiry (≤2h)" value={summary.closeToExpiry} tone={summary.closeToExpiry > 0 ? 'warning' : 'info'} />
+        <Headline label="People in Spaces"      value={summary.totalEntrants} tone="info" />
+        <Headline label="Expired — Verify Evac" value={summary.expired}       tone={summary.expired > 0 ? 'critical' : 'info'} />
+      </section>
+
+      {/* Expired-not-canceled — surface FIRST so it grabs attention */}
+      {expired.length > 0 && (
+        <section className="rounded-xl border-4 border-rose-500 bg-rose-950/40 p-4 sm:p-6 space-y-3">
+          <h2 className="text-2xl sm:text-3xl font-black text-rose-300 flex items-center gap-3">
+            <span className="inline-block w-3 h-3 rounded-full bg-rose-500 animate-pulse" />
+            Expired permits — verify evacuation and cancel
+          </h2>
+          <ul className="space-y-2">
+            {expired.map(p => (
+              <li key={p.id} className="bg-slate-900/70 rounded-lg px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <p className="text-lg font-mono font-bold text-rose-200 tracking-wider">{p.serial}</p>
+                  <p className="text-sm text-slate-300 truncate">
+                    <span className="font-semibold">{p.space_id}</span>
+                    {p.space?.description && <> · {p.space.description}</>}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[11px] text-rose-300 uppercase tracking-widest font-bold">Expired</p>
+                  <p className="text-sm text-slate-400">{new Date(p.expires_at).toLocaleString()}</p>
+                </div>
+                <Link
+                  href={`/confined-spaces/${encodeURIComponent(p.space_id)}/permits/${p.id}`}
+                  className="shrink-0 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm transition-colors"
+                >
+                  Open permit →
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Active permit grid */}
+      {loading ? (
+        <div className="flex items-center justify-center py-24 text-slate-400">
+          <div className="w-12 h-12 border-4 border-slate-700 border-t-white rounded-full animate-spin" />
+        </div>
+      ) : active.length === 0 ? (
+        <div className="bg-slate-900/40 rounded-xl border border-slate-800 p-12 text-center">
+          <p className="text-2xl text-slate-300 font-bold">No active permits</p>
+          <p className="text-sm text-slate-500 mt-2">
+            When a permit is signed and active, it appears here with a live countdown.
+          </p>
+        </div>
+      ) : (
+        <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {active.map(p => <PermitCard key={p.id} permit={p} now={now} />)}
+        </section>
+      )}
+
+      <footer className="text-[11px] text-slate-600 text-center pt-4">
+        Soteria Field · {active.length + expired.length} permit{active.length + expired.length === 1 ? '' : 's'} on display
+      </footer>
+    </div>
+  )
+}
+
+// ── Headline counter tile ─────────────────────────────────────────────────
+
+function Headline({ label, value, tone }: { label: string; value: number; tone: 'info' | 'warning' | 'critical' }) {
+  const cls =
+    tone === 'critical' ? 'bg-rose-950/60 border-rose-500/60'
+  : tone === 'warning'  ? 'bg-amber-950/60 border-amber-500/60'
+  :                       'bg-slate-900/60 border-slate-700'
+  const numCls =
+    tone === 'critical' ? 'text-rose-200'
+  : tone === 'warning'  ? 'text-amber-200'
+  :                       'text-white'
+  return (
+    <div className={`rounded-xl border-2 ${cls} px-5 py-4`}>
+      <p className="text-[11px] sm:text-xs uppercase tracking-widest text-slate-400 font-bold">{label}</p>
+      <p className={`text-5xl sm:text-6xl font-black tabular-nums mt-1 ${numCls}`}>{value}</p>
+    </div>
+  )
+}
+
+// ── Per-permit card ───────────────────────────────────────────────────────
+
+function PermitCard({ permit, now }: { permit: PermitWithSpace; now: number }) {
+  const countdown = permitCountdown(permit, now)
+  const t = effectiveThresholds(permit, permit.space ?? null)
+  const reading = permit.latestTest ? evaluateTest(permit.latestTest, t) : null
+
+  const cardCls =
+    countdown.tone === 'critical' ? 'border-rose-500 bg-rose-950/30 ring-2 ring-rose-500/40'
+  : countdown.tone === 'warning'  ? 'border-amber-500 bg-amber-950/30'
+  :                                 'border-emerald-700 bg-emerald-950/20'
+
+  const timerCls =
+    countdown.tone === 'critical' ? 'text-rose-300'
+  : countdown.tone === 'warning'  ? 'text-amber-300'
+  :                                 'text-emerald-300'
+
+  return (
+    <Link
+      href={`/confined-spaces/${encodeURIComponent(permit.space_id)}/permits/${permit.id}`}
+      className={`rounded-xl border-2 ${cardCls} p-4 sm:p-5 space-y-3 hover:bg-white/5 transition-colors block`}
+    >
+      <header className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-mono font-bold tracking-wider text-slate-300 text-sm">{permit.serial}</p>
+          <p className="text-lg sm:text-xl font-bold text-white mt-0.5">{permit.space_id}</p>
+          {permit.space?.description && (
+            <p className="text-xs text-slate-400 truncate">{permit.space.description}</p>
+          )}
+        </div>
+        {reading && <ReadingPill status={reading.status} />}
+      </header>
+
+      <div className={`text-5xl sm:text-6xl font-black tabular-nums font-mono ${timerCls} text-center py-2`}>
+        {countdown.label}
+      </div>
+      <p className="text-[10px] text-slate-500 text-center uppercase tracking-widest -mt-2">
+        Time remaining · expires {new Date(permit.expires_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+      </p>
+
+      <RosterRow label={`Entrants (${permit.entrants.length})`} names={permit.entrants} tone="entrant" />
+      <RosterRow label={`Attendant${permit.attendants.length === 1 ? '' : 's'}`} names={permit.attendants} tone="attendant" />
+
+      <p className="text-[11px] text-slate-400 truncate" title={permit.purpose}>
+        <span className="font-semibold text-slate-300">Purpose:</span> {permit.purpose}
+      </p>
+    </Link>
+  )
+}
+
+function RosterRow({ label, names, tone }: { label: string; names: string[]; tone: 'entrant' | 'attendant' }) {
+  const dotCls = tone === 'entrant' ? 'bg-sky-400' : 'bg-violet-400'
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">{label}</p>
+      {names.length === 0 ? (
+        <p className="text-sm text-slate-500 italic">— none recorded —</p>
+      ) : (
+        <ul className="flex flex-wrap gap-1.5">
+          {names.map((n, i) => (
+            <li key={`${n}-${i}`} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-800/80 text-sm text-slate-100">
+              <span className={`inline-block w-1.5 h-1.5 rounded-full ${dotCls}`} />
+              {n}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function ReadingPill({ status }: { status: ReadingStatus }) {
+  const cls = status === 'pass' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-600'
+            : status === 'fail' ? 'bg-rose-500/20 text-rose-300 border-rose-500 animate-pulse'
+            :                     'bg-slate-700/50 text-slate-300 border-slate-600'
+  const label = status === 'pass' ? 'Atmos OK'
+              : status === 'fail' ? 'Atmos FAIL'
+              :                     'Atmos —'
+  return (
+    <span className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${cls}`}>
+      {label}
+    </span>
+  )
+}
+

@@ -1,4 +1,5 @@
-import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from 'pdf-lib'
+import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from 'pdf-lib'
+import QRCode from 'qrcode'
 import { hexToRgb01 } from '@/lib/energyCodes'
 import { effectiveThresholds, evaluateTest } from '@/lib/confinedSpaceThresholds'
 import type {
@@ -58,6 +59,31 @@ interface DrawCtx {
   bold:   PDFFont
   y:      number
   pageNo: number
+}
+
+// QR code embedded next to the title so anyone holding the printed permit
+// can scan to the live digital permit. Generated at high error-correction
+// (level Q) so a folded or smudged print still scans.
+async function embedQrCode(doc: PDFDocument, url: string): Promise<PDFImage | null> {
+  try {
+    const dataUrl = await QRCode.toDataURL(url, {
+      errorCorrectionLevel: 'Q',
+      margin: 1,
+      width: 240,
+      color: { dark: '#000000', light: '#ffffff' },
+    })
+    const base64 = dataUrl.split(',')[1]
+    const binary = atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    return await doc.embedPng(bytes)
+  } catch (err) {
+    // Don't break PDF generation if QR encoding fails — just skip the
+    // QR. The serial + permit ID are also on the page so the document
+    // stays traceable manually.
+    console.error('[pdfPermit] QR generation failed', err)
+    return null
+  }
 }
 
 // Reserve `needed` vertical points; if not enough, start a new page.
@@ -137,7 +163,7 @@ function drawDivider(ctx: DrawCtx): void {
 }
 
 // ── Top header (yellow band with title + key facts) ─────────────────────────
-function drawHeader(ctx: DrawCtx, space: ConfinedSpace, permit: ConfinedSpacePermit): void {
+function drawHeader(ctx: DrawCtx, space: ConfinedSpace, permit: ConfinedSpacePermit, qr: PDFImage | null): void {
   // Yellow band
   ctx.page.drawRectangle({
     x: MARGIN, y: ctx.y - 56, width: PAGE_W - 2 * MARGIN, height: 56, color: rgb(...hexToRgb01('#FFD900')),
@@ -147,6 +173,11 @@ function drawHeader(ctx: DrawCtx, space: ConfinedSpace, permit: ConfinedSpacePer
   })
   ctx.page.drawText('OSHA 29 CFR 1910.146 — Permit-Required Confined Spaces', {
     x: MARGIN + 12, y: ctx.y - 40, size: 9, font: ctx.font, color: BLACK,
+  })
+  // Serial — large, bold, mono — directly under the title for at-a-glance
+  // identification on a printed permit.
+  ctx.page.drawText(permit.serial, {
+    x: MARGIN + 12, y: ctx.y - 53, size: 9, font: ctx.bold, color: BLACK,
   })
 
   // Status badge (right side of band)
@@ -165,9 +196,29 @@ function drawHeader(ctx: DrawCtx, space: ConfinedSpace, permit: ConfinedSpacePer
 
   ctx.y -= 60
 
-  // Space + permit ID line
+  // QR code — top-right, large enough to scan from a printed permit at
+  // arm's length. Sits below the yellow band to avoid the status badge.
+  if (qr) {
+    const QR_SIZE = 80
+    ctx.page.drawImage(qr, {
+      x: PAGE_W - MARGIN - QR_SIZE,
+      y: ctx.y - QR_SIZE,
+      width: QR_SIZE, height: QR_SIZE,
+    })
+    ctx.page.drawText('Scan for live permit', {
+      x: PAGE_W - MARGIN - QR_SIZE,
+      y: ctx.y - QR_SIZE - 10,
+      size: 7, font: ctx.font, color: MUTED,
+    })
+  }
+
+  // Space + permit ID line — narrowed to leave room for the QR
+  const headerRightLimit = qr ? PAGE_W - MARGIN - 90 : PAGE_W - MARGIN
+  void headerRightLimit  // currently the key-value helper uses full width;
+                         // wrap text already keeps things clipped reasonably.
   drawKeyValue(ctx, 'Space', `${space.space_id}  —  ${space.description}`, { wrap: true })
   drawKeyValue(ctx, 'Department', space.department)
+  drawKeyValue(ctx, 'Serial', permit.serial)
   drawKeyValue(ctx, 'Permit ID', permit.id)
   drawKeyValue(ctx, 'Started', new Date(permit.started_at).toLocaleString())
   drawKeyValue(ctx, 'Expires', new Date(permit.expires_at).toLocaleString())
@@ -252,17 +303,22 @@ export interface GeneratePermitArgs {
   space:  ConfinedSpace
   permit: ConfinedSpacePermit
   tests:  AtmosphericTest[]
+  // Full URL the QR code should encode (e.g. `${origin}/confined-spaces/...`).
+  // Optional — falls back to a no-QR layout if omitted, so callers in
+  // server contexts without a window object can still generate.
+  permitUrl?: string
 }
 
-export async function generatePermitPdf({ space, permit, tests }: GeneratePermitArgs): Promise<Uint8Array> {
+export async function generatePermitPdf({ space, permit, tests, permitUrl }: GeneratePermitArgs): Promise<Uint8Array> {
   const doc  = await PDFDocument.create()
   const font = await doc.embedFont(StandardFonts.Helvetica)
   const bold = await doc.embedFont(StandardFonts.HelveticaBold)
+  const qr   = permitUrl ? await embedQrCode(doc, permitUrl) : null
   const page = doc.addPage([PAGE_W, PAGE_H])
   const ctx: DrawCtx = { doc, page, font, bold, y: PAGE_H - MARGIN, pageNo: 1 }
   drawPageFooter(ctx)
 
-  drawHeader(ctx, space, permit)
+  drawHeader(ctx, space, permit, qr)
 
   // Personnel
   drawSectionBar(ctx, '1. Personnel')

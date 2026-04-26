@@ -85,9 +85,15 @@ describe('isFeatureAccessible', () => {
 describe('getFeaturesByCategory', () => {
   it('returns all enabled features in a category, preserving registry order', () => {
     const safety = getFeaturesByCategory('safety')
-    // Order from FEATURES: loto, confined-spaces, near-miss, hot-work, jha
     const ids = safety.map(f => f.id)
-    expect(ids).toEqual(['loto', 'confined-spaces', 'near-miss', 'hot-work', 'jha'])
+    expect(ids).toEqual([
+      'loto',
+      'confined-spaces',
+      'permit-status-board',
+      'near-miss',
+      'hot-work',
+      'jha',
+    ])
   })
 
   it('includes coming-soon entries (they have enabled=true)', () => {

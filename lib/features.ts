@@ -58,6 +58,15 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
   },
   {
+    id:          'permit-status-board',
+    name:        'Permit Status Board',
+    description: 'Live big-monitor view of active permits + countdown timers',
+    href:        '/confined-spaces/status',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
     id:          'near-miss',
     name:        'Near-Miss Reporting',
     description: 'Capture and track near-miss incidents',
