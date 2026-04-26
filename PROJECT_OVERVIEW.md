@@ -1,4 +1,4 @@
-# Soteria LOTO Pro — Overview
+# Soteria Field — Overview
 
 ## Tech Stack
 

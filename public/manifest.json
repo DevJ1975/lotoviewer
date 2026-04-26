@@ -1,7 +1,7 @@
 {
-  "name": "Soteria LOTO Pro",
-  "short_name": "Soteria LOTO Pro",
-  "description": "Soteria LOTO Pro — real-time placard completion tracking for field teams",
+  "name": "Soteria Field",
+  "short_name": "Soteria Field",
+  "description": "Soteria Field — real-time field-safety tracking (LOTO, confined spaces, hot work) for production teams",
   "start_url": "/",
   "scope": "/",
   "id": "/",

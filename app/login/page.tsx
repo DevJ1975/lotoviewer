@@ -50,7 +50,9 @@ function LoginForm() {
         className="w-full max-w-sm bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-6 space-y-5"
       >
         <div className="text-center space-y-1">
-          <h1 className="text-xl font-bold text-slate-900">Soteria LOTO Pro</h1>
+          <h1 className="text-xl font-bold text-slate-900">
+            Soteria <span className="text-brand-navy tracking-wider">FIELD</span>
+          </h1>
           <p className="text-sm text-slate-500">Sign in to continue</p>
         </div>
 

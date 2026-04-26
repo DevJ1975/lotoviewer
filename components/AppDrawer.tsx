@@ -76,7 +76,7 @@ export default function AppDrawer({ open, onClose }: Props) {
               SL
             </div>
             <span className="text-slate-900 font-semibold text-sm tracking-tight truncate">
-              Soteria <span className="text-brand-navy font-bold">LOTO Pro</span>
+              Soteria <span className="text-brand-navy font-bold tracking-wider">FIELD</span>
             </span>
           </div>
           <button
