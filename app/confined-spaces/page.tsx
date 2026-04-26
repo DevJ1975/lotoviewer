@@ -4,31 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import type { ConfinedSpace, ConfinedSpaceClassification, ConfinedSpaceType } from '@/lib/types'
+import { SPACE_TYPE_LABELS, CLASSIFICATION_LABELS } from '@/lib/confinedSpaceLabels'
 
 // First slice of the Confined Space module per OSHA 29 CFR 1910.146.
 // Single-pane list view with a department filter and an inline "Add space"
 // dialog so the user can seed data immediately. Three-pane preview layout
 // (matching /) is a follow-up — list + detail-page link is enough to
 // validate the shape end-to-end first.
-
-const SPACE_TYPE_LABELS: Record<ConfinedSpaceType, string> = {
-  tank:    'Tank',
-  silo:    'Silo',
-  vault:   'Vault',
-  pit:     'Pit',
-  hopper:  'Hopper',
-  vessel:  'Vessel',
-  sump:    'Sump',
-  plenum:  'Plenum',
-  manhole: 'Manhole',
-  other:   'Other',
-}
-
-const CLASSIFICATION_LABELS: Record<ConfinedSpaceClassification, string> = {
-  permit_required: 'Permit-Required',
-  non_permit:      'Non-Permit',
-  reclassified:    'Reclassified',
-}
 
 // Visual scheme picked to make the OSHA classification obvious at a glance —
 // the difference between permit-required and non-permit is the difference

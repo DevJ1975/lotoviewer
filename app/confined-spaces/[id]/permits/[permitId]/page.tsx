@@ -18,6 +18,7 @@ import {
   permitState,
   type ReadingStatus,
 } from '@/lib/confinedSpaceThresholds'
+import { CANCEL_REASON_LABELS } from '@/lib/confinedSpaceLabels'
 
 // Live permit page — the OSHA-compliant lifecycle:
 //   1. Permit was created in pending_signature state
@@ -29,13 +30,6 @@ import {
 //
 // This single page covers all four states (pending / active / expired /
 // canceled) by switching what's editable.
-
-const CANCEL_REASON_LABELS: Record<CancelReason, string> = {
-  task_complete:        'Task complete',
-  prohibited_condition: 'Prohibited condition (evacuated)',
-  expired:              'Time expired',
-  other:                'Other',
-}
 
 export default function PermitDetailPage() {
   const params  = useParams<{ id: string; permitId: string }>()

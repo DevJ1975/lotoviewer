@@ -11,24 +11,11 @@ import type {
   ConfinedSpacePermit,
 } from '@/lib/types'
 import { permitState, SITE_DEFAULTS } from '@/lib/confinedSpaceThresholds'
+import { SPACE_TYPE_LABELS, CLASSIFICATION_LABELS } from '@/lib/confinedSpaceLabels'
 import SpacePhotoSlot from '@/components/confined/SpacePhotoSlot'
 
 // Detail page for a single confined space. Read-mostly with an "Edit"
-// affordance opening an inline form. Recent permits load from
-// loto_confined_space_permits but the issuance flow itself ships in a
-// follow-up commit (the button is wired to a /confined-spaces/[id]/permits/new
-// route that doesn't exist yet — we'll add it next).
-
-const SPACE_TYPE_LABELS: Record<ConfinedSpaceType, string> = {
-  tank: 'Tank', silo: 'Silo', vault: 'Vault', pit: 'Pit', hopper: 'Hopper',
-  vessel: 'Vessel', sump: 'Sump', plenum: 'Plenum', manhole: 'Manhole', other: 'Other',
-}
-
-const CLASSIFICATION_LABELS: Record<ConfinedSpaceClassification, string> = {
-  permit_required: 'Permit-Required',
-  non_permit:      'Non-Permit',
-  reclassified:    'Reclassified',
-}
+// affordance opening an inline form.
 
 export default function ConfinedSpaceDetailPage() {
   const params  = useParams<{ id: string }>()
