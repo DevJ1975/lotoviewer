@@ -106,13 +106,21 @@ export default function ConfinedSpacesPage() {
             Permit-required confined spaces inventory · OSHA 29 CFR 1910.146
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setAddOpen(true)}
-          className="self-start px-4 py-2 rounded-lg bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 transition-colors"
-        >
-          + Add space
-        </button>
+        <div className="flex items-center gap-2 self-start">
+          <Link
+            href="/confined-spaces/import"
+            className="px-3 py-2 rounded-lg border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+          >
+            Import CSV
+          </Link>
+          <button
+            type="button"
+            onClick={() => setAddOpen(true)}
+            className="px-4 py-2 rounded-lg bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 transition-colors"
+          >
+            + Add space
+          </button>
+        </div>
       </header>
 
       {departments.length > 1 && (
