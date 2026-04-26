@@ -10,6 +10,7 @@ import type {
   ConfinedSpaceType,
   ConfinedSpacePermit,
 } from '@/lib/types'
+import { permitState } from '@/lib/confinedSpaceThresholds'
 
 // Detail page for a single confined space. Read-mostly with an "Edit"
 // affordance opening an inline form. Recent permits load from
@@ -109,16 +110,12 @@ export default function ConfinedSpaceDetailPage() {
           >
             ✎ Edit details
           </button>
-          {/* Wired to a route shipped in the next commit. Disabled here so
-              users see the affordance is coming without hitting a 404. */}
-          <button
-            type="button"
-            disabled
-            title="Coming in the next commit"
-            className="px-3 py-1.5 rounded-lg bg-brand-navy text-white text-sm font-semibold opacity-50 cursor-not-allowed"
+          <Link
+            href={`/confined-spaces/${encodeURIComponent(space.space_id)}/permits/new`}
+            className="px-3 py-1.5 rounded-lg bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 transition-colors"
           >
             + Issue permit
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -182,17 +179,22 @@ export default function ConfinedSpaceDetailPage() {
         ) : (
           <ul className="divide-y divide-slate-100 border border-slate-200 rounded-lg overflow-hidden">
             {permits.map(p => (
-              <li key={p.id} className="px-3 py-2 hover:bg-slate-50 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-800 truncate">{p.purpose}</p>
-                    <p className="text-[11px] text-slate-500">
-                      {new Date(p.started_at).toLocaleString()}
-                      {p.canceled_at && <> · <span className="font-semibold text-slate-700">canceled</span> ({p.cancel_reason})</>}
-                    </p>
+              <li key={p.id}>
+                <Link
+                  href={`/confined-spaces/${encodeURIComponent(space.space_id)}/permits/${p.id}`}
+                  className="block px-3 py-2 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{p.purpose}</p>
+                      <p className="text-[11px] text-slate-500">
+                        {new Date(p.started_at).toLocaleString()}
+                        {p.canceled_at && <> · <span className="font-semibold text-slate-700">canceled</span> ({p.cancel_reason})</>}
+                      </p>
+                    </div>
+                    <PermitStatusBadge permit={p} />
                   </div>
-                  <PermitStatusBadge permit={p} />
-                </div>
+                </Link>
               </li>
             ))}
           </ul>
@@ -253,15 +255,17 @@ function ClassificationBadge({ value }: { value: ConfinedSpaceClassification }) 
 }
 
 function PermitStatusBadge({ permit }: { permit: ConfinedSpacePermit }) {
-  const expired = !permit.canceled_at && new Date(permit.expires_at) < new Date()
+  const state = permitState(permit)
   const cls =
-    permit.canceled_at ? 'bg-slate-100 text-slate-600'
-  : expired           ? 'bg-amber-100 text-amber-800'
-  :                     'bg-emerald-100 text-emerald-800'
+    state === 'active'             ? 'bg-emerald-100 text-emerald-800'
+  : state === 'pending_signature'  ? 'bg-amber-100 text-amber-800'
+  : state === 'expired'            ? 'bg-rose-100 text-rose-800'
+  :                                  'bg-slate-100 text-slate-600'
   const label =
-    permit.canceled_at ? 'Canceled'
-  : expired           ? 'Expired'
-  :                     'Active'
+    state === 'active'             ? 'Active'
+  : state === 'pending_signature'  ? 'Pending sig'
+  : state === 'expired'            ? 'Expired'
+  :                                  'Canceled'
   return (
     <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${cls}`}>
       {label}
