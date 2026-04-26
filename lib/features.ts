@@ -219,6 +219,15 @@ export const FEATURES: FeatureDef[] = [
     enabled:     true,
     comingSoon:  false,
   },
+  {
+    id:          'support',
+    name:        'Support',
+    description: 'Report a bug — emails the maintainer',
+    href:        '/support',
+    category:    'admin',
+    enabled:     true,
+    comingSoon:  false,
+  },
 ]
 
 // ─── Lookups ───────────────────────────────────────────────────────────────
