@@ -89,13 +89,15 @@ describe('parseConfinedSpaceCsv — row validation', () => {
   })
 
   it('combines multiple per-row errors into a single message', async () => {
+    // Row needs at least one non-empty cell to survive parseCsv's
+    // all-empty filter — a missing-description AND unknown-space_type
+    // combination triggers two errors on a row that parses cleanly.
     const { rows } = await parseConfinedSpaceCsv(csvFile(
-      'space_id,description,department\n,,'
+      'space_id,description,department,space_type\nCS-1,,Bakery,drum'
     ))
     expect(rows[0].status).toBe('invalid')
-    expect(rows[0].error).toMatch(/space_id is required/)
     expect(rows[0].error).toMatch(/description is required/)
-    expect(rows[0].error).toMatch(/department is required/)
+    expect(rows[0].error).toMatch(/unknown space_type "drum"/)
   })
 
   it('defaults space_type to "other" when omitted', async () => {

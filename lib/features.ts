@@ -136,6 +136,17 @@ export const FEATURES: FeatureDef[] = [
 ]
 
 // ─── Lookups ───────────────────────────────────────────────────────────────
+//
+// Three visibility states encoded in two booleans:
+//
+//   enabled=true,  comingSoon=false, href=string  → live + clickable
+//   enabled=true,  comingSoon=true,  href=null    → advertised, not ready
+//   enabled=false, *                              → hidden (per-tenant off)
+//
+// isFeatureEnabled  → "is this feature visible at all" (drawer surface)
+// isFeatureAccessible → "can a user click this and reach a real route"
+//                       (route guards / conditional UI for live features)
+// Coming-soon features pass isFeatureEnabled but NOT isFeatureAccessible.
 
 export function getFeature(id: string): FeatureDef | null {
   return FEATURES.find(f => f.id === id) ?? null
@@ -143,6 +154,15 @@ export function getFeature(id: string): FeatureDef | null {
 
 export function isFeatureEnabled(id: string): boolean {
   return getFeature(id)?.enabled ?? false
+}
+
+// True only when the feature is enabled, not advertised-as-coming, AND has
+// an actual route to navigate to. Useful for multi-tenant route guards
+// (when a tenant disables a feature, every link to it should fail closed).
+export function isFeatureAccessible(id: string): boolean {
+  const f = getFeature(id)
+  if (!f) return false
+  return f.enabled && !f.comingSoon && f.href !== null
 }
 
 export function getFeaturesByCategory(category: FeatureCategory): FeatureDef[] {

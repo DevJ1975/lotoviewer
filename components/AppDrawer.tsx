@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 import { X } from 'lucide-react'
-import { FEATURES, type FeatureCategory, type FeatureDef } from '@/lib/features'
+import { FEATURES, isFeatureAccessible, type FeatureCategory, type FeatureDef } from '@/lib/features'
 
 // Side drawer that hosts every feature in the app. Replaces the inline
 // top-nav links so the chrome stays minimal as more modules ship. Reads
@@ -116,7 +116,9 @@ export default function AppDrawer({ open, onClose }: Props) {
 function DrawerItem({
   feature, active, onNavigate,
 }: { feature: FeatureDef; active: boolean; onNavigate: () => void }) {
-  const isClickable = !feature.comingSoon && feature.href !== null
+  // Single source of truth for "is this clickable" — the same predicate a
+  // future tenant route guard would use (see lib/features.ts).
+  const isClickable = isFeatureAccessible(feature.id)
 
   const body = (
     <div className="flex flex-col gap-0.5">
