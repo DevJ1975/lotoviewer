@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Equipment } from '@/lib/types'
 import { reconcileEquipment, type RealtimePayload } from '@/lib/equipmentReconcile'
-import { needsPhoto } from '@/lib/photoStatus'
+import { buildLotoUrl, findNextNeedsPhoto } from '@/lib/lotoNavigation'
 import { useVisibilityRefetch } from '@/hooks/useVisibilityRefetch'
 import DashboardSidebar     from '@/components/dashboard/DashboardSidebar'
 import EquipmentListPanel   from '@/components/dashboard/EquipmentListPanel'
@@ -171,13 +171,10 @@ function HomeDashboard() {
   searchParamsRef.current = searchParams
 
   const setUrlState = useCallback((next: { dept?: string | null; eq?: string | null }) => {
-    const params = new URLSearchParams(searchParamsRef.current.toString())
-    if (next.dept === null) params.delete('dept')
-    else if (next.dept)     params.set('dept', next.dept)
-    if (next.eq === null)   params.delete('eq')
-    else if (next.eq)       params.set('eq', next.eq)
-    const qs = params.toString()
-    router.replace(qs ? `/?${qs}` : '/')
+    // URL builder lives in lib/lotoNavigation.ts so the merge semantics
+    // (undefined leaves the param, null deletes it, string sets it) are
+    // unit-tested independently of the React tree.
+    router.replace(buildLotoUrl(searchParamsRef.current, next))
   }, [router])
 
   // Pending auto-advance timer — held in a ref so we can cancel it whenever
@@ -228,18 +225,10 @@ function HomeDashboard() {
     const stillNeedsIso   = current.needs_iso_photo   && !afterHasIso
     if (stillNeedsEquip || stillNeedsIso) return
 
-    // Find the next item in this dept (or globally if none selected) that
-    // still needs a photo and isn't decommissioned. URL presence matches
-    // the list-panel's "Needs Photo" filter — same invariant.
-    const scope = selectedDept
-      ? equipment.filter(e => e.department === selectedDept)
-      : equipment
-    const sorted = [...scope].sort((a, b) => a.equipment_id.localeCompare(b.equipment_id))
-    const idx = sorted.findIndex(e => e.equipment_id === selectedEqId)
-    const rotated = idx >= 0 ? [...sorted.slice(idx + 1), ...sorted.slice(0, idx)] : sorted
-    const nextNeedsPhoto = rotated.find(e =>
-      !decommissioned.has(e.equipment_id) && needsPhoto(e),
-    )
+    // findNextNeedsPhoto is the testable extraction of the auto-advance
+    // logic — see lib/lotoNavigation.ts for the rotation / dept-scope /
+    // decommissioned-skip semantics.
+    const nextNeedsPhoto = findNextNeedsPhoto(equipment, selectedEqId, selectedDept, decommissioned)
     if (!nextNeedsPhoto) return
 
     cancelPendingAdvance()

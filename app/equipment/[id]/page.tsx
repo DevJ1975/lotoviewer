@@ -29,7 +29,10 @@ function EquipmentDetail() {
   const searchParams = useSearchParams()
   const router       = useRouter()
   const equipmentId  = decodeURIComponent(id)
-  const fromUrl      = searchParams.get('from') ?? '/'
+  // Default back-link target is the LOTO dashboard, not '/' — the root
+  // path is now the home screen, which would be a confusing destination
+  // if a user arrived here via direct URL.
+  const fromUrl      = searchParams.get('from') ?? '/loto'
 
   const [equipment, setEquipment]   = useState<Equipment | null>(null)
   const [steps, setSteps]           = useState<LotoEnergyStep[]>([])

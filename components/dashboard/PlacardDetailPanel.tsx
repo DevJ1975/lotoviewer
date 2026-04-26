@@ -93,7 +93,13 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
     )
   }
 
-  const href = `/equipment/${encodeURIComponent(equipment.equipment_id)}?from=${encodeURIComponent('/')}`
+  // Back-link target is /loto with the user's dept + selection
+  // preserved as query params. Without this, returning from the
+  // equipment detail page dropped the user on the LOTO dashboard's
+  // first dept with nothing selected — losing the row they were
+  // editing.
+  const back = `/loto?dept=${encodeURIComponent(equipment.department)}&eq=${encodeURIComponent(equipment.equipment_id)}`
+  const href = `/equipment/${encodeURIComponent(equipment.equipment_id)}?from=${encodeURIComponent(back)}`
 
   return (
     <aside className="shrink-0 w-full lg:w-[520px] bg-slate-100 border-l border-slate-200 flex flex-col">
