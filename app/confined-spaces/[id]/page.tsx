@@ -10,7 +10,7 @@ import type {
   ConfinedSpaceType,
   ConfinedSpacePermit,
 } from '@/lib/types'
-import { permitState } from '@/lib/confinedSpaceThresholds'
+import { permitState, SITE_DEFAULTS } from '@/lib/confinedSpaceThresholds'
 
 // Detail page for a single confined space. Read-mostly with an "Edit"
 // affordance opening an inline form. Recent permits load from
@@ -27,17 +27,6 @@ const CLASSIFICATION_LABELS: Record<ConfinedSpaceClassification, string> = {
   permit_required: 'Permit-Required',
   non_permit:      'Non-Permit',
   reclassified:    'Reclassified',
-}
-
-// OSHA-default atmospheric thresholds — surfaced here so the user sees what
-// will apply if no per-space override is set. §1910.146 doesn't fix exact
-// numbers but these are the universally-cited industry baselines.
-const SITE_DEFAULTS = {
-  o2_min:  19.5,
-  o2_max:  23.5,
-  lel_max: 10,
-  h2s_max: 10,
-  co_max:  35,
 }
 
 export default function ConfinedSpaceDetailPage() {

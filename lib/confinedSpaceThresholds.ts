@@ -5,18 +5,30 @@ import type {
   ConfinedSpacePermit,
 } from '@/lib/types'
 
+// Numeric threshold set used everywhere a permit, space, or site default
+// is resolved. Typed explicitly (not `typeof SITE_DEFAULTS`) so the fallback
+// chain in effectiveThresholds() unifies — `as const` on SITE_DEFAULTS would
+// pin the fields to literal types like `19.5` rather than `number`, and the
+// fallbacks (which come from AcceptableConditions, where every field is
+// `number | undefined`) wouldn't be assignable.
+export type ThresholdSet = {
+  o2_min:  number
+  o2_max:  number
+  lel_max: number
+  h2s_max: number
+  co_max:  number
+}
+
 // OSHA-default acceptable atmospheric thresholds for permit-required confined
 // spaces. §1910.146 doesn't fix exact numbers but these are the universally-
 // cited industry baselines and what virtually every state plan adopts.
-export const SITE_DEFAULTS = {
+export const SITE_DEFAULTS: ThresholdSet = {
   o2_min:  19.5,
   o2_max:  23.5,
   lel_max: 10,
   h2s_max: 10,
   co_max:  35,
-} as const
-
-export type ThresholdSet = typeof SITE_DEFAULTS
+}
 
 // Resolve effective thresholds for a permit. Priority:
 //   1. Permit-level override (if the supervisor changed them on this permit)
