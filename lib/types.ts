@@ -158,8 +158,20 @@ export interface ConfinedSpacePermit {
   attendant_signature_at:          string | null
   attendant_signature_name:        string | null
   entrant_acknowledgement_at:      string | null
+  // Free-text reference to the upstream work order (CMMS / WO system).
+  // Migration 014. Rendered as a hyperlink when loto_org_config has a
+  // work_order_url_template configured.
+  work_order_ref:                  string | null
   created_at:                      string
   updated_at:                      string
+}
+
+// Single-row org-level configuration (migration 014). One row, id = 1.
+export interface OrgConfig {
+  id:                       1
+  work_order_url_template:  string | null
+  updated_at:               string
+  updated_by:               string | null
 }
 
 // Per-entrant in/out timestamps. §1910.146(i)(4) — the attendant must

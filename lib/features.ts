@@ -193,6 +193,15 @@ export const FEATURES: FeatureDef[] = [
 
   // ── Admin / configuration ───────────────────────────────────────────────
   {
+    id:          'admin-configuration',
+    name:        'Configuration',
+    description: 'Org-level settings — work-order URL template, etc.',
+    href:        '/admin/configuration',
+    category:    'admin',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
     id:          'admin-webhooks',
     name:        'Webhooks',
     description: 'Outbound HTTP POST on permit + test lifecycle',

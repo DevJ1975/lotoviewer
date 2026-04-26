@@ -13,7 +13,9 @@ import type {
   ConfinedSpaceEntry,
   ConfinedSpacePermit,
   GasMeter,
+  OrgConfig,
 } from '@/lib/types'
+import { formatWorkOrderUrl } from '@/lib/orgConfig'
 import {
   effectiveThresholds,
   evaluateChannel,
@@ -51,6 +53,9 @@ export default function PermitDetailPage() {
   // small table (≤ a few dozen meters per site). Pre-migration-012 sites
   // get an empty map and the form renders without warnings.
   const [meters, setMeters]     = useState<Map<string, GasMeter>>(new Map())
+  // Org-level config: just the work_order_url_template today. Loaded once
+  // at page load; stays static for the rest of the session.
+  const [orgConfig, setOrgConfig] = useState<OrgConfig | null>(null)
   const [loading, setLoading]   = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [signing, setSigning]   = useState(false)
@@ -61,12 +66,13 @@ export default function PermitDetailPage() {
   const [cancelInitialReason, setCancelInitialReason] = useState<CancelReason>('task_complete')
 
   const load = useCallback(async () => {
-    const [spaceRes, permitRes, testsRes, entriesRes, metersRes] = await Promise.all([
+    const [spaceRes, permitRes, testsRes, entriesRes, metersRes, configRes] = await Promise.all([
       supabase.from('loto_confined_spaces').select('*').eq('space_id', spaceId).single(),
       supabase.from('loto_confined_space_permits').select('*').eq('id', permitId).single(),
       supabase.from('loto_atmospheric_tests').select('*').eq('permit_id', permitId).order('tested_at', { ascending: false }),
       supabase.from('loto_confined_space_entries').select('*').eq('permit_id', permitId).order('entered_at', { ascending: false }),
       supabase.from('loto_gas_meters').select('*').eq('decommissioned', false),
+      supabase.from('loto_org_config').select('*').eq('id', 1).maybeSingle(),
     ])
     if (spaceRes.error || permitRes.error || !spaceRes.data || !permitRes.data) {
       setNotFound(true)
@@ -86,6 +92,10 @@ export default function PermitDetailPage() {
       for (const row of metersRes.data as GasMeter[]) m.set(row.instrument_id, row)
       setMeters(m)
     }
+    // Org config: optional. Pre-migration-014 the table doesn't exist
+    // and the query errors silently. The work-order field still renders
+    // as plain text in that case.
+    if (configRes.data) setOrgConfig(configRes.data as OrgConfig)
     setLoading(false)
   }, [spaceId, permitId])
 
@@ -278,13 +288,19 @@ export default function PermitDetailPage() {
         <RescueDisplay rescue={permit.rescue_service} />
       </Section>
 
-      {(permit.equipment_list.length > 0 || permit.concurrent_permits || permit.notes) && (
+      {(permit.equipment_list.length > 0 || permit.concurrent_permits || permit.work_order_ref || permit.notes) && (
         <Section title="Equipment & Other">
           {permit.equipment_list.length > 0 && (
             <Roster label="Equipment in use" items={permit.equipment_list} emptyLabel="None recorded" />
           )}
           {permit.concurrent_permits && (
             <p className="text-xs"><span className="font-semibold text-slate-700">Concurrent permits:</span> {permit.concurrent_permits}</p>
+          )}
+          {permit.work_order_ref && (
+            <p className="text-xs">
+              <span className="font-semibold text-slate-700">Work order:</span>{' '}
+              <WorkOrderRef refValue={permit.work_order_ref} template={orgConfig?.work_order_url_template ?? null} />
+            </p>
           )}
           {permit.notes && (
             <p className="text-xs"><span className="font-semibold text-slate-700">Notes:</span> {permit.notes}</p>
@@ -495,6 +511,26 @@ function Roster({ label, items, emptyLabel }: { label: string; items: string[]; 
       )}
     </div>
   )
+}
+
+// Render a work order ref as a hyperlink when org_config has a URL
+// template configured, otherwise as plain monospace text. Sanitizes
+// through formatWorkOrderUrl which percent-encodes the ref.
+function WorkOrderRef({ refValue, template }: { refValue: string; template: string | null }) {
+  const url = formatWorkOrderUrl(template, refValue)
+  if (url) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-mono text-brand-navy hover:underline"
+      >
+        {refValue}
+      </a>
+    )
+  }
+  return <span className="font-mono">{refValue}</span>
 }
 
 function RescueDisplay({ rescue }: { rescue: ConfinedSpacePermit['rescue_service'] }) {

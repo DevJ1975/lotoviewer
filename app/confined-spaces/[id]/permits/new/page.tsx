@@ -65,6 +65,7 @@ export default function NewPermitPage() {
   const [rescueEta, setRescueEta]                   = useState('')
   const [rescueEquipment, setRescueEquipment]       = useState('')
   const [concurrentPermits, setConcurrentPermits]   = useState('')
+  const [workOrderRef, setWorkOrderRef]             = useState('')
   const [permitNotes, setPermitNotes]               = useState('')
   const [submitting, setSubmitting]                 = useState(false)
   const [serverError, setServerError]               = useState<string | null>(null)
@@ -217,6 +218,7 @@ export default function NewPermitPage() {
         equipment:   splitLines(rescueEquipment),
       },
       concurrent_permits:  concurrentPermits.trim() || null,
+      work_order_ref:      workOrderRef.trim() || null,
       notes:               permitNotes.trim() || null,
     }
 
@@ -460,6 +462,15 @@ export default function NewPermitPage() {
             onChange={e => setConcurrentPermits(e.target.value)}
             placeholder="Hot work permit #HW-2026-118"
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+          />
+        </Field>
+        <Field label="Work order ref" hint="upstream CMMS reference — renders as a link if your org has a URL template configured">
+          <input
+            type="text"
+            value={workOrderRef}
+            onChange={e => setWorkOrderRef(e.target.value)}
+            placeholder="WO-2026-04-1234"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
           />
         </Field>
         <Field label="Additional notes" hint="§(f)(14)">
