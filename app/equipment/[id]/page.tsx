@@ -13,6 +13,8 @@ import SpanishTranslationSheet from '@/components/SpanishTranslationSheet'
 import { useSession } from '@/components/SessionProvider'
 import { useToast } from '@/hooks/useToast'
 import type { Equipment, LotoEnergyStep } from '@/lib/types'
+import { AnnotatedPhoto } from '@/components/AnnotatedPhoto'
+import { parseAnnotations, type Annotation } from '@/lib/photoAnnotations'
 
 export default function EquipmentDetailPage() {
   return (
@@ -177,6 +179,43 @@ function EquipmentDetail() {
         onPhotoSuccess={msg => { showToast(msg, 'success'); handlePhotoUploaded() }}
         onPhotoError={msg => showToast(msg, 'error')}
       />
+
+      {/* Photo annotations — overlay arrows + labels onto the equipment
+          photo to call out disconnects, valves, and isolation points.
+          Read-only when there's no equip photo yet (the editor opens on
+          a non-existent image otherwise). */}
+      {equipment.equip_photo_url && (
+        <section className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
+          <header className="flex items-baseline justify-between gap-2">
+            <h2 className="text-sm font-bold text-slate-900">Annotated photo</h2>
+            <p className="text-[11px] text-slate-500">
+              Tap "Annotate" to add arrows + labels pointing at isolation points.
+            </p>
+          </header>
+          <div className="relative aspect-video bg-slate-50 rounded-lg overflow-hidden">
+            <AnnotatedPhoto
+              src={equipment.equip_photo_url}
+              alt={`${equipment.equipment_id} equipment photo`}
+              annotations={parseAnnotations(equipment.annotations)}
+              editable
+              onSave={async (next: Annotation[]) => {
+                const { data, error } = await supabase
+                  .from('loto_equipment')
+                  .update({ annotations: next, updated_at: new Date().toISOString() })
+                  .eq('equipment_id', equipmentId)
+                  .select('*')
+                  .single()
+                if (error) {
+                  showToast(`Could not save annotations: ${error.message}`, 'error')
+                  return
+                }
+                if (data) setEquipment(data as Equipment)
+                showToast('Annotations saved', 'success')
+              }}
+            />
+          </div>
+        </section>
+      )}
 
       {/* Sheets */}
       <PlacardDetailsSheet

@@ -21,6 +21,10 @@ export interface Equipment {
   needs_iso_photo: boolean
   needs_verification: boolean
   decommissioned: boolean
+  // Photo overlay annotations (migration 015). Array of arrows + labels
+  // with relative (0-1) coordinates so they scale with the rendered
+  // photo. See lib/photoAnnotations.ts for the schema.
+  annotations: unknown[]
   created_at: string | null
   updated_at: string | null
 }
