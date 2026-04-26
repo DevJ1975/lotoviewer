@@ -61,6 +61,12 @@ export default function NewPermitPage() {
   const [permitNotes, setPermitNotes]               = useState('')
   const [submitting, setSubmitting]                 = useState(false)
   const [serverError, setServerError]               = useState<string | null>(null)
+  // AI suggester state — collapsed by default; appends to the form fields
+  // rather than replacing so a partially-filled form isn't clobbered.
+  const [aiOpen, setAiOpen]                         = useState(false)
+  const [aiContext, setAiContext]                   = useState('')
+  const [generating, setGenerating]                 = useState(false)
+  const [aiError, setAiError]                       = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const { data, error } = await supabase
@@ -114,6 +120,67 @@ export default function NewPermitPage() {
   if (entrantList.length === 0)    errors.push('At least one authorized entrant is required.')
   if (attendantList.length === 0)  errors.push('At least one attendant is required (§1910.146(i)).')
   if (!userId)                     errors.push('You must be logged in to create a permit.')
+
+  // Append a generated list to an existing textarea value. Uses newlines
+  // as the separator so the user sees suggestions next to anything they
+  // already typed and can edit/delete by hand. Empty existing → just join.
+  function appendLines(existing: string, additions: string[]): string {
+    const trimmed = existing.trim()
+    const joined  = additions.map(a => a.trim()).filter(Boolean).join('\n')
+    if (!trimmed)  return joined
+    if (!joined)   return existing
+    return `${trimmed}\n${joined}`
+  }
+
+  async function handleGenerate() {
+    if (!space) return
+    setGenerating(true)
+    setAiError(null)
+    try {
+      const res = await fetch('/api/generate-confined-space-hazards', {
+        method:  'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          space_id:           space.space_id,
+          description:        space.description,
+          department:         space.department,
+          space_type:         space.space_type,
+          classification:     space.classification,
+          known_hazards:      space.known_hazards,
+          isolation_required: space.isolation_required,
+          equip_photo_url:    space.equip_photo_url,
+          interior_photo_url: space.interior_photo_url,
+          context:            aiContext.trim() || undefined,
+        }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Could not reach the AI service.' }))
+        setAiError(body.error ?? 'Could not generate suggestions.')
+        return
+      }
+      const json = await res.json() as {
+        hazards:            string[]
+        isolation_measures: string[]
+        equipment_list:     string[]
+        rescue_equipment:   string[]
+        notes:              string
+      }
+      setHazardsText(prev   => appendLines(prev, json.hazards))
+      setIsolationText(prev => appendLines(prev, json.isolation_measures))
+      setEquipmentText(prev => appendLines(prev, json.equipment_list))
+      setRescueEquipment(prev => appendLines(prev, json.rescue_equipment))
+      if (json.notes && json.notes.trim()) {
+        setPermitNotes(prev => prev.trim() ? `${prev.trim()}\n${json.notes.trim()}` : json.notes.trim())
+      }
+      setAiOpen(false)
+      setAiContext('')
+    } catch (err) {
+      console.error('[generate-confined-space-hazards]', err)
+      setAiError('Could not reach the AI service.')
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   async function handleSubmit() {
     if (errors.length > 0 || !validExpiry) return
@@ -174,6 +241,62 @@ export default function NewPermitPage() {
           pre-entry atmospheric test on the next page, sign to authorize entry per §1910.146(f)(6).
         </p>
       </header>
+
+      {/* ── AI suggester ───────────────────────────────────────────────────
+          Appends suggested hazards, isolation steps, equipment, and rescue
+          gear to the form fields so the supervisor reviews each item before
+          saving. The space's photos are passed through to Sonnet 4.6 so
+          visible disconnects, manways, and residue inform the output. */}
+      <div className="rounded-xl border border-violet-100 bg-violet-50/60 p-3 space-y-2">
+        {aiOpen ? (
+          <>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-violet-900">✨ Suggest hazards & equipment with AI</span>
+              <button
+                type="button"
+                onClick={() => { setAiOpen(false); setAiContext(''); setAiError(null) }}
+                disabled={generating}
+                className="text-[11px] text-slate-500 hover:text-slate-700"
+              >
+                Cancel
+              </button>
+            </div>
+            <textarea
+              rows={2}
+              value={aiContext}
+              onChange={e => setAiContext(e.target.value)}
+              disabled={generating}
+              placeholder="Optional — anything the photos / description don't already say (e.g. 'recently CIP'd, residual caustic possible' or 'top-entry only via 18-inch manway')"
+              className="w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400 disabled:opacity-60"
+            />
+            {aiError && (
+              <p className="text-[11px] text-rose-700 bg-rose-50 border border-rose-100 rounded px-2 py-1">{aiError}</p>
+            )}
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] text-violet-900/80 leading-snug">
+                AI suggestions — qualified safety professional must review before issuing the permit.
+              </p>
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={generating}
+                className="shrink-0 px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-semibold hover:bg-violet-700 transition-colors disabled:opacity-50"
+              >
+                {generating ? 'Generating…' : 'Generate'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAiOpen(true)}
+            className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-violet-700 hover:text-violet-900 py-1"
+          >
+            <span>✨</span>
+            <span>Suggest hazards &amp; equipment with AI</span>
+          </button>
+        )}
+      </div>
 
       <Section title="Purpose & Duration">
         <Field label="Purpose of entry" required>
