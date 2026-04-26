@@ -111,6 +111,48 @@ export default function PermitDetailPage() {
   // narrow form keeps the intent obvious — alert depends on a real permit.
   const showEvacuationAlert = permit.entry_supervisor_signature_at && !permit.canceled_at && latestStatus === 'fail'
 
+  // PDF download — opens the generated PDF in a new tab rather than using
+  // a programmatic anchor click. The latter is silently ignored by iOS
+  // Safari (especially in PWA standalone mode), which is where most field
+  // users open this app. Opening in a new tab gives iOS the native PDF
+  // viewer with Share / Save to Files / Print built in, and on desktop
+  // Chrome/Safari the new tab shows a normal "Save / Print" PDF chrome.
+  // Any failure surfaces via the existing serverError banner.
+  async function handleDownloadPdf() {
+    setServerError(null)
+    try {
+      const { generatePermitPdf } = await import('@/lib/pdfPermit')
+      const permitUrl = `${window.location.origin}/confined-spaces/${encodeURIComponent(spaceId)}/permits/${permit!.id}`
+      const bytes = await generatePermitPdf({ space: space!, permit: permit!, tests, permitUrl })
+      const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' })
+      const url  = URL.createObjectURL(blob)
+      const filename = `${permit!.serial ?? `permit-${permit!.id.slice(0, 8)}`}.pdf`
+
+      // Try opening the blob in a new tab first — most platform-agnostic
+      // path. window.open returns null when popups are blocked.
+      const newWin = window.open(url, '_blank', 'noopener,noreferrer')
+      if (!newWin) {
+        // Popup blocked — fall back to anchor click which at least triggers
+        // a download on Chrome/Edge/Firefox even when popups are blocked.
+        const a = document.createElement('a')
+        a.href     = url
+        a.download = filename
+        a.rel      = 'noopener noreferrer'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+      }
+
+      // Long delay so the new tab has time to load the PDF before the
+      // blob URL is revoked. 60s is plenty; the URL is just memory and
+      // gets cleaned up when the tab navigates away anyway.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      console.error('[permit-pdf] download failed', err)
+      setServerError(`Could not generate PDF: ${err instanceof Error ? err.message : 'unknown error'}`)
+    }
+  }
+
   // ── sign & activate ──────────────────────────────────────────────────────
   async function handleSign() {
     if (!userId) return
@@ -149,18 +191,7 @@ export default function PermitDetailPage() {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={async () => {
-              const { generatePermitPdf } = await import('@/lib/pdfPermit')
-              const permitUrl = `${window.location.origin}/confined-spaces/${encodeURIComponent(spaceId)}/permits/${permit.id}`
-              const bytes = await generatePermitPdf({ space, permit, tests, permitUrl })
-              const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' })
-              const url  = URL.createObjectURL(blob)
-              const a    = document.createElement('a')
-              a.href     = url
-              a.download = `${permit.serial}.pdf`
-              a.click()
-              setTimeout(() => URL.revokeObjectURL(url), 1000)
-            }}
+            onClick={handleDownloadPdf}
             className="text-xs font-semibold text-brand-navy hover:underline"
           >
             ⬇ Download PDF
