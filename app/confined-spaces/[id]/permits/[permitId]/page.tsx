@@ -26,6 +26,7 @@ import {
 } from '@/lib/confinedSpaceThresholds'
 import { bumpStatus, calibrationOverdue } from '@/lib/gasMeters'
 import { CANCEL_REASON_LABELS } from '@/lib/confinedSpaceLabels'
+import { validateRosterUpdate, namesCurrentlyInside } from '@/lib/permitRoster'
 
 // Live permit page — the OSHA-compliant lifecycle:
 //   1. Permit was created in pending_signature state
@@ -64,6 +65,7 @@ export default function PermitDetailPage() {
   // Bias the cancel dialog toward prohibited_condition when the user opens
   // it from the evacuation banner (vs. the regular Cancel button).
   const [cancelInitialReason, setCancelInitialReason] = useState<CancelReason>('task_complete')
+  const [rosterOpen, setRosterOpen] = useState(false)
 
   const load = useCallback(async () => {
     const [spaceRes, permitRes, testsRes, entriesRes, metersRes, configRes] = await Promise.all([
@@ -266,6 +268,21 @@ export default function PermitDetailPage() {
         <PersonnelRow label="Entry supervisor" values={[permit.entry_supervisor_id.slice(0, 8) + ' (you sign with this account)']} />
         <PersonnelRow label="Authorized entrants" values={permit.entrants} />
         <PersonnelRow label="Attendant(s)" values={permit.attendants} />
+        {/* Mid-job roster edits — supervisors routinely add/remove
+            entrants and attendants as crews swap during a shift. The
+            modal validates against the live entries log so you can't
+            silently drop a worker who's still inside the space. */}
+        {state === 'active' && (
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => setRosterOpen(true)}
+              className="text-xs font-semibold text-brand-navy hover:underline"
+            >
+              + Edit roster (mid-job)
+            </button>
+          </div>
+        )}
       </Section>
 
       <Section title="Hazards & Isolation">
@@ -403,13 +420,25 @@ export default function PermitDetailPage() {
       )}
 
       {state === 'active' && (
-        <div className="flex items-center justify-end">
+        // Two distinct actions:
+        //   - Close out: normal completion. Most common path. Pre-fills
+        //     task_complete; the dialog is a confirm step, not a form.
+        //   - Cancel for cause: prohibited condition / other disposition.
+        //     Reason picker matters here.
+        <div className="flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => { setCancelInitialReason('prohibited_condition'); setCancelOpen(true) }}
+            className="text-xs font-semibold text-rose-700 hover:underline"
+          >
+            Cancel for cause…
+          </button>
           <button
             type="button"
             onClick={() => { setCancelInitialReason('task_complete'); setCancelOpen(true) }}
-            className="px-4 py-2 rounded-lg border border-rose-200 text-sm font-semibold text-rose-700 hover:bg-rose-50 transition-colors"
+            className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors"
           >
-            Cancel permit
+            Close out permit
           </button>
         </div>
       )}
@@ -442,6 +471,18 @@ export default function PermitDetailPage() {
           onCanceled={(updated) => {
             setPermit(updated)
             setCancelOpen(false)
+          }}
+        />
+      )}
+
+      {rosterOpen && permit && (
+        <EditRosterDialog
+          permit={permit}
+          entries={entries}
+          onClose={() => setRosterOpen(false)}
+          onSaved={(updated) => {
+            setPermit(updated)
+            setRosterOpen(false)
           }}
         />
       )}
@@ -1105,6 +1146,205 @@ function NumInput({
   )
 }
 
+// ── Edit roster dialog ────────────────────────────────────────────────────
+//
+// Mid-job add/remove of entrants and attendants. Validation lives in
+// lib/permitRoster.ts so the rules ("can't remove someone currently
+// inside") get unit-tested without React. The dialog reads the live
+// entries list to compute who's inside; the inside-the-space check is
+// the only hard error — everything else (blanks, dups, signed-off
+// attendant being removed) is also enforced or warned.
+
+function EditRosterDialog({
+  permit, entries, onClose, onSaved,
+}: {
+  permit:  ConfinedSpacePermit
+  entries: ConfinedSpaceEntry[]
+  onClose: () => void
+  onSaved: (updated: ConfinedSpacePermit) => void
+}) {
+  const [entrants,   setEntrants]   = useState<string[]>(() => [...permit.entrants])
+  const [attendants, setAttendants] = useState<string[]>(() => [...permit.attendants])
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError]           = useState<string | null>(null)
+
+  const inside = namesCurrentlyInside(entries)
+
+  // Live validation as the user edits — surfaces blanks / dups / inside
+  // violations on every keystroke. Save is gated on this list being empty
+  // (filtering out the soft-warning prefix the helper emits).
+  const issues = validateRosterUpdate({
+    nextEntrants:        entrants.map(n => n.trim()).filter(n => n.length > 0).length === 0
+      // Edge: empty entrants array shouldn't fail the "names cannot be
+      // blank" check on a list with no rows. Pass an empty list through.
+      ? entrants.filter(n => n.trim().length > 0)
+      : entrants,
+    nextAttendants:      attendants.filter(n => n.trim().length > 0),
+    entries,
+    signedAttendantName: permit.attendant_signature_name,
+  })
+  // Distinguish hard errors from the "heads up" soft warning.
+  const hardErrors = issues.filter(e => !e.toLowerCase().startsWith('heads up'))
+  const warnings   = issues.filter(e =>  e.toLowerCase().startsWith('heads up'))
+
+  async function save() {
+    if (hardErrors.length > 0) return
+    setSubmitting(true)
+    setError(null)
+    const cleanEntrants   = entrants.map(n => n.trim()).filter(Boolean)
+    const cleanAttendants = attendants.map(n => n.trim()).filter(Boolean)
+    const { data, error: err } = await supabase
+      .from('loto_confined_space_permits')
+      .update({
+        entrants:   cleanEntrants,
+        attendants: cleanAttendants,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', permit.id)
+      .select('*')
+      .single()
+    setSubmitting(false)
+    if (err || !data) { setError(err?.message ?? 'Could not save roster.'); return }
+    onSaved(data as ConfinedSpacePermit)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/40 overflow-y-auto py-10">
+      <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl p-5 space-y-4">
+        <header className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-slate-900">Edit roster</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="text-slate-400 hover:text-slate-600 text-lg leading-none px-1"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </header>
+
+        <p className="text-[11px] text-slate-500">
+          Add or remove entrants and attendants while the permit is active. An entrant
+          who is currently inside the space cannot be removed — log them out from the
+          Entrant Log first.
+        </p>
+
+        <NameListEditor
+          label="Authorized entrants"
+          values={entrants}
+          onChange={setEntrants}
+          locked={inside}
+          lockedHint="currently inside"
+        />
+        <NameListEditor
+          label="Attendant(s)"
+          values={attendants}
+          onChange={setAttendants}
+          locked={[]}
+        />
+
+        {hardErrors.length > 0 && (
+          <ul className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-900 space-y-0.5">
+            {hardErrors.map(e => <li key={e}>• {e}</li>)}
+          </ul>
+        )}
+        {warnings.length > 0 && (
+          <ul className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900 space-y-0.5">
+            {warnings.map(e => <li key={e}>• {e}</li>)}
+          </ul>
+        )}
+        {error && <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-md px-3 py-2">{error}</p>}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            disabled={submitting || hardErrors.length > 0}
+            className="px-5 py-2 rounded-lg bg-brand-navy text-white text-sm font-semibold disabled:opacity-40 hover:bg-brand-navy/90 transition-colors"
+          >
+            {submitting ? 'Saving…' : 'Save roster'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Editable list of names. Each row has a delete button except for
+// names in `locked` (which still render with a hint badge instead of
+// the X). The `+` button at the bottom appends a fresh empty row that
+// auto-focuses for typing.
+function NameListEditor({
+  label, values, onChange, locked, lockedHint,
+}: {
+  label:       string
+  values:      string[]
+  onChange:    (next: string[]) => void
+  locked:      string[]
+  lockedHint?: string
+}) {
+  function update(i: number, v: string) {
+    onChange(values.map((x, j) => j === i ? v : x))
+  }
+  function remove(i: number) {
+    onChange(values.filter((_, j) => j !== i))
+  }
+  function add() {
+    onChange([...values, ''])
+  }
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs font-semibold text-slate-600">{label}</p>
+      <ul className="space-y-1">
+        {values.map((name, i) => {
+          const isLocked = locked.includes(name)
+          return (
+            <li key={i} className="flex items-center gap-2">
+              <input
+                type="text"
+                value={name}
+                onChange={e => update(i, e.target.value)}
+                placeholder="Name"
+                className="flex-1 rounded-md border border-slate-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              />
+              {isLocked ? (
+                <span className="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800">
+                  {lockedHint ?? 'locked'}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => remove(i)}
+                  aria-label={`Remove ${name || 'row'}`}
+                  className="shrink-0 text-slate-400 hover:text-rose-600 px-2 py-1 rounded-md transition-colors"
+                >
+                  ×
+                </button>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      <button
+        type="button"
+        onClick={add}
+        className="text-xs font-semibold text-brand-navy hover:underline"
+      >
+        + Add
+      </button>
+    </div>
+  )
+}
+
 // ── Cancel dialog ──────────────────────────────────────────────────────────
 
 interface CancelProps {
@@ -1157,11 +1397,22 @@ function CancelDialog({ permit, initialReason, hasPreEntryTest, onClose, onCance
     onCanceled(data as ConfinedSpacePermit)
   }
 
+  // Dialog adapts to the chosen reason. task_complete is the normal
+  // close-out flow (emerald submit, "Close out permit" wording);
+  // anything else is a cancellation for cause and stays rose.
+  const isCloseOut    = reason === 'task_complete'
+  const dialogTitle   = isCloseOut ? 'Close out permit'    : 'Cancel permit'
+  const submitLabel   = isCloseOut ? 'Close out'           : 'Cancel permit'
+  const submittingLbl = isCloseOut ? 'Closing out…'        : 'Canceling…'
+  const submitTone    = isCloseOut
+    ? 'bg-emerald-600 hover:bg-emerald-700'
+    : 'bg-rose-600 hover:bg-rose-700'
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/40">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-5 space-y-4">
         <header className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900">Cancel permit</h2>
+          <h2 className="text-base font-semibold text-slate-900">{dialogTitle}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -1231,9 +1482,9 @@ function CancelDialog({ permit, initialReason, hasPreEntryTest, onClose, onCance
             type="button"
             onClick={submit}
             disabled={submitting}
-            className="px-5 py-2 rounded-lg bg-rose-600 text-white text-sm font-semibold disabled:opacity-40 hover:bg-rose-700 transition-colors"
+            className={`px-5 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-40 transition-colors ${submitTone}`}
           >
-            {submitting ? 'Canceling…' : 'Cancel permit'}
+            {submitting ? submittingLbl : submitLabel}
           </button>
         </div>
       </div>
