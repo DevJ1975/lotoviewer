@@ -10,7 +10,9 @@ import type {
   AtmosphericTestKind,
   CancelReason,
   ConfinedSpace,
+  ConfinedSpaceEntry,
   ConfinedSpacePermit,
+  GasMeter,
 } from '@/lib/types'
 import {
   effectiveThresholds,
@@ -20,6 +22,7 @@ import {
   type ReadingStatus,
   type ThresholdSet,
 } from '@/lib/confinedSpaceThresholds'
+import { bumpStatus, calibrationOverdue } from '@/lib/gasMeters'
 import { CANCEL_REASON_LABELS } from '@/lib/confinedSpaceLabels'
 
 // Live permit page — the OSHA-compliant lifecycle:
@@ -43,6 +46,11 @@ export default function PermitDetailPage() {
   const [space, setSpace]       = useState<ConfinedSpace | null>(null)
   const [permit, setPermit]     = useState<ConfinedSpacePermit | null>(null)
   const [tests, setTests]       = useState<AtmosphericTest[]>([])
+  const [entries, setEntries]   = useState<ConfinedSpaceEntry[]>([])
+  // Map by instrument_id for the bump-test warning. Fetched once at load —
+  // small table (≤ a few dozen meters per site). Pre-migration-012 sites
+  // get an empty map and the form renders without warnings.
+  const [meters, setMeters]     = useState<Map<string, GasMeter>>(new Map())
   const [loading, setLoading]   = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [signing, setSigning]   = useState(false)
@@ -53,10 +61,12 @@ export default function PermitDetailPage() {
   const [cancelInitialReason, setCancelInitialReason] = useState<CancelReason>('task_complete')
 
   const load = useCallback(async () => {
-    const [spaceRes, permitRes, testsRes] = await Promise.all([
+    const [spaceRes, permitRes, testsRes, entriesRes, metersRes] = await Promise.all([
       supabase.from('loto_confined_spaces').select('*').eq('space_id', spaceId).single(),
       supabase.from('loto_confined_space_permits').select('*').eq('id', permitId).single(),
       supabase.from('loto_atmospheric_tests').select('*').eq('permit_id', permitId).order('tested_at', { ascending: false }),
+      supabase.from('loto_confined_space_entries').select('*').eq('permit_id', permitId).order('entered_at', { ascending: false }),
+      supabase.from('loto_gas_meters').select('*').eq('decommissioned', false),
     ])
     if (spaceRes.error || permitRes.error || !spaceRes.data || !permitRes.data) {
       setNotFound(true)
@@ -66,6 +76,16 @@ export default function PermitDetailPage() {
     setSpace(spaceRes.data as ConfinedSpace)
     setPermit(permitRes.data as ConfinedSpacePermit)
     if (testsRes.data) setTests(testsRes.data as AtmosphericTest[])
+    // entries / meters tables come from migration 012; if it hasn't been
+    // applied yet, both queries return an error and we leave the state
+    // empty. The UI degrades — no in/out log, no bump-test warning — but
+    // doesn't break the rest of the page.
+    if (entriesRes.data) setEntries(entriesRes.data as ConfinedSpaceEntry[])
+    if (metersRes.data) {
+      const m = new Map<string, GasMeter>()
+      for (const row of metersRes.data as GasMeter[]) m.set(row.instrument_id, row)
+      setMeters(m)
+    }
     setLoading(false)
   }, [spaceId, permitId])
 
@@ -296,6 +316,7 @@ export default function PermitDetailPage() {
             userId={userId}
             kindHint={preEntryTest ? 'periodic' : 'pre_entry'}
             thresholds={thresholds}
+            meters={meters}
             onSaved={(t) => setTests(prev => [t, ...prev])}
           />
         )}
@@ -309,6 +330,39 @@ export default function PermitDetailPage() {
           </ul>
         )}
       </Section>
+
+      {/* Multi-party authorization. The supervisor's signature above is the
+          OSHA-mandated authorization (§(f)(6)); these strengthen the audit
+          trail when the site requires the attendant to sign on duty and
+          when the supervisor wants to attest the entrants were briefed
+          on hazards. Both are optional — never block entry. */}
+      {(state === 'active' || state === 'canceled' || state === 'expired') && (
+        <Section title="Authorization & Acknowledgements">
+          <AuthorizationBlock
+            permit={permit}
+            readOnly={state !== 'active'}
+            onUpdated={setPermit}
+          />
+        </Section>
+      )}
+
+      {/* Entrant in/out log per §1910.146(i)(4) — the attendant must know
+          who is inside the space at any moment. Renders for active permits
+          (live log + in/out buttons) and as read-only history for canceled
+          / expired permits. Pending-signature permits don't render this:
+          entrants can't enter until the permit is signed. */}
+      {state !== 'pending_signature' && (
+        <Section title="Entrant Log">
+          <EntrantLog
+            permit={permit}
+            entries={entries}
+            attendantUserId={userId}
+            readOnly={state === 'canceled' || state === 'expired'}
+            onEntered={(row) => setEntries(prev => [row, ...prev])}
+            onExited={(row) => setEntries(prev => prev.map(e => e.id === row.id ? row : e))}
+          />
+        </Section>
+      )}
 
       {state === 'pending_signature' && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-2">
@@ -460,6 +514,312 @@ function RescueDisplay({ rescue }: { rescue: ConfinedSpacePermit['rescue_service
   )
 }
 
+// ── Multi-party authorization block ────────────────────────────────────────
+//
+// Two optional signatures on top of the supervisor's mandatory authorization:
+//   - Attendant on duty (§(i)) — picks a name from the attendants[] roster,
+//     clicks to sign on. Times the moment they took post.
+//   - Entrant briefing acknowledgement (§(f)(6)) — supervisor attests the
+//     entrants were briefed on hazards. Single timestamp; the briefing is
+//     a group act, not per-entrant.
+//
+// Both are write-once for now — once recorded, we surface the timestamp.
+// Re-attestation can be done on a fresh permit if the situation changes.
+
+function AuthorizationBlock({
+  permit, readOnly, onUpdated,
+}: {
+  permit:    ConfinedSpacePermit
+  readOnly:  boolean
+  onUpdated: (updated: ConfinedSpacePermit) => void
+}) {
+  const [attendantPick, setAttendantPick] = useState<string>(permit.attendants[0] ?? '')
+  const [busy, setBusy]   = useState<null | 'attendant' | 'briefing'>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function signAsAttendant() {
+    if (!attendantPick.trim()) { setError('Pick the attendant name first.'); return }
+    setBusy('attendant'); setError(null)
+    const now = new Date().toISOString()
+    const { data, error: err } = await supabase
+      .from('loto_confined_space_permits')
+      .update({
+        attendant_signature_at:   now,
+        attendant_signature_name: attendantPick,
+        updated_at:               now,
+      })
+      .eq('id', permit.id)
+      .select('*')
+      .single()
+    setBusy(null)
+    if (err || !data) { setError(err?.message ?? 'Could not record attendant sign-on.'); return }
+    onUpdated(data as ConfinedSpacePermit)
+  }
+
+  async function ackEntrants() {
+    setBusy('briefing'); setError(null)
+    const now = new Date().toISOString()
+    const { data, error: err } = await supabase
+      .from('loto_confined_space_permits')
+      .update({ entrant_acknowledgement_at: now, updated_at: now })
+      .eq('id', permit.id)
+      .select('*')
+      .single()
+    setBusy(null)
+    if (err || !data) { setError(err?.message ?? 'Could not record acknowledgement.'); return }
+    onUpdated(data as ConfinedSpacePermit)
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Attendant sign-on */}
+      <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-1.5">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-[#214487]">Attendant on duty · §1910.146(i)</p>
+        {permit.attendant_signature_at ? (
+          <p className="text-xs text-slate-700">
+            <span className="font-semibold">{permit.attendant_signature_name ?? '—'}</span> signed on at{' '}
+            {new Date(permit.attendant_signature_at).toLocaleString()}.
+          </p>
+        ) : permit.attendants.length === 0 ? (
+          <p className="text-xs text-slate-400 italic">No attendants on the roster — add one to enable sign-on.</p>
+        ) : readOnly ? (
+          <p className="text-xs text-slate-400 italic">No attendant signed on while the permit was active.</p>
+        ) : (
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={attendantPick}
+              onChange={e => setAttendantPick(e.target.value)}
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-brand-navy/20"
+            >
+              {permit.attendants.map(a => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={signAsAttendant}
+              disabled={busy === 'attendant'}
+              className="px-3 py-1.5 rounded-md bg-brand-navy text-white text-xs font-semibold disabled:opacity-50 hover:bg-brand-navy/90 transition-colors"
+            >
+              {busy === 'attendant' ? '…' : 'Sign on as attendant'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Entrant briefing ack */}
+      <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-1.5">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-[#214487]">Entrant briefing · §1910.146(f)(6)</p>
+        {permit.entrant_acknowledgement_at ? (
+          <p className="text-xs text-slate-700">
+            Supervisor attested entrants were briefed on hazards at{' '}
+            {new Date(permit.entrant_acknowledgement_at).toLocaleString()}.
+          </p>
+        ) : readOnly ? (
+          <p className="text-xs text-slate-400 italic">No briefing acknowledgement was recorded while the permit was active.</p>
+        ) : (
+          <button
+            type="button"
+            onClick={ackEntrants}
+            disabled={busy === 'briefing'}
+            className="px-3 py-1.5 rounded-md bg-brand-navy text-white text-xs font-semibold disabled:opacity-50 hover:bg-brand-navy/90 transition-colors"
+          >
+            {busy === 'briefing' ? '…' : 'I have briefed entrants on hazards'}
+          </button>
+        )}
+      </div>
+
+      {error && <p className="text-[11px] text-rose-600">{error}</p>}
+    </div>
+  )
+}
+
+// ── Entrant in/out log ─────────────────────────────────────────────────────
+//
+// One row per name in permit.entrants[]. Status comes from the entries
+// table — if there's a row with exited_at IS NULL, the entrant is inside.
+// The attendant clicks "Log in" / "Log out" and we insert/update the row.
+// Names match string-compare against permit.entrants[]; the supervisor can
+// edit the roster on the permit but in/out actions are name-keyed so a
+// rename mid-shift breaks the live mapping (acceptable trade — name edits
+// during an active permit are rare and we surface an "Unrostered" row
+// for any orphan entry rather than dropping it silently).
+
+function EntrantLog({
+  permit, entries, attendantUserId, readOnly, onEntered, onExited,
+}: {
+  permit:          ConfinedSpacePermit
+  entries:         ConfinedSpaceEntry[]
+  attendantUserId: string | null
+  readOnly:        boolean
+  onEntered:       (row: ConfinedSpaceEntry) => void
+  onExited:        (row: ConfinedSpaceEntry) => void
+}) {
+  // Group entries by name so we can render the chronological in/out cycles
+  // grouped under each rostered entrant. An "open" row (exited_at == null)
+  // means the entrant is currently inside.
+  const byName = new Map<string, ConfinedSpaceEntry[]>()
+  for (const e of entries) {
+    const list = byName.get(e.entrant_name) ?? []
+    list.push(e)
+    byName.set(e.entrant_name, list)
+  }
+  // Names that have entries but aren't on the roster — rare, but visible
+  // so the supervisor sees the discrepancy.
+  const orphan = [...byName.keys()].filter(n => !permit.entrants.includes(n))
+
+  const insideCount = entries.filter(e => e.exited_at == null).length
+
+  if (permit.entrants.length === 0 && orphan.length === 0) {
+    return <p className="text-xs text-slate-400 italic">No entrants on the roster yet.</p>
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] text-slate-600">
+        <span className="font-semibold">{insideCount}</span> currently inside
+        {' · '}
+        §1910.146(i)(4) — the attendant logs each entrant in and out so the count is accurate at any moment.
+      </p>
+      <ul className="space-y-2">
+        {permit.entrants.map(name => (
+          <EntrantRow
+            key={name}
+            name={name}
+            entries={byName.get(name) ?? []}
+            permitId={permit.id}
+            attendantUserId={attendantUserId}
+            readOnly={readOnly}
+            onEntered={onEntered}
+            onExited={onExited}
+          />
+        ))}
+        {orphan.map(name => (
+          <EntrantRow
+            key={`orphan:${name}`}
+            name={name}
+            entries={byName.get(name) ?? []}
+            permitId={permit.id}
+            attendantUserId={attendantUserId}
+            readOnly={readOnly}
+            isOrphan
+            onEntered={onEntered}
+            onExited={onExited}
+          />
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function EntrantRow({
+  name, entries, permitId, attendantUserId, readOnly, isOrphan,
+  onEntered, onExited,
+}: {
+  name:            string
+  entries:         ConfinedSpaceEntry[]
+  permitId:        string
+  attendantUserId: string | null
+  readOnly:        boolean
+  isOrphan?:       boolean
+  onEntered:       (row: ConfinedSpaceEntry) => void
+  onExited:        (row: ConfinedSpaceEntry) => void
+}) {
+  const [busy, setBusy]   = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Sort newest-first so the open cycle (if any) is at the top.
+  const sorted = [...entries].sort((a, b) =>
+    new Date(b.entered_at).getTime() - new Date(a.entered_at).getTime(),
+  )
+  const open = sorted.find(e => e.exited_at == null) ?? null
+  const inside = open != null
+
+  async function logIn() {
+    if (!attendantUserId) { setError('Attendant must be logged in to record entry.'); return }
+    setBusy(true); setError(null)
+    const { data, error: err } = await supabase
+      .from('loto_confined_space_entries')
+      .insert({
+        permit_id:    permitId,
+        entrant_name: name,
+        entered_by:   attendantUserId,
+      })
+      .select('*')
+      .single()
+    setBusy(false)
+    if (err || !data) { setError(err?.message ?? 'Could not record entry.'); return }
+    onEntered(data as ConfinedSpaceEntry)
+  }
+
+  async function logOut() {
+    if (!open) return
+    if (!attendantUserId) { setError('Attendant must be logged in to record exit.'); return }
+    setBusy(true); setError(null)
+    const now = new Date().toISOString()
+    const { data, error: err } = await supabase
+      .from('loto_confined_space_entries')
+      .update({ exited_at: now, exited_by: attendantUserId })
+      .eq('id', open.id)
+      .select('*')
+      .single()
+    setBusy(false)
+    if (err || !data) { setError(err?.message ?? 'Could not record exit.'); return }
+    onExited(data as ConfinedSpaceEntry)
+  }
+
+  return (
+    <li className={`rounded-lg border ${inside ? 'border-emerald-300 bg-emerald-50/60' : 'border-slate-200 bg-white'} px-3 py-2`}>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-slate-900">
+            {name}
+            {isOrphan && (
+              <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-amber-700">unrostered</span>
+            )}
+          </p>
+          <p className="text-[11px] text-slate-500">
+            {inside
+              ? <>Inside since {new Date(open!.entered_at).toLocaleString()}</>
+              : sorted.length === 0
+                ? 'Has not entered yet'
+                : <>Last out {new Date(sorted[0].exited_at!).toLocaleString()}</>
+            }
+          </p>
+        </div>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={inside ? logOut : logIn}
+            disabled={busy}
+            className={`shrink-0 px-3 py-1.5 rounded-md text-xs font-semibold disabled:opacity-50 transition-colors ${
+              inside
+                ? 'bg-slate-700 text-white hover:bg-slate-800'
+                : 'bg-emerald-600 text-white hover:bg-emerald-700'
+            }`}
+          >
+            {busy ? '…' : inside ? 'Log out' : 'Log in'}
+          </button>
+        )}
+      </div>
+      {/* Cycle history — show prior in/out pairs for the audit trail. Cap
+          at 4 entries with an ellipsis to keep long shifts compact. */}
+      {sorted.length > 1 && (
+        <ul className="mt-2 space-y-0.5 text-[10px] text-slate-500 font-mono">
+          {sorted.slice(inside ? 1 : 0, (inside ? 1 : 0) + 4).map(e => (
+            <li key={e.id}>
+              {new Date(e.entered_at).toLocaleTimeString()} in
+              {' → '}
+              {e.exited_at ? new Date(e.exited_at).toLocaleTimeString() + ' out' : 'still inside'}
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <p className="text-[11px] text-rose-600 mt-1">{error}</p>}
+    </li>
+  )
+}
+
 // ── Test row ───────────────────────────────────────────────────────────────
 
 function TestRow({ test, thresholds }: { test: AtmosphericTest; thresholds: ReturnType<typeof effectiveThresholds> }) {
@@ -504,12 +864,16 @@ function ChannelStat({ label, value, unit, status }: { label: string; value: num
 // ── New test inline form ───────────────────────────────────────────────────
 
 function NewTestForm({
-  permitId, userId, kindHint, thresholds, onSaved,
+  permitId, userId, kindHint, thresholds, meters, onSaved,
 }: {
   permitId:   string
   userId:     string | null
   kindHint:   AtmosphericTestKind
   thresholds: ThresholdSet
+  // Map from instrument_id to the gas-meter row in the bump-test register.
+  // Empty map means migration 012 hasn't been applied or no meters yet —
+  // the form renders without warnings in either case.
+  meters:     Map<string, GasMeter>
   onSaved:    (test: AtmosphericTest) => void
 }) {
   const [kind, setKind]                 = useState<AtmosphericTestKind>(kindHint)
@@ -540,6 +904,12 @@ function NewTestForm({
   const lelStatus = evaluateChannel('lel', num(lel), thresholds)
   const h2sStatus = evaluateChannel('h2s', num(h2s), thresholds)
   const coStatus  = evaluateChannel('co',  num(co),  thresholds)
+
+  // Bump-test status for the typed instrument id. Re-computed each render
+  // — the lookup is a Map.get + a single Date parse, both negligible.
+  const meterRow      = instrumentId.trim() ? meters.get(instrumentId.trim()) ?? null : null
+  const meterStatus   = bumpStatus(meterRow, Date.now())
+  const calOverdue    = calibrationOverdue(meterRow, Date.now())
 
   async function submit() {
     if (!userId) { setError('You must be logged in.'); return }
@@ -590,6 +960,31 @@ function NewTestForm({
           <option value="post_alarm">Post-alarm</option>
         </select>
       </div>
+      {/* Bump-test / calibration warning. Only renders when the tester has
+          typed an instrument id — empty input stays clean. Three states:
+          overdue (rose), never-bumped or unknown meter (amber), calibration
+          past due (rose). Doesn't block submit — the supervisor owns the
+          call, but the audit trail captures the reading + the warning. */}
+      {instrumentId.trim() && meterStatus.kind === 'overdue' && (
+        <p className="text-[11px] rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-rose-900">
+          ⚠ {instrumentId.trim()} bump-test is {meterStatus.hoursSince}h old (window: 24h). §(d)(5)(i) requires a calibrated direct-reading instrument — verify before submitting.
+        </p>
+      )}
+      {instrumentId.trim() && meterStatus.kind === 'never' && (
+        <p className="text-[11px] rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-amber-900">
+          ⚠ {instrumentId.trim()} has no bump-test on record. Verify the meter has been bumped today before submitting.
+        </p>
+      )}
+      {instrumentId.trim() && meterStatus.kind === 'unknown' && meters.size > 0 && (
+        <p className="text-[11px] rounded-md border border-amber-200 bg-amber-50/60 px-2 py-1 text-amber-900/80">
+          {instrumentId.trim()} isn't in the meter register yet — add it to track bump-test compliance.
+        </p>
+      )}
+      {calOverdue && (
+        <p className="text-[11px] rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-rose-900">
+          ⚠ {instrumentId.trim()} calibration is past due. Send the meter back for full calibration before further use.
+        </p>
+      )}
       {/* Threshold legend right above the inputs so the tester doesn't have
           to remember §(d)(5) numbers or open another tab. Same numbers the
           row is evaluated against — they tick if the supervisor edits the

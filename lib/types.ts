@@ -152,8 +152,44 @@ export interface ConfinedSpacePermit {
   notes:                           string | null
   cancel_reason:                   CancelReason | null
   cancel_notes:                    string | null
+  // Multi-party signatures (migration 012). All optional — the entry
+  // supervisor signature above is the OSHA-mandated authorization;
+  // these strengthen the audit trail when the site requires them.
+  attendant_signature_at:          string | null
+  attendant_signature_name:        string | null
+  entrant_acknowledgement_at:      string | null
   created_at:                      string
   updated_at:                      string
+}
+
+// Per-entrant in/out timestamps. §1910.146(i)(4) — the attendant must
+// know who is inside the space at any moment. One row per entry/exit
+// cycle for one named entrant. exited_at = null while still inside.
+export interface ConfinedSpaceEntry {
+  id:           string
+  permit_id:    string
+  entrant_name: string
+  entered_at:   string
+  exited_at:    string | null
+  entered_by:   string                  // attendant profile id
+  exited_by:    string | null
+  notes:        string | null
+  created_at:   string
+}
+
+// Calibration / bump-test register for direct-reading meters per
+// §1910.146(d)(5)(i). Keyed by free-text instrument_id to match the
+// shape we already have on loto_atmospheric_tests.
+export interface GasMeter {
+  instrument_id:        string
+  description:          string | null
+  last_bump_at:         string | null
+  last_calibration_at:  string | null
+  next_calibration_due: string | null
+  decommissioned:       boolean
+  notes:                string | null
+  created_at:           string
+  updated_at:           string
 }
 
 export type AtmosphericTestKind = 'pre_entry' | 'periodic' | 'post_alarm'
