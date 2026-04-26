@@ -148,7 +148,26 @@ export default function PermitDetailPage() {
         <Link href={`/confined-spaces/${encodeURIComponent(spaceId)}`} className="text-sm font-semibold text-slate-500 hover:text-slate-700">
           ← Back to space
         </Link>
-        <span className="text-[11px] text-slate-400 font-mono">{permit.id.slice(0, 8)}</span>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={async () => {
+              const { generatePermitPdf } = await import('@/lib/pdfPermit')
+              const bytes = await generatePermitPdf({ space, permit, tests })
+              const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' })
+              const url  = URL.createObjectURL(blob)
+              const a    = document.createElement('a')
+              a.href     = url
+              a.download = `permit-${space.space_id}-${permit.id.slice(0, 8)}.pdf`
+              a.click()
+              setTimeout(() => URL.revokeObjectURL(url), 1000)
+            }}
+            className="text-xs font-semibold text-brand-navy hover:underline"
+          >
+            ⬇ Download PDF
+          </button>
+          <span className="text-[11px] text-slate-400 font-mono">{permit.id.slice(0, 8)}</span>
+        </div>
       </div>
 
       <StatusBanner state={state!} permit={permit} />
