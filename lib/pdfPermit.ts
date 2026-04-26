@@ -36,9 +36,33 @@ const EMERALD = rgb(...hexToRgb01('#059669'))
 const FAINT   = rgb(0.96, 0.97, 0.99)
 
 // ── Text helpers ────────────────────────────────────────────────────────────
+
+// pdf-lib's StandardFonts use WinAnsi (CP1252) which doesn't cover Unicode
+// subscripts/superscripts or many typography chars. Hazard text from users
+// or the AI suggester routinely contains O₂, H₂S, CO₂ (subscripts at U+2082)
+// and would crash render with "WinAnsi cannot encode '₂'". Map to ASCII
+// before any drawText / widthOfTextAtSize call.
+function sanitizeForWinAnsi(s: string): string {
+  if (!s) return s
+  return s
+    .replace(/[₀-₉]/g, c => String.fromCharCode(0x30 + (c.charCodeAt(0) - 0x2080))) // ₀-₉
+    .replace(/[⁰⁴-⁹]/g, c => String.fromCharCode(0x30 + (c.charCodeAt(0) - 0x2070))) // ⁰ ⁴-⁹
+    .replace(/²/g, '2').replace(/³/g, '3').replace(/¹/g, '1') // ² ³ ¹ (in WinAnsi but normalize anyway)
+    .replace(/⁺/g, '+').replace(/⁻/g, '-')                         // ⁺ ⁻
+    .replace(/₊/g, '+').replace(/₋/g, '-')                         // ₊ ₋
+    .replace(/[‐‑−]/g, '-')                                   // hyphens, minus
+    .replace(/ /g, ' ')                                                  // nbsp
+    .replace(/[‘’‚‛]/g, "'")                              // smart single quotes
+    .replace(/[“”„‟]/g, '"')                              // smart double quotes
+    .replace(/…/g, '...')                                                // …
+    .replace(/[–—]/g, '-')                                          // – —
+    .replace(/[×]/g, 'x')                                                // × (in WinAnsi but normalize)
+    .replace(/[^\x00-\xFF\n\r\t]/g, '?')                                      // strip anything else
+}
+
 function wrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
   const out: string[] = []
-  for (const para of text.split(/\r?\n/)) {
+  for (const para of sanitizeForWinAnsi(text).split(/\r?\n/)) {
     if (!para.trim()) { out.push(''); continue }
     const words = para.split(/\s+/)
     let cur = ''
@@ -97,7 +121,9 @@ function reserveSpace(ctx: DrawCtx, needed: number): void {
 }
 
 function drawPageFooter(ctx: DrawCtx): void {
-  const text = `Page ${ctx.pageNo}  ·  OSHA 29 CFR 1910.146 Permit-Required Confined Space Entry Permit  ·  Generated ${new Date().toLocaleString()}`
+  const text = sanitizeForWinAnsi(
+    `Page ${ctx.pageNo}  ·  OSHA 29 CFR 1910.146 Permit-Required Confined Space Entry Permit  ·  Generated ${new Date().toLocaleString()}`
+  )
   const w = ctx.font.widthOfTextAtSize(text, 7)
   ctx.page.drawText(text, {
     x: PAGE_W - MARGIN - w, y: 18, size: 7, font: ctx.font, color: MUTED,
@@ -110,7 +136,7 @@ function drawSectionBar(ctx: DrawCtx, title: string): void {
   ctx.page.drawRectangle({
     x: MARGIN, y: ctx.y - 18, width: PAGE_W - 2 * MARGIN, height: 18, color: NAVY,
   })
-  ctx.page.drawText(title.toUpperCase(), {
+  ctx.page.drawText(sanitizeForWinAnsi(title.toUpperCase()), {
     x: MARGIN + 8, y: ctx.y - 13, size: 9, font: ctx.bold, color: WHITE,
   })
   ctx.y -= 24
@@ -120,9 +146,11 @@ function drawKeyValue(ctx: DrawCtx, key: string, value: string, opts?: { wrap?: 
   const labelW = 110
   const valueX = MARGIN + labelW
   const valueMaxW = PAGE_W - MARGIN - valueX
-  const lines = opts?.wrap ? wrap(value || '—', ctx.font, 9, valueMaxW) : [value || '—']
+  const lines = opts?.wrap
+    ? wrap(value || '—', ctx.font, 9, valueMaxW)
+    : [sanitizeForWinAnsi(value || '—')]
   reserveSpace(ctx, 12 * Math.max(1, lines.length) + 4)
-  ctx.page.drawText(key, { x: MARGIN, y: ctx.y - 10, size: 8, font: ctx.bold, color: NAVY })
+  ctx.page.drawText(sanitizeForWinAnsi(key), { x: MARGIN, y: ctx.y - 10, size: 8, font: ctx.bold, color: NAVY })
   for (let i = 0; i < lines.length; i++) {
     ctx.page.drawText(lines[i], {
       x: valueX, y: ctx.y - 10 - i * 11, size: 9, font: ctx.font, color: SLATE,
@@ -171,12 +199,12 @@ function drawHeader(ctx: DrawCtx, space: ConfinedSpace, permit: ConfinedSpacePer
   ctx.page.drawText('CONFINED SPACE ENTRY PERMIT', {
     x: MARGIN + 12, y: ctx.y - 24, size: 16, font: ctx.bold, color: BLACK,
   })
-  ctx.page.drawText('OSHA 29 CFR 1910.146 — Permit-Required Confined Spaces', {
+  ctx.page.drawText(sanitizeForWinAnsi('OSHA 29 CFR 1910.146 — Permit-Required Confined Spaces'), {
     x: MARGIN + 12, y: ctx.y - 40, size: 9, font: ctx.font, color: BLACK,
   })
   // Serial — large, bold, mono — directly under the title for at-a-glance
   // identification on a printed permit.
-  ctx.page.drawText(permit.serial, {
+  ctx.page.drawText(sanitizeForWinAnsi(permit.serial), {
     x: MARGIN + 12, y: ctx.y - 53, size: 9, font: ctx.bold, color: BLACK,
   })
 
@@ -190,7 +218,7 @@ function drawHeader(ctx: DrawCtx, space: ConfinedSpace, permit: ConfinedSpacePer
   ctx.page.drawRectangle({
     x: PAGE_W - MARGIN - statusW - 18, y: ctx.y - 32, width: statusW + 14, height: 16, color: statusColor,
   })
-  ctx.page.drawText(status, {
+  ctx.page.drawText(sanitizeForWinAnsi(status), {
     x: PAGE_W - MARGIN - statusW - 11, y: ctx.y - 28, size: 10, font: ctx.bold, color: WHITE,
   })
 
@@ -205,7 +233,7 @@ function drawHeader(ctx: DrawCtx, space: ConfinedSpace, permit: ConfinedSpacePer
       y: ctx.y - QR_SIZE,
       width: QR_SIZE, height: QR_SIZE,
     })
-    ctx.page.drawText('Scan for live permit', {
+    ctx.page.drawText(sanitizeForWinAnsi('Scan for live permit'), {
       x: PAGE_W - MARGIN - QR_SIZE,
       y: ctx.y - QR_SIZE - 10,
       size: 7, font: ctx.font, color: MUTED,
@@ -240,13 +268,15 @@ function drawTestsTable(ctx: DrawCtx, tests: AtmosphericTest[], thresholds: Retu
     return
   }
 
-  // Column layout
+  // Column layout. Subscripts intentionally avoided — pdf-lib's WinAnsi
+  // can't encode '₂' / '₃'; sanitizeForWinAnsi handles dynamic data, but
+  // for static labels it's clearer to write ASCII at source.
   const cols: Array<{ x: number; w: number; label: string }> = [
     { x: MARGIN,        w: 78,  label: 'Time' },
     { x: MARGIN + 78,   w: 50,  label: 'Kind' },
-    { x: MARGIN + 128,  w: 44,  label: 'O₂ %' },
+    { x: MARGIN + 128,  w: 44,  label: 'O2 %' },
     { x: MARGIN + 172,  w: 44,  label: 'LEL %' },
-    { x: MARGIN + 216,  w: 50,  label: 'H₂S ppm' },
+    { x: MARGIN + 216,  w: 50,  label: 'H2S ppm' },
     { x: MARGIN + 266,  w: 50,  label: 'CO ppm' },
     { x: MARGIN + 316,  w: 70,  label: 'Tester' },
     { x: MARGIN + 386,  w: PAGE_W - MARGIN - (MARGIN + 386), label: 'Status' },
@@ -258,7 +288,7 @@ function drawTestsTable(ctx: DrawCtx, tests: AtmosphericTest[], thresholds: Retu
     x: MARGIN, y: ctx.y - 14, width: PAGE_W - 2 * MARGIN, height: 14, color: FAINT,
   })
   for (const c of cols) {
-    ctx.page.drawText(c.label, { x: c.x + 2, y: ctx.y - 11, size: 7, font: ctx.bold, color: NAVY })
+    ctx.page.drawText(sanitizeForWinAnsi(c.label), { x: c.x + 2, y: ctx.y - 11, size: 7, font: ctx.bold, color: NAVY })
   }
   ctx.y -= 16
 
@@ -274,14 +304,14 @@ function drawTestsTable(ctx: DrawCtx, tests: AtmosphericTest[], thresholds: Retu
     const time = new Date(t.tested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     const date = new Date(t.tested_at).toLocaleDateString([], { month: 'numeric', day: 'numeric' })
 
-    ctx.page.drawText(`${date} ${time}`, { x: cols[0].x + 2, y: ctx.y - 10, size: 7, font: ctx.font, color: SLATE })
-    ctx.page.drawText(t.kind.replace('_', ' '), { x: cols[1].x + 2, y: ctx.y - 10, size: 7, font: ctx.font, color: SLATE })
-    ctx.page.drawText(t.o2_pct  != null ? String(t.o2_pct)  : '—', { x: cols[2].x + 2, y: ctx.y - 10, size: 8, font: ctx.font, color: evals.channels.o2  === 'fail' ? RED : SLATE })
-    ctx.page.drawText(t.lel_pct != null ? String(t.lel_pct) : '—', { x: cols[3].x + 2, y: ctx.y - 10, size: 8, font: ctx.font, color: evals.channels.lel === 'fail' ? RED : SLATE })
-    ctx.page.drawText(t.h2s_ppm != null ? String(t.h2s_ppm) : '—', { x: cols[4].x + 2, y: ctx.y - 10, size: 8, font: ctx.font, color: evals.channels.h2s === 'fail' ? RED : SLATE })
-    ctx.page.drawText(t.co_ppm  != null ? String(t.co_ppm)  : '—', { x: cols[5].x + 2, y: ctx.y - 10, size: 8, font: ctx.font, color: evals.channels.co  === 'fail' ? RED : SLATE })
-    ctx.page.drawText(t.tested_by.slice(0, 8), { x: cols[6].x + 2, y: ctx.y - 10, size: 7, font: ctx.font, color: MUTED })
-    ctx.page.drawText(status, { x: cols[7].x + 2, y: ctx.y - 10, size: 7, font: ctx.bold, color })
+    ctx.page.drawText(sanitizeForWinAnsi(`${date} ${time}`), { x: cols[0].x + 2, y: ctx.y - 10, size: 7, font: ctx.font, color: SLATE })
+    ctx.page.drawText(sanitizeForWinAnsi(t.kind.replace('_', ' ')), { x: cols[1].x + 2, y: ctx.y - 10, size: 7, font: ctx.font, color: SLATE })
+    ctx.page.drawText(sanitizeForWinAnsi(t.o2_pct  != null ? String(t.o2_pct)  : '—'), { x: cols[2].x + 2, y: ctx.y - 10, size: 8, font: ctx.font, color: evals.channels.o2  === 'fail' ? RED : SLATE })
+    ctx.page.drawText(sanitizeForWinAnsi(t.lel_pct != null ? String(t.lel_pct) : '—'), { x: cols[3].x + 2, y: ctx.y - 10, size: 8, font: ctx.font, color: evals.channels.lel === 'fail' ? RED : SLATE })
+    ctx.page.drawText(sanitizeForWinAnsi(t.h2s_ppm != null ? String(t.h2s_ppm) : '—'), { x: cols[4].x + 2, y: ctx.y - 10, size: 8, font: ctx.font, color: evals.channels.h2s === 'fail' ? RED : SLATE })
+    ctx.page.drawText(sanitizeForWinAnsi(t.co_ppm  != null ? String(t.co_ppm)  : '—'), { x: cols[5].x + 2, y: ctx.y - 10, size: 8, font: ctx.font, color: evals.channels.co  === 'fail' ? RED : SLATE })
+    ctx.page.drawText(sanitizeForWinAnsi(t.tested_by.slice(0, 8)), { x: cols[6].x + 2, y: ctx.y - 10, size: 7, font: ctx.font, color: MUTED })
+    ctx.page.drawText(sanitizeForWinAnsi(status), { x: cols[7].x + 2, y: ctx.y - 10, size: 7, font: ctx.bold, color })
 
     ctx.page.drawLine({
       start: { x: MARGIN, y: ctx.y - 13.5 },
@@ -291,9 +321,12 @@ function drawTestsTable(ctx: DrawCtx, tests: AtmosphericTest[], thresholds: Retu
     ctx.y -= 14
   }
 
-  // Threshold legend below the table
+  // Threshold legend below the table. Subscripts deliberately written as
+  // ASCII (O2/H2S) at source so this stays readable even after sanitize.
   reserveSpace(ctx, 12)
-  const legend = `Acceptable: O₂ ${thresholds.o2_min}–${thresholds.o2_max}%  ·  LEL <${thresholds.lel_max}%  ·  H₂S <${thresholds.h2s_max} ppm  ·  CO <${thresholds.co_max} ppm`
+  const legend = sanitizeForWinAnsi(
+    `Acceptable: O2 ${thresholds.o2_min}–${thresholds.o2_max}%  ·  LEL <${thresholds.lel_max}%  ·  H2S <${thresholds.h2s_max} ppm  ·  CO <${thresholds.co_max} ppm`
+  )
   ctx.page.drawText(legend, { x: MARGIN, y: ctx.y - 9, size: 7, font: ctx.font, color: MUTED })
   ctx.y -= 12
 }

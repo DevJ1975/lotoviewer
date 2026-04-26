@@ -333,6 +333,25 @@ export default function PermitDetailPage() {
         </div>
       )}
 
+      {/* Expired-but-uncancelled — supervisors must positively close out per
+          §1910.146(e)(5). Without this button there's no UI path to clear an
+          expired permit, leaving it stuck in the home Critical Alert banner. */}
+      {state === 'expired' && (
+        <div className="rounded-xl bg-rose-50 border border-rose-200 p-4 flex items-center justify-between gap-3">
+          <p className="text-xs text-rose-900/80">
+            This permit ran past expiration without being formally closed. Close it out
+            now to clear the alert and lock in the audit trail.
+          </p>
+          <button
+            type="button"
+            onClick={() => { setCancelInitialReason('expired'); setCancelOpen(true) }}
+            className="shrink-0 px-4 py-2 rounded-lg bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700 transition-colors"
+          >
+            Close out expired permit
+          </button>
+        </div>
+      )}
+
       {cancelOpen && permit && (
         <CancelDialog
           permit={permit}
