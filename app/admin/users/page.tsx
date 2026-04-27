@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Copy, Loader2, Mail, Shield, Trash2, UserPlus } from 'lucide-react'
+import { ArrowLeft, Check, Copy, Loader2, Mail, MailCheck, Shield, Trash2, UserPlus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
 
@@ -33,7 +33,7 @@ export default function AdminUsersPage() {
   const [fullName, setFullName] = useState('')
   const [busy, setBusy]         = useState(false)
   const [inviteError, setInviteError] = useState<string | null>(null)
-  const [justInvited, setJustInvited] = useState<{ email: string; fullName: string; tempPassword: string } | null>(null)
+  const [justInvited, setJustInvited] = useState<{ email: string; fullName: string; tempPassword: string; emailSent: boolean } | null>(null)
   const [copied, setCopied] = useState(false)
 
   const fetchUsers = useCallback(async () => {
@@ -66,7 +66,12 @@ export default function AdminUsersPage() {
       })
       const body = await res.json()
       if (!res.ok) { setInviteError(body.error ?? 'Could not create user'); return }
-      setJustInvited({ email: body.email, fullName: body.fullName ?? '', tempPassword: body.tempPassword })
+      setJustInvited({
+        email:        body.email,
+        fullName:     body.fullName ?? '',
+        tempPassword: body.tempPassword,
+        emailSent:    body.emailSent === true,
+      })
       setEmail('')
       setFullName('')
       fetchUsers()
@@ -174,14 +179,58 @@ jamil@trainovations.com`
         )}
       </section>
 
-      {/* Copy-paste template for the most recent invite */}
-      {justInvited && (
+      {/* Result panel for the most recent invite. Two shapes:
+          • emailSent=true  — green confirmation, password shown small as
+            a fallback in case the email got caught by spam.
+          • emailSent=false — full copy-paste template (legacy behavior),
+            so the admin can paste into their own email client. */}
+      {justInvited && justInvited.emailSent && (
         <section className="bg-emerald-50 rounded-xl ring-1 ring-emerald-200 p-5">
+          <div className="flex items-start gap-3">
+            <MailCheck className="h-6 w-6 text-emerald-700 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <h2 className="text-sm font-bold text-emerald-900 flex items-center gap-1.5">
+                <Check className="h-4 w-4" /> Invitation emailed to {justInvited.email}
+              </h2>
+              <p className="text-xs text-emerald-800 mt-1">
+                {(justInvited.fullName || justInvited.email.split('@')[0])} will receive a sign-in link with their one-time password.
+                On first login they'll be required to set their own password (≥ 8 characters).
+              </p>
+              <details className="mt-3 text-xs text-emerald-900">
+                <summary className="cursor-pointer font-semibold hover:underline">
+                  Show one-time password (in case the email gets lost)
+                </summary>
+                <div className="mt-2 inline-flex items-center gap-2 bg-white rounded-md px-3 py-1.5 ring-1 ring-emerald-200">
+                  <code className="text-sm font-mono tracking-wide">{justInvited.tempPassword}</code>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(justInvited.tempPassword)
+                        setCopied(true); setTimeout(() => setCopied(false), 1500)
+                      } catch { /* ignore */ }
+                    }}
+                    className="text-emerald-700 hover:text-emerald-900"
+                    aria-label="Copy password"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </button>
+                  {copied && <span className="text-[11px] text-emerald-700">copied</span>}
+                </div>
+              </details>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {justInvited && !justInvited.emailSent && (
+        <section className="bg-amber-50 rounded-xl ring-1 ring-amber-200 p-5">
           <div className="flex items-start justify-between gap-3 mb-3">
             <div>
-              <h2 className="text-sm font-bold text-emerald-900">Invitation email — ready to send</h2>
-              <p className="text-xs text-emerald-700 mt-0.5">
-                Copy this into your email to {justInvited.email}. The password is shown once; save it if you lose the window.
+              <h2 className="text-sm font-bold text-amber-900">Invite created — email not sent</h2>
+              <p className="text-xs text-amber-800 mt-0.5">
+                The user is created but Resend isn't configured (or the send failed). Copy this into your email to {justInvited.email}.
+                The password is shown once; save it if you lose the window.
               </p>
             </div>
             <button
@@ -193,13 +242,13 @@ jamil@trainovations.com`
                   setTimeout(() => setCopied(false), 1500)
                 } catch { /* ignore */ }
               }}
-              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white ring-1 ring-emerald-300 text-emerald-800 text-xs font-semibold hover:bg-emerald-100 transition-colors"
+              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white ring-1 ring-amber-300 text-amber-900 text-xs font-semibold hover:bg-amber-100 transition-colors"
             >
               <Copy className="h-3.5 w-3.5" />
               {copied ? 'Copied' : 'Copy'}
             </button>
           </div>
-          <pre className="whitespace-pre-wrap text-xs font-mono text-slate-800 bg-white rounded-lg p-3 ring-1 ring-emerald-200 max-h-80 overflow-auto">
+          <pre className="whitespace-pre-wrap text-xs font-mono text-slate-800 bg-white rounded-lg p-3 ring-1 ring-amber-200 max-h-80 overflow-auto">
 {emailTemplate}
           </pre>
         </section>
