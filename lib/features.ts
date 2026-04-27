@@ -211,6 +211,15 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
   },
   {
+    id:          'admin-training',
+    name:        'Training records',
+    description: '§1910.146(g) certifications — entrant / attendant / supervisor / rescuer',
+    href:        '/admin/training-records',
+    category:    'admin',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
     id:          'settings-notifications',
     name:        'Notifications',
     description: 'Enable Web Push for permit + atmospheric-test alerts',

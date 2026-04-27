@@ -27,6 +27,8 @@ import {
 import { bumpStatus, calibrationOverdue } from '@/lib/gasMeters'
 import { CANCEL_REASON_LABELS } from '@/lib/confinedSpaceLabels'
 import { validateRosterUpdate, namesCurrentlyInside } from '@/lib/permitRoster'
+import { validateTraining, type TrainingIssue } from '@/lib/trainingRecords'
+import type { TrainingRecord } from '@/lib/types'
 
 // Live permit page — the OSHA-compliant lifecycle:
 //   1. Permit was created in pending_signature state
@@ -57,6 +59,13 @@ export default function PermitDetailPage() {
   // Org-level config: just the work_order_url_template today. Loaded once
   // at page load; stays static for the rest of the session.
   const [orgConfig, setOrgConfig] = useState<OrgConfig | null>(null)
+  // Training records for §1910.146(g) sign-gate. Loaded once; the gate
+  // re-evaluates whenever the roster changes via the Edit Roster modal.
+  const [trainingRecords, setTrainingRecords] = useState<TrainingRecord[]>([])
+  // Supervisor's explicit override when training records aren't on file
+  // for everyone. Tracked locally so leaving and returning to the page
+  // re-prompts (matches the pre-entry-test warning pattern).
+  const [trainingOverride, setTrainingOverride] = useState(false)
   const [loading, setLoading]   = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [signing, setSigning]   = useState(false)
@@ -68,13 +77,14 @@ export default function PermitDetailPage() {
   const [rosterOpen, setRosterOpen] = useState(false)
 
   const load = useCallback(async () => {
-    const [spaceRes, permitRes, testsRes, entriesRes, metersRes, configRes] = await Promise.all([
+    const [spaceRes, permitRes, testsRes, entriesRes, metersRes, configRes, trainingRes] = await Promise.all([
       supabase.from('loto_confined_spaces').select('*').eq('space_id', spaceId).single(),
       supabase.from('loto_confined_space_permits').select('*').eq('id', permitId).single(),
       supabase.from('loto_atmospheric_tests').select('*').eq('permit_id', permitId).order('tested_at', { ascending: false }),
       supabase.from('loto_confined_space_entries').select('*').eq('permit_id', permitId).order('entered_at', { ascending: false }),
       supabase.from('loto_gas_meters').select('*').eq('decommissioned', false),
       supabase.from('loto_org_config').select('*').eq('id', 1).maybeSingle(),
+      supabase.from('loto_training_records').select('*'),
     ])
     if (spaceRes.error || permitRes.error || !spaceRes.data || !permitRes.data) {
       setNotFound(true)
@@ -98,6 +108,10 @@ export default function PermitDetailPage() {
     // and the query errors silently. The work-order field still renders
     // as plain text in that case.
     if (configRes.data) setOrgConfig(configRes.data as OrgConfig)
+    // Training records likewise — pre-migration-017 the query errors
+    // silently and the §(g) gate behaves as if no records exist (every
+    // worker flagged), which the supervisor can override.
+    if (trainingRes.data) setTrainingRecords(trainingRes.data as TrainingRecord[])
     setLoading(false)
   }, [spaceId, permitId])
 
@@ -105,6 +119,20 @@ export default function PermitDetailPage() {
 
   const thresholds = useMemo(() => effectiveThresholds(permit, space), [permit, space])
   const state      = useMemo(() => permit ? permitState(permit) : null, [permit])
+
+  // §1910.146(g) gate — re-evaluates when the roster (entrants/attendants)
+  // changes via the Edit Roster modal, or when training records load.
+  // An empty array means the gate passes; the override checkbox is
+  // hidden in that case.
+  const trainingIssues: TrainingIssue[] = useMemo(
+    () => permit ? validateTraining({
+      entrants:   permit.entrants,
+      attendants: permit.attendants,
+      records:    trainingRecords,
+      asOf:       new Date(),
+    }) : [],
+    [permit, trainingRecords],
+  )
 
   // Pre-entry test = the most recent test marked pre_entry. Sign-to-activate
   // requires one to exist AND pass thresholds.
@@ -204,6 +232,14 @@ export default function PermitDetailPage() {
     const r = permit!.rescue_service
     if (!r?.name?.trim() || (!r?.phone?.trim() && r?.eta_minutes == null)) {
       setServerError('Rescue service is incomplete — name and either a phone number or ETA are required before signing (§1910.146(f)(11)).')
+      return
+    }
+    // §1910.146(g) — every named entrant / attendant must have a current
+    // training record. Soft block: if any are missing/expired, require
+    // the supervisor to acknowledge they verified training off-app via
+    // the override checkbox below the sign button.
+    if (trainingIssues.length > 0 && !trainingOverride) {
+      setServerError('Some entrants or attendants are missing current training records — review the §(g) banner and confirm verification before signing.')
       return
     }
     setSigning(true)
@@ -398,20 +434,34 @@ export default function PermitDetailPage() {
       )}
 
       {state === 'pending_signature' && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-2">
-          <h3 className="text-sm font-bold text-emerald-900">Sign & activate this permit</h3>
-          <p className="text-[11px] text-emerald-900/80">
-            By signing you authorize entry per §1910.146(f)(6). The permit becomes active immediately.
-            {' '}{!preEntryTest
-              ? 'A pre-entry atmospheric test is required first.'
-              : preEntryStatus !== 'pass'
-              ? 'Pre-entry test must pass thresholds before signing.'
-              : 'Pre-entry test passes — ready to sign.'}
-          </p>
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-3">
+          <div>
+            <h3 className="text-sm font-bold text-emerald-900">Sign & activate this permit</h3>
+            <p className="text-[11px] text-emerald-900/80">
+              By signing you authorize entry per §1910.146(f)(6). The permit becomes active immediately.
+              {' '}{!preEntryTest
+                ? 'A pre-entry atmospheric test is required first.'
+                : preEntryStatus !== 'pass'
+                ? 'Pre-entry test must pass thresholds before signing.'
+                : 'Pre-entry test passes — ready to sign.'}
+            </p>
+          </div>
+          {trainingIssues.length > 0 && (
+            <TrainingGap
+              issues={trainingIssues}
+              acknowledged={trainingOverride}
+              onAcknowledge={setTrainingOverride}
+            />
+          )}
           <button
             type="button"
             onClick={handleSign}
-            disabled={signing || !preEntryTest || preEntryStatus !== 'pass'}
+            disabled={
+              signing ||
+              !preEntryTest ||
+              preEntryStatus !== 'pass' ||
+              (trainingIssues.length > 0 && !trainingOverride)
+            }
             className="px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold disabled:opacity-40 hover:bg-emerald-700 transition-colors"
           >
             {signing ? 'Signing…' : '✓ Sign & activate permit'}
@@ -1143,6 +1193,54 @@ function NumInput({
         className={`rounded-lg border px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy ${borderCls}`}
       />
     </label>
+  )
+}
+
+// ── Training-gap banner (§1910.146(g) gate) ───────────────────────────────
+//
+// Renders inside the pending-signature card when validateTraining
+// surfaced any missing or expired records. Lists each (name, slot,
+// status) row + a checkbox the supervisor flips to acknowledge they
+// verified training off-app. Without that ack, the sign button stays
+// disabled.
+
+function TrainingGap({
+  issues, acknowledged, onAcknowledge,
+}: {
+  issues:        TrainingIssue[]
+  acknowledged:  boolean
+  onAcknowledge: (next: boolean) => void
+}) {
+  return (
+    <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 space-y-1.5">
+      <p className="text-[11px] font-bold text-amber-900">
+        §1910.146(g) — training records not on file
+      </p>
+      <ul className="text-[11px] text-amber-900/85 space-y-0.5">
+        {issues.map((i, idx) => (
+          <li key={`${i.worker_name}:${i.slot}:${idx}`}>
+            • <span className="font-semibold">{i.worker_name}</span>
+            {' '}({i.slot})
+            {' — '}
+            {i.kind === 'missing'
+              ? 'no training record'
+              : <>cert expired{i.expired_on ? ` ${i.expired_on}` : ''}</>}
+          </li>
+        ))}
+      </ul>
+      <label className="flex items-start gap-2 text-[11px] text-amber-900 pt-1 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={acknowledged}
+          onChange={e => onAcknowledge(e.target.checked)}
+          className="mt-0.5"
+        />
+        <span>
+          I have verified each worker's training off-app and accept responsibility for authorizing
+          entry. (The audit log records this acknowledgement on the permit.)
+        </span>
+      </label>
+    </div>
   )
 }
 

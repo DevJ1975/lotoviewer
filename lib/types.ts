@@ -208,6 +208,24 @@ export interface GasMeter {
   updated_at:           string
 }
 
+// Per-worker training records for §1910.146(g) compliance. The four
+// canonical roles plus an "other" slot for site-specific certifications
+// (e.g. fall-protection, hot-work). Migration 017.
+export type TrainingRole = 'entrant' | 'attendant' | 'entry_supervisor' | 'rescuer' | 'other'
+
+export interface TrainingRecord {
+  id:             string
+  worker_name:    string
+  role:           TrainingRole
+  completed_at:   string                 // YYYY-MM-DD
+  expires_at:     string | null          // null = no expiry
+  cert_authority: string | null
+  notes:          string | null
+  created_by:     string | null
+  created_at:     string
+  updated_at:     string
+}
+
 // Outbound webhook subscription (migration 013). Each row receives the
 // events listed in `events[]` whenever the corresponding lifecycle
 // transition fires on the permit / test tables.
