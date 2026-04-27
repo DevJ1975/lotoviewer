@@ -74,11 +74,10 @@ create policy "loto_hygiene_log_admin_write" on public.loto_hygiene_log
              where p.id = auth.uid() and p.is_admin = true)
   );
 
--- The original script used NOW()::text which produces Postgres default
--- text ('2026-04-27 14:30:00.123+00') — NOT ISO 8601 and inconsistent
--- with the app's new Date().toISOString() writes. This helper produces
--- exactly the ISO 8601 format the app uses, so column data stays
--- uniformly parseable as you run hygiene scripts over time.
+-- (Helper retained for back-compat — turned out the loto_equipment
+-- updated_at / created_at columns are timestamp with time zone, not
+-- text. The mutating sections write `updated_at = now()` directly.
+-- This function is harmless if it exists; safe to drop later.)
 create or replace function public._hygiene_now_iso()
   returns text
   language sql
@@ -183,7 +182,7 @@ with changed as (
          notes = coalesce(notes || ' | ', '') ||
                  'DECOMMISSIONED 2026-04-27: Confirmed duplicate of 302-MX-1. ' ||
                  'Same physical machine. Use 302-MX-1 as the canonical equipment ID.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id = '302-MX-01'
      and decommissioned = false
    returning equipment_id
@@ -232,7 +231,7 @@ end $$;
 with changed as (
   update public.loto_equipment
      set decommissioned = true,
-         updated_at = public._hygiene_now_iso(),
+         updated_at = now(),
          notes = case equipment_id
              when 'CDM-4-SHIPPING' then
                'DECOMMISSIONED 2026-04-27: This entry represents a conveyor drive motor component, not a standalone machine. ' ||
@@ -311,7 +310,7 @@ with changed as (
          notes = coalesce(notes || ' | ', '') ||
                  'CORRECTED 2026-04-27: Description had wrong line number (#7-14). ' ||
                  'This ID is in Line 9 sequence. Corrected to #9-13 — verify exact function in field.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id = 'SKAP-913'
    returning equipment_id
 )
@@ -376,7 +375,7 @@ with changed as (
          notes = coalesce(notes || ' | ', '') ||
                  'CORRECTED 2026-04-27: equipment_id renamed from BGNN-100 to BGGN-100. ' ||
                  'Original had typo in prefix (BGNN vs BGGN). All other Building Grounds items use BGGN.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id = 'BGNN-100'
    returning equipment_id
 )
@@ -447,7 +446,7 @@ with changed as (
          notes = coalesce(notes || ' | ', '') ||
                  'CORRECTED 2026-04-27: Renamed from SKPK203 to SKPK-203. ' ||
                  'Missing hyphen in original ID breaks sort order and naming convention.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id = 'SKPK203'
    returning equipment_id
 )
@@ -497,7 +496,7 @@ with changed as (
                  'ACTION REQUIRED 2026-04-27: Description is blank. ' ||
                  'Field verification needed — identify this equipment on the floor and update description in SOTERIA. ' ||
                  'Do not write LOTO procedure until equipment identity is confirmed.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('SKAP-1202','SKAP-1402','SKAP-1602','SKAP-1605','SKAP-1608','SKAP-1626')
      and (description is null or description = '' or description = ' ')
    returning equipment_id
@@ -551,7 +550,7 @@ with changed as (
                  'SKCC-590 (Drum Pre Filter), SKCC-600 (Oil Transfer Pump), ' ||
                  'SKCC-610 (Fryer), SKCC-620 (Heat Exchanger). ' ||
                  'All share one closed hot oil circuit — cannot be individually isolated.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('SKCC-580','SKCC-590','SKCC-600','SKCC-610','SKCC-620')
      and decommissioned = false
    returning equipment_id
@@ -579,7 +578,7 @@ with changed as (
      set notes = coalesce(notes || ' | ', '') ||
                  'COMBINED LOTO GROUP 2026-04-27: Part of the TC1 Fryer Oil Loop system. ' ||
                  'ONE combined LOTO procedure covers: SKT1-540, SKT1-550, SKT1-560, SKT1-570.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('SKT1-540','SKT1-550','SKT1-560','SKT1-570')
      and decommissioned = false
    returning equipment_id
@@ -607,7 +606,7 @@ with changed as (
      set notes = coalesce(notes || ' | ', '') ||
                  'COMBINED LOTO GROUP 2026-04-27: Part of the TC2 Fryer Oil Loop system. ' ||
                  'ONE combined LOTO procedure covers: SKT2-580, SKT2-590, SKT2-600, SKT2-610.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('SKT2-580','SKT2-590','SKT2-600','SKT2-610')
      and decommissioned = false
    returning equipment_id
@@ -635,7 +634,7 @@ with changed as (
      set notes = coalesce(notes || ' | ', '') ||
                  'COMBINED LOTO GROUP 2026-04-27: Part of the Jensen Fryer system. ' ||
                  'ONE combined LOTO procedure covers: JEGN-500, JEGN-510.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('JEGN-500','JEGN-510')
      and decommissioned = false
    returning equipment_id
@@ -663,7 +662,7 @@ with changed as (
      set notes = coalesce(notes || ' | ', '') ||
                  'COMBINED LOTO GROUP 2026-04-27: Part of the USDA Fryer Oil Loop system. ' ||
                  'ONE combined LOTO procedure covers: USGN-350, USGN-500, USGN-520, USGN-570.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('USGN-350','USGN-500','USGN-520','USGN-570')
      and decommissioned = false
    returning equipment_id
@@ -690,7 +689,7 @@ with changed as (
      set notes = coalesce(notes || ' | ', '') ||
                  'COMBINED LOTO GROUP 2026-04-27: Mix Kettle and pump share one hot liquid circuit. ' ||
                  'ONE combined LOTO covers: JECA-530, JECA-540.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('JECA-530','JECA-540') and decommissioned = false
    returning equipment_id
 )
@@ -716,7 +715,7 @@ with changed as (
      set notes = coalesce(notes || ' | ', '') ||
                  'COMBINED LOTO GROUP 2026-04-27: Use Kettle, pump, and condensate pump share one system. ' ||
                  'ONE combined LOTO covers: JECA-550, JECA-560, JECA-570.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('JECA-550','JECA-560','JECA-570') and decommissioned = false
    returning equipment_id
 )
@@ -741,7 +740,7 @@ with changed as (
   update public.loto_equipment
      set notes = coalesce(notes || ' | ', '') ||
                  'COMBINED LOTO GROUP 2026-04-27: ONE combined LOTO covers: SKPC-840, SKPC-850.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('SKPC-840','SKPC-850') and decommissioned = false
    returning equipment_id
 )
@@ -766,7 +765,7 @@ with changed as (
   update public.loto_equipment
      set notes = coalesce(notes || ' | ', '') ||
                  'COMBINED LOTO GROUP 2026-04-27: ONE combined LOTO covers: SKPC-860, SKPC-870.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('SKPC-860','SKPC-870') and decommissioned = false
    returning equipment_id
 )
@@ -791,7 +790,7 @@ with changed as (
   update public.loto_equipment
      set notes = coalesce(notes || ' | ', '') ||
                  'COMBINED LOTO GROUP 2026-04-27: ONE combined LOTO covers: SKPF-850, SKPF-860.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('SKPF-850','SKPF-860') and decommissioned = false
    returning equipment_id
 )
@@ -816,7 +815,7 @@ with changed as (
   update public.loto_equipment
      set notes = coalesce(notes || ' | ', '') ||
                  'COMBINED LOTO GROUP 2026-04-27: ONE combined LOTO covers: SKPF-870, SKPF-880.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('SKPF-870','SKPF-880') and decommissioned = false
    returning equipment_id
 )
@@ -842,7 +841,7 @@ with changed as (
      set notes = coalesce(notes || ' | ', '') ||
                  'COMBINED LOTO GROUP 2026-04-27: All three share one slurry circuit. ' ||
                  'ONE combined LOTO covers: JEPL-101, JEPL-102, JEPL-103.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('JEPL-101','JEPL-102','JEPL-103') and decommissioned = false
    returning equipment_id
 )
@@ -868,7 +867,7 @@ with changed as (
      set notes = coalesce(notes || ' | ', '') ||
                  'COMBINED LOTO GROUP 2026-04-27: Tumbler and its blower motor are one machine. ' ||
                  'ONE combined LOTO covers: SKPC-810, SKPC-820.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('SKPC-810','SKPC-820') and decommissioned = false
    returning equipment_id
 )
@@ -894,7 +893,7 @@ with changed as (
      set notes = coalesce(notes || ' | ', '') ||
                  'COMBINED LOTO GROUP 2026-04-27: Slitter and discharge belt share drive system. ' ||
                  'ONE combined LOTO covers: JECL-590, JECL-600.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('JECL-590','JECL-600') and decommissioned = false
    returning equipment_id
 )
@@ -920,7 +919,7 @@ with changed as (
      set notes = coalesce(notes || ' | ', '') ||
                  'COMBINED LOTO GROUP 2026-04-27: Guillotine and discharge belt share drive system. ' ||
                  'ONE combined LOTO covers: JECL-610, JECL-620.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('JECL-610','JECL-620') and decommissioned = false
    returning equipment_id
 )
@@ -953,7 +952,7 @@ with changed as (
                  'CROSS-REF LOTO 2026-04-27: All 3 boilers (BGGN-011, BGGN-012, BGGN-013) share a common steam header. ' ||
                  'When working on steam distribution piping, all three must be locked at their individual steam isolation valves. ' ||
                  'Verify steam header pressure = 0 PSI before proceeding.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('BGGN-011','BGGN-012','BGGN-013') and decommissioned = false
    returning equipment_id
 )
@@ -980,7 +979,7 @@ with changed as (
                  'CROSS-REF LOTO 2026-04-27: BGGN-030 and BGGN-031 share a common air receiver and distribution header. ' ||
                  'When working on the receiver or main air header, BOTH compressors must be locked out. ' ||
                  'Close and lock inlet ball valve on receiver from each compressor. Verify receiver gauge = 0 PSI.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('BGGN-030','BGGN-031') and decommissioned = false
    returning equipment_id
 )
@@ -1007,7 +1006,7 @@ with changed as (
      set notes = coalesce(notes || ' | ', '') ||
                  'CROSS-REF LOTO 2026-04-27: This vibratory hopper feeds directly into its paired bucket elevator boot section. ' ||
                  'When performing maintenance on the bucket elevator, also lock out this hopper to prevent product from striking the worker.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('JEGN-880','JEGN-890','JEGN-900','JEGN-910','JEGN-920')
      and decommissioned = false
    returning equipment_id
@@ -1036,7 +1035,7 @@ with changed as (
                  'CROSS-REF LOTO 2026-04-27: This bucket elevator is fed by its paired vibratory hopper. ' ||
                  'When performing maintenance on this elevator, also lock out the corresponding vib hopper ' ||
                  '(JEGN-880/890/900/910/920 — match the last digit pair to identify your hopper).',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('JEGN-930','JEGN-940','JEGN-950','JEGN-960','JEGN-970')
      and decommissioned = false
    returning equipment_id
@@ -1068,7 +1067,7 @@ with changed as (
                  'CROSS-REF LOTO 2026-04-27: This metal detector is directly inline with an Atlas/UVA bagger upstream. ' ||
                  'When working inside the detector aperture or on its conveyor belt, also lock out the upstream bagger ' ||
                  '(SNK-601 through SNK-621 — match position number: Detector 1 → Bagger 1, etc.).',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in (
      'SNK-622','SNK-623','SNK-624','SNK-625','SNK-626','SNK-627','SNK-628',
      'SNK-629','SNK-630','SNK-631','SNK-631A','SNK-632','SNK-633','SNK-634',
@@ -1100,7 +1099,7 @@ with changed as (
                  'CROSS-REF LOTO 2026-04-27: This chiller serves the Jensen Cube Line cooling tunnels (JECL-580, JECL-670). ' ||
                  'When working on cooling tunnel chilled water connections, verify which chiller circuit(s) supply that tunnel ' ||
                  'and lock out those chiller(s) at the chilled water supply/return valves.',
-         updated_at = public._hygiene_now_iso()
+         updated_at = now()
    where equipment_id in ('JECL-680','JECL-690','JECL-700','JECL-710')
      and decommissioned = false
    returning equipment_id
