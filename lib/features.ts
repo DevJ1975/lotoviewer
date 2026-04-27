@@ -220,6 +220,15 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
   },
   {
+    id:          'admin-hygiene-log',
+    name:        'Data Hygiene Log',
+    description: 'One-off LOTO data ops — decommissions, renames, FK repairs',
+    href:        '/admin/hygiene-log',
+    category:    'admin',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
     id:          'settings-notifications',
     name:        'Notifications',
     description: 'Enable Web Push for permit + atmospheric-test alerts',

@@ -214,6 +214,30 @@ export interface GasMeter {
   updated_at:           string
 }
 
+// One-off LOTO data-hygiene operations journal — populated by manual
+// scripts run from Supabase SQL Editor (e.g.
+// migrations/data_hygiene_snak_king_2026-04-27.sql). The standard audit
+// log captures per-row before/after via triggers; this table sits one
+// level higher and records "what hygiene op did we do, why, and when."
+export type HygieneAction =
+  | 'decommission'
+  | 'rename'
+  | 'note_append'
+  | 'fk_repair'
+  | 'orphan_detected'
+  | 'snapshot'
+  | 'error'
+
+export interface HygieneLogRow {
+  id:           string
+  ran_at:      string
+  section:      string                  // e.g. 'section_1', 'section_4_cheese_curl', 'baseline'
+  equipment_id: string | null           // null for baseline / summary rows
+  action:       HygieneAction
+  reason:       string
+  detail:       Record<string, unknown> | null
+}
+
 // Per-worker training records for §1910.146(g) compliance. The four
 // canonical roles plus an "other" slot for site-specific certifications
 // (e.g. fall-protection, hot-work). Migration 017.
