@@ -164,9 +164,13 @@ describe('DecommissionPage — rendering', () => {
     expect(counterValue('Decommissioned')).toBe('1')
     expect(counterValue('Total')).toBe('4')
 
-    // Department headers + per-group subcounts
-    expect(screen.getByText('ALPHA')).toBeInTheDocument()
-    expect(screen.getByText('BETA')).toBeInTheDocument()
+    // Department headers + per-group subcounts. The page stores the
+    // dept name in original case ("Alpha") and visually uppercases it
+    // via Tailwind — so textContent stays mixed-case. Match with a
+    // case-insensitive anchor so the assertion doesn't break the next
+    // time the rendering flips between CSS-uppercase and JS-uppercase.
+    expect(screen.getByText(/^alpha$/i)).toBeInTheDocument()
+    expect(screen.getByText(/^beta$/i)).toBeInTheDocument()
     expect(screen.getByText('0/2 decommissioned')).toBeInTheDocument()
     expect(screen.getByText('1/2 decommissioned')).toBeInTheDocument()
   })
@@ -209,18 +213,23 @@ describe('DecommissionPage — individual toggle', () => {
   it('optimistically flips a row, PATCHes with .select(), and shows a success toast', async () => {
     const m = installSupabase({
       fetchRows: SAMPLE,
-      updateResponses: [{ data: [{ equipment_id: 'EQ-001' }], error: null }],
+      // The page now selects BOTH equipment_id AND decommissioned so it
+      // can verify the stored value matches what we asked for. Mock
+      // mirrors that contract: echo back decommissioned=true since
+      // the test exercises an off→on toggle.
+      updateResponses: [{ data: [{ equipment_id: 'EQ-001', decommissioned: true }], error: null }],
     })
     render(<DecommissionPage />)
     await screen.findByText('EQ-001')
 
     await userEvent.click(row('EQ-001'))
 
-    // PATCH fired with correct args — including the critical `.select('equipment_id')`
-    // that distinguishes real writes from silent zero-row "successes".
+    // PATCH fired with correct args — including the .select() that
+    // distinguishes real writes from silent zero-row "successes" AND
+    // verifies the persisted decommissioned value matches what we wrote.
     expect(m.update).toHaveBeenCalledWith({ decommissioned: true })
     expect(m.eq).toHaveBeenCalledWith('equipment_id', 'EQ-001')
-    expect(m.updateSelect).toHaveBeenCalledWith('equipment_id')
+    expect(m.updateSelect).toHaveBeenCalledWith('equipment_id, decommissioned')
 
     // Counters flipped (3/1 → 2/2) and success toast visible
     await waitFor(() => expect(counterValue('Active')).toBe('2'))
@@ -266,8 +275,8 @@ describe('DecommissionPage — individual toggle', () => {
     installSupabase({
       fetchRows: SAMPLE,
       updateResponses: [
-        { data: [{ equipment_id: 'EQ-001' }], error: null }, // initial toggle
-        { data: [{ equipment_id: 'EQ-001' }], error: null }, // undo
+        { data: [{ equipment_id: 'EQ-001', decommissioned: true  }], error: null }, // initial toggle
+        { data: [{ equipment_id: 'EQ-001', decommissioned: false }], error: null }, // undo flips back
       ],
     })
     render(<DecommissionPage />)
@@ -285,8 +294,8 @@ describe('DecommissionPage — individual toggle', () => {
     installSupabase({
       fetchRows: SAMPLE,
       updateResponses: [
-        { data: [{ equipment_id: 'EQ-001' }], error: null }, // first toggle succeeds
-        { data: [], error: null },                           // undo silently rejected
+        { data: [{ equipment_id: 'EQ-001', decommissioned: true }], error: null }, // first toggle succeeds
+        { data: [], error: null },                                                  // undo silently rejected
       ],
     })
     render(<DecommissionPage />)
@@ -331,7 +340,7 @@ describe('DecommissionPage — keyboard', () => {
   it('Space toggles the focused row', async () => {
     const m = installSupabase({
       fetchRows: SAMPLE,
-      updateResponses: [{ data: [{ equipment_id: 'EQ-001' }], error: null }],
+      updateResponses: [{ data: [{ equipment_id: 'EQ-001', decommissioned: true }], error: null }],
     })
     render(<DecommissionPage />)
     await screen.findByText('EQ-001')
@@ -391,7 +400,12 @@ describe('DecommissionPage — bulk selection', () => {
     const m = installSupabase({
       fetchRows: SAMPLE,
       updateResponses: [{
-        data:  [{ equipment_id: 'EQ-001' }, { equipment_id: 'EQ-002' }],
+        // Both rows reconcile as "saved" only when the returned
+        // decommissioned value matches the requested next.
+        data:  [
+          { equipment_id: 'EQ-001', decommissioned: true },
+          { equipment_id: 'EQ-002', decommissioned: true },
+        ],
         error: null,
       }],
     })
@@ -435,7 +449,9 @@ describe('DecommissionPage — bulk selection', () => {
     installSupabase({
       fetchRows: SAMPLE,
       updateResponses: [{
-        data:  [{ equipment_id: 'EQ-001' }],  // only one of the two rows was written
+        // Only EQ-001 was actually written (the page reconciles by
+        // checking decommissioned === next on each returned row).
+        data:  [{ equipment_id: 'EQ-001', decommissioned: true }],
         error: null,
       }],
     })
@@ -506,8 +522,8 @@ describe('DecommissionPage — bulk selection', () => {
     installSupabase({
       fetchRows: SAMPLE,
       updateResponses: [
-        { data: [{ equipment_id: 'EQ-001' }], error: null }, // initial bulk apply
-        { data: [{ equipment_id: 'EQ-001' }], error: null }, // undo write
+        { data: [{ equipment_id: 'EQ-001', decommissioned: true  }], error: null }, // initial bulk apply
+        { data: [{ equipment_id: 'EQ-001', decommissioned: false }], error: null }, // undo flips back
       ],
     })
     render(<DecommissionPage />)
@@ -526,8 +542,8 @@ describe('DecommissionPage — bulk selection', () => {
     installSupabase({
       fetchRows: SAMPLE,
       updateResponses: [
-        { data: [{ equipment_id: 'EQ-001' }], error: null }, // bulk apply succeeds
-        { data: [], error: null },                           // undo silently rejected
+        { data: [{ equipment_id: 'EQ-001', decommissioned: true }], error: null }, // bulk apply succeeds
+        { data: [], error: null },                                                  // undo silently rejected
       ],
     })
     render(<DecommissionPage />)
