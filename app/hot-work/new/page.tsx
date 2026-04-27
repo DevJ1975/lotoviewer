@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
 import type {
   ConfinedSpacePermit,
+  Equipment,
   HotWorkPreChecks,
   HotWorkType,
 } from '@/lib/types'
@@ -92,6 +93,29 @@ export default function NewHotWorkPermitPage() {
   useEffect(() => {
     if (checks.confined_space) loadActiveCsPermits()
   }, [checks.confined_space, loadActiveCsPermits])
+
+  // ── Equipment picker — equipment_id is a real FK into loto_equipment.
+  //    Earlier versions used a free-text input which produced an opaque
+  //    Postgres FK violation when the typed value didn't match any row.
+  //    Loaded once on mount; non-decommissioned only.
+  const [equipmentList, setEquipmentList] = useState<Equipment[]>([])
+  const [equipmentLoading, setEquipmentLoading] = useState(true)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase
+        .from('loto_equipment')
+        .select('equipment_id, description, department, decommissioned')
+        .eq('decommissioned', false)
+        .order('equipment_id', { ascending: true })
+        .limit(500)
+      if (!cancelled) {
+        setEquipmentList((data ?? []) as Equipment[])
+        setEquipmentLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
@@ -330,14 +354,28 @@ export default function NewHotWorkPermitPage() {
       )}
 
       <Section title="Optional cross-references">
-        <Field label="Equipment ID" hint="If the work is on a specific machine — surfaces the LOTO procedure">
-          <input
-            type="text"
-            value={equipmentId}
-            onChange={e => setEquipmentId(e.target.value)}
-            placeholder="EQ-001"
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
-          />
+        <Field label="Equipment" hint="If the work is on a specific machine — surfaces the LOTO procedure">
+          {equipmentLoading ? (
+            <p className="text-xs text-slate-500 px-3 py-2 bg-slate-50 rounded-lg">Loading equipment…</p>
+          ) : equipmentList.length === 0 ? (
+            <p className="text-xs text-slate-500 px-3 py-2 bg-slate-50 rounded-lg">
+              No active equipment registered. Add equipment in the LOTO module before linking it here.
+            </p>
+          ) : (
+            <select
+              value={equipmentId}
+              onChange={e => setEquipmentId(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy bg-white"
+            >
+              <option value="">— No specific equipment —</option>
+              {equipmentList.map(eq => (
+                <option key={eq.equipment_id} value={eq.equipment_id}>
+                  {eq.equipment_id} — {eq.description}
+                  {eq.department ? ` (${eq.department})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
         </Field>
         <Field label="Work order ref" hint="CMMS reference — renders as a link if your org has a URL template">
           <input
