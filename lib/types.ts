@@ -170,10 +170,16 @@ export interface ConfinedSpacePermit {
   updated_at:                      string
 }
 
-// Single-row org-level configuration (migration 014). One row, id = 1.
+// Single-row org-level configuration. Migration 014 created the row;
+// migration 018 added the push-dispatch fields used by the Postgres
+// auto-trigger.
 export interface OrgConfig {
   id:                       1
   work_order_url_template:  string | null
+  // Set together with INTERNAL_PUSH_SECRET on the API side. Both
+  // null = auto-push triggers no-op silently.
+  push_dispatch_url:        string | null
+  push_dispatch_secret:     string | null
   updated_at:               string
   updated_by:               string | null
 }

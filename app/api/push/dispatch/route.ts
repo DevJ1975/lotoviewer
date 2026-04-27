@@ -4,10 +4,17 @@ import webpush from 'web-push'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import type { PushPayload } from '@/lib/push'
 
-// POST /api/push/dispatch — admin-only. Fans out a payload to every
-// subscriber in loto_push_subscriptions. Body shape:
+// POST /api/push/dispatch — fans out a payload to every subscriber in
+// loto_push_subscriptions. Body shape:
 //   { title, body, url?, tag?, profile_ids?: string[] }
 // If profile_ids is omitted, every subscription receives the push.
+//
+// Two auth paths:
+//   1. Bearer token + admin profile  — for human-driven dispatches
+//      (the "Send a test push" button on /settings/notifications).
+//   2. X-Internal-Secret header     — for machine-driven dispatches
+//      (the Postgres trigger from migration 018 calling via pg_net).
+//      The secret value must match env INTERNAL_PUSH_SECRET.
 //
 // VAPID keys come from env:
 //   NEXT_PUBLIC_VAPID_PUBLIC_KEY  (also exposed to the browser)
@@ -48,10 +55,28 @@ function configureVapid(): { ok: true } | { ok: false; reason: string } {
   return { ok: true }
 }
 
+// Constant-time string compare for the internal secret. avoids timing
+// oracles even though the surface is small — same hygiene we'd want
+// for any shared-secret check.
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let mismatch = 0
+  for (let i = 0; i < a.length; i++) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return mismatch === 0
+}
+
 export async function POST(req: Request) {
-  const adminId = await requireAdmin(req.headers.get('authorization'))
-  if (!adminId) {
-    return NextResponse.json({ error: 'Admin only' }, { status: 403 })
+  // Try internal-secret first — short-circuits the Supabase round-trip
+  // when the Postgres trigger fires.
+  const provided = req.headers.get('x-internal-secret') ?? ''
+  const expected = process.env.INTERNAL_PUSH_SECRET ?? ''
+  const internalOk = expected.length > 0 && provided.length > 0 && safeEqual(provided, expected)
+
+  if (!internalOk) {
+    const adminId = await requireAdmin(req.headers.get('authorization'))
+    if (!adminId) {
+      return NextResponse.json({ error: 'Admin only' }, { status: 403 })
+    }
   }
 
   const vapid = configureVapid()

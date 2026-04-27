@@ -8,19 +8,26 @@ import { useAuth } from '@/components/AuthProvider'
 import { formatWorkOrderUrl } from '@/lib/orgConfig'
 import type { OrgConfig } from '@/lib/types'
 
-// Org-level configuration. Today: just the work-order URL template that
-// turns a free-text ref on a permit into a clickable hyperlink.
-// Future config keys land here without a route change.
+// Org-level configuration. Two sections:
+//   - Work-order URL template (migration 014) — turns a free-text ref
+//     on a permit into a clickable link.
+//   - Push auto-dispatch (migration 018) — URL + secret matching the
+//     INTERNAL_PUSH_SECRET env var on the API. Both must be set for
+//     the Postgres trigger to actually fire pushes; either null and
+//     the trigger silently no-ops.
 
 export default function ConfigurationPage() {
   const { profile, loading: authLoading } = useAuth()
-  const [config, setConfig]               = useState<OrgConfig | null>(null)
-  const [template, setTemplate]           = useState('')
-  const [loading, setLoading]             = useState(true)
-  const [saving, setSaving]               = useState(false)
-  const [loadError, setLoadError]         = useState<string | null>(null)
-  const [saveError, setSaveError]         = useState<string | null>(null)
-  const [savedAt, setSavedAt]             = useState<number | null>(null)
+  const [config, setConfig] = useState<OrgConfig | null>(null)
+  const [template, setTemplate] = useState('')
+  const [pushUrl, setPushUrl]       = useState('')
+  const [pushSecret, setPushSecret] = useState('')
+  const [showSecret, setShowSecret] = useState(false)
+  const [loading, setLoading]       = useState(true)
+  const [saving, setSaving]         = useState(false)
+  const [loadError, setLoadError]   = useState<string | null>(null)
+  const [saveError, setSaveError]   = useState<string | null>(null)
+  const [savedAt, setSavedAt]       = useState<number | null>(null)
 
   useEffect(() => {
     if (authLoading) return
@@ -35,8 +42,11 @@ export default function ConfigurationPage() {
         if (cancelled) return
         if (error) setLoadError(error.message)
         if (data) {
-          setConfig(data as OrgConfig)
-          setTemplate((data as OrgConfig).work_order_url_template ?? '')
+          const cfg = data as OrgConfig
+          setConfig(cfg)
+          setTemplate(cfg.work_order_url_template ?? '')
+          setPushUrl(cfg.push_dispatch_url ?? '')
+          setPushSecret(cfg.push_dispatch_secret ?? '')
         }
         setLoading(false)
       })
@@ -50,14 +60,20 @@ export default function ConfigurationPage() {
     return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500">Admins only.</div>
   }
 
+  const dirty =
+    template.trim()    !== (config?.work_order_url_template ?? '')
+    || pushUrl.trim()  !== (config?.push_dispatch_url       ?? '')
+    || pushSecret      !== (config?.push_dispatch_secret    ?? '')
+
   async function save() {
     setSaving(true)
     setSaveError(null)
-    const trimmed = template.trim()
     const { data, error } = await supabase
       .from('loto_org_config')
       .update({
-        work_order_url_template: trimmed || null,
+        work_order_url_template: template.trim()     || null,
+        push_dispatch_url:       pushUrl.trim()      || null,
+        push_dispatch_secret:    pushSecret.trim()   || null,
         updated_at:              new Date().toISOString(),
         updated_by:              profile?.id ?? null,
       })
@@ -70,9 +86,7 @@ export default function ConfigurationPage() {
     setSavedAt(Date.now())
   }
 
-  // Live preview of the rendered URL with a sample ref. Helps the admin
-  // confirm the {ref} placeholder is in the right spot before saving.
-  const preview = formatWorkOrderUrl(template.trim() || null, 'WO-2026-0001')
+  const woPreview = formatWorkOrderUrl(template.trim() || null, 'WO-2026-0001')
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
@@ -98,37 +112,82 @@ export default function ConfigurationPage() {
       {loading ? (
         <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
       ) : (
-        <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
-          <header>
-            <h2 className="text-sm font-bold text-slate-900">Work-order URL template</h2>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              Turns a free-text work-order ref on a permit into a clickable link. Use{' '}
-              <span className="font-mono">{'{ref}'}</span> as the placeholder. Leave blank to render refs as plain text.
-            </p>
-          </header>
-          <input
-            type="url"
-            value={template}
-            onChange={e => setTemplate(e.target.value)}
-            placeholder="https://maintainx.com/wo/{ref}"
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
-          />
-          <div className="rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-[11px]">
-            <p className="font-bold text-slate-600 mb-1">Preview (sample ref WO-2026-0001):</p>
-            {preview ? (
-              <a href={preview} target="_blank" rel="noopener noreferrer" className="font-mono text-brand-navy break-all hover:underline">
-                {preview}
-              </a>
-            ) : (
-              <p className="text-slate-400 italic">
-                {template.trim() === ''
-                  ? 'No template — refs render as plain text.'
-                  : !template.includes('{ref}')
-                  ? 'Template missing {ref} placeholder — every link would point to the same URL.'
-                  : '—'}
+        <>
+          <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+            <header>
+              <h2 className="text-sm font-bold text-slate-900">Work-order URL template</h2>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Turns a free-text work-order ref on a permit into a clickable link. Use{' '}
+                <span className="font-mono">{'{ref}'}</span> as the placeholder. Leave blank to render refs as plain text.
               </p>
-            )}
-          </div>
+            </header>
+            <input
+              type="url"
+              value={template}
+              onChange={e => setTemplate(e.target.value)}
+              placeholder="https://maintainx.com/wo/{ref}"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+            />
+            <div className="rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-[11px]">
+              <p className="font-bold text-slate-600 mb-1">Preview (sample ref WO-2026-0001):</p>
+              {woPreview ? (
+                <a href={woPreview} target="_blank" rel="noopener noreferrer" className="font-mono text-brand-navy break-all hover:underline">
+                  {woPreview}
+                </a>
+              ) : (
+                <p className="text-slate-400 italic">
+                  {template.trim() === ''
+                    ? 'No template — refs render as plain text.'
+                    : !template.includes('{ref}')
+                    ? 'Template missing {ref} placeholder — every link would point to the same URL.'
+                    : '—'}
+                </p>
+              )}
+            </div>
+          </section>
+
+          <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+            <header>
+              <h2 className="text-sm font-bold text-slate-900">Push auto-dispatch</h2>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Both URL and secret must be set for atmospheric-fail and prohibited-cancel pushes
+                to fire. The secret has to match the <span className="font-mono">INTERNAL_PUSH_SECRET</span>
+                {' '}env var on the API. Either field blank → the Postgres trigger silently no-ops.
+              </p>
+            </header>
+            <label className="block space-y-1.5">
+              <span className="text-xs font-semibold text-slate-600">
+                Dispatch URL
+              </span>
+              <input
+                type="url"
+                value={pushUrl}
+                onChange={e => setPushUrl(e.target.value)}
+                placeholder="https://soteria-app.vercel.app/api/push/dispatch"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              />
+            </label>
+            <label className="block space-y-1.5">
+              <span className="text-xs font-semibold text-slate-600 flex items-center justify-between">
+                Internal secret
+                <button
+                  type="button"
+                  onClick={() => setShowSecret(s => !s)}
+                  className="text-[10px] font-semibold text-brand-navy hover:underline"
+                >
+                  {showSecret ? 'Hide' : 'Show'}
+                </button>
+              </span>
+              <input
+                type={showSecret ? 'text' : 'password'}
+                value={pushSecret}
+                onChange={e => setPushSecret(e.target.value)}
+                placeholder="generate a random string and paste it here AND into INTERNAL_PUSH_SECRET"
+                autoComplete="new-password"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              />
+            </label>
+          </section>
 
           {saveError && (
             <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-md px-3 py-2">{saveError}</p>
@@ -141,13 +200,13 @@ export default function ConfigurationPage() {
             <button
               type="button"
               onClick={save}
-              disabled={saving || (template.trim() === (config?.work_order_url_template ?? ''))}
+              disabled={saving || !dirty}
               className="px-4 py-2 rounded-lg bg-brand-navy text-white text-sm font-semibold disabled:opacity-40 hover:bg-brand-navy/90 transition-colors"
             >
               {saving ? 'Saving…' : 'Save'}
             </button>
           </div>
-        </section>
+        </>
       )}
     </div>
   )
