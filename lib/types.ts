@@ -238,10 +238,22 @@ export interface HygieneLogRow {
   detail:       Record<string, unknown> | null
 }
 
-// Per-worker training records for §1910.146(g) compliance. The four
-// canonical roles plus an "other" slot for site-specific certifications
-// (e.g. fall-protection, hot-work). Migration 017.
-export type TrainingRole = 'entrant' | 'attendant' | 'entry_supervisor' | 'rescuer' | 'other'
+// Per-worker training records. Two regulatory anchors covered:
+//   • §1910.146(g) — Confined Space roles (entrant / attendant /
+//     entry_supervisor / rescuer)
+//   • §1910.252(a)(2)(xv) + NFPA 51B — Hot Work roles (hot_work_operator
+//     for welders/cutters/grinders; fire_watcher for the dedicated
+//     fire-watch role required during AND for ≥60 min after hot work).
+// "other" is the catch-all for site-specific certifications.
+// Migration 017 (CS roles), extended in migration 019 / app code for HW.
+export type TrainingRole =
+  | 'entrant'
+  | 'attendant'
+  | 'entry_supervisor'
+  | 'rescuer'
+  | 'hot_work_operator'
+  | 'fire_watcher'
+  | 'other'
 
 export interface TrainingRecord {
   id:             string
@@ -265,6 +277,16 @@ export type WebhookEvent =
   | 'permit.canceled'
   | 'test.recorded'
   | 'test.failed'
+  // Hot Work lifecycle (migration 019 / Phase 3 trigger). 'work_complete'
+  // fires when the supervisor flips the work-done toggle on a hot-work
+  // permit (this kicks off the 60-min post-watch timer). 'fire_observed'
+  // is the emergency cancel — fans out a high-priority push to every
+  // subscriber.
+  | 'hot_work.created'
+  | 'hot_work.signed'
+  | 'hot_work.work_complete'
+  | 'hot_work.canceled'
+  | 'hot_work.fire_observed'
 
 export interface WebhookSubscription {
   id:         string
@@ -278,6 +300,123 @@ export interface WebhookSubscription {
   created_by: string | null
   created_at: string
   updated_at: string
+}
+
+// ── Hot Work (OSHA 1910.252 + NFPA 51B + Cal/OSHA Title 8 §6777) ─────────
+// Migration 019. Mirrors the Confined Space lifecycle but the regulatory
+// shape is different: no atmospheric tests, fire watch is the central
+// concept, and there's a distinct post-work watch period that the CS
+// permit doesn't have.
+
+export type HotWorkType =
+  | 'welding'
+  | 'cutting'
+  | 'grinding'
+  | 'soldering'
+  | 'brazing'
+  | 'torch_roof'
+  | 'other'
+
+export type HotWorkCancelReason =
+  | 'task_complete'
+  | 'fire_observed'
+  | 'unsafe_condition'
+  | 'expired'
+  | 'other'
+
+// Pre-work checklist matching the FM Global 7-40 / Cal/OSHA §4848-4853
+// shape. Stored as jsonb so v2 can extend without a migration. All keys
+// optional in the type so partially-filled forms parse; the validator
+// in lib/hotWorkChecklist.ts enforces sign-time completeness.
+export interface HotWorkPreChecks {
+  combustibles_cleared_35ft?:       boolean
+  floor_swept?:                     boolean
+  floor_openings_protected?:        boolean
+  wall_openings_protected?:         boolean
+  sprinklers_operational?:          boolean
+  // Required when sprinklers_operational === false. Free-text describing
+  // the alternate (e.g. "two ABC extinguishers staged + dedicated watcher").
+  alternate_protection_if_no_spr?:  string | null
+  ventilation_adequate?:            boolean
+  fire_extinguisher_present?:       boolean
+  fire_extinguisher_type?:          string | null   // 'ABC' | 'CO2' | etc.
+  curtains_or_shields_in_place?:    boolean
+  // null when the work doesn't involve gas lines at all.
+  gas_lines_isolated?:              boolean | null
+  adjacent_areas_notified?:         boolean
+  // Triggers the cross-link to a CS permit. When true, the form requires
+  // associated_cs_permit_id before sign per §1910.146(f)(15).
+  confined_space?:                  boolean
+  // Triggers fall-protection downstream (out of scope this build).
+  elevated_work?:                   boolean
+  // Note that designated_area=true would normally exempt the work from
+  // a permit per §1910.252(a)(2)(iii). For v1 we still require the
+  // permit so every hot-work job has an audit trail; the flag exists
+  // for v2 reporting.
+  designated_area?:                 boolean
+}
+
+export interface HotWorkPermit {
+  id:                          string
+  // Human-readable serial HWP-YYYYMMDD-NNNN populated by the BEFORE INSERT
+  // trigger from migration 019. Mirrors the CSP- format from migration 011.
+  serial:                      string
+  work_location:               string
+  work_description:            string
+  work_types:                  HotWorkType[]
+  // Cross-references — both nullable.
+  associated_cs_permit_id:     string | null
+  equipment_id:                string | null
+  work_order_ref:              string | null
+  // Time bounding (8h CHECK constraint mirrors CS)
+  started_at:                  string
+  expires_at:                  string
+  // Permit Authorizing Individual per NFPA 51B
+  pai_id:                      string
+  pai_signature_at:            string | null
+  // Personnel rosters. Cal/OSHA §6777 requires fire_watch_personnel to
+  // be disjoint from hot_work_operators — enforced in app validation,
+  // not in schema.
+  hot_work_operators:          string[]
+  fire_watch_personnel:        string[]
+  fire_watch_signature_at:     string | null
+  fire_watch_signature_name:   string | null
+  // Pre-work checklist as structured jsonb.
+  pre_work_checks:             HotWorkPreChecks
+  // Post-work fire watch — supervisor flips work_completed_at on; the
+  // permit can't close until now() ≥ work_completed_at + post_watch_minutes.
+  // Default 60 min (NFPA 51B floor); per-permit override up to 240.
+  work_completed_at:           string | null
+  post_watch_minutes:          number
+  // Cancel / close-out
+  canceled_at:                 string | null
+  cancel_reason:               HotWorkCancelReason | null
+  cancel_notes:                string | null
+  notes:                       string | null
+  created_at:                  string
+  updated_at:                  string
+}
+
+// Human-readable labels for HotWorkType — used in form pickers and
+// PDF generation. Mirrors the CONFINED_SPACE labels in
+// lib/confinedSpaceLabels.ts (which is where this would live if it
+// grew — for now the type is small enough to inline).
+export const HOT_WORK_TYPE_LABELS: Record<HotWorkType, string> = {
+  welding:    'Welding (arc / gas)',
+  cutting:    'Cutting (oxy-fuel / plasma)',
+  grinding:   'Grinding',
+  soldering:  'Soldering',
+  brazing:    'Brazing',
+  torch_roof: 'Torch-applied roofing',
+  other:      'Other',
+}
+
+export const HOT_WORK_CANCEL_REASON_LABELS: Record<HotWorkCancelReason, string> = {
+  task_complete:    'Task complete (post-watch elapsed)',
+  fire_observed:    'Fire observed — emergency cancel',
+  unsafe_condition: 'Unsafe condition (e.g. sprinklers down)',
+  expired:          'Time expired',
+  other:            'Other',
 }
 
 export type AtmosphericTestKind = 'pre_entry' | 'periodic' | 'post_alarm'

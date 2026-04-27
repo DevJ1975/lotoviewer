@@ -9,11 +9,16 @@ import type { TrainingRecord, TrainingRole } from '@/lib/types'
 // gap that's been verified off-app.
 
 export const TRAINING_ROLE_LABELS: Record<TrainingRole, string> = {
-  entrant:          'Authorized entrant',
-  attendant:        'Attendant',
-  entry_supervisor: 'Entry supervisor',
-  rescuer:          'Rescuer',
-  other:            'Other',
+  entrant:           'Authorized entrant',
+  attendant:         'Attendant',
+  entry_supervisor:  'Entry supervisor',
+  rescuer:           'Rescuer',
+  // Hot-work roles (migration 019). hot_work_operator covers welders,
+  // cutters, grinders, etc.; fire_watcher is the dedicated fire-watch
+  // role required during AND for ≥60 min after hot work per NFPA 51B.
+  hot_work_operator: 'Hot-work operator',
+  fire_watcher:      'Fire watcher',
+  other:             'Other',
 }
 
 // What roles satisfy a given roster slot. An entrant can be qualified
