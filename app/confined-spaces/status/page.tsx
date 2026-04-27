@@ -40,6 +40,15 @@ import {
 
 const REFRESH_MS = 30_000   // data refetch
 const TICK_MS    = 1000     // countdown tick
+// "Stale" threshold: if the last successful refresh is older than this,
+// the timestamp banner turns rose and labels itself STALE. iOS PWAs
+// aggressively throttle background timers, so a 60s gap on a live board
+// usually means we missed at least one tick — not a number to ignore.
+const STALE_MS   = 60_000
+// Bound on how far back atmospheric-test rows are pulled. The 8-hour
+// permit cap means every test on an active permit is within 8h, but
+// we leave 24h of headroom for shift handoffs and post-cancel review.
+const TEST_WINDOW_MS = 24 * 60 * 60 * 1000
 
 interface PermitWithSpace extends ConfinedSpacePermit {
   space?: ConfinedSpace
@@ -75,9 +84,20 @@ export default function PermitStatusBoard() {
     const spaceIds = [...new Set(ps.map(p => p.space_id))]
     const permitIds = ps.map(p => p.id)
 
+    // Cutoff bounds the test pull at TEST_WINDOW_MS. Without this,
+    // a long-running site accumulates atmospheric_tests rows linearly
+    // and the per-refresh payload grows unbounded. 24h is comfortably
+    // larger than the permit duration cap (8h) so we never miss a
+    // relevant test for an active permit.
+    const testCutoffIso = new Date(Date.now() - TEST_WINDOW_MS).toISOString()
     const [spacesRes, testsRes] = await Promise.all([
       supabase.from('loto_confined_spaces').select('*').in('space_id', spaceIds),
-      supabase.from('loto_atmospheric_tests').select('*').in('permit_id', permitIds).order('tested_at', { ascending: false }),
+      supabase
+        .from('loto_atmospheric_tests')
+        .select('*')
+        .in('permit_id', permitIds)
+        .gte('tested_at', testCutoffIso)
+        .order('tested_at', { ascending: false }),
     ])
 
     const spaces = (spacesRes.data ?? []) as ConfinedSpace[]
@@ -99,11 +119,38 @@ export default function PermitStatusBoard() {
     setLastRefresh(Date.now())
   }, [])
 
-  // Initial load + 30s refetch
+  // Initial load + 30s refetch with visibility-API pause/resume.
+  //
+  // iOS PWAs (and most desktop browsers) throttle background timers —
+  // a setInterval running while the tab is hidden may fire at 1/min
+  // or not at all. Pausing on `document.hidden` and forcing an
+  // immediate fetch on resume means the operator sees fresh data
+  // the moment they return, not up to 30s later. The active-board
+  // mode (visible) keeps its 30s cadence.
   useEffect(() => {
+    let id: ReturnType<typeof setInterval> | null = null
+    function start() {
+      if (id) return
+      id = setInterval(load, REFRESH_MS)
+    }
+    function stop() {
+      if (id) { clearInterval(id); id = null }
+    }
+    function onVisibility() {
+      if (document.hidden) {
+        stop()
+      } else {
+        load()        // immediate refresh on resume
+        start()
+      }
+    }
     load()
-    const id = setInterval(load, REFRESH_MS)
-    return () => clearInterval(id)
+    if (typeof document === 'undefined' || !document.hidden) start()
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [load])
 
   // 1s tick for the live countdowns. Cheap — just bumps `now` so the
@@ -126,6 +173,13 @@ export default function PermitStatusBoard() {
     [permits, now],
   )
 
+  // "How stale is the displayed data?" Drives both the discreet
+  // header readout and the prominent banner that appears when the
+  // last successful refresh is far enough behind to suggest a missed
+  // tick or network hiccup.
+  const refreshAgeMs = Math.max(0, now - lastRefresh)
+  const isStale      = refreshAgeMs > STALE_MS
+
   return (
     <div className="min-h-[calc(100vh-6rem)] bg-slate-950 text-white px-4 sm:px-8 py-6 space-y-6">
       <header className="flex items-end justify-between gap-4 flex-wrap">
@@ -141,11 +195,36 @@ export default function PermitStatusBoard() {
           <p className="text-3xl sm:text-4xl font-mono font-bold">
             {new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </p>
-          <p className="text-[11px] text-slate-500">
-            Refreshed {Math.max(0, Math.floor((now - lastRefresh) / 1000))}s ago · auto every 30s
+          <p className={`text-[11px] ${isStale ? 'text-rose-400 font-bold' : 'text-slate-500'}`}>
+            {isStale && '⚠ STALE · '}
+            Refreshed {Math.floor(refreshAgeMs / 1000)}s ago · auto every 30s
           </p>
         </div>
       </header>
+
+      {/* Loud banner when the data is very stale — the discreet header
+          readout is easy to miss across a control room, and an
+          operator counting on this board needs to know when the
+          numbers are NOT live. */}
+      {isStale && !loading && (
+        <section className="rounded-xl border-2 border-rose-500 bg-rose-950/60 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <p className="text-base font-bold text-rose-200">
+              Data is stale — last refresh {Math.floor(refreshAgeMs / 1000)}s ago.
+            </p>
+            <p className="text-xs text-rose-200/80">
+              Check your network connection. The board normally refreshes every 30 seconds.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => load()}
+            className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm transition-colors"
+          >
+            Retry now →
+          </button>
+        </section>
+      )}
 
       {/* Headline tiles */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
