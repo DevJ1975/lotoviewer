@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { hotWorkState } from '@/lib/hotWorkPermitStatus'
 
 // Aggregator for the home screen at /. Splits the work into a pure
 // summarizer + a thin DB orchestrator so the logic (audit-event prose,
@@ -79,6 +80,30 @@ export interface EquipmentPhotoStatusRow {
   photo_status: 'missing' | 'partial' | 'complete'
 }
 
+// Lean shape for the hot-work alert feed. Mirrors PermitSummaryRow but
+// scoped to the fields hotWorkState() needs to derive lifecycle state.
+export interface HotWorkPermitRow {
+  id:                    string
+  serial:                string | null
+  work_location:         string
+  pai_signature_at:      string | null
+  expires_at:            string
+  canceled_at:           string | null
+  work_completed_at:     string | null
+  post_watch_minutes:    number
+}
+
+// Hot-work alert summary. `kind` discriminates what timer the `minutes`
+// field refers to so the home card can render context-appropriate copy
+// ("expires in 12 min" vs "fire watch ends in 35 min").
+export interface HotWorkAlertSummary {
+  id:           string
+  serial:       string
+  workLocation: string
+  kind:         'expiring' | 'post_watch'
+  minutes:      number
+}
+
 export interface HomeMetrics {
   activePermits:        ActivePermitSummary[]   // top 3 by soonest expiry
   activePermitCount:    number
@@ -92,12 +117,21 @@ export interface HomeMetrics {
   // Pending-signature permits older than PENDING_STALE_MIN — drafts the
   // supervisor opened and walked away from. Empty when none.
   pendingStalePermits:  PermitAlertSummary[]
+  // Active hot-work permits with < HOT_WORK_EXPIRING_SOON_MIN remaining.
+  // Tighter than the CS threshold because fire-watcher attention matters
+  // most near end-of-period.
+  hotWorkExpiringSoon:  HotWorkAlertSummary[]
+  // Hot-work permits currently in the post-work fire-watch phase. Not an
+  // urgency alert — informational so the supervisor can see who's still
+  // on watch and shouldn't be released.
+  hotWorkInPostWatch:   HotWorkAlertSummary[]
 }
 
 // Thresholds for the home alerts card. Surfaced as exported constants so
 // tests and UI label strings stay in sync ("Expiring in <2h", etc.).
-export const EXPIRING_SOON_MIN = 120  // < 2 hours remaining triggers the alert
-export const PENDING_STALE_MIN = 120  // pending > 2 hours triggers the alert
+export const EXPIRING_SOON_MIN          = 120  // < 2 hours remaining triggers the alert
+export const PENDING_STALE_MIN          = 120  // pending > 2 hours triggers the alert
+export const HOT_WORK_EXPIRING_SOON_MIN = 30   // hot work is shorter-lived; tighter threshold
 
 // ── Pure helpers (testable without supabase) ──────────────────────────────
 
@@ -286,17 +320,72 @@ export function findPendingStale(
   return out.sort((a, b) => b.minutes - a.minutes)
 }
 
+// Active hot-work permits whose expires_at is within `thresholdMin` of
+// nowMs. Filters via hotWorkState() so canceled / pending / post-watch
+// rows are skipped. Sorted soonest-first.
+export function findHotWorkExpiring(
+  rows:         HotWorkPermitRow[],
+  nowMs:        number,
+  thresholdMin: number,
+): HotWorkAlertSummary[] {
+  const out: HotWorkAlertSummary[] = []
+  for (const r of rows) {
+    if (hotWorkState(r, nowMs) !== 'active') continue
+    const expMs = new Date(r.expires_at).getTime()
+    if (Number.isNaN(expMs)) continue
+    const minutes = (expMs - nowMs) / 60_000
+    if (minutes <= 0 || minutes > thresholdMin) continue
+    out.push({
+      id:           r.id,
+      serial:       r.serial ?? `permit-${r.id.slice(0, 8)}`,
+      workLocation: r.work_location,
+      kind:         'expiring',
+      minutes:      Math.round(minutes),
+    })
+  }
+  return out.sort((a, b) => a.minutes - b.minutes)
+}
+
+// Hot-work permits currently in the post-work fire-watch phase. Reports
+// minutes remaining on each watch so the home card can show "fire watch
+// ends in 23 min." Sorted shortest-remaining first (the watcher closest
+// to release goes on top).
+export function findHotWorkInPostWatch(
+  rows:  HotWorkPermitRow[],
+  nowMs: number,
+): HotWorkAlertSummary[] {
+  const out: HotWorkAlertSummary[] = []
+  for (const r of rows) {
+    if (hotWorkState(r, nowMs) !== 'post_work_watch') continue
+    const wcMs = new Date(r.work_completed_at!).getTime()
+    if (Number.isNaN(wcMs)) continue
+    const watchEndsMs = wcMs + r.post_watch_minutes * 60_000
+    const minutes = Math.max(0, Math.ceil((watchEndsMs - nowMs) / 60_000))
+    out.push({
+      id:           r.id,
+      serial:       r.serial ?? `permit-${r.id.slice(0, 8)}`,
+      workLocation: r.work_location,
+      kind:         'post_watch',
+      minutes,
+    })
+  }
+  return out.sort((a, b) => a.minutes - b.minutes)
+}
+
 // Compose the metrics object from already-fetched rows. Pure — no I/O.
 // Caller does the supabase reads and hands the rows in; tests skip the
 // DB entirely and just feed fixtures.
 export function summarizeMetricsFromRows({
-  permits, pending = [], equipRows, audits, spaceDescById, nowMs,
+  permits, pending = [], hotWork = [], equipRows, audits, spaceDescById, nowMs,
 }: {
   permits:       PermitSummaryRow[]
   // Optional so callers / fixtures that don't care about the pending-stale
   // alert (the original test suite, for example) don't have to thread it
   // through. Defaults to an empty array — no pending alerts.
   pending?:      PendingPermitRow[]
+  // Optional for the same reason — fixtures that don't exercise hot-work
+  // alerts can omit. Defaults to no alerts.
+  hotWork?:      HotWorkPermitRow[]
   equipRows:    EquipmentPhotoStatusRow[]
   audits:       AuditLogRow[]
   spaceDescById: Map<string, string>
@@ -338,6 +427,8 @@ export function summarizeMetricsFromRows({
 
   const expiringSoonPermits = findExpiringSoon(active, nowMs, EXPIRING_SOON_MIN)
   const pendingStalePermits = findPendingStale(pending, nowMs, PENDING_STALE_MIN)
+  const hotWorkExpiringSoon = findHotWorkExpiring(hotWork, nowMs, HOT_WORK_EXPIRING_SOON_MIN)
+  const hotWorkInPostWatch  = findHotWorkInPostWatch(hotWork, nowMs)
 
   return {
     activePermits:        top3,
@@ -349,6 +440,8 @@ export function summarizeMetricsFromRows({
     recentActivity,
     expiringSoonPermits,
     pendingStalePermits,
+    hotWorkExpiringSoon,
+    hotWorkInPostWatch,
   }
 }
 
@@ -362,7 +455,7 @@ export function summarizeMetricsFromRows({
 export async function fetchHomeMetrics(): Promise<HomeMetrics> {
   const nowMs = Date.now()
 
-  const [permitsRes, pendingRes, equipRes, auditRes] = await Promise.all([
+  const [permitsRes, pendingRes, hotWorkRes, equipRes, auditRes] = await Promise.all([
     supabase
       .from('loto_confined_space_permits')
       .select('id, serial, space_id, expires_at, canceled_at, entry_supervisor_signature_at, entrants, attendants')
@@ -377,6 +470,16 @@ export async function fetchHomeMetrics(): Promise<HomeMetrics> {
       .is('entry_supervisor_signature_at', null)
       .order('started_at', { ascending: true })
       .limit(50),
+    // Hot-work permits — signed + non-canceled. The pure helpers filter
+    // further on state (active vs post_work_watch) so we don't need to
+    // shape the query around it.
+    supabase
+      .from('loto_hot_work_permits')
+      .select('id, serial, work_location, pai_signature_at, expires_at, canceled_at, work_completed_at, post_watch_minutes')
+      .is('canceled_at', null)
+      .not('pai_signature_at', 'is', null)
+      .order('expires_at', { ascending: true })
+      .limit(50),
     supabase
       .from('loto_equipment')
       .select('photo_status')
@@ -390,6 +493,7 @@ export async function fetchHomeMetrics(): Promise<HomeMetrics> {
 
   const permits   = (permitsRes.data ?? []) as PermitSummaryRow[]
   const pending   = (pendingRes.data ?? []) as PendingPermitRow[]
+  const hotWork   = (hotWorkRes.data ?? []) as HotWorkPermitRow[]
   const equipRows = (equipRes.data   ?? []) as EquipmentPhotoStatusRow[]
   const audits    = (auditRes.data   ?? []) as AuditLogRow[]
 
@@ -414,5 +518,5 @@ export async function fetchHomeMetrics(): Promise<HomeMetrics> {
     }
   }
 
-  return summarizeMetricsFromRows({ permits, pending, equipRows, audits, spaceDescById, nowMs })
+  return summarizeMetricsFromRows({ permits, pending, hotWork, equipRows, audits, spaceDescById, nowMs })
 }

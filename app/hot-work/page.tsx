@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Flame, Plus, Search } from 'lucide-react'
+import { Flame, Monitor, Plus, Search } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { HotWorkPermit } from '@/lib/types'
 import { HOT_WORK_TYPE_LABELS } from '@/lib/types'
@@ -145,13 +145,22 @@ export default function HotWorkListPage() {
             Welding · cutting · grinding · brazing · soldering · torch-applied work · OSHA 29 CFR 1910.252 + NFPA 51B
           </p>
         </div>
-        <Link
-          href="/hot-work/new"
-          className="self-start inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          New permit
-        </Link>
+        <div className="flex items-center gap-2 self-start">
+          <Link
+            href="/hot-work/status"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors"
+          >
+            <Monitor className="h-4 w-4" />
+            Status board
+          </Link>
+          <Link
+            href="/hot-work/new"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            New permit
+          </Link>
+        </div>
       </header>
 
       {/* Headline tiles */}

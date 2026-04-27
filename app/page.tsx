@@ -4,14 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   AlertTriangle, Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSnow,
-  Camera, FileText, MapPin, Plus, Sun, Wind,
+  Camera, FileText, Flame, MapPin, Plus, Sun, Wind,
 } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { timeOfDayGreeting } from '@/components/Greeting'
 import { getModules } from '@/lib/features'
 import {
   fetchHomeMetrics,
-  type HomeMetrics, type ActivePermitSummary, type ActivityEvent, type PermitAlertSummary,
+  type HomeMetrics, type ActivePermitSummary, type ActivityEvent,
+  type PermitAlertSummary, type HotWorkAlertSummary,
 } from '@/lib/homeMetrics'
 import { permitCountdown, type CountdownTone } from '@/lib/permitStatus'
 
@@ -86,10 +87,17 @@ export default function HomePage() {
         <CriticalAlertBanner count={metrics.expiredPermitCount} />
       )}
 
-      {metrics && (metrics.expiringSoonPermits.length > 0 || metrics.pendingStalePermits.length > 0) && (
-        <ConfinedSpaceAlertsCard
+      {metrics && (
+        metrics.expiringSoonPermits.length > 0
+        || metrics.pendingStalePermits.length > 0
+        || metrics.hotWorkExpiringSoon.length > 0
+        || metrics.hotWorkInPostWatch.length > 0
+      ) && (
+        <PermitAlertsCard
           expiringSoon={metrics.expiringSoonPermits}
           pendingStale={metrics.pendingStalePermits}
+          hotWorkExpiring={metrics.hotWorkExpiringSoon}
+          hotWorkInPostWatch={metrics.hotWorkInPostWatch}
         />
       )}
 
@@ -273,15 +281,21 @@ function CriticalAlertBanner({ count }: { count: number }) {
   )
 }
 
-// ── Confined-space alerts card ────────────────────────────────────────────
+// ── Permit alerts card (CS + Hot Work) ────────────────────────────────────
 //
 // Sits below the critical alert banner (expired permits) but above the KPI
 // strip. Only renders when there's at least one alert — empty state would
-// be noise on a busy iPad.
+// be noise on a busy iPad. Mixes CS expiring/stale tiles with hot-work
+// expiring/post-watch tiles in one responsive grid.
 
-function ConfinedSpaceAlertsCard({
-  expiringSoon, pendingStale,
-}: { expiringSoon: PermitAlertSummary[]; pendingStale: PermitAlertSummary[] }) {
+function PermitAlertsCard({
+  expiringSoon, pendingStale, hotWorkExpiring, hotWorkInPostWatch,
+}: {
+  expiringSoon:       PermitAlertSummary[]
+  pendingStale:       PermitAlertSummary[]
+  hotWorkExpiring:    HotWorkAlertSummary[]
+  hotWorkInPostWatch: HotWorkAlertSummary[]
+}) {
   return (
     <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
       {expiringSoon.length > 0 && (
@@ -310,6 +324,32 @@ function ConfinedSpaceAlertsCard({
           }))}
         />
       )}
+      {hotWorkExpiring.length > 0 && (
+        <AlertList
+          tone="rose"
+          icon={<Flame className="h-5 w-5" />}
+          title={`${hotWorkExpiring.length} hot-work permit${hotWorkExpiring.length === 1 ? '' : 's'} expiring soon`}
+          subtitle="Less than 30 min left — finish or extend before fire watch ends."
+          rows={hotWorkExpiring.slice(0, 3).map(p => ({
+            href:  `/hot-work/${p.id}`,
+            label: p.serial,
+            sub:   `${p.workLocation} · ${p.minutes} min left`,
+          }))}
+        />
+      )}
+      {hotWorkInPostWatch.length > 0 && (
+        <AlertList
+          tone="indigo"
+          icon={<Flame className="h-5 w-5" />}
+          title={`${hotWorkInPostWatch.length} fire watch${hotWorkInPostWatch.length === 1 ? '' : 'es'} active`}
+          subtitle="Post-work watch in progress — watcher must remain on site (NFPA 51B §8.7)."
+          rows={hotWorkInPostWatch.slice(0, 3).map(p => ({
+            href:  `/hot-work/${p.id}`,
+            label: p.serial,
+            sub:   `${p.workLocation} · ${p.minutes} min on watch`,
+          }))}
+        />
+      )}
     </section>
   )
 }
@@ -317,15 +357,17 @@ function ConfinedSpaceAlertsCard({
 function AlertList({
   tone, icon, title, subtitle, rows,
 }: {
-  tone:     'amber' | 'slate'
+  tone:     'amber' | 'slate' | 'rose' | 'indigo'
   icon:     React.ReactNode
   title:    string
   subtitle: string
   rows:     Array<{ href: string; label: string; sub: string }>
 }) {
-  const toneCls = tone === 'amber'
-    ? 'bg-amber-50 border-amber-200 text-amber-900'
-    : 'bg-slate-50 border-slate-200 text-slate-800'
+  const toneCls =
+    tone === 'amber'  ? 'bg-amber-50 border-amber-200 text-amber-900'
+  : tone === 'rose'   ? 'bg-rose-50 border-rose-200 text-rose-900'
+  : tone === 'indigo' ? 'bg-indigo-50 border-indigo-200 text-indigo-900'
+  :                     'bg-slate-50 border-slate-200 text-slate-800'
   return (
     <div className={`rounded-xl border ${toneCls} p-4 space-y-3`}>
       <header className="flex items-start gap-2">

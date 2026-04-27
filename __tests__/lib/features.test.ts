@@ -109,6 +109,7 @@ describe('getFeaturesByCategory', () => {
       'cs-import',
       'near-miss',
       'hot-work',
+      'hot-work-status',
       'jha',
     ])
   })
@@ -186,9 +187,13 @@ describe('getChildren', () => {
     expect(ids).toEqual(['cs-status-board', 'cs-import'])
   })
 
+  it('returns the children of hot-work module', () => {
+    const ids = getChildren('hot-work').map(c => c.id)
+    expect(ids).toEqual(['hot-work-status'])
+  })
+
   it('returns an empty array for a leaf module (coming-soon entries have none)', () => {
     expect(getChildren('near-miss')).toEqual([])
-    expect(getChildren('hot-work')).toEqual([])
     expect(getChildren('jha')).toEqual([])
   })
 

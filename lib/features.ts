@@ -168,6 +168,16 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
   },
   {
+    id:          'hot-work-status',
+    name:        'Hot Work Status Board',
+    description: 'Live big-monitor view of active hot-work permits + fire-watch timers',
+    href:        '/hot-work/status',
+    category:    'safety',
+    parent:      'hot-work',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
     id:          'jha',
     name:        'Job Hazard Analysis',
     description: 'Task-level hazard breakdowns',

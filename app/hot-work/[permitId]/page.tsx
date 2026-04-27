@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Flame, Loader2 } from 'lucide-react'
+import { ArrowLeft, Download, Flame, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
 import type {
@@ -185,6 +185,37 @@ export default function HotWorkPermitDetailPage() {
     setPermit(data as HotWorkPermit)
   }
 
+  // PDF download — same iOS-Safari-friendly pattern as the CS permit:
+  // open the blob in a new tab so the native viewer gets Share / Save / Print
+  // chrome, with an anchor-click fallback when popups are blocked.
+  async function handleDownloadPdf() {
+    if (!permit) return
+    setServerError(null)
+    try {
+      const { generateHotWorkPermitPdf } = await import('@/lib/pdfHotWorkPermit')
+      const permitUrl = `${window.location.origin}/hot-work/${permit.id}`
+      const bytes = await generateHotWorkPermitPdf({ permit, permitUrl })
+      const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' })
+      const url  = URL.createObjectURL(blob)
+      const filename = `${permit.serial ?? `hot-work-${permit.id.slice(0, 8)}`}.pdf`
+
+      const newWin = window.open(url, '_blank', 'noopener,noreferrer')
+      if (!newWin) {
+        const a = document.createElement('a')
+        a.href     = url
+        a.download = filename
+        a.rel      = 'noopener noreferrer'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      console.error('[hot-work-pdf] download failed', err)
+      setServerError(`Could not generate PDF: ${err instanceof Error ? err.message : 'unknown error'}`)
+    }
+  }
+
   // ── Render ────────────────────────────────────────────────────────────
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
@@ -192,7 +223,17 @@ export default function HotWorkPermitDetailPage() {
         <Link href="/hot-work" className="text-sm font-semibold text-slate-500 hover:text-slate-700 inline-flex items-center gap-1">
           <ArrowLeft className="h-4 w-4" /> Back
         </Link>
-        <span className="text-[11px] text-slate-500 font-mono font-bold tracking-wider">{permit.serial}</span>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 border border-slate-300 hover:border-slate-400 rounded-md px-2.5 py-1 transition-colors"
+            aria-label="Download PDF"
+          >
+            <Download className="h-3.5 w-3.5" /> PDF
+          </button>
+          <span className="text-[11px] text-slate-500 font-mono font-bold tracking-wider">{permit.serial}</span>
+        </div>
       </header>
 
       {/* State banner */}

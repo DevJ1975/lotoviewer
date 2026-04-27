@@ -6,12 +6,16 @@ import {
   summarizeMetricsFromRows,
   findExpiringSoon,
   findPendingStale,
+  findHotWorkExpiring,
+  findHotWorkInPostWatch,
   EXPIRING_SOON_MIN,
   PENDING_STALE_MIN,
+  HOT_WORK_EXPIRING_SOON_MIN,
   type AuditLogRow,
   type EquipmentPhotoStatusRow,
   type PermitSummaryRow,
   type PendingPermitRow,
+  type HotWorkPermitRow,
 } from '@/lib/homeMetrics'
 
 const NOW = new Date('2026-04-26T12:00:00Z').getTime()
@@ -541,6 +545,121 @@ describe('findPendingStale', () => {
         pending({ id: 'canceled', started_at: new Date(NOW - 4 * 3600_000).toISOString(), canceled_at: '2026-04-26T11:30:00Z' }),
       ],
       NOW, PENDING_STALE_MIN,
+    )
+    expect(out).toEqual([])
+  })
+})
+
+// ── findHotWorkExpiring ────────────────────────────────────────────────────
+
+function hotWork(partial: Partial<HotWorkPermitRow>): HotWorkPermitRow {
+  return {
+    id:                 'hw-1',
+    serial:             'HWP-20260426-0001',
+    work_location:      'Bay 4 south wall',
+    pai_signature_at:   '2026-04-26T11:00:00Z',
+    expires_at:         new Date(NOW + 4 * 3600_000).toISOString(),
+    canceled_at:        null,
+    work_completed_at:  null,
+    post_watch_minutes: 60,
+    ...partial,
+  }
+}
+
+describe('findHotWorkExpiring', () => {
+  it('returns nothing when all active permits have plenty of headroom', () => {
+    const out = findHotWorkExpiring(
+      [hotWork({ expires_at: new Date(NOW + 2 * 3600_000).toISOString() })],
+      NOW, HOT_WORK_EXPIRING_SOON_MIN,
+    )
+    expect(out).toEqual([])
+  })
+
+  it('flags active permits within the threshold soonest-first', () => {
+    const out = findHotWorkExpiring(
+      [
+        hotWork({ id: 'b', expires_at: new Date(NOW + 25 * 60_000).toISOString() }),
+        hotWork({ id: 'a', expires_at: new Date(NOW +  5 * 60_000).toISOString() }),
+        hotWork({ id: 'c', expires_at: new Date(NOW +  3 * 3600_000).toISOString() }),
+      ],
+      NOW, HOT_WORK_EXPIRING_SOON_MIN,
+    )
+    expect(out.map(p => p.id)).toEqual(['a', 'b'])
+    expect(out.every(p => p.kind === 'expiring')).toBe(true)
+  })
+
+  it('skips canceled and pending-signature rows (not in active state)', () => {
+    const out = findHotWorkExpiring(
+      [
+        hotWork({ id: 'canc',    canceled_at: '2026-04-26T11:30:00Z',    expires_at: new Date(NOW + 10 * 60_000).toISOString() }),
+        hotWork({ id: 'pending', pai_signature_at: null,                 expires_at: new Date(NOW + 10 * 60_000).toISOString() }),
+        hotWork({ id: 'live',                                            expires_at: new Date(NOW + 10 * 60_000).toISOString() }),
+      ],
+      NOW, HOT_WORK_EXPIRING_SOON_MIN,
+    )
+    expect(out.map(p => p.id)).toEqual(['live'])
+  })
+
+  it('skips post_work_watch rows — those are reported by findHotWorkInPostWatch', () => {
+    const out = findHotWorkExpiring(
+      [hotWork({
+        id: 'pw',
+        work_completed_at: new Date(NOW - 20 * 60_000).toISOString(),
+        post_watch_minutes: 60,
+        expires_at: new Date(NOW + 10 * 60_000).toISOString(),
+      })],
+      NOW, HOT_WORK_EXPIRING_SOON_MIN,
+    )
+    expect(out).toEqual([])
+  })
+
+  it('synthesizes a fallback serial when null', () => {
+    const out = findHotWorkExpiring(
+      [hotWork({ id: '12345678-aaaa-bbbb-cccc-dddddddddddd', serial: null,
+                 expires_at: new Date(NOW + 10 * 60_000).toISOString() })],
+      NOW, HOT_WORK_EXPIRING_SOON_MIN,
+    )
+    expect(out[0].serial).toBe('permit-12345678')
+  })
+})
+
+// ── findHotWorkInPostWatch ─────────────────────────────────────────────────
+
+describe('findHotWorkInPostWatch', () => {
+  it('returns rows currently in post_work_watch state', () => {
+    const out = findHotWorkInPostWatch(
+      [
+        // 20 min into a 60-min watch → 40 min remaining
+        hotWork({ id: 'mid', work_completed_at: new Date(NOW - 20 * 60_000).toISOString(), post_watch_minutes: 60 }),
+        // 5 min into a 60-min watch → 55 min remaining
+        hotWork({ id: 'fresh', work_completed_at: new Date(NOW -  5 * 60_000).toISOString(), post_watch_minutes: 60 }),
+      ],
+      NOW,
+    )
+    // Sorted shortest-remaining first: 'mid' (40 min) before 'fresh' (55 min).
+    expect(out.map(p => p.id)).toEqual(['mid', 'fresh'])
+    expect(out[0].kind).toBe('post_watch')
+    expect(out[0].minutes).toBe(40)
+    expect(out[1].minutes).toBe(55)
+  })
+
+  it('skips rows whose watch has already elapsed (post_watch_complete state)', () => {
+    const out = findHotWorkInPostWatch(
+      [hotWork({ work_completed_at: new Date(NOW - 90 * 60_000).toISOString(), post_watch_minutes: 60 })],
+      NOW,
+    )
+    expect(out).toEqual([])
+  })
+
+  it('skips active and canceled rows', () => {
+    const out = findHotWorkInPostWatch(
+      [
+        hotWork({ id: 'active' }),
+        hotWork({ id: 'canc',
+                  canceled_at: '2026-04-26T11:30:00Z',
+                  work_completed_at: new Date(NOW - 10 * 60_000).toISOString() }),
+      ],
+      NOW,
     )
     expect(out).toEqual([])
   })

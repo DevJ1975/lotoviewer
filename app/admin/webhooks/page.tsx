@@ -16,11 +16,18 @@ import type { WebhookEvent, WebhookSubscription } from '@/lib/types'
 // (would need an RPC that calls fire_webhooks with a synthetic payload).
 
 const ALL_EVENTS: { id: WebhookEvent; label: string; hint: string }[] = [
-  { id: 'permit.created',  label: 'Permit created',  hint: 'A new permit row was inserted' },
-  { id: 'permit.signed',   label: 'Permit signed',   hint: 'Entry supervisor signed — entry authorized' },
-  { id: 'permit.canceled', label: 'Permit canceled', hint: 'Permit closed (any reason)' },
-  { id: 'test.recorded',   label: 'Test recorded',   hint: 'Atmospheric reading saved' },
-  { id: 'test.failed',     label: 'Test failed',     hint: 'Reading exceeded OSHA-default thresholds' },
+  // Confined Space events (migration 013)
+  { id: 'permit.created',         label: 'CS permit created',         hint: 'A new confined-space permit row was inserted' },
+  { id: 'permit.signed',          label: 'CS permit signed',          hint: 'Entry supervisor signed — entry authorized' },
+  { id: 'permit.canceled',        label: 'CS permit canceled',        hint: 'Confined-space permit closed (any reason)' },
+  { id: 'test.recorded',          label: 'Atmospheric test recorded', hint: 'Atmospheric reading saved' },
+  { id: 'test.failed',            label: 'Atmospheric test failed',   hint: 'Reading exceeded OSHA-default thresholds' },
+  // Hot Work events (migration 020)
+  { id: 'hot_work.created',       label: 'Hot work permit created',   hint: 'A new hot-work permit row was inserted' },
+  { id: 'hot_work.signed',        label: 'Hot work permit signed',    hint: 'PAI signed — work authorized' },
+  { id: 'hot_work.work_complete', label: 'Hot work — work complete',  hint: 'Supervisor marked work done; post-watch timer started' },
+  { id: 'hot_work.canceled',      label: 'Hot work permit canceled',  hint: 'Hot-work permit closed (any reason)' },
+  { id: 'hot_work.fire_observed', label: 'Hot work — FIRE OBSERVED',  hint: 'Emergency cancel — fire was observed during or after work' },
 ]
 
 export default function WebhooksPage() {

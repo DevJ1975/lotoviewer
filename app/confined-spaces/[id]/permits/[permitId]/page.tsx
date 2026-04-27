@@ -13,8 +13,10 @@ import type {
   ConfinedSpaceEntry,
   ConfinedSpacePermit,
   GasMeter,
+  HotWorkPermit,
   OrgConfig,
 } from '@/lib/types'
+import { hotWorkState } from '@/lib/hotWorkPermitStatus'
 import { formatWorkOrderUrl } from '@/lib/orgConfig'
 import {
   effectiveThresholds,
@@ -66,6 +68,12 @@ export default function PermitDetailPage() {
   // for everyone. Tracked locally so leaving and returning to the page
   // re-prompts (matches the pre-entry-test warning pattern).
   const [trainingOverride, setTrainingOverride] = useState(false)
+  // Hot-work permits cross-linked to this CS permit (migration 019). The
+  // §1910.146(f)(15) cross-reference works in both directions: the hot-
+  // work permit FK-points here, and the CS permit surfaces a banner so
+  // the entry supervisor can see what concurrent fire-risk work is
+  // happening in their space.
+  const [linkedHotWork, setLinkedHotWork] = useState<HotWorkPermit[]>([])
   const [loading, setLoading]   = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [signing, setSigning]   = useState(false)
@@ -77,7 +85,7 @@ export default function PermitDetailPage() {
   const [rosterOpen, setRosterOpen] = useState(false)
 
   const load = useCallback(async () => {
-    const [spaceRes, permitRes, testsRes, entriesRes, metersRes, configRes, trainingRes] = await Promise.all([
+    const [spaceRes, permitRes, testsRes, entriesRes, metersRes, configRes, trainingRes, hotWorkRes] = await Promise.all([
       supabase.from('loto_confined_spaces').select('*').eq('space_id', spaceId).single(),
       supabase.from('loto_confined_space_permits').select('*').eq('id', permitId).single(),
       supabase.from('loto_atmospheric_tests').select('*').eq('permit_id', permitId).order('tested_at', { ascending: false }),
@@ -85,6 +93,7 @@ export default function PermitDetailPage() {
       supabase.from('loto_gas_meters').select('*').eq('decommissioned', false),
       supabase.from('loto_org_config').select('*').eq('id', 1).maybeSingle(),
       supabase.from('loto_training_records').select('*'),
+      supabase.from('loto_hot_work_permits').select('*').eq('associated_cs_permit_id', permitId).order('started_at', { ascending: false }),
     ])
     if (spaceRes.error || permitRes.error || !spaceRes.data || !permitRes.data) {
       setNotFound(true)
@@ -112,6 +121,10 @@ export default function PermitDetailPage() {
     // silently and the §(g) gate behaves as if no records exist (every
     // worker flagged), which the supervisor can override.
     if (trainingRes.data) setTrainingRecords(trainingRes.data as TrainingRecord[])
+    // Hot-work cross-link (migration 019). Pre-migration the table
+    // doesn't exist and the query errors silently — the banner just
+    // doesn't render, no crash.
+    if (hotWorkRes.data) setLinkedHotWork(hotWorkRes.data as HotWorkPermit[])
     setLoading(false)
   }, [spaceId, permitId])
 
@@ -298,6 +311,14 @@ export default function PermitDetailPage() {
 
       {serverError && (
         <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{serverError}</p>
+      )}
+
+      {/* Hot-work cross-link banner — §1910.146(f)(15). The entry
+          supervisor needs to know what fire-risk work is happening
+          inside their space concurrently. Only renders when at least
+          one hot-work permit references this CS permit. */}
+      {linkedHotWork.length > 0 && (
+        <LinkedHotWorkBanner permits={linkedHotWork} />
       )}
 
       <Section title="Personnel">
@@ -564,6 +585,54 @@ function StatusBanner({ state, permit }: { state: NonNullable<ReturnType<typeof 
     <div className={`${cfg.bg} text-white rounded-xl px-4 py-3`}>
       <p className="text-[11px] font-bold uppercase tracking-widest opacity-80">{cfg.label}</p>
       <p className="text-sm mt-0.5">{cfg.detail}</p>
+    </div>
+  )
+}
+
+// ── Linked hot-work banner (§1910.146(f)(15)) ──────────────────────────────
+//
+// Reverse cross-link of the FK on loto_hot_work_permits.associated_cs_permit_id.
+// Renders only when at least one hot-work permit points here. Shows
+// the lifecycle state and a deep-link to the hot-work detail page so
+// the CS entry supervisor can hop over to verify fire watch / pre-work
+// conditions. Active hot-work permits get a rose ring; closed/expired
+// ones get a quieter slate ring so the eye is drawn to live concerns.
+
+function LinkedHotWorkBanner({ permits }: { permits: HotWorkPermit[] }) {
+  return (
+    <div className="rounded-xl border-2 border-rose-300 bg-rose-50/60 p-4 space-y-2">
+      <header>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-rose-900">
+          🔥 Linked hot-work permits · §1910.146(f)(15)
+        </p>
+        <p className="text-[11px] text-rose-900/80 mt-0.5">
+          Concurrent fire-risk work inside this space — verify each fire watcher is on duty before entrants are allowed.
+        </p>
+      </header>
+      <ul className="space-y-1">
+        {permits.map(p => {
+          const s = hotWorkState(p)
+          const isLive = s === 'active' || s === 'post_work_watch' || s === 'pending_signature'
+          return (
+            <li key={p.id}>
+              <Link
+                href={`/hot-work/${p.id}`}
+                className={`flex items-center justify-between gap-2 rounded-md px-3 py-2 text-xs transition-colors ${
+                  isLive
+                    ? 'bg-white ring-1 ring-rose-200 hover:bg-rose-50'
+                    : 'bg-slate-50 ring-1 ring-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <span className="font-mono font-bold tracking-wider">{p.serial}</span>
+                <span className="text-slate-600 truncate">{p.work_location}</span>
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                  isLive ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-600'
+                }`}>{s.replace(/_/g, ' ')}</span>
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }
