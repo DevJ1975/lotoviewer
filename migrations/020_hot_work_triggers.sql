@@ -26,8 +26,22 @@
 -- needs to know "your watch starts now" — without that ping they'd be
 -- watching their wrist instead of the hot-work area.
 --
--- Idempotent. Safe pre-pg_net (the underlying functions both no-op when
--- pg_net or org_config is missing).
+-- Edge cases handled:
+--   • Simultaneous work_completed_at + canceled_at in one UPDATE (admin
+--     SQL fixup, backfill, etc.): the watch-started push is suppressed
+--     when the row is also being canceled in the same statement —
+--     telling a watcher "your watch starts now" while the permit is
+--     being torn down would be worse than no notification at all.
+--     Webhooks still fire faithfully for both transitions; subscribers
+--     decide how to interpret them.
+--   • Empty-string cancel_notes (vs NULL): coalesce alone doesn't catch
+--     ''; we use nullif(notes, '') so a blank notes field falls through
+--     to the "See permit detail." default rather than rendering as a
+--     stranded trailing period in the push body.
+--
+-- Idempotent (`create or replace function` + `drop trigger if exists`).
+-- Safe pre-pg_net — both fire_webhooks() and emit_push() no-op when
+-- pg_net or org_config is missing.
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- 1. Webhook trigger
@@ -86,13 +100,15 @@ declare
 begin
   if TG_OP = 'UPDATE' then
     -- ── fire_observed: highest urgency. Push to ALL subscribers. ──────
+    -- nullif(cancel_notes,'') so a blank notes field falls through to
+    -- the default text rather than rendering as a stranded "<loc>. ".
     if NEW.canceled_at is not null and OLD.canceled_at is null
        and NEW.cancel_reason = 'fire_observed' then
       body_text := format(
         '%s at %s. %s',
         NEW.serial,
         NEW.work_location,
-        coalesce(NEW.cancel_notes, 'See permit detail.')
+        coalesce(nullif(NEW.cancel_notes, ''), 'See permit detail.')
       );
       perform public.emit_push(jsonb_build_object(
         'title', 'FIRE OBSERVED — Hot work canceled',
@@ -112,7 +128,7 @@ begin
         'body',  format('%s at %s. %s',
                   NEW.serial,
                   NEW.work_location,
-                  coalesce(NEW.cancel_notes, 'See permit detail.')),
+                  coalesce(nullif(NEW.cancel_notes, ''), 'See permit detail.')),
         'url',   format('/hot-work/%s', NEW.id),
         'tag',   'hot_work:' || NEW.id || ':canceled'
       ));
@@ -121,7 +137,15 @@ begin
     -- ── work_complete: tells the fire watcher their post-watch timer
     --    just started. Operational, but safety-critical (without this
     --    they'd miss the start of their watch).
-    if NEW.work_completed_at is not null and OLD.work_completed_at is null then
+    --
+    -- Suppress when canceled_at is also set on NEW — a simultaneous
+    -- work_complete + cancel UPDATE (admin fixup, backfill) shouldn't
+    -- tell a watcher "your watch starts now" right as the permit is
+    -- being torn down. Webhooks still fire for both transitions so
+    -- the audit trail is faithful; only the human-facing push is
+    -- suppressed in this pathological case.
+    if NEW.work_completed_at is not null and OLD.work_completed_at is null
+       and NEW.canceled_at is null then
       perform public.emit_push(jsonb_build_object(
         'title', 'Hot work complete — fire watch active',
         'body',  format('%s at %s — fire watch for %s minutes.',
