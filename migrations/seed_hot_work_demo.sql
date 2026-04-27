@@ -28,29 +28,17 @@
 --   6. Closed (task_complete) — audit-trail example
 
 -- ────────────────────────────────────────────────────────────────────────────
--- Training records — operators + fire watchers named on the demo
--- rosters. Inserted before the permits so the sign-gate's training
--- validation sees current certs and doesn't trip the soft-block.
--- Requires migration 021 for the CHECK constraint.
--- ────────────────────────────────────────────────────────────────────────────
-insert into public.loto_training_records
-  (worker_name, role, completed_at, expires_at, cert_authority, notes)
-values
-  -- Operators
-  ('Alex Kim',     'hot_work_operator', current_date - interval '4 months', current_date + interval '8 months',  'AWS D1.1 (in-house refresher)', 'Demo seed.'),
-  ('Maria Lopez',  'hot_work_operator', current_date - interval '2 months', current_date + interval '10 months', 'AWS D1.1 (in-house refresher)', 'Demo seed.'),
-  ('Sam Chen',     'hot_work_operator', current_date - interval '6 months', current_date + interval '6 months',  'AWS D1.1 (in-house refresher)', 'Demo seed.'),
-  ('John Smith',   'hot_work_operator', current_date - interval '1 month',  current_date + interval '11 months', 'AWS D1.1 (in-house refresher)', 'Demo seed.'),
-  -- Fire watchers — separate roster per Cal/OSHA §6777 (no overlap)
-  ('Diana Park',   'fire_watcher',      current_date - interval '3 months', current_date + interval '9 months',  'NFPA 51B fire-watch training',  'Demo seed.'),
-  ('Mike O''Brien','fire_watcher',      current_date - interval '5 months', current_date + interval '7 months',  'NFPA 51B fire-watch training',  'Demo seed.'),
-  ('Jane Doe',     'fire_watcher',      current_date - interval '2 months', current_date + interval '10 months', 'NFPA 51B fire-watch training',  'Demo seed.')
-on conflict do nothing;
-
--- ────────────────────────────────────────────────────────────────────────────
--- Six demo permits across the lifecycle.
--- The DO block runs the inserts under a single advisory transaction so
--- the PAI lookup + cross-reference lookup are consistent.
+-- Six demo permits across the lifecycle, plus the training-record rows
+-- for their operators / watchers (so the sign-gate's training validation
+-- sees current certs and doesn't trip the soft-block).
+--
+-- Both inserts share one DO block under a single existence check. A
+-- prior version used `INSERT ... ON CONFLICT DO NOTHING` for the
+-- training rows, but loto_training_records has no unique constraint
+-- beyond the auto-generated UUID primary key — the ON CONFLICT was a
+-- no-op and re-running multiplied the training rows. Gating both
+-- inserts behind the same `notes like 'Demo seed:%'` marker on the
+-- permits table keeps the seed truly idempotent.
 -- ────────────────────────────────────────────────────────────────────────────
 do $$
 declare
@@ -110,6 +98,25 @@ begin
      and canceled_at is null
    order by created_at desc
    limit 1;
+
+  -- ── Training records ───────────────────────────────────────────────────
+  -- Operators + fire watchers named on the demo rosters. Inserted under
+  -- the same existence check as the permits so re-runs don't multiply
+  -- the rows. Uses (worker_name, role, notes='Demo seed.') as the de-
+  -- facto identity for filtering on cleanup, since the table has no
+  -- unique constraint on (worker_name, role).
+  insert into public.loto_training_records
+    (worker_name, role, completed_at, expires_at, cert_authority, notes)
+  values
+    -- Operators
+    ('Alex Kim',     'hot_work_operator', current_date - interval '4 months', current_date + interval '8 months',  'AWS D1.1 (in-house refresher)', 'Demo seed.'),
+    ('Maria Lopez',  'hot_work_operator', current_date - interval '2 months', current_date + interval '10 months', 'AWS D1.1 (in-house refresher)', 'Demo seed.'),
+    ('Sam Chen',     'hot_work_operator', current_date - interval '6 months', current_date + interval '6 months',  'AWS D1.1 (in-house refresher)', 'Demo seed.'),
+    ('John Smith',   'hot_work_operator', current_date - interval '1 month',  current_date + interval '11 months', 'AWS D1.1 (in-house refresher)', 'Demo seed.'),
+    -- Fire watchers — separate roster per Cal/OSHA §6777 (no overlap)
+    ('Diana Park',   'fire_watcher',      current_date - interval '3 months', current_date + interval '9 months',  'NFPA 51B fire-watch training',  'Demo seed.'),
+    ('Mike O''Brien','fire_watcher',      current_date - interval '5 months', current_date + interval '7 months',  'NFPA 51B fire-watch training',  'Demo seed.'),
+    ('Jane Doe',     'fire_watcher',      current_date - interval '2 months', current_date + interval '10 months', 'NFPA 51B fire-watch training',  'Demo seed.');
 
   -- ── 1. Pending signature ───────────────────────────────────────────────
   --     Created 5 min ago, no PAI signature. Use this to exercise the
@@ -281,6 +288,7 @@ begin
     'Demo seed: closed normally. Happy-path audit example.'
   );
 
-  raise notice 'Seeded hot-work demo permits (% rows).',
-    (select count(*) from public.loto_hot_work_permits where notes like 'Demo seed:%');
+  raise notice 'Seeded hot-work demo: % permits, % training records.',
+    (select count(*) from public.loto_hot_work_permits where notes like 'Demo seed:%'),
+    (select count(*) from public.loto_training_records  where notes = 'Demo seed.');
 end $$;
