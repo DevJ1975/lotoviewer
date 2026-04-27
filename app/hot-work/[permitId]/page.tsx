@@ -134,12 +134,12 @@ export default function HotWorkPermitDetailPage() {
   )
 
   if (authLoading || loading) {
-    return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+    return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
   if (notFound || !permit || !state || !countdown) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-10 text-center space-y-3">
-        <p className="text-sm font-semibold text-slate-700">Hot work permit not found.</p>
+        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Hot work permit not found.</p>
         <Link href="/hot-work" className="inline-block px-4 py-2 rounded-lg bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 transition-colors">
           Back to permits
         </Link>
@@ -220,19 +220,19 @@ export default function HotWorkPermitDetailPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
       <header className="flex items-center justify-between gap-3">
-        <Link href="/hot-work" className="text-sm font-semibold text-slate-500 hover:text-slate-700 inline-flex items-center gap-1">
+        <Link href="/hot-work" className="text-sm font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 inline-flex items-center gap-1">
           <ArrowLeft className="h-4 w-4" /> Back
         </Link>
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={handleDownloadPdf}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 border border-slate-300 hover:border-slate-400 rounded-md px-2.5 py-1 transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 border border-slate-300 dark:border-slate-700 hover:border-slate-400 rounded-md px-2.5 py-1 transition-colors"
             aria-label="Download PDF"
           >
             <Download className="h-3.5 w-3.5" /> PDF
           </button>
-          <span className="text-[11px] text-slate-500 font-mono font-bold tracking-wider">{permit.serial}</span>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono font-bold tracking-wider">{permit.serial}</span>
         </div>
       </header>
 
@@ -254,12 +254,12 @@ export default function HotWorkPermitDetailPage() {
       </div>
 
       {serverError && (
-        <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{serverError}</p>
+        <p className="text-xs text-rose-700 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 rounded-lg px-3 py-2">{serverError}</p>
       )}
 
       {/* Cross-link banners */}
       {csPermit && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+        <div className="rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-950/40 px-4 py-3">
           <p className="text-[11px] font-bold uppercase tracking-wider text-blue-900">Linked confined-space permit</p>
           <p className="text-sm text-blue-900 mt-0.5">
             <Link href={`/confined-spaces/${encodeURIComponent(csPermit.space_id)}/permits/${csPermit.id}`} className="font-mono font-bold hover:underline">
@@ -276,9 +276,9 @@ export default function HotWorkPermitDetailPage() {
       )}
 
       {permit.equipment_id && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Linked equipment</p>
-          <p className="text-sm text-slate-800 mt-0.5">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 px-4 py-3">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Linked equipment</p>
+          <p className="text-sm text-slate-800 dark:text-slate-200 mt-0.5">
             <Link href={`/equipment/${encodeURIComponent(permit.equipment_id)}?from=${encodeURIComponent('/hot-work/' + permit.id)}`} className="font-mono font-bold hover:underline">
               {permit.equipment_id}
             </Link>
@@ -318,7 +318,7 @@ export default function HotWorkPermitDetailPage() {
       {state === 'pending_signature' && (
         <>
           {signBlocks.length > 0 && (
-            <div className="rounded-md border border-rose-300 bg-rose-50 px-3 py-2 space-y-1">
+            <div className="rounded-md border border-rose-300 bg-rose-50 dark:bg-rose-950/40 px-3 py-2 space-y-1">
               <p className="text-[11px] font-bold text-rose-900">Sign blocked — resolve these first:</p>
               <ul className="text-[11px] text-rose-900/85 space-y-0.5 pl-4">
                 {signBlocks.map(b => <li key={b.code}>• {b.message}</li>)}
@@ -326,7 +326,7 @@ export default function HotWorkPermitDetailPage() {
             </div>
           )}
           {trainingIssues.length > 0 && signBlocks.length === 0 && (
-            <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 space-y-1.5">
+            <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 space-y-1.5">
               <p className="text-[11px] font-bold text-amber-900">§1910.252(a)(2)(xv) — training records not on file</p>
               <ul className="text-[11px] text-amber-900/85 space-y-0.5 pl-4">
                 {trainingIssues.map((i, idx) => (
@@ -341,7 +341,7 @@ export default function HotWorkPermitDetailPage() {
               </label>
             </div>
           )}
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap">
+          <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap">
             <div>
               <p className="text-sm font-bold text-emerald-900">Sign &amp; authorize this permit</p>
               <p className="text-[11px] text-emerald-900/80">
@@ -366,7 +366,7 @@ export default function HotWorkPermitDetailPage() {
 
       {/* Fire watch sign-on (active permits, watcher hasn't signed yet) */}
       {state === 'active' && !permit.fire_watch_signature_at && permit.fire_watch_personnel.length > 0 && (
-        <div className="rounded-xl bg-blue-50 border border-blue-200 p-4 flex items-center justify-between gap-3 flex-wrap">
+        <div className="rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 p-4 flex items-center justify-between gap-3 flex-wrap">
           <div>
             <p className="text-sm font-bold text-blue-900">Fire watcher on-duty sign-on</p>
             <p className="text-[11px] text-blue-900/80">NFPA 51B §6.5 — confirm a watcher is in position before work proceeds.</p>
@@ -404,7 +404,7 @@ export default function HotWorkPermitDetailPage() {
 
       {/* Post-work watch — countdown + cancel-for-cause; no close until elapsed */}
       {state === 'post_work_watch' && countdown.postWatchMinutesRemaining != null && (
-        <div className="rounded-xl bg-blue-50 border border-blue-200 p-4 space-y-2">
+        <div className="rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 p-4 space-y-2">
           <p className="text-sm font-bold text-blue-900">
             Fire watch active — {formatMinutes(countdown.postWatchMinutesRemaining)} remaining
           </p>
@@ -426,7 +426,7 @@ export default function HotWorkPermitDetailPage() {
 
       {/* Ready to close */}
       {state === 'post_watch_complete' && (
-        <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 flex items-center justify-between gap-3 flex-wrap">
+        <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 p-4 flex items-center justify-between gap-3 flex-wrap">
           <div>
             <p className="text-sm font-bold text-emerald-900">Post-work watch elapsed — ready to close.</p>
             <p className="text-[11px] text-emerald-900/80">No fire was observed. Confirm and close to lock the audit trail.</p>
@@ -443,7 +443,7 @@ export default function HotWorkPermitDetailPage() {
 
       {/* Expired without close-out */}
       {state === 'expired' && (
-        <div className="rounded-xl bg-rose-50 border border-rose-200 p-4 flex items-center justify-between gap-3">
+        <div className="rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 p-4 flex items-center justify-between gap-3">
           <p className="text-xs text-rose-900/80">
             This permit expired without being formally closed. Close it out now to clear the alert and lock the audit trail.
           </p>
@@ -526,28 +526,28 @@ function FireWatchSignOnDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/40">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-5 space-y-4">
+      <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-5 space-y-4">
         <header className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900">Fire watch sign-on</h2>
-          <button type="button" onClick={onClose} disabled={busy} aria-label="Close" className="text-slate-400 hover:text-slate-600 text-lg leading-none px-1">×</button>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Fire watch sign-on</h2>
+          <button type="button" onClick={onClose} disabled={busy} aria-label="Close" className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 text-lg leading-none px-1">×</button>
         </header>
-        <p className="text-[11px] text-slate-600">
+        <p className="text-[11px] text-slate-600 dark:text-slate-300">
           By signing on you accept the watcher duties under NFPA 51B §6.5: continuous observation during work and
           for at least {permit.post_watch_minutes} minutes after work ends. You may not perform other tasks while on watch.
         </p>
         <label className="block space-y-1.5">
-          <span className="text-xs font-semibold text-slate-600">Watcher signing on</span>
+          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Watcher signing on</span>
           <select
             value={pick}
             onChange={e => setPick(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
           >
             {permit.fire_watch_personnel.map(n => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
-        {err && <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-md px-3 py-2">{err}</p>}
+        {err && <p className="text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">{err}</p>}
         <div className="flex justify-end gap-2 pt-1">
-          <button type="button" onClick={onClose} disabled={busy} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800">Cancel</button>
+          <button type="button" onClick={onClose} disabled={busy} className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200">Cancel</button>
           <button
             type="button"
             onClick={submit}
@@ -610,18 +610,18 @@ function CancelDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/40">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-5 space-y-4">
+      <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-5 space-y-4">
         <header className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900">{dialogTitle}</h2>
-          <button type="button" onClick={onClose} disabled={busy} aria-label="Close" className="text-slate-400 hover:text-slate-600 text-lg leading-none px-1">×</button>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{dialogTitle}</h2>
+          <button type="button" onClick={onClose} disabled={busy} aria-label="Close" className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 text-lg leading-none px-1">×</button>
         </header>
         <div className="space-y-3">
           <label className="block space-y-1.5">
-            <span className="text-xs font-semibold text-slate-600">Reason</span>
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Reason</span>
             <select
               value={reason}
               onChange={e => setReason(e.target.value as HotWorkCancelReason)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             >
               {Object.entries(HOT_WORK_CANCEL_REASON_LABELS).map(([k, label]) => (
                 <option key={k} value={k}>{label}</option>
@@ -629,7 +629,7 @@ function CancelDialog({
             </select>
           </label>
           <label className="block space-y-1.5">
-            <span className="text-xs font-semibold text-slate-600">
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
               Notes {requiresNotes && <span className="text-rose-500">*</span>}
             </span>
             <textarea
@@ -643,13 +643,13 @@ function CancelDialog({
               : reason === 'other'            ? 'Describe the close-out reason.'
               :                                 '(optional)'
               }
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             />
           </label>
         </div>
-        {err && <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-md px-3 py-2">{err}</p>}
+        {err && <p className="text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">{err}</p>}
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} disabled={busy} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800">Back</button>
+          <button type="button" onClick={onClose} disabled={busy} className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200">Back</button>
           <button
             type="button"
             onClick={submit}
@@ -668,7 +668,7 @@ function CancelDialog({
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
+    <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-2">
       <header><h2 className="text-[11px] font-bold uppercase tracking-wider text-[#214487]">{title}</h2></header>
       {children}
     </section>
@@ -678,8 +678,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function KV({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="flex items-baseline gap-2 text-xs">
-      <span className="font-semibold text-slate-500 w-44 shrink-0">{label}</span>
-      <span className="text-slate-800 break-words">{value}</span>
+      <span className="font-semibold text-slate-500 dark:text-slate-400 w-44 shrink-0">{label}</span>
+      <span className="text-slate-800 dark:text-slate-200 break-words">{value}</span>
     </div>
   )
 }
@@ -711,19 +711,19 @@ function ChecklistDisplay({ checks }: { checks: HotWorkPreChecks }) {
         const v = checks[r.key]
         const isFailed = r.code != null && failedCodes.has(r.code)
         return (
-          <li key={String(r.key)} className="flex items-baseline justify-between gap-3 py-0.5 border-t border-slate-100 first:border-t-0">
-            <span className="text-slate-700">{r.label}</span>
+          <li key={String(r.key)} className="flex items-baseline justify-between gap-3 py-0.5 border-t border-slate-100 dark:border-slate-800 first:border-t-0">
+            <span className="text-slate-700 dark:text-slate-300">{r.label}</span>
             <AnswerBadge value={v} format={r.format} failed={isFailed} />
           </li>
         )
       })}
       {checks.sprinklers_operational === false && checks.alternate_protection_if_no_spr && (
-        <li className="text-[11px] text-slate-500 pt-1.5">
+        <li className="text-[11px] text-slate-500 dark:text-slate-400 pt-1.5">
           <span className="font-semibold">Alternate protection:</span> {checks.alternate_protection_if_no_spr}
         </li>
       )}
       {checks.fire_extinguisher_present === true && checks.fire_extinguisher_type && (
-        <li className="text-[11px] text-slate-500">
+        <li className="text-[11px] text-slate-500 dark:text-slate-400">
           <span className="font-semibold">Extinguisher type:</span> {checks.fire_extinguisher_type}
         </li>
       )}
@@ -737,16 +737,16 @@ function AnswerBadge({ value, format, failed }: {
   failed?: boolean
 }) {
   if (value === undefined) {
-    return <span className="text-[10px] uppercase tracking-wider text-slate-400">unanswered</span>
+    return <span className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">unanswered</span>
   }
   if (format === 'tri' && value === null) {
-    return <span className="text-[10px] uppercase tracking-wider text-slate-500">N/A</span>
+    return <span className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">N/A</span>
   }
   const cls = failed
     ? 'bg-rose-100 text-rose-800'
     : value === true  ? 'bg-emerald-100 text-emerald-800'
     : value === false ? 'bg-rose-100 text-rose-800'
-    : 'bg-slate-100 text-slate-700'
+    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
   return (
     <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${cls}`}>
       {value === true ? 'Yes' : value === false ? 'No' : String(value)}

@@ -33,12 +33,12 @@ export default function SupportPage() {
   }, [])
 
   if (authLoading) {
-    return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+    return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
   if (!profile) {
     return (
       <div className="max-w-md mx-auto px-4 py-10 text-center space-y-3">
-        <p className="text-sm font-semibold text-slate-700">Sign in to report a bug.</p>
+        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Sign in to report a bug.</p>
         <Link href="/login" className="inline-block px-4 py-2 rounded-lg bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 transition-colors">
           Sign in
         </Link>
@@ -85,15 +85,15 @@ export default function SupportPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
       <header className="flex items-center gap-3">
-        <Link href="/" className="text-slate-400 hover:text-brand-navy" aria-label="Back to home">
+        <Link href="/" className="text-slate-400 dark:text-slate-500 hover:text-brand-navy" aria-label="Back to home">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <LifeBuoy className="h-5 w-5 text-slate-500" />
+          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <LifeBuoy className="h-5 w-5 text-slate-500 dark:text-slate-400" />
             Support
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Report a bug or send feedback. Submissions email{' '}
             <span className="font-mono">jamil@trainovations.com</span>.
           </p>
@@ -101,7 +101,7 @@ export default function SupportPage() {
       </header>
 
       {submitted ? (
-        <section className="bg-emerald-50 border border-emerald-200 rounded-xl p-6 text-center space-y-3">
+        <section className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 rounded-xl p-6 text-center space-y-3">
           <CheckCircle2 className="h-8 w-8 text-emerald-600 mx-auto" />
           <div>
             <p className="text-base font-bold text-emerald-900">Report sent.</p>
@@ -120,7 +120,7 @@ export default function SupportPage() {
           </button>
         </section>
       ) : (
-        <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5 space-y-3">
           <Field label="Title" hint="Short summary of the problem">
             <input
               type="text"
@@ -128,7 +128,7 @@ export default function SupportPage() {
               onChange={e => setTitle(e.target.value)}
               maxLength={200}
               placeholder="e.g. Equipment list never loads on iPad"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             />
           </Field>
 
@@ -136,7 +136,7 @@ export default function SupportPage() {
             <select
               value={severity}
               onChange={e => setSeverity(e.target.value as BugSeverity)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             >
               {(['critical', 'high', 'medium', 'low'] as const).map(s => (
                 <option key={s} value={s}>{SEVERITY_LABELS[s]}</option>
@@ -151,7 +151,7 @@ export default function SupportPage() {
               onChange={e => setDescription(e.target.value)}
               maxLength={10_000}
               placeholder="Describe the issue in your own words…"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             />
           </Field>
 
@@ -162,7 +162,7 @@ export default function SupportPage() {
               onChange={e => setSteps(e.target.value)}
               maxLength={5_000}
               placeholder={'1. Open LOTO\n2. Tap a row\n3. ...'}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             />
           </Field>
 
@@ -170,7 +170,7 @@ export default function SupportPage() {
               knows what we're sending. We send the page they came
               FROM (document.referrer) since that's the buggy screen,
               not /support. */}
-          <details className="text-[11px] text-slate-500">
+          <details className="text-[11px] text-slate-500 dark:text-slate-400">
             <summary className="cursor-pointer font-semibold">What gets sent automatically</summary>
             <ul className="mt-1 space-y-0.5 pl-4">
               <li>• Your name + email: <span className="font-mono">{email}</span></li>
@@ -180,7 +180,7 @@ export default function SupportPage() {
           </details>
 
           {error && (
-            <p className="text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-md px-3 py-2">
+            <p className="text-xs text-rose-700 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">
               {error}{' '}
               <span className="text-rose-900/80">
                 You can email <span className="font-mono">jamil@trainovations.com</span> directly if it keeps failing.
@@ -207,9 +207,9 @@ export default function SupportPage() {
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs font-semibold text-slate-600">
+      <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
         {label}
-        {hint && <span className="text-slate-400 font-normal ml-1.5">{hint}</span>}
+        {hint && <span className="text-slate-400 dark:text-slate-500 font-normal ml-1.5">{hint}</span>}
       </span>
       {children}
     </label>

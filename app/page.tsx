@@ -211,7 +211,7 @@ function WeatherCard() {
 
   if (error && !weather) {
     return (
-      <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 min-w-[200px]">
+      <div className="bg-white dark:bg-slate-900/10 backdrop-blur-sm rounded-xl p-4 min-w-[200px]">
         <p className="text-xs text-white/60 uppercase tracking-widest font-bold">Weather</p>
         <p className="text-sm text-white/80 mt-1">{error}</p>
       </div>
@@ -219,7 +219,7 @@ function WeatherCard() {
   }
   if (!weather) {
     return (
-      <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 min-w-[200px]">
+      <div className="bg-white dark:bg-slate-900/10 backdrop-blur-sm rounded-xl p-4 min-w-[200px]">
         <p className="text-xs text-white/60 uppercase tracking-widest font-bold">Weather</p>
         <p className="text-sm text-white/80 mt-1">Loading…</p>
       </div>
@@ -228,7 +228,7 @@ function WeatherCard() {
 
   const { Icon, label } = weatherIconForCode(weather.code)
   return (
-    <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 min-w-[200px]">
+    <div className="bg-white dark:bg-slate-900/10 backdrop-blur-sm rounded-xl p-4 min-w-[200px]">
       <div className="flex items-center gap-3">
         <Icon className="h-10 w-10 text-brand-yellow shrink-0" />
         <div>
@@ -364,10 +364,10 @@ function AlertList({
   rows:     Array<{ href: string; label: string; sub: string }>
 }) {
   const toneCls =
-    tone === 'amber'  ? 'bg-amber-50 border-amber-200 text-amber-900'
-  : tone === 'rose'   ? 'bg-rose-50 border-rose-200 text-rose-900'
-  : tone === 'indigo' ? 'bg-indigo-50 border-indigo-200 text-indigo-900'
-  :                     'bg-slate-50 border-slate-200 text-slate-800'
+    tone === 'amber'  ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 text-amber-900'
+  : tone === 'rose'   ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 text-rose-900'
+  : tone === 'indigo' ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 text-indigo-900'
+  :                     'bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
   return (
     <div className={`rounded-xl border ${toneCls} p-4 space-y-3`}>
       <header className="flex items-start gap-2">
@@ -382,7 +382,7 @@ function AlertList({
           <li key={r.href}>
             <Link
               href={r.href}
-              className="flex items-center justify-between gap-2 text-xs bg-white/70 hover:bg-white rounded-md px-2 py-1.5 transition-colors"
+              className="flex items-center justify-between gap-2 text-xs bg-white dark:bg-slate-900/70 hover:bg-white dark:hover:bg-slate-900 rounded-md px-2 py-1.5 transition-colors"
             >
               <span className="font-mono font-semibold tracking-wider truncate">{r.label}</span>
               <span className="text-[11px] opacity-70 truncate">{r.sub}</span>
@@ -434,14 +434,14 @@ function QuickAction({ href, icon, label, sub }: { href: string; icon: React.Rea
   return (
     <Link
       href={href}
-      className="bg-white border border-slate-200 hover:border-brand-navy hover:shadow-sm rounded-xl px-4 py-4 flex items-center gap-3 transition-all group"
+      className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-brand-navy hover:shadow-sm rounded-xl px-4 py-4 flex items-center gap-3 transition-all group"
     >
       <div className="shrink-0 w-11 h-11 rounded-lg bg-brand-navy/5 group-hover:bg-brand-navy/10 text-brand-navy flex items-center justify-center transition-colors">
         {icon}
       </div>
       <div className="min-w-0">
-        <p className="text-sm font-bold text-slate-900 group-hover:text-brand-navy transition-colors">{label}</p>
-        <p className="text-[11px] text-slate-500">{sub}</p>
+        <p className="text-sm font-bold text-slate-900 dark:text-slate-100 group-hover:text-brand-navy transition-colors">{label}</p>
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">{sub}</p>
       </div>
     </Link>
   )
@@ -461,7 +461,7 @@ function KpiRow({
 }) {
   if (error) {
     return (
-      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-900 flex items-center justify-between gap-3">
+      <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-900 flex items-center justify-between gap-3">
         <span>Couldn't load live metrics: {error}. Check your connection or that migrations 009-011 are applied.</span>
         <button
           type="button"
@@ -524,14 +524,14 @@ function FreshnessIndicator({
     ? (refreshing ? 'Loading…' : '—')
     : refreshing ? 'Updating…' : `Updated ${formatAgo(now.getTime() - loadedAt)}`
   return (
-    <div className="flex items-center justify-end gap-2 text-[11px] text-slate-500">
+    <div className="flex items-center justify-end gap-2 text-[11px] text-slate-500 dark:text-slate-400">
       <span aria-live="polite">{label}</span>
       <button
         type="button"
         onClick={onRefresh}
         disabled={refreshing}
         aria-label="Refresh metrics"
-        className="px-1.5 py-0.5 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+        className="px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900/40 disabled:opacity-50 transition-colors"
       >
         ↻
       </button>
@@ -553,20 +553,20 @@ function Kpi({ label, value, href, tone }: {
   tone:  'safe' | 'warning' | 'critical' | 'neutral'
 }) {
   const cls =
-    tone === 'critical' ? 'bg-rose-50 border-rose-200'
-  : tone === 'warning'  ? 'bg-amber-50 border-amber-200'
-  : tone === 'safe'     ? 'bg-emerald-50 border-emerald-200'
-  :                       'bg-white border-slate-200'
+    tone === 'critical' ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200'
+  : tone === 'warning'  ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200'
+  : tone === 'safe'     ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200'
+  :                       'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'
 
   const valueCls =
     tone === 'critical' ? 'text-rose-700'
   : tone === 'warning'  ? 'text-amber-700'
   : tone === 'safe'     ? 'text-emerald-700'
-  :                       'text-slate-900'
+  :                       'text-slate-900 dark:text-slate-100'
 
   return (
     <Link href={href} className={`block rounded-xl border ${cls} p-4 hover:shadow-sm transition-shadow`}>
-      <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">{label}</p>
+      <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">{label}</p>
       <p className={`text-3xl font-black tabular-nums mt-1 ${valueCls}`}>{value}</p>
     </Link>
   )
@@ -576,22 +576,22 @@ function Kpi({ label, value, href, tone }: {
 
 function ActivePermitsPanel({ permits, now }: { permits: ActivePermitSummary[] | null; now: Date }) {
   return (
-    <section className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+    <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
       <header className="flex items-baseline justify-between">
-        <h2 className="text-sm font-bold text-slate-900">Active Permits</h2>
+        <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Active Permits</h2>
         <Link href="/confined-spaces/status" className="text-[11px] font-semibold text-brand-navy hover:underline">
           View all →
         </Link>
       </header>
       {permits === null ? (
-        <p className="text-xs text-slate-400">Loading…</p>
+        <p className="text-xs text-slate-400 dark:text-slate-500">Loading…</p>
       ) : permits.length === 0 ? (
         <div className="py-6 text-center">
-          <p className="text-sm text-slate-500">No active permits.</p>
-          <p className="text-[11px] text-slate-400 mt-1">Issue one from the Confined Spaces module.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">No active permits.</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Issue one from the Confined Spaces module.</p>
         </div>
       ) : (
-        <ul className="divide-y divide-slate-100">
+        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
           {permits.map(p => <ActivePermitRow key={p.id} permit={p} now={now} />)}
         </ul>
       )}
@@ -613,19 +613,19 @@ function ActivePermitRow({ permit, now }: { permit: ActivePermitSummary; now: Da
     <li className="py-2.5">
       <Link
         href={`/confined-spaces/${encodeURIComponent(permit.spaceId)}/permits/${permit.id}`}
-        className="block hover:bg-slate-50 -mx-2 px-2 py-1 rounded-lg transition-colors"
+        className="block hover:bg-slate-50 dark:hover:bg-slate-900/40 -mx-2 px-2 py-1 rounded-lg transition-colors"
       >
         <div className="flex items-baseline justify-between gap-2 flex-wrap">
           <div className="min-w-0">
-            <p className="font-mono text-xs font-bold tracking-wider text-slate-700">{permit.serial}</p>
-            <p className="text-sm font-semibold text-slate-900 truncate">
+            <p className="font-mono text-xs font-bold tracking-wider text-slate-700 dark:text-slate-300">{permit.serial}</p>
+            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
               {permit.spaceId}
-              {permit.spaceDescription && <span className="text-slate-500 font-normal"> · {permit.spaceDescription}</span>}
+              {permit.spaceDescription && <span className="text-slate-500 dark:text-slate-400 font-normal"> · {permit.spaceDescription}</span>}
             </p>
           </div>
           <p className={`text-lg font-black font-mono tabular-nums ${timerCls[c.tone]}`}>{c.label}</p>
         </div>
-        <p className="text-[11px] text-slate-500 mt-1">
+        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
           {permit.entrants.length === 0
             ? 'No entrants recorded'
             : <>{permit.entrants.length} entrant{permit.entrants.length === 1 ? '' : 's'}: {permit.entrants.join(', ')}</>}
@@ -642,14 +642,14 @@ function ActivePermitRow({ permit, now }: { permit: ActivePermitSummary; now: Da
 
 function RecentActivityPanel({ events }: { events: ActivityEvent[] | null }) {
   return (
-    <section className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-      <h2 className="text-sm font-bold text-slate-900">Recent Activity</h2>
+    <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
+      <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Recent Activity</h2>
       {events === null ? (
-        <p className="text-xs text-slate-400">Loading…</p>
+        <p className="text-xs text-slate-400 dark:text-slate-500">Loading…</p>
       ) : events.length === 0 ? (
         <div className="py-6 text-center">
-          <p className="text-sm text-slate-500">No recent activity.</p>
-          <p className="text-[11px] text-slate-400 mt-1">
+          <p className="text-sm text-slate-500 dark:text-slate-400">No recent activity.</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
             Audit log is admin-only — non-admins won't see entries here.
           </p>
         </div>
@@ -666,17 +666,17 @@ function ActivityRow({ event }: { event: ActivityEvent }) {
   const time = new Date(event.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   const body = (
     <div className="flex items-baseline gap-3">
-      <span className="text-[11px] font-mono font-semibold text-slate-400 tabular-nums shrink-0 w-12">{time}</span>
-      <span className="text-sm text-slate-800 flex-1">{event.description}</span>
+      <span className="text-[11px] font-mono font-semibold text-slate-400 dark:text-slate-500 tabular-nums shrink-0 w-12">{time}</span>
+      <span className="text-sm text-slate-800 dark:text-slate-200 flex-1">{event.description}</span>
       {event.actorEmail && (
-        <span className="text-[11px] text-slate-400 hidden sm:inline truncate max-w-[140px]">{event.actorEmail.split('@')[0]}</span>
+        <span className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:inline truncate max-w-[140px]">{event.actorEmail.split('@')[0]}</span>
       )}
     </div>
   )
   if (event.link) {
     return (
       <li>
-        <Link href={event.link} className="block -mx-2 px-2 py-1 rounded-lg hover:bg-slate-50 transition-colors">
+        <Link href={event.link} className="block -mx-2 px-2 py-1 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors">
           {body}
         </Link>
       </li>
@@ -691,13 +691,13 @@ function ComingSoonStrip() {
   const upcoming = getModules('safety').filter(m => m.comingSoon)
   if (upcoming.length === 0) return null
   return (
-    <section className="rounded-xl border border-dashed border-violet-200 bg-violet-50/40 p-4 space-y-2">
+    <section className="rounded-xl border border-dashed border-violet-200 bg-violet-50 dark:bg-violet-950/40/40 p-4 space-y-2">
       <p className="text-[11px] font-bold uppercase tracking-widest text-violet-800">Coming Soon</p>
       <div className="flex flex-wrap gap-3">
         {upcoming.map(m => (
           <div key={m.id} className="flex-1 min-w-[200px]">
-            <p className="text-sm font-semibold text-slate-800">{m.name}</p>
-            <p className="text-[11px] text-slate-500 leading-snug">{m.description}</p>
+            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{m.name}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">{m.description}</p>
           </div>
         ))}
       </div>
@@ -711,16 +711,16 @@ function ModulesGrid() {
   const modules = getModules('safety').filter(m => !m.comingSoon)
   return (
     <section className="space-y-3">
-      <h2 className="text-sm font-bold text-slate-900">Modules</h2>
+      <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Modules</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {modules.map(m => (
           <Link
             key={m.id}
             href={m.href!}
-            className="bg-white border border-slate-200 rounded-xl p-4 hover:border-brand-navy hover:shadow-sm transition-all group"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 hover:border-brand-navy hover:shadow-sm transition-all group"
           >
-            <p className="text-base font-bold text-slate-900 group-hover:text-brand-navy transition-colors">{m.name}</p>
-            <p className="text-[11px] text-slate-500 mt-1 leading-snug">{m.description}</p>
+            <p className="text-base font-bold text-slate-900 dark:text-slate-100 group-hover:text-brand-navy transition-colors">{m.name}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">{m.description}</p>
           </Link>
         ))}
       </div>

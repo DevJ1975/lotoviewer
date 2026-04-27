@@ -118,10 +118,10 @@ export default function NewHotWorkPermitPage() {
   }, [])
 
   if (authLoading) {
-    return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+    return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
   if (!profile) {
-    return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500">Sign in to issue a permit.</div>
+    return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Sign in to issue a permit.</div>
   }
 
   function toggleWorkType(t: HotWorkType) {
@@ -183,17 +183,17 @@ export default function NewHotWorkPermitPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
       <header className="flex items-center justify-between gap-3">
-        <Link href="/hot-work" className="text-sm font-semibold text-slate-500 hover:text-slate-700 inline-flex items-center gap-1">
+        <Link href="/hot-work" className="text-sm font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 inline-flex items-center gap-1">
           <ArrowLeft className="h-4 w-4" /> Back to permits
         </Link>
       </header>
 
       <div className="space-y-1">
-        <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <Flame className="h-5 w-5 text-rose-600" />
           New Hot Work Permit
         </h1>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
           Fill the form, save, then sign on the detail page. Duration capped at {MAX_HOURS} hours per Cal/OSHA §6777.
         </p>
       </div>
@@ -204,7 +204,7 @@ export default function NewHotWorkPermitPage() {
             type="text"
             value={workLocation}
             onChange={e => setWorkLocation(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
           />
         </Field>
         <Field label="Work description" hint="Scope of the work — prints on the permit">
@@ -213,7 +213,7 @@ export default function NewHotWorkPermitPage() {
             value={workDescription}
             onChange={e => setWorkDescription(e.target.value)}
             placeholder="Repair handrail mount; weld new bracket onto frame"
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
           />
         </Field>
         <Field label="Work types" hint="Multi-select">
@@ -226,7 +226,7 @@ export default function NewHotWorkPermitPage() {
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
                   workTypes.has(t)
                     ? 'bg-brand-navy text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                 }`}
               >
                 {HOT_WORK_TYPE_LABELS[t]}
@@ -240,7 +240,7 @@ export default function NewHotWorkPermitPage() {
               type="datetime-local"
               value={expiresAt}
               onChange={e => setExpiresAt(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             />
           </Field>
           <Field label="Post-watch minutes" hint="NFPA 51B floor is 60; some sites bump to 120">
@@ -250,7 +250,7 @@ export default function NewHotWorkPermitPage() {
               max={240}
               value={postWatchMinutes}
               onChange={e => setPostWatchMinutes(Number(e.target.value))}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             />
           </Field>
         </div>
@@ -263,7 +263,7 @@ export default function NewHotWorkPermitPage() {
             value={operators}
             onChange={e => setOperators(e.target.value)}
             placeholder={'Maria Lopez\nJose García'}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
           />
         </Field>
         <Field label="Fire watch personnel" hint="One per line — must NOT also be operating per Cal/OSHA §6777">
@@ -272,7 +272,7 @@ export default function NewHotWorkPermitPage() {
             value={watchers}
             onChange={e => setWatchers(e.target.value)}
             placeholder="Tomás Reyes"
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
           />
         </Field>
       </Section>
@@ -295,7 +295,7 @@ export default function NewHotWorkPermitPage() {
               value={checks.alternate_protection_if_no_spr ?? ''}
               onChange={e => setCheck('alternate_protection_if_no_spr', e.target.value)}
               placeholder="Two ABC extinguishers staged at corners; dedicated watcher."
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             />
           </Field>
         )}
@@ -308,7 +308,7 @@ export default function NewHotWorkPermitPage() {
             <select
               value={checks.fire_extinguisher_type ?? ''}
               onChange={e => setCheck('fire_extinguisher_type', e.target.value || null)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             >
               <option value="">— Select —</option>
               {FIRE_EXTINGUISHER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
@@ -331,7 +331,7 @@ export default function NewHotWorkPermitPage() {
       {checks.confined_space && (
         <Section title="Linked confined-space permit" hint="§1910.146(f)(15) — required when work is inside a CS">
           {csLoading ? (
-            <p className="text-xs text-slate-400">Loading active CS permits…</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Loading active CS permits…</p>
           ) : activeCsPermits.length === 0 ? (
             <p className="text-xs text-rose-700">
               No active confined-space permits found. Create the CS permit first; you can come back here once it's signed.
@@ -340,7 +340,7 @@ export default function NewHotWorkPermitPage() {
             <select
               value={associatedCsPermitId}
               onChange={e => setAssociatedCsPermitId(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             >
               <option value="">— Select an active CS permit —</option>
               {activeCsPermits.map(p => (
@@ -356,16 +356,16 @@ export default function NewHotWorkPermitPage() {
       <Section title="Optional cross-references">
         <Field label="Equipment" hint="If the work is on a specific machine — surfaces the LOTO procedure">
           {equipmentLoading ? (
-            <p className="text-xs text-slate-500 px-3 py-2 bg-slate-50 rounded-lg">Loading equipment…</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 px-3 py-2 bg-slate-50 dark:bg-slate-900/40 rounded-lg">Loading equipment…</p>
           ) : equipmentList.length === 0 ? (
-            <p className="text-xs text-slate-500 px-3 py-2 bg-slate-50 rounded-lg">
+            <p className="text-xs text-slate-500 dark:text-slate-400 px-3 py-2 bg-slate-50 dark:bg-slate-900/40 rounded-lg">
               No active equipment registered. Add equipment in the LOTO module before linking it here.
             </p>
           ) : (
             <select
               value={equipmentId}
               onChange={e => setEquipmentId(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy bg-white"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy bg-white dark:bg-slate-900"
             >
               <option value="">— No specific equipment —</option>
               {equipmentList.map(eq => (
@@ -383,7 +383,7 @@ export default function NewHotWorkPermitPage() {
             value={workOrderRef}
             onChange={e => setWorkOrderRef(e.target.value)}
             placeholder="WO-2026-04-1234"
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
           />
         </Field>
         <Field label="Notes (optional)">
@@ -391,22 +391,22 @@ export default function NewHotWorkPermitPage() {
             rows={2}
             value={notes}
             onChange={e => setNotes(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
           />
         </Field>
       </Section>
 
       {submitErrors.length > 0 && (
-        <ul className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-900 space-y-0.5">
+        <ul className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-900 space-y-0.5">
           {submitErrors.map(e => <li key={e}>• {e}</li>)}
         </ul>
       )}
       {serverError && (
-        <p className="text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-md px-3 py-2">{serverError}</p>
+        <p className="text-xs text-rose-700 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">{serverError}</p>
       )}
 
       <div className="flex items-center justify-end gap-2 pt-2">
-        <Link href="/hot-work" className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800">
+        <Link href="/hot-work" className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200">
           Cancel
         </Link>
         <button
@@ -426,10 +426,10 @@ export default function NewHotWorkPermitPage() {
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <section className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+    <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
       <header>
-        <h2 className="text-sm font-bold text-slate-900">{title}</h2>
-        {hint && <p className="text-[11px] text-slate-500 mt-0.5">{hint}</p>}
+        <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">{title}</h2>
+        {hint && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{hint}</p>}
       </header>
       {children}
     </section>
@@ -439,9 +439,9 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs font-semibold text-slate-600">
+      <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
         {label}
-        {hint && <span className="text-slate-400 font-normal ml-1.5">{hint}</span>}
+        {hint && <span className="text-slate-400 dark:text-slate-500 font-normal ml-1.5">{hint}</span>}
       </span>
       {children}
     </label>
@@ -458,8 +458,8 @@ function CheckRow({ label, value, onChange }: {
   onChange: (v: boolean) => void
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 py-1.5 border-t border-slate-100 first:border-t-0">
-      <p className="text-xs text-slate-700 flex-1">{label}</p>
+    <div className="flex items-start justify-between gap-3 py-1.5 border-t border-slate-100 dark:border-slate-800 first:border-t-0">
+      <p className="text-xs text-slate-700 dark:text-slate-300 flex-1">{label}</p>
       <div className="flex items-center gap-1 shrink-0">
         <ChoiceButton active={value === true}  onClick={() => onChange(true)}  label="Yes" tone="emerald" />
         <ChoiceButton active={value === false} onClick={() => onChange(false)} label="No"  tone="rose" />
@@ -474,8 +474,8 @@ function TriStateRow({ label, value, onChange }: {
   onChange: (v: boolean | null) => void
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 py-1.5 border-t border-slate-100 first:border-t-0">
-      <p className="text-xs text-slate-700 flex-1">{label}</p>
+    <div className="flex items-start justify-between gap-3 py-1.5 border-t border-slate-100 dark:border-slate-800 first:border-t-0">
+      <p className="text-xs text-slate-700 dark:text-slate-300 flex-1">{label}</p>
       <div className="flex items-center gap-1 shrink-0">
         <ChoiceButton active={value === true}  onClick={() => onChange(true)}  label="Yes" tone="emerald" />
         <ChoiceButton active={value === false} onClick={() => onChange(false)} label="No"  tone="rose" />
@@ -495,7 +495,7 @@ function ChoiceButton({ active, onClick, label, tone }: {
     ? tone === 'emerald' ? 'bg-emerald-600 text-white'
     : tone === 'rose'    ? 'bg-rose-600 text-white'
     :                      'bg-slate-700 text-white'
-    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900/40'
   return (
     <button
       type="button"

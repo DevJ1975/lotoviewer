@@ -63,42 +63,42 @@ export default function WelcomePage() {
   if (loading || !userId) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900/40 px-4">
       <form
         onSubmit={onSubmit}
-        className="w-full max-w-sm bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-6 space-y-5"
+        className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl shadow-sm ring-1 ring-slate-200 dark:ring-slate-700 p-6 space-y-5"
       >
         <div className="text-center space-y-1">
-          <h1 className="text-xl font-bold text-slate-900">Welcome</h1>
-          <p className="text-sm text-slate-500">
-            Finish setting up your account. Signed in as <span className="font-medium text-slate-700">{email}</span>.
+          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Welcome</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Finish setting up your account. Signed in as <span className="font-medium text-slate-700 dark:text-slate-300">{email}</span>.
           </p>
         </div>
 
         <div className="space-y-3">
           <label className="block">
-            <span className="text-xs font-semibold text-slate-600">Full name</span>
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Full name</span>
             <div className="relative mt-1">
-              <UserIcon className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <UserIcon className="h-4 w-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 required
                 autoComplete="name"
                 value={fullName}
                 onChange={e => setFullName(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 pl-9 pr-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
               />
             </div>
           </label>
 
           <label className="block">
-            <span className="text-xs font-semibold text-slate-600">New password</span>
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">New password</span>
             <div className="mt-1">
               <PasswordField
                 required
@@ -111,7 +111,7 @@ export default function WelcomePage() {
           </label>
 
           <label className="block">
-            <span className="text-xs font-semibold text-slate-600">Confirm password</span>
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Confirm password</span>
             <div className="mt-1">
               <PasswordField
                 required
@@ -125,7 +125,7 @@ export default function WelcomePage() {
         </div>
 
         {error && (
-          <p className="text-sm font-medium text-rose-700 bg-rose-50 rounded-lg px-3 py-2">
+          <p className="text-sm font-medium text-rose-700 bg-rose-50 dark:bg-rose-950/40 rounded-lg px-3 py-2">
             {error}
           </p>
         )}

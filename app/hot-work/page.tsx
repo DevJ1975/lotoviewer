@@ -33,9 +33,9 @@ const STATE_BADGE: Record<HotWorkState, string> = {
   pending_signature:   'bg-amber-100   text-amber-800   ring-amber-200',
   active:              'bg-emerald-100 text-emerald-800 ring-emerald-200',
   post_work_watch:     'bg-blue-100    text-blue-800    ring-blue-200',
-  post_watch_complete: 'bg-emerald-50  text-emerald-700 ring-emerald-200',
+  post_watch_complete: 'bg-emerald-50 dark:bg-emerald-950/40  text-emerald-700 ring-emerald-200',
   expired:             'bg-rose-100    text-rose-800    ring-rose-200',
-  canceled:            'bg-slate-100   text-slate-700   ring-slate-200',
+  canceled:            'bg-slate-100 dark:bg-slate-800   text-slate-700 dark:text-slate-300   ring-slate-200 dark:ring-slate-700',
 }
 
 const STATE_LABEL: Record<HotWorkState, string> = {
@@ -118,8 +118,8 @@ export default function HotWorkListPage() {
   if (loadError) {
     return (
       <div className="max-w-5xl mx-auto px-4 py-10 text-center">
-        <p className="text-sm font-semibold text-slate-700 mb-1">Could not load hot work permits.</p>
-        <p className="text-xs text-slate-500 mb-4">
+        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Could not load hot work permits.</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
           Migration 019 may not be applied yet — check the Supabase SQL Editor.
         </p>
         <button
@@ -137,18 +137,18 @@ export default function HotWorkListPage() {
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <Flame className="h-5 w-5 text-rose-600" />
             Hot Work Permits
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Welding · cutting · grinding · brazing · soldering · torch-applied work · OSHA 29 CFR 1910.252 + NFPA 51B
           </p>
         </div>
         <div className="flex items-center gap-2 self-start">
           <Link
             href="/hot-work/status"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors"
           >
             <Monitor className="h-4 w-4" />
             Status board
@@ -175,20 +175,20 @@ export default function HotWorkListPage() {
       {permits.length > 0 && (
         <>
           <div className="relative">
-            <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="h-4 w-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="search"
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search by serial, location, description, or person…"
-              className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             />
             {query && (
               <button
                 type="button"
                 onClick={() => setQuery('')}
                 aria-label="Clear search"
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-sm px-1"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 text-sm px-1"
               >×</button>
             )}
           </div>
@@ -201,7 +201,7 @@ export default function HotWorkListPage() {
                 className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
                   stateFilter === f.value
                     ? 'bg-brand-navy text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                 }`}
               >{f.label}</button>
             ))}
@@ -211,23 +211,23 @@ export default function HotWorkListPage() {
 
       {/* Permit list */}
       {loading ? (
-        <div className="py-12 text-center text-sm text-slate-400">Loading…</div>
+        <div className="py-12 text-center text-sm text-slate-400 dark:text-slate-500">Loading…</div>
       ) : visible.length === 0 ? (
         <div className="py-12 text-center space-y-2">
           {permits.length === 0 ? (
             <>
-              <p className="text-sm font-semibold text-slate-700">No hot work permits yet.</p>
-              <p className="text-xs text-slate-400">Issue your first permit to start the audit trail.</p>
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">No hot work permits yet.</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">Issue your first permit to start the audit trail.</p>
             </>
           ) : (
             <>
-              <p className="text-sm font-semibold text-slate-700">No permits match your filter.</p>
-              <p className="text-xs text-slate-400">Try a different search term or state filter.</p>
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">No permits match your filter.</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">Try a different search term or state filter.</p>
             </>
           )}
         </div>
       ) : (
-        <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white overflow-hidden">
+        <ul className="divide-y divide-slate-100 dark:divide-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden">
           {visible.map(p => {
             const s = hotWorkState(p, now)
             const c = hotWorkCountdown(p, now)
@@ -235,26 +235,26 @@ export default function HotWorkListPage() {
               <li key={p.id}>
                 <Link
                   href={`/hot-work/${p.id}`}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors"
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-sm font-bold text-slate-900">{p.serial}</span>
+                      <span className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">{p.serial}</span>
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ring-1 tracking-wider ${STATE_BADGE[s]}`}>
                         {STATE_LABEL[s]}
                       </span>
                       {p.work_types.slice(0, 3).map(t => (
-                        <span key={t} className="text-[10px] uppercase tracking-wider text-slate-500">
+                        <span key={t} className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
                           {HOT_WORK_TYPE_LABELS[t]}
                         </span>
                       ))}
                     </div>
-                    <p className="text-sm text-slate-700 truncate mt-0.5">{p.work_location}</p>
-                    <p className="text-[11px] text-slate-400 truncate">{p.work_description}</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-300 truncate mt-0.5">{p.work_location}</p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{p.work_description}</p>
                   </div>
                   <div className="text-right shrink-0">
                     {s === 'active' && c.activeMinutesRemaining != null && (
-                      <p className="text-xs font-mono text-slate-700">{formatMinutes(c.activeMinutesRemaining)} left</p>
+                      <p className="text-xs font-mono text-slate-700 dark:text-slate-300">{formatMinutes(c.activeMinutesRemaining)} left</p>
                     )}
                     {s === 'post_work_watch' && c.postWatchMinutesRemaining != null && (
                       <p className="text-xs font-mono text-blue-700">watch {formatMinutes(c.postWatchMinutesRemaining)}</p>
@@ -262,7 +262,7 @@ export default function HotWorkListPage() {
                     {s === 'post_watch_complete' && (
                       <p className="text-xs text-emerald-700 font-semibold">Ready to close</p>
                     )}
-                    <p className="text-[10px] text-slate-400">{new Date(p.started_at).toLocaleString()}</p>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(p.started_at).toLocaleString()}</p>
                   </div>
                   <span className="text-slate-300 text-lg shrink-0">›</span>
                 </Link>
@@ -283,11 +283,11 @@ function Tile({ label, value, tone }: {
   tone:  'slate' | 'amber' | 'emerald' | 'blue' | 'rose'
 }) {
   const toneCls =
-    tone === 'amber'   ? 'border-amber-200   bg-amber-50   text-amber-900'
-  : tone === 'emerald' ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-  : tone === 'blue'    ? 'border-blue-200    bg-blue-50    text-blue-900'
-  : tone === 'rose'    ? 'border-rose-200    bg-rose-50    text-rose-900'
-  :                      'border-slate-200   bg-white      text-slate-700'
+    tone === 'amber'   ? 'border-amber-200   bg-amber-50 dark:bg-amber-950/40   text-amber-900'
+  : tone === 'emerald' ? 'border-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900'
+  : tone === 'blue'    ? 'border-blue-200    bg-blue-50 dark:bg-blue-950/40    text-blue-900'
+  : tone === 'rose'    ? 'border-rose-200    bg-rose-50 dark:bg-rose-950/40    text-rose-900'
+  :                      'border-slate-200 dark:border-slate-700   bg-white dark:bg-slate-900      text-slate-700 dark:text-slate-300'
   return (
     <div className={`rounded-xl border px-3 py-2 ${toneCls}`}>
       <p className="text-[10px] font-bold uppercase tracking-wider opacity-70">{label}</p>

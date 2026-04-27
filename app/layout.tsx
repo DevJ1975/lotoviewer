@@ -3,6 +3,7 @@ import { Inter, Geist_Mono } from 'next/font/google'
 import { UploadQueueProvider } from '@/components/UploadQueueProvider'
 import { SessionProvider } from '@/components/SessionProvider'
 import { AuthProvider } from '@/components/AuthProvider'
+import { ThemeProvider, NO_FLASH_SCRIPT } from '@/components/ThemeProvider'
 import AuthGate from '@/components/AuthGate'
 import AppChrome from '@/components/AppChrome'
 import IosSplashLinks from '@/components/IosSplashLinks'
@@ -39,20 +40,26 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${geistMono.variable} h-full antialiased`}>
       <head>
+        {/* Pre-paint script: applies dark class from localStorage before
+            React hydrates so dark-mode users never flash light. Must come
+            before any rendering content in <body>. */}
+        <script dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }} />
         <IosSplashLinks />
       </head>
-      <body className="min-h-full bg-slate-50">
-        <AuthProvider>
-          <SessionProvider>
-            <UploadQueueProvider>
-              <AuthGate>
-                <AppChrome>{children}</AppChrome>
-              </AuthGate>
-            </UploadQueueProvider>
-          </SessionProvider>
-        </AuthProvider>
+      <body className="min-h-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+        <ThemeProvider>
+          <AuthProvider>
+            <SessionProvider>
+              <UploadQueueProvider>
+                <AuthGate>
+                  <AppChrome>{children}</AppChrome>
+                </AuthGate>
+              </UploadQueueProvider>
+            </SessionProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

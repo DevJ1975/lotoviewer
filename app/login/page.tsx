@@ -8,7 +8,7 @@ import PasswordField from '@/components/PasswordField'
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>}>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>}>
       <LoginForm />
     </Suspense>
   )
@@ -44,36 +44,36 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900/40 px-4">
       <form
         onSubmit={onSubmit}
-        className="w-full max-w-sm bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-6 space-y-5"
+        className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl shadow-sm ring-1 ring-slate-200 dark:ring-slate-700 p-6 space-y-5"
       >
         <div className="text-center space-y-1">
-          <h1 className="text-xl font-bold text-slate-900">
+          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">
             Soteria <span className="text-brand-navy tracking-wider">FIELD</span>
           </h1>
-          <p className="text-sm text-slate-500">Sign in to continue</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Sign in to continue</p>
         </div>
 
         <div className="space-y-3">
           <label className="block">
-            <span className="text-xs font-semibold text-slate-600">Email</span>
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Email</span>
             <div className="relative mt-1">
-              <Mail className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Mail className="h-4 w-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="email"
                 required
                 autoComplete="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 pl-9 pr-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
               />
             </div>
           </label>
 
           <label className="block">
-            <span className="text-xs font-semibold text-slate-600">Password</span>
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Password</span>
             <div className="mt-1">
               <PasswordField
                 required
@@ -86,7 +86,7 @@ function LoginForm() {
         </div>
 
         {error && (
-          <p className="text-sm font-medium text-rose-700 bg-rose-50 rounded-lg px-3 py-2">
+          <p className="text-sm font-medium text-rose-700 bg-rose-50 dark:bg-rose-950/40 rounded-lg px-3 py-2">
             {error}
           </p>
         )}
@@ -100,7 +100,7 @@ function LoginForm() {
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
 
-        <p className="text-xs text-slate-400 text-center">
+        <p className="text-xs text-slate-400 dark:text-slate-500 text-center">
           Access is by invitation only. Contact your administrator if you need an account.
         </p>
       </form>

@@ -125,21 +125,21 @@ export default function AppDrawer({ open, onClose }: Props) {
         className="absolute inset-0 bg-black/40 backdrop-blur-sm"
       />
 
-      <aside className="relative bg-white w-72 sm:w-80 max-w-[85vw] h-full flex flex-col shadow-2xl">
-        <header className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0">
+      <aside className="relative bg-white dark:bg-slate-900 w-72 sm:w-80 max-w-[85vw] h-full flex flex-col shadow-2xl">
+        <header className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-7 h-7 rounded-md flex items-center justify-center font-bold text-xs bg-brand-yellow text-brand-navy tracking-tight shrink-0">
               SL
             </div>
-            <span className="text-slate-900 font-semibold text-sm tracking-tight truncate">
-              Soteria <span className="text-brand-navy font-bold tracking-wider">FIELD</span>
+            <span className="text-slate-900 dark:text-slate-100 font-semibold text-sm tracking-tight truncate">
+              Soteria <span className="text-brand-navy dark:text-brand-yellow font-bold tracking-wider">FIELD</span>
             </span>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md h-9 w-9 flex items-center justify-center transition-colors"
+            className="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md h-9 w-9 flex items-center justify-center transition-colors"
           >
             <X className="h-4 w-4" />
           </button>
@@ -148,7 +148,7 @@ export default function AppDrawer({ open, onClose }: Props) {
         <nav className="flex-1 overflow-y-auto py-2">
           {groups.map(({ category, modules }) => (
             <section key={category} className="px-2 py-2">
-              <h3 className="px-3 text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+              <h3 className="px-3 text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1">
                 {CATEGORY_LABELS[category]}
               </h3>
               <ul className="space-y-0.5">
@@ -167,7 +167,7 @@ export default function AppDrawer({ open, onClose }: Props) {
           ))}
         </nav>
 
-        <footer className="px-4 py-3 border-t border-slate-100 text-[10px] text-slate-400 shrink-0">
+        <footer className="px-4 py-3 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-400 dark:text-slate-500 shrink-0">
           Manage features in <span className="font-mono">lib/features.ts</span>.
           Multi-tenant overrides will layer on later.
         </footer>
@@ -199,17 +199,19 @@ function ModuleRow({
     <div className="flex flex-col gap-0.5 min-w-0">
       <span className="flex items-center gap-2 flex-wrap">
         <span className={`text-[14px] font-semibold ${
-          active ? 'text-brand-navy' : mod.comingSoon ? 'text-slate-500' : 'text-slate-900'
+          active ? 'text-brand-navy dark:text-brand-yellow'
+          : mod.comingSoon ? 'text-slate-500 dark:text-slate-400'
+          : 'text-slate-900 dark:text-slate-100'
         }`}>
           {mod.name}
         </span>
         {mod.comingSoon && (
-          <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800">
+          <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
             Coming Soon
           </span>
         )}
       </span>
-      <span className={`text-[11px] leading-snug ${mod.comingSoon ? 'text-slate-400' : 'text-slate-500'}`}>
+      <span className={`text-[11px] leading-snug ${mod.comingSoon ? 'text-slate-400 dark:text-slate-500' : 'text-slate-500 dark:text-slate-400'}`}>
         {mod.description}
       </span>
     </div>
@@ -218,7 +220,7 @@ function ModuleRow({
   return (
     <li>
       <div className={`flex items-stretch rounded-lg ${
-        active ? 'bg-brand-navy/5' : 'hover:bg-slate-100'
+        active ? 'bg-brand-navy/5 dark:bg-brand-navy/20' : 'hover:bg-slate-100 dark:hover:bg-slate-800'
       } transition-colors`}>
         {isClickable ? (
           <Link
@@ -240,7 +242,7 @@ function ModuleRow({
             onClick={onToggleExpand}
             aria-label={expanded ? `Collapse ${mod.name}` : `Expand ${mod.name}`}
             aria-expanded={expanded}
-            className="shrink-0 w-10 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors"
+            className="shrink-0 w-10 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
           >
             {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
@@ -248,7 +250,7 @@ function ModuleRow({
       </div>
 
       {hasChildren && expanded && (
-        <ul className="mt-0.5 ml-3 pl-3 border-l border-slate-200 space-y-0.5">
+        <ul className="mt-0.5 ml-3 pl-3 border-l border-slate-200 dark:border-slate-700 space-y-0.5">
           {children.map(c => <ChildRow key={c.id} child={c} active={pathname === c.href} onNavigate={onNavigate} />)}
         </ul>
       )}
@@ -262,12 +264,14 @@ function ChildRow({ child, active, onNavigate }: { child: FeatureDef; active: bo
   const body = (
     <div className="flex items-center justify-between gap-2">
       <span className={`text-[13px] font-medium ${
-        active ? 'text-brand-navy font-semibold' : child.comingSoon ? 'text-slate-500' : 'text-slate-700'
+        active ? 'text-brand-navy dark:text-brand-yellow font-semibold'
+        : child.comingSoon ? 'text-slate-500 dark:text-slate-400'
+        : 'text-slate-700 dark:text-slate-200'
       }`}>
         {child.name}
       </span>
       {child.comingSoon && (
-        <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800">
+        <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
           Coming Soon
         </span>
       )}
@@ -290,7 +294,7 @@ function ChildRow({ child, active, onNavigate }: { child: FeatureDef; active: bo
         href={child.href!}
         onClick={onNavigate}
         className={`block px-3 py-2 rounded-lg transition-colors ${
-          active ? 'bg-brand-navy/5' : 'hover:bg-slate-100'
+          active ? 'bg-brand-navy/5 dark:bg-brand-navy/20' : 'hover:bg-slate-100 dark:hover:bg-slate-800'
         }`}
       >
         {body}
