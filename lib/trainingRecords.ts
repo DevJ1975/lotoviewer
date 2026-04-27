@@ -106,3 +106,73 @@ function check(
 function ymd(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
+
+// ── Hot Work training validation (§1910.252(a)(2)(xv) + NFPA 51B §6.5) ────
+//
+// Same kind/missing/expired output as validateTraining() so the hot-work
+// permit-sign gate can render issues with the same UI. Different slot
+// mapping:
+//   - operator slot → 'hot_work_operator' role (no higher-standard
+//     fallback; a fire watcher cert is for fire watching, not for
+//     performing the work)
+//   - watcher slot → 'fire_watcher' role
+// Mirror the entry/exit-of-scope logic from validateTraining for
+// consistency.
+const HOT_WORK_ROLES_FOR_SLOT: Record<'operator' | 'watcher', TrainingRole[]> = {
+  operator: ['hot_work_operator'],
+  watcher:  ['fire_watcher'],
+}
+
+export interface HotWorkTrainingIssue {
+  worker_name: string
+  slot:        'operator' | 'watcher'
+  kind:        TrainingIssueKind
+  expired_on:  string | null
+}
+
+export function validateHotWorkTraining(args: {
+  operators:  string[]
+  watchers:   string[]
+  records:    TrainingRecord[]
+  asOf:       Date
+}): HotWorkTrainingIssue[] {
+  const { operators, watchers, records, asOf } = args
+  const today = ymd(asOf)
+  const byName = new Map<string, Map<TrainingRole, TrainingRecord>>()
+  for (const r of records) {
+    const k = r.worker_name.toLowerCase()
+    let inner = byName.get(k)
+    if (!inner) { inner = new Map(); byName.set(k, inner) }
+    const existing = inner.get(r.role)
+    if (!existing || r.completed_at > existing.completed_at) {
+      inner.set(r.role, r)
+    }
+  }
+
+  const issues: HotWorkTrainingIssue[] = []
+  for (const name of operators) issues.push(...checkHotWork(name, 'operator', byName, today))
+  for (const name of watchers)  issues.push(...checkHotWork(name, 'watcher',  byName, today))
+  return issues
+}
+
+function checkHotWork(
+  name: string,
+  slot: 'operator' | 'watcher',
+  byName: Map<string, Map<TrainingRole, TrainingRecord>>,
+  today: string,
+): HotWorkTrainingIssue[] {
+  const inner = byName.get(name.toLowerCase())
+  const acceptableRoles = HOT_WORK_ROLES_FOR_SLOT[slot]
+  if (!inner || acceptableRoles.every(r => !inner.has(r))) {
+    return [{ worker_name: name, slot, kind: 'missing', expired_on: null }]
+  }
+  let bestExpiry: string | null = null
+  for (const role of acceptableRoles) {
+    const rec = inner.get(role)
+    if (!rec) continue
+    if (!rec.expires_at) return []
+    if (rec.expires_at >= today) return []
+    if (!bestExpiry || rec.expires_at > bestExpiry) bestExpiry = rec.expires_at
+  }
+  return [{ worker_name: name, slot, kind: 'expired', expired_on: bestExpiry }]
+}

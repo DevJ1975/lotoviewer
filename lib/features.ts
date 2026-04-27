@@ -161,11 +161,11 @@ export const FEATURES: FeatureDef[] = [
   {
     id:          'hot-work',
     name:        'Hot Work Permit',
-    description: 'OSHA 1910.252 hot work authorization',
-    href:        null,
+    description: 'OSHA 1910.252 + NFPA 51B hot work authorization',
+    href:        '/hot-work',
     category:    'safety',
     enabled:     true,
-    comingSoon:  true,
+    comingSoon:  false,
   },
   {
     id:          'jha',
