@@ -190,7 +190,7 @@ function EquipmentDetail() {
       {equipment.equip_photo_url && (
         <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-2">
           <header className="flex items-baseline justify-between gap-2">
-            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Annotated photo</h2>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Annotated equipment photo</h2>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
               Tap "Annotate" to add arrows + labels pointing at isolation points.
             </p>
@@ -205,6 +205,43 @@ function EquipmentDetail() {
                 const { data, error } = await supabase
                   .from('loto_equipment')
                   .update({ annotations: next, updated_at: new Date().toISOString() })
+                  .eq('equipment_id', equipmentId)
+                  .select('*')
+                  .single()
+                if (error) {
+                  showToast(`Could not save annotations: ${error.message}`, 'error')
+                  return
+                }
+                if (data) setEquipment(data as Equipment)
+                showToast('Annotations saved', 'success')
+              }}
+            />
+          </div>
+        </section>
+      )}
+
+      {/* Same overlay UX for the isolation photo, with red arrows so the
+          two layers read as distinct. Persists to iso_annotations
+          (migration 022) instead of annotations. */}
+      {equipment.iso_photo_url && (
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-2">
+          <header className="flex items-baseline justify-between gap-2">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Annotated isolation photo</h2>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              Tap "Annotate" to add red arrows + labels naming each isolation point.
+            </p>
+          </header>
+          <div className="relative aspect-video bg-slate-50 dark:bg-slate-900/40 rounded-lg overflow-hidden">
+            <AnnotatedPhoto
+              src={equipment.iso_photo_url}
+              alt={`${equipment.equipment_id} isolation photo`}
+              annotations={parseAnnotations(equipment.iso_annotations)}
+              color="#BF1414"
+              editable
+              onSave={async (next: Annotation[]) => {
+                const { data, error } = await supabase
+                  .from('loto_equipment')
+                  .update({ iso_annotations: next, updated_at: new Date().toISOString() })
                   .eq('equipment_id', equipmentId)
                   .select('*')
                   .single()

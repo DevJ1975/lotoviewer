@@ -1,8 +1,20 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { Pencil, ArrowRight, Type, Trash2, X, Check } from 'lucide-react'
 import { type Annotation, clampUnit, parseAnnotations } from '@/lib/photoAnnotations'
+
+// Default arrow + label color. Equipment photo uses brand navy; the
+// isolation photo passes the placard red so the two layers read as
+// distinct at a glance.
+const DEFAULT_COLOR = '#214488'
+
+// useId() returns ":r0:" — the colons are valid HTML5 ids but break
+// url(#…) refs on some browsers (treated as pseudo-class delimiters).
+// One sanitiser, used by both the read-only overlay and the editor.
+function useUniqueMarkerId(): string {
+  return useId().replace(/:/g, '_')
+}
 
 // Photo with overlay annotations. Two modes:
 //   - default: renders an SVG overlay on top of the image. Click "Annotate"
@@ -14,7 +26,7 @@ import { type Annotation, clampUnit, parseAnnotations } from '@/lib/photoAnnotat
 // shape coordinates literally map to the SVG coordinate system.
 
 export function AnnotatedPhoto({
-  src, alt, annotations, onSave, editable = false, className,
+  src, alt, annotations, onSave, editable = false, className, color = DEFAULT_COLOR,
 }: {
   src:         string
   alt:         string
@@ -25,12 +37,15 @@ export function AnnotatedPhoto({
   // When false, the "Annotate" button is hidden — pure display use.
   editable?:   boolean
   className?:  string
+  // Stroke + arrowhead fill. Pass placard red for the isolation photo,
+  // brand navy (default) for the equipment photo.
+  color?:      string
 }) {
   const [editing, setEditing] = useState(false)
   return (
     <div className={`relative ${className ?? ''}`}>
       <img src={src} alt={alt} className="w-full h-full object-cover" />
-      <Overlay annotations={annotations} />
+      <AnnotationLayer annotations={annotations} color={color} />
       {editable && onSave && (
         <button
           type="button"
@@ -46,6 +61,7 @@ export function AnnotatedPhoto({
           src={src}
           alt={alt}
           initial={annotations}
+          color={color}
           onClose={() => setEditing(false)}
           onSave={(next) => { onSave(next); setEditing(false) }}
         />
@@ -54,13 +70,72 @@ export function AnnotatedPhoto({
   )
 }
 
+// Arrowhead marker reused by every arrow shape. Filled with the caller-
+// provided color and a white edge so it's legible against any photo
+// background. refX positions the tip on the arrow's endpoint, not past it.
+function ArrowheadMarker({ id, color }: { id: string; color: string }) {
+  return (
+    <marker
+      id={id}
+      viewBox="0 0 10 10"
+      refX="9" refY="5"
+      markerWidth="6" markerHeight="6"
+      markerUnits="strokeWidth"
+      orient="auto-start-reverse"
+    >
+      <path d="M 0 0 L 10 5 L 0 10 z" fill={color} stroke="white" strokeWidth="0.5" />
+    </marker>
+  )
+}
+
+// SVG primitives for one shape — no wrapping <g>, so the parent owns
+// click handlers and pointer-events styling. Single source of truth for
+// what an arrow / label looks like.
+function ShapeNode({ shape, color, markerId }: {
+  shape:    Annotation
+  color:    string
+  markerId: string
+}) {
+  if (shape.type === 'arrow') {
+    return (
+      <>
+        {/* White halo first, then colored line on top — keeps the arrow
+            visible on dark backgrounds. */}
+        <line x1={shape.x1} y1={shape.y1} x2={shape.x2} y2={shape.y2}
+          stroke="white" strokeWidth="0.012" strokeLinecap="round" />
+        <line x1={shape.x1} y1={shape.y1} x2={shape.x2} y2={shape.y2}
+          stroke={color} strokeWidth="0.008" strokeLinecap="round"
+          markerEnd={`url(#${markerId})`} />
+        {shape.label && (
+          <text x={shape.x2} y={shape.y2 - 0.02} fontSize="0.04"
+            fill="#0f172a" stroke="white" strokeWidth="0.008" paintOrder="stroke"
+            textAnchor="middle" fontWeight="bold">
+            {shape.label}
+          </text>
+        )}
+      </>
+    )
+  }
+  return (
+    <text x={shape.x} y={shape.y} fontSize="0.045"
+      fill="#0f172a" stroke="white" strokeWidth="0.012" paintOrder="stroke"
+      textAnchor="middle" dominantBaseline="middle" fontWeight="bold">
+      {shape.text}
+    </text>
+  )
+}
+
 // Read-only SVG overlay. Drawn over the image with absolute positioning;
 // inherits its size from the parent so the annotations track the photo
-// regardless of object-fit / responsive layout.
-function Overlay({ annotations, onShapeClick }: {
-  annotations:   Annotation[]
-  onShapeClick?: (index: number) => void
+// regardless of object-fit / responsive layout. Exported so other
+// consumers (e.g. the placard photo slots) can render arrows + labels
+// directly over their own <img>/<Image> without going through
+// AnnotatedPhoto's editor-aware shell. Owns its marker id internally.
+export function AnnotationLayer({ annotations, color = DEFAULT_COLOR }: {
+  annotations: Annotation[]
+  color?:      string
 }) {
+  const markerId = useUniqueMarkerId()
   return (
     <svg
       viewBox="0 0 1 1"
@@ -68,72 +143,13 @@ function Overlay({ annotations, onShapeClick }: {
       className="absolute inset-0 w-full h-full pointer-events-none"
     >
       <defs>
-        {/* Single arrowhead marker reused by every arrow shape. Filled
-            navy with a white edge so it's legible against any photo
-            background. refX is set so the tip lands on the arrow's
-            endpoint, not past it. */}
-        <marker
-          id="arrowhead"
-          viewBox="0 0 10 10"
-          refX="9" refY="5"
-          markerWidth="6" markerHeight="6"
-          markerUnits="strokeWidth"
-          orient="auto-start-reverse"
-        >
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="#214488" stroke="white" strokeWidth="0.5" />
-        </marker>
+        <ArrowheadMarker id={markerId} color={color} />
       </defs>
-      {annotations.map((shape, i) => {
-        if (shape.type === 'arrow') {
-          return (
-            <g key={i}
-              className={onShapeClick ? 'pointer-events-auto cursor-pointer' : ''}
-              onClick={onShapeClick ? () => onShapeClick(i) : undefined}
-            >
-              {/* White halo first, then navy line on top — keeps the
-                  arrow visible on dark backgrounds. */}
-              <line x1={shape.x1} y1={shape.y1} x2={shape.x2} y2={shape.y2}
-                stroke="white" strokeWidth="0.012" strokeLinecap="round" />
-              <line x1={shape.x1} y1={shape.y1} x2={shape.x2} y2={shape.y2}
-                stroke="#214488" strokeWidth="0.008" strokeLinecap="round"
-                markerEnd="url(#arrowhead)" />
-              {shape.label && (
-                <text
-                  x={shape.x2} y={shape.y2 - 0.02}
-                  fontSize="0.04"
-                  fill="#0f172a"
-                  stroke="white" strokeWidth="0.008" paintOrder="stroke"
-                  textAnchor="middle"
-                  fontWeight="bold"
-                >
-                  {shape.label}
-                </text>
-              )}
-            </g>
-          )
-        }
-        if (shape.type === 'label') {
-          return (
-            <g key={i}
-              className={onShapeClick ? 'pointer-events-auto cursor-pointer' : ''}
-              onClick={onShapeClick ? () => onShapeClick(i) : undefined}
-            >
-              <text
-                x={shape.x} y={shape.y}
-                fontSize="0.045"
-                fill="#0f172a"
-                stroke="white" strokeWidth="0.012" paintOrder="stroke"
-                textAnchor="middle"
-                dominantBaseline="middle"
-                fontWeight="bold"
-              >
-                {shape.text}
-              </text>
-            </g>
-          )
-        }
-        return null
-      })}
+      {annotations.map((shape, i) => (
+        <g key={i}>
+          <ShapeNode shape={shape} color={color} markerId={markerId} />
+        </g>
+      ))}
     </svg>
   )
 }
@@ -143,19 +159,21 @@ function Overlay({ annotations, onShapeClick }: {
 type Tool = 'arrow' | 'label' | 'select'
 
 function AnnotationEditor({
-  src, alt, initial, onClose, onSave,
+  src, alt, initial, color, onClose, onSave,
 }: {
   src:     string
   alt:     string
   initial: Annotation[]
+  color:   string
   onClose: () => void
   onSave:  (next: Annotation[]) => void
 }) {
   const [shapes, setShapes] = useState<Annotation[]>(() => parseAnnotations(initial))
   const [tool, setTool]     = useState<Tool>('arrow')
+  const markerId = useUniqueMarkerId()
   // Two-click arrow drawing: first click sets the start, second click
   // sets the end and finalizes the shape. arrowStart === null means the
-  // next click is a start; otherwise it's an end.
+  // next pointer-down is a start; otherwise it's an end.
   const [arrowStart, setArrowStart] = useState<{ x: number; y: number } | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
 
@@ -169,14 +187,20 @@ function AnnotationEditor({
     }
   }
 
-  function handleClick(e: React.PointerEvent<SVGSVGElement>) {
+  function handlePointerDown(e: React.PointerEvent<SVGSVGElement>) {
     if (tool === 'select') return
     const p = pointerToUnit(e)
     if (tool === 'arrow') {
       if (!arrowStart) {
         setArrowStart(p)
       } else {
-        setShapes(prev => [...prev, { type: 'arrow', x1: arrowStart.x, y1: arrowStart.y, x2: p.x, y2: p.y }])
+        // Prompt for a label inline so a single arrow gesture captures
+        // "what isolation point this points at" without the user having
+        // to switch to the Label tool. Empty / cancelled = unlabeled
+        // arrow, which is still valid.
+        const text = window.prompt('Name this isolation point (optional)')
+        const label = text && text.trim() ? text.trim() : undefined
+        setShapes(prev => [...prev, { type: 'arrow', x1: arrowStart.x, y1: arrowStart.y, x2: p.x, y2: p.y, label }])
         setArrowStart(null)
       }
     } else if (tool === 'label') {
@@ -225,44 +249,18 @@ function AnnotationEditor({
               preserveAspectRatio="none"
               className="absolute inset-0 w-full h-full"
               style={{ touchAction: 'none', cursor: tool === 'select' ? 'pointer' : 'crosshair' }}
-              onPointerDown={handleClick}
+              onPointerDown={handlePointerDown}
             >
               <defs>
-                <marker
-                  id="arrowhead-edit"
-                  viewBox="0 0 10 10"
-                  refX="9" refY="5"
-                  markerWidth="6" markerHeight="6"
-                  markerUnits="strokeWidth"
-                  orient="auto-start-reverse"
-                >
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#214488" stroke="white" strokeWidth="0.5" />
-                </marker>
+                <ArrowheadMarker id={markerId} color={color} />
               </defs>
-              {shapes.map((shape, i) => {
-                if (shape.type === 'arrow') {
-                  return (
-                    <g key={i} onClick={(e) => { e.stopPropagation(); if (tool === 'select') deleteAt(i) }}
-                       className={tool === 'select' ? 'cursor-pointer' : ''}>
-                      <line x1={shape.x1} y1={shape.y1} x2={shape.x2} y2={shape.y2}
-                        stroke="white" strokeWidth="0.012" strokeLinecap="round" />
-                      <line x1={shape.x1} y1={shape.y1} x2={shape.x2} y2={shape.y2}
-                        stroke="#214488" strokeWidth="0.008" strokeLinecap="round"
-                        markerEnd="url(#arrowhead-edit)" />
-                    </g>
-                  )
-                }
-                return (
-                  <g key={i} onClick={(e) => { e.stopPropagation(); if (tool === 'select') deleteAt(i) }}
-                     className={tool === 'select' ? 'cursor-pointer' : ''}>
-                    <text x={shape.x} y={shape.y} fontSize="0.045"
-                          fill="#0f172a" stroke="white" strokeWidth="0.012" paintOrder="stroke"
-                          textAnchor="middle" dominantBaseline="middle" fontWeight="bold">
-                      {shape.text}
-                    </text>
-                  </g>
-                )
-              })}
+              {shapes.map((shape, i) => (
+                <g key={i}
+                   onClick={(e) => { e.stopPropagation(); if (tool === 'select') deleteAt(i) }}
+                   className={tool === 'select' ? 'cursor-pointer' : ''}>
+                  <ShapeNode shape={shape} color={color} markerId={markerId} />
+                </g>
+              ))}
               {/* Pending-arrow indicator — show the start dot while waiting
                   for the second click. */}
               {arrowStart && (

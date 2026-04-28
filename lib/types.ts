@@ -25,6 +25,8 @@ export interface Equipment {
   // with relative (0-1) coordinates so they scale with the rendered
   // photo. See lib/photoAnnotations.ts for the schema.
   annotations: unknown[]
+  // Same schema, but for the isolation photo (migration 022).
+  iso_annotations: unknown[]
   created_at: string | null
   updated_at: string | null
 }

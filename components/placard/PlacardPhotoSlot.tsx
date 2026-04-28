@@ -7,6 +7,8 @@ import { useNetworkStatus } from '@/hooks/useNetworkStatus'
 import { useUploadQueue } from '@/components/UploadQueueProvider'
 import { compressImage, heicToJpeg, isHeic } from '@/lib/imageUtils'
 import { haptic } from '@/lib/platform'
+import { AnnotationLayer } from '@/components/AnnotatedPhoto'
+import type { Annotation } from '@/lib/photoAnnotations'
 
 interface Props {
   equipmentId: string
@@ -15,11 +17,18 @@ interface Props {
   existingUrl: string | null
   onSuccess?:  (url: string) => void
   onError?:    (message: string) => void
+  // Read-only annotation overlay rendered on top of the displayed photo
+  // so workers see the arrows + isolation-point names directly on the
+  // placard. Editing still happens on the equipment detail page; this
+  // is display-only (the layer uses pointer-events-none so the upload
+  // click + Replace hover keep working).
+  annotations?: Annotation[]
+  color?:       string
 }
 
 const MAX_FILE_BYTES = 10_000_000
 
-export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl, onSuccess, onError }: Props) {
+export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl, onSuccess, onError, annotations, color }: Props) {
   const { upload, status, url, reset } = usePhotoUpload(equipmentId, type)
   const { online } = useNetworkStatus()
   const { enqueue, queuedKeys } = useUploadQueue()
@@ -213,6 +222,13 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
               style={{ imageOrientation: 'from-image' }}
               unoptimized
             />
+            {/* Annotation overlay sits between the image and the
+                hover/busy/badge layers. Hidden during upload (the photo
+                is at 40% opacity then; arrows over a fading photo look
+                buggy) but otherwise shown whenever annotations exist. */}
+            {!isBusy && annotations && annotations.length > 0 && (
+              <AnnotationLayer annotations={annotations} color={color} />
+            )}
             {isBusy ? (
               // Busy overlay on top of the preview, so the user keeps seeing
               // what they picked during validation/compression/upload.

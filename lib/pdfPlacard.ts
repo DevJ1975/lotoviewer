@@ -1,6 +1,7 @@
 import { PDFDocument, PDFFont, PDFPage, RGB, StandardFonts, degrees, rgb } from 'pdf-lib'
 import { ENERGY_CODES, energyCodeFor, hexToRgb01 } from '@/lib/energyCodes'
 import { PLACARD_TEXT } from '@/lib/placardText'
+import { type Annotation, parseAnnotations } from '@/lib/photoAnnotations'
 import type { Equipment, LotoEnergyStep } from '@/lib/types'
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -94,15 +95,163 @@ async function fetchAndEmbedImage(pdfDoc: PDFDocument, url: string | null | unde
   }
 }
 
+// ── Annotation overlay (matches AnnotationLayer in components/AnnotatedPhoto.tsx) ──
+//
+// PDF coordinate space is Y-up with origin at bottom-left. Annotation
+// shapes use 0-1 image space with Y-down (matching SVG / the on-screen
+// renderer). The `mapY` flip below is the only translation needed.
+
+// pdf-lib's StandardFonts.Helvetica uses WinAnsiEncoding (CP1252).
+// Anything outside that — emojis, CJK, control chars — throws on
+// drawText. Workers type annotation labels via window.prompt() on
+// iPad and could easily paste an emoji from autocomplete; without
+// this sanitiser, one bad character would void the whole PDF.
+//
+// The kept set is CP1252: ASCII printable, Latin-1 supplement, plus
+// the CP1252-specific code points (Euro sign, smart quotes, em/en
+// dashes, typographic apostrophes, bullet, ellipsis, etc.). Everything
+// else collapses to '?' so the label still occupies its place on the
+// page even if a glyph is lost.
+//
+// Exported for unit testing — the regex enumeration is fragile enough
+// that direct-coverage tests are more useful than re-deriving it.
+export function sanitizeForWinAnsi(s: string): string {
+  // The /u flag is critical: without it, supplementary-plane chars
+  // (e.g. 🔥 = U+1F525) are seen as TWO surrogate-pair code units and
+  // each half gets replaced separately, producing '??' instead of '?'.
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/[^\x20-\x7E\xA0-\xFF€ŒœŽžƒˆ˜–—‘’‚“”„†‡•…‰‹›™]/gu, '?')
+}
+
+// Draw text with a simulated white halo for legibility against any
+// photo background. pdf-lib has no paint-order/text-stroke support, so
+// we draw the text 8 times offset by 1pt in white, then once on top in
+// the dark color. Matches the visual weight of the SVG overlay's
+// stroke="white" + paintOrder="stroke" trick.
+function drawHaloedText(page: PDFPage, text: string, opts: {
+  x: number; y: number;
+  font: PDFFont; size: number;
+  color: RGB; halo?: RGB;
+  align?: 'center' | 'left';
+}) {
+  const { x, y, font, size, color, halo = COLOR_WHITE, align = 'center' } = opts
+  const safe = sanitizeForWinAnsi(text)
+  if (!safe) return
+  const w = font.widthOfTextAtSize(safe, size)
+  const drawX = align === 'center' ? x - w / 2 : x
+  for (const dx of [-1, 0, 1]) {
+    for (const dy of [-1, 0, 1]) {
+      if (dx === 0 && dy === 0) continue
+      page.drawText(safe, { x: drawX + dx, y: y + dy, size, font, color: halo })
+    }
+  }
+  page.drawText(safe, { x: drawX, y, size, font, color })
+}
+
+export function drawAnnotationsOnImage(
+  page: PDFPage,
+  bold: PDFFont,
+  imageX: number, imageY: number,
+  imageW: number, imageH: number,
+  annotations: Annotation[],
+  color: RGB,
+) {
+  // drawSvgPath translates SVG coordinates to PDF Y-up via the page's
+  // own height, so we read it from the page rather than hardcoding
+  // PAGE_H — keeps the helper reusable on any page size.
+  const pageHeight = page.getHeight()
+  if (!annotations.length) return
+  const minDim   = Math.min(imageW, imageH)
+  const haloThk  = Math.max(1.2, 0.012 * minDim)
+  const lineThk  = Math.max(0.8, 0.008 * minDim)
+  const arrowH   = Math.max(4,   0.05  * minDim)   // arrowhead length
+  const arrowW   = Math.max(2.5, 0.025 * minDim)   // arrowhead half-width
+  const labelSz  = Math.max(6,   0.045 * minDim)
+
+  // 0-1 image space → PDF page coords. Y is flipped because annotations
+  // measure from the top of the image (SVG convention), PDF measures
+  // from the bottom of the page.
+  const mapX = (x: number) => imageX + x * imageW
+  const mapY = (y: number) => imageY + (1 - y) * imageH
+
+  for (const shape of annotations) {
+    if (shape.type === 'arrow') {
+      const sx = mapX(shape.x1), sy = mapY(shape.y1)
+      const ex = mapX(shape.x2), ey = mapY(shape.y2)
+
+      // White halo behind the colored stroke — keeps the arrow visible
+      // on dark photos, same trick the SVG renderer uses.
+      page.drawLine({
+        start: { x: sx, y: sy }, end: { x: ex, y: ey },
+        thickness: haloThk, color: COLOR_WHITE,
+      })
+      page.drawLine({
+        start: { x: sx, y: sy }, end: { x: ex, y: ey },
+        thickness: lineThk, color,
+      })
+
+      // Filled arrowhead triangle at the tip. pdf-lib's drawSvgPath
+      // expects SVG-space coordinates (Y-down from page top), so we
+      // convert each PDF-Y-up vertex back via PAGE_H − y.
+      const dx = ex - sx, dy = ey - sy
+      const len = Math.hypot(dx, dy)
+      if (len > 0.001) {
+        const ux = dx / len, uy = dy / len
+        const px = -uy,      py = ux
+        const baseX = ex - arrowH * ux
+        const baseY = ey - arrowH * uy
+        const lX = baseX + arrowW * px, lY = baseY + arrowW * py
+        const rX = baseX - arrowW * px, rY = baseY - arrowW * py
+        const triPath =
+          `M ${ex} ${pageHeight - ey} ` +
+          `L ${lX} ${pageHeight - lY} ` +
+          `L ${rX} ${pageHeight - rY} Z`
+        page.drawSvgPath(triPath, {
+          color,
+          borderColor: COLOR_WHITE,
+          // Scale the white halo with the rest of the overlay so it
+          // doesn't dominate tiny photos or vanish on huge ones.
+          borderWidth: Math.max(0.4, lineThk * 0.5),
+        })
+      }
+
+      if (shape.label) {
+        // Label sits just above the arrowhead — same offset (-0.02 in
+        // image space) the SVG uses, so on-screen and on-paper align.
+        const labelY = mapY(shape.y2 - 0.02) - labelSz * 0.2
+        drawHaloedText(page, shape.label, {
+          x: ex, y: labelY,
+          font: bold, size: labelSz,
+          color: COLOR_SLATE_TEXT, halo: COLOR_WHITE,
+          align: 'center',
+        })
+      }
+    } else {
+      // Standalone label
+      const lx = mapX(shape.x), ly = mapY(shape.y) - labelSz * 0.35
+      drawHaloedText(page, shape.text, {
+        x: lx, y: ly,
+        font: bold, size: labelSz,
+        color: COLOR_SLATE_TEXT, halo: COLOR_WHITE,
+        align: 'center',
+      })
+    }
+  }
+}
+
 // ── Page renderer ───────────────────────────────────────────────────────────
 export interface PlacardPageOptions {
-  language:    'en' | 'es'
-  equipment:   Equipment
-  steps:       LotoEnergyStep[]
-  equipImage:  Awaited<ReturnType<typeof fetchAndEmbedImage>>
-  isoImage:    Awaited<ReturnType<typeof fetchAndEmbedImage>>
-  dateStr:     string
-  draft:       boolean  // show "BORRADOR — NO REVISADO" watermark
+  language:         'en' | 'es'
+  equipment:        Equipment
+  steps:            LotoEnergyStep[]
+  equipImage:       Awaited<ReturnType<typeof fetchAndEmbedImage>>
+  isoImage:         Awaited<ReturnType<typeof fetchAndEmbedImage>>
+  // Parsed annotation overlays for each photo. Both default to empty
+  // when unspecified so older callers keep working unchanged.
+  equipAnnotations?: Annotation[]
+  isoAnnotations?:   Annotation[]
+  dateStr:          string
+  draft:            boolean  // show "BORRADOR — NO REVISADO" watermark
 }
 
 export function drawPlacardPage(
@@ -110,7 +259,12 @@ export function drawPlacardPage(
   fonts: { regular: PDFFont; bold: PDFFont },
   opts: PlacardPageOptions,
 ) {
-  const { language, equipment, steps, equipImage, isoImage, dateStr, draft } = opts
+  const {
+    language, equipment, steps,
+    equipImage, isoImage,
+    equipAnnotations = [], isoAnnotations = [],
+    dateStr, draft,
+  } = opts
   const isEn = language === 'en'
   const { regular, bold } = fonts
 
@@ -288,7 +442,10 @@ export function drawPlacardPage(
   const photoLX     = MARGIN
   const photoRX     = MARGIN + photoSlotW + MARGIN
 
-  function drawPhotoSlot(x: number, image: typeof equipImage, caption: string) {
+  function drawPhotoSlot(
+    x: number, image: typeof equipImage, caption: string,
+    annotations: Annotation[], overlayColor: RGB,
+  ) {
     page.drawRectangle({
       x, y: photoY, width: photoSlotW, height: photoH,
       color: rgb(0.96, 0.97, 0.98),
@@ -300,11 +457,12 @@ export function drawPlacardPage(
       const scale = Math.min((photoSlotW - 8) / imgW, (photoH - 18) / imgH)
       const drawW = imgW * scale
       const drawH = imgH * scale
-      page.drawImage(image, {
-        x: x + (photoSlotW - drawW) / 2,
-        y: photoY + 14 + (photoH - 18 - drawH) / 2,
-        width: drawW, height: drawH,
-      })
+      const drawX = x + (photoSlotW - drawW) / 2
+      const drawY = photoY + 14 + (photoH - 18 - drawH) / 2
+      page.drawImage(image, { x: drawX, y: drawY, width: drawW, height: drawH })
+      // Overlay arrows + labels onto the just-drawn image. Same shape
+      // data the on-screen renderer uses, scaled into PDF points.
+      drawAnnotationsOnImage(page, bold, drawX, drawY, drawW, drawH, annotations, overlayColor)
     } else {
       const placeholder = isEn ? '— No photo —' : '— Sin foto —'
       const w = regular.widthOfTextAtSize(placeholder, 10)
@@ -319,8 +477,14 @@ export function drawPlacardPage(
       size: 7.5, font: bold, color: COLOR_NAVY_HEADER,
     })
   }
-  drawPhotoSlot(photoLX, equipImage, PLACARD_TEXT.photoCaptions[language].equipment.toUpperCase())
-  drawPhotoSlot(photoRX, isoImage,   PLACARD_TEXT.photoCaptions[language].isolation.toUpperCase())
+  drawPhotoSlot(
+    photoLX, equipImage, PLACARD_TEXT.photoCaptions[language].equipment.toUpperCase(),
+    equipAnnotations, COLOR_NAVY_HEADER,
+  )
+  drawPhotoSlot(
+    photoRX, isoImage, PLACARD_TEXT.photoCaptions[language].isolation.toUpperCase(),
+    isoAnnotations, COLOR_RED_BLOCK,
+  )
 
   // ── 8. Energy steps table ────────────────────────────────────────────────
   const tableTop    = Y_PHOTOS_BOT
@@ -481,18 +645,24 @@ async function addPlacardPages(
     fetchAndEmbedImage(pdfDoc, equipment.iso_photo_url),
   ])
 
+  // Parse once; reuse on both EN and ES pages.
+  const equipAnnotations = parseAnnotations(equipment.annotations)
+  const isoAnnotations   = parseAnnotations(equipment.iso_annotations)
+
   const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
   const pageEn = pdfDoc.addPage([PAGE_W, PAGE_H])
   drawPlacardPage(pageEn, fonts, {
-    language: 'en', equipment, steps, equipImage, isoImage, dateStr,
-    draft: false,
+    language: 'en', equipment, steps, equipImage, isoImage,
+    equipAnnotations, isoAnnotations,
+    dateStr, draft: false,
   })
 
   const pageEs = pdfDoc.addPage([PAGE_W, PAGE_H])
   drawPlacardPage(pageEs, fonts, {
-    language: 'es', equipment, steps, equipImage, isoImage, dateStr,
-    draft: equipment.spanish_reviewed === false,
+    language: 'es', equipment, steps, equipImage, isoImage,
+    equipAnnotations, isoAnnotations,
+    dateStr, draft: equipment.spanish_reviewed === false,
   })
 }
 

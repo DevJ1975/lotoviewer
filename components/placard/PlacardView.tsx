@@ -3,6 +3,7 @@
 import type { Equipment, LotoEnergyStep } from '@/lib/types'
 import { ENERGY_CODES, energyCodeFor } from '@/lib/energyCodes'
 import { PLACARD_TEXT } from '@/lib/placardText'
+import { parseAnnotations } from '@/lib/photoAnnotations'
 import PlacardPhotoSlot from './PlacardPhotoSlot'
 
 interface Props {
@@ -118,6 +119,10 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
       </div>
 
       {/* ── Photo row ───────────────────────────────────────────────────── */}
+      {/* Annotations parsed once here so the same shape array drives the
+          on-placard overlay AND the editor on the equipment detail page.
+          Equipment photo overlays are navy; isolation overlays are red
+          to match the placard palette. */}
       <div className="grid grid-cols-2 bg-slate-200 dark:bg-slate-700">
         <div className="h-56 sm:h-64">
           <PlacardPhotoSlot
@@ -125,6 +130,8 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
             type="EQUIP"
             label={PLACARD_TEXT.photoCaptions[lang].equipment}
             existingUrl={equipment.equip_photo_url}
+            annotations={parseAnnotations(equipment.annotations)}
+            color="#214488"
             onSuccess={() => { onPhotoSuccess?.('Equipment photo saved.'); onPhotoSaved?.('equip') }}
             onError={onPhotoError}
           />
@@ -135,6 +142,8 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
             type="ISO"
             label={PLACARD_TEXT.photoCaptions[lang].isolation}
             existingUrl={equipment.iso_photo_url}
+            annotations={parseAnnotations(equipment.iso_annotations)}
+            color="#BF1414"
             onSuccess={() => { onPhotoSuccess?.('Isolation photo saved.'); onPhotoSaved?.('iso') }}
             onError={onPhotoError}
           />
