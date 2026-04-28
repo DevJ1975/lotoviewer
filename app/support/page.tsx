@@ -104,8 +104,8 @@ export default function SupportPage() {
         <section className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 rounded-xl p-6 text-center space-y-3">
           <CheckCircle2 className="h-8 w-8 text-emerald-600 mx-auto" />
           <div>
-            <p className="text-base font-bold text-emerald-900">Report sent.</p>
-            <p className="text-xs text-emerald-900/80 mt-1">
+            <p className="text-base font-bold text-emerald-900 dark:text-emerald-100">Report sent.</p>
+            <p className="text-xs text-emerald-900 dark:text-emerald-100/80 mt-1">
               Thanks — we'll follow up at <span className="font-mono">{email}</span> if we need anything else.
             </p>
           </div>
@@ -114,7 +114,7 @@ export default function SupportPage() {
             onClick={() => {
               setTitle(''); setDescription(''); setSteps(''); setSeverity('medium'); setSubmitted(false)
             }}
-            className="text-xs font-semibold text-emerald-700 hover:underline"
+            className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:underline"
           >
             Submit another report
           </button>
@@ -180,9 +180,9 @@ export default function SupportPage() {
           </details>
 
           {error && (
-            <p className="text-xs text-rose-700 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">
+            <p className="text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">
               {error}{' '}
-              <span className="text-rose-900/80">
+              <span className="text-rose-900 dark:text-rose-100/80">
                 You can email <span className="font-mono">jamil@trainovations.com</span> directly if it keeps failing.
               </span>
             </p>

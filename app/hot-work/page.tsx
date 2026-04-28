@@ -30,11 +30,11 @@ const STATE_FILTERS: Array<{ value: HotWorkState | 'all' | 'open'; label: string
 ]
 
 const STATE_BADGE: Record<HotWorkState, string> = {
-  pending_signature:   'bg-amber-100   text-amber-800   ring-amber-200',
-  active:              'bg-emerald-100 text-emerald-800 ring-emerald-200',
-  post_work_watch:     'bg-blue-100    text-blue-800    ring-blue-200',
-  post_watch_complete: 'bg-emerald-50 dark:bg-emerald-950/40  text-emerald-700 ring-emerald-200',
-  expired:             'bg-rose-100    text-rose-800    ring-rose-200',
+  pending_signature:   'bg-amber-100   text-amber-800 dark:text-amber-200   ring-amber-200',
+  active:              'bg-emerald-100 text-emerald-800 dark:text-emerald-200 ring-emerald-200',
+  post_work_watch:     'bg-blue-100    text-blue-800 dark:text-blue-200    ring-blue-200',
+  post_watch_complete: 'bg-emerald-50 dark:bg-emerald-950/40  text-emerald-700 dark:text-emerald-300 ring-emerald-200',
+  expired:             'bg-rose-100    text-rose-800 dark:text-rose-200    ring-rose-200',
   canceled:            'bg-slate-100 dark:bg-slate-800   text-slate-700 dark:text-slate-300   ring-slate-200 dark:ring-slate-700',
 }
 
@@ -257,10 +257,10 @@ export default function HotWorkListPage() {
                       <p className="text-xs font-mono text-slate-700 dark:text-slate-300">{formatMinutes(c.activeMinutesRemaining)} left</p>
                     )}
                     {s === 'post_work_watch' && c.postWatchMinutesRemaining != null && (
-                      <p className="text-xs font-mono text-blue-700">watch {formatMinutes(c.postWatchMinutesRemaining)}</p>
+                      <p className="text-xs font-mono text-blue-700 dark:text-blue-300">watch {formatMinutes(c.postWatchMinutesRemaining)}</p>
                     )}
                     {s === 'post_watch_complete' && (
-                      <p className="text-xs text-emerald-700 font-semibold">Ready to close</p>
+                      <p className="text-xs text-emerald-700 dark:text-emerald-300 font-semibold">Ready to close</p>
                     )}
                     <p className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(p.started_at).toLocaleString()}</p>
                   </div>
@@ -283,10 +283,10 @@ function Tile({ label, value, tone }: {
   tone:  'slate' | 'amber' | 'emerald' | 'blue' | 'rose'
 }) {
   const toneCls =
-    tone === 'amber'   ? 'border-amber-200   bg-amber-50 dark:bg-amber-950/40   text-amber-900'
-  : tone === 'emerald' ? 'border-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900'
-  : tone === 'blue'    ? 'border-blue-200    bg-blue-50 dark:bg-blue-950/40    text-blue-900'
-  : tone === 'rose'    ? 'border-rose-200    bg-rose-50 dark:bg-rose-950/40    text-rose-900'
+    tone === 'amber'   ? 'border-amber-200   bg-amber-50 dark:bg-amber-950/40   text-amber-900 dark:text-amber-100'
+  : tone === 'emerald' ? 'border-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-100'
+  : tone === 'blue'    ? 'border-blue-200    bg-blue-50 dark:bg-blue-950/40    text-blue-900 dark:text-blue-100'
+  : tone === 'rose'    ? 'border-rose-200    bg-rose-50 dark:bg-rose-950/40    text-rose-900 dark:text-rose-100'
   :                      'border-slate-200 dark:border-slate-700   bg-white dark:bg-slate-900      text-slate-700 dark:text-slate-300'
   return (
     <div className={`rounded-xl border px-3 py-2 ${toneCls}`}>

@@ -132,4 +132,34 @@
   html {
     @apply font-sans;
   }
+
+  /* Dark-mode form-control defaults.
+     Form inputs inherit the browser-default text color (effectively black)
+     unless an explicit color is set. Many inputs in the app use
+     `bg-white dark:bg-slate-900` to swap the surface but don't override
+     the text color, leaving black-text-on-dark-bg in dark mode — visually
+     "whitewashed." This block ensures every input/textarea/select inside
+     .dark gets a legible foreground + matching placeholder + selection
+     palette, without having to touch every element. */
+  .dark input,
+  .dark textarea,
+  .dark select {
+    color: rgb(241 245 249);                /* slate-100 */
+  }
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: rgb(100 116 139);                /* slate-500 */
+  }
+  .dark input::-webkit-input-placeholder,
+  .dark textarea::-webkit-input-placeholder {
+    color: rgb(100 116 139);
+  }
+  /* <option> in <select> drops out of the page's color context on
+     several browsers — Firefox and Safari render options on the OS
+     popover. Explicit colors keep them legible inside the page-styled
+     select, and OS dropdowns will use the OS theme via color-scheme. */
+  .dark option {
+    background-color: rgb(15 23 42);        /* slate-900 */
+    color: rgb(241 245 249);                /* slate-100 */
+  }
 }

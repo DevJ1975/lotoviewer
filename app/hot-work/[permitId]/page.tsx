@@ -254,14 +254,14 @@ export default function HotWorkPermitDetailPage() {
       </div>
 
       {serverError && (
-        <p className="text-xs text-rose-700 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 rounded-lg px-3 py-2">{serverError}</p>
+        <p className="text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 rounded-lg px-3 py-2">{serverError}</p>
       )}
 
       {/* Cross-link banners */}
       {csPermit && (
         <div className="rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-950/40 px-4 py-3">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-blue-900">Linked confined-space permit</p>
-          <p className="text-sm text-blue-900 mt-0.5">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-blue-900 dark:text-blue-100">Linked confined-space permit</p>
+          <p className="text-sm text-blue-900 dark:text-blue-100 mt-0.5">
             <Link href={`/confined-spaces/${encodeURIComponent(csPermit.space_id)}/permits/${csPermit.id}`} className="font-mono font-bold hover:underline">
               {csPermit.serial}
             </Link>
@@ -269,7 +269,7 @@ export default function HotWorkPermitDetailPage() {
             <span className="font-semibold">{csPermit.space_id}</span>
             {' (expires ' + new Date(csPermit.expires_at).toLocaleString() + ')'}
           </p>
-          <p className="text-[11px] text-blue-900/80 mt-1">
+          <p className="text-[11px] text-blue-900 dark:text-blue-100/80 mt-1">
             §1910.146(f)(15) — work in this space requires both permits to remain valid.
           </p>
         </div>
@@ -319,23 +319,23 @@ export default function HotWorkPermitDetailPage() {
         <>
           {signBlocks.length > 0 && (
             <div className="rounded-md border border-rose-300 bg-rose-50 dark:bg-rose-950/40 px-3 py-2 space-y-1">
-              <p className="text-[11px] font-bold text-rose-900">Sign blocked — resolve these first:</p>
-              <ul className="text-[11px] text-rose-900/85 space-y-0.5 pl-4">
+              <p className="text-[11px] font-bold text-rose-900 dark:text-rose-100">Sign blocked — resolve these first:</p>
+              <ul className="text-[11px] text-rose-900 dark:text-rose-100/85 space-y-0.5 pl-4">
                 {signBlocks.map(b => <li key={b.code}>• {b.message}</li>)}
               </ul>
             </div>
           )}
           {trainingIssues.length > 0 && signBlocks.length === 0 && (
             <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 space-y-1.5">
-              <p className="text-[11px] font-bold text-amber-900">§1910.252(a)(2)(xv) — training records not on file</p>
-              <ul className="text-[11px] text-amber-900/85 space-y-0.5 pl-4">
+              <p className="text-[11px] font-bold text-amber-900 dark:text-amber-100">§1910.252(a)(2)(xv) — training records not on file</p>
+              <ul className="text-[11px] text-amber-900 dark:text-amber-100/85 space-y-0.5 pl-4">
                 {trainingIssues.map((i, idx) => (
                   <li key={`${i.worker_name}:${i.slot}:${idx}`}>
                     • <span className="font-semibold">{i.worker_name}</span> ({i.slot}) — {i.kind === 'missing' ? 'no training record' : `cert expired${i.expired_on ? ` ${i.expired_on}` : ''}`}
                   </li>
                 ))}
               </ul>
-              <label className="flex items-start gap-2 text-[11px] text-amber-900 pt-1 cursor-pointer">
+              <label className="flex items-start gap-2 text-[11px] text-amber-900 dark:text-amber-100 pt-1 cursor-pointer">
                 <input type="checkbox" checked={trainingOverride} onChange={e => setTrainingOverride(e.target.checked)} className="mt-0.5" />
                 <span>I have verified each worker's training off-app and accept responsibility for authorizing entry.</span>
               </label>
@@ -343,8 +343,8 @@ export default function HotWorkPermitDetailPage() {
           )}
           <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap">
             <div>
-              <p className="text-sm font-bold text-emerald-900">Sign &amp; authorize this permit</p>
-              <p className="text-[11px] text-emerald-900/80">
+              <p className="text-sm font-bold text-emerald-900 dark:text-emerald-100">Sign &amp; authorize this permit</p>
+              <p className="text-[11px] text-emerald-900 dark:text-emerald-100/80">
                 You're acting as the Permit Authorizing Individual. The permit becomes active immediately on sign.
               </p>
             </div>
@@ -368,8 +368,8 @@ export default function HotWorkPermitDetailPage() {
       {state === 'active' && !permit.fire_watch_signature_at && permit.fire_watch_personnel.length > 0 && (
         <div className="rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 p-4 flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <p className="text-sm font-bold text-blue-900">Fire watcher on-duty sign-on</p>
-            <p className="text-[11px] text-blue-900/80">NFPA 51B §6.5 — confirm a watcher is in position before work proceeds.</p>
+            <p className="text-sm font-bold text-blue-900 dark:text-blue-100">Fire watcher on-duty sign-on</p>
+            <p className="text-[11px] text-blue-900 dark:text-blue-100/80">NFPA 51B §6.5 — confirm a watcher is in position before work proceeds.</p>
           </div>
           <button
             type="button"
@@ -387,7 +387,7 @@ export default function HotWorkPermitDetailPage() {
           <button
             type="button"
             onClick={() => { setCancelInitial('unsafe_condition'); setCancelOpen(true) }}
-            className="text-xs font-semibold text-rose-700 hover:underline"
+            className="text-xs font-semibold text-rose-700 dark:text-rose-300 hover:underline"
           >
             Cancel for cause…
           </button>
@@ -405,10 +405,10 @@ export default function HotWorkPermitDetailPage() {
       {/* Post-work watch — countdown + cancel-for-cause; no close until elapsed */}
       {state === 'post_work_watch' && countdown.postWatchMinutesRemaining != null && (
         <div className="rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 p-4 space-y-2">
-          <p className="text-sm font-bold text-blue-900">
+          <p className="text-sm font-bold text-blue-900 dark:text-blue-100">
             Fire watch active — {formatMinutes(countdown.postWatchMinutesRemaining)} remaining
           </p>
-          <p className="text-[11px] text-blue-900/80">
+          <p className="text-[11px] text-blue-900 dark:text-blue-100/80">
             NFPA 51B §8.7 — the fire watcher must remain on site and observe for smoke / fire. Permit cannot be closed
             until the timer elapses.
           </p>
@@ -416,7 +416,7 @@ export default function HotWorkPermitDetailPage() {
             <button
               type="button"
               onClick={() => { setCancelInitial('fire_observed'); setCancelOpen(true) }}
-              className="text-xs font-semibold text-rose-700 hover:underline"
+              className="text-xs font-semibold text-rose-700 dark:text-rose-300 hover:underline"
             >
               Fire / unsafe condition observed →
             </button>
@@ -428,8 +428,8 @@ export default function HotWorkPermitDetailPage() {
       {state === 'post_watch_complete' && (
         <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 p-4 flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <p className="text-sm font-bold text-emerald-900">Post-work watch elapsed — ready to close.</p>
-            <p className="text-[11px] text-emerald-900/80">No fire was observed. Confirm and close to lock the audit trail.</p>
+            <p className="text-sm font-bold text-emerald-900 dark:text-emerald-100">Post-work watch elapsed — ready to close.</p>
+            <p className="text-[11px] text-emerald-900 dark:text-emerald-100/80">No fire was observed. Confirm and close to lock the audit trail.</p>
           </div>
           <button
             type="button"
@@ -444,7 +444,7 @@ export default function HotWorkPermitDetailPage() {
       {/* Expired without close-out */}
       {state === 'expired' && (
         <div className="rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 p-4 flex items-center justify-between gap-3">
-          <p className="text-xs text-rose-900/80">
+          <p className="text-xs text-rose-900 dark:text-rose-100/80">
             This permit expired without being formally closed. Close it out now to clear the alert and lock the audit trail.
           </p>
           <button
@@ -743,9 +743,9 @@ function AnswerBadge({ value, format, failed }: {
     return <span className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">N/A</span>
   }
   const cls = failed
-    ? 'bg-rose-100 text-rose-800'
-    : value === true  ? 'bg-emerald-100 text-emerald-800'
-    : value === false ? 'bg-rose-100 text-rose-800'
+    ? 'bg-rose-100 text-rose-800 dark:text-rose-200'
+    : value === true  ? 'bg-emerald-100 text-emerald-800 dark:text-emerald-200'
+    : value === false ? 'bg-rose-100 text-rose-800 dark:text-rose-200'
     : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
   return (
     <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${cls}`}>

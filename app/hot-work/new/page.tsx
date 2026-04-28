@@ -333,7 +333,7 @@ export default function NewHotWorkPermitPage() {
           {csLoading ? (
             <p className="text-xs text-slate-400 dark:text-slate-500">Loading active CS permits…</p>
           ) : activeCsPermits.length === 0 ? (
-            <p className="text-xs text-rose-700">
+            <p className="text-xs text-rose-700 dark:text-rose-300">
               No active confined-space permits found. Create the CS permit first; you can come back here once it's signed.
             </p>
           ) : (
@@ -397,12 +397,12 @@ export default function NewHotWorkPermitPage() {
       </Section>
 
       {submitErrors.length > 0 && (
-        <ul className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-900 space-y-0.5">
+        <ul className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-900 dark:text-amber-100 space-y-0.5">
           {submitErrors.map(e => <li key={e}>• {e}</li>)}
         </ul>
       )}
       {serverError && (
-        <p className="text-xs text-rose-700 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">{serverError}</p>
+        <p className="text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">{serverError}</p>
       )}
 
       <div className="flex items-center justify-end gap-2 pt-2">

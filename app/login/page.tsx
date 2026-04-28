@@ -51,7 +51,7 @@ function LoginForm() {
       >
         <div className="text-center space-y-1">
           <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">
-            Soteria <span className="text-brand-navy tracking-wider">FIELD</span>
+            Soteria <span className="text-brand-navy dark:text-brand-yellow tracking-wider">FIELD</span>
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">Sign in to continue</p>
         </div>
@@ -86,7 +86,7 @@ function LoginForm() {
         </div>
 
         {error && (
-          <p className="text-sm font-medium text-rose-700 bg-rose-50 dark:bg-rose-950/40 rounded-lg px-3 py-2">
+          <p className="text-sm font-medium text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg px-3 py-2">
             {error}
           </p>
         )}

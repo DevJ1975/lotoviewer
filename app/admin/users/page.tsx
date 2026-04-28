@@ -175,7 +175,7 @@ jamil@trainovations.com`
           </button>
         </form>
         {inviteError && (
-          <p className="mt-3 text-sm font-medium text-rose-700 bg-rose-50 dark:bg-rose-950/40 rounded-lg px-3 py-2">{inviteError}</p>
+          <p className="mt-3 text-sm font-medium text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg px-3 py-2">{inviteError}</p>
         )}
       </section>
 
@@ -187,16 +187,16 @@ jamil@trainovations.com`
       {justInvited && justInvited.emailSent && (
         <section className="bg-emerald-50 dark:bg-emerald-950/40 rounded-xl ring-1 ring-emerald-200 p-5">
           <div className="flex items-start gap-3">
-            <MailCheck className="h-6 w-6 text-emerald-700 shrink-0 mt-0.5" />
+            <MailCheck className="h-6 w-6 text-emerald-700 dark:text-emerald-300 shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
-              <h2 className="text-sm font-bold text-emerald-900 flex items-center gap-1.5">
+              <h2 className="text-sm font-bold text-emerald-900 dark:text-emerald-100 flex items-center gap-1.5">
                 <Check className="h-4 w-4" /> Invitation emailed to {justInvited.email}
               </h2>
-              <p className="text-xs text-emerald-800 mt-1">
+              <p className="text-xs text-emerald-800 dark:text-emerald-200 mt-1">
                 {(justInvited.fullName || justInvited.email.split('@')[0])} will receive a sign-in link with their one-time password.
                 On first login they'll be required to set their own password (≥ 8 characters).
               </p>
-              <details className="mt-3 text-xs text-emerald-900">
+              <details className="mt-3 text-xs text-emerald-900 dark:text-emerald-100">
                 <summary className="cursor-pointer font-semibold hover:underline">
                   Show one-time password (in case the email gets lost)
                 </summary>
@@ -210,12 +210,12 @@ jamil@trainovations.com`
                         setCopied(true); setTimeout(() => setCopied(false), 1500)
                       } catch { /* ignore */ }
                     }}
-                    className="text-emerald-700 hover:text-emerald-900"
+                    className="text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100"
                     aria-label="Copy password"
                   >
                     <Copy className="h-3.5 w-3.5" />
                   </button>
-                  {copied && <span className="text-[11px] text-emerald-700">copied</span>}
+                  {copied && <span className="text-[11px] text-emerald-700 dark:text-emerald-300">copied</span>}
                 </div>
               </details>
             </div>
@@ -227,8 +227,8 @@ jamil@trainovations.com`
         <section className="bg-amber-50 dark:bg-amber-950/40 rounded-xl ring-1 ring-amber-200 p-5">
           <div className="flex items-start justify-between gap-3 mb-3">
             <div>
-              <h2 className="text-sm font-bold text-amber-900">Invite created — email not sent</h2>
-              <p className="text-xs text-amber-800 mt-0.5">
+              <h2 className="text-sm font-bold text-amber-900 dark:text-amber-100">Invite created — email not sent</h2>
+              <p className="text-xs text-amber-800 dark:text-amber-200 mt-0.5">
                 The user is created but Resend isn't configured (or the send failed). Copy this into your email to {justInvited.email}.
                 The password is shown once; save it if you lose the window.
               </p>
@@ -242,7 +242,7 @@ jamil@trainovations.com`
                   setTimeout(() => setCopied(false), 1500)
                 } catch { /* ignore */ }
               }}
-              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 ring-1 ring-amber-300 text-amber-900 text-xs font-semibold hover:bg-amber-100 transition-colors"
+              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 ring-1 ring-amber-300 text-amber-900 dark:text-amber-100 text-xs font-semibold hover:bg-amber-100 transition-colors"
             >
               <Copy className="h-3.5 w-3.5" />
               {copied ? 'Copied' : 'Copy'}
@@ -263,7 +263,7 @@ jamil@trainovations.com`
         {loading ? (
           <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-slate-400 dark:text-slate-500" /></div>
         ) : loadError ? (
-          <p className="px-5 py-6 text-sm text-rose-700">{loadError}</p>
+          <p className="px-5 py-6 text-sm text-rose-700 dark:text-rose-300">{loadError}</p>
         ) : users.length === 0 ? (
           <p className="px-5 py-6 text-sm text-slate-500 dark:text-slate-400">No users yet.</p>
         ) : (
@@ -273,8 +273,8 @@ jamil@trainovations.com`
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">{u.full_name || u.email.split('@')[0]}</span>
-                    {u.is_admin && <span className="text-[10px] font-bold text-brand-navy bg-brand-navy/10 rounded-full px-1.5 py-0.5 uppercase tracking-wider">Admin</span>}
-                    {u.must_change_password && <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 dark:bg-amber-950/40 rounded-full px-1.5 py-0.5">pending first login</span>}
+                    {u.is_admin && <span className="text-[10px] font-bold text-brand-navy dark:text-brand-yellow bg-brand-navy/10 dark:bg-brand-navy/30 rounded-full px-1.5 py-0.5 uppercase tracking-wider">Admin</span>}
+                    {u.must_change_password && <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 rounded-full px-1.5 py-0.5">pending first login</span>}
                   </div>
                   <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{u.email}</div>
                 </div>

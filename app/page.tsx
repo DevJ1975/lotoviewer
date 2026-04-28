@@ -373,9 +373,9 @@ function AlertList({
   rows:     Array<{ href: string; label: string; sub: string }>
 }) {
   const toneCls =
-    tone === 'amber'  ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 text-amber-900'
-  : tone === 'rose'   ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 text-rose-900'
-  : tone === 'indigo' ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 text-indigo-900'
+    tone === 'amber'  ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 text-amber-900 dark:text-amber-100'
+  : tone === 'rose'   ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 text-rose-900 dark:text-rose-100'
+  : tone === 'indigo' ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 text-indigo-900 dark:text-indigo-100'
   :                     'bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
   return (
     <div className={`rounded-xl border ${toneCls} p-4 space-y-3`}>
@@ -445,7 +445,7 @@ function QuickAction({ href, icon, label, sub }: { href: string; icon: React.Rea
       href={href}
       className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-brand-navy hover:shadow-sm rounded-xl px-4 py-4 flex items-center gap-3 transition-all group"
     >
-      <div className="shrink-0 w-11 h-11 rounded-lg bg-brand-navy/5 group-hover:bg-brand-navy/10 text-brand-navy flex items-center justify-center transition-colors">
+      <div className="shrink-0 w-11 h-11 rounded-lg bg-brand-navy/5 dark:bg-brand-navy/30 group-hover:bg-brand-navy/10 dark:group-hover:bg-brand-navy/40 text-brand-navy dark:text-brand-yellow flex items-center justify-center transition-colors">
         {icon}
       </div>
       <div className="min-w-0">
@@ -470,7 +470,7 @@ function KpiRow({
 }) {
   if (error) {
     return (
-      <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-900 flex items-center justify-between gap-3">
+      <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-900 dark:text-amber-100 flex items-center justify-between gap-3">
         <span>Couldn't load live metrics: {error}. Check your connection or that migrations 009-011 are applied.</span>
         <button
           type="button"
@@ -568,9 +568,9 @@ function Kpi({ label, value, href, tone }: {
   :                       'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'
 
   const valueCls =
-    tone === 'critical' ? 'text-rose-700'
-  : tone === 'warning'  ? 'text-amber-700'
-  : tone === 'safe'     ? 'text-emerald-700'
+    tone === 'critical' ? 'text-rose-700 dark:text-rose-300'
+  : tone === 'warning'  ? 'text-amber-700 dark:text-amber-300'
+  : tone === 'safe'     ? 'text-emerald-700 dark:text-emerald-300'
   :                       'text-slate-900 dark:text-slate-100'
 
   return (
@@ -588,7 +588,7 @@ function ActivePermitsPanel({ permits, now }: { permits: ActivePermitSummary[] |
     <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
       <header className="flex items-baseline justify-between">
         <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Active Permits</h2>
-        <Link href="/confined-spaces/status" className="text-[11px] font-semibold text-brand-navy hover:underline">
+        <Link href="/confined-spaces/status" className="text-[11px] font-semibold text-brand-navy dark:text-brand-yellow hover:underline">
           View all →
         </Link>
       </header>
@@ -613,10 +613,10 @@ function ActivePermitRow({ permit, now }: { permit: ActivePermitSummary; now: Da
   // clock tick).
   const c = permitCountdown({ expires_at: permit.expiresAt }, now.getTime())
   const timerCls: Record<CountdownTone, string> = {
-    safe:     'text-emerald-700',
-    warning:  'text-amber-700',
-    critical: 'text-rose-700',
-    expired:  'text-rose-700',
+    safe:     'text-emerald-700 dark:text-emerald-300',
+    warning:  'text-amber-700 dark:text-amber-300',
+    critical: 'text-rose-700 dark:text-rose-300',
+    expired:  'text-rose-700 dark:text-rose-300',
   }
   return (
     <li className="py-2.5">
@@ -701,7 +701,7 @@ function ComingSoonStrip() {
   if (upcoming.length === 0) return null
   return (
     <section className="rounded-xl border border-dashed border-violet-200 bg-violet-50 dark:bg-violet-950/40/40 p-4 space-y-2">
-      <p className="text-[11px] font-bold uppercase tracking-widest text-violet-800">Coming Soon</p>
+      <p className="text-[11px] font-bold uppercase tracking-widest text-violet-800 dark:text-violet-200">Coming Soon</p>
       <div className="flex flex-wrap gap-3">
         {upcoming.map(m => (
           <div key={m.id} className="flex-1 min-w-[200px]">

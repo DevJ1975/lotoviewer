@@ -125,7 +125,7 @@ export default function WelcomePage() {
         </div>
 
         {error && (
-          <p className="text-sm font-medium text-rose-700 bg-rose-50 dark:bg-rose-950/40 rounded-lg px-3 py-2">
+          <p className="text-sm font-medium text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg px-3 py-2">
             {error}
           </p>
         )}
