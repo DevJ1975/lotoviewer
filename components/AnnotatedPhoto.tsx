@@ -67,7 +67,19 @@ export function AnnotatedPhoto({
           initial={annotations}
           color={color}
           onClose={() => setEditing(false)}
-          onSave={(next) => { onSave(next); setEditing(false) }}
+          // Await the parent's save so we only close the editor on
+          // success. If onSave throws (e.g. Supabase RLS / column
+          // error), keep the editor open so the user's drawn shapes
+          // aren't lost and they have a chance to read the toast.
+          onSave={async (next) => {
+            try {
+              await onSave(next)
+              setEditing(false)
+            } catch {
+              // Parent already surfaced the error via toast / console.
+              // Editor stays open with the drawn shapes intact.
+            }
+          }}
         />
       )}
     </div>
@@ -170,10 +182,13 @@ function AnnotationEditor({
   initial: Annotation[]
   color:   string
   onClose: () => void
-  onSave:  (next: Annotation[]) => void
+  // May be sync or async. Async returns let us show a "Saving…"
+  // state and keep the editor open if the save throws.
+  onSave:  (next: Annotation[]) => void | Promise<void>
 }) {
   const [shapes, setShapes] = useState<Annotation[]>(() => parseAnnotations(initial))
   const [tool, setTool]     = useState<Tool>('arrow')
+  const [saving, setSaving] = useState(false)
   const markerId = useUniqueMarkerId()
   // Two-click arrow drawing: first click sets the start, second click
   // sets the end and finalizes the shape. arrowStart === null means the
@@ -227,18 +242,23 @@ function AnnotationEditor({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            disabled={saving}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
           >
             <X className="h-4 w-4" />
             Cancel
           </button>
           <button
             type="button"
-            onClick={() => onSave(shapes)}
-            className="inline-flex items-center gap-1 px-4 py-1.5 rounded-md bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 transition-colors"
+            disabled={saving}
+            onClick={async () => {
+              setSaving(true)
+              try { await onSave(shapes) } finally { setSaving(false) }
+            }}
+            className="inline-flex items-center gap-1 px-4 py-1.5 rounded-md bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 disabled:opacity-60 transition-colors"
           >
             <Check className="h-4 w-4" />
-            Save
+            {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </header>

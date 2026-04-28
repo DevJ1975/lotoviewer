@@ -209,8 +209,11 @@ function EquipmentDetail() {
                   .select('*')
                   .single()
                 if (error) {
-                  showToast(`Could not save annotations: ${error.message}`, 'error')
-                  return
+                  console.error('[equipment] save annotations failed', { equipmentId, error })
+                  showToast(`Could not save: ${error.code ?? ''} ${error.message}`, 'error')
+                  // Re-throw so AnnotatedPhoto keeps the editor open and
+                  // the user's work isn't silently discarded.
+                  throw error
                 }
                 if (data) setEquipment(data as Equipment)
                 showToast('Annotations saved', 'success')
@@ -246,8 +249,9 @@ function EquipmentDetail() {
                   .select('*')
                   .single()
                 if (error) {
-                  showToast(`Could not save annotations: ${error.message}`, 'error')
-                  return
+                  console.error('[equipment] save iso_annotations failed', { equipmentId, error })
+                  showToast(`Could not save: ${error.code ?? ''} ${error.message}`, 'error')
+                  throw error
                 }
                 if (data) setEquipment(data as Equipment)
                 showToast('Annotations saved', 'success')

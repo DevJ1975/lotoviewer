@@ -15,15 +15,18 @@ const STYLE = {
 
 const ICON = { success: '✓', error: '✗', info: 'ⓘ' } as const
 
-// Auto-dismisses after 3.5s, or 6s when an inline action is present so the
-// user has time to read + click "Undo". Refs keep the timer stable across
-// parent re-renders that hand us a fresh onClose closure.
+// Auto-dismisses after 3.5s normally, 6s when an inline action is present
+// so the user has time to read + click "Undo", and 9s for errors so the
+// user can actually read what went wrong (3.5s is too short on a tablet
+// when something fails — by the time you focus on the toast it's gone).
+// Refs keep the timer stable across parent re-renders that hand us a
+// fresh onClose closure.
 export default function Toast({ message, type, action, onClose }: Props) {
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
 
   useEffect(() => {
-    const timeout = action ? 6000 : 3500
+    const timeout = type === 'error' ? 9000 : action ? 6000 : 3500
     const timer = setTimeout(() => onCloseRef.current(), timeout)
     return () => clearTimeout(timer)
   }, [message, type, action])
