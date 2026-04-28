@@ -190,10 +190,13 @@ function AnnotationEditor({
   const [tool, setTool]     = useState<Tool>('arrow')
   const [saving, setSaving] = useState(false)
   const markerId = useUniqueMarkerId()
-  // Two-click arrow drawing: first click sets the start, second click
-  // sets the end and finalizes the shape. arrowStart === null means the
-  // next pointer-down is a start; otherwise it's an end.
-  const [arrowStart, setArrowStart] = useState<{ x: number; y: number } | null>(null)
+  // Drag-and-release arrow drawing. arrowDraft holds the in-flight
+  // arrow's tail (x1,y1) and current pointer position (x2,y2) while the
+  // finger is down. null = nothing being drawn. The earlier tap-tap
+  // approach was confusing on iPad — users couldn't tell which tap set
+  // the arrowhead direction, so arrows often pointed the wrong way.
+  type ArrowDraft = { x1: number; y1: number; x2: number; y2: number }
+  const [arrowDraft, setArrowDraft] = useState<ArrowDraft | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
 
   function pointerToUnit(e: React.PointerEvent<SVGSVGElement>): { x: number; y: number } {
@@ -210,24 +213,42 @@ function AnnotationEditor({
     if (tool === 'select') return
     const p = pointerToUnit(e)
     if (tool === 'arrow') {
-      if (!arrowStart) {
-        setArrowStart(p)
-      } else {
-        // Prompt for a label inline so a single arrow gesture captures
-        // "what isolation point this points at" without the user having
-        // to switch to the Label tool. Empty / cancelled = unlabeled
-        // arrow, which is still valid.
-        const text = window.prompt('Name this isolation point (optional)')
-        const label = text && text.trim() ? text.trim() : undefined
-        setShapes(prev => [...prev, { type: 'arrow', x1: arrowStart.x, y1: arrowStart.y, x2: p.x, y2: p.y, label }])
-        setArrowStart(null)
-      }
+      // Capture the pointer so we keep getting move/up events even if
+      // the finger drifts outside the SVG bounds during the drag.
+      try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* unsupported, ignore */ }
+      setArrowDraft({ x1: p.x, y1: p.y, x2: p.x, y2: p.y })
     } else if (tool === 'label') {
       const text = window.prompt('Label text')
       if (text && text.trim()) {
         setShapes(prev => [...prev, { type: 'label', x: p.x, y: p.y, text: text.trim() }])
       }
     }
+  }
+
+  function handlePointerMove(e: React.PointerEvent<SVGSVGElement>) {
+    if (!arrowDraft) return
+    const p = pointerToUnit(e)
+    setArrowDraft(prev => prev ? { x1: prev.x1, y1: prev.y1, x2: p.x, y2: p.y } : null)
+  }
+
+  function handlePointerUp() {
+    if (!arrowDraft) return
+    const draft = arrowDraft
+    setArrowDraft(null)
+    const dx = draft.x2 - draft.x1
+    const dy = draft.y2 - draft.y1
+    // Reject anything shorter than ~4% of the image — almost certainly
+    // a stray tap rather than an intended arrow. Without this guard,
+    // accidental presses leave 0-length arrows that look like a dot.
+    if (dx * dx + dy * dy < 0.04 * 0.04) return
+    const text = window.prompt('Name this isolation point (optional)')
+    const label = text && text.trim() ? text.trim() : undefined
+    setShapes(prev => [...prev, {
+      type: 'arrow',
+      x1: draft.x1, y1: draft.y1,
+      x2: draft.x2, y2: draft.y2,
+      label,
+    }])
   }
 
   function deleteAt(index: number) {
@@ -274,6 +295,9 @@ function AnnotationEditor({
               className="absolute inset-0 w-full h-full"
               style={{ touchAction: 'none', cursor: tool === 'select' ? 'pointer' : 'crosshair' }}
               onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={() => setArrowDraft(null)}
             >
               <defs>
                 <ArrowheadMarker id={markerId} color={color} />
@@ -285,10 +309,17 @@ function AnnotationEditor({
                   <ShapeNode shape={shape} color={color} markerId={markerId} />
                 </g>
               ))}
-              {/* Pending-arrow indicator — show the start dot while waiting
-                  for the second click. */}
-              {arrowStart && (
-                <circle cx={arrowStart.x} cy={arrowStart.y} r="0.012" fill="#BF1414" stroke="white" strokeWidth="0.004" />
+              {/* Live preview while the user is dragging — same visual
+                  weight as a finalized arrow so they see exactly what
+                  they're about to commit. */}
+              {arrowDraft && (
+                <g>
+                  <line x1={arrowDraft.x1} y1={arrowDraft.y1} x2={arrowDraft.x2} y2={arrowDraft.y2}
+                        stroke="white" strokeWidth="0.012" strokeLinecap="round" />
+                  <line x1={arrowDraft.x1} y1={arrowDraft.y1} x2={arrowDraft.x2} y2={arrowDraft.y2}
+                        stroke={color} strokeWidth="0.008" strokeLinecap="round"
+                        markerEnd={`url(#${markerId})`} />
+                </g>
               )}
             </svg>
           </div>
@@ -297,12 +328,12 @@ function AnnotationEditor({
 
       <footer className="bg-white dark:bg-slate-900 px-4 py-3 flex items-center justify-between gap-3 shrink-0 border-t border-slate-200 dark:border-slate-700">
         <div className="flex items-center gap-1.5">
-          <ToolButton active={tool === 'arrow'}  onClick={() => { setTool('arrow');  setArrowStart(null) }} icon={<ArrowRight className="h-4 w-4" />} label="Arrow" />
-          <ToolButton active={tool === 'label'}  onClick={() => { setTool('label');  setArrowStart(null) }} icon={<Type className="h-4 w-4" />}       label="Label" />
-          <ToolButton active={tool === 'select'} onClick={() => { setTool('select'); setArrowStart(null) }} icon={<Trash2 className="h-4 w-4" />}     label="Tap to delete" />
+          <ToolButton active={tool === 'arrow'}  onClick={() => { setTool('arrow');  setArrowDraft(null) }} icon={<ArrowRight className="h-4 w-4" />} label="Arrow" />
+          <ToolButton active={tool === 'label'}  onClick={() => { setTool('label');  setArrowDraft(null) }} icon={<Type className="h-4 w-4" />}       label="Label" />
+          <ToolButton active={tool === 'select'} onClick={() => { setTool('select'); setArrowDraft(null) }} icon={<Trash2 className="h-4 w-4" />}     label="Tap to delete" />
         </div>
         <p className="text-[11px] text-slate-500 dark:text-slate-400">
-          {tool === 'arrow' && (arrowStart ? 'Tap the arrow tip.' : 'Tap where the arrow should start.')}
+          {tool === 'arrow' && (arrowDraft ? 'Release on the isolation point.' : 'Press, drag to the isolation point, release.')}
           {tool === 'label' && 'Tap to drop a label.'}
           {tool === 'select' && 'Tap a shape to remove it.'}
         </p>
