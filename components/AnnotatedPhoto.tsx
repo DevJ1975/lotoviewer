@@ -35,7 +35,7 @@ export function AnnotatedPhoto({
         <button
           type="button"
           onClick={() => setEditing(true)}
-          className="absolute bottom-2 right-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white/90 hover:bg-white text-slate-700 text-[11px] font-semibold shadow-sm border border-slate-200 transition-colors"
+          className="absolute bottom-2 right-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white/90 dark:bg-slate-900/90 hover:bg-white dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300 text-[11px] font-semibold shadow-sm border border-slate-200 dark:border-slate-700 transition-colors"
         >
           <Pencil className="h-3 w-3" />
           Annotate
@@ -193,13 +193,13 @@ function AnnotationEditor({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex flex-col">
-      <header className="bg-white px-4 py-3 flex items-center justify-between gap-2 shrink-0">
-        <p className="text-sm font-semibold text-slate-900">Annotate photo</p>
+      <header className="bg-white dark:bg-slate-900 px-4 py-3 flex items-center justify-between gap-2 shrink-0">
+        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Annotate photo</p>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm text-slate-600 hover:bg-slate-100 transition-colors"
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <X className="h-4 w-4" />
             Cancel
@@ -273,13 +273,13 @@ function AnnotationEditor({
         </div>
       </div>
 
-      <footer className="bg-white px-4 py-3 flex items-center justify-between gap-3 shrink-0 border-t border-slate-200">
+      <footer className="bg-white dark:bg-slate-900 px-4 py-3 flex items-center justify-between gap-3 shrink-0 border-t border-slate-200 dark:border-slate-700">
         <div className="flex items-center gap-1.5">
           <ToolButton active={tool === 'arrow'}  onClick={() => { setTool('arrow');  setArrowStart(null) }} icon={<ArrowRight className="h-4 w-4" />} label="Arrow" />
           <ToolButton active={tool === 'label'}  onClick={() => { setTool('label');  setArrowStart(null) }} icon={<Type className="h-4 w-4" />}       label="Label" />
           <ToolButton active={tool === 'select'} onClick={() => { setTool('select'); setArrowStart(null) }} icon={<Trash2 className="h-4 w-4" />}     label="Tap to delete" />
         </div>
-        <p className="text-[11px] text-slate-500">
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">
           {tool === 'arrow' && (arrowStart ? 'Tap the arrow tip.' : 'Tap where the arrow should start.')}
           {tool === 'label' && 'Tap to drop a label.'}
           {tool === 'select' && 'Tap a shape to remove it.'}
@@ -302,7 +302,7 @@ function ToolButton({ active, onClick, icon, label }: {
       className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
         active
           ? 'bg-brand-navy text-white'
-          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
       }`}
     >
       {icon}

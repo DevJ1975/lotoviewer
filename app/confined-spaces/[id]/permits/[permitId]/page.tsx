@@ -168,12 +168,12 @@ export default function PermitDetailPage() {
   const latestStatus = latestTest ? evaluateTest(latestTest, thresholds).status : null
 
   if (loading) {
-    return <div className="max-w-3xl mx-auto px-4 py-10 text-center text-sm text-slate-400">Loading…</div>
+    return <div className="max-w-3xl mx-auto px-4 py-10 text-center text-sm text-slate-400 dark:text-slate-500">Loading…</div>
   }
   if (notFound || !space || !permit) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-10 text-center space-y-3">
-        <p className="text-sm font-semibold text-slate-700">Permit not found.</p>
+        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Permit not found.</p>
         <Link href={`/confined-spaces/${encodeURIComponent(spaceId)}`} className="inline-block px-4 py-2 rounded-lg bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 transition-colors">
           Back to space
         </Link>
@@ -276,7 +276,7 @@ export default function PermitDetailPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
       <div className="flex items-center justify-between gap-3">
-        <Link href={`/confined-spaces/${encodeURIComponent(spaceId)}`} className="text-sm font-semibold text-slate-500 hover:text-slate-700">
+        <Link href={`/confined-spaces/${encodeURIComponent(spaceId)}`} className="text-sm font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300">
           ← Back to space
         </Link>
         <div className="flex items-center gap-3">
@@ -287,21 +287,21 @@ export default function PermitDetailPage() {
           >
             ⬇ Download PDF
           </button>
-          <span className="text-[11px] text-slate-500 font-mono font-bold tracking-wider">{permit.serial}</span>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono font-bold tracking-wider">{permit.serial}</span>
         </div>
       </div>
 
       <StatusBanner state={state!} permit={permit} />
 
-      <header className="bg-white border border-slate-200 rounded-xl p-4">
+      <header className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
         <div className="flex items-baseline justify-between gap-3 flex-wrap">
           <div>
-            <h1 className="text-base font-bold text-slate-900">{permit.purpose}</h1>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <h1 className="text-base font-bold text-slate-900 dark:text-slate-100">{permit.purpose}</h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               <span className="font-mono font-semibold">{space.space_id}</span> — {space.description}
             </p>
           </div>
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
             Started <strong>{new Date(permit.started_at).toLocaleString()}</strong>
             {' · expires '}
             <strong>{new Date(permit.expires_at).toLocaleString()}</strong>
@@ -310,7 +310,7 @@ export default function PermitDetailPage() {
       </header>
 
       {serverError && (
-        <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{serverError}</p>
+        <p className="text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 rounded-lg px-3 py-2">{serverError}</p>
       )}
 
       {/* Hot-work cross-link banner — §1910.146(f)(15). The entry
@@ -358,7 +358,7 @@ export default function PermitDetailPage() {
       </Section>
 
       <Section title="Communication & Rescue">
-        <p className="text-xs"><span className="font-semibold text-slate-700">Communication:</span> {permit.communication_method ?? <em className="text-slate-400">not set</em>}</p>
+        <p className="text-xs"><span className="font-semibold text-slate-700 dark:text-slate-300">Communication:</span> {permit.communication_method ?? <em className="text-slate-400 dark:text-slate-500">not set</em>}</p>
         <RescueDisplay rescue={permit.rescue_service} />
       </Section>
 
@@ -368,16 +368,16 @@ export default function PermitDetailPage() {
             <Roster label="Equipment in use" items={permit.equipment_list} emptyLabel="None recorded" />
           )}
           {permit.concurrent_permits && (
-            <p className="text-xs"><span className="font-semibold text-slate-700">Concurrent permits:</span> {permit.concurrent_permits}</p>
+            <p className="text-xs"><span className="font-semibold text-slate-700 dark:text-slate-300">Concurrent permits:</span> {permit.concurrent_permits}</p>
           )}
           {permit.work_order_ref && (
             <p className="text-xs">
-              <span className="font-semibold text-slate-700">Work order:</span>{' '}
+              <span className="font-semibold text-slate-700 dark:text-slate-300">Work order:</span>{' '}
               <WorkOrderRef refValue={permit.work_order_ref} template={orgConfig?.work_order_url_template ?? null} />
             </p>
           )}
           {permit.notes && (
-            <p className="text-xs"><span className="font-semibold text-slate-700">Notes:</span> {permit.notes}</p>
+            <p className="text-xs"><span className="font-semibold text-slate-700 dark:text-slate-300">Notes:</span> {permit.notes}</p>
           )}
         </Section>
       )}
@@ -392,7 +392,7 @@ export default function PermitDetailPage() {
           <button
             type="button"
             onClick={() => { setCancelInitialReason('prohibited_condition'); setCancelOpen(true) }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-rose-700 text-sm font-bold hover:bg-rose-50 transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-300 text-sm font-bold hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
           >
             Evacuate &amp; cancel permit →
           </button>
@@ -411,7 +411,7 @@ export default function PermitDetailPage() {
           />
         )}
         {tests.length === 0 ? (
-          <p className="text-xs text-slate-400 italic">No tests recorded yet.</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 italic">No tests recorded yet.</p>
         ) : (
           <ul className="space-y-1.5">
             {tests.map(t => (
@@ -455,10 +455,10 @@ export default function PermitDetailPage() {
       )}
 
       {state === 'pending_signature' && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-3">
+        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 rounded-xl p-4 space-y-3">
           <div>
-            <h3 className="text-sm font-bold text-emerald-900">Sign & activate this permit</h3>
-            <p className="text-[11px] text-emerald-900/80">
+            <h3 className="text-sm font-bold text-emerald-900 dark:text-emerald-100">Sign & activate this permit</h3>
+            <p className="text-[11px] text-emerald-900/80 dark:text-emerald-100/80">
               By signing you authorize entry per §1910.146(f)(6). The permit becomes active immediately.
               {' '}{!preEntryTest
                 ? 'A pre-entry atmospheric test is required first.'
@@ -500,7 +500,7 @@ export default function PermitDetailPage() {
           <button
             type="button"
             onClick={() => { setCancelInitialReason('prohibited_condition'); setCancelOpen(true) }}
-            className="text-xs font-semibold text-rose-700 hover:underline"
+            className="text-xs font-semibold text-rose-700 dark:text-rose-300 hover:underline"
           >
             Cancel for cause…
           </button>
@@ -518,8 +518,8 @@ export default function PermitDetailPage() {
           §1910.146(e)(5). Without this button there's no UI path to clear an
           expired permit, leaving it stuck in the home Critical Alert banner. */}
       {state === 'expired' && (
-        <div className="rounded-xl bg-rose-50 border border-rose-200 p-4 flex items-center justify-between gap-3">
-          <p className="text-xs text-rose-900/80">
+        <div className="rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 p-4 flex items-center justify-between gap-3">
+          <p className="text-xs text-rose-900/80 dark:text-rose-100/80">
             This permit ran past expiration without being formally closed. Close it out
             now to clear the alert and lock in the audit trail.
           </p>
@@ -600,12 +600,12 @@ function StatusBanner({ state, permit }: { state: NonNullable<ReturnType<typeof 
 
 function LinkedHotWorkBanner({ permits }: { permits: HotWorkPermit[] }) {
   return (
-    <div className="rounded-xl border-2 border-rose-300 bg-rose-50/60 p-4 space-y-2">
+    <div className="rounded-xl border-2 border-rose-300 bg-rose-50/60 dark:bg-rose-950/40/60 p-4 space-y-2">
       <header>
-        <p className="text-[11px] font-bold uppercase tracking-wider text-rose-900">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-rose-900 dark:text-rose-100">
           🔥 Linked hot-work permits · §1910.146(f)(15)
         </p>
-        <p className="text-[11px] text-rose-900/80 mt-0.5">
+        <p className="text-[11px] text-rose-900/80 dark:text-rose-100/80 mt-0.5">
           Concurrent fire-risk work inside this space — verify each fire watcher is on duty before entrants are allowed.
         </p>
       </header>
@@ -619,14 +619,14 @@ function LinkedHotWorkBanner({ permits }: { permits: HotWorkPermit[] }) {
                 href={`/hot-work/${p.id}`}
                 className={`flex items-center justify-between gap-2 rounded-md px-3 py-2 text-xs transition-colors ${
                   isLive
-                    ? 'bg-white ring-1 ring-rose-200 hover:bg-rose-50'
-                    : 'bg-slate-50 ring-1 ring-slate-200 hover:bg-slate-100'
+                    ? 'bg-white dark:bg-slate-900 ring-1 ring-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                    : 'bg-slate-50 dark:bg-slate-900/40 ring-1 ring-slate-200 dark:ring-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <span className="font-mono font-bold tracking-wider">{p.serial}</span>
-                <span className="text-slate-600 truncate">{p.work_location}</span>
+                <span className="text-slate-600 dark:text-slate-300 truncate">{p.work_location}</span>
                 <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                  isLive ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-600'
+                  isLive ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                 }`}>{s.replace(/_/g, ' ')}</span>
               </Link>
             </li>
@@ -642,13 +642,13 @@ function LinkedHotWorkBanner({ permits }: { permits: HotWorkPermit[] }) {
 function PersonnelRow({ label, values }: { label: string; values: string[] }) {
   return (
     <div className="flex items-baseline gap-2 flex-wrap">
-      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 w-32 shrink-0">{label}</span>
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 w-32 shrink-0">{label}</span>
       {values.length === 0 ? (
-        <span className="text-xs text-slate-400 italic">None</span>
+        <span className="text-xs text-slate-400 dark:text-slate-500 italic">None</span>
       ) : (
         <ul className="flex flex-wrap gap-1.5">
           {values.map((v, i) => (
-            <li key={`${v}-${i}`} className="px-2 py-0.5 rounded-md bg-slate-100 text-[11px] text-slate-800 font-mono">{v}</li>
+            <li key={`${v}-${i}`} className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] text-slate-800 dark:text-slate-200 font-mono">{v}</li>
           ))}
         </ul>
       )}
@@ -659,13 +659,13 @@ function PersonnelRow({ label, values }: { label: string; values: string[] }) {
 function Roster({ label, items, emptyLabel }: { label: string; items: string[]; emptyLabel: string }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">{label}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1">{label}</p>
       {items.length === 0 ? (
-        <p className="text-xs text-slate-400 italic">{emptyLabel}</p>
+        <p className="text-xs text-slate-400 dark:text-slate-500 italic">{emptyLabel}</p>
       ) : (
         <ul className="space-y-0.5 list-disc list-inside marker:text-slate-300">
           {items.map((it, i) => (
-            <li key={`${it}-${i}`} className="text-xs text-slate-700">{it}</li>
+            <li key={`${it}-${i}`} className="text-xs text-slate-700 dark:text-slate-300">{it}</li>
           ))}
         </ul>
       )}
@@ -695,11 +695,11 @@ function WorkOrderRef({ refValue, template }: { refValue: string; template: stri
 
 function RescueDisplay({ rescue }: { rescue: ConfinedSpacePermit['rescue_service'] }) {
   if (!rescue || Object.keys(rescue).length === 0) {
-    return <p className="text-xs text-slate-400 italic">No rescue service recorded.</p>
+    return <p className="text-xs text-slate-400 dark:text-slate-500 italic">No rescue service recorded.</p>
   }
   return (
     <p className="text-xs">
-      <span className="font-semibold text-slate-700">Rescue:</span>{' '}
+      <span className="font-semibold text-slate-700 dark:text-slate-300">Rescue:</span>{' '}
       {rescue.name ?? 'unnamed'}
       {rescue.phone && <> · <span className="font-mono">{rescue.phone}</span></>}
       {rescue.eta_minutes != null && <> · ETA {rescue.eta_minutes} min</>}
@@ -769,23 +769,23 @@ function AuthorizationBlock({
   return (
     <div className="space-y-3">
       {/* Attendant sign-on */}
-      <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-1.5">
+      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 space-y-1.5">
         <p className="text-[11px] font-bold uppercase tracking-wide text-[#214487]">Attendant on duty · §1910.146(i)</p>
         {permit.attendant_signature_at ? (
-          <p className="text-xs text-slate-700">
+          <p className="text-xs text-slate-700 dark:text-slate-300">
             <span className="font-semibold">{permit.attendant_signature_name ?? '—'}</span> signed on at{' '}
             {new Date(permit.attendant_signature_at).toLocaleString()}.
           </p>
         ) : permit.attendants.length === 0 ? (
-          <p className="text-xs text-slate-400 italic">No attendants on the roster — add one to enable sign-on.</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 italic">No attendants on the roster — add one to enable sign-on.</p>
         ) : readOnly ? (
-          <p className="text-xs text-slate-400 italic">No attendant signed on while the permit was active.</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 italic">No attendant signed on while the permit was active.</p>
         ) : (
           <div className="flex items-center gap-2 flex-wrap">
             <select
               value={attendantPick}
               onChange={e => setAttendantPick(e.target.value)}
-              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-brand-navy/20"
+              className="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-brand-navy/20"
             >
               {permit.attendants.map(a => (
                 <option key={a} value={a}>{a}</option>
@@ -804,15 +804,15 @@ function AuthorizationBlock({
       </div>
 
       {/* Entrant briefing ack */}
-      <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-1.5">
+      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 space-y-1.5">
         <p className="text-[11px] font-bold uppercase tracking-wide text-[#214487]">Entrant briefing · §1910.146(f)(6)</p>
         {permit.entrant_acknowledgement_at ? (
-          <p className="text-xs text-slate-700">
+          <p className="text-xs text-slate-700 dark:text-slate-300">
             Supervisor attested entrants were briefed on hazards at{' '}
             {new Date(permit.entrant_acknowledgement_at).toLocaleString()}.
           </p>
         ) : readOnly ? (
-          <p className="text-xs text-slate-400 italic">No briefing acknowledgement was recorded while the permit was active.</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 italic">No briefing acknowledgement was recorded while the permit was active.</p>
         ) : (
           <button
             type="button"
@@ -825,7 +825,7 @@ function AuthorizationBlock({
         )}
       </div>
 
-      {error && <p className="text-[11px] text-rose-600">{error}</p>}
+      {error && <p className="text-[11px] text-rose-600 dark:text-rose-400">{error}</p>}
     </div>
   )
 }
@@ -867,12 +867,12 @@ function EntrantLog({
   const insideCount = entries.filter(e => e.exited_at == null).length
 
   if (permit.entrants.length === 0 && orphan.length === 0) {
-    return <p className="text-xs text-slate-400 italic">No entrants on the roster yet.</p>
+    return <p className="text-xs text-slate-400 dark:text-slate-500 italic">No entrants on the roster yet.</p>
   }
 
   return (
     <div className="space-y-3">
-      <p className="text-[11px] text-slate-600">
+      <p className="text-[11px] text-slate-600 dark:text-slate-300">
         <span className="font-semibold">{insideCount}</span> currently inside
         {' · '}
         §1910.146(i)(4) — the attendant logs each entrant in and out so the count is accurate at any moment.
@@ -965,16 +965,16 @@ function EntrantRow({
   }
 
   return (
-    <li className={`rounded-lg border ${inside ? 'border-emerald-300 bg-emerald-50/60' : 'border-slate-200 bg-white'} px-3 py-2`}>
+    <li className={`rounded-lg border ${inside ? 'border-emerald-300 bg-emerald-50/60 dark:bg-emerald-950/40/60' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'} px-3 py-2`}>
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-900">
+          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
             {name}
             {isOrphan && (
-              <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-amber-700">unrostered</span>
+              <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">unrostered</span>
             )}
           </p>
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
             {inside
               ? <>Inside since {new Date(open!.entered_at).toLocaleString()}</>
               : sorted.length === 0
@@ -1001,7 +1001,7 @@ function EntrantRow({
       {/* Cycle history — show prior in/out pairs for the audit trail. Cap
           at 4 entries with an ellipsis to keep long shifts compact. */}
       {sorted.length > 1 && (
-        <ul className="mt-2 space-y-0.5 text-[10px] text-slate-500 font-mono">
+        <ul className="mt-2 space-y-0.5 text-[10px] text-slate-500 dark:text-slate-400 font-mono">
           {sorted.slice(inside ? 1 : 0, (inside ? 1 : 0) + 4).map(e => (
             <li key={e.id}>
               {new Date(e.entered_at).toLocaleTimeString()} in
@@ -1011,7 +1011,7 @@ function EntrantRow({
           ))}
         </ul>
       )}
-      {error && <p className="text-[11px] text-rose-600 mt-1">{error}</p>}
+      {error && <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">{error}</p>}
     </li>
   )
 }
@@ -1020,16 +1020,16 @@ function EntrantRow({
 
 function TestRow({ test, thresholds }: { test: AtmosphericTest; thresholds: ReturnType<typeof effectiveThresholds> }) {
   const evals = evaluateTest(test, thresholds)
-  const cls = evals.status === 'fail' ? 'border-rose-300 bg-rose-50'
-            : evals.status === 'pass' ? 'border-emerald-300 bg-emerald-50'
-            :                            'border-slate-200 bg-white'
+  const cls = evals.status === 'fail' ? 'border-rose-300 bg-rose-50 dark:bg-rose-950/40'
+            : evals.status === 'pass' ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40'
+            :                            'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'
   return (
     <li className={`rounded-lg border ${cls} px-3 py-2`}>
       <div className="flex items-baseline justify-between gap-2 flex-wrap">
-        <p className="text-[11px] font-semibold text-slate-600">
+        <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
           {test.kind.replace('_', ' ').toUpperCase()} · {new Date(test.tested_at).toLocaleString()}
         </p>
-        <p className="text-[10px] text-slate-500 font-mono">{test.tested_by.slice(0, 8)}</p>
+        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{test.tested_by.slice(0, 8)}</p>
       </div>
       <dl className="grid grid-cols-4 gap-1.5 mt-1.5 text-xs">
         <ChannelStat label="O₂"  value={test.o2_pct}  unit="%"   status={evals.channels.o2} />
@@ -1037,19 +1037,19 @@ function TestRow({ test, thresholds }: { test: AtmosphericTest; thresholds: Retu
         <ChannelStat label="H₂S" value={test.h2s_ppm} unit="ppm" status={evals.channels.h2s} />
         <ChannelStat label="CO"  value={test.co_ppm}  unit="ppm" status={evals.channels.co} />
       </dl>
-      {test.instrument_id && <p className="text-[10px] text-slate-400 mt-1">Meter: <span className="font-mono">{test.instrument_id}</span></p>}
-      {test.notes && <p className="text-[11px] text-slate-600 mt-1">{test.notes}</p>}
+      {test.instrument_id && <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Meter: <span className="font-mono">{test.instrument_id}</span></p>}
+      {test.notes && <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1">{test.notes}</p>}
     </li>
   )
 }
 
 function ChannelStat({ label, value, unit, status }: { label: string; value: number | null; unit: string; status: ReadingStatus }) {
-  const cls = status === 'fail' ? 'text-rose-700 font-bold'
-            : status === 'pass' ? 'text-emerald-700 font-semibold'
-            :                      'text-slate-400'
+  const cls = status === 'fail' ? 'text-rose-700 dark:text-rose-300 font-bold'
+            : status === 'pass' ? 'text-emerald-700 dark:text-emerald-300 font-semibold'
+            :                      'text-slate-400 dark:text-slate-500'
   return (
     <div>
-      <dt className="text-[10px] uppercase tracking-wide text-slate-500">{label}</dt>
+      <dt className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</dt>
       <dd className={`text-sm font-mono ${cls}`}>
         {value == null ? '—' : `${value} ${unit}`}
       </dd>
@@ -1143,13 +1143,13 @@ function NewTestForm({
   }
 
   return (
-    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/50 p-3 space-y-2">
+    <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/40/50 p-3 space-y-2">
       <div className="flex items-baseline justify-between gap-2">
         <p className="text-[11px] font-bold uppercase tracking-wide text-[#214487]">+ Record new reading</p>
         <select
           value={kind}
           onChange={e => setKind(e.target.value as AtmosphericTestKind)}
-          className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+          className="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-0.5 text-[11px] font-semibold focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
         >
           <option value="pre_entry">Pre-entry</option>
           <option value="periodic">Periodic</option>
@@ -1162,22 +1162,22 @@ function NewTestForm({
           past due (rose). Doesn't block submit — the supervisor owns the
           call, but the audit trail captures the reading + the warning. */}
       {instrumentId.trim() && meterStatus.kind === 'overdue' && (
-        <p className="text-[11px] rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-rose-900">
+        <p className="text-[11px] rounded-md border border-rose-300 bg-rose-50 dark:bg-rose-950/40 px-2 py-1 text-rose-900 dark:text-rose-100">
           ⚠ {instrumentId.trim()} bump-test is {meterStatus.hoursSince}h old (window: 24h). §(d)(5)(i) requires a calibrated direct-reading instrument — verify before submitting.
         </p>
       )}
       {instrumentId.trim() && meterStatus.kind === 'never' && (
-        <p className="text-[11px] rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-amber-900">
+        <p className="text-[11px] rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-1 text-amber-900 dark:text-amber-100">
           ⚠ {instrumentId.trim()} has no bump-test on record. Verify the meter has been bumped today before submitting.
         </p>
       )}
       {instrumentId.trim() && meterStatus.kind === 'unknown' && meters.size > 0 && (
-        <p className="text-[11px] rounded-md border border-amber-200 bg-amber-50/60 px-2 py-1 text-amber-900/80">
+        <p className="text-[11px] rounded-md border border-amber-200 bg-amber-50/60 dark:bg-amber-950/40/60 px-2 py-1 text-amber-900/80 dark:text-amber-100/80">
           {instrumentId.trim()} isn't in the meter register yet — add it to track bump-test compliance.
         </p>
       )}
       {calOverdue && (
-        <p className="text-[11px] rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-rose-900">
+        <p className="text-[11px] rounded-md border border-rose-300 bg-rose-50 dark:bg-rose-950/40 px-2 py-1 text-rose-900 dark:text-rose-100">
           ⚠ {instrumentId.trim()} calibration is past due. Send the meter back for full calibration before further use.
         </p>
       )}
@@ -1185,7 +1185,7 @@ function NewTestForm({
           to remember §(d)(5) numbers or open another tab. Same numbers the
           row is evaluated against — they tick if the supervisor edits the
           permit's acceptable_conditions_override. */}
-      <p className="text-[10px] text-slate-500">
+      <p className="text-[10px] text-slate-500 dark:text-slate-400">
         Acceptable: O₂ {thresholds.o2_min}–{thresholds.o2_max}%
         {' · '}LEL &lt;{thresholds.lel_max}%
         {' · '}H₂S &lt;{thresholds.h2s_max} ppm
@@ -1203,17 +1203,17 @@ function NewTestForm({
           value={instrumentId}
           onChange={e => setInstrumentId(e.target.value)}
           placeholder="Meter ID (BW MicroClip…)"
-          className="sm:col-span-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+          className="sm:col-span-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
         />
         <input
           type="text"
           value={notes}
           onChange={e => setNotes(e.target.value)}
           placeholder="Notes (optional)"
-          className="sm:col-span-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+          className="sm:col-span-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
         />
       </div>
-      {error && <p className="text-[11px] text-rose-600">{error}</p>}
+      {error && <p className="text-[11px] text-rose-600 dark:text-rose-400">{error}</p>}
       <div className="flex justify-end">
         <button
           type="button"
@@ -1241,15 +1241,15 @@ function NumInput({
   status?: ReadingStatus
 }) {
   const borderCls = status === 'fail'
-    ? 'border-rose-400 ring-2 ring-rose-200 bg-rose-50/40'
+    ? 'border-rose-400 ring-2 ring-rose-200 bg-rose-50/40 dark:bg-rose-950/40/40'
     : status === 'pass'
-    ? 'border-emerald-400 ring-2 ring-emerald-200 bg-emerald-50/40'
-    : 'border-slate-200 bg-white'
+    ? 'border-emerald-400 ring-2 ring-emerald-200 bg-emerald-50/40 dark:bg-emerald-950/40/40'
+    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'
   const labelCls = status === 'fail'
-    ? 'text-rose-700'
+    ? 'text-rose-700 dark:text-rose-300'
     : status === 'pass'
-    ? 'text-emerald-700'
-    : 'text-slate-500'
+    ? 'text-emerald-700 dark:text-emerald-300'
+    : 'text-slate-500 dark:text-slate-400'
   return (
     <label className="flex flex-col gap-0.5">
       <span className={`text-[10px] font-semibold uppercase tracking-wide ${labelCls}`}>{label}</span>
@@ -1281,11 +1281,11 @@ function TrainingGap({
   onAcknowledge: (next: boolean) => void
 }) {
   return (
-    <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 space-y-1.5">
-      <p className="text-[11px] font-bold text-amber-900">
+    <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 space-y-1.5">
+      <p className="text-[11px] font-bold text-amber-900 dark:text-amber-100">
         §1910.146(g) — training records not on file
       </p>
-      <ul className="text-[11px] text-amber-900/85 space-y-0.5">
+      <ul className="text-[11px] text-amber-900/85 dark:text-amber-100/85 space-y-0.5">
         {issues.map((i, idx) => (
           <li key={`${i.worker_name}:${i.slot}:${idx}`}>
             • <span className="font-semibold">{i.worker_name}</span>
@@ -1297,7 +1297,7 @@ function TrainingGap({
           </li>
         ))}
       </ul>
-      <label className="flex items-start gap-2 text-[11px] text-amber-900 pt-1 cursor-pointer">
+      <label className="flex items-start gap-2 text-[11px] text-amber-900 dark:text-amber-100 pt-1 cursor-pointer">
         <input
           type="checkbox"
           checked={acknowledged}
@@ -1377,21 +1377,21 @@ function EditRosterDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/40 overflow-y-auto py-10">
-      <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl p-5 space-y-4">
+      <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-5 space-y-4">
         <header className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900">Edit roster</h2>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Edit roster</h2>
           <button
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="text-slate-400 hover:text-slate-600 text-lg leading-none px-1"
+            className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 text-lg leading-none px-1"
             aria-label="Close"
           >
             ×
           </button>
         </header>
 
-        <p className="text-[11px] text-slate-500">
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">
           Add or remove entrants and attendants while the permit is active. An entrant
           who is currently inside the space cannot be removed — log them out from the
           Entrant Log first.
@@ -1412,23 +1412,23 @@ function EditRosterDialog({
         />
 
         {hardErrors.length > 0 && (
-          <ul className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-900 space-y-0.5">
+          <ul className="rounded-md border border-rose-200 bg-rose-50 dark:bg-rose-950/40 px-3 py-2 text-[11px] text-rose-900 dark:text-rose-100 space-y-0.5">
             {hardErrors.map(e => <li key={e}>• {e}</li>)}
           </ul>
         )}
         {warnings.length > 0 && (
-          <ul className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900 space-y-0.5">
+          <ul className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-[11px] text-amber-900 dark:text-amber-100 space-y-0.5">
             {warnings.map(e => <li key={e}>• {e}</li>)}
           </ul>
         )}
-        {error && <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-md px-3 py-2">{error}</p>}
+        {error && <p className="text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">{error}</p>}
 
         <div className="flex justify-end gap-2 pt-1">
           <button
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"
+            className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200"
           >
             Cancel
           </button>
@@ -1470,7 +1470,7 @@ function NameListEditor({
   }
   return (
     <div className="space-y-1.5">
-      <p className="text-xs font-semibold text-slate-600">{label}</p>
+      <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">{label}</p>
       <ul className="space-y-1">
         {values.map((name, i) => {
           const isLocked = locked.includes(name)
@@ -1481,10 +1481,10 @@ function NameListEditor({
                 value={name}
                 onChange={e => update(i, e.target.value)}
                 placeholder="Name"
-                className="flex-1 rounded-md border border-slate-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+                className="flex-1 rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
               />
               {isLocked ? (
-                <span className="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800">
+                <span className="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200">
                   {lockedHint ?? 'locked'}
                 </span>
               ) : (
@@ -1492,7 +1492,7 @@ function NameListEditor({
                   type="button"
                   onClick={() => remove(i)}
                   aria-label={`Remove ${name || 'row'}`}
-                  className="shrink-0 text-slate-400 hover:text-rose-600 px-2 py-1 rounded-md transition-colors"
+                  className="shrink-0 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 px-2 py-1 rounded-md transition-colors"
                 >
                   ×
                 </button>
@@ -1577,14 +1577,14 @@ function CancelDialog({ permit, initialReason, hasPreEntryTest, onClose, onCance
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/40">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-5 space-y-4">
+      <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-5 space-y-4">
         <header className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900">{dialogTitle}</h2>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{dialogTitle}</h2>
           <button
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="text-slate-400 hover:text-slate-600 text-lg leading-none px-1"
+            className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 text-lg leading-none px-1"
             aria-label="Close"
           >
             ×
@@ -1593,11 +1593,11 @@ function CancelDialog({ permit, initialReason, hasPreEntryTest, onClose, onCance
 
         <div className="space-y-3">
           <label className="block space-y-1.5">
-            <span className="text-xs font-semibold text-slate-600">Reason</span>
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Reason</span>
             <select
               value={reason}
               onChange={e => setReason(e.target.value as CancelReason)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             >
               {Object.entries(CANCEL_REASON_LABELS).map(([k, label]) => (
                 <option key={k} value={k}>{label}</option>
@@ -1605,7 +1605,7 @@ function CancelDialog({ permit, initialReason, hasPreEntryTest, onClose, onCance
             </select>
           </label>
           <label className="block space-y-1.5">
-            <span className="text-xs font-semibold text-slate-600">
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
               Notes {requiresNotes && <span className="text-rose-500">*</span>}
             </span>
             <textarea
@@ -1618,13 +1618,13 @@ function CancelDialog({ permit, initialReason, hasPreEntryTest, onClose, onCance
               : reason === 'other'                ? 'Describe the cancellation reason.'
               :                                     '(optional)'
               }
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             />
           </label>
         </div>
 
         {showPreEntryWarning && (
-          <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+          <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-[11px] text-amber-900 dark:text-amber-100">
             <p className="font-bold mb-0.5">No pre-entry test on record</p>
             <p>
               §1910.146(d)(5) requires an atmospheric test before entry. This permit will
@@ -1634,14 +1634,14 @@ function CancelDialog({ permit, initialReason, hasPreEntryTest, onClose, onCance
           </div>
         )}
 
-        {error && <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-md px-3 py-2">{error}</p>}
+        {error && <p className="text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">{error}</p>}
 
         <div className="flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"
+            className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200"
           >
             Back
           </button>
@@ -1663,10 +1663,10 @@ function CancelDialog({ permit, initialReason, hasPreEntryTest, onClose, onCance
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <section className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
+    <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-2">
       <header className="flex items-baseline justify-between gap-2">
         <h2 className="text-[11px] font-bold uppercase tracking-wider text-[#214487]">{title}</h2>
-        {hint && <span className="text-[10px] text-slate-400">{hint}</span>}
+        {hint && <span className="text-[10px] text-slate-400 dark:text-slate-500">{hint}</span>}
       </header>
       {children}
     </section>
@@ -1675,9 +1675,9 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md bg-slate-50 border border-slate-100 px-2 py-1.5">
-      <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="text-sm font-semibold text-slate-800 font-mono">{value}</dd>
+    <div className="rounded-md bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 px-2 py-1.5">
+      <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</dt>
+      <dd className="text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono">{value}</dd>
     </div>
   )
 }

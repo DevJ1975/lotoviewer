@@ -21,7 +21,7 @@ export function Switch({ checked, onChange, id, ariaLabel }: Props) {
       }`}
     >
       <span
-        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+        className={`inline-block h-4 w-4 transform rounded-full bg-white dark:bg-slate-900 shadow transition-transform ${
           checked ? 'translate-x-6' : 'translate-x-1'
         }`}
       />

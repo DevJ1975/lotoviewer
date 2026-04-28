@@ -104,7 +104,7 @@ export default function EquipmentTable({ equipment }: Props) {
           placeholder="Search by ID or description…"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
+          className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
         />
         <div className="flex gap-2 flex-wrap">
           {filterBtns.map(b => (
@@ -128,16 +128,16 @@ export default function EquipmentTable({ equipment }: Props) {
         </div>
       </div>
 
-      <p className="text-xs text-slate-400 font-medium">
+      <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">
         {filtered.length} {filtered.length === 1 ? 'item' : 'items'}
         {totalPages > 1 && ` · page ${page} of ${totalPages}`}
       </p>
 
       {/* Table */}
-      <div className="rounded-xl border border-slate-100 overflow-x-auto bg-white shadow-sm">
+      <div className="rounded-xl border border-slate-100 dark:border-slate-800 overflow-x-auto bg-white dark:bg-slate-900 shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50/80">
+            <TableRow className="bg-slate-50/80 dark:bg-slate-900/40/80">
               <TableHead
                 className="cursor-pointer select-none whitespace-nowrap"
                 onClick={() => toggleSort('equipment_id')}
@@ -172,7 +172,7 @@ export default function EquipmentTable({ equipment }: Props) {
                 const from = `/departments/${encodeURIComponent(eq.department)}`
                 const href = `/equipment/${encodeURIComponent(eq.equipment_id)}?from=${encodeURIComponent(from)}`
                 return (
-                  <TableRow key={eq.equipment_id} className="hover:bg-slate-50">
+                  <TableRow key={eq.equipment_id} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
                     <TableCell className="font-mono text-sm font-medium">
                       <Link href={href} className="text-brand-navy hover:underline">
                         {eq.equipment_id}
@@ -193,7 +193,7 @@ export default function EquipmentTable({ equipment }: Props) {
                           href={eq.placard_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline text-sm"
+                          className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
                         >
                           View PDF
                         </a>
@@ -212,7 +212,7 @@ export default function EquipmentTable({ equipment }: Props) {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-400 dark:text-slate-500">
             Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
           </p>
           <div className="flex items-center gap-1">
@@ -232,7 +232,7 @@ export default function EquipmentTable({ equipment }: Props) {
             >
               ‹
             </Button>
-            <span className="text-xs text-slate-500 px-2 tabular-nums">{page} / {totalPages}</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400 px-2 tabular-nums">{page} / {totalPages}</span>
             <Button
               variant="outline"
               size="sm"

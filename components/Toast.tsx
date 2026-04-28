@@ -41,7 +41,7 @@ export default function Toast({ message, type, action, onClose }: Props) {
         <button
           type="button"
           onClick={() => { action.onClick(); onClose() }}
-          className="font-bold uppercase tracking-wider text-xs px-2 py-1 rounded-md bg-white/15 hover:bg-white/25 transition-colors"
+          className="font-bold uppercase tracking-wider text-xs px-2 py-1 rounded-md bg-white/15 dark:bg-slate-900/15 hover:bg-white/25 dark:hover:bg-slate-900/25 transition-colors"
         >
           {action.label}
         </button>

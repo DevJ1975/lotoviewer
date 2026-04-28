@@ -54,10 +54,10 @@ export default function ConfigurationPage() {
   }, [authLoading, profile])
 
   if (authLoading) {
-    return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+    return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
   if (!profile?.is_admin) {
-    return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500">Admins only.</div>
+    return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 
   const dirty =
@@ -91,32 +91,32 @@ export default function ConfigurationPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
       <header className="flex items-center gap-3">
-        <Link href="/" className="text-slate-400 hover:text-brand-navy" aria-label="Back to home">
+        <Link href="/" className="text-slate-400 dark:text-slate-500 hover:text-brand-navy" aria-label="Back to home">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <Settings className="h-5 w-5 text-slate-500" />
+          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Settings className="h-5 w-5 text-slate-500 dark:text-slate-400" />
             Configuration
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Org-level settings shared across all users.
           </p>
         </div>
       </header>
 
       {loadError && (
-        <p className="text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-md px-3 py-2">{loadError}</p>
+        <p className="text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">{loadError}</p>
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
+        <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-slate-400 dark:text-slate-500" /></div>
       ) : (
         <>
-          <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+          <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5 space-y-3">
             <header>
-              <h2 className="text-sm font-bold text-slate-900">Work-order URL template</h2>
-              <p className="text-[11px] text-slate-500 mt-0.5">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Work-order URL template</h2>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                 Turns a free-text work-order ref on a permit into a clickable link. Use{' '}
                 <span className="font-mono">{'{ref}'}</span> as the placeholder. Leave blank to render refs as plain text.
               </p>
@@ -126,16 +126,16 @@ export default function ConfigurationPage() {
               value={template}
               onChange={e => setTemplate(e.target.value)}
               placeholder="https://maintainx.com/wo/{ref}"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             />
-            <div className="rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-[11px]">
-              <p className="font-bold text-slate-600 mb-1">Preview (sample ref WO-2026-0001):</p>
+            <div className="rounded-md bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 px-3 py-2 text-[11px]">
+              <p className="font-bold text-slate-600 dark:text-slate-300 mb-1">Preview (sample ref WO-2026-0001):</p>
               {woPreview ? (
                 <a href={woPreview} target="_blank" rel="noopener noreferrer" className="font-mono text-brand-navy break-all hover:underline">
                   {woPreview}
                 </a>
               ) : (
-                <p className="text-slate-400 italic">
+                <p className="text-slate-400 dark:text-slate-500 italic">
                   {template.trim() === ''
                     ? 'No template — refs render as plain text.'
                     : !template.includes('{ref}')
@@ -146,17 +146,17 @@ export default function ConfigurationPage() {
             </div>
           </section>
 
-          <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+          <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5 space-y-3">
             <header>
-              <h2 className="text-sm font-bold text-slate-900">Push auto-dispatch</h2>
-              <p className="text-[11px] text-slate-500 mt-0.5">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Push auto-dispatch</h2>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                 Both URL and secret must be set for atmospheric-fail and prohibited-cancel pushes
                 to fire. The secret has to match the <span className="font-mono">INTERNAL_PUSH_SECRET</span>
                 {' '}env var on the API. Either field blank → the Postgres trigger silently no-ops.
               </p>
             </header>
             <label className="block space-y-1.5">
-              <span className="text-xs font-semibold text-slate-600">
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
                 Dispatch URL
               </span>
               <input
@@ -164,11 +164,11 @@ export default function ConfigurationPage() {
                 value={pushUrl}
                 onChange={e => setPushUrl(e.target.value)}
                 placeholder="https://soteria-app.vercel.app/api/push/dispatch"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
               />
             </label>
             <label className="block space-y-1.5">
-              <span className="text-xs font-semibold text-slate-600 flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center justify-between">
                 Internal secret
                 <button
                   type="button"
@@ -184,18 +184,18 @@ export default function ConfigurationPage() {
                 onChange={e => setPushSecret(e.target.value)}
                 placeholder="generate a random string and paste it here AND into INTERNAL_PUSH_SECRET"
                 autoComplete="new-password"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
               />
             </label>
           </section>
 
           {saveError && (
-            <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-md px-3 py-2">{saveError}</p>
+            <p className="text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">{saveError}</p>
           )}
 
           <div className="flex items-center justify-end gap-3">
             {savedAt && Date.now() - savedAt < 5000 && (
-              <span className="text-[11px] text-emerald-700">Saved.</span>
+              <span className="text-[11px] text-emerald-700 dark:text-emerald-300">Saved.</span>
             )}
             <button
               type="button"

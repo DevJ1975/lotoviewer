@@ -155,17 +155,17 @@ export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Prop
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
       onMouseDown={e => { if (e.target === e.currentTarget && !submitting) onClose() }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
+        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100 dark:border-slate-800">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">Add Equipment</h2>
-            <p className="text-xs text-slate-400 mt-0.5">A blank placard will be created.</p>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Add Equipment</h2>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">A blank placard will be created.</p>
           </div>
           <button
             onClick={onClose}
             disabled={submitting}
-            className="text-slate-400 hover:text-slate-600 transition-colors text-xl leading-none disabled:opacity-40"
+            className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors text-xl leading-none disabled:opacity-40"
             aria-label="Close"
           >
             ×
@@ -177,14 +177,14 @@ export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Prop
           {showDraftBanner && (
             <div
               role="status"
-              className="flex items-center justify-between gap-3 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-lg"
+              className="flex items-center justify-between gap-3 px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 text-amber-900 dark:text-amber-100 text-xs rounded-lg"
             >
               <span>We restored your unsaved draft from earlier.</span>
               <button
                 type="button"
                 onClick={handleStartOver}
                 disabled={submitting}
-                className="font-semibold uppercase tracking-wider text-[11px] text-amber-800 hover:text-amber-950 transition-colors disabled:opacity-50"
+                className="font-semibold uppercase tracking-wider text-[11px] text-amber-800 dark:text-amber-200 hover:text-amber-950 transition-colors disabled:opacity-50"
               >
                 Start over
               </button>
@@ -303,7 +303,7 @@ export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Prop
           <button
             onClick={onClose}
             disabled={submitting}
-            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors disabled:opacity-40"
+            className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200 transition-colors disabled:opacity-40"
           >
             Cancel
           </button>
@@ -321,16 +321,16 @@ export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Prop
 }
 
 function inputCls(invalid: boolean): string {
-  const base = 'w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 transition-colors disabled:bg-slate-50 disabled:text-slate-500'
+  const base = 'w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 transition-colors disabled:bg-slate-50 dark:disabled:bg-slate-900/40 disabled:text-slate-500 dark:disabled:text-slate-400'
   return invalid
     ? `${base} border-rose-300 focus:ring-rose-200 focus:border-rose-400`
-    : `${base} border-slate-200 focus:ring-brand-navy/20 focus:border-brand-navy`
+    : `${base} border-slate-200 dark:border-slate-700 focus:ring-brand-navy/20 focus:border-brand-navy`
 }
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-semibold text-slate-600 block">
+      <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block">
         {label} {required && <span className="text-rose-500">*</span>}
       </label>
       {children}
@@ -340,13 +340,13 @@ function Field({ label, required, children }: { label: string; required?: boolea
 
 function Toggle({ label, checked, onChange, disabled }: { label: string; checked: boolean; onChange: (v: boolean) => void; disabled: boolean }) {
   return (
-    <label className={`flex items-center gap-2 text-xs text-slate-700 font-medium select-none ${disabled ? 'opacity-50' : 'cursor-pointer'}`}>
+    <label className={`flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 font-medium select-none ${disabled ? 'opacity-50' : 'cursor-pointer'}`}>
       <input
         type="checkbox"
         checked={checked}
         onChange={e => onChange(e.target.checked)}
         disabled={disabled}
-        className="h-4 w-4 rounded border-slate-300 text-brand-navy focus:ring-brand-navy/20"
+        className="h-4 w-4 rounded border-slate-300 dark:border-slate-700 text-brand-navy focus:ring-brand-navy/20"
       />
       {label}
     </label>

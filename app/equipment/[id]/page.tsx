@@ -18,7 +18,7 @@ import { parseAnnotations, type Annotation } from '@/lib/photoAnnotations'
 
 export default function EquipmentDetailPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-48 text-slate-400 text-sm">Loading…</div>}>
+    <Suspense fallback={<div className="flex items-center justify-center h-48 text-slate-400 dark:text-slate-500 text-sm">Loading…</div>}>
       <EquipmentDetail />
     </Suspense>
   )
@@ -121,13 +121,13 @@ function EquipmentDetail() {
   }
 
   if (loading) {
-    return <div className="max-w-5xl mx-auto px-4 py-12 flex items-center justify-center text-slate-400 text-sm">Loading…</div>
+    return <div className="max-w-5xl mx-auto px-4 py-12 flex items-center justify-center text-slate-400 dark:text-slate-500 text-sm">Loading…</div>
   }
 
   if (notFound || !equipment) {
     return (
       <div className="text-center py-24">
-        <p className="text-slate-500 text-lg font-medium mb-4">Equipment not found</p>
+        <p className="text-slate-500 dark:text-slate-400 text-lg font-medium mb-4">Equipment not found</p>
         <Link href="/loto" className="text-brand-navy text-sm font-semibold hover:underline">← Back to LOTO Dashboard</Link>
       </div>
     )
@@ -140,14 +140,14 @@ function EquipmentDetail() {
         <div className="flex items-center gap-2">
           <Link
             href={fromUrl}
-            className="flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900 px-2 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+            className="flex items-center gap-1 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 px-2 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             title="Back"
           >
             ← Back
           </Link>
           <div className="hidden sm:block text-slate-300">|</div>
           <div className="flex items-center gap-2">
-            <h1 className="font-mono text-base font-bold text-slate-900">{equipment.equipment_id}</h1>
+            <h1 className="font-mono text-base font-bold text-slate-900 dark:text-slate-100">{equipment.equipment_id}</h1>
             {equipment.verified && <span className="text-emerald-500 text-sm" title="Verified">✓</span>}
           </div>
         </div>
@@ -188,14 +188,14 @@ function EquipmentDetail() {
           Read-only when there's no equip photo yet (the editor opens on
           a non-existent image otherwise). */}
       {equipment.equip_photo_url && (
-        <section className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-2">
           <header className="flex items-baseline justify-between gap-2">
-            <h2 className="text-sm font-bold text-slate-900">Annotated photo</h2>
-            <p className="text-[11px] text-slate-500">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Annotated photo</h2>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
               Tap "Annotate" to add arrows + labels pointing at isolation points.
             </p>
           </header>
-          <div className="relative aspect-video bg-slate-50 rounded-lg overflow-hidden">
+          <div className="relative aspect-video bg-slate-50 dark:bg-slate-900/40 rounded-lg overflow-hidden">
             <AnnotatedPhoto
               src={equipment.equip_photo_url}
               alt={`${equipment.equipment_id} equipment photo`}
@@ -270,7 +270,7 @@ function ToolbarButton({ onClick, disabled, primary, children }: { onClick: () =
   const base = 'flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap'
   const style = primary
     ? 'bg-brand-navy text-white hover:bg-brand-navy/90'
-    : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
+    : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900/40'
   return <button type="button" onClick={onClick} disabled={disabled} className={`${base} ${style}`}>{children}</button>
 }
 

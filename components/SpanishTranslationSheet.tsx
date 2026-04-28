@@ -93,21 +93,21 @@ export default function SpanishTranslationSheet({
     <Sheet open={open} onClose={() => !saving && onClose()} title="Español — Translations" subtitle={equipmentId}>
       <div className="space-y-6">
         {/* Notes */}
-        <div className="rounded-xl border border-slate-100 p-4 space-y-3">
+        <div className="rounded-xl border border-slate-100 dark:border-slate-800 p-4 space-y-3">
           <div>
-            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Notas (Spanish notes)</label>
+            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Notas (Spanish notes)</label>
             <textarea
               rows={3}
               value={draftNotes}
               onChange={e => setDraftNotes(e.target.value)}
-              className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
+              className="mt-1.5 w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
             />
           </div>
 
           <div className="flex items-center justify-between pt-2 border-t border-slate-50">
             <div>
-              <p className="text-sm font-medium text-slate-700">Spanish Reviewed</p>
-              <p className="text-xs text-slate-400">Mark when a bilingual reviewer has verified the translations.</p>
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Spanish Reviewed</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">Mark when a bilingual reviewer has verified the translations.</p>
             </div>
             <Switch checked={draftReviewed} onChange={setDraftRev} ariaLabel="Spanish reviewed" />
           </div>
@@ -117,7 +117,7 @@ export default function SpanishTranslationSheet({
         {draftSteps.map(step => {
           const { hex, textHex, labelEs } = energyCodeFor(step.energy_type)
           return (
-            <div key={step.id} className="rounded-xl border border-slate-100 p-4 space-y-3">
+            <div key={step.id} className="rounded-xl border border-slate-100 dark:border-slate-800 p-4 space-y-3">
               <div className="flex items-center gap-2 pb-2 border-b border-slate-50">
                 <span
                   className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-bold"
@@ -126,42 +126,42 @@ export default function SpanishTranslationSheet({
                   <span className="font-mono">{step.energy_type}</span>
                   <span>{labelEs}</span>
                 </span>
-                <span className="text-sm font-semibold text-slate-700">Paso {step.step_number}</span>
+                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Paso {step.step_number}</span>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Etiqueta y Descripción</label>
+                <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Etiqueta y Descripción</label>
                 <textarea
                   rows={2}
                   value={step.tag_description_es ?? ''}
                   placeholder={step.tag_description || 'Traducción al español…'}
                   aria-label="Etiqueta y Descripción"
                   onChange={e => patchStep(step.id, { tag_description_es: e.target.value })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Procedimiento de Aislamiento y Dispositivos de Bloqueo</label>
+                <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Procedimiento de Aislamiento y Dispositivos de Bloqueo</label>
                 <textarea
                   rows={3}
                   value={step.isolation_procedure_es ?? ''}
                   placeholder={step.isolation_procedure || 'Traducción al español…'}
                   aria-label="Procedimiento de Aislamiento"
                   onChange={e => patchStep(step.id, { isolation_procedure_es: e.target.value })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Método de Verificación</label>
+                <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Método de Verificación</label>
                 <textarea
                   rows={2}
                   value={step.method_of_verification_es ?? ''}
                   placeholder={step.method_of_verification || 'Traducción al español…'}
                   aria-label="Método de Verificación"
                   onChange={e => patchStep(step.id, { method_of_verification_es: e.target.value })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
                 />
               </div>
             </div>
@@ -169,12 +169,12 @@ export default function SpanishTranslationSheet({
         })}
       </div>
 
-      <div className="sticky bottom-0 bg-white pt-4 mt-6 border-t border-slate-100 flex justify-end gap-2">
+      <div className="sticky bottom-0 bg-white dark:bg-slate-900 pt-4 mt-6 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
         <button
           type="button"
           onClick={onClose}
           disabled={saving}
-          className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"
+          className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200"
         >
           Cancel
         </button>

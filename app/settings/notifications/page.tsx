@@ -37,10 +37,10 @@ export default function NotificationsSettingsPage() {
   }, [])
 
   if (authLoading) {
-    return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+    return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
   if (!profile) {
-    return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500">Sign in to manage notifications.</div>
+    return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Sign in to manage notifications.</div>
   }
 
   async function enable() {
@@ -158,35 +158,35 @@ export default function NotificationsSettingsPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
       <header className="flex items-center gap-3">
-        <Link href="/" className="text-slate-400 hover:text-brand-navy" aria-label="Back to home">
+        <Link href="/" className="text-slate-400 dark:text-slate-500 hover:text-brand-navy" aria-label="Back to home">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <Bell className="h-5 w-5 text-slate-500" />
+          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Bell className="h-5 w-5 text-slate-500 dark:text-slate-400" />
             Notifications
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Enable push notifications on this device for permit + atmospheric-test alerts.
           </p>
         </div>
       </header>
 
-      <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5 space-y-3">
         {supported === null ? (
-          <p className="text-xs text-slate-500">Checking browser capabilities…</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Checking browser capabilities…</p>
         ) : !supported ? (
-          <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-1">
-            <p className="text-sm font-bold text-amber-900">Push notifications unavailable.</p>
-            <p className="text-xs text-amber-900/80">
+          <div className="rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 p-3 space-y-1">
+            <p className="text-sm font-bold text-amber-900 dark:text-amber-100">Push notifications unavailable.</p>
+            <p className="text-xs text-amber-900/80 dark:text-amber-100/80">
               Your browser doesn't expose the Push API. On iPad, install Soteria FIELD to your home screen
               (Share → Add to Home Screen) and open it from there — Web Push only works in installed PWAs on iOS.
             </p>
           </div>
         ) : permission === 'denied' ? (
-          <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 space-y-1">
-            <p className="text-sm font-bold text-rose-900">Permission blocked.</p>
-            <p className="text-xs text-rose-900/80">
+          <div className="rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 p-3 space-y-1">
+            <p className="text-sm font-bold text-rose-900 dark:text-rose-100">Permission blocked.</p>
+            <p className="text-xs text-rose-900/80 dark:text-rose-100/80">
               You previously denied notification permission in this browser. To re-enable, open your browser's
               site settings for Soteria FIELD and switch Notifications to Allow, then reload.
             </p>
@@ -195,8 +195,8 @@ export default function NotificationsSettingsPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
-                <p className="text-sm font-bold text-slate-900">Status</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-sm font-bold text-slate-900 dark:text-slate-100">Status</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   {subscribed === null
                     ? 'Checking…'
                     : subscribed
@@ -209,7 +209,7 @@ export default function NotificationsSettingsPage() {
                   type="button"
                   onClick={disable}
                   disabled={busy}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200 disabled:opacity-50 transition-colors"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
                 >
                   <BellOff className="h-4 w-4" />
                   {busy ? 'Disabling…' : 'Disable notifications'}
@@ -226,7 +226,7 @@ export default function NotificationsSettingsPage() {
                 </button>
               )}
             </div>
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
               You'll receive an alert when an atmospheric reading fails or when one of your permits is about
               to expire. Each device has to be enabled separately. You can disable any time.
             </p>
@@ -245,8 +245,8 @@ export default function NotificationsSettingsPage() {
           </div>
         )}
 
-        {error && <p className="text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-md px-3 py-2">{error}</p>}
-        {okMsg && <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-md px-3 py-2">{okMsg}</p>}
+        {error && <p className="text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">{error}</p>}
+        {okMsg && <p className="text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 rounded-md px-3 py-2">{okMsg}</p>}
       </section>
     </div>
   )

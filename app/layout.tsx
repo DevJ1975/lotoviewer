@@ -48,7 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }} />
         <IosSplashLinks />
       </head>
-      <body className="min-h-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <body className="min-h-full bg-slate-50 dark:bg-slate-900/40 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
         <ThemeProvider>
           <AuthProvider>
             <SessionProvider>

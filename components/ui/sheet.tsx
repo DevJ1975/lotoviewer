@@ -43,17 +43,17 @@ export function Sheet({ open, onClose, title, subtitle, children, widthClass = '
   return (
     <div className="fixed inset-0 z-50 flex justify-end" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div className={`relative bg-white w-full ${widthClass} h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-200`}>
-        <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-slate-100">
+      <div className={`relative bg-white dark:bg-slate-900 w-full ${widthClass} h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-200`}>
+        <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-slate-100 dark:border-slate-800">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-            {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
+            {subtitle && <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{subtitle}</p>}
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="text-slate-400 hover:text-slate-600 text-xl leading-none transition-colors"
+            className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 text-xl leading-none transition-colors"
           >
             ×
           </button>

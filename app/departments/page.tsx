@@ -62,14 +62,14 @@ export default function DepartmentsPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Departments</h1>
-        <p className="text-sm text-slate-500 mt-0.5">{stats.length} departments · click a card to view equipment</p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Departments</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{stats.length} departments · click a card to view equipment</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {stats.map(s => {
           const pctColor =
-            s.pct >= 80 ? 'text-emerald-600' : s.pct >= 50 ? 'text-amber-600' : 'text-rose-600'
+            s.pct >= 80 ? 'text-emerald-600 dark:text-emerald-400' : s.pct >= 50 ? 'text-amber-600' : 'text-rose-600 dark:text-rose-400'
           const barClass =
             s.pct >= 80
               ? '[&_[data-slot=progress-indicator]]:bg-emerald-500'
@@ -80,10 +80,10 @@ export default function DepartmentsPage() {
 
           return (
             <Link key={s.department} href={`/departments/${encodeURIComponent(s.department)}`}>
-              <Card className="bg-white border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 cursor-pointer h-full">
+              <Card className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 cursor-pointer h-full">
                 <CardContent className="p-5 space-y-3">
                   <div className="flex items-start justify-between gap-2">
-                    <h2 className="font-semibold text-slate-800 leading-tight text-[15px]">{s.department}</h2>
+                    <h2 className="font-semibold text-slate-800 dark:text-slate-200 leading-tight text-[15px]">{s.department}</h2>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         onClick={e => {
@@ -91,7 +91,7 @@ export default function DepartmentsPage() {
                           e.stopPropagation()
                           setRenamingDept(s.department)
                         }}
-                        className="p-1 rounded-md text-slate-300 hover:text-slate-700 hover:bg-slate-100 focus:text-slate-700 focus:bg-slate-100 transition-colors"
+                        className="p-1 rounded-md text-slate-300 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 focus:text-slate-700 dark:focus:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800 transition-colors"
                         aria-label={`Rename ${s.department}`}
                         title="Rename department"
                       >
@@ -104,16 +104,16 @@ export default function DepartmentsPage() {
                   <Progress value={s.pct} className={`h-1.5 ${barClass}`} />
 
                   <div className="flex gap-3 text-xs">
-                    <span className="text-emerald-600 font-medium">{s.complete} done</span>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">{s.complete} done</span>
                     <span className="text-amber-500 font-medium">{s.partial} partial</span>
                     <span className="text-rose-500 font-medium">{s.missing} missing</span>
                   </div>
 
                   <div className="flex items-center justify-between pt-0.5">
-                    <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide">{s.total} equipment</p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium uppercase tracking-wide">{s.total} equipment</p>
                     {review ? (
                       <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                        review.approved ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                        review.approved ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
                       }`}>
                         {review.approved ? '✓ Reviewed' : '⚠ Action Needed'}
                       </span>

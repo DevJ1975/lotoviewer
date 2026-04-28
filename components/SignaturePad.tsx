@@ -113,7 +113,7 @@ const SignaturePad = forwardRef<SignaturePadRef, Props>(function SignaturePad({ 
       ref={canvasRef}
       width={600}
       height={160}
-      className="w-full h-[140px] rounded-lg border-2 border-dashed border-slate-200 bg-white cursor-crosshair touch-none select-none"
+      className="w-full h-[140px] rounded-lg border-2 border-dashed border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-crosshair touch-none select-none"
     />
   )
 })

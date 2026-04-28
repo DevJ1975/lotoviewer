@@ -30,11 +30,11 @@ const STATE_FILTERS: Array<{ value: HotWorkState | 'all' | 'open'; label: string
 ]
 
 const STATE_BADGE: Record<HotWorkState, string> = {
-  pending_signature:   'bg-amber-100   text-amber-800 dark:text-amber-200   ring-amber-200',
-  active:              'bg-emerald-100 text-emerald-800 dark:text-emerald-200 ring-emerald-200',
-  post_work_watch:     'bg-blue-100    text-blue-800 dark:text-blue-200    ring-blue-200',
+  pending_signature:   'bg-amber-100 dark:bg-amber-900/40   text-amber-800 dark:text-amber-200   ring-amber-200',
+  active:              'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 ring-emerald-200',
+  post_work_watch:     'bg-blue-100 dark:bg-blue-900/40    text-blue-800 dark:text-blue-200    ring-blue-200',
   post_watch_complete: 'bg-emerald-50 dark:bg-emerald-950/40  text-emerald-700 dark:text-emerald-300 ring-emerald-200',
-  expired:             'bg-rose-100    text-rose-800 dark:text-rose-200    ring-rose-200',
+  expired:             'bg-rose-100 dark:bg-rose-900/40    text-rose-800 dark:text-rose-200    ring-rose-200',
   canceled:            'bg-slate-100 dark:bg-slate-800   text-slate-700 dark:text-slate-300   ring-slate-200 dark:ring-slate-700',
 }
 
@@ -138,7 +138,7 @@ export default function HotWorkListPage() {
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-            <Flame className="h-5 w-5 text-rose-600" />
+            <Flame className="h-5 w-5 text-rose-600 dark:text-rose-400" />
             Hot Work Permits
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">

@@ -2,7 +2,7 @@
 // animate-pulse is enough — keeps the bundle clean. Pass any className for
 // sizing, rounding, or color overrides.
 export function Skeleton({ className = '' }: { className?: string }) {
-  return <div aria-hidden="true" className={`animate-pulse bg-slate-200 rounded ${className}`} />
+  return <div aria-hidden="true" className={`animate-pulse bg-slate-200 dark:bg-slate-700 rounded ${className}`} />
 }
 
 // Composed skeleton matching an equipment list row: status dot, two stacked
@@ -10,7 +10,7 @@ export function Skeleton({ className = '' }: { className?: string }) {
 // and ~68px height so the list doesn't jump on hydration.
 export function EquipmentRowSkeleton() {
   return (
-    <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
+    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3">
       <Skeleton className="w-2.5 h-2.5 rounded-full shrink-0" />
       <div className="flex-1 min-w-0 space-y-1.5">
         <Skeleton className="h-3.5 w-32" />
@@ -36,9 +36,9 @@ export function DecommissionSkeleton() {
         ))}
       </div>
       <Skeleton className="h-10 w-full rounded-lg" />
-      <div className="rounded-xl bg-white ring-1 ring-slate-200 overflow-hidden">
+      <div className="rounded-xl bg-white dark:bg-slate-900 ring-1 ring-slate-200 dark:ring-slate-700 overflow-hidden">
         {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="px-4 py-3.5 border-t border-slate-100 first:border-t-0 flex items-center gap-3">
+          <div key={i} className="px-4 py-3.5 border-t border-slate-100 dark:border-slate-800 first:border-t-0 flex items-center gap-3">
             <Skeleton className="h-4 w-4 rounded shrink-0" />
             <Skeleton className="h-5 w-5 rounded shrink-0" />
             <div className="flex-1 min-w-0 space-y-1.5">
@@ -83,7 +83,7 @@ export function DashboardSkeleton() {
   return (
     <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-6rem)]">
       {/* Sidebar */}
-      <aside className="shrink-0 w-full lg:w-72 bg-white border-r border-slate-100 p-4 space-y-4">
+      <aside className="shrink-0 w-full lg:w-72 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-800 p-4 space-y-4">
         <div className="flex gap-1.5">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-7 w-7 rounded-md" />
@@ -102,8 +102,8 @@ export function DashboardSkeleton() {
         </div>
       </aside>
       {/* Equipment list */}
-      <section className="flex-1 min-w-0 bg-slate-50">
-        <div className="bg-white border-b border-slate-200 p-4 space-y-3">
+      <section className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-900/40">
+        <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 p-4 space-y-3">
           <Skeleton className="h-5 w-40" />
           <Skeleton className="h-9 w-full rounded-lg" />
           <div className="flex gap-1.5">
@@ -119,7 +119,7 @@ export function DashboardSkeleton() {
         </div>
       </section>
       {/* Detail */}
-      <aside className="shrink-0 w-full lg:w-[520px] bg-slate-100 border-l border-slate-200 p-4 space-y-3">
+      <aside className="shrink-0 w-full lg:w-[520px] bg-slate-100 dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 p-4 space-y-3">
         <Skeleton className="h-5 w-32" />
         <Skeleton className="aspect-[3/2] w-full rounded-lg" />
         <Skeleton className="h-4 w-full" />

@@ -139,9 +139,9 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex flex-col">
       {/* Toolbar */}
-      <div className="bg-white border-b border-slate-200 flex items-center justify-between gap-3 px-4 py-2.5 shrink-0">
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 px-4 py-2.5 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <h2 className="text-sm font-bold text-slate-900 truncate">{equipment.equipment_id}_LOTO_Placard.pdf</h2>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{equipment.equipment_id}_LOTO_Placard.pdf</h2>
           <UploadStatusBadge state={uploadState} />
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -149,7 +149,7 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
             type="button"
             onClick={handlePrint}
             disabled={generating || !pdfUrl}
-            className="text-sm font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors"
+            className="text-sm font-semibold border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900/40 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors"
           >
             🖨 Print
           </button>
@@ -165,7 +165,7 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="text-sm font-semibold text-slate-600 hover:text-slate-900 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+            className="text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             ✕ Close
           </button>
@@ -184,7 +184,7 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
             ref={iframeRef}
             src={pdfUrl}
             title={`Placard preview for ${equipment.equipment_id}`}
-            className="w-full h-full border-0 bg-white"
+            className="w-full h-full border-0 bg-white dark:bg-slate-900"
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-white text-sm">
@@ -200,7 +200,7 @@ function UploadStatusBadge({ state }: { state: UploadState }) {
   if (state === 'idle') return null
   if (state === 'uploading') {
     return (
-      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 bg-slate-100 rounded-full px-2 py-0.5">
+      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-full px-2 py-0.5">
         <span className="w-2.5 h-2.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
         Saving to cloud…
       </span>
@@ -208,13 +208,13 @@ function UploadStatusBadge({ state }: { state: UploadState }) {
   }
   if (state === 'saved') {
     return (
-      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 rounded-full px-2 py-0.5">
+      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 rounded-full px-2 py-0.5">
         ✓ Saved to cloud
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 bg-rose-50 rounded-full px-2 py-0.5">
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-full px-2 py-0.5">
       ⚠ Cloud save failed
     </span>
   )

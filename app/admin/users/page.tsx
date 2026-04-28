@@ -242,7 +242,7 @@ jamil@trainovations.com`
                   setTimeout(() => setCopied(false), 1500)
                 } catch { /* ignore */ }
               }}
-              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 ring-1 ring-amber-300 text-amber-900 dark:text-amber-100 text-xs font-semibold hover:bg-amber-100 transition-colors"
+              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 ring-1 ring-amber-300 text-amber-900 dark:text-amber-100 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
             >
               <Copy className="h-3.5 w-3.5" />
               {copied ? 'Copied' : 'Copy'}
@@ -283,7 +283,7 @@ jamil@trainovations.com`
                   onClick={() => onRemove(u.id, u.email)}
                   title="Remove user"
                   aria-label={`Remove ${u.email}`}
-                  className="text-slate-400 dark:text-slate-500 hover:text-rose-600 p-1.5 rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                  className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-1.5 rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>

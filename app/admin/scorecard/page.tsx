@@ -49,31 +49,31 @@ export default function ScorecardPage() {
   }, [authLoading, profile, windowDays])
 
   if (authLoading) {
-    return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+    return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
   if (!profile?.is_admin) {
-    return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500">Admins only.</div>
+    return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
       <header className="flex items-center gap-3">
-        <Link href="/" className="text-slate-400 hover:text-brand-navy" aria-label="Back to home">
+        <Link href="/" className="text-slate-400 dark:text-slate-500 hover:text-brand-navy" aria-label="Back to home">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div className="flex-1">
-          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-slate-500" />
+          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-slate-500 dark:text-slate-400" />
             EHS Scorecard
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Trend view across permits, atmospheric tests, and equipment compliance.
           </p>
         </div>
         <select
           value={windowDays}
           onChange={e => setWindowDays(Number(e.target.value))}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
         >
           {WINDOW_OPTIONS.map(opt => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -82,7 +82,7 @@ export default function ScorecardPage() {
       </header>
 
       {loadError && (
-        <div className="bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 text-xs text-rose-900">
+        <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 rounded-xl px-4 py-3 text-xs text-rose-900 dark:text-rose-100">
           Couldn't load scorecard: {loadError}
         </div>
       )}
@@ -174,15 +174,15 @@ function Kpi({ label, value, sub, tone }: {
   sub:   string
   tone?: 'safe' | 'warning' | 'critical'
 }) {
-  const valueCls = tone === 'critical' ? 'text-rose-700'
-                 : tone === 'warning'  ? 'text-amber-700'
-                 : tone === 'safe'     ? 'text-emerald-700'
-                 :                       'text-slate-900'
+  const valueCls = tone === 'critical' ? 'text-rose-700 dark:text-rose-300'
+                 : tone === 'warning'  ? 'text-amber-700 dark:text-amber-300'
+                 : tone === 'safe'     ? 'text-emerald-700 dark:text-emerald-300'
+                 :                       'text-slate-900 dark:text-slate-100'
   return (
-    <div className="bg-white border border-slate-200 rounded-xl px-4 py-3">
-      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3">
+      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</p>
       <p className={`text-2xl font-black tabular-nums mt-1 ${valueCls}`}>{value}</p>
-      <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>
+      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{sub}</p>
     </div>
   )
 }
@@ -197,15 +197,15 @@ function ChartCard({
   children: React.ReactNode
 }) {
   return (
-    <section className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
+    <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-2">
       <header>
-        <h2 className="text-sm font-bold text-slate-900">{title}</h2>
-        <p className="text-[11px] text-slate-500">{subtitle}</p>
+        <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">{title}</h2>
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">{subtitle}</p>
       </header>
       {loading ? (
-        <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
+        <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-slate-400 dark:text-slate-500" /></div>
       ) : empty ? (
-        <p className="py-10 text-center text-xs text-slate-400 italic">No data in this window yet.</p>
+        <p className="py-10 text-center text-xs text-slate-400 dark:text-slate-500 italic">No data in this window yet.</p>
       ) : children}
     </section>
   )

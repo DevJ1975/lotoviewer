@@ -41,7 +41,7 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
   const notes = equipment.notes?.trim() ? equipment.notes : PLACARD_TEXT.warningFallback.en
 
   return (
-    <article className="bg-white border border-slate-300 shadow-md rounded-lg overflow-hidden font-sans">
+    <article className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 shadow-md rounded-lg overflow-hidden font-sans">
       {/* ── Yellow header band ──────────────────────────────────────────── */}
       <header className="flex items-center gap-3 px-4 py-3" style={{ backgroundColor: COLOR.yellow }}>
         <div className="w-11 h-11 bg-[#214487] rounded flex items-center justify-center text-[#FFD900] font-bold text-sm shrink-0">
@@ -58,7 +58,7 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
 
       {/* ── Light blue equipment bar ────────────────────────────────────── */}
       <div
-        className="flex items-center justify-between gap-3 px-4 py-1.5 border-y border-slate-200"
+        className="flex items-center justify-between gap-3 px-4 py-1.5 border-y border-slate-200 dark:border-slate-700"
         style={{ backgroundColor: COLOR.blue }}
       >
         <p className="text-sm min-w-0 truncate">
@@ -75,28 +75,28 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
       </div>
 
       {/* ── Purpose + Steps (2 columns) ─────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-[55fr_45fr] gap-4 px-4 py-3 border-b border-slate-200">
+      <div className="grid grid-cols-1 md:grid-cols-[55fr_45fr] gap-4 px-4 py-3 border-b border-slate-200 dark:border-slate-700">
         <div>
           <h3 className="text-[11px] font-bold uppercase tracking-wider text-[#214487] mb-1.5">
             {PLACARD_TEXT.purposeHeader[lang]}
           </h3>
-          <p className="text-[11px] text-slate-700 leading-relaxed">{PLACARD_TEXT.purposeBody[lang]}</p>
+          <p className="text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed">{PLACARD_TEXT.purposeBody[lang]}</p>
         </div>
         <div>
           <h3 className="text-[11px] font-bold uppercase tracking-wider text-[#214487] mb-1.5">
             {PLACARD_TEXT.stepsHeader[lang]}
           </h3>
-          <ol className="list-decimal list-inside space-y-0.5 text-[11px] text-slate-700 marker:font-bold marker:text-[#214487]">
+          <ol className="list-decimal list-inside space-y-0.5 text-[11px] text-slate-700 dark:text-slate-300 marker:font-bold marker:text-[#214487]">
             {PLACARD_TEXT.steps[lang].map(s => <li key={s}>{s}</li>)}
           </ol>
         </div>
       </div>
 
       {/* ── Color legend bar ────────────────────────────────────────────── */}
-      <div className="bg-slate-100 px-4 py-1.5 border-b border-slate-200">
+      <div className="bg-slate-100 dark:bg-slate-800 px-4 py-1.5 border-b border-slate-200 dark:border-slate-700">
         <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
           {ENERGY_CODES.map(ec => (
-            <span key={ec.code} className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-700">
+            <span key={ec.code} className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
               <span
                 className="inline-block w-4 h-4 rounded font-mono font-bold text-[9px] flex items-center justify-center shadow-sm"
                 style={{ backgroundColor: ec.hex, color: ec.textHex }}
@@ -118,7 +118,7 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
       </div>
 
       {/* ── Photo row ───────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 bg-slate-200">
+      <div className="grid grid-cols-2 bg-slate-200 dark:bg-slate-700">
         <div className="h-56 sm:h-64">
           <PlacardPhotoSlot
             equipmentId={equipment.equipment_id}
@@ -129,7 +129,7 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
             onError={onPhotoError}
           />
         </div>
-        <div className="h-56 sm:h-64 border-l border-slate-300">
+        <div className="h-56 sm:h-64 border-l border-slate-300 dark:border-slate-700">
           <PlacardPhotoSlot
             equipmentId={equipment.equipment_id}
             type="ISO"
@@ -142,7 +142,7 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
       </div>
 
       {/* ── Energy isolation table ──────────────────────────────────────── */}
-      <div className="overflow-x-auto border-t border-slate-300">
+      <div className="overflow-x-auto border-t border-slate-300 dark:border-slate-700">
         <table className="w-full text-xs">
           <thead>
             <tr className="text-white text-left" style={{ backgroundColor: COLOR.navy }}>
@@ -160,25 +160,25 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
           <tbody>
             {steps.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-3 py-6 text-center text-slate-400 italic">
+                <td colSpan={3} className="px-3 py-6 text-center text-slate-400 dark:text-slate-500 italic">
                   {PLACARD_TEXT.noSteps[lang]}
                 </td>
               </tr>
             ) : (
               steps.map((step, i) => (
-                <tr key={step.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                  <td className="px-3 py-2 align-top border-t border-slate-200">
+                <tr key={step.id} className={i % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-900/40'}>
+                  <td className="px-3 py-2 align-top border-t border-slate-200 dark:border-slate-700">
                     <div className="flex items-start gap-2">
                       <EnergyBadge code={step.energy_type} />
-                      <div className="text-[11px] text-slate-700 whitespace-pre-wrap leading-snug min-w-0">
+                      <div className="text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-snug min-w-0">
                         {step.tag_description || <span className="text-slate-300 italic">—</span>}
                       </div>
                     </div>
                   </td>
-                  <td className="px-3 py-2 align-top border-t border-slate-200 text-[11px] text-slate-700 whitespace-pre-wrap leading-snug">
+                  <td className="px-3 py-2 align-top border-t border-slate-200 dark:border-slate-700 text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-snug">
                     {step.isolation_procedure || <span className="text-slate-300 italic">—</span>}
                   </td>
-                  <td className="px-3 py-2 align-top border-t border-slate-200 text-[11px] text-slate-700 whitespace-pre-wrap leading-snug">
+                  <td className="px-3 py-2 align-top border-t border-slate-200 dark:border-slate-700 text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-snug">
                     {step.method_of_verification || <span className="text-slate-300 italic">—</span>}
                   </td>
                 </tr>
@@ -189,11 +189,11 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
       </div>
 
       {/* ── Signature bar ───────────────────────────────────────────────── */}
-      <div className="grid grid-cols-4 border-t border-slate-300 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-[#214487]">
+      <div className="grid grid-cols-4 border-t border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 text-[10px] font-bold uppercase tracking-wider text-[#214487]">
         {PLACARD_TEXT.signature[lang].map((label, i) => (
           <div
             key={label}
-            className={`px-3 py-2 ${i < 3 ? 'border-r border-slate-300' : ''} min-h-[38px] flex items-end`}
+            className={`px-3 py-2 ${i < 3 ? 'border-r border-slate-300 dark:border-slate-700' : ''} min-h-[38px] flex items-end`}
           >
             {label}{i < 3 ? ':' : ''}
           </div>

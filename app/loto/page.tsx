@@ -243,9 +243,9 @@ function HomeDashboard() {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-6rem)]">
         <div className="text-center px-6 max-w-sm">
-          <div className="w-14 h-14 rounded-full bg-rose-100 flex items-center justify-center text-2xl mx-auto mb-3">⚠</div>
-          <p className="text-sm font-semibold text-slate-700 mb-1">Could not load equipment</p>
-          <p className="text-xs text-slate-400 mb-4">Please check your connection and try again.</p>
+          <div className="w-14 h-14 rounded-full bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center text-2xl mx-auto mb-3">⚠</div>
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Could not load equipment</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">Please check your connection and try again.</p>
           <button
             type="button"
             onClick={() => { setLoading(true); setLoadError(false); fetchData() }}

@@ -200,7 +200,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
         onClick={() => !isBusy && fileRef.current?.click()}
         disabled={isBusy}
         aria-label={`Upload ${label}`}
-        className="flex-1 relative bg-slate-50 border-2 border-slate-200 border-t-0 overflow-hidden group disabled:cursor-wait"
+        className="flex-1 relative bg-slate-50 dark:bg-slate-900/40 border-2 border-slate-200 dark:border-slate-700 border-t-0 overflow-hidden group disabled:cursor-wait"
       >
         {displayUrl ? (
           <>
@@ -218,9 +218,9 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
               // what they picked during validation/compression/upload.
               // Previously the spinner replaced the image, hiding their
               // selection for 500ms–2s after a file pick.
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/30 backdrop-blur-[1px]">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/30 dark:bg-slate-900/30 backdrop-blur-[1px]">
                 <div className="w-7 h-7 border-[3px] border-brand-navy/30 border-t-brand-navy rounded-full animate-spin" />
-                <p className="text-xs text-slate-700 font-semibold drop-shadow-sm">
+                <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold drop-shadow-sm">
                   {validating  ? 'Checking…'  :
                    queueing    ? 'Queueing…'  :
                    compressing ? 'Compressing…' : 'Uploading…'}
@@ -228,7 +228,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
               </div>
             ) : (
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                <span className="opacity-0 group-hover:opacity-100 bg-white/95 text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm transition-opacity">
+                <span className="opacity-0 group-hover:opacity-100 bg-white/95 dark:bg-slate-900/95 text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm transition-opacity">
                   Replace
                 </span>
               </div>
@@ -251,7 +251,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
           // before a preview is available.
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
             <div className="w-7 h-7 border-[3px] border-brand-navy/30 border-t-brand-navy rounded-full animate-spin" />
-            <p className="text-xs text-slate-500 font-medium">
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
               {validating  ? 'Checking…'  :
                queueing    ? 'Queueing…'  :
                compressing ? 'Compressing…' : 'Uploading…'}
@@ -260,7 +260,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
         ) : showError ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-3 text-center">
             <p className="text-rose-500 text-xs font-semibold">Upload failed</p>
-            <p className="text-[11px] text-slate-400">Please try again.</p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500">Please try again.</p>
             <button
               type="button"
               onClick={e => { e.stopPropagation(); reset() }}
@@ -270,7 +270,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
             </button>
           </div>
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-400 group-hover:text-brand-navy transition-colors">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-400 dark:text-slate-500 group-hover:text-brand-navy transition-colors">
             <div className="w-10 h-10 rounded-full border-2 border-current flex items-center justify-center text-xl">+</div>
             <p className="text-xs font-semibold">Click to upload</p>
             <p className="text-[10px]">JPEG or PNG</p>

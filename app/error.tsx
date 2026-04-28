@@ -26,13 +26,13 @@ export default function Error({ error, unstable_retry }: Props) {
 
   return (
     <div className="flex items-center justify-center min-h-[60vh] px-4">
-      <div className="text-center max-w-md w-full rounded-2xl bg-white ring-1 ring-slate-200 p-8 space-y-4">
-        <div className="w-14 h-14 rounded-full bg-rose-100 flex items-center justify-center mx-auto">
-          <AlertTriangle className="h-7 w-7 text-rose-600" />
+      <div className="text-center max-w-md w-full rounded-2xl bg-white dark:bg-slate-900 ring-1 ring-slate-200 dark:ring-slate-700 p-8 space-y-4">
+        <div className="w-14 h-14 rounded-full bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center mx-auto">
+          <AlertTriangle className="h-7 w-7 text-rose-600 dark:text-rose-400" />
         </div>
         <div className="space-y-1">
-          <h1 className="text-lg font-bold text-slate-900">Something went wrong</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">Something went wrong</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             The page ran into an unexpected error. Your data is safe.
           </p>
         </div>
@@ -45,7 +45,7 @@ export default function Error({ error, unstable_retry }: Props) {
           Try again
         </button>
         {error.digest && (
-          <p className="text-[11px] text-slate-400 font-mono">ref: {error.digest}</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">ref: {error.digest}</p>
         )}
       </div>
     </div>

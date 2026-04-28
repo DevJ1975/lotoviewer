@@ -117,7 +117,7 @@ export default function HotWorkStatusBoard() {
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
             Hot Work Status Board
           </h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">
             Live status of hot-work permits · OSHA 29 CFR 1910.252 · NFPA 51B · Cal/OSHA Title 8 §6777
           </p>
         </div>
@@ -125,7 +125,7 @@ export default function HotWorkStatusBoard() {
           <p className="text-3xl sm:text-4xl font-mono font-bold">
             {new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </p>
-          <p className={`text-[11px] ${isStale ? 'text-rose-400 font-bold' : 'text-slate-500'}`}>
+          <p className={`text-[11px] ${isStale ? 'text-rose-400 font-bold' : 'text-slate-500 dark:text-slate-400'}`}>
             {isStale && '⚠ STALE · '}
             Refreshed {Math.floor(refreshAgeMs / 1000)}s ago · auto every 30s
           </p>
@@ -180,7 +180,7 @@ export default function HotWorkStatusBoard() {
                   <p className="text-[11px] text-rose-300 uppercase tracking-widest font-bold">
                     {p.state === 'expired' ? 'Expired' : 'Watch complete'}
                   </p>
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-slate-400 dark:text-slate-500">
                     {p.state === 'expired'
                       ? new Date(p.expires_at).toLocaleString()
                       : 'Ready to close'}
@@ -200,13 +200,13 @@ export default function HotWorkStatusBoard() {
 
       {/* Active + post-watch grid */}
       {loading ? (
-        <div className="flex items-center justify-center py-24 text-slate-400">
+        <div className="flex items-center justify-center py-24 text-slate-400 dark:text-slate-500">
           <div className="w-12 h-12 border-4 border-slate-700 border-t-white rounded-full animate-spin" />
         </div>
       ) : active.length === 0 && postWatch.length === 0 ? (
         <div className="bg-slate-900/40 rounded-xl border border-slate-800 p-12 text-center">
           <p className="text-2xl text-slate-300 font-bold">No hot work in progress</p>
-          <p className="text-sm text-slate-500 mt-2">
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
             When a hot-work permit is signed and active, it appears here with a live countdown.
           </p>
         </div>
@@ -217,7 +217,7 @@ export default function HotWorkStatusBoard() {
         </section>
       )}
 
-      <footer className="text-[11px] text-slate-600 text-center pt-4">
+      <footer className="text-[11px] text-slate-600 dark:text-slate-300 text-center pt-4">
         Soteria Field · {active.length + postWatch.length + needsAction.length} hot-work permit
         {active.length + postWatch.length + needsAction.length === 1 ? '' : 's'} on display
       </footer>
@@ -238,7 +238,7 @@ function Headline({ label, value, tone }: { label: string; value: number; tone: 
   :                       'text-white'
   return (
     <div className={`rounded-xl border-2 ${cls} px-5 py-4`}>
-      <p className="text-[11px] sm:text-xs uppercase tracking-widest text-slate-400 font-bold">{label}</p>
+      <p className="text-[11px] sm:text-xs uppercase tracking-widest text-slate-400 dark:text-slate-500 font-bold">{label}</p>
       <p className={`text-5xl sm:text-6xl font-black tabular-nums mt-1 ${numCls}`}>{value}</p>
     </div>
   )
@@ -272,7 +272,7 @@ function PermitCard({ permit }: { permit: BoardPermit }) {
   return (
     <Link
       href={`/hot-work/${permit.id}`}
-      className={`rounded-xl border-2 ${cardCls} p-4 sm:p-5 space-y-3 hover:bg-white/5 transition-colors block`}
+      className={`rounded-xl border-2 ${cardCls} p-4 sm:p-5 space-y-3 hover:bg-white/5 dark:hover:bg-slate-900/5 transition-colors block`}
     >
       <header className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -280,7 +280,7 @@ function PermitCard({ permit }: { permit: BoardPermit }) {
           <p className="text-lg sm:text-xl font-bold text-white mt-0.5 truncate" title={permit.work_location}>
             {permit.work_location}
           </p>
-          <p className="text-xs text-slate-400 truncate" title={permit.work_description}>
+          <p className="text-xs text-slate-400 dark:text-slate-500 truncate" title={permit.work_description}>
             {permit.work_description}
           </p>
         </div>
@@ -294,7 +294,7 @@ function PermitCard({ permit }: { permit: BoardPermit }) {
       <div className={`text-5xl sm:text-6xl font-black tabular-nums font-mono ${timerCls} text-center py-2`}>
         {minutes != null ? formatMinutes(minutes) : '—'}
       </div>
-      <p className="text-[10px] text-slate-500 text-center uppercase tracking-widest -mt-2">
+      <p className="text-[10px] text-slate-500 dark:text-slate-400 text-center uppercase tracking-widest -mt-2">
         {timerLabel}
       </p>
 
@@ -308,9 +308,9 @@ function RosterRow({ label, names, tone }: { label: string; names: string[]; ton
   const dotCls = tone === 'operator' ? 'bg-amber-400' : 'bg-blue-400'
   return (
     <div>
-      <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">{label}</p>
+      <p className="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-400 font-bold mb-1">{label}</p>
       {names.length === 0 ? (
-        <p className="text-sm text-slate-500 italic">— none recorded —</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400 italic">— none recorded —</p>
       ) : (
         <ul className="flex flex-wrap gap-1.5">
           {names.map((n, i) => (

@@ -189,7 +189,7 @@ export default function PrintQueuePage() {
                     <span className="font-semibold text-sm text-gray-800">{dept}</span>
                     <span className="text-xs text-gray-400">{eqs.length} placard{eqs.length !== 1 ? 's' : ''}</span>
                     {eqs.some(e => e.signed_placard_url) && (
-                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300">
                         Signed
                       </span>
                     )}
@@ -208,7 +208,7 @@ export default function PrintQueuePage() {
                     {eqs.map(eq => (
                       <TableRow
                         key={eq.equipment_id}
-                        className={`hover:bg-gray-50 cursor-pointer ${selected.has(eq.equipment_id) ? 'bg-blue-50' : ''}`}
+                        className={`hover:bg-gray-50 cursor-pointer ${selected.has(eq.equipment_id) ? 'bg-blue-50 dark:bg-blue-950/40' : ''}`}
                         onClick={() => toggleOne(eq.equipment_id)}
                       >
                         <TableCell className="w-10" onClick={e => e.stopPropagation()}>
@@ -225,7 +225,7 @@ export default function PrintQueuePage() {
                         <TableCell><StatusBadge status={eq.photo_status} /></TableCell>
                         <TableCell>
                           {eq.signed_placard_url
-                            ? <span className="text-[11px] font-semibold text-emerald-700">✓ Signed</span>
+                            ? <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">✓ Signed</span>
                             : <span className="text-[11px] text-gray-400">Unsigned</span>
                           }
                         </TableCell>
@@ -235,7 +235,7 @@ export default function PrintQueuePage() {
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={e => e.stopPropagation()}
-                            className="text-blue-600 hover:underline text-sm"
+                            className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
                           >
                             View PDF
                           </a>
@@ -283,7 +283,7 @@ export default function PrintQueuePage() {
                   pagedRows.map(eq => (
                     <TableRow
                       key={eq.equipment_id}
-                      className={`hover:bg-gray-50 cursor-pointer ${selected.has(eq.equipment_id) ? 'bg-blue-50' : ''}`}
+                      className={`hover:bg-gray-50 cursor-pointer ${selected.has(eq.equipment_id) ? 'bg-blue-50 dark:bg-blue-950/40' : ''}`}
                       onClick={() => toggleOne(eq.equipment_id)}
                     >
                       <TableCell onClick={e => e.stopPropagation()}>
@@ -301,7 +301,7 @@ export default function PrintQueuePage() {
                       <TableCell><StatusBadge status={eq.photo_status} /></TableCell>
                       <TableCell>
                         {eq.signed_placard_url
-                          ? <span className="text-[11px] font-semibold text-emerald-700">✓ Signed</span>
+                          ? <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">✓ Signed</span>
                           : <span className="text-[11px] text-gray-400">—</span>
                         }
                       </TableCell>
@@ -311,7 +311,7 @@ export default function PrintQueuePage() {
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={e => e.stopPropagation()}
-                          className="text-blue-600 hover:underline text-sm"
+                          className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
                         >
                           View PDF
                         </a>

@@ -18,9 +18,9 @@ import { DepartmentPicker } from '@/components/DepartmentPicker'
 // between needing a written permit + attendant + atmospheric tests and not.
 function ClassificationBadge({ value }: { value: ConfinedSpaceClassification }) {
   const cls =
-    value === 'permit_required' ? 'bg-rose-100 text-rose-800'
-  : value === 'reclassified'    ? 'bg-amber-100 text-amber-800'
-  :                                'bg-slate-100 text-slate-700'
+    value === 'permit_required' ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200'
+  : value === 'reclassified'    ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200'
+  :                                'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${cls}`}>
       {CLASSIFICATION_LABELS[value]}
@@ -79,8 +79,8 @@ export default function ConfinedSpacesPage() {
   if (loadError) {
     return (
       <div className="max-w-5xl mx-auto px-4 py-10 text-center">
-        <p className="text-sm font-semibold text-slate-700 mb-1">Could not load confined spaces.</p>
-        <p className="text-xs text-slate-500 mb-4">Migration 009 may not be applied yet — check the Supabase SQL Editor.</p>
+        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Could not load confined spaces.</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Migration 009 may not be applied yet — check the Supabase SQL Editor.</p>
         <button
           type="button"
           onClick={() => { setLoading(true); load() }}
@@ -96,15 +96,15 @@ export default function ConfinedSpacesPage() {
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Confined Spaces</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Confined Spaces</h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Permit-required confined spaces inventory · OSHA 29 CFR 1910.146
           </p>
         </div>
         <div className="flex items-center gap-2 self-start">
           <Link
             href="/confined-spaces/import"
-            className="px-3 py-2 rounded-lg border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors"
           >
             Import CSV
           </Link>
@@ -128,15 +128,15 @@ export default function ConfinedSpacesPage() {
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Search by ID, description, or department…"
-            className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
           />
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">⌕</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 text-sm">⌕</span>
           {query && (
             <button
               type="button"
               onClick={() => setQuery('')}
               aria-label="Clear search"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-sm px-1"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 text-sm px-1"
             >
               ×
             </button>
@@ -154,39 +154,39 @@ export default function ConfinedSpacesPage() {
       )}
 
       {loading ? (
-        <div className="py-12 text-center text-sm text-slate-400">Loading…</div>
+        <div className="py-12 text-center text-sm text-slate-400 dark:text-slate-500">Loading…</div>
       ) : visible.length === 0 ? (
         <div className="py-12 text-center space-y-2">
           {spaces.length === 0 ? (
             <>
-              <p className="text-sm font-semibold text-slate-700">No confined spaces yet.</p>
-              <p className="text-xs text-slate-400">Add your first space to start managing entry permits.</p>
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">No confined spaces yet.</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">Add your first space to start managing entry permits.</p>
             </>
           ) : (
             <>
-              <p className="text-sm font-semibold text-slate-700">No spaces match your filter.</p>
-              <p className="text-xs text-slate-400">Try a different search term or clear the department filter.</p>
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">No spaces match your filter.</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">Try a different search term or clear the department filter.</p>
             </>
           )}
         </div>
       ) : (
-        <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white overflow-hidden">
+        <ul className="divide-y divide-slate-100 dark:divide-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden">
           {visible.map(s => (
             <li key={s.space_id}>
               <Link
                 href={`/confined-spaces/${encodeURIComponent(s.space_id)}`}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors"
+                className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors"
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-sm font-bold text-slate-900">{s.space_id}</span>
+                    <span className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">{s.space_id}</span>
                     <ClassificationBadge value={s.classification} />
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                       {SPACE_TYPE_LABELS[s.space_type]}
                     </span>
                   </div>
-                  <p className="text-sm text-slate-700 truncate mt-0.5">{s.description}</p>
-                  <p className="text-[11px] text-slate-400">{s.department}</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-300 truncate mt-0.5">{s.description}</p>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500">{s.department}</p>
                 </div>
                 <span className="text-slate-300 text-lg">›</span>
               </Link>
@@ -220,7 +220,7 @@ function DeptChip({ label, active, onClick }: { label: string; active: boolean; 
       className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
         active
           ? 'bg-brand-navy text-white'
-          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
       }`}
     >
       {label}
@@ -289,14 +289,14 @@ function AddSpaceDialog({ existingIds, knownDepartments, onClose, onAdded }: Add
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/40">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-5 space-y-4">
+      <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-5 space-y-4">
         <header className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900">Add Confined Space</h2>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Add Confined Space</h2>
           <button
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="text-slate-400 hover:text-slate-600 text-lg leading-none px-1"
+            className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 text-lg leading-none px-1"
             aria-label="Close"
           >
             ×
@@ -310,10 +310,10 @@ function AddSpaceDialog({ existingIds, knownDepartments, onClose, onAdded }: Add
               value={spaceId}
               onChange={e => setSpaceId(e.target.value)}
               autoFocus
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             />
             {duplicate && (
-              <p className="text-[11px] text-rose-600 mt-1">A space with this ID already exists.</p>
+              <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">A space with this ID already exists.</p>
             )}
           </Field>
 
@@ -323,7 +323,7 @@ function AddSpaceDialog({ existingIds, knownDepartments, onClose, onAdded }: Add
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="South side mixing tank #4"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             />
           </Field>
 
@@ -341,7 +341,7 @@ function AddSpaceDialog({ existingIds, knownDepartments, onClose, onAdded }: Add
               <select
                 value={spaceType}
                 onChange={e => setSpaceType(e.target.value as ConfinedSpaceType)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
               >
                 {Object.entries(SPACE_TYPE_LABELS).map(([k, label]) => (
                   <option key={k} value={k}>{label}</option>
@@ -353,7 +353,7 @@ function AddSpaceDialog({ existingIds, knownDepartments, onClose, onAdded }: Add
               <select
                 value={classification}
                 onChange={e => setClassification(e.target.value as ConfinedSpaceClassification)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
               >
                 {Object.entries(CLASSIFICATION_LABELS).map(([k, label]) => (
                   <option key={k} value={k}>{label}</option>
@@ -364,7 +364,7 @@ function AddSpaceDialog({ existingIds, knownDepartments, onClose, onAdded }: Add
         </div>
 
         {serverError && (
-          <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-md px-3 py-2">{serverError}</p>
+          <p className="text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">{serverError}</p>
         )}
 
         <div className="flex items-center justify-end gap-2 pt-1">
@@ -372,7 +372,7 @@ function AddSpaceDialog({ existingIds, knownDepartments, onClose, onAdded }: Add
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"
+            className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200"
           >
             Cancel
           </button>
@@ -393,9 +393,9 @@ function AddSpaceDialog({ existingIds, knownDepartments, onClose, onAdded }: Add
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-semibold text-slate-600">
+      <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
         {label}
-        {hint && <span className="text-slate-400 font-normal ml-1.5">{hint}</span>}
+        {hint && <span className="text-slate-400 dark:text-slate-500 font-normal ml-1.5">{hint}</span>}
       </label>
       {children}
     </div>

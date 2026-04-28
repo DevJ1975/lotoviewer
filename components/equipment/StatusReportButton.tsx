@@ -49,12 +49,12 @@ export default function StatusReportButton({ equipment, decommissioned }: Props)
         disabled={busy}
         title="Generate Status Report PDF"
         aria-label="Generate Status Report PDF"
-        className="text-slate-400 hover:text-brand-navy hover:bg-slate-100 rounded-md w-7 h-7 flex items-center justify-center transition-colors disabled:opacity-40"
+        className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors disabled:opacity-40"
       >
         {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
       </button>
       {error && (
-        <p className="absolute left-0 top-full mt-1 w-48 text-[10px] text-rose-500 font-medium bg-white border border-rose-200 rounded-md px-2 py-1 shadow-sm z-10">
+        <p className="absolute left-0 top-full mt-1 w-48 text-[10px] text-rose-500 font-medium bg-white dark:bg-slate-900 border border-rose-200 rounded-md px-2 py-1 shadow-sm z-10">
           {error}
         </p>
       )}

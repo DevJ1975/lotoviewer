@@ -125,15 +125,15 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
       className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
       onMouseDown={e => { if (e.target === e.currentTarget && !busy) onClose() }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="px-6 pt-5 pb-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900">Batch Print by Department</h2>
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="px-6 pt-5 pb-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Batch Print by Department</h2>
           <button
             type="button"
             onClick={onClose}
             disabled={busy}
             aria-label="Close"
-            className="text-slate-400 hover:text-slate-600 text-xl leading-none disabled:opacity-40"
+            className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 text-xl leading-none disabled:opacity-40"
           >
             ×
           </button>
@@ -141,13 +141,13 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
 
         <div className="px-6 py-5 space-y-4">
           <div className="space-y-1.5">
-            <label htmlFor="batch-dept" className="text-xs font-semibold text-slate-600">Department</label>
+            <label htmlFor="batch-dept" className="text-xs font-semibold text-slate-600 dark:text-slate-300">Department</label>
             <select
               id="batch-dept"
               value={dept}
               onChange={e => setDept(e.target.value)}
               disabled={busy}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
             >
               <option value="">Select a department…</option>
               {departments.map(d => <option key={d} value={d}>{d}</option>)}
@@ -155,13 +155,13 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
           </div>
 
           {dept && (
-            <div className="bg-slate-50 rounded-lg px-4 py-3 text-sm">
-              <p className="text-slate-700">
+            <div className="bg-slate-50 dark:bg-slate-900/40 rounded-lg px-4 py-3 text-sm">
+              <p className="text-slate-700 dark:text-slate-300">
                 <span className="font-semibold">{deptEquipment.length}</span> equipment items
-                <span className="text-slate-400"> · </span>
+                <span className="text-slate-400 dark:text-slate-500"> · </span>
                 <span className="font-semibold">{withPhotos}</span> with photos
               </p>
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                 Output: {deptEquipment.length * 2} pages (English + Spanish per item)
               </p>
             </div>
@@ -170,12 +170,12 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
           {(phase === 'fetching' || phase === 'rendering') && (
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-slate-700">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
                   {phase === 'fetching' ? 'Fetching energy steps…' : `Rendering PDF (${progress}%)`}
                 </span>
-                {phase === 'rendering' && <span className="text-slate-400 tabular-nums">{progress}%</span>}
+                {phase === 'rendering' && <span className="text-slate-400 dark:text-slate-500 tabular-nums">{progress}%</span>}
               </div>
-              <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+              <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                 <div
                   className="h-full bg-brand-navy transition-all"
                   style={{ width: `${phase === 'rendering' ? progress : 10}%` }}
@@ -185,13 +185,13 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
           )}
 
           {phase === 'done' && (
-            <p className="text-sm font-semibold text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">
+            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg px-3 py-2">
               ✓ PDF downloaded.
             </p>
           )}
 
           {phase === 'error' && errorMsg && (
-            <p className="text-sm font-semibold text-rose-700 bg-rose-50 rounded-lg px-3 py-2">
+            <p className="text-sm font-semibold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg px-3 py-2">
               {errorMsg}
             </p>
           )}
@@ -202,7 +202,7 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 disabled:opacity-40"
+            className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200 disabled:opacity-40"
           >
             {phase === 'done' ? 'Close' : 'Cancel'}
           </button>

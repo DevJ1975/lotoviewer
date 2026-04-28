@@ -187,7 +187,7 @@ export default function PermitStatusBoard() {
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
             Permit Status Board
           </h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">
             Live status of permit-required confined-space entries · OSHA 29 CFR 1910.146
           </p>
         </div>
@@ -195,7 +195,7 @@ export default function PermitStatusBoard() {
           <p className="text-3xl sm:text-4xl font-mono font-bold">
             {new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </p>
-          <p className={`text-[11px] ${isStale ? 'text-rose-400 font-bold' : 'text-slate-500'}`}>
+          <p className={`text-[11px] ${isStale ? 'text-rose-400 font-bold' : 'text-slate-500 dark:text-slate-400'}`}>
             {isStale && '⚠ STALE · '}
             Refreshed {Math.floor(refreshAgeMs / 1000)}s ago · auto every 30s
           </p>
@@ -253,7 +253,7 @@ export default function PermitStatusBoard() {
                 </div>
                 <div className="text-right">
                   <p className="text-[11px] text-rose-300 uppercase tracking-widest font-bold">Expired</p>
-                  <p className="text-sm text-slate-400">{new Date(p.expires_at).toLocaleString()}</p>
+                  <p className="text-sm text-slate-400 dark:text-slate-500">{new Date(p.expires_at).toLocaleString()}</p>
                 </div>
                 <Link
                   href={`/confined-spaces/${encodeURIComponent(p.space_id)}/permits/${p.id}`}
@@ -269,13 +269,13 @@ export default function PermitStatusBoard() {
 
       {/* Active permit grid */}
       {loading ? (
-        <div className="flex items-center justify-center py-24 text-slate-400">
+        <div className="flex items-center justify-center py-24 text-slate-400 dark:text-slate-500">
           <div className="w-12 h-12 border-4 border-slate-700 border-t-white rounded-full animate-spin" />
         </div>
       ) : active.length === 0 ? (
         <div className="bg-slate-900/40 rounded-xl border border-slate-800 p-12 text-center">
           <p className="text-2xl text-slate-300 font-bold">No active permits</p>
-          <p className="text-sm text-slate-500 mt-2">
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
             When a permit is signed and active, it appears here with a live countdown.
           </p>
         </div>
@@ -285,7 +285,7 @@ export default function PermitStatusBoard() {
         </section>
       )}
 
-      <footer className="text-[11px] text-slate-600 text-center pt-4">
+      <footer className="text-[11px] text-slate-600 dark:text-slate-300 text-center pt-4">
         Soteria Field · {active.length + expired.length} permit{active.length + expired.length === 1 ? '' : 's'} on display
       </footer>
     </div>
@@ -305,7 +305,7 @@ function Headline({ label, value, tone }: { label: string; value: number; tone: 
   :                       'text-white'
   return (
     <div className={`rounded-xl border-2 ${cls} px-5 py-4`}>
-      <p className="text-[11px] sm:text-xs uppercase tracking-widest text-slate-400 font-bold">{label}</p>
+      <p className="text-[11px] sm:text-xs uppercase tracking-widest text-slate-400 dark:text-slate-500 font-bold">{label}</p>
       <p className={`text-5xl sm:text-6xl font-black tabular-nums mt-1 ${numCls}`}>{value}</p>
     </div>
   )
@@ -331,14 +331,14 @@ function PermitCard({ permit, now }: { permit: PermitWithSpace; now: number }) {
   return (
     <Link
       href={`/confined-spaces/${encodeURIComponent(permit.space_id)}/permits/${permit.id}`}
-      className={`rounded-xl border-2 ${cardCls} p-4 sm:p-5 space-y-3 hover:bg-white/5 transition-colors block`}
+      className={`rounded-xl border-2 ${cardCls} p-4 sm:p-5 space-y-3 hover:bg-white/5 dark:hover:bg-slate-900/5 transition-colors block`}
     >
       <header className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-mono font-bold tracking-wider text-slate-300 text-sm">{permit.serial}</p>
           <p className="text-lg sm:text-xl font-bold text-white mt-0.5">{permit.space_id}</p>
           {permit.space?.description && (
-            <p className="text-xs text-slate-400 truncate">{permit.space.description}</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{permit.space.description}</p>
           )}
         </div>
         {reading && <ReadingPill status={reading.status} />}
@@ -347,14 +347,14 @@ function PermitCard({ permit, now }: { permit: PermitWithSpace; now: number }) {
       <div className={`text-5xl sm:text-6xl font-black tabular-nums font-mono ${timerCls} text-center py-2`}>
         {countdown.label}
       </div>
-      <p className="text-[10px] text-slate-500 text-center uppercase tracking-widest -mt-2">
+      <p className="text-[10px] text-slate-500 dark:text-slate-400 text-center uppercase tracking-widest -mt-2">
         Time remaining · expires {new Date(permit.expires_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
       </p>
 
       <RosterRow label={`Entrants (${permit.entrants.length})`} names={permit.entrants} tone="entrant" />
       <RosterRow label={`Attendant${permit.attendants.length === 1 ? '' : 's'}`} names={permit.attendants} tone="attendant" />
 
-      <p className="text-[11px] text-slate-400 truncate" title={permit.purpose}>
+      <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate" title={permit.purpose}>
         <span className="font-semibold text-slate-300">Purpose:</span> {permit.purpose}
       </p>
     </Link>
@@ -365,9 +365,9 @@ function RosterRow({ label, names, tone }: { label: string; names: string[]; ton
   const dotCls = tone === 'entrant' ? 'bg-sky-400' : 'bg-violet-400'
   return (
     <div>
-      <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">{label}</p>
+      <p className="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-400 font-bold mb-1">{label}</p>
       {names.length === 0 ? (
-        <p className="text-sm text-slate-500 italic">— none recorded —</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400 italic">— none recorded —</p>
       ) : (
         <ul className="flex flex-wrap gap-1.5">
           {names.map((n, i) => (

@@ -64,24 +64,24 @@ export default function ReviewModal({ department, onSubmit, onClose, onApproved 
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
       onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         {done ? (
           <div className="flex flex-col items-center justify-center py-16 px-8 gap-4 text-center">
-            <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center text-2xl">✓</div>
-            <p className="text-lg font-semibold text-slate-800">Review Submitted</p>
-            <p className="text-sm text-slate-500">Signed off by {name}</p>
+            <div className="w-14 h-14 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-2xl">✓</div>
+            <p className="text-lg font-semibold text-slate-800 dark:text-slate-200">Review Submitted</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Signed off by {name}</p>
           </div>
         ) : (
           <>
             {/* Header */}
-            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100 dark:border-slate-800">
               <div>
-                <h2 className="text-base font-semibold text-slate-900">Department Sign-Off</h2>
-                <p className="text-xs text-slate-400 mt-0.5">{department}</p>
+                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Department Sign-Off</h2>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{department}</p>
               </div>
               <button
                 onClick={onClose}
-                className="text-slate-400 hover:text-slate-600 transition-colors text-xl leading-none"
+                className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors text-xl leading-none"
                 aria-label="Close"
               >
                 ×
@@ -97,7 +97,7 @@ export default function ReviewModal({ department, onSubmit, onClose, onApproved 
                   className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${
                     approved
                       ? 'bg-emerald-500 border-emerald-500 text-white'
-                      : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                      : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'
                   }`}
                 >
                   ✓ Approved
@@ -107,7 +107,7 @@ export default function ReviewModal({ department, onSubmit, onClose, onApproved 
                   className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${
                     !approved
                       ? 'bg-rose-500 border-rose-500 text-white'
-                      : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                      : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'
                   }`}
                 >
                   ✗ Needs Action
@@ -116,7 +116,7 @@ export default function ReviewModal({ department, onSubmit, onClose, onApproved 
 
               {/* Name */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-600" htmlFor="reviewer-name">
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300" htmlFor="reviewer-name">
                   Full Name <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -125,14 +125,14 @@ export default function ReviewModal({ department, onSubmit, onClose, onApproved 
                   value={name}
                   onChange={e => setName(e.target.value)}
                   placeholder="Your full name"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
                 />
               </div>
 
               {/* Email */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-600" htmlFor="reviewer-email">
-                  Email <span className="text-slate-400 font-normal">(optional)</span>
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300" htmlFor="reviewer-email">
+                  Email <span className="text-slate-400 dark:text-slate-500 font-normal">(optional)</span>
                 </label>
                 <input
                   id="reviewer-email"
@@ -140,14 +140,14 @@ export default function ReviewModal({ department, onSubmit, onClose, onApproved 
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="your@email.com"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
                 />
               </div>
 
               {/* Notes */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-600" htmlFor="reviewer-notes">
-                  Notes <span className="text-slate-400 font-normal">(optional)</span>
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300" htmlFor="reviewer-notes">
+                  Notes <span className="text-slate-400 dark:text-slate-500 font-normal">(optional)</span>
                 </label>
                 <textarea
                   id="reviewer-notes"
@@ -155,26 +155,26 @@ export default function ReviewModal({ department, onSubmit, onClose, onApproved 
                   onChange={e => setNotes(e.target.value)}
                   rows={2}
                   placeholder="Any observations or follow-up items…"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
                 />
               </div>
 
               {/* Signature */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-600">
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
                     Signature <span className="text-rose-500">*</span>
                   </label>
                   <button
                     onClick={() => sigRef.current?.clear()}
-                    className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                    className="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
                   >
                     Clear
                   </button>
                 </div>
                 <SignaturePad ref={sigRef} onChange={isEmpty => setSigEmpty(isEmpty)} />
                 {sigEmpty && (
-                  <p className="text-[11px] text-slate-400">Draw your signature above to continue</p>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500">Draw your signature above to continue</p>
                 )}
               </div>
 
@@ -187,7 +187,7 @@ export default function ReviewModal({ department, onSubmit, onClose, onApproved 
             <div className="px-6 pb-6 flex items-center gap-3 justify-end">
               <button
                 onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
               >
                 Cancel
               </button>

@@ -28,7 +28,7 @@ export default function UserMenu() {
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-white/10 transition-colors"
+        className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-white/10 dark:hover:bg-slate-900/10 transition-colors"
       >
         <span className="w-7 h-7 rounded-full bg-brand-yellow text-brand-navy text-xs font-bold flex items-center justify-center">
           {(profile?.full_name?.[0] ?? email[0]).toUpperCase()}

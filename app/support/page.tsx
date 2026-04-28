@@ -102,7 +102,7 @@ export default function SupportPage() {
 
       {submitted ? (
         <section className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 rounded-xl p-6 text-center space-y-3">
-          <CheckCircle2 className="h-8 w-8 text-emerald-600 mx-auto" />
+          <CheckCircle2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400 mx-auto" />
           <div>
             <p className="text-base font-bold text-emerald-900 dark:text-emerald-100">Report sent.</p>
             <p className="text-xs text-emerald-900 dark:text-emerald-100/80 mt-1">

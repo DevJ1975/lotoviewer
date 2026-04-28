@@ -328,9 +328,9 @@ export default function DecommissionPage() {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center px-6 max-w-sm">
-          <div className="w-14 h-14 rounded-full bg-rose-100 flex items-center justify-center text-2xl mx-auto mb-3">⚠</div>
-          <p className="text-sm font-semibold text-slate-700 mb-1">Could not load equipment</p>
-          <p className="text-xs text-slate-400 mb-4">Please check your connection and try again.</p>
+          <div className="w-14 h-14 rounded-full bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center text-2xl mx-auto mb-3">⚠</div>
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Could not load equipment</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">Please check your connection and try again.</p>
           <button
             type="button"
             onClick={() => { setLoading(true); setLoadError(false); fetchData() }}
@@ -351,17 +351,17 @@ export default function DecommissionPage() {
         <div className="flex items-center gap-3">
           <Link
             href="/loto"
-            className="text-slate-400 hover:text-brand-navy transition-colors"
+            className="text-slate-400 dark:text-slate-500 hover:text-brand-navy transition-colors"
             aria-label="Back to LOTO dashboard"
           >
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div>
-            <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-              <Archive className="h-5 w-5 text-slate-500" />
+            <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Archive className="h-5 w-5 text-slate-500 dark:text-slate-400" />
               Decommission Mode
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Tap a row to retire it. Changes save immediately.
             </p>
           </div>
@@ -369,19 +369,19 @@ export default function DecommissionPage() {
       </header>
 
       {schemaError && (
-        <div role="alert" className="rounded-xl border-2 border-rose-300 bg-rose-50 p-4 text-sm text-rose-900 space-y-2">
+        <div role="alert" className="rounded-xl border-2 border-rose-300 bg-rose-50 dark:bg-rose-950/40 p-4 text-sm text-rose-900 dark:text-rose-100 space-y-2">
           <p className="font-bold flex items-center gap-2">
             <span>⚠</span> Database schema is out of date
           </p>
           <p>
-            The <code className="px-1 py-0.5 rounded bg-rose-100 font-mono text-xs">decommissioned</code> column
+            The <code className="px-1 py-0.5 rounded bg-rose-100 dark:bg-rose-900/40 font-mono text-xs">decommissioned</code> column
             isn&apos;t being returned for any equipment row. Decommission writes will not persist until this is fixed.
           </p>
           <p className="text-xs">
             Open the Supabase SQL editor and run{' '}
-            <code className="px-1 py-0.5 rounded bg-rose-100 font-mono">migrations/002_decommissioned_and_indexes.sql</code>,
+            <code className="px-1 py-0.5 rounded bg-rose-100 dark:bg-rose-900/40 font-mono">migrations/002_decommissioned_and_indexes.sql</code>,
             then reload PostgREST&apos;s schema cache with{' '}
-            <code className="px-1 py-0.5 rounded bg-rose-100 font-mono">NOTIFY pgrst, &apos;reload schema&apos;;</code>
+            <code className="px-1 py-0.5 rounded bg-rose-100 dark:bg-rose-900/40 font-mono">NOTIFY pgrst, &apos;reload schema&apos;;</code>
           </p>
         </div>
       )}
@@ -398,41 +398,41 @@ export default function DecommissionPage() {
           value={decommissionedCount}
           label="Decommissioned"
           valueClass="text-amber-600"
-          bgClass="bg-amber-50"
+          bgClass="bg-amber-50 dark:bg-amber-950/40"
         />
         <CounterTile
           value={equipment.length}
           label="Total"
-          valueClass="text-slate-500"
+          valueClass="text-slate-500 dark:text-slate-400"
           bgClass="bg-muted/40"
         />
       </div>
 
       {/* Search */}
       <div className="relative">
-        <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <Search className="h-4 w-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
         <input
           type="search"
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search equipment"
-          className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
+          className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
         />
       </div>
 
       {/* List */}
       {grouped.length === 0 ? (
-        <div className="flex items-center justify-center h-48 text-slate-400 text-sm">
+        <div className="flex items-center justify-center h-48 text-slate-400 dark:text-slate-500 text-sm">
           {equipment.length === 0
             ? 'No equipment to show.'
             : `No equipment matches "${debounced.trim()}".`}
         </div>
       ) : (
-        <div className="rounded-xl bg-white ring-1 ring-slate-200 overflow-hidden">
+        <div className="rounded-xl bg-white dark:bg-slate-900 ring-1 ring-slate-200 dark:ring-slate-700 overflow-hidden">
           {grouped.map((group, gi) => (
             <section key={group.dept}>
-              <div className={`sticky top-0 z-10 bg-slate-50/95 backdrop-blur px-4 py-2 flex items-center justify-between ${gi > 0 ? 'border-t border-slate-200' : ''}`}>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+              <div className={`sticky top-0 z-10 bg-slate-50/95 dark:bg-slate-900/40/95 backdrop-blur px-4 py-2 flex items-center justify-between ${gi > 0 ? 'border-t border-slate-200 dark:border-slate-700' : ''}`}>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                   {group.dept}
                 </span>
                 <span className="text-xs text-muted-foreground tabular-nums">
@@ -441,7 +441,7 @@ export default function DecommissionPage() {
               </div>
               <ul>
                 {group.rows.map(eq => (
-                  <li key={eq.equipment_id} className="border-t border-slate-100 first:border-t-0">
+                  <li key={eq.equipment_id} className="border-t border-slate-100 dark:border-slate-800 first:border-t-0">
                     <DecommRow
                       eq={eq}
                       pending={pending.has(eq.equipment_id)}
@@ -504,7 +504,7 @@ export default function DecommissionPage() {
               type="button"
               disabled={bulkBusy || effectiveSelected.size === 0}
               onClick={() => bulkApply(false)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white/10 text-white text-sm font-bold disabled:opacity-50 hover:bg-white/20 transition-colors min-h-[40px]"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white/10 dark:bg-slate-900/10 text-white text-sm font-bold disabled:opacity-50 hover:bg-white/20 dark:hover:bg-slate-900/20 transition-colors min-h-[40px]"
             >
               {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArchiveRestore className="h-4 w-4" />}
               Restore
@@ -559,7 +559,7 @@ function DecommRow({ eq, pending, isSelected, onToggle, onSelectChange, onKeyDow
       onClick={onToggle}
       onKeyDown={onKeyDown}
       className={`flex items-center gap-3 px-3 sm:px-4 py-3.5 min-h-[56px] cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/30 focus-visible:ring-inset ${
-        isSelected ? 'bg-brand-navy/5 hover:bg-brand-navy/10' : checked ? 'bg-amber-50/30 hover:bg-amber-50/60' : 'hover:bg-slate-50'
+        isSelected ? 'bg-brand-navy/5 hover:bg-brand-navy/10' : checked ? 'bg-amber-50/30 dark:bg-amber-950/40/30 hover:bg-amber-50/60 dark:hover:bg-amber-950/40/60' : 'hover:bg-slate-50 dark:hover:bg-slate-900/40'
       }`}
     >
       {/* Multi-select checkbox — clicking it does NOT toggle decommissioned */}
@@ -572,7 +572,7 @@ function DecommRow({ eq, pending, isSelected, onToggle, onSelectChange, onKeyDow
           checked={isSelected}
           onChange={e => onSelectChange(e.target.checked)}
           aria-label={`Select ${eq.equipment_id}`}
-          className="h-4 w-4 rounded border-slate-300 text-brand-navy focus:ring-brand-navy/30"
+          className="h-4 w-4 rounded border-slate-300 dark:border-slate-700 text-brand-navy focus:ring-brand-navy/30"
         />
       </label>
       <span
@@ -580,7 +580,7 @@ function DecommRow({ eq, pending, isSelected, onToggle, onSelectChange, onKeyDow
         className={`shrink-0 h-5 w-5 rounded border flex items-center justify-center transition-colors ${
           checked
             ? 'bg-brand-navy border-brand-navy text-white'
-            : 'bg-white border-slate-300'
+            : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700'
         }`}
       >
         {checked && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
@@ -589,12 +589,12 @@ function DecommRow({ eq, pending, isSelected, onToggle, onSelectChange, onKeyDow
         <div className={`font-mono text-sm font-bold truncate ${checked ? 'line-through text-muted-foreground' : 'text-brand-navy'}`}>
           {eq.equipment_id}
         </div>
-        <div className={`text-xs truncate ${checked ? 'line-through text-muted-foreground' : 'text-slate-500'}`}>
+        <div className={`text-xs truncate ${checked ? 'line-through text-muted-foreground' : 'text-slate-500 dark:text-slate-400'}`}>
           {eq.description}
         </div>
       </div>
       {pending && (
-        <Loader2 className="h-4 w-4 text-slate-400 animate-spin shrink-0" aria-label="Saving" />
+        <Loader2 className="h-4 w-4 text-slate-400 dark:text-slate-500 animate-spin shrink-0" aria-label="Saving" />
       )}
     </div>
   )

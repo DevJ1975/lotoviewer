@@ -206,7 +206,7 @@ function ModuleRow({
           {mod.name}
         </span>
         {mod.comingSoon && (
-          <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+          <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
             Coming Soon
           </span>
         )}
@@ -271,7 +271,7 @@ function ChildRow({ child, active, onNavigate }: { child: FeatureDef; active: bo
         {child.name}
       </span>
       {child.comingSoon && (
-        <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+        <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
           Coming Soon
         </span>
       )}

@@ -93,13 +93,13 @@ export default function InstallPrompt() {
       <div
         role="region"
         aria-label="Install Soteria Field"
-        className="fixed left-4 right-4 bottom-4 sm:left-auto sm:right-6 sm:max-w-sm z-40 bg-white rounded-2xl shadow-2xl ring-1 ring-slate-200 p-4 flex items-center gap-3"
+        className="fixed left-4 right-4 bottom-4 sm:left-auto sm:right-6 sm:max-w-sm z-40 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl ring-1 ring-slate-200 dark:ring-slate-700 p-4 flex items-center gap-3"
         style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="w-10 h-10 rounded-xl bg-brand-navy text-brand-yellow font-bold text-sm flex items-center justify-center shrink-0">SL</div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-slate-900">Install LOTO</p>
-          <p className="text-xs text-slate-500">Faster launch and offline access.</p>
+          <p className="text-sm font-bold text-slate-900 dark:text-slate-100">Install LOTO</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Faster launch and offline access.</p>
         </div>
         <button
           type="button"
@@ -112,7 +112,7 @@ export default function InstallPrompt() {
           type="button"
           onClick={handleDismiss}
           aria-label="Dismiss"
-          className="text-slate-400 hover:text-slate-600 p-1 rounded"
+          className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 p-1 rounded"
         >
           <X className="h-4 w-4" />
         </button>
@@ -125,14 +125,14 @@ export default function InstallPrompt() {
       <div
         role="region"
         aria-label="Install LOTO on iOS"
-        className="fixed left-4 right-4 bottom-4 sm:left-auto sm:right-6 sm:max-w-sm z-40 bg-white rounded-2xl shadow-2xl ring-1 ring-slate-200 p-4"
+        className="fixed left-4 right-4 bottom-4 sm:left-auto sm:right-6 sm:max-w-sm z-40 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl ring-1 ring-slate-200 dark:ring-slate-700 p-4"
         style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-xl bg-brand-navy text-brand-yellow font-bold text-sm flex items-center justify-center shrink-0">SL</div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-slate-900">Add LOTO to your Home Screen</p>
-            <p className="text-xs text-slate-500 mt-1 flex items-center gap-1 flex-wrap">
+            <p className="text-sm font-bold text-slate-900 dark:text-slate-100">Add LOTO to your Home Screen</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1 flex-wrap">
               Tap <Share className="h-3.5 w-3.5 inline-block text-blue-500" /> Share, then <span className="font-semibold">Add to Home Screen</span>.
             </p>
           </div>
@@ -140,7 +140,7 @@ export default function InstallPrompt() {
             type="button"
             onClick={handleDismiss}
             aria-label="Dismiss"
-            className="text-slate-400 hover:text-slate-600 p-1 rounded shrink-0"
+            className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 p-1 rounded shrink-0"
           >
             <X className="h-4 w-4" />
           </button>

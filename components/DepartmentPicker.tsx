@@ -55,7 +55,7 @@ export function DepartmentPicker({
       <select
         value={selectValue}
         onChange={e => handleSelect(e.target.value)}
-        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+        className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
       >
         <option value="">— Select a department —</option>
         {knownDepartments.map(d => (

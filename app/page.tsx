@@ -220,7 +220,7 @@ function WeatherCard() {
 
   if (error && !weather) {
     return (
-      <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 min-w-[200px]">
+      <div className="bg-white/10 dark:bg-slate-900/10 backdrop-blur-sm rounded-xl p-4 min-w-[200px]">
         <p className="text-xs text-white/60 uppercase tracking-widest font-bold">Weather</p>
         <p className="text-sm text-white/80 mt-1">{error}</p>
       </div>
@@ -228,7 +228,7 @@ function WeatherCard() {
   }
   if (!weather) {
     return (
-      <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 min-w-[200px]">
+      <div className="bg-white/10 dark:bg-slate-900/10 backdrop-blur-sm rounded-xl p-4 min-w-[200px]">
         <p className="text-xs text-white/60 uppercase tracking-widest font-bold">Weather</p>
         <p className="text-sm text-white/80 mt-1">Loading…</p>
       </div>
@@ -237,7 +237,7 @@ function WeatherCard() {
 
   const { Icon, label } = weatherIconForCode(weather.code)
   return (
-    <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 min-w-[200px]">
+    <div className="bg-white/10 dark:bg-slate-900/10 backdrop-blur-sm rounded-xl p-4 min-w-[200px]">
       <div className="flex items-center gap-3">
         <Icon className="h-10 w-10 text-brand-yellow shrink-0" />
         <div>

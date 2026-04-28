@@ -58,7 +58,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
               onClick={() => setDrawerOpen(true)}
               aria-label="Open navigation"
               aria-expanded={drawerOpen}
-              className="text-white/80 hover:text-white hover:bg-white/10 rounded-md h-10 w-10 flex items-center justify-center transition-colors shrink-0"
+              className="text-white/80 hover:text-white hover:bg-white/10 dark:hover:bg-slate-900/10 rounded-md h-10 w-10 flex items-center justify-center transition-colors shrink-0"
             >
               <Menu className="h-5 w-5" />
             </button>

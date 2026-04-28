@@ -58,13 +58,13 @@ export default function ConfinedSpaceDetailPage() {
   useEffect(() => { load() }, [load])
 
   if (loading) {
-    return <div className="max-w-3xl mx-auto px-4 py-10 text-center text-sm text-slate-400">Loading…</div>
+    return <div className="max-w-3xl mx-auto px-4 py-10 text-center text-sm text-slate-400 dark:text-slate-500">Loading…</div>
   }
 
   if (notFound || !space) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-10 text-center space-y-3">
-        <p className="text-sm font-semibold text-slate-700">Space not found.</p>
+        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Space not found.</p>
         <Link href="/confined-spaces" className="inline-block px-4 py-2 rounded-lg bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 transition-colors">
           Back to list
         </Link>
@@ -77,14 +77,14 @@ export default function ConfinedSpaceDetailPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
       <div className="flex items-center justify-between gap-3">
-        <Link href="/confined-spaces" className="text-sm font-semibold text-slate-500 hover:text-slate-700">
+        <Link href="/confined-spaces" className="text-sm font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300">
           ← Back
         </Link>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setEditOpen(true)}
-            className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors"
           >
             ✎ Edit details
           </button>
@@ -97,18 +97,18 @@ export default function ConfinedSpaceDetailPage() {
         </div>
       </div>
 
-      <header className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
+      <header className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <h1 className="font-mono text-lg font-bold text-slate-900">{space.space_id}</h1>
+          <h1 className="font-mono text-lg font-bold text-slate-900 dark:text-slate-100">{space.space_id}</h1>
           <ClassificationBadge value={space.classification} />
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             {SPACE_TYPE_LABELS[space.space_type]}
           </span>
         </div>
-        <p className="text-sm text-slate-700">{space.description}</p>
-        <p className="text-xs text-slate-500">{space.department}</p>
+        <p className="text-sm text-slate-700 dark:text-slate-300">{space.description}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{space.department}</p>
         {space.entry_dimensions && (
-          <p className="text-xs text-slate-500"><span className="font-semibold">Entry:</span> {space.entry_dimensions}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400"><span className="font-semibold">Entry:</span> {space.entry_dimensions}</p>
         )}
       </header>
 
@@ -133,11 +133,11 @@ export default function ConfinedSpaceDetailPage() {
 
       <Section title="Known Hazards">
         {space.known_hazards.length === 0 ? (
-          <p className="text-xs text-slate-400 italic">None recorded yet.</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 italic">None recorded yet.</p>
         ) : (
           <ul className="flex flex-wrap gap-1.5">
             {space.known_hazards.map(h => (
-              <li key={h} className="px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-[11px] font-semibold text-amber-900">
+              <li key={h} className="px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 text-[11px] font-semibold text-amber-900 dark:text-amber-100">
                 {h}
               </li>
             ))}
@@ -160,35 +160,35 @@ export default function ConfinedSpaceDetailPage() {
 
       {space.isolation_required && (
         <Section title="Isolation Required">
-          <p className="text-sm text-slate-700 whitespace-pre-wrap">{space.isolation_required}</p>
+          <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{space.isolation_required}</p>
         </Section>
       )}
 
       {space.internal_notes && (
         <Section title="Internal Notes" hint="Private — never printed on a permit">
-          <p className="text-sm text-slate-700 whitespace-pre-wrap">{space.internal_notes}</p>
+          <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{space.internal_notes}</p>
         </Section>
       )}
 
       <Section title={`Recent Permits${permits.length > 0 ? ` (${permits.length})` : ''}`}>
         {permits.length === 0 ? (
-          <p className="text-xs text-slate-400 italic">No permits issued yet.</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 italic">No permits issued yet.</p>
         ) : (
-          <ul className="divide-y divide-slate-100 border border-slate-200 rounded-lg overflow-hidden">
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
             {permits.map(p => (
               <li key={p.id}>
                 <Link
                   href={`/confined-spaces/${encodeURIComponent(space.space_id)}/permits/${p.id}`}
-                  className="block px-3 py-2 hover:bg-slate-50 transition-colors"
+                  className="block px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-800 truncate">{p.purpose}</p>
-                      <p className="text-[11px] text-slate-500">
-                        <span className="font-mono font-bold tracking-wider text-slate-600">{p.serial}</span>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">{p.purpose}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        <span className="font-mono font-bold tracking-wider text-slate-600 dark:text-slate-300">{p.serial}</span>
                         {' · '}
                         {new Date(p.started_at).toLocaleString()}
-                        {p.canceled_at && <> · <span className="font-semibold text-slate-700">canceled</span> ({p.cancel_reason})</>}
+                        {p.canceled_at && <> · <span className="font-semibold text-slate-700 dark:text-slate-300">canceled</span> ({p.cancel_reason})</>}
                       </p>
                     </div>
                     <PermitStatusBadge permit={p} />
@@ -222,10 +222,10 @@ export default function ConfinedSpaceDetailPage() {
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <section className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
+    <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-2">
       <header className="flex items-baseline justify-between gap-2">
         <h2 className="text-[11px] font-bold uppercase tracking-wider text-[#214487]">{title}</h2>
-        {hint && <span className="text-[10px] text-slate-400">{hint}</span>}
+        {hint && <span className="text-[10px] text-slate-400 dark:text-slate-500">{hint}</span>}
       </header>
       {children}
     </section>
@@ -234,18 +234,18 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md bg-slate-50 border border-slate-100 px-2 py-1.5">
-      <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="text-sm font-semibold text-slate-800 font-mono">{value}</dd>
+    <div className="rounded-md bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 px-2 py-1.5">
+      <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</dt>
+      <dd className="text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono">{value}</dd>
     </div>
   )
 }
 
 function ClassificationBadge({ value }: { value: ConfinedSpaceClassification }) {
   const cls =
-    value === 'permit_required' ? 'bg-rose-100 text-rose-800'
-  : value === 'reclassified'    ? 'bg-amber-100 text-amber-800'
-  :                                'bg-slate-100 text-slate-700'
+    value === 'permit_required' ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200'
+  : value === 'reclassified'    ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200'
+  :                                'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${cls}`}>
       {CLASSIFICATION_LABELS[value]}
@@ -256,10 +256,10 @@ function ClassificationBadge({ value }: { value: ConfinedSpaceClassification }) 
 function PermitStatusBadge({ permit }: { permit: ConfinedSpacePermit }) {
   const state = permitState(permit)
   const cls =
-    state === 'active'             ? 'bg-emerald-100 text-emerald-800'
-  : state === 'pending_signature'  ? 'bg-amber-100 text-amber-800'
-  : state === 'expired'            ? 'bg-rose-100 text-rose-800'
-  :                                  'bg-slate-100 text-slate-600'
+    state === 'active'             ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200'
+  : state === 'pending_signature'  ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200'
+  : state === 'expired'            ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200'
+  :                                  'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
   const label =
     state === 'active'             ? 'Active'
   : state === 'pending_signature'  ? 'Pending sig'
@@ -389,14 +389,14 @@ function EditDetailsDialog({ space, onClose, onSaved, onDeleted }: EditProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/40 overflow-y-auto py-10">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-5 space-y-4">
+      <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-5 space-y-4">
         <header className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900">Edit Details</h2>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Edit Details</h2>
           <button
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="text-slate-400 hover:text-slate-600 text-lg leading-none px-1"
+            className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 text-lg leading-none px-1"
             aria-label="Close"
           >
             ×
@@ -409,7 +409,7 @@ function EditDetailsDialog({ space, onClose, onSaved, onDeleted }: EditProps) {
               type="text"
               value={description}
               onChange={e => setDescription(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             />
           </Field>
 
@@ -427,7 +427,7 @@ function EditDetailsDialog({ space, onClose, onSaved, onDeleted }: EditProps) {
               <select
                 value={spaceType}
                 onChange={e => setSpaceType(e.target.value as ConfinedSpaceType)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
               >
                 {Object.entries(SPACE_TYPE_LABELS).map(([k, label]) => (
                   <option key={k} value={k}>{label}</option>
@@ -439,7 +439,7 @@ function EditDetailsDialog({ space, onClose, onSaved, onDeleted }: EditProps) {
               <select
                 value={classification}
                 onChange={e => setClassification(e.target.value as ConfinedSpaceClassification)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
               >
                 {Object.entries(CLASSIFICATION_LABELS).map(([k, label]) => (
                   <option key={k} value={k}>{label}</option>
@@ -453,7 +453,7 @@ function EditDetailsDialog({ space, onClose, onSaved, onDeleted }: EditProps) {
               type="text"
               value={entryDimensions}
               onChange={e => setEntryDimensions(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             />
           </Field>
 
@@ -462,13 +462,13 @@ function EditDetailsDialog({ space, onClose, onSaved, onDeleted }: EditProps) {
               rows={3}
               value={internalNotes}
               onChange={e => setInternalNotes(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             />
           </Field>
         </div>
 
         {serverError && (
-          <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-md px-3 py-2">{serverError}</p>
+          <p className="text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">{serverError}</p>
         )}
 
         <div className="flex items-center justify-between gap-2 pt-1">
@@ -476,7 +476,7 @@ function EditDetailsDialog({ space, onClose, onSaved, onDeleted }: EditProps) {
             type="button"
             onClick={handleDecommission}
             disabled={submitting}
-            className="px-3 py-2 text-xs font-semibold text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-md transition-colors disabled:opacity-40"
+            className="px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-md transition-colors disabled:opacity-40"
           >
             Decommission
           </button>
@@ -485,7 +485,7 @@ function EditDetailsDialog({ space, onClose, onSaved, onDeleted }: EditProps) {
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"
+              className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200"
             >
               Cancel
             </button>
@@ -507,9 +507,9 @@ function EditDetailsDialog({ space, onClose, onSaved, onDeleted }: EditProps) {
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-semibold text-slate-600">
+      <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
         {label}
-        {hint && <span className="text-slate-400 font-normal ml-1.5">{hint}</span>}
+        {hint && <span className="text-slate-400 dark:text-slate-500 font-normal ml-1.5">{hint}</span>}
       </label>
       {children}
     </div>

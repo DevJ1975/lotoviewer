@@ -153,7 +153,7 @@ export default function SpacePhotoSlot({ spaceId, slot, label, existingUrl, onUp
         onClick={() => !busy && fileRef.current?.click()}
         disabled={busy}
         aria-label={`Upload ${label}`}
-        className="relative h-48 bg-slate-50 border-2 border-t-0 border-slate-200 rounded-b-lg overflow-hidden group disabled:cursor-wait"
+        className="relative h-48 bg-slate-50 dark:bg-slate-900/40 border-2 border-t-0 border-slate-200 dark:border-slate-700 rounded-b-lg overflow-hidden group disabled:cursor-wait"
       >
         {displayUrl ? (
           <>
@@ -167,13 +167,13 @@ export default function SpacePhotoSlot({ spaceId, slot, label, existingUrl, onUp
               unoptimized
             />
             {busy ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/30 backdrop-blur-[1px]">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/30 dark:bg-slate-900/30 backdrop-blur-[1px]">
                 <div className="w-7 h-7 border-[3px] border-brand-navy/30 border-t-brand-navy rounded-full animate-spin" />
-                <p className="text-xs text-slate-700 font-semibold">{phaseLabel}</p>
+                <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold">{phaseLabel}</p>
               </div>
             ) : (
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                <span className="opacity-0 group-hover:opacity-100 bg-white/95 text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm transition-opacity">
+                <span className="opacity-0 group-hover:opacity-100 bg-white/95 dark:bg-slate-900/95 text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm transition-opacity">
                   Replace
                 </span>
               </div>
@@ -187,16 +187,16 @@ export default function SpacePhotoSlot({ spaceId, slot, label, existingUrl, onUp
         ) : busy ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
             <div className="w-7 h-7 border-[3px] border-brand-navy/30 border-t-brand-navy rounded-full animate-spin" />
-            <p className="text-xs text-slate-500 font-medium">{phaseLabel}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{phaseLabel}</p>
           </div>
         ) : errorState ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-3 text-center">
             <p className="text-rose-500 text-xs font-semibold">Upload failed</p>
-            <p className="text-[11px] text-slate-500">{errorState}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">{errorState}</p>
             <span className="text-[11px] text-brand-navy font-semibold">Tap to try again</span>
           </div>
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-400 group-hover:text-brand-navy transition-colors">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-400 dark:text-slate-500 group-hover:text-brand-navy transition-colors">
             <div className="w-10 h-10 rounded-full border-2 border-current flex items-center justify-center text-xl">+</div>
             <p className="text-xs font-semibold">Click to upload</p>
             <p className="text-[10px]">JPEG, PNG, or HEIC</p>

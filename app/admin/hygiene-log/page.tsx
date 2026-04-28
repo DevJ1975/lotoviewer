@@ -19,13 +19,13 @@ import type { HygieneAction, HygieneLogRow } from '@/lib/types'
 const PAGE_SIZE = 500   // hygiene runs produce hundreds of rows at most
 
 const ACTION_STYLE: Record<HygieneAction, string> = {
-  decommission:    'bg-rose-50    text-rose-800    ring-rose-200',
-  rename:          'bg-blue-50    text-blue-800    ring-blue-200',
-  note_append:     'bg-slate-50   text-slate-700   ring-slate-200',
-  fk_repair:       'bg-amber-50   text-amber-800   ring-amber-200',
-  orphan_detected: 'bg-rose-100   text-rose-900    ring-rose-300 font-bold',
-  snapshot:        'bg-emerald-50 text-emerald-800 ring-emerald-200',
-  error:           'bg-rose-200   text-rose-900    ring-rose-400 font-bold',
+  decommission:    'bg-rose-50 dark:bg-rose-950/40    text-rose-800 dark:text-rose-200    ring-rose-200',
+  rename:          'bg-blue-50 dark:bg-blue-950/40    text-blue-800 dark:text-blue-200    ring-blue-200',
+  note_append:     'bg-slate-50 dark:bg-slate-900/40   text-slate-700 dark:text-slate-300   ring-slate-200 dark:ring-slate-700',
+  fk_repair:       'bg-amber-50 dark:bg-amber-950/40   text-amber-800 dark:text-amber-200   ring-amber-200',
+  orphan_detected: 'bg-rose-100 dark:bg-rose-900/40   text-rose-900 dark:text-rose-100    ring-rose-300 font-bold',
+  snapshot:        'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 ring-emerald-200',
+  error:           'bg-rose-200   text-rose-900 dark:text-rose-100    ring-rose-400 font-bold',
 }
 
 const ALL_ACTIONS: HygieneAction[] = [
@@ -110,24 +110,24 @@ export default function HygieneLogPage() {
   }, [rows, search, sectionFilter, actionFilter])
 
   if (authLoading) {
-    return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+    return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
   if (!profile?.is_admin) {
-    return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500">Admins only.</div>
+    return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
       <header className="flex items-center gap-3">
-        <Link href="/" className="text-slate-400 hover:text-brand-navy" aria-label="Back to home">
+        <Link href="/" className="text-slate-400 dark:text-slate-500 hover:text-brand-navy" aria-label="Back to home">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <Wrench className="h-5 w-5 text-slate-500" />
+          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Wrench className="h-5 w-5 text-slate-500 dark:text-slate-400" />
             Data Hygiene Log
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             One-off LOTO data-hygiene operations — decommissions, renames, FK repairs, batch note appends.
           </p>
         </div>
@@ -139,7 +139,7 @@ export default function HygieneLogPage() {
           type="button"
           onClick={() => downloadHygieneCsv(filtered)}
           disabled={filtered.length === 0}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900/40 disabled:opacity-50 transition-colors"
         >
           <Download className="h-3.5 w-3.5" />
           Export {filtered.length} row{filtered.length === 1 ? '' : 's'} (CSV)
@@ -147,19 +147,19 @@ export default function HygieneLogPage() {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-3">
         <div className="relative">
-          <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="h-4 w-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="search"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Filter by equipment_id, reason, or section…"
-            className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 pl-9 pr-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
           />
         </div>
         <select
           value={sectionFilter}
           onChange={e => setSectionFilter(e.target.value)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
         >
           <option value="">All sections</option>
           {sections.map(s => <option key={s} value={s}>{s}</option>)}
@@ -167,7 +167,7 @@ export default function HygieneLogPage() {
         <select
           value={actionFilter}
           onChange={e => setActionFilter(e.target.value as '' | HygieneAction)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
         >
           <option value="">All actions</option>
           {ALL_ACTIONS.map(a => <option key={a} value={a}>{a}</option>)}
@@ -175,7 +175,7 @@ export default function HygieneLogPage() {
         <select
           value={dateScope}
           onChange={e => setDateScope(e.target.value as DateScope)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
         >
           {(['today','7d','30d','all'] as DateScope[]).map(s => (
             <option key={s} value={s}>{DATE_SCOPE_LABEL[s]}</option>
@@ -184,25 +184,25 @@ export default function HygieneLogPage() {
       </div>
 
       {/* Table */}
-      <section className="bg-white rounded-xl ring-1 ring-slate-200 overflow-hidden">
+      <section className="bg-white dark:bg-slate-900 rounded-xl ring-1 ring-slate-200 dark:ring-slate-700 overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
+          <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-slate-400 dark:text-slate-500" /></div>
         ) : loadError ? (
           <div className="px-5 py-6 space-y-1">
-            <p className="text-sm font-semibold text-rose-700">{loadError}</p>
-            <p className="text-xs text-slate-500">
+            <p className="text-sm font-semibold text-rose-700 dark:text-rose-300">{loadError}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               If this says <span className="font-mono">relation &quot;loto_hygiene_log&quot; does not exist</span>, run the
               data-hygiene SQL script first — the table is created in Section -1.
             </p>
           </div>
         ) : filtered.length === 0 ? (
-          <p className="px-5 py-10 text-sm text-slate-500 text-center">
+          <p className="px-5 py-10 text-sm text-slate-500 dark:text-slate-400 text-center">
             {rows.length === 0
               ? 'No hygiene operations logged yet.'
               : 'No rows match your filters.'}
           </p>
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {filtered.map(r => {
               const isOpen = expandedId === r.id
               return (
@@ -210,34 +210,34 @@ export default function HygieneLogPage() {
                   <button
                     type="button"
                     onClick={() => setExpandedId(isOpen ? null : r.id)}
-                    className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3"
+                    className="w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-900/40 flex items-center gap-3"
                     aria-expanded={isOpen}
                   >
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ring-1 shrink-0 tracking-wider ${ACTION_STYLE[r.action]}`}>
                       {r.action}
                     </span>
-                    <span className="font-mono text-xs text-slate-700 truncate min-w-0 max-w-[200px] shrink-0">
+                    <span className="font-mono text-xs text-slate-700 dark:text-slate-300 truncate min-w-0 max-w-[200px] shrink-0">
                       {r.section}
                     </span>
-                    <span className="font-mono text-xs text-slate-500 truncate flex-1 min-w-0">
-                      {r.equipment_id ?? <span className="italic text-slate-400">—</span>}
+                    <span className="font-mono text-xs text-slate-500 dark:text-slate-400 truncate flex-1 min-w-0">
+                      {r.equipment_id ?? <span className="italic text-slate-400 dark:text-slate-500">—</span>}
                     </span>
-                    <span className="hidden md:inline text-xs text-slate-500 truncate max-w-[400px] shrink-0">
+                    <span className="hidden md:inline text-xs text-slate-500 dark:text-slate-400 truncate max-w-[400px] shrink-0">
                       {r.reason}
                     </span>
-                    <span className="text-xs text-slate-400 tabular-nums whitespace-nowrap shrink-0">
+                    <span className="text-xs text-slate-400 dark:text-slate-500 tabular-nums whitespace-nowrap shrink-0">
                       {new Date(r.ran_at).toLocaleString()}
                     </span>
                   </button>
                   {isOpen && (
-                    <div className="px-4 pb-4 space-y-3 bg-slate-50/40 border-t border-slate-100">
+                    <div className="px-4 pb-4 space-y-3 bg-slate-50/40 dark:bg-slate-900/40/40 border-t border-slate-100 dark:border-slate-800">
                       <DetailField label="Reason">
-                        <p className="text-xs text-slate-700">{r.reason}</p>
+                        <p className="text-xs text-slate-700 dark:text-slate-300">{r.reason}</p>
                       </DetailField>
                       <DetailField label="Detail">
                         {r.detail
-                          ? <pre className="text-[11px] font-mono text-slate-700 bg-white rounded-md p-3 ring-1 ring-slate-200 overflow-auto max-h-72">{JSON.stringify(r.detail, null, 2)}</pre>
-                          : <p className="text-xs text-slate-400 italic">none</p>}
+                          ? <pre className="text-[11px] font-mono text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900 rounded-md p-3 ring-1 ring-slate-200 dark:ring-slate-700 overflow-auto max-h-72">{JSON.stringify(r.detail, null, 2)}</pre>
+                          : <p className="text-xs text-slate-400 dark:text-slate-500 italic">none</p>}
                       </DetailField>
                     </div>
                   )}
@@ -256,7 +256,7 @@ export default function HygieneLogPage() {
 function DetailField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">{label}</p>
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">{label}</p>
       {children}
     </div>
   )

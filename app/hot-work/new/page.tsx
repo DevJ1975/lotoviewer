@@ -190,7 +190,7 @@ export default function NewHotWorkPermitPage() {
 
       <div className="space-y-1">
         <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-          <Flame className="h-5 w-5 text-rose-600" />
+          <Flame className="h-5 w-5 text-rose-600 dark:text-rose-400" />
           New Hot Work Permit
         </h1>
         <p className="text-xs text-slate-500 dark:text-slate-400">

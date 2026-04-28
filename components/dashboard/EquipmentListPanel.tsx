@@ -125,15 +125,15 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
   ]
 
   return (
-    <section className="flex-1 min-w-0 bg-slate-50 flex flex-col">
+    <section className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-900/40 flex flex-col">
       {/* Header */}
-      <div className="border-b border-slate-200 bg-white p-4 space-y-3">
+      <div className="border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
               {selectedDept ?? 'All Equipment'}
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
               {sorted.length} {sorted.length === 1 ? 'item' : 'items'}
               {debounced.trim() && ` matching "${debounced}"`}
             </p>
@@ -141,7 +141,7 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
           <button
             type="button"
             onClick={() => setSort(s => s === 'id' ? 'status' : 'id')}
-            className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors"
             title="Toggle sort order"
           >
             Sort: {sort === 'id' ? 'ID ↑' : 'Status'}
@@ -153,7 +153,7 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by ID, description, or department…"
-          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
+          className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
         />
 
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mb-1">
@@ -165,7 +165,7 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
               className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
                 filter === b.value
                   ? 'bg-brand-navy text-white border-brand-navy'
-                  : 'border-slate-200 text-slate-600 hover:bg-slate-100'
+                  : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               {b.label} <span className="opacity-70 tabular-nums">({counts[b.value]})</span>
@@ -177,14 +177,14 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
       {/* List */}
       <div className="flex-1 overflow-y-auto">
         {sorted.length === 0 ? (
-          <div className="flex items-center justify-center h-48 text-slate-400 text-sm">
+          <div className="flex items-center justify-center h-48 text-slate-400 dark:text-slate-500 text-sm">
             No equipment matches your filters.
           </div>
         ) : (
           grouped.map(group => (
             <div key={group.dept}>
               {!selectedDept && (
-                <div className="sticky top-0 z-10 bg-slate-50/90 backdrop-blur px-4 py-2 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <div className="sticky top-0 z-10 bg-slate-50/90 dark:bg-slate-900/40/90 backdrop-blur px-4 py-2 border-b border-slate-200 dark:border-slate-700 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   {group.dept} · {group.rows.length}
                 </div>
               )}
@@ -217,10 +217,10 @@ function StatusDot({ status }: { status: PhotoStatus }) {
 
 function StatusPill({ status }: { status: PhotoStatus }) {
   const style = status === 'complete'
-    ? 'bg-emerald-50 text-emerald-700'
+    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
     : status === 'partial'
-      ? 'bg-amber-50 text-amber-700'
-      : 'bg-rose-50 text-rose-700'
+      ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
+      : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
   return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${style}`}>{status}</span>
 }
 
@@ -253,8 +253,8 @@ const EquipmentRow = memo(function EquipmentRow({ eq, status, isSelected, isFlag
       <div
         onClick={handleClick}
         onContextMenu={handleContext}
-        className={`w-full text-left px-4 py-3 border-b border-slate-100 transition-colors cursor-pointer group ${
-          isSelected ? 'bg-brand-navy/5' : isFlagged ? 'bg-orange-50/60 hover:bg-orange-50' : 'bg-white hover:bg-slate-50'
+        className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors cursor-pointer group ${
+          isSelected ? 'bg-brand-navy/5' : isFlagged ? 'bg-orange-50/60 hover:bg-orange-50' : 'bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-900/40'
         }`}
       >
         <div className="flex items-center gap-3">
@@ -264,15 +264,15 @@ const EquipmentRow = memo(function EquipmentRow({ eq, status, isSelected, isFlag
               <span className="font-mono text-sm font-bold text-brand-navy truncate">{eq.equipment_id}</span>
               {eq.verified && <span className="text-emerald-500 text-xs" title="Verified">✓</span>}
             </div>
-            <div className="text-xs text-slate-500 truncate">{shortName(eq.description)}</div>
+            <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{shortName(eq.description)}</div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {isQueued && (
-              <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 rounded-full px-1.5 py-0.5" title="Upload queued">
+              <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 rounded-full px-1.5 py-0.5" title="Upload queued">
                 ☁︎ Queued
               </span>
             )}
-            <span className="text-[10px] font-semibold text-slate-500 tabular-nums bg-slate-100 rounded-full px-1.5 py-0.5">
+            <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 tabular-nums bg-slate-100 dark:bg-slate-800 rounded-full px-1.5 py-0.5">
               {photoCount}/2
             </span>
             <StatusPill status={status} />

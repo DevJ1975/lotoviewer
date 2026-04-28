@@ -17,7 +17,7 @@ export default function OfflineBanner() {
         <span>⚠</span>
         <span>Offline — photos will queue until reconnected.</span>
         {queueCount > 0 && (
-          <span className="bg-white/20 rounded-full px-2 py-0.5 text-xs tabular-nums">{queueCount} queued</span>
+          <span className="bg-white/20 dark:bg-slate-900/20 rounded-full px-2 py-0.5 text-xs tabular-nums">{queueCount} queued</span>
         )}
       </div>
     )
@@ -28,7 +28,7 @@ export default function OfflineBanner() {
     return (
       <div
         role="status"
-        className="sticky top-14 z-40 w-full bg-amber-400 text-amber-900 text-sm font-semibold flex items-center justify-center gap-2 py-2 px-4 shadow-sm"
+        className="sticky top-14 z-40 w-full bg-amber-400 text-amber-900 dark:text-amber-100 text-sm font-semibold flex items-center justify-center gap-2 py-2 px-4 shadow-sm"
       >
         <span className="w-3 h-3 border-2 border-amber-900/40 border-t-amber-900 rounded-full animate-spin" />
         <span>Syncing {queueCount} queued upload{queueCount === 1 ? '' : 's'}…</span>
@@ -41,7 +41,7 @@ export default function OfflineBanner() {
     return (
       <div
         role="status"
-        className="sticky top-14 z-40 w-full bg-amber-400 text-amber-900 text-sm font-semibold flex items-center justify-center gap-3 py-2 px-4 shadow-sm"
+        className="sticky top-14 z-40 w-full bg-amber-400 text-amber-900 dark:text-amber-100 text-sm font-semibold flex items-center justify-center gap-3 py-2 px-4 shadow-sm"
       >
         <span>☁︎</span>
         <span>{queueCount} upload{queueCount === 1 ? '' : 's'} queued.</span>
@@ -55,7 +55,7 @@ export default function OfflineBanner() {
         <button
           type="button"
           onClick={() => { if (confirm('Clear all queued uploads? This cannot be undone.')) clearAll() }}
-          className="text-amber-900 underline hover:no-underline text-xs"
+          className="text-amber-900 dark:text-amber-100 underline hover:no-underline text-xs"
         >
           Clear
         </button>

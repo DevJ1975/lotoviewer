@@ -287,7 +287,7 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
           Produces draft "New" rows the user reviews and saves. Kept
           collapsed by default so it never surprises users who just want
           to edit manually. */}
-      <div className="mb-4 rounded-xl border border-violet-100 bg-violet-50/60 p-3 space-y-2">
+      <div className="mb-4 rounded-xl border border-violet-100 bg-violet-50/60 dark:bg-violet-950/40/60 p-3 space-y-2">
         {aiOpen ? (
           <>
             <div className="flex items-center justify-between">
@@ -296,7 +296,7 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
                 type="button"
                 onClick={() => { setAiOpen(false); setAiContext('') }}
                 disabled={generating}
-                className="text-[11px] text-slate-500 hover:text-slate-700"
+                className="text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
               >
                 Cancel
               </button>
@@ -307,7 +307,7 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
               onChange={e => setAiContext(e.target.value)}
               disabled={generating}
               placeholder="Optional — anything not obvious from the photos (e.g. 'has a separate pneumatic supply at the back')"
-              className="w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400 disabled:opacity-60"
+              className="w-full rounded-lg border border-violet-200 bg-white dark:bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400 disabled:opacity-60"
             />
             <div className="flex items-center justify-between gap-2">
               <p className="text-[11px] text-violet-900/80 leading-snug">
@@ -328,7 +328,7 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
             type="button"
             onClick={() => setAiOpen(true)}
             disabled={saving}
-            className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-violet-700 hover:text-violet-900 py-1"
+            className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-violet-700 dark:text-violet-300 hover:text-violet-900 py-1"
           >
             <span>✨</span>
             <span>Generate steps with AI</span>
@@ -338,7 +338,7 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
 
       {drafts.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-8 text-center">
-          <p className="text-sm text-slate-500">No energy steps defined yet.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">No energy steps defined yet.</p>
           <button
             type="button"
             onClick={addStep}
@@ -353,7 +353,7 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
             const { hex, textHex, labelEn } = energyCodeFor(draft.energy_type)
             const isNew = !draft.dbId
             return (
-              <div key={draft.key} className="rounded-xl border border-slate-100 p-4 space-y-3">
+              <div key={draft.key} className="rounded-xl border border-slate-100 dark:border-slate-800 p-4 space-y-3">
                 <div className="flex items-center gap-2 pb-2 border-b border-slate-50">
                   {isNew ? (
                     // Colored <select> so picking the energy type looks like
@@ -383,16 +383,16 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
                       <span>{labelEn}</span>
                     </span>
                   )}
-                  <span className="text-sm font-semibold text-slate-700">Step {draft.step_number}</span>
+                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Step {draft.step_number}</span>
                   {isNew && (
                     <>
-                      <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-600">New</span>
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">New</span>
                       <button
                         type="button"
                         onClick={() => removeNew(draft.key)}
                         disabled={saving}
                         aria-label="Remove this new step"
-                        className="ml-auto text-slate-400 hover:text-rose-500 text-lg leading-none px-1"
+                        className="ml-auto text-slate-400 dark:text-slate-500 hover:text-rose-500 text-lg leading-none px-1"
                       >
                         ×
                       </button>
@@ -411,19 +411,19 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
             type="button"
             onClick={addStep}
             disabled={saving}
-            className="w-full rounded-lg border border-dashed border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:text-brand-navy hover:border-brand-navy/40 transition-colors"
+            className="w-full rounded-lg border border-dashed border-slate-300 dark:border-slate-700 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-brand-navy hover:border-brand-navy/40 transition-colors"
           >
             + Add another step
           </button>
         </div>
       )}
 
-      <div className="sticky bottom-0 bg-white pt-4 mt-6 border-t border-slate-100 flex justify-end gap-2">
+      <div className="sticky bottom-0 bg-white dark:bg-slate-900 pt-4 mt-6 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
         <button
           type="button"
           onClick={onClose}
           disabled={saving}
-          className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"
+          className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200"
         >
           Cancel
         </button>
@@ -443,13 +443,13 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
 function FieldArea({ label, value, onChange, rows }: { label: string; value: string; onChange: (v: string) => void; rows: number }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{label}</label>
+      <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</label>
       <textarea
         rows={rows}
         value={value}
         onChange={e => onChange(e.target.value)}
         aria-label={label}
-        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
+        className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
       />
     </div>
   )

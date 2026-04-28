@@ -83,11 +83,11 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
 
   if (!equipment) {
     return (
-      <aside className="shrink-0 w-full lg:w-[520px] bg-slate-100 border-l border-slate-200 flex items-center justify-center">
+      <aside className="shrink-0 w-full lg:w-[520px] bg-slate-100 dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex items-center justify-center">
         <div className="text-center px-6">
-          <div className="w-14 h-14 rounded-full bg-slate-200 flex items-center justify-center text-2xl mx-auto mb-3">📋</div>
-          <p className="text-sm font-semibold text-slate-700">Select an equipment item</p>
-          <p className="text-xs text-slate-400 mt-1">Its placard will appear here.</p>
+          <div className="w-14 h-14 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-2xl mx-auto mb-3">📋</div>
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Select an equipment item</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Its placard will appear here.</p>
         </div>
       </aside>
     )
@@ -102,11 +102,11 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
   const href = `/equipment/${encodeURIComponent(equipment.equipment_id)}?from=${encodeURIComponent(back)}`
 
   return (
-    <aside className="shrink-0 w-full lg:w-[520px] bg-slate-100 border-l border-slate-200 flex flex-col">
-      <div className="px-4 py-3 bg-white border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
+    <aside className="shrink-0 w-full lg:w-[520px] bg-slate-100 dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex flex-col">
+      <div className="px-4 py-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 shrink-0">
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Placard Preview</p>
-          <h2 className="font-mono text-sm font-bold text-slate-900 truncate">{equipment.equipment_id}</h2>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Placard Preview</p>
+          <h2 className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{equipment.equipment_id}</h2>
         </div>
         <Link
           href={href}
@@ -118,7 +118,7 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
 
       <div className="flex-1 overflow-y-auto p-3">
         {loading ? (
-          <div className="flex items-center justify-center h-40 text-slate-400 text-sm">Loading…</div>
+          <div className="flex items-center justify-center h-40 text-slate-400 dark:text-slate-500 text-sm">Loading…</div>
         ) : (
           <PlacardView
             equipment={fullEquipment ?? equipment}
