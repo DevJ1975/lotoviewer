@@ -43,7 +43,11 @@ export function AnnotatedPhoto({
 }) {
   const [editing, setEditing] = useState(false)
   return (
-    <div className={`relative ${className ?? ''}`}>
+    // w-full h-full so the wrapper fills its parent (typically an
+    // aspect-ratio'd container). Without an explicit height, the img's
+    // h-full resolves to 0, and the absolute-positioned Annotate button
+    // ends up clipped by the parent's overflow-hidden.
+    <div className={`relative w-full h-full ${className ?? ''}`}>
       <img src={src} alt={alt} className="w-full h-full object-cover" />
       <AnnotationLayer annotations={annotations} color={color} />
       {editable && onSave && (
