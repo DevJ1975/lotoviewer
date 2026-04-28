@@ -86,40 +86,40 @@ export default function ImportConfinedSpacesPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-5">
       <div className="flex items-center justify-between">
-        <Link href="/confined-spaces" className="text-sm font-semibold text-slate-500 hover:text-slate-700">
+        <Link href="/confined-spaces" className="text-sm font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300">
           ← Back to Confined Spaces
         </Link>
       </div>
 
       <header>
-        <h1 className="text-xl font-bold text-slate-900">Import Confined Spaces</h1>
-        <p className="text-xs text-slate-500 mt-0.5">Bulk-seed the inventory from a CSV file. Existing rows (matched on space_id) are skipped.</p>
+        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Import Confined Spaces</h1>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Bulk-seed the inventory from a CSV file. Existing rows (matched on space_id) are skipped.</p>
       </header>
 
       {phase === 'pick' && (
         <>
-          <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-            <p className="text-sm text-slate-700">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
+            <p className="text-sm text-slate-700 dark:text-slate-300">
               <strong>Required columns:</strong> <span className="font-mono text-xs">space_id, description, department</span>
             </p>
-            <p className="text-sm text-slate-700">
+            <p className="text-sm text-slate-700 dark:text-slate-300">
               <strong>Optional columns:</strong>{' '}
               <span className="font-mono text-xs">space_type, classification, entry_dimensions, known_hazards, isolation_required</span>
             </p>
-            <div className="bg-slate-50 border border-slate-100 rounded-lg p-3 text-[11px] font-mono text-slate-700 leading-relaxed">
+            <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 rounded-lg p-3 text-[11px] font-mono text-slate-700 dark:text-slate-300 leading-relaxed">
               space_id,description,department,space_type,classification,known_hazards<br />
               CS-MIX-04,South side mixing tank #4,Packaging,tank,permit_required,Engulfment;CIP residue<br />
               CS-SILO-01,Flour silo east,Bakery,silo,permit_required,Dust explosion;Engulfment;O2 deficiency
             </div>
-            <ul className="text-[11px] text-slate-500 leading-relaxed space-y-0.5">
+            <ul className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed space-y-0.5">
               <li>• <strong>space_type</strong>: tank, silo, vault, pit, hopper, vessel, sump, plenum, manhole, other</li>
               <li>• <strong>classification</strong>: permit_required, non_permit, reclassified — defaults to permit_required if omitted</li>
               <li>• <strong>known_hazards</strong>: semicolon-separated list (use commas if you wrap the cell in quotes)</li>
             </ul>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-xl p-6 text-center">
-            <p className="text-sm font-semibold text-slate-700 mb-3">Choose a CSV file to begin</p>
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-6 text-center">
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Choose a CSV file to begin</p>
             <input
               type="file"
               accept=".csv,text/csv"
@@ -129,7 +129,7 @@ export default function ImportConfinedSpacesPage() {
           </div>
 
           {parseErrors.length > 0 && (
-            <div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-xs text-rose-800 space-y-0.5">
+            <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 rounded-lg px-3 py-2 text-xs text-rose-800 dark:text-rose-200 space-y-0.5">
               {parseErrors.map((e, i) => <p key={i}>• {e}</p>)}
             </div>
           )}
@@ -145,15 +145,15 @@ export default function ImportConfinedSpacesPage() {
           </div>
 
           {parseErrors.length > 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-900 space-y-0.5">
+            <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-900 dark:text-amber-100 space-y-0.5">
               {parseErrors.map((e, i) => <p key={i}>• {e}</p>)}
             </div>
           )}
 
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200">
+                <thead className="bg-slate-50 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-700">
                   <tr>
                     <Th>Status</Th>
                     <Th>Space ID</Th>
@@ -166,11 +166,11 @@ export default function ImportConfinedSpacesPage() {
                 </thead>
                 <tbody>
                   {rows.map((r, i) => (
-                    <tr key={i} className="border-b border-slate-100 last:border-b-0">
+                    <tr key={i} className="border-b border-slate-100 dark:border-slate-800 last:border-b-0">
                       <Td>
                         <StatusPill status={r.status} />
                       </Td>
-                      <Td><span className="font-mono">{r.space_id || <em className="text-slate-400">—</em>}</span></Td>
+                      <Td><span className="font-mono">{r.space_id || <em className="text-slate-400 dark:text-slate-500">—</em>}</span></Td>
                       <Td>{r.description}</Td>
                       <Td>{r.department}</Td>
                       <Td>{r.space_type}</Td>
@@ -184,7 +184,7 @@ export default function ImportConfinedSpacesPage() {
           </div>
 
           {rows.some(r => r.status === 'invalid') && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-900 space-y-0.5">
+            <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-900 dark:text-amber-100 space-y-0.5">
               {rows.filter(r => r.status === 'invalid').map((r, i) => (
                 <p key={i}>• <span className="font-mono">{r.space_id || `(line ${i + 2})`}</span>: {r.error}</p>
               ))}
@@ -195,7 +195,7 @@ export default function ImportConfinedSpacesPage() {
             <button
               type="button"
               onClick={() => { setRows([]); setParseErrors([]); setPhase('pick') }}
-              className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"
+              className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200"
             >
               Choose different file
             </button>
@@ -212,19 +212,19 @@ export default function ImportConfinedSpacesPage() {
       )}
 
       {phase === 'importing' && (
-        <div className="bg-white border border-slate-200 rounded-xl p-12 text-center">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-12 text-center">
           <div className="w-10 h-10 mx-auto mb-3 border-4 border-brand-navy border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm font-semibold text-slate-700">Importing…</p>
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Importing…</p>
         </div>
       )}
 
       {phase === 'done' && (
-        <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-3">
-          <p className="text-base font-bold text-slate-900">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-6 space-y-3">
+          <p className="text-base font-bold text-slate-900 dark:text-slate-100">
             Imported {importedCount} space{importedCount === 1 ? '' : 's'}.
           </p>
           {importErrors.length > 0 && (
-            <div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-xs text-rose-800 space-y-0.5">
+            <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 rounded-lg px-3 py-2 text-xs text-rose-800 dark:text-rose-200 space-y-0.5">
               <p className="font-semibold">Some batches failed:</p>
               {importErrors.map((e, i) => <p key={i}>• {e}</p>)}
             </div>
@@ -239,7 +239,7 @@ export default function ImportConfinedSpacesPage() {
             <button
               type="button"
               onClick={() => { setRows([]); setParseErrors([]); setImportedCount(0); setImportErrors([]); setPhase('pick') }}
-              className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"
+              className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200"
             >
               Import another file
             </button>
@@ -251,9 +251,9 @@ export default function ImportConfinedSpacesPage() {
 }
 
 function Stat({ label, value, tone }: { label: string; value: number; tone: 'emerald' | 'slate' | 'rose' }) {
-  const cls = tone === 'emerald' ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-            : tone === 'rose'    ? 'bg-rose-50 border-rose-200 text-rose-900'
-            :                       'bg-slate-50 border-slate-200 text-slate-700'
+  const cls = tone === 'emerald' ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 text-emerald-900 dark:text-emerald-100'
+            : tone === 'rose'    ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 text-rose-900 dark:text-rose-100'
+            :                       'bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
   return (
     <div className={`rounded-xl border ${cls} p-4`}>
       <p className="text-[10px] font-semibold uppercase tracking-wider opacity-70">{label}</p>
@@ -263,9 +263,9 @@ function Stat({ label, value, tone }: { label: string; value: number; tone: 'eme
 }
 
 function StatusPill({ status }: { status: ParsedSpaceRow['status'] }) {
-  const cls = status === 'new'      ? 'bg-emerald-100 text-emerald-800'
-            : status === 'existing' ? 'bg-slate-100 text-slate-600'
-            :                          'bg-rose-100 text-rose-800'
+  const cls = status === 'new'      ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200'
+            : status === 'existing' ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+            :                          'bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200'
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${cls}`}>
       {status}
@@ -274,9 +274,9 @@ function StatusPill({ status }: { status: ParsedSpaceRow['status'] }) {
 }
 
 function Th({ children }: { children: React.ReactNode }) {
-  return <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">{children}</th>
+  return <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{children}</th>
 }
 
 function Td({ children }: { children: React.ReactNode }) {
-  return <td className="px-3 py-1.5 text-slate-700">{children}</td>
+  return <td className="px-3 py-1.5 text-slate-700 dark:text-slate-300">{children}</td>
 }
