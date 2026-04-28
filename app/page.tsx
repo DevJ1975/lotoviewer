@@ -15,6 +15,7 @@ import {
   type PermitAlertSummary, type HotWorkAlertSummary,
 } from '@/lib/homeMetrics'
 import { permitCountdown, type CountdownTone } from '@/lib/permitStatus'
+import ThemeToggle from '@/components/ThemeToggle'
 
 // Home screen — the landing page after login.
 //
@@ -82,6 +83,14 @@ export default function HomePage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
       <Hero greeting={greeting} firstName={firstName} dateLabel={dateLabel} timeLabel={timeLabel} />
+
+      {/* Theme switch — right-aligned strip directly under the hero so
+          it's easy to find without crowding the greeting band. The
+          toggle component handles its own light/dark coloring. */}
+      <div className="flex items-center justify-end gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Theme</span>
+        <ThemeToggle />
+      </div>
 
       {metrics && metrics.expiredPermitCount > 0 && (
         <CriticalAlertBanner count={metrics.expiredPermitCount} />
