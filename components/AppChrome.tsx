@@ -101,10 +101,17 @@ export default function AppChrome({ children }: { children: ReactNode }) {
       <IdleLogout />
 
       <footer
-        className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-3 text-center text-xs text-slate-500 dark:text-slate-400"
+        className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-3 text-xs text-slate-500 dark:text-slate-400"
         style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
       >
-        Developed by Jamil Jones · Copyright 2026
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span>Developed by Jamil Jones · Copyright 2026</span>
+          <span className="flex items-center gap-3">
+            <Link href="/privacy" className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors">Privacy</Link>
+            <span aria-hidden="true">·</span>
+            <Link href="/terms"   className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors">Terms</Link>
+          </span>
+        </div>
       </footer>
     </>
   )

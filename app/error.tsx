@@ -7,6 +7,7 @@
 // the user retry without losing their place in the PWA shell.
 import { useEffect } from 'react'
 import { AlertTriangle, RefreshCcw } from 'lucide-react'
+import * as Sentry from '@sentry/nextjs'
 
 interface Props {
   error:          Error & { digest?: string }
@@ -15,8 +16,9 @@ interface Props {
 
 export default function Error({ error, unstable_retry }: Props) {
   useEffect(() => {
-    // Surfacing digest + message in the console lets us grep server logs
-    // for the matching entry — the digest is the stable cross-process key.
+    // Surface to Sentry first (so the team sees it before the user
+    // does), then to the console so we can grep server logs.
+    Sentry.captureException(error, { tags: { source: 'error-boundary', digest: error.digest ?? 'unknown' } })
     console.error('[error-boundary]', {
       message: error.message,
       digest:  error.digest,

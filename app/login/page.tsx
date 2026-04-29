@@ -103,6 +103,12 @@ function LoginForm() {
         <p className="text-xs text-slate-400 dark:text-slate-500 text-center">
           Access is by invitation only. Contact your administrator if you need an account.
         </p>
+
+        <p className="text-[11px] text-slate-400 dark:text-slate-500 text-center pt-2 border-t border-slate-100 dark:border-slate-800">
+          <a href="/privacy" className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors">Privacy</a>
+          <span aria-hidden="true" className="mx-2">·</span>
+          <a href="/terms" className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors">Terms</a>
+        </p>
       </form>
     </div>
   )
