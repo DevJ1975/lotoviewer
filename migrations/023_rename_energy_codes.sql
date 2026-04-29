@@ -12,6 +12,9 @@
 -- placards use the canonical codes; old placards re-render correctly
 -- the next time they're saved.
 --
+-- Note: the column is `energy_type` on loto_energy_steps (the value
+-- happens to be a code/letter — naming predates the placard rework).
+--
 -- The lib has temporary in-memory aliases (ALIASES map in
 -- energyCodes.ts) so any rows missed by this migration still resolve
 -- correctly until the table is updated. Aliases will be removed in a
@@ -21,12 +24,12 @@
 -- the WHERE clauses target only the legacy values.
 
 update public.loto_energy_steps
-   set energy_code = 'M'
- where energy_code = 'O';
+   set energy_type = 'M'
+ where energy_type = 'O';
 
 update public.loto_energy_steps
-   set energy_code = 'CG'
- where energy_code = 'OG';
+   set energy_type = 'CG'
+ where energy_type = 'OG';
 
-comment on column public.loto_energy_steps.energy_code is
+comment on column public.loto_energy_steps.energy_type is
   'Canonical energy-source code from the Snak King palette (lib/energyCodes.ts). 12 codes: E, G, H, P, M, T, W, S, V, CG, CP, GR, plus the N sentinel for "none". Legacy O/OG values are migrated to M/CG by migration 023.';
