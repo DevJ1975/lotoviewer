@@ -268,17 +268,34 @@ export function drawPlacardPage(
   const isEn = language === 'en'
   const { regular, bold } = fonts
 
-  // y-bands (top → bottom)
-  const Y_YELLOW_TOP   = PAGE_H
-  const Y_YELLOW_BOT   = Y_YELLOW_TOP - 44
-  const Y_BLUE_BOT     = Y_YELLOW_BOT - 20
-  const Y_RED_BOT      = Y_BLUE_BOT - 30
-  const Y_COLS_BOT     = Y_RED_BOT - 72
-  const Y_LEGEND_BOT   = Y_COLS_BOT - 14
-  const Y_NAVYHDR_BOT  = Y_LEGEND_BOT - 13
-  const Y_PHOTOS_BOT   = Y_NAVYHDR_BOT - 110
-  const Y_TABLE_BOT    = 18
-  const Y_SIG_BOT      = 0
+  // y-bands (top → bottom). Reorganized to fit on one landscape page:
+  //   yellow header → blue equipment bar → red warning → purpose +
+  //   application steps (2 cols) → COLOR CODES (red header + 6×2 grid)
+  //   → navy section header → photos → energy steps table → LOCKOUT
+  //   REMOVAL PROCESS (red header + 2 cols) → print note → signatures.
+  const COLOR_GRID_ROWS  = 2
+  const COLOR_ROW_H      = 11
+  const COLOR_GRID_H     = COLOR_GRID_ROWS * COLOR_ROW_H
+  const REMOVAL_BODY_H   = 38   // 4 lines × ~9.5pt
+  const REMOVAL_HEADER_H = 12
+  const REMOVAL_TOTAL_H  = REMOVAL_HEADER_H + REMOVAL_BODY_H
+  const PRINT_NOTE_H     = 8
+
+  const Y_YELLOW_TOP    = PAGE_H
+  const Y_YELLOW_BOT    = Y_YELLOW_TOP - 44
+  const Y_BLUE_BOT      = Y_YELLOW_BOT - 20
+  const Y_RED_BOT       = Y_BLUE_BOT - 30
+  const Y_COLS_BOT      = Y_RED_BOT - 70
+  const Y_LEG_HDR_BOT   = Y_COLS_BOT - REMOVAL_HEADER_H              // red "COLOR CODES" strip
+  const Y_LEGEND_BOT    = Y_LEG_HDR_BOT - COLOR_GRID_H               // 6×2 grid
+  const Y_NAVYHDR_BOT   = Y_LEGEND_BOT - 13
+  const Y_PHOTOS_BOT    = Y_NAVYHDR_BOT - 100                         // slightly tighter photos
+  const Y_SIG_BOT       = 0
+  const Y_SIG_TOP       = Y_SIG_BOT + 16                             // 16pt sig bar
+  const Y_PRINT_NOTE_BOT= Y_SIG_TOP                                  // 8pt note above sig
+  const Y_REMOVAL_BOT   = Y_PRINT_NOTE_BOT + PRINT_NOTE_H            // removal process bottom
+  const Y_REMOVAL_TOP   = Y_REMOVAL_BOT + REMOVAL_TOTAL_H
+  const Y_TABLE_BOT     = Y_REMOVAL_TOP + 2                           // table sits above removal
 
   // ── 1. Yellow band ────────────────────────────────────────────────────────
   page.drawRectangle({
@@ -380,11 +397,11 @@ export function drawPlacardPage(
     color: COLOR_SLATE_TEXT, lineHeight: 10, maxLines: 6,
   })
   // Right heading
-  page.drawText(PLACARD_TEXT.stepsHeader[language], {
+  page.drawText(PLACARD_TEXT.applicationHeader[language], {
     x: colR_X, y: COLS_TOP - 10,
     size: 9, font: bold, color: COLOR_NAVY_HEADER,
   })
-  const steps_list = PLACARD_TEXT.steps[language]
+  const steps_list = PLACARD_TEXT.applicationSteps[language]
   let stepY = COLS_TOP - 22
   for (let i = 0; i < steps_list.length; i++) {
     if (stepY < Y_COLS_BOT + 4) break
@@ -397,31 +414,44 @@ export function drawPlacardPage(
     }
   }
 
-  // ── 5. Gray legend bar ───────────────────────────────────────────────────
+  // ── 5. Color Codes section (red header + 6×2 grid) ───────────────────────
+  // Red header strip matching the DANGER / LOCKOUT APPLICATION PROCESS
+  // banding from the Snak King reference.
   page.drawRectangle({
-    x: 0, y: Y_LEGEND_BOT, width: PAGE_W, height: 14,
-    color: COLOR_GRAY_LEGEND,
+    x: 0, y: Y_LEG_HDR_BOT, width: PAGE_W, height: REMOVAL_HEADER_H,
+    color: COLOR_RED_BLOCK,
   })
-  let legendX = MARGIN
-  for (const ec of ENERGY_CODES) {
-    const label = isEn ? ec.labelEn : ec.labelEs
-    const chipText = `${ec.code}`
-    const chipTextW = bold.widthOfTextAtSize(chipText, 7)
-    // Colored chip
+  const ccHdr = PLACARD_TEXT.colorCodesHeader[language]
+  const ccHdrW = bold.widthOfTextAtSize(ccHdr, 9)
+  page.drawText(ccHdr, {
+    x: (PAGE_W - ccHdrW) / 2, y: Y_LEG_HDR_BOT + 2,
+    size: 9, font: bold, color: COLOR_WHITE,
+  })
+
+  // 6×2 grid of colored chips. Filter the 'N' sentinel — it's an
+  // app-side placeholder, not a real placard category.
+  const renderable = ENERGY_CODES.filter(ec => ec.code !== 'N')
+  const COLS = Math.ceil(renderable.length / COLOR_GRID_ROWS)
+  const cellW = (PAGE_W - MARGIN * 2) / COLS
+  for (let i = 0; i < renderable.length; i++) {
+    const ec = renderable[i]
+    const col = i % COLS
+    const row = Math.floor(i / COLS)
+    const cx = MARGIN + col * cellW
+    const cy = Y_LEGEND_BOT + (COLOR_GRID_ROWS - 1 - row) * COLOR_ROW_H
+    // Colored cell
     page.drawRectangle({
-      x: legendX, y: Y_LEGEND_BOT + 2, width: chipTextW + 6, height: 10,
+      x: cx, y: cy, width: cellW, height: COLOR_ROW_H,
       color: rgb(...hexToRgb01(ec.hex)),
+      borderColor: COLOR_TABLE_BORDER, borderWidth: 0.3,
     })
-    page.drawText(chipText, {
-      x: legendX + 3, y: Y_LEGEND_BOT + 4,
+    // "<CODE> = <Label>"
+    const label = isEn ? ec.labelEn : ec.labelEs
+    const cellText = `${ec.code} = ${label}`
+    page.drawText(cellText, {
+      x: cx + 4, y: cy + 3,
       size: 7, font: bold, color: rgb(...hexToRgb01(ec.textHex)),
     })
-    // Label
-    page.drawText(label, {
-      x: legendX + chipTextW + 9, y: Y_LEGEND_BOT + 4,
-      size: 7, font: regular, color: COLOR_SLATE_TEXT,
-    })
-    legendX += chipTextW + 9 + regular.widthOfTextAtSize(label, 7) + 10
   }
 
   // ── 6. Navy section header ───────────────────────────────────────────────
@@ -436,7 +466,10 @@ export function drawPlacardPage(
   })
 
   // ── 7. Side-by-side photo slots ──────────────────────────────────────────
-  const photoH      = 100
+  // photoH shrunk from 100 → 90 to absorb the y-budget the new
+  // Removal Process section needs at the bottom of the page. Photos
+  // still scale to fit so the visual change is subtle.
+  const photoH      = 90
   const photoY      = Y_PHOTOS_BOT + 5
   const photoSlotW  = (PAGE_W - MARGIN * 3) / 2
   const photoLX     = MARGIN
@@ -488,7 +521,7 @@ export function drawPlacardPage(
 
   // ── 8. Energy steps table ────────────────────────────────────────────────
   const tableTop    = Y_PHOTOS_BOT
-  const tableBottom = Y_TABLE_BOT + 8
+  const tableBottom = Y_TABLE_BOT
   const tableH      = tableTop - tableBottom
   const hdrH        = 14
   const colBadgeW   = 100                // tag badge + description
@@ -589,9 +622,51 @@ export function drawPlacardPage(
     color: undefined,
   })
 
-  // ── 9. Signature bar ─────────────────────────────────────────────────────
+  // ── 9. Lockout Removal Process ───────────────────────────────────────────
+  // Red header strip + 7 numbered steps in 2 columns (4 left, 3 right),
+  // mirroring the Application Process layout above.
   page.drawRectangle({
-    x: 0, y: Y_SIG_BOT, width: PAGE_W, height: 18,
+    x: 0, y: Y_REMOVAL_TOP - REMOVAL_HEADER_H, width: PAGE_W, height: REMOVAL_HEADER_H,
+    color: COLOR_RED_BLOCK,
+  })
+  const remHdr = PLACARD_TEXT.removalHeader[language]
+  const remHdrW = bold.widthOfTextAtSize(remHdr, 9)
+  page.drawText(remHdr, {
+    x: (PAGE_W - remHdrW) / 2, y: Y_REMOVAL_TOP - REMOVAL_HEADER_H + 2,
+    size: 9, font: bold, color: COLOR_WHITE,
+  })
+
+  // 2-column numbered list. Same 4/3 split as Application above.
+  const removalSteps = PLACARD_TEXT.removalSteps[language]
+  const removalSplit = Math.ceil(removalSteps.length / 2)
+  const removalColW  = (PAGE_W - MARGIN * 2 - 12) / 2
+  let remLY = Y_REMOVAL_TOP - REMOVAL_HEADER_H - 10
+  let remRY = Y_REMOVAL_TOP - REMOVAL_HEADER_H - 10
+  for (let i = 0; i < removalSteps.length; i++) {
+    const text = `${i + 1}. ${removalSteps[i]}`
+    const targetX = i < removalSplit ? MARGIN : (MARGIN + removalColW + 12)
+    const targetW = removalColW
+    const wrapped = wrapText(text, regular, 7.5, targetW)
+    for (const w of wrapped) {
+      const yPos = i < removalSplit ? remLY : remRY
+      if (yPos < Y_REMOVAL_BOT) break
+      page.drawText(w, { x: targetX, y: yPos, size: 7.5, font: regular, color: COLOR_SLATE_TEXT })
+      if (i < removalSplit) remLY -= 9; else remRY -= 9
+    }
+  }
+
+  // ── 10. Print note (page 1 only — bilingual short reminder) ──────────────
+  // The print note tells whoever's printing this placard to flip on
+  // long edge so EN ends up front, ES on the back. Same line on both
+  // pages so the reader on the back also gets the cue.
+  page.drawText(PLACARD_TEXT.printNote[language], {
+    x: MARGIN, y: Y_PRINT_NOTE_BOT + 1.5,
+    size: 6, font: regular, color: rgb(0.55, 0.55, 0.6),
+  })
+
+  // ── 11. Signature bar ────────────────────────────────────────────────────
+  page.drawRectangle({
+    x: 0, y: Y_SIG_BOT, width: PAGE_W, height: 16,
     color: rgb(0.97, 0.97, 0.98),
     borderColor: COLOR_TABLE_BORDER, borderWidth: 0.5,
   })
@@ -606,7 +681,7 @@ export function drawPlacardPage(
     if (i < 3) {
       page.drawLine({
         start: { x: (i + 1) * sigColW, y: Y_SIG_BOT },
-        end:   { x: (i + 1) * sigColW, y: Y_SIG_BOT + 18 },
+        end:   { x: (i + 1) * sigColW, y: Y_SIG_BOT + 16 },
         thickness: 0.4, color: COLOR_TABLE_BORDER,
       })
     }

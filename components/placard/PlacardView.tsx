@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+import { Languages } from 'lucide-react'
 import type { Equipment, LotoEnergyStep } from '@/lib/types'
 import { ENERGY_CODES, energyCodeFor } from '@/lib/energyCodes'
 import { PLACARD_TEXT } from '@/lib/placardText'
@@ -15,6 +17,8 @@ interface Props {
   // lets the parent implement behaviors like auto-advance after capture.
   onPhotoSaved?:   (type: 'equip' | 'iso') => void
 }
+
+type Lang = 'en' | 'es'
 
 // ── Color palette matching physical placard ────────────────────────────────
 const COLOR = {
@@ -38,11 +42,24 @@ function EnergyBadge({ code }: { code: string }) {
 
 export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoError, onPhotoSaved }: Props) {
   const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-  const lang: 'en' = 'en'
-  const notes = equipment.notes?.trim() ? equipment.notes : PLACARD_TEXT.warningFallback.en
+  const [lang, setLang] = useState<Lang>('en')
+  const notes = lang === 'en'
+    ? (equipment.notes?.trim()    ? equipment.notes    : PLACARD_TEXT.warningFallback.en)
+    : (equipment.notes_es?.trim() ? equipment.notes_es : PLACARD_TEXT.warningFallback.es)
 
   return (
-    <article className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 shadow-md rounded-lg overflow-hidden font-sans">
+    <article className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 shadow-md rounded-lg overflow-hidden font-sans relative">
+      {/* ── Language toggle — floats top-right of the placard ─────────── */}
+      <button
+        type="button"
+        onClick={() => setLang(l => l === 'en' ? 'es' : 'en')}
+        className="absolute top-2 right-2 z-10 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/85 hover:bg-white text-[10px] font-bold tracking-wider text-[#214487] uppercase shadow ring-1 ring-black/10"
+        aria-label={`Switch to ${lang === 'en' ? 'Spanish' : 'English'}`}
+      >
+        <Languages className="h-3 w-3" />
+        {lang === 'en' ? 'ES' : 'EN'}
+      </button>
+
       {/* ── Yellow header band ──────────────────────────────────────────── */}
       <header className="flex items-center gap-3 px-4 py-3" style={{ backgroundColor: COLOR.yellow }}>
         <div className="w-11 h-11 bg-[#214487] rounded flex items-center justify-center text-[#FFD900] font-bold text-sm shrink-0">
@@ -51,8 +68,8 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
         <h1 className="flex-1 text-center text-lg sm:text-xl font-black tracking-tight text-black">
           {PLACARD_TEXT.title[lang]}
         </h1>
-        <div className="text-[10px] text-black/75 font-semibold whitespace-nowrap text-right shrink-0">
-          <div className="uppercase tracking-wider">Date</div>
+        <div className="text-[10px] text-black/75 font-semibold whitespace-nowrap text-right shrink-0 pr-12">
+          <div className="uppercase tracking-wider">{lang === 'en' ? 'Date' : 'Fecha'}</div>
           <div className="font-bold">{dateStr}</div>
         </div>
       </header>
@@ -75,42 +92,23 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
         <p className="text-center text-[11px] mt-1 opacity-95 leading-snug">{notes}</p>
       </div>
 
-      {/* ── Purpose + Steps (2 columns) ─────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-[55fr_45fr] gap-4 px-4 py-3 border-b border-slate-200 dark:border-slate-700">
-        <div>
-          <h3 className="text-[11px] font-bold uppercase tracking-wider text-[#214487] mb-1.5">
-            {PLACARD_TEXT.purposeHeader[lang]}
-          </h3>
-          <p className="text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed">{PLACARD_TEXT.purposeBody[lang]}</p>
-        </div>
-        <div>
-          <h3 className="text-[11px] font-bold uppercase tracking-wider text-[#214487] mb-1.5">
-            {PLACARD_TEXT.stepsHeader[lang]}
-          </h3>
-          <ol className="list-decimal list-inside space-y-0.5 text-[11px] text-slate-700 dark:text-slate-300 marker:font-bold marker:text-[#214487]">
-            {PLACARD_TEXT.steps[lang].map(s => <li key={s}>{s}</li>)}
-          </ol>
-        </div>
+      {/* ── Purpose ─────────────────────────────────────────────────────── */}
+      <SectionBar title={PLACARD_TEXT.purposeHeader[lang]} />
+      <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-700">
+        <p className="text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed">
+          {PLACARD_TEXT.purposeBody[lang]}
+        </p>
       </div>
 
-      {/* ── Color legend bar ────────────────────────────────────────────── */}
-      <div className="bg-slate-100 dark:bg-slate-800 px-4 py-1.5 border-b border-slate-200 dark:border-slate-700">
-        <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
-          {ENERGY_CODES.map(ec => (
-            <span key={ec.code} className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
-              <span
-                className="inline-block w-4 h-4 rounded font-mono font-bold text-[9px] flex items-center justify-center shadow-sm"
-                style={{ backgroundColor: ec.hex, color: ec.textHex }}
-              >
-                {ec.code}
-              </span>
-              {ec.labelEn}
-            </span>
-          ))}
-        </div>
-      </div>
+      {/* ── Lockout Application Process ─────────────────────────────────── */}
+      <SectionBar title={PLACARD_TEXT.applicationHeader[lang]} />
+      <NumberedSteps steps={PLACARD_TEXT.applicationSteps[lang]} />
 
-      {/* ── Navy section header ─────────────────────────────────────────── */}
+      {/* ── Color Codes legend ──────────────────────────────────────────── */}
+      <SectionBar title={PLACARD_TEXT.colorCodesHeader[lang]} />
+      <ColorCodesGrid lang={lang} />
+
+      {/* ── Section header for equipment + photos ───────────────────────── */}
       <div
         className="px-4 py-2 text-center text-white text-xs font-bold uppercase tracking-wider"
         style={{ backgroundColor: COLOR.navy }}
@@ -180,15 +178,15 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
                     <div className="flex items-start gap-2">
                       <EnergyBadge code={step.energy_type} />
                       <div className="text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-snug min-w-0">
-                        {step.tag_description || <span className="text-slate-300 italic">—</span>}
+                        {(lang === 'es' && step.tag_description_es) ? step.tag_description_es : (step.tag_description || <span className="text-slate-300 italic">—</span>)}
                       </div>
                     </div>
                   </td>
                   <td className="px-3 py-2 align-top border-t border-slate-200 dark:border-slate-700 text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-snug">
-                    {step.isolation_procedure || <span className="text-slate-300 italic">—</span>}
+                    {(lang === 'es' && step.isolation_procedure_es) ? step.isolation_procedure_es : (step.isolation_procedure || <span className="text-slate-300 italic">—</span>)}
                   </td>
                   <td className="px-3 py-2 align-top border-t border-slate-200 dark:border-slate-700 text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-snug">
-                    {step.method_of_verification || <span className="text-slate-300 italic">—</span>}
+                    {(lang === 'es' && step.method_of_verification_es) ? step.method_of_verification_es : (step.method_of_verification || <span className="text-slate-300 italic">—</span>)}
                   </td>
                 </tr>
               ))
@@ -196,6 +194,10 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
           </tbody>
         </table>
       </div>
+
+      {/* ── Lockout Removal Process ─────────────────────────────────────── */}
+      <SectionBar title={PLACARD_TEXT.removalHeader[lang]} />
+      <NumberedSteps steps={PLACARD_TEXT.removalSteps[lang]} />
 
       {/* ── Signature bar ───────────────────────────────────────────────── */}
       <div className="grid grid-cols-4 border-t border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 text-[10px] font-bold uppercase tracking-wider text-[#214487]">
@@ -209,5 +211,65 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
         ))}
       </div>
     </article>
+  )
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+// Red header strip matching Snak King's section bands (DANGER, PURPOSE,
+// LOCKOUT APPLICATION PROCESS, etc.). Keeps the placard visually
+// consistent across every section break.
+function SectionBar({ title }: { title: string }) {
+  return (
+    <div
+      className="px-4 py-1 text-center text-white text-[12px] font-black uppercase tracking-wider"
+      style={{ backgroundColor: COLOR.red }}
+    >
+      {title}
+    </div>
+  )
+}
+
+// Numbered list shown in two columns for vertical compactness.
+// Splits a 7-step list as 4 + 3 to mirror the Snak King layout.
+function NumberedSteps({ steps }: { steps: readonly string[] }) {
+  // Render in document order across columns (1-4 left, 5-7 right) so a
+  // worker reading top-to-bottom hits steps in the correct sequence.
+  const split = Math.ceil(steps.length / 2)
+  const left  = steps.slice(0, split)
+  const right = steps.slice(split)
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0 px-4 py-2 border-b border-slate-200 dark:border-slate-700">
+      <ol className="text-[11px] text-slate-700 dark:text-slate-300 leading-snug space-y-0.5" start={1}>
+        {left.map((s, i) => (
+          <li key={s} className="flex gap-1.5"><span className="font-bold text-[#214487] shrink-0">{i + 1}.</span><span>{s}</span></li>
+        ))}
+      </ol>
+      <ol className="text-[11px] text-slate-700 dark:text-slate-300 leading-snug space-y-0.5" start={split + 1}>
+        {right.map((s, i) => (
+          <li key={s} className="flex gap-1.5"><span className="font-bold text-[#214487] shrink-0">{split + i + 1}.</span><span>{s}</span></li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
+// 12-chip color legend in a 6-column × 2-row grid, matching the Snak
+// King reference layout.
+function ColorCodesGrid({ lang }: { lang: Lang }) {
+  const renderable = ENERGY_CODES.filter(ec => ec.code !== 'N')
+  return (
+    <div className="grid grid-cols-3 sm:grid-cols-6 gap-px bg-slate-300 dark:bg-slate-700 border-b border-slate-300 dark:border-slate-700">
+      {renderable.map(ec => (
+        <div
+          key={ec.code}
+          className="px-2 py-1 flex items-center gap-1.5 text-[10px] font-semibold"
+          style={{ backgroundColor: ec.hex, color: ec.textHex }}
+        >
+          <span className="font-mono font-black tracking-wider">{ec.code} =</span>
+          <span className="truncate">{lang === 'en' ? ec.labelEn : ec.labelEs}</span>
+        </div>
+      ))}
+    </div>
   )
 }
