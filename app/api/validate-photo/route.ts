@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { NextRequest, NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
 
 const client = new Anthropic()
 
@@ -53,6 +54,7 @@ export async function POST(req: NextRequest) {
     const parsed = JSON.parse(clean) as { valid: boolean; reason: string }
     return NextResponse.json(parsed)
   } catch (err) {
+    Sentry.captureException(err, { tags: { route: '/api/validate-photo' } })
     console.error('[validate-photo]', err)
     return NextResponse.json({ error: 'Validation failed' }, { status: 500 })
   }

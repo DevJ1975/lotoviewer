@@ -1,5 +1,6 @@
 import { PDFDocument, PDFFont, PDFImage, PDFPage, rgb } from 'pdf-lib'
 import QRCode from 'qrcode'
+import * as Sentry from '@sentry/nextjs'
 import { hexToRgb01 } from '@/lib/energyCodes'
 
 // Shared building blocks for the OSHA permit PDFs (Confined Space + Hot Work).
@@ -153,7 +154,9 @@ export async function embedQrCode(
   } catch (err) {
     // Don't break PDF generation if QR encoding fails — just skip the
     // QR. The serial + permit ID are also on the page so the document
-    // stays traceable manually.
+    // stays traceable manually. Capture so we can tell whether QR
+    // failures are an isolated incident or a regression.
+    Sentry.captureException(err, { tags: { source: tag, stage: 'qr-encode' } })
     console.error(`[${tag}] QR generation failed`, err)
     return null
   }

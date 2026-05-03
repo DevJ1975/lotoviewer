@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin, generateTempPassword } from '@/lib/supabaseAdmin'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
+import * as Sentry from '@sentry/nextjs'
 
 // Verify the caller's JWT and confirm they're an admin before doing anything.
 // The JWT comes from the browser's supabase client in an Authorization header.
@@ -142,11 +143,13 @@ async function sendInviteEmail(args: InviteEmailArgs): Promise<boolean> {
       html,
     })
     if (error) {
+      Sentry.captureException(error, { tags: { route: '/api/admin/users', stage: 'resend' } })
       console.error('[admin-invite] Resend rejected the send', error)
       return false
     }
     return true
   } catch (err) {
+    Sentry.captureException(err, { tags: { route: '/api/admin/users', stage: 'resend' } })
     console.error('[admin-invite] send threw', err)
     return false
   }

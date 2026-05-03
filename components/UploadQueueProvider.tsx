@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import * as Sentry from '@sentry/nextjs'
 import { uploadPhotoForEquipment, type UploadType } from '@/lib/photoUpload'
 import {
   clearQueue,
@@ -86,7 +87,12 @@ export function UploadQueueProvider({ children }: { children: React.ReactNode })
         } catch (err) {
           failed++
           // Leave in queue on failure. Log the actual cause so field users can
-          // tell us what's blocking uploads without needing a dev to repro.
+          // tell us what's blocking uploads without needing a dev to repro,
+          // and capture to Sentry so we see drain failures in aggregate.
+          Sentry.captureException(err, {
+            tags:  { source: 'upload-queue', stage: 'sync' },
+            extra: { equipmentId: item.equipmentId, type: item.type },
+          })
           console.error('[upload-queue] sync failed', {
             equipmentId: item.equipmentId,
             type:        item.type,

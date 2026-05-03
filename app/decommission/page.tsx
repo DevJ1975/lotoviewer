@@ -12,14 +12,17 @@ import Toast from '@/components/Toast'
 import { haptic } from '@/lib/platform'
 import { DecommissionSkeleton } from '@/components/Skeleton'
 import { isOffline, OFFLINE_WRITE_MESSAGE } from '@/lib/netGuard'
+import { debug } from '@/lib/debug'
 
-// Module-level marker so we can tell if the latest build actually loaded in
-// the browser. If this line doesn't appear in the console on page load, the
-// user is running stale JS (stale Vercel edge cache, SW cache, or browser
-// HTTP cache). Bump the tag when touching this file.
+// Module-level marker so non-production builds can confirm the latest JS
+// actually loaded (stale Vercel edge cache, SW cache, or browser HTTP cache
+// otherwise look identical). The build SHA comes from Vercel automatically;
+// no hand-bumping required. debug() is stripped in production builds so
+// shipped users see a clean console.
 if (typeof window !== 'undefined') {
-  // eslint-disable-next-line no-console
-  console.log('[decommission] module loaded', { build: 'a81665c+1' })
+  debug('[decommission] module loaded', {
+    build: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'dev',
+  })
 }
 
 export default function DecommissionPage() {
@@ -113,13 +116,13 @@ export default function DecommissionPage() {
     // verify the persisted value matches what we asked for: if a trigger or
     // BEFORE UPDATE rule overrode our value, we catch it here instead of at
     // the next page refresh.
-    console.log('[decommission] PATCH start', { id, next })
+    debug('[decommission] PATCH start', { id, next })
     const { data, error } = await supabase
       .from('loto_equipment')
       .update({ decommissioned: next })
       .eq('equipment_id', id)
       .select('equipment_id, decommissioned')
-    console.log('[decommission] PATCH result', { id, next, data, error })
+    debug('[decommission] PATCH result', { id, next, data, error })
 
     setPending(prev => { const s = new Set(prev); s.delete(id); return s })
 
@@ -261,24 +264,24 @@ export default function DecommissionPage() {
   }, [bulkBusy, effectiveSelected, showToast])
 
   const toggle = useCallback(async (id: string) => {
-    console.log('[decommission] toggle invoked', { id })
+    debug('[decommission] toggle invoked', { id })
     // Block if this row has an individual PATCH already in flight, OR if a
     // bulk op is running and this row is in that bulk set. Without the second
     // check, tapping the row's body (not its checkbox) while a bulk PATCH is
     // in flight would fire a concurrent individual PATCH on the same row,
     // and the later response wins — race.
-    if (pending.has(id)) { console.log('[decommission] skip — already pending', id); return }
-    if (bulkBusy && selected.has(id)) { console.log('[decommission] skip — bulk busy', id); return }
+    if (pending.has(id)) { debug('[decommission] skip — already pending', id); return }
+    if (bulkBusy && selected.has(id)) { debug('[decommission] skip — bulk busy', id); return }
     if (isOffline()) {
       haptic('error')
       showToast(OFFLINE_WRITE_MESSAGE, 'error')
       return
     }
     const current = equipment.find(e => e.equipment_id === id)
-    if (!current) { console.log('[decommission] skip — not in local state', id); return }
+    if (!current) { debug('[decommission] skip — not in local state', id); return }
     const previous = current.decommissioned
     const next     = !previous
-    console.log('[decommission] flipping', { id, previous, next })
+    debug('[decommission] flipping', { id, previous, next })
     haptic('tap')
 
     const error = await setDecommissionedRaw(id, next)

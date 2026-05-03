@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2, Settings } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
 import { formatWorkOrderUrl } from '@/lib/orgConfig'
+import { formatSupabaseError } from '@/lib/supabaseError'
 import type { OrgConfig } from '@/lib/types'
 
 // Org-level configuration. Two sections:
@@ -81,7 +82,7 @@ export default function ConfigurationPage() {
       .select('*')
       .single()
     setSaving(false)
-    if (error || !data) { setSaveError(error?.message ?? 'Could not save.'); return }
+    if (error || !data) { setSaveError(formatSupabaseError(error, 'save')); return }
     setConfig(data as OrgConfig)
     setSavedAt(Date.now())
   }
