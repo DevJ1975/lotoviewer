@@ -23,9 +23,26 @@ const COLOR_SLATE_TEXT  = rgb(0.15, 0.18, 0.23)
 // (All text strings come from PLACARD_TEXT — see lib/placardText.ts)
 
 // ── Text helpers ────────────────────────────────────────────────────────────
+//
+// IMPORTANT: every helper here MUST sanitise input before calling
+// font.widthOfTextAtSize() or page.drawText(). pdf-lib's StandardFonts
+// use WinAnsi (CP1252) and throw on Unicode chars outside that — even
+// the measure call (widthOfTextAtSize) crashes the PDF generator on
+// e.g. an O₂ subscript in equipment.notes. Historically this was the
+// #1 source of "placard generator died" bug reports.
+//
+// Direct-call sites elsewhere in this file that bypass these helpers
+// (drawing equipment.department, step.energy_type, etc.) MUST sanitise
+// inline — search for `sanitizeForWinAnsi(` to find the existing
+// pattern.
+
 function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
   const lines: string[] = []
-  const paragraphs = text.split(/\r?\n/)
+  // Sanitise once up front — every measure + emit downstream operates
+  // on the safe form. The downstream `page.drawText(line)` call in
+  // drawWrapped therefore can't crash on a Unicode char that survived.
+  const safe = sanitizeForWinAnsi(text)
+  const paragraphs = safe.split(/\r?\n/)
   for (const para of paragraphs) {
     if (!para.trim()) { lines.push(''); continue }
     const words = para.split(/\s+/)
@@ -353,8 +370,9 @@ export function drawPlacardPage(
     x: MARGIN + equipLabelW, y: Y_BLUE_BOT + 6,
     size: 11, font: regular, color: COLOR_SLATE_TEXT,
   })
-  // Department right-aligned
-  const deptText = equipment.department
+  // Department right-aligned. Sanitise — user-imported equipment rows
+  // can have any string here including non-WinAnsi chars from a CSV.
+  const deptText = sanitizeForWinAnsi(equipment.department)
   const deptW = bold.widthOfTextAtSize(deptText, 11)
   page.drawText(deptText, {
     x: PAGE_W - deptW - MARGIN, y: Y_BLUE_BOT + 6,
@@ -564,7 +582,10 @@ export function drawPlacardPage(
       x: MARGIN + 6, y: rowY - 14, width: chipW, height: 11,
       color: rgb(...hexToRgb01(ec.hex)),
     })
-    page.drawText(step.energy_type, {
+    // step.energy_type is normally a 1-2 char code (E, P, M…) but the
+    // 'other' / future-proofing path lets it be anything. Sanitise so a
+    // typed value like "E2" with a subscript can't crash the row draw.
+    page.drawText(sanitizeForWinAnsi(step.energy_type), {
       x: MARGIN + 10, y: rowY - 12,
       size: 8, font: bold, color: rgb(...hexToRgb01(ec.textHex)),
     })

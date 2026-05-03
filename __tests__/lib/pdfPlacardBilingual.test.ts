@@ -90,14 +90,14 @@ describe('generateBilingualPlacardPdf', () => {
     expect(bytes.length).toBeGreaterThan(1000)
   })
 
-  it('handles an equipment row with notes containing WinAnsi-safe typographic chars', async () => {
-    // Smart quotes + em-dashes are IN WinAnsi (0x80-0x9F range) and
-    // should pass through. Subscripts / ≥ are NOT in WinAnsi and
-    // currently crash the placard wrapText path — that's a pre-
-    // existing bug separate from this PR; tracking as a follow-up.
+  it('handles equipment notes with smart quotes / em-dashes / subscripts', async () => {
+    // The placard wrapText path used to crash on subscripts; that's
+    // fixed at the helper layer now (see pdfPlacardWinAnsi.test.ts
+    // for the regression coverage). Including a representative payload
+    // here too so a bilingual-specific regression also gets caught.
     const bytes = await generateBilingualPlacardPdf({
       equipment: makeEquipment({
-        notes: 'Confirm "purge complete" before unlock — supervisor sign-off required.',
+        notes: 'Verify O₂ ≥ 19.5% — confirm "purge complete" before unlock',
       }),
       steps: [],
     })
