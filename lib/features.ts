@@ -218,6 +218,15 @@ export const FEATURES: FeatureDef[] = [
     enabled:     true,
     comingSoon:  false,
   },
+  {
+    id:          'reports-inspector',
+    name:        'Inspector access',
+    description: 'Mint a signed read-only URL for an OSHA / Cal-OSHA inspector',
+    href:        '/admin/inspector',
+    category:    'reports',
+    enabled:     true,
+    comingSoon:  false,
+  },
 
   // ── Admin / configuration ───────────────────────────────────────────────
   {
