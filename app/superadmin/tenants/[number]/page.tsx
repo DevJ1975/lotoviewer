@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { use, useEffect, useMemo, useState, type FormEvent, type ChangeEvent } from 'react'
-import { ArrowLeft, Loader2, AlertCircle, CheckCircle2, Upload, Trash2 } from 'lucide-react'
+import { ArrowLeft, Loader2, AlertCircle, CheckCircle2, Upload, Trash2, UserPlus, X, RotateCcw } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
 import { getModules, type FeatureCategory, type FeatureDef } from '@/lib/features'
@@ -379,40 +379,17 @@ export default function SuperadminTenantDetail({
         </div>
       </form>
 
-      {/* ── Members (read-only — invite + role change in slice 6.4) ────── */}
+      {/* ── Members ─────────────────────────────────────────────────────── */}
       <div className="mt-10">
-        <Section title={`Members (${members.length})`}>
-          {members.length === 0 ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">No members yet.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100 dark:divide-slate-700">
-              {members.map(m => (
-                <li key={m.user_id} className="py-2 flex items-center justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
-                      {m.full_name ?? m.email ?? m.user_id}
-                    </p>
-                    {m.email && m.full_name && (
-                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate font-mono">{m.email}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="text-xs uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">
-                      {m.role}
-                    </span>
-                    <span className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:inline">
-                      Joined {new Date(m.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
-            Invitations and role changes ship in slice 6.4.
-          </p>
-        </Section>
+        <MembersSection tenantNumber={number} members={members} reload={load} />
       </div>
+
+      {/* ── Reset demo (only for is_demo tenants) ──────────────────────── */}
+      {tenant.is_demo && (
+        <div className="mt-10">
+          <ResetDemoSection tenantNumber={number} tenantName={tenant.name} reload={load} />
+        </div>
+      )}
     </div>
   )
 }
@@ -442,5 +419,332 @@ function ModuleCheckbox({
         <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">{m.description}</div>
       </div>
     </label>
+  )
+}
+
+// ─── Members ────────────────────────────────────────────────────────────────
+
+const ROLE_OPTIONS: TenantRole[] = ['owner', 'admin', 'member', 'viewer']
+
+interface InviteResult {
+  email:          string
+  role:           TenantRole
+  tempPassword?:  string
+  alreadyExisted: boolean
+}
+
+function MembersSection({
+  tenantNumber, members, reload,
+}: { tenantNumber: string; members: MemberRow[]; reload: () => Promise<void> }) {
+  const [inviteOpen,   setInviteOpen]   = useState(false)
+  const [inviteEmail,  setInviteEmail]  = useState('')
+  const [inviteName,   setInviteName]   = useState('')
+  const [inviteRole,   setInviteRole]   = useState<TenantRole>('member')
+  const [inviteBusy,   setInviteBusy]   = useState(false)
+  const [inviteError,  setInviteError]  = useState<string | null>(null)
+  const [inviteResult, setInviteResult] = useState<InviteResult | null>(null)
+
+  // Per-row mutation state. Keyed by user_id.
+  const [busyUserId, setBusyUserId] = useState<string | null>(null)
+  const [rowError,   setRowError]   = useState<string | null>(null)
+
+  async function bearerToken(): Promise<string | null> {
+    const { data: { session } } = await supabase.auth.getSession()
+    return session?.access_token ?? null
+  }
+
+  async function onInvite(e: FormEvent) {
+    e.preventDefault()
+    setInviteError(null); setInviteResult(null)
+    const email = inviteEmail.trim().toLowerCase()
+    if (!email) { setInviteError('Email required'); return }
+
+    setInviteBusy(true)
+    try {
+      const token = await bearerToken()
+      if (!token) { setInviteError('Not signed in'); return }
+
+      const res = await fetch(`/api/superadmin/tenants/${tenantNumber}/members`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({
+          email,
+          role:      inviteRole,
+          full_name: inviteName.trim() || undefined,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setInviteError(json?.error ?? `Invite failed (${res.status})`)
+        return
+      }
+      setInviteResult({
+        email:          json.email,
+        role:           json.role,
+        tempPassword:   json.tempPassword,
+        alreadyExisted: json.alreadyExisted,
+      })
+      setInviteEmail(''); setInviteName(''); setInviteRole('member')
+      await reload()
+    } catch (err: unknown) {
+      setInviteError(err instanceof Error ? err.message : 'Network error')
+    } finally {
+      setInviteBusy(false)
+    }
+  }
+
+  async function changeRole(userId: string, role: TenantRole) {
+    setBusyUserId(userId); setRowError(null)
+    try {
+      const token = await bearerToken()
+      if (!token) { setRowError('Not signed in'); return }
+      const res = await fetch(`/api/superadmin/tenants/${tenantNumber}/members/${userId}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ role }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { setRowError(json?.error ?? `Change failed (${res.status})`); return }
+      await reload()
+    } catch (err: unknown) {
+      setRowError(err instanceof Error ? err.message : 'Network error')
+    } finally {
+      setBusyUserId(null)
+    }
+  }
+
+  async function removeMember(userId: string, label: string) {
+    if (!confirm(`Remove ${label} from this tenant? Their account stays — only the membership is removed.`)) return
+    setBusyUserId(userId); setRowError(null)
+    try {
+      const token = await bearerToken()
+      if (!token) { setRowError('Not signed in'); return }
+      const res = await fetch(`/api/superadmin/tenants/${tenantNumber}/members/${userId}`, {
+        method:  'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { setRowError(json?.error ?? `Remove failed (${res.status})`); return }
+      await reload()
+    } catch (err: unknown) {
+      setRowError(err instanceof Error ? err.message : 'Network error')
+    } finally {
+      setBusyUserId(null)
+    }
+  }
+
+  return (
+    <Section title={`Members (${members.length})`}>
+      <div className="flex justify-end mb-3">
+        <button
+          type="button"
+          onClick={() => { setInviteOpen(o => !o); setInviteError(null); setInviteResult(null) }}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-brand-navy text-white hover:bg-brand-navy/90 transition-colors"
+        >
+          {inviteOpen ? <X className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+          {inviteOpen ? 'Cancel' : 'Invite member'}
+        </button>
+      </div>
+
+      {inviteOpen && (
+        <form onSubmit={onInvite} className="mb-4 p-3 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <input
+              type="email"
+              required
+              placeholder="email@example.com"
+              value={inviteEmail}
+              onChange={e => setInviteEmail(e.target.value)}
+              className="px-3 py-1.5 text-sm rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-navy"
+            />
+            <input
+              type="text"
+              placeholder="Full name (optional)"
+              value={inviteName}
+              onChange={e => setInviteName(e.target.value)}
+              className="px-3 py-1.5 text-sm rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-navy"
+            />
+            <select
+              value={inviteRole}
+              onChange={e => setInviteRole(e.target.value as TenantRole)}
+              className="px-3 py-1.5 text-sm rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-navy"
+            >
+              {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={inviteBusy}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-brand-navy text-white text-sm font-medium hover:bg-brand-navy/90 disabled:opacity-60 transition-colors"
+            >
+              {inviteBusy && <Loader2 className="h-4 w-4 animate-spin" />}
+              {inviteBusy ? 'Inviting…' : 'Send invite'}
+            </button>
+          </div>
+          {inviteError && (
+            <p className="text-sm text-rose-600 dark:text-rose-400 flex items-center gap-1">
+              <AlertCircle className="h-3.5 w-3.5" /> {inviteError}
+            </p>
+          )}
+        </form>
+      )}
+
+      {inviteResult && (
+        <div className="mb-4 p-3 rounded-md bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+          <div className="flex items-start gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+            <div className="text-sm">
+              <p className="font-medium text-emerald-900 dark:text-emerald-100">
+                {inviteResult.alreadyExisted ? 'Added existing user' : 'Invite created'}: {inviteResult.email} ({inviteResult.role})
+              </p>
+              {inviteResult.tempPassword && (
+                <p className="mt-2 text-emerald-800 dark:text-emerald-200 text-xs">
+                  Temporary password (share with the user — they&apos;ll be forced to rotate it on first login):
+                  <code className="block mt-1 p-2 bg-emerald-100 dark:bg-emerald-900/40 rounded font-mono text-sm select-all">
+                    {inviteResult.tempPassword}
+                  </code>
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rowError && (
+        <div className="mb-3 p-3 rounded-md bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 text-sm text-rose-800 dark:text-rose-200 flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0" /> {rowError}
+        </div>
+      )}
+
+      {members.length === 0 ? (
+        <p className="text-sm text-slate-500 dark:text-slate-400">No members yet. Use the invite button above.</p>
+      ) : (
+        <ul className="divide-y divide-slate-100 dark:divide-slate-700">
+          {members.map(m => {
+            const label = m.full_name ?? m.email ?? m.user_id
+            const busy  = busyUserId === m.user_id
+            return (
+              <li key={m.user_id} className="py-2 flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{label}</p>
+                  {m.email && m.full_name && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate font-mono">{m.email}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <select
+                    value={m.role}
+                    onChange={e => changeRole(m.user_id, e.target.value as TenantRole)}
+                    disabled={busy}
+                    className="px-2 py-1 text-xs uppercase tracking-wider font-medium rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-brand-navy disabled:opacity-60"
+                  >
+                    {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => removeMember(m.user_id, label)}
+                    disabled={busy}
+                    aria-label={`Remove ${label}`}
+                    className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors disabled:opacity-50"
+                  >
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  </button>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </Section>
+  )
+}
+
+// ─── Reset Demo ─────────────────────────────────────────────────────────────
+
+function ResetDemoSection({
+  tenantNumber, tenantName, reload,
+}: { tenantNumber: string; tenantName: string; reload: () => Promise<void> }) {
+  const [busy,   setBusy]   = useState(false)
+  const [error,  setError]  = useState<string | null>(null)
+  const [result, setResult] = useState<{ wiped: Record<string, number>; skipped: string[] } | null>(null)
+
+  async function onReset() {
+    const phrase = `RESET ${tenantNumber}`
+    const got = prompt(
+      `This wipes ALL domain data for ${tenantName} (#${tenantNumber}) — equipment, permits, training records, audit log.\n\n` +
+      `Re-seeding canonical demo data is wired in Phase D; for now the tenant ends up empty.\n\n` +
+      `Type "${phrase}" to confirm.`,
+    )
+    if (got !== phrase) {
+      if (got !== null) alert('Confirmation phrase did not match. Nothing was changed.')
+      return
+    }
+
+    setBusy(true); setError(null); setResult(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) { setError('Not signed in'); return }
+
+      const res = await fetch(`/api/superadmin/tenants/${tenantNumber}/reset-demo`, {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { setError(json?.error ?? `Reset failed (${res.status})`); return }
+      setResult({ wiped: json.wiped ?? {}, skipped: json.skipped ?? [] })
+      await reload()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Network error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const totalWiped = result ? Object.values(result.wiped).reduce((a, b) => a + b, 0) : 0
+
+  return (
+    <Section title="Reset demo data">
+      <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+        Wipes every domain row in this tenant. The tenant row, memberships, and
+        settings are preserved. Re-seeding canonical demo data ships in Phase&nbsp;D.
+      </p>
+
+      <button
+        type="button"
+        onClick={onReset}
+        disabled={busy}
+        className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-rose-600 text-white text-sm font-medium hover:bg-rose-700 disabled:opacity-60 transition-colors"
+      >
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+        {busy ? 'Wiping…' : 'Reset demo data'}
+      </button>
+
+      {error && (
+        <p className="mt-3 text-sm text-rose-600 dark:text-rose-400 flex items-center gap-1">
+          <AlertCircle className="h-3.5 w-3.5" /> {error}
+        </p>
+      )}
+
+      {result && (
+        <div className="mt-4 p-3 rounded-md bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-sm">
+          <p className="font-medium text-emerald-900 dark:text-emerald-100 mb-2">
+            Wiped {totalWiped.toLocaleString()} row{totalWiped === 1 ? '' : 's'}.
+          </p>
+          <ul className="text-xs text-emerald-800 dark:text-emerald-200 grid grid-cols-2 gap-x-4 gap-y-0.5 font-mono">
+            {Object.entries(result.wiped)
+              .filter(([, n]) => n > 0)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([t, n]) => <li key={t}>{t}: {n}</li>)}
+          </ul>
+          {result.skipped.length > 0 && (
+            <p className="mt-2 text-[11px] text-emerald-700 dark:text-emerald-300/70">
+              Skipped (table not in this DB): {result.skipped.join(', ')}
+            </p>
+          )}
+        </div>
+      )}
+    </Section>
   )
 }
