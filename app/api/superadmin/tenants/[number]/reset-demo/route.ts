@@ -117,14 +117,34 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     }
   }
 
-  // TODO(phase-D): re-seed canonical demo data here once lib/seed/demoTenant.ts
-  // exists. Until then, the wipe leaves the tenant empty.
+  // Re-seed canonical demo data via the SQL function defined in
+  // migration 030. Slug-based, so this only works for slug='wls-demo'
+  // today; future demo tenants would need their own seed function.
+  let seedResult: string | null = null
+  let seedSkipped = false
+  if (tenant.tenant_number === '0002') {
+    const { data, error: seedErr } = await admin.rpc('seed_wls_demo')
+    if (seedErr) {
+      Sentry.captureException(seedErr)
+      return NextResponse.json({
+        error: `Re-seed failed: ${seedErr.message}`,
+        wiped,
+      }, { status: 500 })
+    }
+    seedResult = typeof data === 'string' ? data : null
+  } else {
+    seedSkipped = true
+  }
 
   return NextResponse.json({
     ok: true,
     tenant: { id: tenant.id, tenant_number: tenant.tenant_number },
     wiped,
     skipped,
-    note: 'Re-seed will be added in Phase D (migration 030 / lib/seed/demoTenant.ts).',
+    seed:    seedResult,
+    seedSkipped,
+    note: seedSkipped
+      ? 'No seed function for this tenant — only the wipe ran. WLS Demo (#0002) auto-reseeds.'
+      : 'Wiped and re-seeded canonical demo data.',
   })
 }
