@@ -40,7 +40,7 @@ export function TrainingGap({
           className="mt-0.5"
         />
         <span>
-          I have verified each worker's training off-app and accept responsibility for authorizing
+          I have verified each worker&apos;s training off-app and accept responsibility for authorizing
           entry. (The audit log records this acknowledgement on the permit.)
         </span>
       </label>

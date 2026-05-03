@@ -194,7 +194,7 @@ jamil@trainovations.com`
               </h2>
               <p className="text-xs text-emerald-800 dark:text-emerald-200 mt-1">
                 {(justInvited.fullName || justInvited.email.split('@')[0])} will receive a sign-in link with their one-time password.
-                On first login they'll be required to set their own password (≥ 8 characters).
+                On first login they&apos;ll be required to set their own password (≥ 8 characters).
               </p>
               <details className="mt-3 text-xs text-emerald-900 dark:text-emerald-100">
                 <summary className="cursor-pointer font-semibold hover:underline">
@@ -229,7 +229,7 @@ jamil@trainovations.com`
             <div>
               <h2 className="text-sm font-bold text-amber-900 dark:text-amber-100">Invite created — email not sent</h2>
               <p className="text-xs text-amber-800 dark:text-amber-200 mt-0.5">
-                The user is created but Resend isn't configured (or the send failed). Copy this into your email to {justInvited.email}.
+                The user is created but Resend isn&apos;t configured (or the send failed). Copy this into your email to {justInvited.email}.
                 The password is shown once; save it if you lose the window.
               </p>
             </div>

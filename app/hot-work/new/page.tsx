@@ -335,7 +335,7 @@ export default function NewHotWorkPermitPage() {
             <p className="text-xs text-slate-400 dark:text-slate-500">Loading active CS permits…</p>
           ) : activeCsPermits.length === 0 ? (
             <p className="text-xs text-rose-700 dark:text-rose-300">
-              No active confined-space permits found. Create the CS permit first; you can come back here once it's signed.
+              No active confined-space permits found. Create the CS permit first; you can come back here once it&apos;s signed.
             </p>
           ) : (
             <select

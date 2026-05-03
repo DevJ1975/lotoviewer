@@ -192,7 +192,7 @@ function EquipmentDetail() {
           <header className="flex items-baseline justify-between gap-2">
             <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Annotated equipment photo</h2>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Tap "Annotate" to add arrows + labels pointing at isolation points.
+              Tap &quot;Annotate&quot; to add arrows + labels pointing at isolation points.
             </p>
           </header>
           <div className="relative aspect-video bg-slate-50 dark:bg-slate-900/40 rounded-lg overflow-hidden">
@@ -231,7 +231,7 @@ function EquipmentDetail() {
           <header className="flex items-baseline justify-between gap-2">
             <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Annotated isolation photo</h2>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Tap "Annotate" to add red arrows + labels naming each isolation point.
+              Tap &quot;Annotate&quot; to add red arrows + labels naming each isolation point.
             </p>
           </header>
           <div className="relative aspect-video bg-slate-50 dark:bg-slate-900/40 rounded-lg overflow-hidden">

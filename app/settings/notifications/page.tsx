@@ -179,7 +179,7 @@ export default function NotificationsSettingsPage() {
           <div className="rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 p-3 space-y-1">
             <p className="text-sm font-bold text-amber-900 dark:text-amber-100">Push notifications unavailable.</p>
             <p className="text-xs text-amber-900/80 dark:text-amber-100/80">
-              Your browser doesn't expose the Push API. On iPad, install Soteria FIELD to your home screen
+              Your browser doesn&apos;t expose the Push API. On iPad, install Soteria FIELD to your home screen
               (Share → Add to Home Screen) and open it from there — Web Push only works in installed PWAs on iOS.
             </p>
           </div>
@@ -187,7 +187,7 @@ export default function NotificationsSettingsPage() {
           <div className="rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 p-3 space-y-1">
             <p className="text-sm font-bold text-rose-900 dark:text-rose-100">Permission blocked.</p>
             <p className="text-xs text-rose-900/80 dark:text-rose-100/80">
-              You previously denied notification permission in this browser. To re-enable, open your browser's
+              You previously denied notification permission in this browser. To re-enable, open your browser&apos;s
               site settings for Soteria FIELD and switch Notifications to Allow, then reload.
             </p>
           </div>
@@ -227,7 +227,7 @@ export default function NotificationsSettingsPage() {
               )}
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              You'll receive an alert when an atmospheric reading fails or when one of your permits is about
+              You&apos;ll receive an alert when an atmospheric reading fails or when one of your permits is about
               to expire. Each device has to be enabled separately. You can disable any time.
             </p>
             {/* Admin-only self-test. Sends a push only to the current
