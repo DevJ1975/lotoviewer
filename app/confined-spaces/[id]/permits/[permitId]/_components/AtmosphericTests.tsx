@@ -236,7 +236,7 @@ export function NewTestForm({
       )}
       {instrumentId.trim() && meterStatus.kind === 'unknown' && meters.size > 0 && (
         <p className="text-[11px] rounded-md border border-amber-200 bg-amber-50/60 dark:bg-amber-950/40/60 px-2 py-1 text-amber-900/80 dark:text-amber-100/80">
-          {instrumentId.trim()} isn't in the meter register yet — add it to track bump-test compliance.
+          {instrumentId.trim()} isn&apos;t in the meter register yet — add it to track bump-test compliance.
         </p>
       )}
       {calOverdue && (

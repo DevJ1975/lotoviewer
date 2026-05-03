@@ -336,7 +336,7 @@ export default function HotWorkPermitDetailPage() {
               </ul>
               <label className="flex items-start gap-2 text-[11px] text-amber-900 dark:text-amber-100 pt-1 cursor-pointer">
                 <input type="checkbox" checked={trainingOverride} onChange={e => setTrainingOverride(e.target.checked)} className="mt-0.5" />
-                <span>I have verified each worker's training off-app and accept responsibility for authorizing entry.</span>
+                <span>I have verified each worker&apos;s training off-app and accept responsibility for authorizing entry.</span>
               </label>
             </div>
           )}
@@ -344,7 +344,7 @@ export default function HotWorkPermitDetailPage() {
             <div>
               <p className="text-sm font-bold text-emerald-900 dark:text-emerald-100">Sign &amp; authorize this permit</p>
               <p className="text-[11px] text-emerald-900 dark:text-emerald-100/80">
-                You're acting as the Permit Authorizing Individual. The permit becomes active immediately on sign.
+                You&apos;re acting as the Permit Authorizing Individual. The permit becomes active immediately on sign.
               </p>
             </div>
             <button

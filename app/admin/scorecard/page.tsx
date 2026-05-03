@@ -83,7 +83,7 @@ export default function ScorecardPage() {
 
       {loadError && (
         <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 rounded-xl px-4 py-3 text-xs text-rose-900 dark:text-rose-100">
-          Couldn't load scorecard: {loadError}
+          Couldn&apos;t load scorecard: {loadError}
         </div>
       )}
 

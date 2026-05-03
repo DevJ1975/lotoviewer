@@ -106,7 +106,7 @@ export default function SupportPage() {
           <div>
             <p className="text-base font-bold text-emerald-900 dark:text-emerald-100">Report sent.</p>
             <p className="text-xs text-emerald-900 dark:text-emerald-100/80 mt-1">
-              Thanks — we'll follow up at <span className="font-mono">{email}</span> if we need anything else.
+              Thanks — we&apos;ll follow up at <span className="font-mono">{email}</span> if we need anything else.
             </p>
           </div>
           <button
