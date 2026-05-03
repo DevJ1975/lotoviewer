@@ -7,11 +7,12 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import { generateCompliancePdfBundle } from '@/lib/pdfBundle'
+import { loadPermitsInWindow }      from '@/lib/queries/confinedSpacePermits'
+import { loadHotWorkPermitsInWindow } from '@/lib/queries/hotWorkPermits'
+import { loadConfinedSpacesByIds }  from '@/lib/queries/confinedSpaces'
 import type {
   AtmosphericTest,
   ConfinedSpace,
-  ConfinedSpacePermit,
-  HotWorkPermit,
 } from '@/lib/types'
 
 // Admin-only "compliance report bundle" generator. The user picks a date
@@ -64,26 +65,10 @@ export default function CompliancePage() {
       const startTs = new Date(`${start}T00:00:00.000Z`).toISOString()
       const endTs   = new Date(`${end}T23:59:59.999Z`).toISOString()
 
-      const [csRes, hwRes] = await Promise.all([
-        supabase
-          .from('loto_confined_space_permits')
-          .select('*')
-          .gte('started_at', startTs)
-          .lte('started_at', endTs)
-          .order('started_at', { ascending: true }),
-        supabase
-          .from('loto_hot_work_permits')
-          .select('*')
-          .gte('started_at', startTs)
-          .lte('started_at', endTs)
-          .order('started_at', { ascending: true }),
+      const [csPermitsRaw, hwPermitsRaw] = await Promise.all([
+        loadPermitsInWindow({ startTs, endTs }),
+        loadHotWorkPermitsInWindow({ startTs, endTs }),
       ])
-
-      if (csRes.error) throw new Error(formatSupabaseError(csRes.error, 'load CS permits'))
-      if (hwRes.error) throw new Error(formatSupabaseError(hwRes.error, 'load hot-work permits'))
-
-      const csPermitsRaw = (csRes.data ?? []) as ConfinedSpacePermit[]
-      const hwPermitsRaw = (hwRes.data ?? []) as HotWorkPermit[]
 
       if (csPermitsRaw.length === 0 && hwPermitsRaw.length === 0) {
         setError('No permits found in the selected window.')
@@ -99,10 +84,10 @@ export default function CompliancePage() {
       const spaceIds  = Array.from(new Set(csPermitsRaw.map(p => p.space_id))).filter(Boolean) as string[]
       const permitIds = csPermitsRaw.map(p => p.id)
 
-      const [spacesRes, testsRes] = await Promise.all([
-        spaceIds.length > 0
-          ? supabase.from('loto_confined_spaces').select('*').in('space_id', spaceIds)
-          : Promise.resolve({ data: [], error: null }),
+      // Tests aren't centralised yet (no other call sites use this exact
+      // shape); leaving this one inline for now.
+      const [spaces, testsRes] = await Promise.all([
+        loadConfinedSpacesByIds(spaceIds),
         permitIds.length > 0
           ? supabase
               .from('loto_atmospheric_tests')
@@ -111,14 +96,10 @@ export default function CompliancePage() {
               .order('tested_at', { ascending: false })
           : Promise.resolve({ data: [], error: null }),
       ])
-
-      if (spacesRes.error) throw new Error(formatSupabaseError(spacesRes.error, 'load spaces'))
-      if (testsRes.error)  throw new Error(formatSupabaseError(testsRes.error, 'load atmospheric tests'))
+      if (testsRes.error) throw new Error(formatSupabaseError(testsRes.error, 'load atmospheric tests'))
 
       const spacesById = new Map<string, ConfinedSpace>()
-      for (const s of (spacesRes.data ?? []) as ConfinedSpace[]) {
-        spacesById.set(s.space_id, s)
-      }
+      for (const s of spaces) spacesById.set(s.space_id, s)
       const testsByPermit = new Map<string, AtmosphericTest[]>()
       for (const t of (testsRes.data ?? []) as AtmosphericTest[]) {
         const list = testsByPermit.get(t.permit_id) ?? []

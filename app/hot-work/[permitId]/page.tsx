@@ -26,6 +26,9 @@ import {
   validateHotWorkTraining,
   type HotWorkTrainingIssue,
 } from '@/lib/trainingRecords'
+import { loadHotWorkPermit }            from '@/lib/queries/hotWorkPermits'
+import { loadPermit }                   from '@/lib/queries/confinedSpacePermits'
+import { loadAllTrainingRecordsSafe }   from '@/lib/queries/trainingRecords'
 import { FireWatchSignOnDialog } from './_components/FireWatchSignOnDialog'
 import { CancelDialog }          from './_components/CancelDialog'
 import { ChecklistDisplay }      from './_components/ChecklistDisplay'
@@ -91,25 +94,20 @@ export default function HotWorkPermitDetailPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [pRes, trRes] = await Promise.all([
-      supabase.from('loto_hot_work_permits').select('*').eq('id', permitId).single(),
-      supabase.from('loto_training_records').select('*'),
+    const [p, trainingRecords] = await Promise.all([
+      loadHotWorkPermit(permitId),
+      loadAllTrainingRecordsSafe(),
     ])
-    if (pRes.error || !pRes.data) {
+    if (!p) {
       setNotFound(true); setLoading(false); return
     }
-    const p = pRes.data as HotWorkPermit
     setPermit(p)
-    if (trRes.data) setTrainingRecords(trRes.data as TrainingRecord[])
+    setTrainingRecords(trainingRecords)
 
     // Load cross-linked CS permit if any.
     if (p.associated_cs_permit_id) {
-      const { data: cs } = await supabase
-        .from('loto_confined_space_permits')
-        .select('*')
-        .eq('id', p.associated_cs_permit_id)
-        .single()
-      if (cs) setCsPermit(cs as ConfinedSpacePermit)
+      const cs = await loadPermit(p.associated_cs_permit_id)
+      if (cs) setCsPermit(cs)
     } else {
       setCsPermit(null)
     }
