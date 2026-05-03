@@ -2,6 +2,7 @@ import {
   parseCsv,
   decodeFile,
   normalizeHeader,
+  cell,
 } from '@/lib/csvImport'
 import type {
   ConfinedSpaceClassification,
@@ -113,11 +114,6 @@ function buildSpaceHeaderMap(headerRow: string[]): SpaceHeaderMap | { error: str
     knownhazards:      idx.knownhazards,
     isolationrequired: idx.isolationrequired,
   }
-}
-
-function cell(row: string[], i: number | undefined): string {
-  if (i === undefined) return ''
-  return (row[i] ?? '').trim()
 }
 
 function processSpaceRows(rows: string[][], h: SpaceHeaderMap): {

@@ -55,9 +55,10 @@ export default function IdleLogout() {
       for (const ev of WINDOW_EVENTS) window.removeEventListener(ev, onActivity)
       for (const ev of DOC_EVENTS)    document.removeEventListener(ev, onActivity)
     }
-  // signOut/userId are the only inputs that should re-arm the timer.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId])
+    // signOut from AuthProvider is wrapped in useCallback with empty deps,
+    // so its identity is stable across renders — safe to depend on without
+    // re-arming the timer on every parent render.
+  }, [userId, signOut])
 
   if (secondsLeft === null) return null
 

@@ -1,5 +1,4 @@
-import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from 'pdf-lib'
-import QRCode from 'qrcode'
+import { PDFDocument, PDFImage, StandardFonts, rgb } from 'pdf-lib'
 import { hexToRgb01 } from '@/lib/energyCodes'
 import { effectiveThresholds, evaluateTest } from '@/lib/confinedSpaceThresholds'
 import type {
@@ -7,6 +6,16 @@ import type {
   ConfinedSpace,
   ConfinedSpacePermit,
 } from '@/lib/types'
+import {
+  AMBER, BLACK, EMERALD, FAINT, MARGIN, MUTED, NAVY, PAGE_H, PAGE_W, RED, RULE, SLATE, WHITE,
+  createDrawCtx, drawBullets, drawDivider, drawKeyValue, drawSectionBar, embedQrCode,
+  reserveSpace, sanitizeForWinAnsi,
+  type DrawCtx,
+} from '@/lib/pdfShared'
+
+// Re-export so existing test imports (`import { sanitizeForWinAnsi } from '@/lib/pdfPermit'`)
+// keep working — the function itself now lives in pdfShared.
+export { sanitizeForWinAnsi }
 
 // Single-page portrait Letter permit print, modeled on the OSHA Permit-
 // Required Confined Spaces Quick Card. Layout is single-column, flowing
@@ -17,189 +26,6 @@ import type {
 // Generated client-side (same pattern as lib/pdfPlacard.ts) so users can
 // download without round-tripping a PDF service. pdf-lib + StandardFonts
 // keep the bundle small (no font embedding).
-
-// ── Page geometry ───────────────────────────────────────────────────────────
-const PAGE_W = 612    // 8.5" × 72
-const PAGE_H = 792    // 11"  × 72
-const MARGIN = 36
-
-// ── Palette (matches the placard generator so prints feel cohesive) ────────
-const NAVY    = rgb(...hexToRgb01('#214488'))
-const SLATE   = rgb(0.15, 0.18, 0.23)
-const MUTED   = rgb(0.45, 0.50, 0.55)
-const RULE    = rgb(0.82, 0.85, 0.90)
-const WHITE   = rgb(1, 1, 1)
-const BLACK   = rgb(0, 0, 0)
-const RED     = rgb(...hexToRgb01('#BF1414'))
-const AMBER   = rgb(...hexToRgb01('#D97706'))
-const EMERALD = rgb(...hexToRgb01('#059669'))
-const FAINT   = rgb(0.96, 0.97, 0.99)
-
-// ── Text helpers ────────────────────────────────────────────────────────────
-
-// pdf-lib's StandardFonts use WinAnsi (CP1252) which doesn't cover Unicode
-// subscripts/superscripts or many typography chars. Hazard text from users
-// or the AI suggester routinely contains O₂, H₂S, CO₂ (subscripts at U+2082)
-// and would crash render with "WinAnsi cannot encode '₂'". Map to ASCII
-// before any drawText / widthOfTextAtSize call.
-// Exported so the unit tests in __tests__/lib/pdfPermit.test.ts can pin
-// the WinAnsi-safe substitution table — a regression here turned out to
-// crash the entire PDF generator in production once.
-// Chars in WinAnsi's 0x80-0x9F range that the engine CAN render even
-// though they're outside Latin-1. Preserved by the catch-all so a pasted
-// bullet (•), trademark (™), or currency (€) survives. Smart quotes /
-// em-dash / ellipsis are normalized to ASCII earlier in the pipeline.
-const WINANSI_HIGH_KEEP = '€‚ƒ„†‡ˆ‰Š‹ŒŽ•˜™š›œžŸ'
-
-export function sanitizeForWinAnsi(s: string): string {
-  if (!s) return s
-  // Built per call (cheap; the kept chars are a fixed string).
-  const stripOther = new RegExp(`[^\\x00-\\xFF\\n\\r\\t${WINANSI_HIGH_KEEP}]`, 'g')
-  return s
-    .replace(/[₀-₉]/g, c => String.fromCharCode(0x30 + (c.charCodeAt(0) - 0x2080))) // ₀-₉
-    .replace(/[⁰⁴-⁹]/g, c => String.fromCharCode(0x30 + (c.charCodeAt(0) - 0x2070))) // ⁰ ⁴-⁹
-    .replace(/²/g, '2').replace(/³/g, '3').replace(/¹/g, '1') // ² ³ ¹ (in WinAnsi but normalize anyway)
-    .replace(/⁺/g, '+').replace(/⁻/g, '-')                         // ⁺ ⁻
-    .replace(/₊/g, '+').replace(/₋/g, '-')                         // ₊ ₋
-    .replace(/[‐‑−]/g, '-')                                   // hyphens, minus
-    .replace(/ /g, ' ')                                                  // nbsp
-    .replace(/[‘’‚‛]/g, "'")                              // smart single quotes
-    .replace(/[“”„‟]/g, '"')                              // smart double quotes
-    .replace(/…/g, '...')                                                // …
-    .replace(/[–—]/g, '-')                                          // – —
-    .replace(/[×]/g, 'x')                                                // × (in WinAnsi but normalize)
-    .replace(stripOther, '?')                                            // strip anything else (preserve WinAnsi 0x80-0x9F)
-}
-
-function wrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
-  const out: string[] = []
-  for (const para of sanitizeForWinAnsi(text).split(/\r?\n/)) {
-    if (!para.trim()) { out.push(''); continue }
-    const words = para.split(/\s+/)
-    let cur = ''
-    for (const w of words) {
-      const cand = cur ? `${cur} ${w}` : w
-      if (font.widthOfTextAtSize(cand, size) <= maxWidth) cur = cand
-      else { if (cur) out.push(cur); cur = w }
-    }
-    if (cur) out.push(cur)
-  }
-  return out
-}
-
-interface DrawCtx {
-  doc:    PDFDocument
-  page:   PDFPage
-  font:   PDFFont
-  bold:   PDFFont
-  y:      number
-  pageNo: number
-}
-
-// QR code embedded next to the title so anyone holding the printed permit
-// can scan to the live digital permit. Generated at high error-correction
-// (level Q) so a folded or smudged print still scans.
-async function embedQrCode(doc: PDFDocument, url: string): Promise<PDFImage | null> {
-  try {
-    const dataUrl = await QRCode.toDataURL(url, {
-      errorCorrectionLevel: 'Q',
-      margin: 1,
-      width: 240,
-      color: { dark: '#000000', light: '#ffffff' },
-    })
-    const base64 = dataUrl.split(',')[1]
-    const binary = atob(base64)
-    const bytes = new Uint8Array(binary.length)
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-    return await doc.embedPng(bytes)
-  } catch (err) {
-    // Don't break PDF generation if QR encoding fails — just skip the
-    // QR. The serial + permit ID are also on the page so the document
-    // stays traceable manually.
-    console.error('[pdfPermit] QR generation failed', err)
-    return null
-  }
-}
-
-// Reserve `needed` vertical points; if not enough, start a new page.
-function reserveSpace(ctx: DrawCtx, needed: number): void {
-  if (ctx.y - needed < MARGIN + 24) {
-    ctx.page = ctx.doc.addPage([PAGE_W, PAGE_H])
-    ctx.pageNo += 1
-    drawPageFooter(ctx)
-    ctx.y = PAGE_H - MARGIN
-  }
-}
-
-function drawPageFooter(ctx: DrawCtx): void {
-  const text = sanitizeForWinAnsi(
-    `Page ${ctx.pageNo}  ·  OSHA 29 CFR 1910.146 Permit-Required Confined Space Entry Permit  ·  Generated ${new Date().toLocaleString()}`
-  )
-  const w = ctx.font.widthOfTextAtSize(text, 7)
-  ctx.page.drawText(text, {
-    x: PAGE_W - MARGIN - w, y: 18, size: 7, font: ctx.font, color: MUTED,
-  })
-}
-
-// ── Section drawing ────────────────────────────────────────────────────────
-function drawSectionBar(ctx: DrawCtx, title: string): void {
-  reserveSpace(ctx, 24)
-  ctx.page.drawRectangle({
-    x: MARGIN, y: ctx.y - 18, width: PAGE_W - 2 * MARGIN, height: 18, color: NAVY,
-  })
-  ctx.page.drawText(sanitizeForWinAnsi(title.toUpperCase()), {
-    x: MARGIN + 8, y: ctx.y - 13, size: 9, font: ctx.bold, color: WHITE,
-  })
-  ctx.y -= 24
-}
-
-function drawKeyValue(ctx: DrawCtx, key: string, value: string, opts?: { wrap?: boolean }): void {
-  const labelW = 110
-  const valueX = MARGIN + labelW
-  const valueMaxW = PAGE_W - MARGIN - valueX
-  const lines = opts?.wrap
-    ? wrap(value || '—', ctx.font, 9, valueMaxW)
-    : [sanitizeForWinAnsi(value || '—')]
-  reserveSpace(ctx, 12 * Math.max(1, lines.length) + 4)
-  ctx.page.drawText(sanitizeForWinAnsi(key), { x: MARGIN, y: ctx.y - 10, size: 8, font: ctx.bold, color: NAVY })
-  for (let i = 0; i < lines.length; i++) {
-    ctx.page.drawText(lines[i], {
-      x: valueX, y: ctx.y - 10 - i * 11, size: 9, font: ctx.font, color: SLATE,
-    })
-  }
-  ctx.y -= 12 * Math.max(1, lines.length) + 2
-}
-
-function drawBullets(ctx: DrawCtx, items: string[]): void {
-  if (items.length === 0) {
-    drawKeyValue(ctx, '', '— none —')
-    return
-  }
-  const maxW = PAGE_W - 2 * MARGIN - 14
-  for (const item of items) {
-    const lines = wrap(item, ctx.font, 9, maxW)
-    reserveSpace(ctx, 12 * lines.length + 2)
-    for (let i = 0; i < lines.length; i++) {
-      if (i === 0) {
-        ctx.page.drawText('•', { x: MARGIN + 2, y: ctx.y - 10, size: 9, font: ctx.bold, color: NAVY })
-      }
-      ctx.page.drawText(lines[i], {
-        x: MARGIN + 14, y: ctx.y - 10, size: 9, font: ctx.font, color: SLATE,
-      })
-      ctx.y -= 12
-    }
-  }
-}
-
-function drawDivider(ctx: DrawCtx): void {
-  reserveSpace(ctx, 8)
-  ctx.page.drawLine({
-    start: { x: MARGIN, y: ctx.y - 4 },
-    end:   { x: PAGE_W - MARGIN, y: ctx.y - 4 },
-    color: RULE, thickness: 0.5,
-  })
-  ctx.y -= 8
-}
 
 // ── Top header (yellow band with title + key facts) ─────────────────────────
 function drawHeader(ctx: DrawCtx, space: ConfinedSpace, permit: ConfinedSpacePermit, qr: PDFImage | null): void {
@@ -251,10 +77,6 @@ function drawHeader(ctx: DrawCtx, space: ConfinedSpace, permit: ConfinedSpacePer
     })
   }
 
-  // Space + permit ID line — narrowed to leave room for the QR
-  const headerRightLimit = qr ? PAGE_W - MARGIN - 90 : PAGE_W - MARGIN
-  void headerRightLimit  // currently the key-value helper uses full width;
-                         // wrap text already keeps things clipped reasonably.
   drawKeyValue(ctx, 'Space', `${space.space_id}  —  ${space.description}`, { wrap: true })
   drawKeyValue(ctx, 'Department', space.department)
   drawKeyValue(ctx, 'Serial', permit.serial)
@@ -357,10 +179,12 @@ export async function generatePermitPdf({ space, permit, tests, permitUrl }: Gen
   const doc  = await PDFDocument.create()
   const font = await doc.embedFont(StandardFonts.Helvetica)
   const bold = await doc.embedFont(StandardFonts.HelveticaBold)
-  const qr   = permitUrl ? await embedQrCode(doc, permitUrl) : null
+  const qr   = permitUrl ? await embedQrCode(doc, permitUrl, 'pdfPermit') : null
   const page = doc.addPage([PAGE_W, PAGE_H])
-  const ctx: DrawCtx = { doc, page, font, bold, y: PAGE_H - MARGIN, pageNo: 1 }
-  drawPageFooter(ctx)
+  const ctx  = createDrawCtx({
+    doc, page, font, bold,
+    legend: 'OSHA 29 CFR 1910.146 Permit-Required Confined Space Entry Permit',
+  })
 
   drawHeader(ctx, space, permit, qr)
 

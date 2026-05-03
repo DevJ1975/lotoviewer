@@ -141,7 +141,12 @@ export function buildHeaderMap(headerRow: string[]): HeaderMap | { error: string
   }
 }
 
-function cell(row: string[], i: number | undefined): string {
+// Read a column from a CSV row by header-map index. Tolerates undefined
+// (column not present in headers) and missing trailing cells (CSV rows
+// can be short when the publisher omits trailing empty fields).
+// Exported so lib/csvImportConfinedSpaces.ts shares the same helper —
+// these CSV importers must agree on how to handle missing cells.
+export function cell(row: string[], i: number | undefined): string {
   if (i === undefined) return ''
   return (row[i] ?? '').trim()
 }

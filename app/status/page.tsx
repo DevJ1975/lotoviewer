@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Equipment } from '@/lib/types'
+import { loadAllEquipment } from '@/lib/queries/equipment'
 import StatsCards from '@/components/StatsCards'
 import ProgressRing from '@/components/ProgressRing'
 import DepartmentChart from '@/components/DepartmentChart'
@@ -17,12 +18,15 @@ export default function StatusPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   const fetchData = useCallback(async () => {
-    const { data } = await supabase.from('loto_equipment').select('*')
-    if (data) {
-      setEquipment(data as Equipment[])
+    try {
+      const data = await loadAllEquipment()
+      setEquipment(data)
       setLastUpdated(new Date())
+    } catch (err) {
+      console.error('[status] fetch failed', err)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }, [])
 
   useEffect(() => {

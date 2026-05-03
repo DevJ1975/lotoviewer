@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Webhook, Loader2, Trash2, Plus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { formatSupabaseError } from '@/lib/supabaseError'
 import type { WebhookEvent, WebhookSubscription } from '@/lib/types'
 
 // Outbound webhook management. Admin-only at the route level (RLS in
@@ -73,7 +74,7 @@ export default function WebhooksPage() {
       .eq('id', row.id)
       .select('*')
       .single()
-    if (error || !data) { setLoadError(error?.message ?? 'Could not update.'); return }
+    if (error || !data) { setLoadError(formatSupabaseError(error, 'update')); return }
     setRows(prev => prev.map(r => r.id === row.id ? (data as WebhookSubscription) : r))
   }
 

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Flame, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { formatSupabaseError } from '@/lib/supabaseError'
 import type {
   ConfinedSpacePermit,
   Equipment,
@@ -173,7 +174,7 @@ export default function NewHotWorkPermitPage() {
       .select('id')
       .single()
     if (error || !data) {
-      setServerError(error?.message ?? 'Could not create permit.')
+      setServerError(formatSupabaseError(error, 'create permit'))
       setSubmitting(false)
       return
     }

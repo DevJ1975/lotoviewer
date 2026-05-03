@@ -107,7 +107,6 @@ function HomeDashboard() {
       setEquipment(cached)
       setLoading(false)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Debounce realtime events with requestAnimationFrame. A CSV import or
@@ -236,8 +235,7 @@ function HomeDashboard() {
       advanceTimer.current = null
       handleSelectEquip(nextNeedsPhoto.equipment_id)
     }, 1200)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedEqId, selectedDept, equipment, decommissioned, cancelPendingAdvance])
+  }, [selectedEqId, selectedDept, equipment, decommissioned, cancelPendingAdvance, handleSelectEquip])
 
   if (loadError) {
     return (

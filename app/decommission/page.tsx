@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Archive, ArchiveRestore, ArrowLeft, Check, Loader2, Search, X } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowLeft, Loader2, Search, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { loadAllEquipment } from '@/lib/queries/equipment'
 import type { Equipment } from '@/lib/types'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useToast } from '@/hooks/useToast'
@@ -12,14 +13,19 @@ import Toast from '@/components/Toast'
 import { haptic } from '@/lib/platform'
 import { DecommissionSkeleton } from '@/components/Skeleton'
 import { isOffline, OFFLINE_WRITE_MESSAGE } from '@/lib/netGuard'
+import { debug } from '@/lib/debug'
+import { CounterTile } from './_components/CounterTile'
+import { DecommRow }   from './_components/DecommRow'
 
-// Module-level marker so we can tell if the latest build actually loaded in
-// the browser. If this line doesn't appear in the console on page load, the
-// user is running stale JS (stale Vercel edge cache, SW cache, or browser
-// HTTP cache). Bump the tag when touching this file.
+// Module-level marker so non-production builds can confirm the latest JS
+// actually loaded (stale Vercel edge cache, SW cache, or browser HTTP cache
+// otherwise look identical). The build SHA comes from Vercel automatically;
+// no hand-bumping required. debug() is stripped in production builds so
+// shipped users see a clean console.
 if (typeof window !== 'undefined') {
-  // eslint-disable-next-line no-console
-  console.log('[decommission] module loaded', { build: 'a81665c+1' })
+  debug('[decommission] module loaded', {
+    build: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'dev',
+  })
 }
 
 export default function DecommissionPage() {
@@ -35,25 +41,22 @@ export default function DecommissionPage() {
   const { toast, showToast, clearToast } = useToast()
 
   const fetchData = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('loto_equipment')
-      .select('*')
-      .order('equipment_id', { ascending: true })
-    if (error) {
-      console.error('[decommission] fetch failed', error)
-      setLoadError(true)
-    } else if (data) {
+    try {
+      const rows = await loadAllEquipment()
       // Hard schema check: if the `decommissioned` column is missing from the
       // DB or PostgREST's schema cache, every row comes back without the
       // property and counters look fine (all "active") — but writes then
       // silently do nothing. Detect it up front so the user can't be fooled.
-      const rows = data as Equipment[]
       const missing = rows.length > 0 && rows.every(r => !('decommissioned' in r))
       setSchemaError(missing)
       setEquipment(rows)
       setLoadError(false)
+    } catch (err) {
+      console.error('[decommission] fetch failed', err)
+      setLoadError(true)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
@@ -113,13 +116,13 @@ export default function DecommissionPage() {
     // verify the persisted value matches what we asked for: if a trigger or
     // BEFORE UPDATE rule overrode our value, we catch it here instead of at
     // the next page refresh.
-    console.log('[decommission] PATCH start', { id, next })
+    debug('[decommission] PATCH start', { id, next })
     const { data, error } = await supabase
       .from('loto_equipment')
       .update({ decommissioned: next })
       .eq('equipment_id', id)
       .select('equipment_id, decommissioned')
-    console.log('[decommission] PATCH result', { id, next, data, error })
+    debug('[decommission] PATCH result', { id, next, data, error })
 
     setPending(prev => { const s = new Set(prev); s.delete(id); return s })
 
@@ -261,24 +264,24 @@ export default function DecommissionPage() {
   }, [bulkBusy, effectiveSelected, showToast])
 
   const toggle = useCallback(async (id: string) => {
-    console.log('[decommission] toggle invoked', { id })
+    debug('[decommission] toggle invoked', { id })
     // Block if this row has an individual PATCH already in flight, OR if a
     // bulk op is running and this row is in that bulk set. Without the second
     // check, tapping the row's body (not its checkbox) while a bulk PATCH is
     // in flight would fire a concurrent individual PATCH on the same row,
     // and the later response wins — race.
-    if (pending.has(id)) { console.log('[decommission] skip — already pending', id); return }
-    if (bulkBusy && selected.has(id)) { console.log('[decommission] skip — bulk busy', id); return }
+    if (pending.has(id)) { debug('[decommission] skip — already pending', id); return }
+    if (bulkBusy && selected.has(id)) { debug('[decommission] skip — bulk busy', id); return }
     if (isOffline()) {
       haptic('error')
       showToast(OFFLINE_WRITE_MESSAGE, 'error')
       return
     }
     const current = equipment.find(e => e.equipment_id === id)
-    if (!current) { console.log('[decommission] skip — not in local state', id); return }
+    if (!current) { debug('[decommission] skip — not in local state', id); return }
     const previous = current.decommissioned
     const next     = !previous
-    console.log('[decommission] flipping', { id, previous, next })
+    debug('[decommission] flipping', { id, previous, next })
     haptic('tap')
 
     const error = await setDecommissionedRaw(id, next)
@@ -514,88 +517,6 @@ export default function DecommissionPage() {
       )}
 
       {toast && <Toast {...toast} onClose={clearToast} />}
-    </div>
-  )
-}
-
-interface CounterTileProps {
-  value:      number
-  label:      string
-  valueClass: string
-  bgClass:    string
-}
-
-function CounterTile({ value, label, valueClass, bgClass }: CounterTileProps) {
-  return (
-    <div className={`rounded-xl ${bgClass} px-5 py-4 text-center`}>
-      <div className={`text-4xl font-bold tabular-nums leading-tight ${valueClass}`}>
-        {value.toLocaleString()}
-      </div>
-      <div className="text-sm text-muted-foreground mt-1">{label}</div>
-    </div>
-  )
-}
-
-interface DecommRowProps {
-  eq:             Equipment
-  pending:        boolean
-  isSelected:     boolean
-  onToggle:       () => void
-  onSelectChange: (selected: boolean) => void
-  onKeyDown:      (e: React.KeyboardEvent<HTMLDivElement>) => void
-  registerRef:    (el: HTMLDivElement | null) => void
-}
-
-function DecommRow({ eq, pending, isSelected, onToggle, onSelectChange, onKeyDown, registerRef }: DecommRowProps) {
-  const checked = eq.decommissioned
-  return (
-    <div
-      ref={registerRef}
-      role="checkbox"
-      aria-checked={checked}
-      aria-disabled={pending}
-      aria-label={`${eq.equipment_id} ${eq.description}`}
-      tabIndex={0}
-      onClick={onToggle}
-      onKeyDown={onKeyDown}
-      className={`flex items-center gap-3 px-3 sm:px-4 py-3.5 min-h-[56px] cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/30 focus-visible:ring-inset ${
-        isSelected ? 'bg-brand-navy/5 hover:bg-brand-navy/10' : checked ? 'bg-amber-50/30 dark:bg-amber-950/40/30 hover:bg-amber-50/60 dark:hover:bg-amber-950/40/60' : 'hover:bg-slate-50 dark:hover:bg-slate-900/40'
-      }`}
-    >
-      {/* Multi-select checkbox — clicking it does NOT toggle decommissioned */}
-      <label
-        onClick={e => e.stopPropagation()}
-        className="shrink-0 flex items-center justify-center h-9 w-9 -my-2 -ml-2 cursor-pointer"
-      >
-        <input
-          type="checkbox"
-          checked={isSelected}
-          onChange={e => onSelectChange(e.target.checked)}
-          aria-label={`Select ${eq.equipment_id}`}
-          className="h-4 w-4 rounded border-slate-300 dark:border-slate-700 text-brand-navy focus:ring-brand-navy/30"
-        />
-      </label>
-      <span
-        aria-hidden="true"
-        className={`shrink-0 h-5 w-5 rounded border flex items-center justify-center transition-colors ${
-          checked
-            ? 'bg-brand-navy border-brand-navy text-white'
-            : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700'
-        }`}
-      >
-        {checked && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
-      </span>
-      <div className="flex-1 min-w-0">
-        <div className={`font-mono text-sm font-bold truncate ${checked ? 'line-through text-muted-foreground' : 'text-brand-navy'}`}>
-          {eq.equipment_id}
-        </div>
-        <div className={`text-xs truncate ${checked ? 'line-through text-muted-foreground' : 'text-slate-500 dark:text-slate-400'}`}>
-          {eq.description}
-        </div>
-      </div>
-      {pending && (
-        <Loader2 className="h-4 w-4 text-slate-400 dark:text-slate-500 animate-spin shrink-0" aria-label="Saving" />
-      )}
     </div>
   )
 }

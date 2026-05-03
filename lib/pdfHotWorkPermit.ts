@@ -1,13 +1,17 @@
-import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from 'pdf-lib'
-import QRCode from 'qrcode'
+import { PDFDocument, PDFImage, StandardFonts, rgb } from 'pdf-lib'
 import { hexToRgb01 } from '@/lib/energyCodes'
-import { sanitizeForWinAnsi } from '@/lib/pdfPermit'
 import {
   HOT_WORK_TYPE_LABELS,
   HOT_WORK_CANCEL_REASON_LABELS,
   type HotWorkPermit,
 } from '@/lib/types'
 import { hotWorkState } from '@/lib/hotWorkPermitStatus'
+import {
+  AMBER, EMERALD, FAINT, MARGIN, MUTED, NAVY, PAGE_H, PAGE_W, RED, RULE, SLATE, WHITE,
+  createDrawCtx, drawBullets, drawDivider, drawKeyValue, drawSectionBar, embedQrCode,
+  reserveSpace, sanitizeForWinAnsi, wrap,
+  type DrawCtx,
+} from '@/lib/pdfShared'
 
 // Single-page portrait Letter print for hot-work permits. Layout follows
 // the FM Global 7-40 / Cal/OSHA §6777 hot-work permit shape:
@@ -18,152 +22,14 @@ import { hotWorkState } from '@/lib/hotWorkPermitStatus'
 //   5. Authorization (signatures)
 //   6. Post-work fire watch (timer + closeout)
 //
-// Reuses sanitizeForWinAnsi() from lib/pdfPermit.ts so the WinAnsi
-// edge-case work isn't duplicated.
+// Layout primitives (header/footer, key/value, bullets, sanitiser) come
+// from lib/pdfShared.ts so any layout fix lands in both this file and
+// the CS permit generator at once.
 
-// ── Page geometry ──────────────────────────────────────────────────────────
-const PAGE_W = 612
-const PAGE_H = 792
-const MARGIN = 36
-
-// ── Palette ────────────────────────────────────────────────────────────────
-const NAVY    = rgb(...hexToRgb01('#214488'))
-const SLATE   = rgb(0.15, 0.18, 0.23)
-const MUTED   = rgb(0.45, 0.50, 0.55)
-const RULE    = rgb(0.82, 0.85, 0.90)
-const WHITE   = rgb(1, 1, 1)
-const BLACK   = rgb(0, 0, 0)
-const RED     = rgb(...hexToRgb01('#BF1414'))
-const AMBER   = rgb(...hexToRgb01('#D97706'))
-const EMERALD = rgb(...hexToRgb01('#059669'))
-const FAINT   = rgb(0.96, 0.97, 0.99)
 // Hot-work band uses a hotter rose so the printed permit is visually
 // distinct from the yellow CS permit print. Both are recognizable at
 // a glance from across a shop floor.
-const ROSE    = rgb(...hexToRgb01('#E11D48'))
-
-// ── Drawing context ────────────────────────────────────────────────────────
-interface DrawCtx {
-  doc:    PDFDocument
-  page:   PDFPage
-  font:   PDFFont
-  bold:   PDFFont
-  y:      number
-  pageNo: number
-}
-
-function wrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
-  const out: string[] = []
-  for (const para of sanitizeForWinAnsi(text).split(/\r?\n/)) {
-    if (!para.trim()) { out.push(''); continue }
-    const words = para.split(/\s+/)
-    let cur = ''
-    for (const w of words) {
-      const cand = cur ? `${cur} ${w}` : w
-      if (font.widthOfTextAtSize(cand, size) <= maxWidth) cur = cand
-      else { if (cur) out.push(cur); cur = w }
-    }
-    if (cur) out.push(cur)
-  }
-  return out
-}
-
-async function embedQrCode(doc: PDFDocument, url: string): Promise<PDFImage | null> {
-  try {
-    const dataUrl = await QRCode.toDataURL(url, {
-      errorCorrectionLevel: 'Q',
-      margin: 1,
-      width: 240,
-      color: { dark: '#000000', light: '#ffffff' },
-    })
-    const base64 = dataUrl.split(',')[1]
-    const binary = atob(base64)
-    const bytes = new Uint8Array(binary.length)
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-    return await doc.embedPng(bytes)
-  } catch (err) {
-    console.error('[pdfHotWorkPermit] QR generation failed', err)
-    return null
-  }
-}
-
-function reserveSpace(ctx: DrawCtx, needed: number): void {
-  if (ctx.y - needed < MARGIN + 24) {
-    ctx.page = ctx.doc.addPage([PAGE_W, PAGE_H])
-    ctx.pageNo += 1
-    drawPageFooter(ctx)
-    ctx.y = PAGE_H - MARGIN
-  }
-}
-
-function drawPageFooter(ctx: DrawCtx): void {
-  const text = sanitizeForWinAnsi(
-    `Page ${ctx.pageNo}  ·  OSHA 29 CFR 1910.252 / NFPA 51B / Cal/OSHA §6777 Hot Work Permit  ·  Generated ${new Date().toLocaleString()}`
-  )
-  const w = ctx.font.widthOfTextAtSize(text, 7)
-  ctx.page.drawText(text, {
-    x: PAGE_W - MARGIN - w, y: 18, size: 7, font: ctx.font, color: MUTED,
-  })
-}
-
-function drawSectionBar(ctx: DrawCtx, title: string): void {
-  reserveSpace(ctx, 24)
-  ctx.page.drawRectangle({
-    x: MARGIN, y: ctx.y - 18, width: PAGE_W - 2 * MARGIN, height: 18, color: NAVY,
-  })
-  ctx.page.drawText(sanitizeForWinAnsi(title.toUpperCase()), {
-    x: MARGIN + 8, y: ctx.y - 13, size: 9, font: ctx.bold, color: WHITE,
-  })
-  ctx.y -= 24
-}
-
-function drawKeyValue(ctx: DrawCtx, key: string, value: string, opts?: { wrap?: boolean }): void {
-  const labelW = 110
-  const valueX = MARGIN + labelW
-  const valueMaxW = PAGE_W - MARGIN - valueX
-  const lines = opts?.wrap
-    ? wrap(value || '—', ctx.font, 9, valueMaxW)
-    : [sanitizeForWinAnsi(value || '—')]
-  reserveSpace(ctx, 12 * Math.max(1, lines.length) + 4)
-  ctx.page.drawText(sanitizeForWinAnsi(key), { x: MARGIN, y: ctx.y - 10, size: 8, font: ctx.bold, color: NAVY })
-  for (let i = 0; i < lines.length; i++) {
-    ctx.page.drawText(lines[i], {
-      x: valueX, y: ctx.y - 10 - i * 11, size: 9, font: ctx.font, color: SLATE,
-    })
-  }
-  ctx.y -= 12 * Math.max(1, lines.length) + 2
-}
-
-function drawBullets(ctx: DrawCtx, items: string[]): void {
-  if (items.length === 0) {
-    drawKeyValue(ctx, '', '— none —')
-    return
-  }
-  const maxW = PAGE_W - 2 * MARGIN - 14
-  for (const item of items) {
-    const lines = wrap(item, ctx.font, 9, maxW)
-    reserveSpace(ctx, 12 * lines.length + 2)
-    for (let i = 0; i < lines.length; i++) {
-      if (i === 0) {
-        ctx.page.drawText('•', { x: MARGIN + 2, y: ctx.y - 10, size: 9, font: ctx.bold, color: NAVY })
-      }
-      ctx.page.drawText(lines[i], {
-        x: MARGIN + 14, y: ctx.y - 10, size: 9, font: ctx.font, color: SLATE,
-      })
-      ctx.y -= 12
-    }
-  }
-}
-
-function drawDivider(ctx: DrawCtx): void {
-  reserveSpace(ctx, 8)
-  ctx.page.drawLine({
-    start: { x: MARGIN, y: ctx.y - 4 },
-    end:   { x: PAGE_W - MARGIN, y: ctx.y - 4 },
-    color: RULE, thickness: 0.5,
-  })
-  ctx.y -= 8
-}
+const ROSE = rgb(...hexToRgb01('#E11D48'))
 
 // Pre-work checklist: pass/fail/N-A row per question, plus optional
 // note column when the answer demands one (alternate protection text,
@@ -319,10 +185,12 @@ export async function generateHotWorkPermitPdf(
   const doc  = await PDFDocument.create()
   const font = await doc.embedFont(StandardFonts.Helvetica)
   const bold = await doc.embedFont(StandardFonts.HelveticaBold)
-  const qr   = permitUrl ? await embedQrCode(doc, permitUrl) : null
+  const qr   = permitUrl ? await embedQrCode(doc, permitUrl, 'pdfHotWorkPermit') : null
   const page = doc.addPage([PAGE_W, PAGE_H])
-  const ctx: DrawCtx = { doc, page, font, bold, y: PAGE_H - MARGIN, pageNo: 1 }
-  drawPageFooter(ctx)
+  const ctx  = createDrawCtx({
+    doc, page, font, bold,
+    legend: 'OSHA 29 CFR 1910.252 / NFPA 51B / Cal/OSHA §6777 Hot Work Permit',
+  })
 
   drawHeader(ctx, permit, qr)
 
@@ -429,9 +297,6 @@ export async function generateHotWorkPermitPdf(
       : '—')
     if (permit.cancel_notes) drawKeyValue(ctx, 'Notes', permit.cancel_notes, { wrap: true })
   }
-
-  // Reference unused palette tokens to keep TS happy if future edits drop them.
-  void BLACK
 
   return doc.save()
 }

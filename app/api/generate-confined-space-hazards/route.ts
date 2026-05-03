@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { NextRequest, NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
 
 const client = new Anthropic()
 
@@ -221,6 +222,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(parsed)
   } catch (err) {
+    Sentry.captureException(err, { tags: { route: '/api/generate-confined-space-hazards' } })
     console.error('[generate-confined-space-hazards]', err)
     if (err instanceof Anthropic.RateLimitError) {
       return NextResponse.json({ error: 'AI is rate-limited. Retry in a minute.' }, { status: 429 })

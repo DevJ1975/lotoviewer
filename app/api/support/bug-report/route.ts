@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
+import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
   validateBugReport,
@@ -119,6 +120,7 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ ok: true, id: data?.id ?? null }, { status: 200 })
   } catch (err) {
+    Sentry.captureException(err, { tags: { route: '/api/support/bug-report' } })
     console.error('[bug-report] send threw', err)
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Could not send report.' },

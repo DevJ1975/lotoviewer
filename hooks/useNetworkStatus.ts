@@ -25,7 +25,13 @@ async function pingSupabase(): Promise<boolean> {
 }
 
 export function useNetworkStatus() {
-  const [online, setOnline] = useState(true)
+  // Initialise from navigator.onLine so a user who arrives offline doesn't
+  // see a momentary "online" flash before the first pingSupabase resolves.
+  // Falls back to `true` during SSR (no `navigator` on the server) and on
+  // Node test environments — the first effect run reconciles either way.
+  const [online, setOnline] = useState<boolean>(() =>
+    typeof navigator !== 'undefined' ? navigator.onLine : true,
+  )
 
   useEffect(() => {
     let cancelled = false

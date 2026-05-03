@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { formatSupabaseError } from '@/lib/supabaseError'
 import type { ConfinedSpace } from '@/lib/types'
 import { effectiveThresholds, SITE_DEFAULTS } from '@/lib/confinedSpaceThresholds'
 
@@ -229,7 +230,7 @@ export default function NewPermitPage() {
       .single()
 
     if (error || !data) {
-      setServerError(error?.message ?? 'Could not create permit.')
+      setServerError(formatSupabaseError(error, 'create permit'))
       setSubmitting(false)
       return
     }
