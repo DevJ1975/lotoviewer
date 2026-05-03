@@ -137,61 +137,85 @@ alter table public.profiles
 -- NOT NULL and rewrites RLS to filter by tenant.
 -- ────────────────────────────────────────────────────────────────────────────
 
--- LOTO core (loto_equipment, loto_energy_steps, loto_reviews)
--- Note: photo annotations live as jsonb columns on loto_equipment
--- (migrations 015, 022) so they're already covered by loto_equipment.tenant_id.
-alter table public.loto_equipment     add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.loto_energy_steps  add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.loto_reviews       add column if not exists tenant_id uuid references public.tenants(id);
+-- The full list of domain tables. Each entry is a public.<table_name>; the
+-- DO block below skips any that don't exist on this DB (e.g. if a feature's
+-- migration hasn't been applied yet) so a partial-state DB still applies
+-- cleanly. RAISE NOTICE prints a list of skipped tables in the SQL Editor's
+-- Notices pane — review it before running migration 029.
+--
+-- Notes on what's NOT in the list:
+-- - photo_annotations / iso_annotations live as jsonb columns on
+--   loto_equipment, not as separate tables (migrations 015, 022)
+-- - hot_work pre-work checklist is a jsonb column on loto_hot_work_permits
+-- - signon_token is a column on loto_confined_space_permits, not a table
+do $$
+declare
+  t text;
+  domain_tables text[] := array[
+    -- LOTO core
+    'loto_equipment',
+    'loto_energy_steps',
+    'loto_reviews',
+    -- Confined Spaces
+    'loto_confined_spaces',
+    'loto_confined_space_permits',
+    'loto_confined_space_entries',
+    'loto_atmospheric_tests',
+    -- Hot Work
+    'loto_hot_work_permits',
+    -- Training, devices, gas meters, integrations, hygiene
+    'loto_training_records',
+    'loto_devices',
+    'loto_device_checkouts',
+    'loto_gas_meters',
+    'loto_meter_alerts',
+    'loto_webhook_subscriptions',
+    'loto_push_subscriptions',
+    'loto_hygiene_log',
+    -- Audit log: nullable forever. Cross-tenant superadmin actions
+    -- legitimately have no tenant context, so 029 will not set NOT NULL.
+    'audit_log'
+  ];
+  skipped text[] := '{}';
+begin
+  foreach t in array domain_tables loop
+    if exists (
+      select 1 from information_schema.tables
+       where table_schema = 'public' and table_name = t
+    ) then
+      execute format(
+        'alter table public.%I add column if not exists tenant_id uuid references public.tenants(id)',
+        t
+      );
+      execute format(
+        'create index if not exists %I on public.%I(tenant_id)',
+        'idx_' || t || '_tenant',
+        t
+      );
+    else
+      skipped := array_append(skipped, t);
+    end if;
+  end loop;
 
--- Confined Spaces (009, 010)
--- Note: signon tokens are a column on loto_confined_space_permits (migration 024),
--- not a separate table.
-alter table public.loto_confined_spaces         add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.loto_confined_space_permits  add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.loto_confined_space_entries  add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.loto_atmospheric_tests       add column if not exists tenant_id uuid references public.tenants(id);
+  if array_length(skipped, 1) > 0 then
+    raise notice 'Migration 027 skipped these missing tables (review before applying 028/029): %', skipped;
+  end if;
+end $$;
 
--- Hot Work (019, 020)
--- Note: pre-work checklist is a jsonb column on loto_hot_work_permits, not a separate table.
-alter table public.loto_hot_work_permits        add column if not exists tenant_id uuid references public.tenants(id);
-
--- Training, devices, gas meters, integrations, hygiene
-alter table public.loto_training_records        add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.loto_devices                 add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.loto_device_checkouts        add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.loto_gas_meters              add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.loto_meter_alerts            add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.loto_webhook_subscriptions   add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.loto_push_subscriptions      add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.loto_hygiene_log             add column if not exists tenant_id uuid references public.tenants(id);
-
--- Audit log: nullable forever. Cross-tenant superadmin actions legitimately
--- have no tenant context, so we never set NOT NULL on this column.
-alter table public.audit_log                    add column if not exists tenant_id uuid references public.tenants(id);
-
--- ────────────────────────────────────────────────────────────────────────────
--- Composite indexes on (tenant_id) so the upcoming RLS predicate is cheap.
--- Partial indexes that exclude NULL would be faster but break post-backfill,
--- so plain b-tree on the full column.
--- ────────────────────────────────────────────────────────────────────────────
-create index if not exists idx_loto_equipment_tenant            on public.loto_equipment(tenant_id);
-create index if not exists idx_loto_energy_steps_tenant         on public.loto_energy_steps(tenant_id);
-create index if not exists idx_loto_reviews_tenant              on public.loto_reviews(tenant_id);
-create index if not exists idx_confined_spaces_tenant           on public.loto_confined_spaces(tenant_id);
-create index if not exists idx_confined_space_permits_tenant    on public.loto_confined_space_permits(tenant_id);
-create index if not exists idx_confined_space_entries_tenant    on public.loto_confined_space_entries(tenant_id);
-create index if not exists idx_atmospheric_tests_tenant         on public.loto_atmospheric_tests(tenant_id);
-create index if not exists idx_hot_work_permits_tenant          on public.loto_hot_work_permits(tenant_id);
-create index if not exists idx_loto_training_records_tenant     on public.loto_training_records(tenant_id);
-create index if not exists idx_loto_devices_tenant              on public.loto_devices(tenant_id);
-create index if not exists idx_loto_device_checkouts_tenant     on public.loto_device_checkouts(tenant_id);
-create index if not exists idx_loto_gas_meters_tenant           on public.loto_gas_meters(tenant_id);
-create index if not exists idx_loto_meter_alerts_tenant         on public.loto_meter_alerts(tenant_id);
-create index if not exists idx_loto_webhook_subscriptions_tenant on public.loto_webhook_subscriptions(tenant_id);
-create index if not exists idx_loto_push_subscriptions_tenant   on public.loto_push_subscriptions(tenant_id);
-create index if not exists idx_loto_hygiene_log_tenant          on public.loto_hygiene_log(tenant_id);
-create index if not exists idx_audit_log_tenant                 on public.audit_log(tenant_id, created_at desc);
+-- audit_log gets a composite (tenant_id, created_at desc) index for the
+-- common "show me this tenant's recent audit rows" query. The plain
+-- tenant_id index added by the loop above is fine, but the composite is
+-- cheaper for that read pattern.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.tables
+     where table_schema = 'public' and table_name = 'audit_log'
+  ) then
+    create index if not exists idx_audit_log_tenant_time
+      on public.audit_log(tenant_id, created_at desc);
+  end if;
+end $$;
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- updated_at trigger on tenants (mirrors the pattern from earlier migrations)
