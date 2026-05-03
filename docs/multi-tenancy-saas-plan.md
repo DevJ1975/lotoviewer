@@ -23,6 +23,7 @@ those phases rather than re-doing them.
 | Superadmin model | `profiles.is_superadmin` flag **plus** `SUPERADMIN_EMAILS` env allowlist (both required) |
 | Demo tenant content | Full seed across LOTO, Confined Spaces, Hot Work, training, audit |
 | Tenant ID convention | UUID PK (for FKs/RLS) + 4-digit `tenant_number` (for humans/URLs/logs) |
+| Tenant branding | `tenants.logo_url` shown in app header so client confirms correct tenant on login; logos in `tenant-logos/` Storage bucket |
 | First tenant | Snak King = `0001`, assigned to the existing populated database |
 | Demo tenant | `0002` "WLS Demo", seeded |
 | Numbering policy | Sequential, zero-padded, never reused |
@@ -268,8 +269,24 @@ In addition to the base plan's `TenantProvider`, ship:
 
 #### 4e. Tenant header banner
 
-`components/AppChrome.tsx` shows the active tenant name + 4-digit number in the
-header. If `tenants.is_demo`, render a yellow demo banner.
+`components/AppChrome.tsx` shows the active tenant **logo + name + 4-digit
+number** in the header. The logo is the user's primary visual confirmation
+that they're in the right tenant — render it small (e.g. 24–32px tall) to
+the left of the tenant name. Fallback if `tenants.logo_url` is null: show
+the tenant's initials in a colored circle (deterministic from the slug so
+it's stable across renders).
+
+If `tenants.is_demo`, render a yellow demo banner across the top.
+
+**Logo storage.** Logos live in a new Supabase Storage bucket `tenant-logos`
+(public-read, write restricted to superadmin). Path convention:
+`tenant-logos/{tenant_id}.{ext}`. The `tenants.logo_url` column stores the
+public URL returned by `getPublicUrl()`. Upload UI lives on the
+`/superadmin/tenants/[number]` edit screen — drag-drop a PNG/SVG, the
+server action uploads to Storage and writes the URL back to the column.
+
+The bucket and its RLS policies will be created in migration 031 alongside
+the other storage RLS work, so we don't need a new migration for it.
 
 #### 4f. Module-aware drawer
 

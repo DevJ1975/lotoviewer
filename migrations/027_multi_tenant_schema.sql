@@ -31,6 +31,9 @@ create extension if not exists "pgcrypto";
 -- is_demo         demo tenant — eligible for "Reset Demo" button + cron
 -- disabled_at     soft-delete timestamp; filtered out of current_user_tenant_ids
 -- modules         jsonb map of feature-id -> bool, top-level modules only
+-- logo_url        public URL (or storage path) to the tenant's logo, shown
+--                 in the app header so users can confirm they're in the
+--                 correct tenant; nullable, defaults to no logo
 -- custom_domain   reserved for future subdomain branding (nullable)
 -- settings        jsonb bag for per-tenant config (work-order URL template, etc.)
 -- ────────────────────────────────────────────────────────────────────────────
@@ -44,6 +47,7 @@ create table if not exists public.tenants (
   is_demo         boolean not null default false,
   disabled_at     timestamptz,
   modules         jsonb not null default '{}'::jsonb,
+  logo_url        text,
   custom_domain   text unique,
   settings        jsonb not null default '{}'::jsonb,
   created_at      timestamptz not null default now(),
