@@ -34,6 +34,11 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     if (userId && pathname.startsWith('/admin') && profile && !profile.is_admin) {
       router.replace('/')
     }
+    // Gate /superadmin routes to superadmin users (the DB flag is the
+    // client-side gate; the env allowlist is enforced by API routes).
+    if (userId && pathname.startsWith('/superadmin') && profile && !profile.is_superadmin) {
+      router.replace('/')
+    }
   }, [loading, userId, profile, pathname, isPublic, router])
 
   if (loading) {
