@@ -39,20 +39,28 @@ create extension if not exists "pgcrypto";
 -- ────────────────────────────────────────────────────────────────────────────
 create table if not exists public.tenants (
   id              uuid primary key default gen_random_uuid(),
-  tenant_number   text unique check (tenant_number ~ '^[0-9]{4}$'),
-  slug            text unique not null,
-  name            text not null,
+  tenant_number   text unique
+                    check (tenant_number ~ '^[0-9]{4}$' and tenant_number <> '0000'),
+  slug            text unique not null
+                    check (slug ~ '^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$'),
+  name            text not null
+                    check (length(trim(name)) between 1 and 200),
   status          text not null default 'active'
                     check (status in ('active','trial','disabled','archived')),
   is_demo         boolean not null default false,
   disabled_at     timestamptz,
   modules         jsonb not null default '{}'::jsonb,
-  logo_url        text,
+  logo_url        text
+                    check (logo_url is null or logo_url ~ '^https?://'),
   custom_domain   text unique,
   settings        jsonb not null default '{}'::jsonb,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
+
+-- TODO(028): org_config (singleton, work_order_url_template, etc.) folds into
+-- tenants.settings jsonb during backfill. Snak King's row inherits the current
+-- org_config values; org_config table itself is deprecated in a later migration.
 
 create index if not exists tenants_status_idx       on public.tenants (status) where disabled_at is null;
 create index if not exists tenants_tenant_number_idx on public.tenants (tenant_number);
@@ -84,6 +92,7 @@ create table if not exists public.tenant_memberships (
                 check (role in ('owner','admin','member','viewer')),
   invited_by  uuid references auth.users(id),
   created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
   primary key (user_id, tenant_id)
 );
 
@@ -193,6 +202,73 @@ drop trigger if exists trg_tenants_updated_at on public.tenants;
 create trigger trg_tenants_updated_at
   before update on public.tenants
   for each row execute function public.touch_updated_at();
+
+drop trigger if exists trg_tenant_memberships_updated_at on public.tenant_memberships;
+create trigger trg_tenant_memberships_updated_at
+  before update on public.tenant_memberships
+  for each row execute function public.touch_updated_at();
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- Audit triggers on the new tables
+--
+-- Reuses log_audit() from migration 003. Tenant changes (rename, status flip,
+-- modules toggle) and membership changes (role changes, invites, removals)
+-- are sensitive — the audit trail is the only after-the-fact record of who
+-- did what.
+--
+-- For tenant_memberships the table has a composite PK (user_id, tenant_id).
+-- log_audit takes a single PK column name; we pass 'user_id' so audits are
+-- searchable by member, with the tenant_id available in the new_row jsonb.
+-- ────────────────────────────────────────────────────────────────────────────
+drop trigger if exists trg_audit_tenants on public.tenants;
+create trigger trg_audit_tenants
+  after insert or update or delete on public.tenants
+  for each row execute function public.log_audit('id');
+
+drop trigger if exists trg_audit_tenant_memberships on public.tenant_memberships;
+create trigger trg_audit_tenant_memberships
+  after insert or update or delete on public.tenant_memberships
+  for each row execute function public.log_audit('user_id');
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- tenant-logos storage bucket
+--
+-- Public-read so the AppChrome <img src> just works. Writes restricted to
+-- superadmins (gated by profiles.is_superadmin; the route layer additionally
+-- enforces SUPERADMIN_EMAILS allowlist).
+--
+-- Path convention: tenant-logos/{tenant_id}.{ext}
+--
+-- Idempotent: re-running this migration won't duplicate the bucket or fail
+-- on already-existing policies.
+-- ────────────────────────────────────────────────────────────────────────────
+insert into storage.buckets (id, name, public)
+values ('tenant-logos', 'tenant-logos', true)
+on conflict (id) do nothing;
+
+drop policy if exists "tenant_logos_public_read"      on storage.objects;
+drop policy if exists "tenant_logos_superadmin_write" on storage.objects;
+
+create policy "tenant_logos_public_read" on storage.objects
+  for select to anon, authenticated
+  using (bucket_id = 'tenant-logos');
+
+create policy "tenant_logos_superadmin_write" on storage.objects
+  for all to authenticated
+  using (
+    bucket_id = 'tenant-logos'
+    and exists (
+      select 1 from public.profiles p
+       where p.id = auth.uid() and p.is_superadmin = true
+    )
+  )
+  with check (
+    bucket_id = 'tenant-logos'
+    and exists (
+      select 1 from public.profiles p
+       where p.id = auth.uid() and p.is_superadmin = true
+    )
+  );
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- Reload PostgREST schema cache so the new columns appear in the API
