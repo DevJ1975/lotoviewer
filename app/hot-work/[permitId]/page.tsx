@@ -10,7 +10,6 @@ import type {
   ConfinedSpacePermit,
   HotWorkCancelReason,
   HotWorkPermit,
-  HotWorkPreChecks,
   TrainingRecord,
 } from '@/lib/types'
 import {
@@ -23,11 +22,13 @@ import {
   evaluateSignGates,
   type HotWorkState,
 } from '@/lib/hotWorkPermitStatus'
-import { validateChecklist } from '@/lib/hotWorkChecklist'
 import {
   validateHotWorkTraining,
   type HotWorkTrainingIssue,
 } from '@/lib/trainingRecords'
+import { FireWatchSignOnDialog } from './_components/FireWatchSignOnDialog'
+import { CancelDialog }          from './_components/CancelDialog'
+import { ChecklistDisplay }      from './_components/ChecklistDisplay'
 
 // Hot Work permit detail page. Six-state lifecycle with action buttons
 // shown contextually:
@@ -492,178 +493,6 @@ export default function HotWorkPermitDetailPage() {
   )
 }
 
-// ── Fire watch sign-on dialog ─────────────────────────────────────────────
-
-function FireWatchSignOnDialog({
-  permit, onClose, onSigned,
-}: {
-  permit:   HotWorkPermit
-  onClose:  () => void
-  onSigned: (updated: HotWorkPermit) => void
-}) {
-  const [pick, setPick] = useState(permit.fire_watch_personnel[0] ?? '')
-  const [busy, setBusy] = useState(false)
-  const [err, setErr]   = useState<string | null>(null)
-
-  async function submit() {
-    if (!pick.trim()) { setErr('Pick the watcher signing on.'); return }
-    setBusy(true); setErr(null)
-    const now = new Date().toISOString()
-    const { data, error } = await supabase
-      .from('loto_hot_work_permits')
-      .update({
-        fire_watch_signature_at:   now,
-        fire_watch_signature_name: pick,
-        updated_at:                now,
-      })
-      .eq('id', permit.id)
-      .select('*')
-      .single()
-    setBusy(false)
-    if (error || !data) { setErr(error?.message ?? 'Could not sign on.'); return }
-    onSigned(data as HotWorkPermit)
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/40">
-      <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-5 space-y-4">
-        <header className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Fire watch sign-on</h2>
-          <button type="button" onClick={onClose} disabled={busy} aria-label="Close" className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 text-lg leading-none px-1">×</button>
-        </header>
-        <p className="text-[11px] text-slate-600 dark:text-slate-300">
-          By signing on you accept the watcher duties under NFPA 51B §6.5: continuous observation during work and
-          for at least {permit.post_watch_minutes} minutes after work ends. You may not perform other tasks while on watch.
-        </p>
-        <label className="block space-y-1.5">
-          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Watcher signing on</span>
-          <select
-            value={pick}
-            onChange={e => setPick(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
-          >
-            {permit.fire_watch_personnel.map(n => <option key={n} value={n}>{n}</option>)}
-          </select>
-        </label>
-        {err && <p className="text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">{err}</p>}
-        <div className="flex justify-end gap-2 pt-1">
-          <button type="button" onClick={onClose} disabled={busy} className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200">Cancel</button>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={busy}
-            className="px-5 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold disabled:opacity-40 hover:bg-blue-700 transition-colors"
-          >
-            {busy ? 'Signing…' : 'Sign on as watcher'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Cancel / close-out dialog ─────────────────────────────────────────────
-
-function CancelDialog({
-  permit, initialReason, onClose, onCanceled,
-}: {
-  permit:        HotWorkPermit
-  initialReason: HotWorkCancelReason
-  onClose:       () => void
-  onCanceled:    (updated: HotWorkPermit) => void
-}) {
-  const [reason, setReason] = useState<HotWorkCancelReason>(initialReason)
-  const [notes, setNotes]   = useState('')
-  const [busy, setBusy]     = useState(false)
-  const [err, setErr]       = useState<string | null>(null)
-
-  const requiresNotes = reason !== 'task_complete'
-  const isCloseOut    = reason === 'task_complete'
-  const dialogTitle   = isCloseOut ? 'Close out permit' : 'Cancel permit'
-  const submitLabel   = isCloseOut ? 'Close out' : 'Cancel permit'
-  const submitTone    = isCloseOut
-    ? 'bg-emerald-600 hover:bg-emerald-700'
-    : reason === 'fire_observed' ? 'bg-rose-700 hover:bg-rose-800'
-    : 'bg-rose-600 hover:bg-rose-700'
-
-  async function submit() {
-    if (requiresNotes && !notes.trim()) {
-      setErr('Describe the situation when canceling for this reason.'); return
-    }
-    setBusy(true); setErr(null)
-    const now = new Date().toISOString()
-    const { data, error } = await supabase
-      .from('loto_hot_work_permits')
-      .update({
-        canceled_at:   now,
-        cancel_reason: reason,
-        cancel_notes:  notes.trim() || null,
-        updated_at:    now,
-      })
-      .eq('id', permit.id)
-      .select('*')
-      .single()
-    setBusy(false)
-    if (error || !data) { setErr(error?.message ?? 'Could not save.'); return }
-    onCanceled(data as HotWorkPermit)
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/40">
-      <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-5 space-y-4">
-        <header className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{dialogTitle}</h2>
-          <button type="button" onClick={onClose} disabled={busy} aria-label="Close" className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 text-lg leading-none px-1">×</button>
-        </header>
-        <div className="space-y-3">
-          <label className="block space-y-1.5">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Reason</span>
-            <select
-              value={reason}
-              onChange={e => setReason(e.target.value as HotWorkCancelReason)}
-              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
-            >
-              {Object.entries(HOT_WORK_CANCEL_REASON_LABELS).map(([k, label]) => (
-                <option key={k} value={k}>{label}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-              Notes {requiresNotes && <span className="text-rose-500">*</span>}
-            </span>
-            <textarea
-              rows={3}
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder={
-                reason === 'fire_observed'    ? 'What was observed? Was the fire suppressed? Was emergency response activated?'
-              : reason === 'unsafe_condition' ? 'What condition triggered the cancel? (sprinklers down, ignition near combustibles, etc.)'
-              : reason === 'expired'          ? 'Permit ran past expiration — describe the disposition.'
-              : reason === 'other'            ? 'Describe the close-out reason.'
-              :                                 '(optional)'
-              }
-              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
-            />
-          </label>
-        </div>
-        {err && <p className="text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">{err}</p>}
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} disabled={busy} className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200">Back</button>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={busy}
-            className={`px-5 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-40 transition-colors ${submitTone}`}
-          >
-            {busy ? 'Saving…' : submitLabel}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── Layout helpers ────────────────────────────────────────────────────────
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -683,77 +512,6 @@ function KV({ label, value }: { label: string; value: string | number }) {
     </div>
   )
 }
-
-function ChecklistDisplay({ checks }: { checks: HotWorkPreChecks }) {
-  const issues = validateChecklist(checks)
-  const failedCodes = new Set(issues.map(i => i.code))
-  // Static rendering so the printed-permit format and the on-screen
-  // detail page stay in lockstep. Each row shows the question and the
-  // current answer. Failures get a rose pill so the supervisor sees
-  // gaps at a glance.
-  const rows: Array<{ key: keyof HotWorkPreChecks; label: string; code?: string; format?: 'tri' }> = [
-    { key: 'combustibles_cleared_35ft',    label: 'Combustibles cleared / shielded within 35 ft',  code: 'combustibles' },
-    { key: 'floor_swept',                  label: 'Floor swept clean for 35 ft radius',             code: 'floor_swept' },
-    { key: 'floor_openings_protected',     label: 'Floor openings within 35 ft protected',          code: 'floor_openings' },
-    { key: 'wall_openings_protected',      label: 'Wall openings within 35 ft protected',           code: 'wall_openings' },
-    { key: 'sprinklers_operational',       label: 'Sprinklers operational',                         code: 'sprinklers' },
-    { key: 'ventilation_adequate',         label: 'Ventilation adequate',                           code: 'ventilation' },
-    { key: 'fire_extinguisher_present',    label: 'Fire extinguisher present within reach',         code: 'extinguisher_present' },
-    { key: 'curtains_or_shields_in_place', label: 'Curtains / shields in place where needed',       code: 'curtains' },
-    { key: 'gas_lines_isolated',           label: 'Gas lines isolated (or N/A)',                    format: 'tri', code: 'gas_lines' },
-    { key: 'adjacent_areas_notified',      label: 'Adjacent areas notified before work begins',     code: 'adjacent_notified' },
-    { key: 'confined_space',               label: 'Hot work performed inside a confined space' },
-    { key: 'elevated_work',                label: 'Elevated work (>4 ft / fall protection req.)' },
-  ]
-  return (
-    <ul className="text-xs space-y-0.5">
-      {rows.map(r => {
-        const v = checks[r.key]
-        const isFailed = r.code != null && failedCodes.has(r.code)
-        return (
-          <li key={String(r.key)} className="flex items-baseline justify-between gap-3 py-0.5 border-t border-slate-100 dark:border-slate-800 first:border-t-0">
-            <span className="text-slate-700 dark:text-slate-300">{r.label}</span>
-            <AnswerBadge value={v} format={r.format} failed={isFailed} />
-          </li>
-        )
-      })}
-      {checks.sprinklers_operational === false && checks.alternate_protection_if_no_spr && (
-        <li className="text-[11px] text-slate-500 dark:text-slate-400 pt-1.5">
-          <span className="font-semibold">Alternate protection:</span> {checks.alternate_protection_if_no_spr}
-        </li>
-      )}
-      {checks.fire_extinguisher_present === true && checks.fire_extinguisher_type && (
-        <li className="text-[11px] text-slate-500 dark:text-slate-400">
-          <span className="font-semibold">Extinguisher type:</span> {checks.fire_extinguisher_type}
-        </li>
-      )}
-    </ul>
-  )
-}
-
-function AnswerBadge({ value, format, failed }: {
-  value:  HotWorkPreChecks[keyof HotWorkPreChecks]
-  format?: 'tri'
-  failed?: boolean
-}) {
-  if (value === undefined) {
-    return <span className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">unanswered</span>
-  }
-  if (format === 'tri' && value === null) {
-    return <span className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">N/A</span>
-  }
-  const cls = failed
-    ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200'
-    : value === true  ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200'
-    : value === false ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200'
-    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-  return (
-    <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${cls}`}>
-      {value === true ? 'Yes' : value === false ? 'No' : String(value)}
-    </span>
-  )
-}
-
 function formatMinutes(m: number): string {
   if (m < 60) return `${m}m`
   const h = Math.floor(m / 60)
