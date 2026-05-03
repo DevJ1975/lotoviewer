@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Bluetooth, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import type { AtmosphericTest, AtmosphericTestKind, GasMeter } from '@/lib/types'
@@ -12,6 +13,7 @@ import {
   type ThresholdSet,
 } from '@/lib/confinedSpaceThresholds'
 import { bumpStatus, calibrationOverdue } from '@/lib/gasMeters'
+import { createMeterReader, meterReaderSupported } from '@/lib/meterReader'
 
 // ── Existing-test row ─────────────────────────────────────────────────────
 
@@ -84,8 +86,51 @@ export function NewTestForm({
   const [submitting, setSubmitting]     = useState(false)
   const [error, setError]               = useState<string | null>(null)
 
+  // Live capture from a Bluetooth meter (T1.1). Browser-gated: shows the
+  // button only when navigator.bluetooth exists, which excludes iOS
+  // Safari. Manual entry stays the canonical path; this is a convenience
+  // for Android / desktop Chrome users with a Soteria-compatible meter.
+  const [connecting, setConnecting] = useState(false)
+  const [meterMessage, setMeterMessage] = useState<string | null>(null)
+  const meterAvailable = meterReaderSupported()
+
   // Update default kind when hint changes (e.g. after a pre-entry test lands).
   useEffect(() => { setKind(kindHint) }, [kindHint])
+
+  async function connectMeter() {
+    setConnecting(true)
+    setMeterMessage(null)
+    setError(null)
+    const reader = createMeterReader('auto')
+    if (!reader) {
+      setMeterMessage('Bluetooth meter capture is not available on this device. Use manual entry.')
+      setConnecting(false)
+      return
+    }
+    try {
+      const reading = await reader.connect()
+      // Only overwrite fields the meter actually returned a value for —
+      // a meter without an H₂S sensor shouldn't blank a tester's
+      // already-typed value.
+      if (reading.o2_pct  != null) setO2(String(reading.o2_pct))
+      if (reading.lel_pct != null) setLel(String(reading.lel_pct))
+      if (reading.h2s_ppm != null) setH2s(String(reading.h2s_ppm))
+      if (reading.co_ppm  != null) setCo(String(reading.co_ppm))
+      if (reading.instrument_id) setInstrumentId(reading.instrument_id)
+      setMeterMessage(`Filled from ${reader.name} at ${new Date(reading.sampledAt).toLocaleTimeString()}.`)
+    } catch (err) {
+      // User-cancel of the picker throws NotFoundError ("User cancelled
+      // the requestDevice() chooser") — surface that softly rather than
+      // as an angry error.
+      const msg = err instanceof Error ? err.message : 'Could not read meter'
+      if (/cancel/i.test(msg)) setMeterMessage('Meter selection canceled.')
+      else                     setError(`Meter capture failed: ${msg}`)
+    } finally {
+      // Disconnect on the way out so we don't hold the device.
+      try { await reader?.close() } catch { /* ignore */ }
+      setConnecting(false)
+    }
+  }
 
   function num(s: string): number | null {
     const t = s.trim()
@@ -158,6 +203,22 @@ export function NewTestForm({
           <option value="post_alarm">Post-alarm</option>
         </select>
       </div>
+      {meterAvailable && (
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={connectMeter}
+            disabled={connecting}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border border-blue-300 bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-100 hover:bg-blue-100 dark:hover:bg-blue-950/60 disabled:opacity-50 transition-colors"
+          >
+            {connecting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Bluetooth className="h-3 w-3" />}
+            {connecting ? 'Connecting…' : 'Connect meter'}
+          </button>
+          {meterMessage && (
+            <span className="text-[10px] text-slate-600 dark:text-slate-300 truncate max-w-[60%]">{meterMessage}</span>
+          )}
+        </div>
+      )}
       {/* Bump-test / calibration warning. Only renders when the tester has
           typed an instrument id — empty input stays clean. Three states:
           overdue (rose), never-bumped or unknown meter (amber), calibration

@@ -200,6 +200,24 @@ export const FEATURES: FeatureDef[] = [
     enabled:     true,
     comingSoon:  false,
   },
+  {
+    id:          'reports-insights',
+    name:        'Risk Intelligence',
+    description: 'Where to look harder — fail-rate hot spots, anomaly detection, supervisor mix',
+    href:        '/admin/insights',
+    category:    'reports',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'reports-compliance-bundle',
+    name:        'Compliance Bundles',
+    description: 'Inspector-ready PDF — every permit in a date range with chain-of-custody hashing',
+    href:        '/admin/compliance-bundle',
+    category:    'reports',
+    enabled:     true,
+    comingSoon:  false,
+  },
 
   // ── Admin / configuration ───────────────────────────────────────────────
   {
