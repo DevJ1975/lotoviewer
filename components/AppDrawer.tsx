@@ -11,6 +11,8 @@ import {
   type FeatureCategory,
   type FeatureDef,
 } from '@/lib/features'
+import { useTenant } from '@/components/TenantProvider'
+import { isModuleVisible } from '@/lib/moduleVisibility'
 
 // Side drawer that hosts every feature in the app. Replaces the inline
 // top-nav links so the chrome stays minimal as more modules ship.
@@ -21,9 +23,10 @@ import {
 // users already recognize on their iPads. The module name itself is a
 // Link to the module's home; tapping the chevron only toggles the group.
 //
-// Reads from lib/features.ts via getModules() + getChildren(). When
-// multi-tenant lands the registry will be hydrated from a tenant_features
-// table; nothing in this component changes.
+// Reads from lib/features.ts via getModules() + getChildren(), then filters
+// the top-level rows through the active tenant's `tenants.modules` JSONB
+// (see lib/moduleVisibility.ts). Coming-Soon entries bypass the filter
+// since they advertise a roadmap feature, not a tenant-controlled one.
 
 interface Props {
   open:    boolean
@@ -60,7 +63,15 @@ function loadExpanded(): Set<string> {
 
 export default function AppDrawer({ open, onClose }: Props) {
   const pathname = usePathname()
+  const { tenant } = useTenant()
   const [expanded, setExpanded] = useState<Set<string>>(() => loadExpanded())
+
+  // Per-tenant module filter. Coming-Soon entries stay visible (they're a
+  // global advertisement, not tenant-controlled). Disabled top-level modules
+  // and their children disappear from the drawer entirely.
+  const tenantModules = tenant?.modules ?? null
+  const visibleToTenant = (m: FeatureDef): boolean =>
+    m.comingSoon || isModuleVisible(m.id, tenantModules)
 
   // Close on Esc
   useEffect(() => {
@@ -107,7 +118,10 @@ export default function AppDrawer({ open, onClose }: Props) {
   if (!open) return null
 
   const groups = CATEGORY_ORDER
-    .map(cat => ({ category: cat, modules: getModules(cat) }))
+    .map(cat => ({
+      category: cat,
+      modules: getModules(cat).filter(visibleToTenant),
+    }))
     .filter(g => g.modules.length > 0)
 
   return (
@@ -168,8 +182,8 @@ export default function AppDrawer({ open, onClose }: Props) {
         </nav>
 
         <footer className="px-4 py-3 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-400 dark:text-slate-500 shrink-0">
-          Manage features in <span className="font-mono">lib/features.ts</span>.
-          Multi-tenant overrides will layer on later.
+          Catalog: <span className="font-mono">lib/features.ts</span>.
+          Per-tenant on/off: <span className="font-mono">tenants.modules</span>.
         </footer>
       </aside>
     </div>
