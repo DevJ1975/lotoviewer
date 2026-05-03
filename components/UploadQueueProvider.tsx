@@ -1,8 +1,7 @@
 'use client'
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { supabase } from '@/lib/supabase'
-import { computePhotoStatusFromUrls } from '@/lib/photoStatus'
+import { uploadPhotoForEquipment, type UploadType } from '@/lib/photoUpload'
 import {
   clearQueue,
   enqueueUpload,
@@ -10,8 +9,6 @@ import {
   removeFromQueue,
   type QueuedUpload,
 } from '@/lib/uploadQueue'
-
-type UploadType = 'EQUIP' | 'ISO'
 
 interface QueueContextValue {
   queue:        QueuedUpload[]
@@ -43,74 +40,15 @@ export function useUploadQueue(): QueueContextValue {
   return useContext(Ctx)
 }
 
-function sanitize(id: string) {
-  return id.replace(/[^a-zA-Z0-9_-]/g, '_')
-}
-
 async function uploadOne(item: QueuedUpload): Promise<void> {
-  const sanitized = sanitize(item.equipmentId)
-  const path = `${sanitized}/${sanitized}_${item.type}_${Date.now()}.jpg`
-  const bucket = supabase.storage.from('loto-photos')
-
-  const { error: upErr } = await bucket.upload(path, item.blob, { contentType: 'image/jpeg', upsert: false })
-  if (upErr) throw new Error(upErr.message)
-
-  const { data: { publicUrl } } = bucket.getPublicUrl(path)
-
-  // needs_*_photo flags let the status reflect "complete" for equipment that
-  // only requires one of the two photos — otherwise those rows stay stuck at
-  // "partial" forever.
-  const { data: current, error: selErr } = await supabase
-    .from('loto_equipment')
-    .select('equip_photo_url, iso_photo_url, needs_equip_photo, needs_iso_photo')
-    .eq('equipment_id', item.equipmentId)
-    .single()
-  if (selErr) throw new Error(selErr.message)
-
-  const newEquipUrl = item.type === 'EQUIP' ? publicUrl : current?.equip_photo_url ?? null
-  const newIsoUrl   = item.type === 'ISO'   ? publicUrl : current?.iso_photo_url   ?? null
-  const newStatus   = computePhotoStatusFromUrls(
-    newEquipUrl,
-    newIsoUrl,
-    current?.needs_equip_photo,
-    current?.needs_iso_photo,
-  )
-
-  const urlField = item.type === 'EQUIP' ? 'equip_photo_url' : 'iso_photo_url'
-  const hasField = item.type === 'EQUIP' ? 'has_equip_photo' : 'has_iso_photo'
-
-  const { error: patchErr } = await supabase
-    .from('loto_equipment')
-    .update({
-      [urlField]: publicUrl,
-      [hasField]: true,
-      photo_status: newStatus,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('equipment_id', item.equipmentId)
-  if (patchErr) throw new Error(patchErr.message)
-
-  // Reconcile: re-read URLs and correct photo_status if another concurrent
-  // upload (live or queue) wrote between our SELECT and UPDATE.
-  const { data: fresh } = await supabase
-    .from('loto_equipment')
-    .select('equip_photo_url, iso_photo_url, photo_status, needs_equip_photo, needs_iso_photo')
-    .eq('equipment_id', item.equipmentId)
-    .single()
-  if (fresh) {
-    const actualStatus = computePhotoStatusFromUrls(
-      fresh.equip_photo_url,
-      fresh.iso_photo_url,
-      fresh.needs_equip_photo,
-      fresh.needs_iso_photo,
-    )
-    if (fresh.photo_status !== actualStatus) {
-      await supabase
-        .from('loto_equipment')
-        .update({ photo_status: actualStatus, updated_at: new Date().toISOString() })
-        .eq('equipment_id', item.equipmentId)
-    }
-  }
+  // No retry on queue drain — failed items stay queued and the next
+  // drain trigger (online / focus / visibilitychange) retries them.
+  await uploadPhotoForEquipment({
+    equipmentId: item.equipmentId,
+    type:        item.type,
+    blob:        item.blob,
+    retry:       false,
+  })
 }
 
 export function UploadQueueProvider({ children }: { children: React.ReactNode }) {
