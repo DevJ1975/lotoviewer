@@ -58,9 +58,10 @@ create table if not exists public.tenants (
   updated_at      timestamptz not null default now()
 );
 
--- TODO(028): org_config (singleton, work_order_url_template, etc.) folds into
--- tenants.settings jsonb during backfill. Snak King's row inherits the current
--- org_config values; org_config table itself is deprecated in a later migration.
+-- TODO(028): loto_org_config (singleton, work_order_url_template, etc.) folds
+-- into tenants.settings jsonb during backfill. Snak King's row inherits the
+-- current loto_org_config values; the table itself is deprecated in a later
+-- migration.
 
 create index if not exists tenants_status_idx       on public.tenants (status) where disabled_at is null;
 create index if not exists tenants_tenant_number_idx on public.tenants (tenant_number);
@@ -136,32 +137,38 @@ alter table public.profiles
 -- NOT NULL and rewrites RLS to filter by tenant.
 -- ────────────────────────────────────────────────────────────────────────────
 
--- LOTO core (001, 002, 008, 015, 022, 023)
+-- LOTO core (loto_equipment, loto_energy_steps, loto_reviews)
+-- Note: photo annotations live as jsonb columns on loto_equipment
+-- (migrations 015, 022) so they're already covered by loto_equipment.tenant_id.
 alter table public.loto_equipment     add column if not exists tenant_id uuid references public.tenants(id);
 alter table public.loto_energy_steps  add column if not exists tenant_id uuid references public.tenants(id);
 alter table public.loto_reviews       add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.photo_annotations  add column if not exists tenant_id uuid references public.tenants(id);
 
 -- Confined Spaces (009, 010)
+-- Note: signon tokens are a column on loto_confined_space_permits (migration 024),
+-- not a separate table.
 alter table public.loto_confined_spaces         add column if not exists tenant_id uuid references public.tenants(id);
 alter table public.loto_confined_space_permits  add column if not exists tenant_id uuid references public.tenants(id);
+alter table public.loto_confined_space_entries  add column if not exists tenant_id uuid references public.tenants(id);
 alter table public.loto_atmospheric_tests       add column if not exists tenant_id uuid references public.tenants(id);
 
 -- Hot Work (019, 020)
-alter table public.loto_hot_work_permits     add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.loto_hot_work_checklists  add column if not exists tenant_id uuid references public.tenants(id);
+-- Note: pre-work checklist is a jsonb column on loto_hot_work_permits, not a separate table.
+alter table public.loto_hot_work_permits        add column if not exists tenant_id uuid references public.tenants(id);
 
--- Training, devices, integrations (013, 016, 017, 024, 025, 026)
-alter table public.training_records       add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.loto_devices           add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.webhooks               add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.push_subscriptions     add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.permit_signon_tokens   add column if not exists tenant_id uuid references public.tenants(id);
-alter table public.meter_alerts           add column if not exists tenant_id uuid references public.tenants(id);
+-- Training, devices, gas meters, integrations, hygiene
+alter table public.loto_training_records        add column if not exists tenant_id uuid references public.tenants(id);
+alter table public.loto_devices                 add column if not exists tenant_id uuid references public.tenants(id);
+alter table public.loto_device_checkouts        add column if not exists tenant_id uuid references public.tenants(id);
+alter table public.loto_gas_meters              add column if not exists tenant_id uuid references public.tenants(id);
+alter table public.loto_meter_alerts            add column if not exists tenant_id uuid references public.tenants(id);
+alter table public.loto_webhook_subscriptions   add column if not exists tenant_id uuid references public.tenants(id);
+alter table public.loto_push_subscriptions      add column if not exists tenant_id uuid references public.tenants(id);
+alter table public.loto_hygiene_log             add column if not exists tenant_id uuid references public.tenants(id);
 
 -- Audit log: nullable forever. Cross-tenant superadmin actions legitimately
 -- have no tenant context, so we never set NOT NULL on this column.
-alter table public.audit_log              add column if not exists tenant_id uuid references public.tenants(id);
+alter table public.audit_log                    add column if not exists tenant_id uuid references public.tenants(id);
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- Composite indexes on (tenant_id) so the upcoming RLS predicate is cheap.
@@ -171,18 +178,19 @@ alter table public.audit_log              add column if not exists tenant_id uui
 create index if not exists idx_loto_equipment_tenant            on public.loto_equipment(tenant_id);
 create index if not exists idx_loto_energy_steps_tenant         on public.loto_energy_steps(tenant_id);
 create index if not exists idx_loto_reviews_tenant              on public.loto_reviews(tenant_id);
-create index if not exists idx_photo_annotations_tenant         on public.photo_annotations(tenant_id);
 create index if not exists idx_confined_spaces_tenant           on public.loto_confined_spaces(tenant_id);
 create index if not exists idx_confined_space_permits_tenant    on public.loto_confined_space_permits(tenant_id);
+create index if not exists idx_confined_space_entries_tenant    on public.loto_confined_space_entries(tenant_id);
 create index if not exists idx_atmospheric_tests_tenant         on public.loto_atmospheric_tests(tenant_id);
 create index if not exists idx_hot_work_permits_tenant          on public.loto_hot_work_permits(tenant_id);
-create index if not exists idx_hot_work_checklists_tenant       on public.loto_hot_work_checklists(tenant_id);
-create index if not exists idx_training_records_tenant          on public.training_records(tenant_id);
+create index if not exists idx_loto_training_records_tenant     on public.loto_training_records(tenant_id);
 create index if not exists idx_loto_devices_tenant              on public.loto_devices(tenant_id);
-create index if not exists idx_webhooks_tenant                  on public.webhooks(tenant_id);
-create index if not exists idx_push_subscriptions_tenant        on public.push_subscriptions(tenant_id);
-create index if not exists idx_permit_signon_tokens_tenant      on public.permit_signon_tokens(tenant_id);
-create index if not exists idx_meter_alerts_tenant              on public.meter_alerts(tenant_id);
+create index if not exists idx_loto_device_checkouts_tenant     on public.loto_device_checkouts(tenant_id);
+create index if not exists idx_loto_gas_meters_tenant           on public.loto_gas_meters(tenant_id);
+create index if not exists idx_loto_meter_alerts_tenant         on public.loto_meter_alerts(tenant_id);
+create index if not exists idx_loto_webhook_subscriptions_tenant on public.loto_webhook_subscriptions(tenant_id);
+create index if not exists idx_loto_push_subscriptions_tenant   on public.loto_push_subscriptions(tenant_id);
+create index if not exists idx_loto_hygiene_log_tenant          on public.loto_hygiene_log(tenant_id);
 create index if not exists idx_audit_log_tenant                 on public.audit_log(tenant_id, created_at desc);
 
 -- ────────────────────────────────────────────────────────────────────────────
