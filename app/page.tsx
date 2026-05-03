@@ -7,6 +7,7 @@ import { fetchHomeMetrics, type HomeMetrics } from '@/lib/homeMetrics'
 import ThemeToggle from '@/components/ThemeToggle'
 import { Hero }                 from './_components/Hero'
 import { CriticalAlertBanner }  from './_components/CriticalAlertBanner'
+import { MeterAlertsBanner }    from './_components/MeterAlertsBanner'
 import { PermitAlertsCard }     from './_components/PermitAlertsCard'
 import { QuickActions }         from './_components/QuickActions'
 import { KpiRow }               from './_components/KpiRow'
@@ -93,6 +94,11 @@ export default function HomePage() {
       {metrics && metrics.expiredPermitCount > 0 && (
         <CriticalAlertBanner count={metrics.expiredPermitCount} />
       )}
+
+      {/* Bump-test reminders. Sits below the critical permit banner
+          (expired permits are higher severity) but above other alerts.
+          Renders nothing when no meters need attention. */}
+      <MeterAlertsBanner />
 
       {metrics && (
         metrics.expiringSoonPermits.length > 0
