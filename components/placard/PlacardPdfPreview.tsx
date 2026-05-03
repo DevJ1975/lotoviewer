@@ -23,6 +23,9 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
   const [pdfUrl, setPdfUrl]       = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
   const [uploadState, setUploadState] = useState<UploadState>('idle')
+  // Bilingual mode = single-page side-by-side EN/ES instead of two
+  // sequential per-language pages. Toggling regenerates + re-uploads.
+  const [bilingual, setBilingual] = useState(false)
   // Keep the screen awake while the placard is generating or uploading so
   // a tablet doesn't doze and drop the upload mid-flight.
   useWakeLock(open && (generating || uploadState === 'uploading'))
@@ -56,8 +59,9 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
     ;(async () => {
       try {
         // Lazy-load pdf-lib — only needed when the preview actually opens.
-        const { generatePlacardPdf } = await import('@/lib/pdfPlacard')
-        const bytes = await generatePlacardPdf({ equipment: equipmentRef.current, steps: stepsRef.current })
+        const { generatePlacardPdf, generateBilingualPlacardPdf } = await import('@/lib/pdfPlacard')
+        const generator = bilingual ? generateBilingualPlacardPdf : generatePlacardPdf
+        const bytes = await generator({ equipment: equipmentRef.current, steps: stepsRef.current })
         if (cancelled) return
 
         const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' })
@@ -98,10 +102,11 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
       cancelled = true
       if (objUrl) URL.revokeObjectURL(objUrl)
     }
-    // Only re-run when modal opens/closes or equipment changes — NOT on every
-    // render when parent passes fresh callback closures.
+    // Re-run when modal opens/closes, equipment changes, OR the
+    // bilingual toggle flips — refs cover the rest. Callback closures
+    // intentionally NOT in deps (we'd re-fire on every parent render).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, equipmentId])
+  }, [open, equipmentId, bilingual])
 
   // Escape closes the modal
   useEffect(() => {
@@ -145,6 +150,16 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
           <UploadStatusBadge state={uploadState} />
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={bilingual}
+              onChange={e => setBilingual(e.target.checked)}
+              disabled={generating}
+              className="h-3.5 w-3.5 rounded border-slate-300 text-brand-navy focus:ring-brand-navy/30"
+            />
+            EN+ES on one page
+          </label>
           <button
             type="button"
             onClick={handlePrint}

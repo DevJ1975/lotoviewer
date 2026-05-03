@@ -227,6 +227,15 @@ export const FEATURES: FeatureDef[] = [
     enabled:     true,
     comingSoon:  false,
   },
+  {
+    id:          'admin-loto-devices',
+    name:        'LOTO devices',
+    description: 'Physical lock + tag inventory and per-checkout ownership log',
+    href:        '/admin/loto-devices',
+    category:    'admin',
+    enabled:     true,
+    comingSoon:  false,
+  },
 
   // ── Admin / configuration ───────────────────────────────────────────────
   {
