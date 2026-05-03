@@ -199,8 +199,18 @@ export default function PermitDetailPage() {
     setServerError(null)
     try {
       const { generatePermitPdf } = await import('@/lib/pdfPermit')
-      const permitUrl = `${window.location.origin}/confined-spaces/${encodeURIComponent(spaceId)}/permits/${permit!.id}`
-      const bytes = await generatePermitPdf({ space: space!, permit: permit!, tests, permitUrl })
+      // When a sign-on token is on the permit (post-migration-024), the
+      // QR points at the worker self-service page; otherwise it points
+      // at the live supervisor view of the permit. Caption changes to
+      // match so a worker scanning a printed permit knows what to expect.
+      const hasSignonToken = !!permit!.signon_token
+      const permitUrl = hasSignonToken
+        ? `${window.location.origin}/permit-signon/${permit!.signon_token}`
+        : `${window.location.origin}/confined-spaces/${encodeURIComponent(spaceId)}/permits/${permit!.id}`
+      const qrCaption = hasSignonToken ? 'Scan to sign in or out' : 'Scan for live permit'
+      const bytes = await generatePermitPdf({
+        space: space!, permit: permit!, tests, permitUrl, qrCaption,
+      })
       const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' })
       const url  = URL.createObjectURL(blob)
       const filename = `${permit!.serial ?? `permit-${permit!.id.slice(0, 8)}`}.pdf`
