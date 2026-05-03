@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { supabase } from '@/lib/supabase'
 import type { Equipment } from '@/lib/types'
+import { loadPrintableEquipment } from '@/lib/queries/equipment'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import StatusBadge from '@/components/StatusBadge'
@@ -19,15 +19,10 @@ export default function PrintQueuePage() {
   const [merging, setMerging]     = useState<string | null>(null)
 
   useEffect(() => {
-    supabase
-      .from('loto_equipment')
-      .select('*')
-      .not('placard_url', 'is', null)
-      .order('department')
-      .then(({ data }) => {
-        if (data) setEquipment(data as Equipment[])
-        setLoading(false)
-      })
+    loadPrintableEquipment()
+      .then(setEquipment)
+      .catch(err => console.error('[print] fetch failed', err))
+      .finally(() => setLoading(false))
   }, [])
 
   const filtered = useMemo(() => {

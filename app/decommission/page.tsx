@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Archive, ArchiveRestore, ArrowLeft, Check, Loader2, Search, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { loadAllEquipment } from '@/lib/queries/equipment'
 import type { Equipment } from '@/lib/types'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useToast } from '@/hooks/useToast'
@@ -38,25 +39,22 @@ export default function DecommissionPage() {
   const { toast, showToast, clearToast } = useToast()
 
   const fetchData = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('loto_equipment')
-      .select('*')
-      .order('equipment_id', { ascending: true })
-    if (error) {
-      console.error('[decommission] fetch failed', error)
-      setLoadError(true)
-    } else if (data) {
+    try {
+      const rows = await loadAllEquipment()
       // Hard schema check: if the `decommissioned` column is missing from the
       // DB or PostgREST's schema cache, every row comes back without the
       // property and counters look fine (all "active") — but writes then
       // silently do nothing. Detect it up front so the user can't be fooled.
-      const rows = data as Equipment[]
       const missing = rows.length > 0 && rows.every(r => !('decommissioned' in r))
       setSchemaError(missing)
       setEquipment(rows)
       setLoadError(false)
+    } catch (err) {
+      console.error('[decommission] fetch failed', err)
+      setLoadError(true)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
