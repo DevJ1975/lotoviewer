@@ -28,7 +28,13 @@ export { sanitizeForWinAnsi }
 // keep the bundle small (no font embedding).
 
 // ── Top header (yellow band with title + key facts) ─────────────────────────
-function drawHeader(ctx: DrawCtx, space: ConfinedSpace, permit: ConfinedSpacePermit, qr: PDFImage | null): void {
+function drawHeader(
+  ctx: DrawCtx,
+  space: ConfinedSpace,
+  permit: ConfinedSpacePermit,
+  qr: PDFImage | null,
+  qrCaption: string,
+): void {
   // Yellow band
   ctx.page.drawRectangle({
     x: MARGIN, y: ctx.y - 56, width: PAGE_W - 2 * MARGIN, height: 56, color: rgb(...hexToRgb01('#FFD900')),
@@ -70,7 +76,7 @@ function drawHeader(ctx: DrawCtx, space: ConfinedSpace, permit: ConfinedSpacePer
       y: ctx.y - QR_SIZE,
       width: QR_SIZE, height: QR_SIZE,
     })
-    ctx.page.drawText(sanitizeForWinAnsi('Scan for live permit'), {
+    ctx.page.drawText(sanitizeForWinAnsi(qrCaption), {
       x: PAGE_W - MARGIN - QR_SIZE,
       y: ctx.y - QR_SIZE - 10,
       size: 7, font: ctx.font, color: MUTED,
@@ -169,13 +175,21 @@ export interface GeneratePermitArgs {
   space:  ConfinedSpace
   permit: ConfinedSpacePermit
   tests:  AtmosphericTest[]
-  // Full URL the QR code should encode (e.g. `${origin}/confined-spaces/...`).
+  // Full URL the QR code should encode. When the permit has a sign-on
+  // token (migration 024), pass `${origin}/permit-signon/<token>` so a
+  // worker scanning the QR lands on the self-service sign-on page; in
+  // any other case the live permit detail page is the right target.
   // Optional — falls back to a no-QR layout if omitted, so callers in
   // server contexts without a window object can still generate.
   permitUrl?: string
+  // Caption rendered under the QR. Defaults to "Scan for live permit"
+  // (supervisor flow); pass "Scan to sign in or out" when permitUrl is
+  // a sign-on URL so a worker holding the printed permit knows what
+  // tapping the QR will do.
+  qrCaption?: string
 }
 
-export async function generatePermitPdf({ space, permit, tests, permitUrl }: GeneratePermitArgs): Promise<Uint8Array> {
+export async function generatePermitPdf({ space, permit, tests, permitUrl, qrCaption }: GeneratePermitArgs): Promise<Uint8Array> {
   const doc  = await PDFDocument.create()
   const font = await doc.embedFont(StandardFonts.Helvetica)
   const bold = await doc.embedFont(StandardFonts.HelveticaBold)
@@ -186,7 +200,7 @@ export async function generatePermitPdf({ space, permit, tests, permitUrl }: Gen
     legend: 'OSHA 29 CFR 1910.146 Permit-Required Confined Space Entry Permit',
   })
 
-  drawHeader(ctx, space, permit, qr)
+  drawHeader(ctx, space, permit, qr, qrCaption ?? 'Scan for live permit')
 
   // Personnel
   drawSectionBar(ctx, '1. Personnel')

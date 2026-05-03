@@ -168,6 +168,13 @@ export interface ConfinedSpacePermit {
   // Migration 014. Rendered as a hyperlink when loto_org_config has a
   // work_order_url_template configured.
   work_order_ref:                  string | null
+  // Per-permit token for the worker QR sign-on flow (migration 024).
+  // 32 hex chars, populated by a BEFORE INSERT trigger. Anyone with the
+  // QR can hit /permit-signon/<token> and self-log in/out — the API
+  // server-side validates training + roster before writing. Pre-migration
+  // permits and intentionally-unmigrated rows have null and just don't
+  // expose a sign-on URL on their printed QR.
+  signon_token:                    string | null
   created_at:                      string
   updated_at:                      string
 }
