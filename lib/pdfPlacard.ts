@@ -749,6 +749,60 @@ export async function generatePlacardPdf({ equipment, steps }: GeneratePlacardAr
   return pdfDoc.save()
 }
 
+// Single-page bilingual placard. Renders the existing EN and ES placards
+// to a temp document, then composes them side-by-side on one letter-
+// landscape sheet using pdf-lib's embedPages. Intent: a posted placard
+// holder at the worksite shows BOTH languages on one printable sheet
+// rather than two separate posts.
+//
+// Trade-off: text shrinks ~50% (each placard occupies a half-width
+// region scaled uniformly). The placard layout is already glance-
+// optimised at arm's length, so the smaller form remains readable for
+// the energy-code colors and step rows. If a workplace prefers the
+// full-size single-language form, generatePlacardPdf above is still
+// the canonical generator.
+export async function generateBilingualPlacardPdf(
+  { equipment, steps }: GeneratePlacardArgs,
+): Promise<Uint8Array> {
+  // Step 1: render EN + ES at full size into a temporary doc. Reuse
+  // addPlacardPages so any future fix to the per-language layout
+  // automatically lands here.
+  const tmp = await PDFDocument.create()
+  const tmpRegular = await tmp.embedFont(StandardFonts.Helvetica)
+  const tmpBold    = await tmp.embedFont(StandardFonts.HelveticaBold)
+  await addPlacardPages(tmp, { regular: tmpRegular, bold: tmpBold }, equipment, steps)
+  // Tmp now has [EN, ES].
+
+  // Step 2: embed both pages into the output doc, place side-by-side.
+  const doc = await PDFDocument.create()
+  const [enEmbed, esEmbed] = await doc.embedPages([tmp.getPage(0), tmp.getPage(1)])
+
+  const page = doc.addPage([PAGE_W, PAGE_H])
+  const halfW = PAGE_W / 2
+  // Each placard is PAGE_W × PAGE_H (792 × 612). Fit it into halfW × PAGE_H
+  // by uniform scale on width — height becomes shorter, which we centre
+  // vertically. This keeps aspect ratio so photos and the navy-yellow
+  // band don't distort.
+  const scale = halfW / PAGE_W
+  const scaledH = PAGE_H * scale
+  const yOffset = (PAGE_H - scaledH) / 2
+
+  page.drawPage(enEmbed, { x: 0,     y: yOffset, width: halfW, height: scaledH })
+  page.drawPage(esEmbed, { x: halfW, y: yOffset, width: halfW, height: scaledH })
+
+  // Centre divider so the two halves are visually separated. Thin so it
+  // doesn't compete with the printed content; uses the existing table-
+  // border slate colour for consistency with the per-language layout.
+  page.drawLine({
+    start: { x: halfW, y: 0 },
+    end:   { x: halfW, y: PAGE_H },
+    thickness: 0.5,
+    color: COLOR_TABLE_BORDER,
+  })
+
+  return doc.save()
+}
+
 export interface BatchItem {
   equipment: Equipment
   steps:     LotoEnergyStep[]

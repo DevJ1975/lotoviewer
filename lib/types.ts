@@ -445,3 +445,40 @@ export interface AtmosphericTest {
   notes:           string | null
   created_at:      string
 }
+
+// ── LOTO device tracking (migration 026) ──────────────────────────────────
+
+export type LotoDeviceKind   = 'padlock' | 'cable' | 'hasp' | 'group_box' | 'other'
+export type LotoDeviceStatus = 'available' | 'checked_out' | 'maintenance' | 'lost'
+
+export interface LotoDevice {
+  id:                  string
+  device_label:        string
+  description:         string | null
+  kind:                LotoDeviceKind
+  status:              LotoDeviceStatus
+  // FK to the open checkout row when status = 'checked_out'. Null
+  // otherwise. Maintained denormalised for fast lookup; the source
+  // of truth is loto_device_checkouts.
+  current_checkout_id: string | null
+  notes:               string | null
+  decommissioned:      boolean
+  created_at:          string
+  updated_at:          string
+}
+
+export interface LotoDeviceCheckout {
+  id:             string
+  device_id:      string
+  owner_id:       string
+  // The equipment this lock is on. Free-text because group locks may
+  // apply to bays / circuits not in loto_equipment. Null = "I'm
+  // taking this lock" without a specific tag yet.
+  equipment_id:   string | null
+  checked_out_at: string
+  recorded_by:    string
+  returned_at:    string | null
+  returned_by:    string | null
+  notes:          string | null
+  created_at:     string
+}
