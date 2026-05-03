@@ -40,20 +40,26 @@ function safeEqual(a: string, b: string): boolean {
   return mismatch === 0
 }
 
-// Vercel Cron sends "Authorization: Bearer <CRON_SECRET>"; we also
-// accept the internal X-Internal-Secret header used by the existing
-// push trigger. Either path is fine — both check against the same env.
+// Vercel Cron sends "Authorization: Bearer <CRON_SECRET>"; we accept
+// that path AND the X-Internal-Secret header used by the existing push
+// trigger. Either secret env name works (CRON_SECRET or INTERNAL_PUSH_SECRET)
+// so the operator can pick whichever convention fits their setup —
+// Vercel's cron path uses CRON_SECRET by convention; non-Vercel
+// schedulers tend to pre-existingly know INTERNAL_PUSH_SECRET.
 function authorize(req: Request): boolean {
-  const expected = process.env.INTERNAL_PUSH_SECRET ?? ''
-  if (!expected) return false
+  const cronSecret     = process.env.CRON_SECRET ?? ''
+  const internalSecret = process.env.INTERNAL_PUSH_SECRET ?? ''
+  if (!cronSecret && !internalSecret) return false
 
   const auth = req.headers.get('authorization') ?? ''
   if (auth.startsWith('Bearer ')) {
-    if (safeEqual(auth.slice('Bearer '.length), expected)) return true
+    const provided = auth.slice('Bearer '.length)
+    if (cronSecret     && safeEqual(provided, cronSecret))     return true
+    if (internalSecret && safeEqual(provided, internalSecret)) return true
   }
 
   const internal = req.headers.get('x-internal-secret') ?? ''
-  if (internal && safeEqual(internal, expected)) return true
+  if (internal && internalSecret && safeEqual(internal, internalSecret)) return true
 
   return false
 }

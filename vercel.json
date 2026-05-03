@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/meter-bump-reminders",
+      "schedule": "0 */4 * * *"
+    }
+  ]
+}
