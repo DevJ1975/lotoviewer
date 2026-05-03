@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { loadPermitPage } from '@/lib/queries/permitDetail'
 import type {
   AtmosphericTest,
   CancelReason,
@@ -87,46 +88,21 @@ export default function PermitDetailPage() {
   const [rosterOpen, setRosterOpen] = useState(false)
 
   const load = useCallback(async () => {
-    const [spaceRes, permitRes, testsRes, entriesRes, metersRes, configRes, trainingRes, hotWorkRes] = await Promise.all([
-      supabase.from('loto_confined_spaces').select('*').eq('space_id', spaceId).single(),
-      supabase.from('loto_confined_space_permits').select('*').eq('id', permitId).single(),
-      supabase.from('loto_atmospheric_tests').select('*').eq('permit_id', permitId).order('tested_at', { ascending: false }),
-      supabase.from('loto_confined_space_entries').select('*').eq('permit_id', permitId).order('entered_at', { ascending: false }),
-      supabase.from('loto_gas_meters').select('*').eq('decommissioned', false),
-      supabase.from('loto_org_config').select('*').eq('id', 1).maybeSingle(),
-      supabase.from('loto_training_records').select('*'),
-      supabase.from('loto_hot_work_permits').select('*').eq('associated_cs_permit_id', permitId).order('started_at', { ascending: false }),
-    ])
-    if (spaceRes.error || permitRes.error || !spaceRes.data || !permitRes.data) {
+    const res = await loadPermitPage({ spaceId, permitId })
+    if (!res.ok) {
       setNotFound(true)
       setLoading(false)
       return
     }
-    setSpace(spaceRes.data as ConfinedSpace)
-    setPermit(permitRes.data as ConfinedSpacePermit)
-    if (testsRes.data) setTests(testsRes.data as AtmosphericTest[])
-    // entries / meters tables come from migration 012; if it hasn't been
-    // applied yet, both queries return an error and we leave the state
-    // empty. The UI degrades — no in/out log, no bump-test warning — but
-    // doesn't break the rest of the page.
-    if (entriesRes.data) setEntries(entriesRes.data as ConfinedSpaceEntry[])
-    if (metersRes.data) {
-      const m = new Map<string, GasMeter>()
-      for (const row of metersRes.data as GasMeter[]) m.set(row.instrument_id, row)
-      setMeters(m)
-    }
-    // Org config: optional. Pre-migration-014 the table doesn't exist
-    // and the query errors silently. The work-order field still renders
-    // as plain text in that case.
-    if (configRes.data) setOrgConfig(configRes.data as OrgConfig)
-    // Training records likewise — pre-migration-017 the query errors
-    // silently and the §(g) gate behaves as if no records exist (every
-    // worker flagged), which the supervisor can override.
-    if (trainingRes.data) setTrainingRecords(trainingRes.data as TrainingRecord[])
-    // Hot-work cross-link (migration 019). Pre-migration the table
-    // doesn't exist and the query errors silently — the banner just
-    // doesn't render, no crash.
-    if (hotWorkRes.data) setLinkedHotWork(hotWorkRes.data as HotWorkPermit[])
+    const { data } = res
+    setSpace(data.space)
+    setPermit(data.permit)
+    setTests(data.tests)
+    setEntries(data.entries)
+    setMeters(data.meters)
+    setOrgConfig(data.orgConfig)
+    setTrainingRecords(data.trainingRecords)
+    setLinkedHotWork(data.linkedHotWork)
     setLoading(false)
   }, [spaceId, permitId])
 

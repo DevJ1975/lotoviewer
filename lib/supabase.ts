@@ -10,6 +10,18 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 // is constructed on the first property access, and cached. Real usage
 // paths (supabase.from(), supabase.auth.getSession(), etc.) look and
 // behave identically.
+//
+// TODO: once `npm run db:types` has been run and lib/database.types.ts
+// has the generated schema, swap the client to:
+//
+//   import type { Database } from '@/lib/database.types'
+//   ...
+//   cached = createClient<Database>(url, anon)
+//
+// This narrows every supabase.from(...) result so the inline `as Foo[]`
+// casts in app pages can be deleted. We don't do it preemptively
+// because the placeholder Database = empty interface gives no narrowing
+// and would make the types feel "broken" without delivering value.
 let cached: SupabaseClient | null = null
 
 function getClient(): SupabaseClient {

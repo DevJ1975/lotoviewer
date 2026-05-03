@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > lib/database.types.ts && echo '✓ wrote lib/database.types.ts'"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
