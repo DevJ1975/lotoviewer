@@ -3,6 +3,7 @@ import { Inter, Geist_Mono } from 'next/font/google'
 import { UploadQueueProvider } from '@/components/UploadQueueProvider'
 import { SessionProvider } from '@/components/SessionProvider'
 import { AuthProvider } from '@/components/AuthProvider'
+import { TenantProvider } from '@/components/TenantProvider'
 import { ThemeProvider, NO_FLASH_SCRIPT } from '@/components/ThemeProvider'
 import AuthGate from '@/components/AuthGate'
 import AppChrome from '@/components/AppChrome'
@@ -51,13 +52,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-full bg-slate-50 dark:bg-slate-900/40 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
         <ThemeProvider>
           <AuthProvider>
-            <SessionProvider>
-              <UploadQueueProvider>
-                <AuthGate>
-                  <AppChrome>{children}</AppChrome>
-                </AuthGate>
-              </UploadQueueProvider>
-            </SessionProvider>
+            <TenantProvider>
+              <SessionProvider>
+                <UploadQueueProvider>
+                  <AuthGate>
+                    <AppChrome>{children}</AppChrome>
+                  </AuthGate>
+                </UploadQueueProvider>
+              </SessionProvider>
+            </TenantProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

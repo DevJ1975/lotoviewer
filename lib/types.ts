@@ -69,9 +69,47 @@ export interface Profile {
   email:                string
   full_name:            string | null
   is_admin:             boolean
+  is_superadmin:        boolean
   must_change_password: boolean
   created_at:           string
   updated_at:           string
+}
+
+// ── Multi-tenant model (migrations 027–029) ────────────────────────────────
+// One tenant per customer organization. Users belong to many tenants via
+// tenant_memberships; the active tenant is held in TenantProvider /
+// sessionStorage. RLS enforces isolation at the DB layer; the app code adds
+// .eq('tenant_id', tenantId) filters as belt-and-suspenders.
+
+export type TenantStatus = 'active' | 'trial' | 'disabled' | 'archived'
+export type TenantRole   = 'owner'  | 'admin' | 'member'   | 'viewer'
+
+export interface Tenant {
+  id:             string
+  tenant_number:  string                    // 4-digit, '0001'…'9999'
+  slug:           string
+  name:           string
+  status:         TenantStatus
+  is_demo:        boolean
+  disabled_at:    string | null
+  // Top-level feature-id -> enabled. Children inherit their parent's flag.
+  // Missing keys fall back to the static catalog in lib/features.ts.
+  modules:        Record<string, boolean>
+  logo_url:       string | null
+  custom_domain:  string | null
+  // Free-form per-tenant config (work_order_url_template, etc.)
+  settings:       Record<string, unknown>
+  created_at:     string
+  updated_at:     string
+}
+
+export interface TenantMembership {
+  user_id:    string
+  tenant_id:  string
+  role:       TenantRole
+  invited_by: string | null
+  created_at: string
+  updated_at: string
 }
 
 // ── Confined Space module (OSHA 29 CFR 1910.146) ────────────────────────────
