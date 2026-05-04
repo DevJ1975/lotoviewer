@@ -83,23 +83,30 @@ export default function SuperadminTenantDetail({
     setModules({ ...t.modules })
 
     // Members: join tenant_memberships → profiles via user_id. RLS allows
-    // superadmin to read both tables.
+    // superadmin to read both tables. Supabase types the embedded foreign
+    // table as an array even on a many-to-one relationship; we read the
+    // first row.
     const { data: mRows } = await supabase
       .from('tenant_memberships')
       .select('user_id, role, created_at, profiles:user_id(email, full_name)')
       .eq('tenant_id', t.id)
       .order('created_at', { ascending: true })
+    type RawProfile = { email: string | null; full_name: string | null }
     type RawMember = {
       user_id: string; role: TenantRole; created_at: string
-      profiles: { email: string | null; full_name: string | null } | null
+      profiles: RawProfile | RawProfile[] | null
     }
-    setMembers((mRows ?? []).map((r: RawMember) => ({
-      user_id:    r.user_id,
-      role:       r.role,
-      created_at: r.created_at,
-      email:      r.profiles?.email     ?? null,
-      full_name:  r.profiles?.full_name ?? null,
-    })))
+    setMembers((mRows ?? []).map((row: unknown) => {
+      const r = row as RawMember
+      const p = Array.isArray(r.profiles) ? r.profiles[0] ?? null : r.profiles
+      return {
+        user_id:    r.user_id,
+        role:       r.role,
+        created_at: r.created_at,
+        email:      p?.email     ?? null,
+        full_name:  p?.full_name ?? null,
+      }
+    }))
 
     setLoading(false)
   }
