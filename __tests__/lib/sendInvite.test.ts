@@ -1,11 +1,16 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 
-// Mock the Resend module BEFORE importing the helper. Resend's
-// constructor returns an object with `emails.send`; tests swap the
-// implementation to control success/failure.
-const sendMock = vi.fn()
+// Mock the Resend module BEFORE importing the helper. The Resend SDK
+// is class-instantiated (`new Resend(apiKey)`) — we have to mock with
+// an actual class, not vi.fn().mockImplementation (which produces a
+// plain function and breaks when called with `new`). vi.hoisted is the
+// only way to reference a spy inside a vi.mock factory because the
+// factory runs before module-level `const` declarations execute.
+const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn() }))
 vi.mock('resend', () => ({
-  Resend: vi.fn().mockImplementation(() => ({ emails: { send: sendMock } })),
+  Resend: class {
+    emails = { send: sendMock }
+  },
 }))
 
 // Sentry is a no-op in tests; we only check the boolean return value

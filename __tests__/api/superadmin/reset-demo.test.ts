@@ -101,10 +101,19 @@ describe('POST /api/superadmin/tenants/[number]/reset-demo', () => {
 })
 
 describe('DELETE /api/superadmin/users/[user_id]', () => {
-  beforeEach(() => { resetMocks(); gateOk('caller-id') })
+  // Real auth.users.id is a UUID; the route validates the format.
+  const CALLER  = '11111111-1111-1111-1111-111111111111'
+  const TARGET  = '22222222-2222-2222-2222-222222222222'
+
+  beforeEach(() => { resetMocks(); gateOk(CALLER) })
+
+  it('rejects an obviously-invalid user_id with 400', async () => {
+    const r = await deleteUser(emptyRequest('DELETE'), ctxFor({ user_id: 'not-a-uuid' }))
+    expect(r.status).toBe(400)
+  })
 
   it('refuses to delete the caller with 400', async () => {
-    const r = await deleteUser(emptyRequest('DELETE'), ctxFor({ user_id: 'caller-id' }))
+    const r = await deleteUser(emptyRequest('DELETE'), ctxFor({ user_id: CALLER }))
     expect(r.status).toBe(400)
     const body = await r.json()
     expect(body.error).toMatch(/your own/i)
@@ -120,7 +129,7 @@ describe('DELETE /api/superadmin/users/[user_id]', () => {
     })
     // ownerCount on T1 returns 1 → block.
     mockState.queue('tenant_memberships', { data: null, count: 1, error: null })
-    const r = await deleteUser(emptyRequest('DELETE'), ctxFor({ user_id: 'U1' }))
+    const r = await deleteUser(emptyRequest('DELETE'), ctxFor({ user_id: TARGET }))
     expect(r.status).toBe(409)
     const body = await r.json()
     expect(body.error).toMatch(/last owner/i)
@@ -132,8 +141,8 @@ describe('DELETE /api/superadmin/users/[user_id]', () => {
       error: null,
     })
     authAdminMock.deleteUser.mockResolvedValue({ error: null })
-    const r = await deleteUser(emptyRequest('DELETE'), ctxFor({ user_id: 'U1' }))
+    const r = await deleteUser(emptyRequest('DELETE'), ctxFor({ user_id: TARGET }))
     expect(r.status).toBe(200)
-    expect(authAdminMock.deleteUser).toHaveBeenCalledWith('U1')
+    expect(authAdminMock.deleteUser).toHaveBeenCalledWith(TARGET)
   })
 })
