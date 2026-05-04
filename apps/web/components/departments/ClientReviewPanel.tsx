@@ -3,16 +3,21 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
+import { renderReviewLinkBody } from '@/lib/email/renderReviewLinkBody'
 
 // Client-review-portal panel for /departments/[dept]. Sits below the
 // existing in-app sign-off section. Two affordances:
 //   1. "Send for client review" button → modal → POST /api/admin/review-links
+//      (1..MAX_REVIEWERS at a time)
 //   2. List of past + pending review_links for this department, with
-//      revoke + copy-link affordances.
+//      revoke + copy-link affordances + manual-send-via-your-email
+//      fallback.
 //
 // State updates use a manual refetch after each mutation rather than
 // realtime — these are low-volume admin actions, no need for the
 // extra subscription.
+
+const MAX_REVIEWERS = 5
 
 interface ReviewLinkRow {
   id:                  string
@@ -30,6 +35,19 @@ interface ReviewLinkRow {
   revoked_at:          string | null
   created_at:          string
   token:               string
+  email_channel:       'auto' | 'manual'
+}
+
+// Subset of ReviewLinkRow needed to compose a manual-send mailto.
+interface MailtoContext {
+  reviewerName:  string
+  reviewerEmail: string
+  tenantName:    string
+  department:    string
+  placardCount:  number
+  reviewUrl:     string
+  expiresAt:     string
+  adminMessage:  string | null
 }
 
 interface Props {
@@ -37,12 +55,15 @@ interface Props {
 }
 
 export default function ClientReviewPanel({ department }: Props) {
-  const { tenantId } = useTenant()
+  const { tenantId, tenant } = useTenant()
   const [links,   setLinks]   = useState<ReviewLinkRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
   const [showSendModal, setShowSendModal] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  const [placardCount, setPlacardCount] = useState<number>(0)
+
+  const tenantName = tenant?.name ?? 'your tenant'
 
   const refresh = useCallback(async () => {
     setLoading(true); setError(null)
@@ -62,6 +83,19 @@ export default function ClientReviewPanel({ department }: Props) {
       setLoading(false)
     }
   }, [department, tenantId])
+
+  // Background fetch the placard count so manual-send mailto bodies
+  // reflect the same numbers Resend sends would.
+  useEffect(() => {
+    if (!tenantId) return
+    void supabase
+      .from('loto_equipment')
+      .select('*', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+      .eq('department', department)
+      .eq('decommissioned', false)
+      .then(({ count }) => setPlacardCount(count ?? 0))
+  }, [tenantId, department])
 
   useEffect(() => { void refresh() }, [refresh])
 
@@ -89,6 +123,19 @@ export default function ClientReviewPanel({ department }: Props) {
   function reviewUrl(token: string): string {
     if (typeof window !== 'undefined') return `${window.location.origin}/review/${token}`
     return `/review/${token}`
+  }
+
+  function buildMailtoContext(link: ReviewLinkRow): MailtoContext {
+    return {
+      reviewerName:  link.reviewer_name,
+      reviewerEmail: link.reviewer_email,
+      tenantName,
+      department:    link.department,
+      placardCount,
+      reviewUrl:     reviewUrl(link.token),
+      expiresAt:     link.expires_at,
+      adminMessage:  link.admin_message,
+    }
   }
 
   return (
@@ -120,11 +167,20 @@ export default function ClientReviewPanel({ department }: Props) {
         <LinkRow
           key={link.id}
           link={link}
-          reviewUrl={reviewUrl(link.token)}
+          mailto={buildMailtoContext(link)}
           onRevoke={() => handleRevoke(link.id)}
-          onCopy={() => {
+          onCopyLink={() => {
             void navigator.clipboard.writeText(reviewUrl(link.token))
             setToast('Link copied to clipboard')
+          }}
+          onCopyEmailText={() => {
+            const ctx = buildMailtoContext(link)
+            const { subject, body } = renderReviewLinkBody({
+              ...ctx,
+              adminMessage: ctx.adminMessage ?? undefined,
+            })
+            void navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`)
+            setToast('Email text copied — paste into your mail app')
           }}
         />
       ))}
@@ -138,6 +194,9 @@ export default function ClientReviewPanel({ department }: Props) {
       {showSendModal && (
         <SendForReviewModal
           department={department}
+          tenantName={tenantName}
+          placardCount={placardCount}
+          baseUrl={typeof window !== 'undefined' ? window.location.origin : ''}
           onClose={() => setShowSendModal(false)}
           onSent={(msg) => { setToast(msg); setShowSendModal(false); void refresh() }}
         />
@@ -146,25 +205,21 @@ export default function ClientReviewPanel({ department }: Props) {
   )
 }
 
+// ─── LinkRow ────────────────────────────────────────────────────────────────
+
 function LinkRow({
-  link, reviewUrl, onRevoke, onCopy,
+  link, mailto, onRevoke, onCopyLink, onCopyEmailText,
 }: {
-  link:      ReviewLinkRow
-  reviewUrl: string
-  onRevoke:  () => void
-  onCopy:    () => void
+  link:             ReviewLinkRow
+  mailto:           MailtoContext
+  onRevoke:         () => void
+  onCopyLink:       () => void
+  onCopyEmailText:  () => void
 }) {
-  const status = link.revoked_at
-    ? { label: 'Revoked', tone: 'bg-slate-100 text-slate-600' }
-    : link.signed_off_at
-    ? link.signoff_approved
-      ? { label: 'Approved',      tone: 'bg-emerald-100 text-emerald-800' }
-      : { label: 'Needs changes', tone: 'bg-amber-100 text-amber-800' }
-    : link.first_viewed_at
-    ? { label: 'Opened',  tone: 'bg-sky-100 text-sky-800' }
-    : link.sent_at
-    ? { label: 'Sent',    tone: 'bg-slate-200 text-slate-700' }
-    : { label: 'Pending send', tone: 'bg-amber-100 text-amber-800' }
+  const status = computeLinkStatus(link)
+  const canManualSend = !link.revoked_at && !link.signed_off_at
+
+  const mailtoHref = canManualSend ? buildMailtoUrl(mailto) : undefined
 
   return (
     <div className="border border-slate-100 dark:border-slate-800 rounded-lg p-3">
@@ -179,7 +234,7 @@ function LinkRow({
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 italic">"{link.admin_message}"</p>
           )}
           <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-            Sent {formatRelative(link.sent_at ?? link.created_at)}
+            {link.email_channel === 'manual' ? 'Created' : 'Sent'} {formatRelative(link.sent_at ?? link.created_at)}
             {link.first_viewed_at ? ` · Opened ${formatRelative(link.first_viewed_at)}` : ''}
             {link.signed_off_at ? ` · Signed ${formatRelative(link.signed_off_at)}` : ''}
             {' · '}Expires {new Date(link.expires_at).toLocaleDateString()}
@@ -190,27 +245,70 @@ function LinkRow({
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={onCopy}
-            className="text-[11px] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 underline"
-          >
-            Copy link
-          </button>
-          {!link.revoked_at && !link.signed_off_at && (
-            <button
-              type="button"
-              onClick={onRevoke}
-              className="text-[11px] text-rose-700 hover:text-rose-900 underline"
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          {canManualSend && mailtoHref && (
+            <a
+              href={mailtoHref}
+              className="text-[11px] font-semibold bg-brand-navy text-white px-2.5 py-1 rounded-md hover:bg-brand-navy/90"
+              title="Compose a pre-filled email in your default mail client"
             >
-              Revoke
-            </button>
+              Send via your email
+            </a>
           )}
+          <div className="flex items-center gap-2">
+            {canManualSend && (
+              <button type="button" onClick={onCopyEmailText} className="text-[11px] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 underline">
+                Copy email text
+              </button>
+            )}
+            <button type="button" onClick={onCopyLink} className="text-[11px] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 underline">
+              Copy link
+            </button>
+            {canManualSend && (
+              <button type="button" onClick={onRevoke} className="text-[11px] text-rose-700 hover:text-rose-900 underline">
+                Revoke
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
   )
+}
+
+// Status badge logic. Manual-channel rows get their own neutral
+// "Sent manually" badge so the admin can tell at a glance which
+// links went out via Resend vs. their own mail client.
+function computeLinkStatus(link: ReviewLinkRow): { label: string; tone: string } {
+  if (link.revoked_at) return { label: 'Revoked', tone: 'bg-slate-100 text-slate-600' }
+  if (link.signed_off_at) {
+    return link.signoff_approved
+      ? { label: 'Approved',      tone: 'bg-emerald-100 text-emerald-800' }
+      : { label: 'Needs changes', tone: 'bg-amber-100 text-amber-800' }
+  }
+  if (link.first_viewed_at) return { label: 'Opened', tone: 'bg-sky-100 text-sky-800' }
+  if (link.email_channel === 'manual') {
+    return { label: 'Sent manually', tone: 'bg-indigo-100 text-indigo-800' }
+  }
+  if (link.sent_at) return { label: 'Sent', tone: 'bg-slate-200 text-slate-700' }
+  return { label: 'Send failed', tone: 'bg-amber-100 text-amber-800' }
+}
+
+function buildMailtoUrl(ctx: MailtoContext): string {
+  const { subject, body } = renderReviewLinkBody({
+    reviewerName:  ctx.reviewerName,
+    reviewerEmail: ctx.reviewerEmail,
+    tenantName:    ctx.tenantName,
+    department:    ctx.department,
+    placardCount:  ctx.placardCount,
+    reviewUrl:     ctx.reviewUrl,
+    expiresAt:     ctx.expiresAt,
+    adminMessage:  ctx.adminMessage ?? undefined,
+  }, { truncateAdminMessageForMailto: true })
+  const params = new URLSearchParams()
+  params.set('subject', subject)
+  params.set('body', body)
+  return `mailto:${encodeURIComponent(ctx.reviewerEmail)}?${params.toString()}`
 }
 
 function formatRelative(iso: string | null): string {
@@ -222,23 +320,48 @@ function formatRelative(iso: string | null): string {
   return `${Math.floor(ms / 86400_000)}d ago`
 }
 
+// ─── SendForReviewModal ────────────────────────────────────────────────────
+
+interface ReviewerRow {
+  id:    string  // local-only stable key for the form rows
+  name:  string
+  email: string
+}
+
 function SendForReviewModal({
-  department, onClose, onSent,
+  department, tenantName, placardCount, baseUrl, onClose, onSent,
 }: {
-  department: string
-  onClose:    () => void
-  onSent:     (toastMsg: string) => void
+  department:   string
+  tenantName:   string
+  placardCount: number
+  baseUrl:      string
+  onClose:      () => void
+  onSent:       (toastMsg: string) => void
 }) {
   const { tenantId } = useTenant()
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
+  const [reviewers, setReviewers] = useState<ReviewerRow[]>([
+    { id: rid(), name: '', email: '' },
+  ])
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
-    if (busy) return
+  function addRow() {
+    if (reviewers.length >= MAX_REVIEWERS) return
+    setReviewers(rs => [...rs, { id: rid(), name: '', email: '' }])
+  }
+  function removeRow(id: string) {
+    setReviewers(rs => rs.length === 1 ? rs : rs.filter(r => r.id !== id))
+  }
+  function updateRow(id: string, patch: Partial<ReviewerRow>) {
+    setReviewers(rs => rs.map(r => r.id === id ? { ...r, ...patch } : r))
+  }
+
+  const valid = reviewers.every(r => r.name.trim() && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email.trim()))
+              && new Set(reviewers.map(r => r.email.trim().toLowerCase())).size === reviewers.length
+
+  async function submit(opts: { skipEmail: boolean }) {
+    if (busy || !valid) return
     setBusy(true); setError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -251,17 +374,38 @@ function SendForReviewModal({
         },
         body: JSON.stringify({
           department,
-          reviewer_name:  name.trim(),
-          reviewer_email: email.trim(),
+          reviewers: reviewers.map(r => ({ name: r.name.trim(), email: r.email.trim() })),
           admin_message:  message.trim(),
+          skip_email:     opts.skipEmail,
         }),
       })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
-      const toastMsg = body.link?.email_sent
-        ? `Sent to ${email.trim()}`
-        : `Created — email send failed; copy the link manually`
-      onSent(toastMsg)
+
+      const links = (body.links ?? []) as Array<{ reviewer_email: string; review_url: string; reviewer_name: string; expires_at: string; admin_message: string | null; email_sent: boolean }>
+
+      if (opts.skipEmail) {
+        // Open the first reviewer's mail-app immediately on this user
+        // gesture (a click). For batches >1, hand off to the
+        // walkthrough so each subsequent reviewer requires its own
+        // explicit click (avoids popup-blocker drama).
+        if (links.length === 1) {
+          window.location.href = mailtoFromLink(links[0]!, { tenantName, department, placardCount })
+          onSent(`Opened mail app for ${links[0]!.reviewer_email}`)
+        } else {
+          openManualBatch(links, { tenantName, department, placardCount }, onSent)
+        }
+        return
+      }
+
+      // Resend path. Summarize partial failures.
+      const sentCount   = links.filter(l => l.email_sent).length
+      const failedRows  = links.filter(l => !l.email_sent)
+      if (failedRows.length === 0) {
+        onSent(`Sent ${sentCount} ${sentCount === 1 ? 'invite' : 'invites'}`)
+      } else {
+        onSent(`Sent ${sentCount} of ${links.length}. ${failedRows.length} failed: ${failedRows.map(r => r.reviewer_email).join(', ')} — see panel for retry options.`)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -271,42 +415,62 @@ function SendForReviewModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <form
-        onSubmit={submit}
+      <div
         onClick={e => e.stopPropagation()}
-        className="bg-white dark:bg-slate-900 rounded-xl shadow-xl max-w-md w-full p-6 space-y-4"
+        className="bg-white dark:bg-slate-900 rounded-xl shadow-xl max-w-md w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto"
       >
         <header>
           <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Send {department} for review</h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            The reviewer doesn't need a Soteria account. They'll get an email with a tokenized link.
+            Up to {MAX_REVIEWERS} reviewers per send. They don't need a Soteria account.
           </p>
         </header>
 
-        <label className="block">
-          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Reviewer name</span>
-          <input
-            type="text"
-            required
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="Alice Reviewer"
-            className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm"
-          />
-        </label>
-
-        <label className="block">
-          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Reviewer email</span>
-          <input
-            type="email"
-            required
-            autoComplete="off"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="alice@client.com"
-            className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm"
-          />
-        </label>
+        <div className="space-y-2">
+          {reviewers.map((r, i) => (
+            <div key={r.id} className="flex items-end gap-2">
+              <label className="flex-1 block">
+                {i === 0 && <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Name</span>}
+                <input
+                  type="text"
+                  value={r.name}
+                  onChange={e => updateRow(r.id, { name: e.target.value })}
+                  placeholder={`Reviewer ${i + 1} name`}
+                  className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-800 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="flex-1 block">
+                {i === 0 && <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Email</span>}
+                <input
+                  type="email"
+                  autoComplete="off"
+                  value={r.email}
+                  onChange={e => updateRow(r.id, { email: e.target.value })}
+                  placeholder="alice@client.com"
+                  className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-800 px-2 py-1.5 text-sm"
+                />
+              </label>
+              {reviewers.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeRow(r.id)}
+                  className="text-slate-400 hover:text-rose-700 text-lg w-7 h-7 flex items-center justify-center"
+                  title="Remove this reviewer"
+                  aria-label="Remove reviewer"
+                >×</button>
+              )}
+            </div>
+          ))}
+          {reviewers.length < MAX_REVIEWERS && (
+            <button
+              type="button"
+              onClick={addRow}
+              className="text-[12px] font-semibold text-brand-navy hover:underline"
+            >
+              + Add another reviewer ({MAX_REVIEWERS - reviewers.length} remaining)
+            </button>
+          )}
+        </div>
 
         <label className="block">
           <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Message (optional)</span>
@@ -321,23 +485,122 @@ function SendForReviewModal({
 
         {error && <p className="text-sm text-rose-700 bg-rose-50 px-3 py-2 rounded-lg">{error}</p>}
 
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex flex-col gap-2 pt-2">
+          <button
+            type="button"
+            onClick={() => void submit({ skipEmail: false })}
+            disabled={busy || !valid}
+            className="w-full bg-brand-navy text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-40 hover:bg-brand-navy/90 transition-colors"
+          >
+            {busy ? 'Sending…' : `Send ${reviewers.length === 1 ? 'invite' : `${reviewers.length} invites`} via Soteria`}
+          </button>
+          <button
+            type="button"
+            onClick={() => void submit({ skipEmail: true })}
+            disabled={busy || !valid}
+            className="w-full text-sm font-semibold border border-slate-200 dark:border-slate-700 px-4 py-2 rounded-lg disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+            title="Skip auto-send; open each invite in your default mail app so it goes from your own address"
+          >
+            Open {reviewers.length === 1 ? 'in your mail app' : `${reviewers.length} in your mail app`}
+          </button>
           <button
             type="button"
             onClick={onClose}
-            className="text-sm text-slate-600 dark:text-slate-300 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 self-center mt-1"
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            disabled={busy || !name || !email}
-            className="bg-brand-navy text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-40 hover:bg-brand-navy/90 transition-colors"
-          >
-            {busy ? 'Sending…' : 'Send invite'}
-          </button>
         </div>
-      </form>
+      </div>
     </div>
   )
+}
+
+// Helper used by the manual-batch walkthrough.
+function mailtoFromLink(
+  link: { reviewer_email: string; reviewer_name: string; review_url: string; expires_at: string; admin_message: string | null },
+  ctx:  { tenantName: string; department: string; placardCount: number },
+): string {
+  const { subject, body } = renderReviewLinkBody({
+    reviewerName:  link.reviewer_name,
+    reviewerEmail: link.reviewer_email,
+    tenantName:    ctx.tenantName,
+    department:    ctx.department,
+    placardCount:  ctx.placardCount,
+    reviewUrl:     link.review_url,
+    expiresAt:     link.expires_at,
+    adminMessage:  link.admin_message ?? undefined,
+  }, { truncateAdminMessageForMailto: true })
+  const params = new URLSearchParams()
+  params.set('subject', subject)
+  params.set('body', body)
+  return `mailto:${encodeURIComponent(link.reviewer_email)}?${params.toString()}`
+}
+
+// Walkthrough modal for batch manual-send. Browsers block multiple
+// auto-popups, so we open the first immediately on the original
+// click and require an explicit Continue button for each subsequent
+// reviewer (preserves user-gesture).
+function openManualBatch(
+  links: Array<{ reviewer_email: string; reviewer_name: string; review_url: string; expires_at: string; admin_message: string | null; email_sent: boolean }>,
+  ctx:   { tenantName: string; department: string; placardCount: number },
+  done:  (toastMsg: string) => void,
+) {
+  if (links.length === 0) { done('No links to send'); return }
+
+  // Open the first immediately — same user-gesture as the click that
+  // triggered submit(), so no popup block.
+  window.location.href = mailtoFromLink(links[0]!, ctx)
+
+  if (links.length === 1) { done(`Opened mail app for ${links[0]!.reviewer_email}`); return }
+
+  // For the rest, render a tiny floating walkthrough panel with a
+  // Continue button per reviewer. Each click is a fresh user gesture
+  // and bypasses popup blockers.
+  const root = document.createElement('div')
+  root.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.5);display:flex;align-items:center;justify-content:center;z-index:60;'
+  document.body.appendChild(root)
+
+  let i = 1
+  function renderStep() {
+    if (i >= links.length) {
+      root.remove()
+      done(`Opened mail app for all ${links.length} reviewers`)
+      return
+    }
+    const link = links[i]!
+    root.innerHTML = `
+      <div style="background:#fff;color:#0f172a;border-radius:12px;padding:20px;max-width:380px;width:100%;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#1e3a8a;margin-bottom:6px;">Reviewer ${i + 1} of ${links.length}</div>
+        <div style="font-size:15px;font-weight:600;">${escapeHtml(link.reviewer_name)}</div>
+        <div style="font-size:13px;color:#64748b;margin-bottom:12px;">${escapeHtml(link.reviewer_email)}</div>
+        <p style="font-size:13px;line-height:1.5;color:#334155;margin:0 0 14px 0;">Click Continue to open the next invite in your mail app. Send it, then return here for the next reviewer.</p>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button id="ml-skip" style="background:#fff;color:#64748b;border:1px solid #cbd5e1;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;">Skip remaining</button>
+          <button id="ml-continue" style="background:#1e3a8a;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;">Continue →</button>
+        </div>
+      </div>
+    `
+    const cont = root.querySelector('#ml-continue') as HTMLButtonElement | null
+    const skip = root.querySelector('#ml-skip') as HTMLButtonElement | null
+    cont?.addEventListener('click', () => {
+      window.location.href = mailtoFromLink(link, ctx)
+      i += 1
+      renderStep()
+    })
+    skip?.addEventListener('click', () => {
+      root.remove()
+      done(`Opened ${i} of ${links.length} reviewers; ${links.length - i} skipped — links still saved.`)
+    })
+  }
+  renderStep()
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+function rid(): string {
+  // Stable enough for one modal session — no need for crypto.randomUUID.
+  return Math.random().toString(36).slice(2, 10)
 }

@@ -11,6 +11,7 @@
 
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
+import { renderReviewLinkBody } from './renderReviewLinkBody'
 
 export interface ReviewLinkEmailArgs {
   to:             string
@@ -55,9 +56,19 @@ export async function sendReviewLinkEmail(
             ?? process.env.SUPPORT_FROM_EMAIL
             ?? 'Soteria FIELD <onboarding@resend.dev>'
 
-  const subject = `Please review LOTO placards for ${args.department} — ${args.tenantName}`
-
-  const text = renderText(args)
+  // Subject + plain-text body come from the shared pure renderer so
+  // the manual-send (mailto) path produces identical wording. HTML
+  // template is server-only and stays inline below.
+  const { subject, body: text } = renderReviewLinkBody({
+    reviewerName:  args.reviewerName,
+    reviewerEmail: args.to,
+    tenantName:    args.tenantName,
+    department:    args.department,
+    placardCount:  args.placardCount,
+    reviewUrl:     args.reviewUrl,
+    expiresAt:     args.expiresAt,
+    adminMessage:  args.adminMessage,
+  })
   const html = renderHtml(args)
 
   try {
@@ -95,26 +106,11 @@ function formatDate(iso: string): string {
   }
 }
 
-function renderText(a: ReviewLinkEmailArgs): string {
-  const dispName = a.reviewerName || a.to.split('@')[0]!
-  const adminBlock = a.adminMessage?.trim()
-    ? `\n\n  > ${a.adminMessage.trim().split('\n').join('\n  > ')}\n`
-    : ''
-  return `Hi ${dispName},
-
-${a.tenantName}'s ${a.department} department has ${a.placardCount} LOTO ${a.placardCount === 1 ? 'placard' : 'placards'} ready for your review.${adminBlock}
-
-Open the review portal (no sign-in required):
-  ${a.reviewUrl}
-
-You can leave notes on any placard, then sign off on the whole batch
-(Approve / Needs changes). The link expires ${formatDate(a.expiresAt)}.
-
-If you have any trouble, just reply to this email.
-
-— Soteria FIELD on behalf of ${a.tenantName}
-`
-}
+// Plain-text body now comes from the shared `renderReviewLinkBody`
+// helper — see the import + call site at the top of this file. The
+// HTML template below stays inline because (a) it's heavy template
+// markup that the manual-send path doesn't need, and (b) it's
+// server-only by the time it ships.
 
 function renderHtml(a: ReviewLinkEmailArgs): string {
   const safe = (s: string) => s
