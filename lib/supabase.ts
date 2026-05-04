@@ -37,9 +37,28 @@ let cached: SupabaseClient | null = null
 // .from('loto_*') call site.
 export const ACTIVE_TENANT_KEY = 'soteria.activeTenantId'
 
+// Tenants use UUIDs. Anything else means sessionStorage was tampered
+// with (or the writer wrote 'null'/'undefined' as a string). RLS treats
+// a missing/malformed header as "no scope" — so a typo'd value would
+// silently widen the superadmin's view to all tenants. Log once per
+// session if we see a malformed value.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+let warnedAboutMalformed = false
+
 function readActiveTenant(): string | null {
   if (typeof window === 'undefined') return null
-  try { return window.sessionStorage.getItem(ACTIVE_TENANT_KEY) } catch { return null }
+  try {
+    const raw = window.sessionStorage.getItem(ACTIVE_TENANT_KEY)
+    if (raw === null || raw === '') return null
+    if (!UUID_RE.test(raw)) {
+      if (!warnedAboutMalformed) {
+        warnedAboutMalformed = true
+        console.warn('[supabase] Malformed active-tenant in sessionStorage, ignoring:', raw)
+      }
+      return null
+    }
+    return raw
+  } catch { return null }
 }
 
 function getClient(): SupabaseClient {

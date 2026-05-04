@@ -105,7 +105,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ number: strin
     .maybeSingle()
 
   if (error) {
-    Sentry.captureException(error)
+    Sentry.captureException(error,
+      { tags: { route: '/api/superadmin/tenants/[number]', stage: 'update' } })
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
   if (!data) {

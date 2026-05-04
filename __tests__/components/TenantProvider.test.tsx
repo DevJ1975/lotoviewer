@@ -155,7 +155,15 @@ describe('TenantProvider', () => {
     expect(captured!.available[0]!.id).toBe('T1')
   })
 
-  it('switchTenant updates state + writes ACTIVE_TENANT_KEY', async () => {
+  it('switchTenant writes ACTIVE_TENANT_KEY and reloads (B1)', async () => {
+    // jsdom's location.reload throws by default; replace with a spy so
+    // we can assert it fired without actually navigating the test page.
+    const reloadSpy = vi.fn()
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...window.location, reload: reloadSpy, href: '' },
+    })
+
     useAuthMock.mockReturnValue({ userId: 'u1', loading: false })
     mockMemberships([
       { role: 'owner',  tenants: { id: 'T1', slug: 'snak-king', name: 'Snak King', tenant_number: '0001', status: 'active' } },
@@ -166,7 +174,8 @@ describe('TenantProvider', () => {
     expect(captured!.tenantId).toBe('T1')
 
     act(() => { captured!.switchTenant('T2') })
-    expect(captured!.tenantId).toBe('T2')
+    // Storage was written before reload — the next-page load picks it up.
     expect(sessionStorage.getItem(ACTIVE_KEY)).toBe('T2')
+    expect(reloadSpy).toHaveBeenCalledTimes(1)
   })
 })

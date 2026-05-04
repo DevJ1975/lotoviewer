@@ -66,7 +66,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
 
   const { admin, tenant, error: lookupErr } = await findTenant(number)
   if (lookupErr) {
-    Sentry.captureException(lookupErr)
+    Sentry.captureException(lookupErr, { tags: { route: '/api/superadmin/tenants/[number]/logo', stage: 'tenant-lookup' } })
     return NextResponse.json({ error: lookupErr.message }, { status: 500 })
   }
   if (!tenant) {
@@ -89,7 +89,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
       upsert: true,
     })
   if (uploadErr) {
-    Sentry.captureException(uploadErr)
+    Sentry.captureException(uploadErr, { tags: { route: '/api/superadmin/tenants/[number]/logo', stage: 'storage-upload' } })
     return NextResponse.json({ error: `Upload failed: ${uploadErr.message}` }, { status: 500 })
   }
 
@@ -105,7 +105,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     .select('*')
     .maybeSingle()
   if (updateErr) {
-    Sentry.captureException(updateErr)
+    Sentry.captureException(updateErr, { tags: { route: '/api/superadmin/tenants/[number]/logo', stage: 'tenant-update' } })
     return NextResponse.json({ error: updateErr.message }, { status: 500 })
   }
 
@@ -123,7 +123,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ number: stri
 
   const { admin, tenant, error: lookupErr } = await findTenant(number)
   if (lookupErr) {
-    Sentry.captureException(lookupErr)
+    Sentry.captureException(lookupErr, { tags: { route: '/api/superadmin/tenants/[number]/logo', stage: 'tenant-lookup' } })
     return NextResponse.json({ error: lookupErr.message }, { status: 500 })
   }
   if (!tenant) {
@@ -160,7 +160,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ number: stri
     .select('*')
     .maybeSingle()
   if (updateErr) {
-    Sentry.captureException(updateErr)
+    Sentry.captureException(updateErr, { tags: { route: '/api/superadmin/tenants/[number]/logo', stage: 'tenant-update' } })
     return NextResponse.json({ error: updateErr.message }, { status: 500 })
   }
 
