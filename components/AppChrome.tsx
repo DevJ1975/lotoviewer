@@ -53,6 +53,15 @@ export default function AppChrome({ children }: { children: ReactNode }) {
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          {/* Powered-by attribution. Subtle utility bar above the main
+              header row. Hidden on the smallest screens to keep the
+              chrome thin where every pixel matters. */}
+          <div className="hidden sm:flex justify-end pt-1">
+            <span className="text-[10px] uppercase tracking-widest text-white/40">
+              Powered by Trainovate Technologies LLC
+            </span>
+          </div>
+
           <div className="flex items-center justify-between h-14 gap-2 sm:gap-4">
             <button
               type="button"
