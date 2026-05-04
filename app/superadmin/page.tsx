@@ -3,18 +3,16 @@
 import Link from 'next/link'
 import { Building2, ArrowRight } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
+import { AllMembersPanel } from './_components/AllMembersPanel'
 
 // Superadmin landing. AuthGate enforces is_superadmin before this renders;
 // the env allowlist is enforced server-side by requireSuperadmin() in
 // every /api/superadmin/* route.
-//
-// Today this page is just a launcher for the tenants list. Future cards
-// can land here (per-tenant usage stats, audit feed, etc.).
 export default function SuperadminHome() {
   const { profile } = useAuth()
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
       <header className="mb-8">
         <p className="text-xs uppercase tracking-widest text-brand-yellow font-bold mb-1">
           Superadmin
@@ -29,7 +27,7 @@ export default function SuperadminHome() {
         </p>
       </header>
 
-      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
         <li>
           <Link
             href="/superadmin/tenants"
@@ -52,6 +50,8 @@ export default function SuperadminHome() {
           </Link>
         </li>
       </ul>
+
+      <AllMembersPanel />
     </div>
   )
 }

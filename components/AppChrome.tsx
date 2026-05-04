@@ -53,15 +53,6 @@ export default function AppChrome({ children }: { children: ReactNode }) {
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-          {/* Powered-by attribution. Subtle utility bar above the main
-              header row. Hidden on the smallest screens to keep the
-              chrome thin where every pixel matters. */}
-          <div className="hidden sm:flex justify-end pt-1">
-            <span className="text-[10px] uppercase tracking-widest text-white/40">
-              Powered by Trainovate Technologies LLC
-            </span>
-          </div>
-
           <div className="flex items-center justify-between h-14 gap-2 sm:gap-4">
             <button
               type="button"
@@ -117,7 +108,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
         style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>Developed by Jamil Jones · Copyright 2026</span>
+          <span>Powered by Trainovate Technologies LLC · Copyright 2026</span>
           <span className="flex items-center gap-3">
             <Link href="/privacy" className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors">Privacy</Link>
             <span aria-hidden="true">·</span>
