@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase, ACTIVE_TENANT_KEY } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
 import type { Tenant, TenantRole } from '@/lib/types'
 
@@ -64,6 +64,11 @@ function writeStoredTenantId(userId: string, tenantId: string | null) {
   try {
     if (tenantId) window.sessionStorage.setItem(storageKey(userId), tenantId)
     else          window.sessionStorage.removeItem(storageKey(userId))
+    // Mirror to the Supabase-client-readable key. The fetch wrapper in
+    // lib/supabase.ts reads this on every request and forwards it as
+    // the x-active-tenant header so RLS can scope the result.
+    if (tenantId) window.sessionStorage.setItem(ACTIVE_TENANT_KEY, tenantId)
+    else          window.sessionStorage.removeItem(ACTIVE_TENANT_KEY)
   } catch { /* sessionStorage may be blocked — non-fatal */ }
 }
 
