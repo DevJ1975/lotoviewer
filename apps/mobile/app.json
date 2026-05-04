@@ -16,7 +16,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.soteriafield.app",
-      "associatedDomains": ["applinks:soteriafield.app"]
+      "associatedDomains": ["applinks:soteriafield.app"],
+      "infoPlist": {
+        "NSCameraUsageDescription": "Soteria FIELD uses the camera to capture equipment and isolation-point photos for LOTO placards.",
+        "NSPhotoLibraryUsageDescription": "Soteria FIELD lets you pick existing photos from your library when capturing isn't practical in the field."
+      }
     },
     "android": {
       "package": "com.soteriafield.app",
@@ -44,7 +48,14 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Soteria FIELD lets you pick existing photos from your library when capturing isn't practical in the field.",
+          "cameraPermission": "Soteria FIELD uses the camera to capture equipment and isolation-point photos for LOTO placards."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

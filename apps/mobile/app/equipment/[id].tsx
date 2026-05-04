@@ -9,18 +9,16 @@ import {
 } from 'react-native'
 
 import { Text, View } from '@/components/Themed'
+import PhotoCaptureSheet from '@/components/PhotoCaptureSheet'
 import { supabase } from '@/lib/supabase'
 import { loadEquipment } from '@soteria/core/queries/equipment'
+import type { PhotoSlot } from '@soteria/core/storagePaths'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 
-// Phase 3 read-only equipment detail. Pulls the equipment row plus
-// its energy steps in parallel — same data the web placard uses, but
-// rendered as a scrollable native screen instead of the placard PDF.
-//
-// Phase 3 also leaves a Sign-photo affordance OUT — the camera /
-// upload pipeline lands as its own commit (will pull in
-// expo-camera + expo-image-picker + the photo-upload helpers from
-// packages/core when we promote lib/photoUpload.ts there).
+// Phase 3 equipment detail. Equipment row + energy steps via parallel
+// fetch (same data the web placard uses). Photos are tappable to
+// launch <PhotoCaptureSheet> for capture-or-pick + upload through the
+// shared @soteria/core/photoUpload pipeline.
 
 export default function EquipmentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -30,6 +28,7 @@ export default function EquipmentDetailScreen() {
   const [steps,     setSteps]     = useState<LotoEnergyStep[]>([])
   const [error,     setError]     = useState<string | null>(null)
   const [loading,   setLoading]   = useState(true)
+  const [captureSlot, setCaptureSlot] = useState<PhotoSlot | null>(null)
 
   useEffect(() => {
     if (!equipmentId) return
@@ -90,6 +89,7 @@ export default function EquipmentDetailScreen() {
   }
 
   return (
+    <>
     <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
       <Text style={styles.idTitle}>{equipment.equipment_id}</Text>
       <Text style={styles.description}>{equipment.description}</Text>
@@ -101,11 +101,19 @@ export default function EquipmentDetailScreen() {
       </View>
 
       <Section title="Equipment photo">
-        <PhotoBlock url={equipment.equip_photo_url} placeholder="No equipment photo yet" />
+        <PhotoBlock
+          url={equipment.equip_photo_url}
+          placeholder="No equipment photo yet"
+          onPress={() => setCaptureSlot('EQUIP')}
+        />
       </Section>
 
       <Section title="Isolation photo">
-        <PhotoBlock url={equipment.iso_photo_url} placeholder="No isolation photo yet" />
+        <PhotoBlock
+          url={equipment.iso_photo_url}
+          placeholder="No isolation photo yet"
+          onPress={() => setCaptureSlot('ISO')}
+        />
       </Section>
 
       <Section title="Energy steps">
@@ -160,6 +168,24 @@ export default function EquipmentDetailScreen() {
 
       <View style={styles.footerSpacer} />
     </ScrollView>
+    <PhotoCaptureSheet
+      visible={captureSlot !== null}
+      equipmentId={equipment.equipment_id}
+      slot={captureSlot ?? 'EQUIP'}
+      onClose={() => setCaptureSlot(null)}
+      onUploaded={(url) => {
+        // Optimistic write so the user sees the new photo without
+        // a full refetch. The shared upload pipeline already
+        // persisted it server-side.
+        setEquipment(prev => {
+          if (!prev) return prev
+          return captureSlot === 'EQUIP'
+            ? { ...prev, equip_photo_url: url, has_equip_photo: true }
+            : { ...prev, iso_photo_url:   url, has_iso_photo:   true }
+        })
+      }}
+    />
+    </>
   )
 }
 
@@ -185,26 +211,36 @@ function Badge({ label, intent, children }: { label: string; intent?: string; ch
   )
 }
 
-function PhotoBlock({ url, placeholder }: { url: string | null; placeholder: string }) {
+function PhotoBlock({ url, placeholder, onPress }: { url: string | null; placeholder: string; onPress: () => void }) {
   const [loaded, setLoaded] = useState(false)
   if (!url) {
     return (
-      <View style={styles.photoPlaceholder}>
-        <Text style={styles.muted}>{placeholder}</Text>
-      </View>
+      <Pressable onPress={onPress}>
+        {({ pressed }) => (
+          <View style={[styles.photoPlaceholder, pressed && styles.photoPressed]}>
+            <Text style={styles.muted}>{placeholder}</Text>
+            <Text style={styles.photoCta}>Tap to add</Text>
+          </View>
+        )}
+      </Pressable>
     )
   }
   return (
-    <Pressable>
-      <View style={styles.photoFrame}>
-        {!loaded && <ActivityIndicator style={styles.photoLoader} />}
-        <Image
-          source={{ uri: url }}
-          style={styles.photo}
-          resizeMode="cover"
-          onLoadEnd={() => setLoaded(true)}
-        />
-      </View>
+    <Pressable onPress={onPress}>
+      {({ pressed }) => (
+        <View style={[styles.photoFrame, pressed && styles.photoPressed]}>
+          {!loaded && <ActivityIndicator style={styles.photoLoader} />}
+          <Image
+            source={{ uri: url }}
+            style={styles.photo}
+            resizeMode="cover"
+            onLoadEnd={() => setLoaded(true)}
+          />
+          <View style={styles.photoReplaceBadge}>
+            <Text style={styles.photoReplaceText}>Tap to replace</Text>
+          </View>
+        </View>
+      )}
     </Pressable>
   )
 }
@@ -224,10 +260,14 @@ const styles = StyleSheet.create({
   badgeValue:       { fontSize: 13, fontWeight: '600', marginTop: 2 },
   section:          { marginTop: 12, gap: 8 },
   sectionTitle:     { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.55 },
-  photoFrame:       { borderRadius: 12, overflow: 'hidden', backgroundColor: '#0f172a' },
-  photoPlaceholder: { borderRadius: 12, paddingVertical: 28, alignItems: 'center', borderWidth: 1, borderColor: '#cbd5e1', borderStyle: 'dashed' },
-  photo:            { width: '100%', aspectRatio: 4 / 3 },
-  photoLoader:      { position: 'absolute', top: '50%', left: '50%' },
+  photoFrame:        { borderRadius: 12, overflow: 'hidden', backgroundColor: '#0f172a' },
+  photoPlaceholder:  { borderRadius: 12, paddingVertical: 28, alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#cbd5e1', borderStyle: 'dashed' },
+  photoPressed:      { opacity: 0.7 },
+  photoCta:          { fontSize: 12, fontWeight: '600', color: '#1e3a8a' },
+  photoReplaceBadge: { position: 'absolute', bottom: 8, right: 8, backgroundColor: 'rgba(15, 23, 42, 0.7)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  photoReplaceText:  { fontSize: 11, fontWeight: '600', color: '#fff' },
+  photo:             { width: '100%', aspectRatio: 4 / 3 },
+  photoLoader:       { position: 'absolute', top: '50%', left: '50%' },
   stepCard:         { padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#cbd5e1', gap: 4 },
   stepHeaderRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   stepNumber:       { fontSize: 13, fontWeight: '700' },
