@@ -9,7 +9,8 @@ vi.mock('@/lib/supabase', () => ({
   },
 }))
 
-const TEST_URL = 'https://cdn.example.com/photo.jpg'
+const TEST_URL       = 'https://cdn.example.com/photo.jpg'
+const TEST_TENANT_ID = '00000000-0000-0000-0000-0000000aabbb'
 
 function setupStorage(uploadError: Error | null = null) {
   const bucket = {
@@ -98,14 +99,29 @@ describe('uploadPhotoForEquipment', () => {
       equipmentId: 'EQ/01#bad',
       type:        'EQUIP',
       blob:        makeBlob(),
+      tenantId:    TEST_TENANT_ID,
     })
 
     const path = bucket.upload.mock.calls[0][0] as string
-    // The whole path must be free of '/', '#' aside from the one folder slash.
+    // Phase 5: path is now <tenant_uuid>/<sanitized_id>/<sanitized_id>_<type>_<ts>.jpg
     const segments = path.split('/')
-    expect(segments).toHaveLength(2)
-    expect(segments[0]).toBe('EQ_01_bad')
-    expect(segments[1]).toMatch(/^EQ_01_bad_EQUIP_\d+\.jpg$/)
+    expect(segments).toHaveLength(3)
+    expect(segments[0]).toBe(TEST_TENANT_ID)
+    expect(segments[1]).toBe('EQ_01_bad')
+    expect(segments[2]).toMatch(/^EQ_01_bad_EQUIP_\d+\.jpg$/)
+  })
+
+  it('rejects when tenantId is missing', async () => {
+    setupStorage()
+    setupDb({})
+
+    await expect(uploadPhotoForEquipment({
+      equipmentId: 'EQ-001',
+      type:        'EQUIP',
+      blob:        makeBlob(),
+      // @ts-expect-error — intentionally missing tenantId
+      tenantId:    undefined,
+    })).rejects.toThrow(/tenantId is required/)
   })
 
   // ── Reconcile branch ──────────────────────────────────────────────────────
@@ -133,6 +149,7 @@ describe('uploadPhotoForEquipment', () => {
       equipmentId: 'EQ-001',
       type:        'EQUIP',
       blob:        makeBlob(),
+      tenantId:    TEST_TENANT_ID,
     })
 
     expect(reconciledTo).toBe('complete')
@@ -159,6 +176,7 @@ describe('uploadPhotoForEquipment', () => {
       equipmentId: 'EQ-001',
       type:        'EQUIP',
       blob:        makeBlob(),
+      tenantId:    TEST_TENANT_ID,
     })
 
     expect(onReconcileUpdate).not.toHaveBeenCalled()
@@ -174,6 +192,7 @@ describe('uploadPhotoForEquipment', () => {
       equipmentId: 'EQ-001',
       type:        'EQUIP',
       blob:        makeBlob(),
+      tenantId:    TEST_TENANT_ID,
       retry:       false,
     })).rejects.toThrow('Network down')
   })
@@ -188,6 +207,7 @@ describe('uploadPhotoForEquipment', () => {
       equipmentId: 'EQ-001',
       type:        'EQUIP',
       blob:        makeBlob(),
+      tenantId:    TEST_TENANT_ID,
     })).rejects.toThrow('DB unavailable')
   })
 
@@ -201,6 +221,7 @@ describe('uploadPhotoForEquipment', () => {
       equipmentId: 'EQ-001',
       type:        'EQUIP',
       blob:        makeBlob(),
+      tenantId:    TEST_TENANT_ID,
     })).rejects.toThrow('Connection refused')
   })
 })
