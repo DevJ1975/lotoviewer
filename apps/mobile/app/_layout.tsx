@@ -8,6 +8,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider } from '@/components/AuthProvider';
+import { TenantProvider } from '@/components/TenantProvider';
 import AuthGate from '@/components/AuthGate';
 
 export {
@@ -43,7 +44,9 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <RootLayoutNav />
+      <TenantProvider>
+        <RootLayoutNav />
+      </TenantProvider>
     </AuthProvider>
   );
 }
@@ -58,6 +61,8 @@ function RootLayoutNav() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="forgot-password" options={{ title: 'Reset password' }} />
+          <Stack.Screen name="equipment/[id]" options={{ title: 'Equipment' }} />
+          <Stack.Screen name="tenant-switcher" options={{ presentation: 'modal', title: 'Switch tenant' }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
         </Stack>
       </AuthGate>

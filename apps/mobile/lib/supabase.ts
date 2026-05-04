@@ -39,7 +39,15 @@ let cachedActiveTenant: string | null = null
 // await. We hydrate `cachedActiveTenant` once at startup via
 // hydrateActiveTenant() (called from the auth gate) and write through
 // on every setActiveTenant().
+//
+// Exported (as `getCachedActiveTenant`) so TenantProvider can resume
+// the last-active tenant on app boot without a second SecureStore
+// round-trip.
 function readActiveTenantSync(): string | null {
+  return cachedActiveTenant
+}
+
+export function getCachedActiveTenant(): string | null {
   return cachedActiveTenant
 }
 
