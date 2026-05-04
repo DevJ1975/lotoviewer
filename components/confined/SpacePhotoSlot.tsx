@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { compressImage, heicToJpeg, isHeic } from '@/lib/imageUtils'
+import { useTenant } from '@/components/TenantProvider'
 
 // Photo slot for confined spaces. Simpler than PlacardPhotoSlot:
 //   • No subject validation (confined-space photos are diagnostic — interior
@@ -34,6 +35,7 @@ function sanitize(id: string): string {
 }
 
 export default function SpacePhotoSlot({ spaceId, slot, label, existingUrl, onUploaded, onError }: Props) {
+  const { tenantId } = useTenant()
   const fileRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy]                 = useState(false)
   const [phase, setPhase]               = useState<'idle' | 'decoding' | 'compressing' | 'uploading'>('idle')
@@ -94,9 +96,16 @@ export default function SpacePhotoSlot({ spaceId, slot, label, existingUrl, onUp
 
     setLocalPreview(URL.createObjectURL(compressed))
 
+    if (!tenantId) {
+      fail('No active tenant — cannot upload.')
+      setBusy(false); setPhase('idle')
+      return
+    }
+
     setPhase('uploading')
     const timestamp = Date.now()
-    const path = `confined-spaces/${sanitize(spaceId)}/${slot}_${timestamp}.jpg`
+    // Tenant-prefixed path (migration 033 enforces the first segment).
+    const path = `${tenantId}/confined-spaces/${sanitize(spaceId)}/${slot}_${timestamp}.jpg`
     const bucket = supabase.storage.from(BUCKET)
 
     // upsert: false to fail loudly if path already exists. The timestamp
