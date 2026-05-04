@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { isValidTenantNumber } from '@/lib/validation/tenants'
 
 // POST   /api/superadmin/tenants/[number]/logo  — multipart form, field "file"
 // DELETE /api/superadmin/tenants/[number]/logo  — clears logo_url (does NOT
@@ -41,7 +42,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   const { number } = await ctx.params
-  if (!/^[0-9]{4}$/.test(number)) {
+  if (!isValidTenantNumber(number)) {
     return NextResponse.json({ error: 'Invalid tenant number' }, { status: 400 })
   }
 
@@ -116,7 +117,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ number: stri
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   const { number } = await ctx.params
-  if (!/^[0-9]{4}$/.test(number)) {
+  if (!isValidTenantNumber(number)) {
     return NextResponse.json({ error: 'Invalid tenant number' }, { status: 400 })
   }
 
@@ -129,8 +130,29 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ number: stri
     return NextResponse.json({ error: `No tenant with number ${number}` }, { status: 404 })
   }
 
-  // Clear logo_url; leave the storage object in place (idempotent + cheap).
-  // A future migration can sweep orphans if storage cost ever matters.
+  // Delete the storage object before clearing logo_url so we don't
+  // leave orphans accumulating in the bucket. Path is the tenant id +
+  // any of the accepted extensions; use list+remove since we don't
+  // remember the original ext at delete time.
+  const { data: existing } = await admin
+    .storage
+    .from('tenant-logos')
+    .list('', { search: tenant.id })
+  const objectsToDelete = (existing ?? [])
+    .filter(o => o.name.startsWith(`${tenant.id}.`))
+    .map(o => o.name)
+  if (objectsToDelete.length > 0) {
+    const { error: removeErr } = await admin
+      .storage
+      .from('tenant-logos')
+      .remove(objectsToDelete)
+    if (removeErr) {
+      // Non-fatal — the URL clear below still proceeds. Log so we know
+      // if storage cleanup is silently failing across many tenants.
+      Sentry.captureException(removeErr, { tags: { route: '/api/superadmin/tenants/[number]/logo', stage: 'storage-remove' } })
+    }
+  }
+
   const { data: updated, error: updateErr } = await admin
     .from('tenants')
     .update({ logo_url: null })

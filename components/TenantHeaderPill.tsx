@@ -62,8 +62,10 @@ export default function TenantHeaderPill() {
     }
   }, [open])
 
-  // Superadmin: load all tenants once on first dropdown open. RLS lets
-  // is_superadmin read every row in tenants.
+  // Superadmin: load all tenants on first dropdown open. RLS lets
+  // is_superadmin read every row in tenants. Re-fetched on window focus
+  // so a tenant just created via /superadmin/tenants/new appears the
+  // next time the dropdown opens.
   useEffect(() => {
     if (!open || !profile?.is_superadmin || allTenants !== null || loadingAll) return
     setLoadingAll(true)
@@ -76,6 +78,16 @@ export default function TenantHeaderPill() {
         setLoadingAll(false)
       })
   }, [open, profile?.is_superadmin, allTenants, loadingAll])
+
+  // Invalidate the all-tenants cache on window focus so navigating
+  // back from /superadmin/tenants/new shows the new tenant in the
+  // dropdown without requiring a manual page reload.
+  useEffect(() => {
+    if (!profile?.is_superadmin) return
+    const onFocus = () => setAllTenants(null)
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [profile?.is_superadmin])
 
   if (loading || !tenant) return null
 

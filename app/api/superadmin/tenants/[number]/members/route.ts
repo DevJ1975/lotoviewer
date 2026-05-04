@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin, generateTempPassword } from '@/lib/supabaseAdmin'
 import { sendInviteEmail, computeLoginUrl } from '@/lib/email/sendInvite'
+import { isValidRole, isValidTenantNumber, normalizeEmail } from '@/lib/validation/tenants'
 import type { TenantRole } from '@/lib/types'
 
 // GET  /api/superadmin/tenants/[number]/members
@@ -18,11 +19,6 @@ import type { TenantRole } from '@/lib/types'
 // and emails the invite via Resend (lib/email/sendInvite). The temp
 // password is also returned in the response so the superadmin has a
 // copy-paste fallback when Resend isn't configured.
-
-const VALID_ROLES: ReadonlySet<TenantRole> =
-  new Set<TenantRole>(['owner', 'admin', 'member', 'viewer'])
-
-const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
 // ─── GET ───────────────────────────────────────────────────────────────────
 
@@ -45,7 +41,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ number: string 
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   const { number } = await ctx.params
-  if (!/^[0-9]{4}$/.test(number)) {
+  if (!isValidTenantNumber(number)) {
     return NextResponse.json({ error: 'Invalid tenant number' }, { status: 400 })
   }
 
@@ -112,7 +108,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   const { number } = await ctx.params
-  if (!/^[0-9]{4}$/.test(number)) {
+  if (!isValidTenantNumber(number)) {
     return NextResponse.json({ error: 'Invalid tenant number' }, { status: 400 })
   }
 
@@ -120,15 +116,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
   try { body = await req.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
-  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
-  if (!EMAIL_RE.test(email)) {
+  const email = normalizeEmail(body.email)
+  if (!email) {
     return NextResponse.json({ error: 'Valid email required' }, { status: 400 })
   }
 
-  const role = body.role as TenantRole
-  if (!VALID_ROLES.has(role)) {
+  if (!isValidRole(body.role)) {
     return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
   }
+  const role = body.role as TenantRole
 
   const fullName = typeof body.full_name === 'string' ? body.full_name.trim() : ''
 

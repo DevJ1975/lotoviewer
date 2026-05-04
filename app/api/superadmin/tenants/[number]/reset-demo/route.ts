@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { isValidTenantNumber } from '@/lib/validation/tenants'
 
 // POST /api/superadmin/tenants/[number]/reset-demo
 //
@@ -22,9 +23,10 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 //   parent's delete.
 //
 // SEEDING:
-//   Phase D adds the canonical demo seed. Until then, this endpoint
-//   leaves the tenant empty and the superadmin can re-populate manually.
-//   The seed-after-wipe call site is marked TODO(phase-D).
+//   For WLS Demo (#0002), this RPCs into seed_wls_demo() defined in
+//   migration 030 to restore canonical demo data. Other is_demo tenants
+//   without a seed function are wiped only — the response surfaces
+//   seedSkipped:true so the UI explains.
 
 const DELETE_ORDER: readonly string[] = [
   // Children (FK to a parent in this list).
@@ -56,7 +58,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   const { number } = await ctx.params
-  if (!/^[0-9]{4}$/.test(number)) {
+  if (!isValidTenantNumber(number)) {
     return NextResponse.json({ error: 'Invalid tenant number' }, { status: 400 })
   }
 

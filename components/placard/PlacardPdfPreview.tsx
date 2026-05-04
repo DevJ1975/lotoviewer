@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
+import { placardPdfPath } from '@/lib/storagePaths'
 import { useWakeLock } from '@/hooks/useWakeLock'
 import type { Equipment, LotoEnergyStep } from '@/lib/types'
 
@@ -17,7 +18,6 @@ interface Props {
 
 type UploadState = 'idle' | 'uploading' | 'saved' | 'error'
 
-function sanitize(id: string) { return id.replace(/[^a-zA-Z0-9_-]/g, '_') }
 
 export default function PlacardPdfPreview({ open, onClose, equipment, steps, onSaved, onError }: Props) {
   const [pdfBytes, setPdfBytes]   = useState<Uint8Array | null>(null)
@@ -78,10 +78,7 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
           return
         }
         setUploadState('uploading')
-        const sanitized  = sanitize(equipmentId)
-        // Tenant-prefixed path so two tenants with the same equipment_id
-        // don't overwrite each other's placards. Migration 033 enforces.
-        const storagePath = `${tenantId}/${sanitized}/${sanitized}_placard.pdf`
+        const storagePath = placardPdfPath(tenantId, equipmentId)
         const { error: upErr } = await supabase.storage
           .from('loto-photos')
           .upload(storagePath, bytes, { contentType: 'application/pdf', upsert: true })

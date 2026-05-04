@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMemo, useState, type FormEvent } from 'react'
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { superadminJson } from '@/lib/superadminFetch'
 import { getModules, type FeatureCategory, type FeatureDef } from '@/lib/features'
 
 // Create a new tenant. Submits to /api/superadmin/tenants which uses
@@ -90,31 +90,19 @@ export default function NewTenantPage() {
     }
 
     setSubmitting(true)
-    try {
-      // Pass the current session's access token so requireSuperadmin can
-      // verify on the server. The same pattern is used by /api/admin/users.
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token
-      if (!token) { setError('Not signed in'); setSubmitting(false); return }
-
-      const res = await fetch('/api/superadmin/tenants', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ name: trimmedName, slug, is_demo: isDemo, modules }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setError(json?.error ?? `Request failed (${res.status})`)
-        setSubmitting(false)
-        return
-      }
-      // Redirect to the new tenant's detail page.
-      const tenant = json.tenant as { tenant_number: string }
-      router.push(`/superadmin/tenants/${tenant.tenant_number}`)
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Network error')
+    const result = await superadminJson<{ tenant: { tenant_number: string } }>(
+      '/api/superadmin/tenants',
+      {
+        method: 'POST',
+        body:   JSON.stringify({ name: trimmedName, slug, is_demo: isDemo, modules }),
+      },
+    )
+    if (!result.ok || !result.body) {
+      setError(result.error ?? 'Request failed')
       setSubmitting(false)
+      return
     }
+    router.push(`/superadmin/tenants/${result.body.tenant.tenant_number}`)
   }
 
   return (
