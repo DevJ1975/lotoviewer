@@ -29,19 +29,33 @@ interface Props {
 }
 
 export function UndoToast({ message, duration = 30, onCommit, onUndo }: Props) {
+  // Two related signals:
+  //   `dismissed` STATE     — drives the re-render that hides the toast
+  //                           after Undo is clicked. JSX uses it directly.
+  //   `dismissedRef` REF    — mirrors `dismissed` so non-render code
+  //                           (timer callbacks + the unmount cleanup)
+  //                           can check the LATEST value without going
+  //                           through stale closures.
+  //   `committedRef` REF    — single-fire guard. The timer commit and
+  //                           the unmount-defensive commit can both
+  //                           fire; this prevents both running.
   const [secondsLeft, setSecondsLeft] = useState(duration)
   const [committing, setCommitting]   = useState(false)
-  const undoneRef = useRef(false)
+  const [dismissed, setDismissed]     = useState(false)
+  const dismissedRef = useRef(false)
   const committedRef = useRef(false)
+
+  // Keep the ref in sync with the state on every render.
+  useEffect(() => { dismissedRef.current = dismissed }, [dismissed])
 
   // Single timer for the actual commit (vs. a counter timer for the
   // display below). Splitting them keeps the commit deterministic in
   // tests — advance fake timers by `duration*1000` and the commit
   // fires exactly once.
   useEffect(() => {
-    if (undoneRef.current) return
+    if (dismissedRef.current) return
     const handle = setTimeout(() => {
-      if (undoneRef.current || committedRef.current) return
+      if (dismissedRef.current || committedRef.current) return
       committedRef.current = true
       setCommitting(true)
       void Promise.resolve(onCommit()).finally(() => setCommitting(false))
@@ -52,7 +66,7 @@ export function UndoToast({ message, duration = 30, onCommit, onUndo }: Props) {
   // Display-only countdown — separate from the commit timer so a slow
   // tick interval can't delay the destructive action.
   useEffect(() => {
-    if (undoneRef.current) return
+    if (dismissedRef.current) return
     const tick = setInterval(() => {
       setSecondsLeft(s => (s > 0 ? s - 1 : 0))
     }, 1000)
@@ -63,7 +77,7 @@ export function UndoToast({ message, duration = 30, onCommit, onUndo }: Props) {
   // clicking Undo and before the timer fired. Preserves intent.
   useEffect(() => {
     return () => {
-      if (!undoneRef.current && !committedRef.current) {
+      if (!dismissedRef.current && !committedRef.current) {
         committedRef.current = true
         void onCommit()
       }
@@ -71,7 +85,7 @@ export function UndoToast({ message, duration = 30, onCommit, onUndo }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  if (undoneRef.current && committedRef.current === false) return null
+  if (dismissed) return null
 
   return (
     <div
@@ -86,7 +100,8 @@ export function UndoToast({ message, duration = 30, onCommit, onUndo }: Props) {
       <button
         type="button"
         onClick={() => {
-          undoneRef.current = true
+          dismissedRef.current = true  // immediate guard for in-flight timers
+          setDismissed(true)            // triggers re-render so JSX returns null
           onUndo()
         }}
         disabled={committing}

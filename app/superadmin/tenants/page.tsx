@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Plus, Loader2, AlertCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Tenant } from '@/lib/types'
@@ -31,9 +31,7 @@ export default function SuperadminTenants() {
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
-  useEffect(() => { void load() }, [])
-
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     const { data, error: err } = await supabase
@@ -52,7 +50,9 @@ export default function SuperadminTenants() {
       member_count: r.tenant_memberships?.[0]?.count ?? 0,
     })))
     setLoading(false)
-  }
+  }, [])
+
+  useEffect(() => { void load() }, [load])
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
