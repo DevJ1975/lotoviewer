@@ -10,6 +10,13 @@ vi.mock('@/lib/supabase', () => ({
   },
 }))
 
+// Phase 5+ requires tenantId from useTenant. Tests don't exercise the
+// real provider — mock with a stable demo tenant id so storage paths
+// get a valid first segment.
+vi.mock('@/components/TenantProvider', () => ({
+  useTenant: () => ({ tenantId: '00000000-0000-0000-0000-0000000aabbb' }),
+}))
+
 const TEST_URL = 'https://cdn.example.com/photo.jpg'
 
 function makeFile() {

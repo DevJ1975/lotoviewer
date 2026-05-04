@@ -26,7 +26,9 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ user_id: str
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   const { user_id } = await ctx.params
-  if (!user_id || user_id.length < 8) {
+  // auth.users.id is a UUID. Tighten the check so a typo'd path can't
+  // get past the first guard and reach the DB.
+  if (!user_id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user_id)) {
     return NextResponse.json({ error: 'Invalid user_id' }, { status: 400 })
   }
 

@@ -3,20 +3,26 @@ import { act, render, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 // Active-tenant key written by the provider; also read by the supabase
-// fetch wrapper to forward as x-active-tenant.
-const ACTIVE_KEY = 'soteria.activeTenantId'
+// fetch wrapper to forward as x-active-tenant. Hoisted because the
+// vi.mock factory below references it.
+const { ACTIVE_KEY, useAuthMock, fromMock } = vi.hoisted(() => ({
+  ACTIVE_KEY:  'soteria.activeTenantId',
+  useAuthMock: vi.fn(),
+  fromMock:    vi.fn(),
+}))
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 // We stub out useAuth so the provider thinks a user is signed in, and
 // stub the supabase client so the provider's fetch + lazy lookup are
 // deterministic. The mocks are configurable per-test via the helpers
 // below.
-const useAuthMock = vi.fn()
 vi.mock('@/components/AuthProvider', () => ({ useAuth: () => useAuthMock() }))
-
-const fromMock = vi.fn()
 vi.mock('@/lib/supabase', () => ({
-  supabase: { from: (table: string) => fromMock(table) },
+  supabase: {
+    from: (table: string) => fromMock(table),
+    // B3 path calls auth.signOut + redirects on tenant-disappeared.
+    auth: { signOut: vi.fn().mockResolvedValue({}) },
+  },
   ACTIVE_TENANT_KEY: ACTIVE_KEY,
 }))
 
@@ -131,16 +137,40 @@ describe('TenantProvider', () => {
     expect(captured!.role).toBe('member')
   })
 
-  it('falls back to the first membership when stored choice is no longer valid', async () => {
+  it('B3: stored tenant gone from memberships (non-superadmin) → signs out + redirects', async () => {
+    // Stub window.alert and window.location for the B3 path.
+    const alertSpy  = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...window.location, href: '' },
+    })
+
     sessionStorage.setItem(ACTIVE_KEY, 'GHOST')
-    useAuthMock.mockReturnValue({ userId: 'u1', loading: false })
+    useAuthMock.mockReturnValue({ userId: 'u1', profile: { is_superadmin: false }, loading: false })
+    mockMemberships([
+      { role: 'owner', tenants: { id: 'T1', slug: 'snak-king', name: 'Snak King', tenant_number: '0001', status: 'active' } },
+    ])
+    renderProvider()
+    await waitFor(() => expect(alertSpy).toHaveBeenCalled())
+    // Asserts the user-facing alert + the redirect target. signOut is
+    // an async call we can't easily await here; the redirect proves
+    // the path executed.
+    expect(window.location.href).toBe('/login')
+    alertSpy.mockRestore()
+  })
+
+  it('superadmin with stored=GHOST does NOT get signed out — keeps stored as active', async () => {
+    sessionStorage.setItem(ACTIVE_KEY, 'GHOST')
+    useAuthMock.mockReturnValue({ userId: 'u1', profile: { is_superadmin: true }, loading: false })
     mockMemberships([
       { role: 'owner', tenants: { id: 'T1', slug: 'snak-king', name: 'Snak King', tenant_number: '0001', status: 'active' } },
     ])
     renderProvider()
     await waitFor(() => expect(captured!.loading).toBe(false))
-    expect(captured!.tenantId).toBe('T1')
-    expect(sessionStorage.getItem(ACTIVE_KEY)).toBe('T1')
+    // Stored value is preserved — the lazy externalTenant fetch will
+    // resolve the row. tenantId stays GHOST.
+    expect(captured!.tenantId).toBe('GHOST')
+    expect(sessionStorage.getItem(ACTIVE_KEY)).toBe('GHOST')
   })
 
   it('excludes disabled tenants from `available`', async () => {
