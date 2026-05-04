@@ -105,6 +105,11 @@ describe('getFeaturesByCategory', () => {
       'loto-import',
       'loto-decommission',
       'loto-review-portal',
+      'risk-assessment',
+      'risk-heatmap',
+      'risk-list',
+      'risk-new',
+      'risk-controls',
       'confined-spaces',
       'cs-status-board',
       'cs-import',
@@ -142,6 +147,7 @@ describe('getModules', () => {
     const ids = getModules('safety').map(m => m.id)
     expect(ids).toEqual([
       'loto',
+      'risk-assessment',
       'confined-spaces',
       'near-miss',
       'hot-work',

@@ -142,6 +142,72 @@ export const FEATURES: FeatureDef[] = [
     internal:    true,
   },
 
+  // ── Risk Assessment module + sub-pages ─────────────────────────────────
+  // ISO 45001 6.1 + Cal/OSHA T8 §3203 IIPP hazard-evaluation backbone.
+  //
+  // Slice 1 status: comingSoon:true until the heat map UI ships in
+  // slice 2. The schema + scoring engine + audit log are live as of
+  // this slice; the module just isn't user-reachable yet. Marking
+  // it coming-soon keeps it from counting as a "visible safety
+  // module" in the per-tenant landing resolver — single-module
+  // tenants like Snak King continue auto-redirecting to /loto
+  // until slice 2 flips this flag.
+  //
+  // Slice 2 will set comingSoon:false on risk-assessment +
+  // risk-heatmap when the heat map view lands.
+  {
+    id:          'risk-assessment',
+    name:        'Risk Assessment',
+    description: 'ISO 45001 6.1 risk register + heat map',
+    href:        null,
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  true,
+  },
+  {
+    id:          'risk-heatmap',
+    name:        'Heat Map',
+    description: '5x5 risk matrix view',
+    href:        null,
+    category:    'safety',
+    parent:      'risk-assessment',
+    enabled:     true,
+    comingSoon:  true,
+  },
+  {
+    id:          'risk-list',
+    name:        'Risk Register',
+    description: 'List + filter every identified risk',
+    href:        null,
+    category:    'safety',
+    parent:      'risk-assessment',
+    enabled:     true,
+    comingSoon:  true,
+  },
+  {
+    // Hidden from drawer (internal:true) — surfaced via the +New
+    // Risk button on the heat map page.
+    id:          'risk-new',
+    name:        'New Risk',
+    description: 'Hazard-ID wizard',
+    href:        null,
+    category:    'safety',
+    parent:      'risk-assessment',
+    enabled:     true,
+    comingSoon:  true,
+    internal:    true,
+  },
+  {
+    id:          'risk-controls',
+    name:        'Controls Library',
+    description: 'Tenant-scoped catalog of available controls',
+    href:        null,
+    category:    'safety',
+    parent:      'risk-assessment',
+    enabled:     true,
+    comingSoon:  true,
+  },
+
   // ── Confined Spaces module + sub-pages ──────────────────────────────────
   {
     id:          'confined-spaces',
