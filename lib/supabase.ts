@@ -24,6 +24,24 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 // and would make the types feel "broken" without delivering value.
 let cached: SupabaseClient | null = null
 
+// Single, browser-readable key for the active tenant. Written by
+// TenantProvider on mount + on switch; read by the fetch wrapper below
+// on every PostgREST/Storage call.
+//
+// PostgREST forwards request headers into Postgres via current_setting
+// ('request.headers'), where RLS policies can read them. Migration 032
+// adds active_tenant_id() that reads x-active-tenant and an updated set
+// of policies that scope by it (when set) on top of the existing
+// "is member or superadmin" check. Net effect: superadmin's "active
+// tenant" filters reads/writes server-side, without us touching every
+// .from('loto_*') call site.
+export const ACTIVE_TENANT_KEY = 'soteria.activeTenantId'
+
+function readActiveTenant(): string | null {
+  if (typeof window === 'undefined') return null
+  try { return window.sessionStorage.getItem(ACTIVE_TENANT_KEY) } catch { return null }
+}
+
 function getClient(): SupabaseClient {
   if (cached) return cached
   const url  = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -34,7 +52,21 @@ function getClient(): SupabaseClient {
       'Set them in .env.local for local dev and in the Vercel project settings for deploys.',
     )
   }
-  cached = createClient(url, anon)
+  cached = createClient(url, anon, {
+    global: {
+      // Inject x-active-tenant on every PostgREST + Storage request from
+      // the browser. The header is read fresh per request from
+      // sessionStorage, so a tenant switch takes effect on the next
+      // query without needing to recreate the client.
+      fetch: (input, init) => {
+        const tenantId = readActiveTenant()
+        if (!tenantId) return fetch(input as RequestInfo, init)
+        const headers = new Headers(init?.headers ?? {})
+        headers.set('x-active-tenant', tenantId)
+        return fetch(input as RequestInfo, { ...init, headers })
+      },
+    },
+  })
   return cached
 }
 
