@@ -99,6 +99,39 @@ export async function POST(req: Request) {
   // give email clients with rich rendering a slightly nicer layout.
   const html = `<pre style="font-family: ui-monospace, Menlo, monospace; font-size: 13px; line-height: 1.5; white-space: pre-wrap;">${escapeHtml(text)}</pre>`
 
+  // Browser context — optional. The form posts these alongside the
+  // payload; older clients may omit them.
+  const userAgent = (body as { user_agent?: unknown }).user_agent
+  const reportUrl = (body as { url?: unknown }).url
+
+  // Persist FIRST, then attempt the email. Migration 034's RLS lets
+  // any authenticated user insert; reads are superadmin-only.
+  // emailed_ok is updated below once we know the send result.
+  const admin = supabaseAdmin()
+  const { data: stored, error: storeErr } = await admin
+    .from('bug_reports')
+    .insert({
+      reporter_id:    reporter.id,
+      reporter_email: reporter.email,
+      reporter_name:  reporter.name,
+      title:          payload.title.trim(),
+      description:    payload.description.trim(),
+      severity:       payload.severity,
+      user_agent:     typeof userAgent === 'string' ? userAgent.slice(0, 1000) : null,
+      url:            typeof reportUrl === 'string' ? reportUrl.slice(0, 1000) : null,
+      emailed_ok:     null,  // patched after the send below
+    })
+    .select('id')
+    .maybeSingle()
+  // Don't fail the whole request on a store failure — the email path
+  // still has value. Just log + carry on.
+  if (storeErr) {
+    Sentry.captureException(storeErr, {
+      tags: { route: '/api/support/bug-report', stage: 'store' },
+    })
+    console.error('[bug-report] store failed', storeErr)
+  }
+
   try {
     const resend = new Resend(apiKey)
     const { data, error } = await resend.emails.send({
@@ -111,6 +144,10 @@ export async function POST(req: Request) {
       // reply lands in their inbox rather than the no-reply sender.
       replyTo: reporter.email ?? undefined,
     })
+    const emailedOk = !error
+    if (stored?.id) {
+      await admin.from('bug_reports').update({ emailed_ok: emailedOk }).eq('id', stored.id)
+    }
     if (error) {
       console.error('[bug-report] Resend rejected the send', error)
       return NextResponse.json(
@@ -118,8 +155,11 @@ export async function POST(req: Request) {
         { status: 502 },
       )
     }
-    return NextResponse.json({ ok: true, id: data?.id ?? null }, { status: 200 })
+    return NextResponse.json({ ok: true, id: data?.id ?? null, stored: stored?.id ?? null }, { status: 200 })
   } catch (err) {
+    if (stored?.id) {
+      await admin.from('bug_reports').update({ emailed_ok: false }).eq('id', stored.id)
+    }
     Sentry.captureException(err, { tags: { route: '/api/support/bug-report' } })
     console.error('[bug-report] send threw', err)
     return NextResponse.json(
