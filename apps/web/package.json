@@ -12,6 +12,7 @@
     "db:types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > lib/database.types.ts && echo '✓ wrote lib/database.types.ts'"
   },
   "dependencies": {
+    "@soteria/core": "*",
     "@anthropic-ai/sdk": "^0.90.0",
     "@base-ui/react": "^1.4.0",
     "@sentry/nextjs": "^10.51.0",

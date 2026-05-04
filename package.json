@@ -3,7 +3,8 @@
   "version": "1.8.0",
   "private": true,
   "workspaces": [
-    "apps/*"
+    "apps/*",
+    "packages/*"
   ],
   "scripts": {
     "dev": "npm --workspace web run dev",

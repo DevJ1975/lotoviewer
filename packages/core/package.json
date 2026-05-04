@@ -1,0 +1,14 @@
+{
+  "name": "@soteria/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cross-platform business logic shared between apps/web (Next.js) and apps/mobile (Expo). No DOM, no Node, no React.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts",
+    "./validation/*": "./src/validation/*.ts"
+  },
+  "sideEffects": false
+}
