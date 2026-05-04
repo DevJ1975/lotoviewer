@@ -16,8 +16,8 @@ interface QueueContextValue {
   queueCount:   number
   queuedKeys:   Set<string>   // "{equipmentId}:{type}" for quick lookup
   syncing:      boolean
-  enqueue:      (args: { equipmentId: string; type: UploadType; blob: Blob }) => Promise<void>
-  syncNow:      () => Promise<{ ok: number; failed: number }>
+  enqueue:      (args: { equipmentId: string; type: UploadType; blob: Blob; tenantId: string }) => Promise<void>
+  syncNow:      () => Promise<{ ok: number; failed: number; dropped: number }>
   clearAll:     () => Promise<void>
   refresh:      () => Promise<void>
 }
@@ -30,7 +30,7 @@ const DEFAULTS: QueueContextValue = {
   queuedKeys: new Set(),
   syncing:    false,
   enqueue:    noop,
-  syncNow:    async () => ({ ok: 0, failed: 0 }),
+  syncNow:    async () => ({ ok: 0, failed: 0, dropped: 0 }),
   clearAll:   noop,
   refresh:    noop,
 }
@@ -42,12 +42,18 @@ export function useUploadQueue(): QueueContextValue {
 }
 
 async function uploadOne(item: QueuedUpload): Promise<void> {
+  if (!item.tenantId) {
+    // Pre-Phase-5 queued item with no tenant context — we can't safely
+    // route it to a tenant prefix. Throw so the caller drops it.
+    throw new Error('PRE_PHASE_5_ITEM')
+  }
   // No retry on queue drain — failed items stay queued and the next
   // drain trigger (online / focus / visibilitychange) retries them.
   await uploadPhotoForEquipment({
     equipmentId: item.equipmentId,
     type:        item.type,
     blob:        item.blob,
+    tenantId:    item.tenantId,
     retry:       false,
   })
 }
@@ -62,7 +68,7 @@ export function UploadQueueProvider({ children }: { children: React.ReactNode })
     setQueue(items)
   }, [])
 
-  const enqueue = useCallback(async (args: { equipmentId: string; type: UploadType; blob: Blob }) => {
+  const enqueue = useCallback(async (args: { equipmentId: string; type: UploadType; blob: Blob; tenantId: string }) => {
     await enqueueUpload(args)
     await refresh()
   }, [refresh])
@@ -73,10 +79,10 @@ export function UploadQueueProvider({ children }: { children: React.ReactNode })
   }, [refresh])
 
   const syncNow = useCallback(async () => {
-    if (syncingRef.current) return { ok: 0, failed: 0 }
+    if (syncingRef.current) return { ok: 0, failed: 0, dropped: 0 }
     syncingRef.current = true
     setSyncing(true)
-    let ok = 0, failed = 0
+    let ok = 0, failed = 0, dropped = 0
     try {
       const items = await getAllQueued()
       for (const item of items) {
@@ -85,6 +91,17 @@ export function UploadQueueProvider({ children }: { children: React.ReactNode })
           await removeFromQueue(item.id)
           ok++
         } catch (err) {
+          // Pre-Phase-5 queued item without tenantId — drop instead of
+          // routing to the wrong tenant. Rare in practice (queue items
+          // are typically minutes-old, not deploy-spanning).
+          if (err instanceof Error && err.message === 'PRE_PHASE_5_ITEM') {
+            await removeFromQueue(item.id)
+            dropped++
+            console.warn('[upload-queue] dropped pre-Phase-5 queued item', {
+              equipmentId: item.equipmentId, type: item.type,
+            })
+            continue
+          }
           failed++
           // Leave in queue on failure. Log the actual cause so field users can
           // tell us what's blocking uploads without needing a dev to repro,
@@ -106,7 +123,7 @@ export function UploadQueueProvider({ children }: { children: React.ReactNode })
       syncingRef.current = false
       setSyncing(false)
     }
-    return { ok, failed }
+    return { ok, failed, dropped }
   }, [refresh])
 
   // Initial load + drain triggers. iOS Safari has no Background Sync API,

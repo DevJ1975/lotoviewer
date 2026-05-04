@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useTenant } from '@/components/TenantProvider'
 import { useWakeLock } from '@/hooks/useWakeLock'
 import type { Equipment, LotoEnergyStep } from '@/lib/types'
 
@@ -30,6 +31,7 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
   // a tablet doesn't doze and drop the upload mid-flight.
   useWakeLock(open && (generating || uploadState === 'uploading'))
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const { tenantId } = useTenant()
 
   // Capture latest callbacks + data in refs so the effect only re-fires when
   // the modal opens (not on every parent render that gives us new closures).
@@ -70,9 +72,16 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
         setPdfUrl(objUrl)
         setGenerating(false)
 
+        if (!tenantId) {
+          setUploadState('error')
+          onErrorRef.current?.('No active tenant — cannot save placard.')
+          return
+        }
         setUploadState('uploading')
         const sanitized  = sanitize(equipmentId)
-        const storagePath = `${sanitized}/${sanitized}_placard.pdf`
+        // Tenant-prefixed path so two tenants with the same equipment_id
+        // don't overwrite each other's placards. Migration 033 enforces.
+        const storagePath = `${tenantId}/${sanitized}/${sanitized}_placard.pdf`
         const { error: upErr } = await supabase.storage
           .from('loto-photos')
           .upload(storagePath, bytes, { contentType: 'application/pdf', upsert: true })
@@ -106,7 +115,7 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
     // bilingual toggle flips — refs cover the rest. Callback closures
     // intentionally NOT in deps (we'd re-fire on every parent render).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, equipmentId, bilingual])
+  }, [open, equipmentId, bilingual, tenantId])
 
   // Escape closes the modal
   useEffect(() => {

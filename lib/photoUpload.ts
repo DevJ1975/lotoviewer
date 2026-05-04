@@ -34,6 +34,10 @@ export interface UploadPhotoArgs {
   equipmentId: string
   type:        UploadType
   blob:        Blob
+  // Tenant the equipment row lives in. Used as the first path segment
+  // in storage so two tenants with the same equipment_id don't collide,
+  // and so storage RLS (migration 033) can scope writes by tenant.
+  tenantId:    string
   // When true, retry the storage upload up to 3 times with exponential
   // backoff. The live in-app upload sets this; the offline-queue drain
   // does NOT — failed queue items stay in the queue and the next drain
@@ -56,10 +60,15 @@ export interface UploadPhotoResult {
 // their SELECT and UPDATE; without reconciliation, photo_status can be
 // left in a state that doesn't match the actual URL columns.
 export async function uploadPhotoForEquipment(
-  { equipmentId, type, blob, retry = false }: UploadPhotoArgs,
+  { equipmentId, type, blob, tenantId, retry = false }: UploadPhotoArgs,
 ): Promise<UploadPhotoResult> {
+  if (!tenantId) {
+    throw new Error('uploadPhotoForEquipment: tenantId is required (Phase 5+)')
+  }
   const sanitized   = sanitizeId(equipmentId)
-  const storagePath = `${sanitized}/${sanitized}_${type}_${Date.now()}.jpg`
+  // Tenant-prefixed path. Storage RLS (migration 033) checks the first
+  // segment is a tenant the caller belongs to.
+  const storagePath = `${tenantId}/${sanitized}/${sanitized}_${type}_${Date.now()}.jpg`
   const bucket      = supabase.storage.from('loto-photos')
 
   if (retry) {

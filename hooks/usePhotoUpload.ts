@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { uploadPhotoForEquipment, type UploadType } from '@/lib/photoUpload'
+import { useTenant } from '@/components/TenantProvider'
 
 export type { UploadType }
 export type UploadStatus = 'idle' | 'uploading' | 'success' | 'error'
@@ -10,6 +11,7 @@ export type UploadStatus = 'idle' | 'uploading' | 'success' | 'error'
 // itself (storage upload + reconcile) is shared with UploadQueueProvider
 // so a fix to either path lands in both.
 export function usePhotoUpload(equipmentId: string, type: UploadType) {
+  const { tenantId } = useTenant()
   const [status, setStatus]     = useState<UploadStatus>('idle')
   const [url, setUrl]           = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -20,6 +22,11 @@ export function usePhotoUpload(equipmentId: string, type: UploadType) {
   // degrade quality for no gain since the caller needs a compressed blob
   // anyway for the offline upload queue.
   const upload = useCallback(async (file: File): Promise<string | null> => {
+    if (!tenantId) {
+      setErrorMsg('No active tenant')
+      setStatus('error')
+      return null
+    }
     setStatus('uploading')
     setErrorMsg(null)
     setAttempt(a => a + 1)
@@ -29,6 +36,7 @@ export function usePhotoUpload(equipmentId: string, type: UploadType) {
         equipmentId,
         type,
         blob: file,
+        tenantId,
         retry: true,
       })
       setUrl(publicUrl)
@@ -40,7 +48,7 @@ export function usePhotoUpload(equipmentId: string, type: UploadType) {
       setStatus('error')
       return null
     }
-  }, [equipmentId, type])
+  }, [equipmentId, type, tenantId])
 
   const reset = useCallback(() => {
     setStatus('idle')

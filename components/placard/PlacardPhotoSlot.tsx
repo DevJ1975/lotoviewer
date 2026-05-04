@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { usePhotoUpload, type UploadType } from '@/hooks/usePhotoUpload'
 import { useNetworkStatus } from '@/hooks/useNetworkStatus'
 import { useUploadQueue } from '@/components/UploadQueueProvider'
+import { useTenant } from '@/components/TenantProvider'
 import { compressImage, heicToJpeg, isHeic } from '@/lib/imageUtils'
 import { haptic } from '@/lib/platform'
 import { AnnotationLayer } from '@/components/AnnotatedPhoto'
@@ -32,6 +33,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
   const { upload, status, url, reset } = usePhotoUpload(equipmentId, type)
   const { online } = useNetworkStatus()
   const { enqueue, queuedKeys } = useUploadQueue()
+  const { tenantId } = useTenant()
 
   const fileRef = useRef<HTMLInputElement>(null)
   const [validating, setValidating] = useState(false)
@@ -81,9 +83,13 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
   const showError   = status === 'error' && !isQueuedForThisSlot
 
   async function enqueueCompressed(blob: Blob) {
+    if (!tenantId) {
+      onErrorRef.current?.('No active tenant — cannot queue upload.')
+      return
+    }
     setQueueing(true)
     try {
-      await enqueue({ equipmentId, type, blob })
+      await enqueue({ equipmentId, type, blob, tenantId })
       onSuccessRef.current?.('Upload queued — will sync when online.')
     } catch {
       onErrorRef.current?.('Upload failed. Changes saved locally and queued for your next sync.')

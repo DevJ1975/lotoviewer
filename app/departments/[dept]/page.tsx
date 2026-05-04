@@ -11,6 +11,7 @@ import Toast from '@/components/Toast'
 import { Button } from '@/components/ui/button'
 import { useReviews } from '@/hooks/useReviews'
 import { useToast } from '@/hooks/useToast'
+import { useTenant } from '@/components/TenantProvider'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
@@ -26,6 +27,7 @@ export default function DepartmentDetailPage() {
   const [signing, setSigning]       = useState(false)
   const mountedRef                  = useRef(true)
   const { toast, showToast, clearToast } = useToast()
+  const { tenantId } = useTenant()
 
   useEffect(() => () => { mountedRef.current = false }, [])
 
@@ -44,6 +46,10 @@ export default function DepartmentDetailPage() {
   }, [dept, fetchReviews])
 
   async function handleApproved(signatureDataUrl: string, reviewerName: string, signedAt: string) {
+    if (!tenantId) {
+      showToast('No active tenant — cannot sign placards', 'error')
+      return
+    }
     const targets = equipment.filter(e => e.placard_url)
     if (!targets.length) return
     setSigning(true)
@@ -55,7 +61,8 @@ export default function DepartmentDetailPage() {
         if (!mountedRef.current) return  // user left the page
         try {
           const bytes       = await stampSignature(eq.placard_url!, signatureDataUrl, reviewerName, signedAt)
-          const storagePath = `signed-placards/${eq.equipment_id}_${Date.now()}.pdf`
+          // Tenant-prefixed path (migration 033 enforces).
+          const storagePath = `${tenantId}/signed-placards/${eq.equipment_id}_${Date.now()}.pdf`
           const { error: upErr } = await supabase.storage
             .from('loto-photos')
             .upload(storagePath, bytes, { contentType: 'application/pdf', upsert: true })
