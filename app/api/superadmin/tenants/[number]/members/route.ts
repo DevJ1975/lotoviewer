@@ -202,21 +202,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     return NextResponse.json({ error: insertErr.message }, { status: 500 })
   }
 
-  // Send the invite email only for newly-created users — they need the
-  // temp password. Existing users see the new tenant in their switcher
-  // on next login; emailing them with a "tempPassword: " section that
-  // doesn't apply would just confuse.
-  let emailSent = false
-  if (tempPassword) {
-    const loginUrl = computeLoginUrl(req)
-    emailSent = await sendInviteEmail({
-      to:           email,
-      fullName,
-      tempPassword,
-      loginUrl,
-      tenantName:   tenant.name,
-    })
-  }
+  // Send an invite email in BOTH cases:
+  //   - new user → email with the temp password
+  //   - existing user → notification email with no password (the helper
+  //     renders a different template when tempPassword is empty)
+  // Best-effort: emailSent=false surfaces in the UI so the superadmin
+  // can fall back to copy-pasting the password (new user) or telling
+  // the existing user about the new tenant out-of-band.
+  const loginUrl = computeLoginUrl(req)
+  const emailSent = await sendInviteEmail({
+    to:           email,
+    fullName,
+    tempPassword: tempPassword ?? '',
+    loginUrl,
+    tenantName:   tenant.name,
+  })
 
   return NextResponse.json({
     user_id: userId,

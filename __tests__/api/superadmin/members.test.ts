@@ -70,7 +70,7 @@ describe('POST /api/superadmin/tenants/[number]/members (invite)', () => {
     expect(r.status).toBe(404)
   })
 
-  it('existing user: skips auth.createUser AND skips email send', async () => {
+  it('existing user: skips auth.createUser, sends a notification email (no temp password)', async () => {
     mockState.queue('tenants',  { data: { id: 'T1', tenant_number: '0001', name: 'Snak King' }, error: null })
     mockState.queue('profiles', { data: { id: 'U1', email: 'jane@x.com' }, error: null })
     mockState.queue('tenant_memberships', { data: null, error: null })  // insert succeeds
@@ -80,7 +80,13 @@ describe('POST /api/superadmin/tenants/[number]/members (invite)', () => {
     expect(body.alreadyExisted).toBe(true)
     expect(body.tempPassword).toBeUndefined()
     expect(authAdminMock.createUser).not.toHaveBeenCalled()
-    expect(sendInviteEmailMock).not.toHaveBeenCalled()
+    // Notification email goes out with empty tempPassword — the helper
+    // renders the "you've been added to {tenant}" template.
+    expect(sendInviteEmailMock).toHaveBeenCalledWith(expect.objectContaining({
+      to:           'jane@x.com',
+      tenantName:   'Snak King',
+      tempPassword: '',
+    }))
   })
 
   it('new user: creates auth row, patches profile, sends email, returns tempPassword', async () => {

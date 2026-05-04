@@ -67,7 +67,8 @@ function writeStoredTenantId(tenantId: string | null) {
 }
 
 export function TenantProvider({ children }: { children: ReactNode }) {
-  const { userId, loading: authLoading } = useAuth()
+  const { userId, profile, loading: authLoading } = useAuth()
+  const isSuperadmin = profile?.is_superadmin === true
 
   const [available,    setAvailable]    = useState<Array<Tenant & { role: TenantRole }>>([])
   const [tenantId,     setTenantId]     = useState<string | null>(null)
@@ -99,23 +100,33 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       .map(r => ({ ...(r.tenants as Tenant), role: r.role }))
     setAvailable(list)
 
-    // Pick the active tenant: stored choice if still valid, else first.
-    // B3: if the previously-active tenant disappeared from the user's
-    // memberships (disabled OR removed), force a sign-out + reload so
-    // they get a clean session rather than silently empty pages.
+    // Pick the active tenant. Three cases:
+    //   - stored is in the user's memberships → use it
+    //   - stored is set but NOT in memberships AND user is superadmin →
+    //     keep it (the lazy externalTenant fetch will resolve the row)
+    //   - stored is set but NOT in memberships AND user is NOT superadmin →
+    //     fall back to first membership (or null)
     const stored = readStoredTenantId()
-    const previouslyActive = stored
-    const pick = list.find(t => t.id === stored) ?? list[0] ?? null
+    const inMembership = stored ? list.find(t => t.id === stored) : null
+    const keepStoredForSuperadmin = stored && !inMembership && isSuperadmin
+
+    let pick: { id: string } | null
+    if (inMembership)               pick = inMembership
+    else if (keepStoredForSuperadmin) pick = { id: stored }
+    else                            pick = list[0] ?? null
+
     setTenantId(pick?.id ?? null)
     if (pick && pick.id !== stored) writeStoredTenantId(pick.id)
     setLoading(false)
 
+    // B3: only fires when a NON-superadmin had a previously-active
+    // tenant that disappeared from their memberships (disabled or
+    // member-removed). Superadmin's cross-tenant view is handled by
+    // the keepStoredForSuperadmin branch above.
     if (
-      previouslyActive
-      && !list.find(t => t.id === previouslyActive)
-      // Don't fire for the "first sign-in / no stored tenant" case OR
-      // the "superadmin viewing a non-member tenant" case (the lazy
-      // externalTenant fetch handles that path).
+      !isSuperadmin
+      && stored
+      && !inMembership
       && list.length > 0
     ) {
       console.warn('[tenant] previously-active tenant is no longer available — signing out')
@@ -128,7 +139,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         window.location.href = '/login'
       }
     }
-  }, [])
+  }, [isSuperadmin])
 
   useEffect(() => {
     if (authLoading) return

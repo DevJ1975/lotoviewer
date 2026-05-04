@@ -211,7 +211,9 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
               )}
               {inviteResult.alreadyExisted && (
                 <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-200">
-                  Existing user — no email sent. They&apos;ll see this tenant in the switcher on next login.
+                  {inviteResult.emailSent
+                    ? '✉ Notification emailed — they can sign in with their existing account; the new tenant will appear in the switcher.'
+                    : '⚠ Email not sent. Tell them out-of-band that they were added to this tenant.'}
                 </p>
               )}
               {inviteResult.tempPassword && (
