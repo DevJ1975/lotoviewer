@@ -12,13 +12,11 @@ export interface QueuedUpload {
   type:        'EQUIP' | 'ISO'
   blob:        Blob
   createdAt:   number
-  // Tenant the upload was queued in. Required for new items so the
-  // drain knows which tenant prefix to write under in storage. Older
-  // items queued before Phase 5 lack this field and the drain will
-  // drop them with a console warning rather than send to the wrong
-  // tenant. Pre-Phase-5 queued items are rare in practice — most
-  // installs drain before a multi-tenant deploy.
-  tenantId?:   string
+  // Tenant the upload was queued in — used by the drain to pick the
+  // storage prefix. Required since Phase 5; the back-compat handling
+  // for missing tenantId in UploadQueueProvider drops such items so
+  // they never silently route to the wrong tenant.
+  tenantId:    string
 }
 
 function isIndexedDBAvailable(): boolean {

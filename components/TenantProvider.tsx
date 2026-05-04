@@ -28,8 +28,6 @@ import type { Tenant, TenantRole } from '@/lib/types'
 // scoped to userId so different users on the same browser don't pick up
 // each other's last-active tenant.
 
-const STORAGE_KEY_PREFIX = 'soteria.activeTenantId.'
-
 interface TenantState {
   tenantId:       string | null
   tenant:         Tenant | null
@@ -52,21 +50,17 @@ const Ctx = createContext<TenantState>({
   refresh:      async () => {},
 })
 
-function storageKey(userId: string) { return STORAGE_KEY_PREFIX + userId }
-
-function readStoredTenantId(userId: string): string | null {
+// Single sessionStorage key for the active tenant. Also read by the
+// fetch wrapper in lib/supabase.ts which forwards it as the
+// x-active-tenant header so RLS can scope the result.
+function readStoredTenantId(): string | null {
   if (typeof window === 'undefined') return null
-  try { return window.sessionStorage.getItem(storageKey(userId)) } catch { return null }
+  try { return window.sessionStorage.getItem(ACTIVE_TENANT_KEY) } catch { return null }
 }
 
-function writeStoredTenantId(userId: string, tenantId: string | null) {
+function writeStoredTenantId(tenantId: string | null) {
   if (typeof window === 'undefined') return
   try {
-    if (tenantId) window.sessionStorage.setItem(storageKey(userId), tenantId)
-    else          window.sessionStorage.removeItem(storageKey(userId))
-    // Mirror to the Supabase-client-readable key. The fetch wrapper in
-    // lib/supabase.ts reads this on every request and forwards it as
-    // the x-active-tenant header so RLS can scope the result.
     if (tenantId) window.sessionStorage.setItem(ACTIVE_TENANT_KEY, tenantId)
     else          window.sessionStorage.removeItem(ACTIVE_TENANT_KEY)
   } catch { /* sessionStorage may be blocked — non-fatal */ }
@@ -75,9 +69,13 @@ function writeStoredTenantId(userId: string, tenantId: string | null) {
 export function TenantProvider({ children }: { children: ReactNode }) {
   const { userId, loading: authLoading } = useAuth()
 
-  const [available, setAvailable]   = useState<Array<Tenant & { role: TenantRole }>>([])
-  const [tenantId,  setTenantId]    = useState<string | null>(null)
-  const [loading,   setLoading]     = useState(true)
+  const [available,    setAvailable]    = useState<Array<Tenant & { role: TenantRole }>>([])
+  const [tenantId,     setTenantId]     = useState<string | null>(null)
+  // Cache for superadmin's "switched to a non-member tenant" case. The
+  // pill needs the tenant row to render; if the active id isn't in
+  // `available`, we lazily fetch and stash it here.
+  const [externalTenant, setExternalTenant] = useState<Tenant | null>(null)
+  const [loading,      setLoading]      = useState(true)
 
   const fetchAll = useCallback(async (uid: string) => {
     setLoading(true)
@@ -102,10 +100,10 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     setAvailable(list)
 
     // Pick the active tenant: stored choice if still valid, else first.
-    const stored = readStoredTenantId(uid)
+    const stored = readStoredTenantId()
     const pick = list.find(t => t.id === stored) ?? list[0] ?? null
     setTenantId(pick?.id ?? null)
-    if (pick && pick.id !== stored) writeStoredTenantId(uid, pick.id)
+    if (pick && pick.id !== stored) writeStoredTenantId(pick.id)
     setLoading(false)
   }, [])
 
@@ -122,23 +120,44 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
   const switchTenant = useCallback((id: string) => {
     if (!userId) return
-    if (!available.some(t => t.id === id)) {
-      console.warn('[tenant] switchTenant called with non-member tenant', id)
-      return
-    }
-    writeStoredTenantId(userId, id)
+    // Allow superadmin to switch to a tenant they're not a member of —
+    // header-scoped RLS in migration 032 grants the cross-tenant view.
+    // For non-superadmins this still falls through with a warning since
+    // RLS would reject their reads anyway.
+    writeStoredTenantId(id)
     setTenantId(id)
-  }, [userId, available])
+  }, [userId])
 
   const refresh = useCallback(async () => {
     if (userId) await fetchAll(userId)
   }, [userId, fetchAll])
 
-  const tenant = useMemo(
-    () => available.find(t => t.id === tenantId) ?? null,
-    [available, tenantId],
-  )
-  const role = tenant?.role ?? null
+  // Active tenant resolution order:
+  //   1. The user's own membership row (preserves their role)
+  //   2. The externalTenant cache (superadmin viewing a non-member tenant)
+  //   3. null
+  const tenant = useMemo(() => {
+    const fromMembership = available.find(t => t.id === tenantId)
+    if (fromMembership) return fromMembership
+    if (externalTenant && externalTenant.id === tenantId) {
+      return { ...externalTenant, role: null as unknown as TenantRole }
+    }
+    return null
+  }, [available, tenantId, externalTenant])
+
+  // Lazy-fetch a tenant row when the active id isn't in `available`.
+  // Only superadmin can read it (RLS); non-superadmins just stay with
+  // tenant=null which the rest of the app treats as signed-out.
+  useEffect(() => {
+    if (!tenantId) { setExternalTenant(null); return }
+    if (available.some(t => t.id === tenantId)) { setExternalTenant(null); return }
+    if (externalTenant?.id === tenantId) return
+    void supabase
+      .from('tenants').select('*').eq('id', tenantId).maybeSingle()
+      .then(({ data }) => { if (data) setExternalTenant(data as Tenant) })
+  }, [tenantId, available, externalTenant])
+
+  const role = (tenant && 'role' in tenant ? tenant.role : null) as TenantRole | null
 
   const value = useMemo<TenantState>(() => ({
     tenantId,

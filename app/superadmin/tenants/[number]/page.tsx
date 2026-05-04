@@ -6,6 +6,7 @@ import { use, useEffect, useMemo, useState, type FormEvent, type ChangeEvent } f
 import { ArrowLeft, Loader2, AlertCircle, CheckCircle2, Upload, Trash2, UserPlus, X, RotateCcw } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
+import { superadminFetch, superadminJson } from '@/lib/superadminFetch'
 import { getModules, type FeatureCategory, type FeatureDef } from '@/lib/features'
 import type { Tenant, TenantRole, TenantStatus } from '@/lib/types'
 
@@ -87,21 +88,11 @@ export default function SuperadminTenantDetail({
 
     // Members: enriched fetch via the superadmin API. The route joins
     // auth.users for last_sign_in_at so the UI can show invite status.
-    const { data: { session } } = await supabase.auth.getSession()
-    const token = session?.access_token
-    if (token) {
-      const res = await fetch(`/api/superadmin/tenants/${number}/members`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const json = await res.json().catch(() => ({}))
-      if (res.ok && Array.isArray(json.members)) {
-        setMembers(json.members as MemberRow[])
-      } else {
-        setMembers([])
-      }
-    } else {
-      setMembers([])
-    }
+    const result = await superadminJson<{ members: MemberRow[] }>(
+      `/api/superadmin/tenants/${number}/members`,
+      { method: 'GET' },
+    )
+    setMembers(result.ok && result.body ? result.body.members : [])
 
     setLoading(false)
   }
@@ -115,37 +106,23 @@ export default function SuperadminTenantDetail({
     e.preventDefault()
     if (!tenant) return
     setSaving(true); setSaveError(null); setSaveSuccess(false)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token
-      if (!token) { setSaveError('Not signed in'); setSaving(false); return }
-
-      const res = await fetch(`/api/superadmin/tenants/${number}`, {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({
-          name:    name.trim(),
-          status,
-          is_demo: isDemo,
-          modules,
-        }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setSaveError(json?.error ?? `Save failed (${res.status})`)
-        setSaving(false)
-        return
-      }
-      setTenant(json.tenant as Tenant)
+    const result = await superadminJson<{ tenant: Tenant }>(
+      `/api/superadmin/tenants/${number}`,
+      {
+        method: 'PATCH',
+        body:   JSON.stringify({ name: name.trim(), status, is_demo: isDemo, modules }),
+      },
+    )
+    if (!result.ok || !result.body) {
+      setSaveError(result.error ?? 'Save failed')
+    } else {
+      setTenant(result.body.tenant)
       setSaveSuccess(true)
       // If the edited tenant is one the current user belongs to, re-fetch
       // so the header pill / drawer reflect new name + modules immediately.
       void refreshActiveTenant()
-    } catch (err: unknown) {
-      setSaveError(err instanceof Error ? err.message : 'Network error')
-    } finally {
-      setSaving(false)
     }
+    setSaving(false)
   }
 
   async function onLogoUpload(e: ChangeEvent<HTMLInputElement>) {
@@ -153,17 +130,14 @@ export default function SuperadminTenantDetail({
     if (!file || !tenant) return
     setLogoUploading(true); setLogoError(null)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token
-      if (!token) { setLogoError('Not signed in'); setLogoUploading(false); return }
-
+      // FormData uploads can't go through superadminJson (which sets
+      // Content-Type: application/json by default). Use superadminFetch
+      // so the browser picks the multipart boundary itself.
       const fd = new FormData()
       fd.append('file', file)
-
-      const res = await fetch(`/api/superadmin/tenants/${number}/logo`, {
-        method:  'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body:    fd,
+      const res = await superadminFetch(`/api/superadmin/tenants/${number}/logo`, {
+        method: 'POST',
+        body:   fd,
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -183,29 +157,19 @@ export default function SuperadminTenantDetail({
 
   async function onLogoClear() {
     if (!tenant) return
-    if (!confirm('Remove the logo? The image stays in storage but the tenant header reverts to initials.')) return
+    if (!confirm('Remove the logo? The image is also deleted from storage; reuploading will create a fresh path.')) return
     setLogoUploading(true); setLogoError(null)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token
-      if (!token) { setLogoError('Not signed in'); setLogoUploading(false); return }
-
-      const res = await fetch(`/api/superadmin/tenants/${number}/logo`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setLogoError(json?.error ?? `Clear failed (${res.status})`)
-        return
-      }
-      setTenant(json.tenant as Tenant)
+    const result = await superadminJson<{ tenant: Tenant }>(
+      `/api/superadmin/tenants/${number}/logo`,
+      { method: 'DELETE' },
+    )
+    if (!result.ok || !result.body) {
+      setLogoError(result.error ?? 'Clear failed')
+    } else {
+      setTenant(result.body.tenant)
       void refreshActiveTenant()
-    } catch (err: unknown) {
-      setLogoError(err instanceof Error ? err.message : 'Network error')
-    } finally {
-      setLogoUploading(false)
     }
+    setLogoUploading(false)
   }
 
   if (loading) {
@@ -451,11 +415,6 @@ function MembersSection({
   const [busyUserId, setBusyUserId] = useState<string | null>(null)
   const [rowError,   setRowError]   = useState<string | null>(null)
 
-  async function bearerToken(): Promise<string | null> {
-    const { data: { session } } = await supabase.auth.getSession()
-    return session?.access_token ?? null
-  }
-
   async function onInvite(e: FormEvent) {
     e.preventDefault()
     setInviteError(null); setInviteResult(null)
@@ -463,78 +422,54 @@ function MembersSection({
     if (!email) { setInviteError('Email required'); return }
 
     setInviteBusy(true)
-    try {
-      const token = await bearerToken()
-      if (!token) { setInviteError('Not signed in'); return }
-
-      const res = await fetch(`/api/superadmin/tenants/${tenantNumber}/members`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({
-          email,
-          role:      inviteRole,
-          full_name: inviteName.trim() || undefined,
-        }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setInviteError(json?.error ?? `Invite failed (${res.status})`)
-        return
-      }
+    const result = await superadminJson<{
+      email: string; role: TenantRole; tempPassword?: string
+      emailSent?: boolean; alreadyExisted: boolean
+    }>(`/api/superadmin/tenants/${tenantNumber}/members`, {
+      method: 'POST',
+      body:   JSON.stringify({
+        email,
+        role:      inviteRole,
+        full_name: inviteName.trim() || undefined,
+      }),
+    })
+    if (!result.ok || !result.body) {
+      setInviteError(result.error ?? 'Invite failed')
+    } else {
       setInviteResult({
-        email:          json.email,
-        role:           json.role,
-        tempPassword:   json.tempPassword,
-        emailSent:      json.emailSent === true,
-        alreadyExisted: json.alreadyExisted,
+        email:          result.body.email,
+        role:           result.body.role,
+        tempPassword:   result.body.tempPassword,
+        emailSent:      result.body.emailSent === true,
+        alreadyExisted: result.body.alreadyExisted,
       })
       setInviteEmail(''); setInviteName(''); setInviteRole('member')
       await reload()
-    } catch (err: unknown) {
-      setInviteError(err instanceof Error ? err.message : 'Network error')
-    } finally {
-      setInviteBusy(false)
     }
+    setInviteBusy(false)
   }
 
   async function changeRole(userId: string, role: TenantRole) {
     setBusyUserId(userId); setRowError(null)
-    try {
-      const token = await bearerToken()
-      if (!token) { setRowError('Not signed in'); return }
-      const res = await fetch(`/api/superadmin/tenants/${tenantNumber}/members/${userId}`, {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ role }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) { setRowError(json?.error ?? `Change failed (${res.status})`); return }
-      await reload()
-    } catch (err: unknown) {
-      setRowError(err instanceof Error ? err.message : 'Network error')
-    } finally {
-      setBusyUserId(null)
-    }
+    const result = await superadminJson(
+      `/api/superadmin/tenants/${tenantNumber}/members/${userId}`,
+      { method: 'PATCH', body: JSON.stringify({ role }) },
+    )
+    if (!result.ok) setRowError(result.error ?? 'Change failed')
+    else await reload()
+    setBusyUserId(null)
   }
 
   async function removeMember(userId: string, label: string) {
     if (!confirm(`Remove ${label} from this tenant? Their account stays — only the membership is removed.`)) return
     setBusyUserId(userId); setRowError(null)
-    try {
-      const token = await bearerToken()
-      if (!token) { setRowError('Not signed in'); return }
-      const res = await fetch(`/api/superadmin/tenants/${tenantNumber}/members/${userId}`, {
-        method:  'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) { setRowError(json?.error ?? `Remove failed (${res.status})`); return }
-      await reload()
-    } catch (err: unknown) {
-      setRowError(err instanceof Error ? err.message : 'Network error')
-    } finally {
-      setBusyUserId(null)
-    }
+    const result = await superadminJson(
+      `/api/superadmin/tenants/${tenantNumber}/members/${userId}`,
+      { method: 'DELETE' },
+    )
+    if (!result.ok) setRowError(result.error ?? 'Remove failed')
+    else await reload()
+    setBusyUserId(null)
   }
 
   // Cancel-invite path: remove the membership AND delete the auth.user
@@ -544,24 +479,19 @@ function MembersSection({
   async function cancelInvite(userId: string, label: string) {
     if (!confirm(`Cancel invite for ${label}? Their account will be deleted from the system entirely (they never signed in).`)) return
     setBusyUserId(userId); setRowError(null)
-    try {
-      const token = await bearerToken()
-      if (!token) { setRowError('Not signed in'); return }
-      const res = await fetch(`/api/superadmin/tenants/${tenantNumber}/members/${userId}?cancel-invite=true`, {
-        method:  'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) { setRowError(json?.error ?? `Cancel failed (${res.status})`); return }
-      if (json.userDeleted === false && json.userDeleteError) {
-        setRowError(`Membership removed but user delete failed: ${json.userDeleteError}`)
+    const result = await superadminJson<{ userDeleted?: boolean; userDeleteError?: string }>(
+      `/api/superadmin/tenants/${tenantNumber}/members/${userId}?cancel-invite=true`,
+      { method: 'DELETE' },
+    )
+    if (!result.ok) {
+      setRowError(result.error ?? 'Cancel failed')
+    } else {
+      if (result.body?.userDeleted === false && result.body.userDeleteError) {
+        setRowError(`Membership removed but user delete failed: ${result.body.userDeleteError}`)
       }
       await reload()
-    } catch (err: unknown) {
-      setRowError(err instanceof Error ? err.message : 'Network error')
-    } finally {
-      setBusyUserId(null)
     }
+    setBusyUserId(null)
   }
 
   // System-wide delete: removes the user from every tenant + auth.users.
@@ -579,21 +509,13 @@ function MembersSection({
       return
     }
     setBusyUserId(userId); setRowError(null)
-    try {
-      const token = await bearerToken()
-      if (!token) { setRowError('Not signed in'); return }
-      const res = await fetch(`/api/superadmin/users/${userId}`, {
-        method:  'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) { setRowError(json?.error ?? `Delete failed (${res.status})`); return }
-      await reload()
-    } catch (err: unknown) {
-      setRowError(err instanceof Error ? err.message : 'Network error')
-    } finally {
-      setBusyUserId(null)
-    }
+    const result = await superadminJson(
+      `/api/superadmin/users/${userId}`,
+      { method: 'DELETE' },
+    )
+    if (!result.ok) setRowError(result.error ?? 'Delete failed')
+    else await reload()
+    setBusyUserId(null)
   }
 
   return (
@@ -809,29 +731,22 @@ function ResetDemoSection({
     }
 
     setBusy(true); setError(null); setResult(null)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token
-      if (!token) { setError('Not signed in'); return }
-
-      const res = await fetch(`/api/superadmin/tenants/${tenantNumber}/reset-demo`, {
-        method:  'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) { setError(json?.error ?? `Reset failed (${res.status})`); return }
+    const apiResult = await superadminJson<{
+      wiped: Record<string, number>; skipped: string[]
+      seed: string | null; seedSkipped: boolean
+    }>(`/api/superadmin/tenants/${tenantNumber}/reset-demo`, { method: 'POST' })
+    if (!apiResult.ok || !apiResult.body) {
+      setError(apiResult.error ?? 'Reset failed')
+    } else {
       setResult({
-        wiped:       json.wiped ?? {},
-        skipped:     json.skipped ?? [],
-        seed:        json.seed ?? null,
-        seedSkipped: !!json.seedSkipped,
+        wiped:       apiResult.body.wiped ?? {},
+        skipped:     apiResult.body.skipped ?? [],
+        seed:        apiResult.body.seed ?? null,
+        seedSkipped: !!apiResult.body.seedSkipped,
       })
       await reload()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Network error')
-    } finally {
-      setBusy(false)
     }
+    setBusy(false)
   }
 
   const totalWiped = result ? Object.values(result.wiped).reduce((a, b) => a + b, 0) : 0

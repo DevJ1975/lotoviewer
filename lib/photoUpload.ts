@@ -1,17 +1,10 @@
 import { supabase } from '@/lib/supabase'
 import { computePhotoStatusFromUrls } from '@/lib/photoStatus'
+import { equipmentPhotoPath } from '@/lib/storagePaths'
 
 export type UploadType = 'EQUIP' | 'ISO'
 
 const RETRY_DELAYS_MS = [1_000, 2_000, 4_000]
-
-// Storage paths must be safe for object-storage keys (no slashes,
-// spaces, etc.). Equipment IDs come from CSV imports and have been
-// observed to contain '/' and '#' historically; sanitise both the
-// folder prefix and the filename component.
-function sanitizeId(id: string): string {
-  return id.replace(/[^a-zA-Z0-9_-]/g, '_')
-}
 
 async function uploadWithRetry(
   bucket: ReturnType<typeof supabase.storage.from>,
@@ -65,10 +58,7 @@ export async function uploadPhotoForEquipment(
   if (!tenantId) {
     throw new Error('uploadPhotoForEquipment: tenantId is required (Phase 5+)')
   }
-  const sanitized   = sanitizeId(equipmentId)
-  // Tenant-prefixed path. Storage RLS (migration 033) checks the first
-  // segment is a tenant the caller belongs to.
-  const storagePath = `${tenantId}/${sanitized}/${sanitized}_${type}_${Date.now()}.jpg`
+  const storagePath = equipmentPhotoPath(tenantId, equipmentId, type)
   const bucket      = supabase.storage.from('loto-photos')
 
   if (retry) {

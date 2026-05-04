@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getModules } from '@/lib/features'
+import { isValidStatus, isValidTenantNumber, normalizeName } from '@/lib/validation/tenants'
 import type { TenantStatus } from '@/lib/types'
 
 // PATCH /api/superadmin/tenants/[number]
@@ -23,9 +24,6 @@ import type { TenantStatus } from '@/lib/types'
 // excluded from current_user_tenant_ids() (RLS hides their data) but
 // the row stays for audit. Hard delete is intentionally not supported.
 
-const VALID_STATUSES: ReadonlySet<TenantStatus> =
-  new Set<TenantStatus>(['active', 'trial', 'disabled', 'archived'])
-
 function validModuleKeys(): Set<string> {
   return new Set(
     (['safety', 'reports', 'admin'] as const).flatMap(cat =>
@@ -39,7 +37,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ number: strin
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   const { number } = await ctx.params
-  if (!/^[0-9]{4}$/.test(number)) {
+  if (!isValidTenantNumber(number)) {
     return NextResponse.json({ error: 'Invalid tenant number' }, { status: 400 })
   }
 
@@ -50,18 +48,18 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ number: strin
   const patch: Record<string, unknown> = {}
 
   if ('name' in body) {
-    const name = typeof body.name === 'string' ? body.name.trim() : ''
-    if (name.length < 1 || name.length > 200) {
+    const name = normalizeName(body.name)
+    if (!name) {
       return NextResponse.json({ error: 'Name must be 1–200 characters' }, { status: 400 })
     }
     patch.name = name
   }
 
   if ('status' in body) {
-    const status = body.status as TenantStatus
-    if (!VALID_STATUSES.has(status)) {
+    if (!isValidStatus(body.status)) {
       return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
     }
+    const status = body.status as TenantStatus
     patch.status = status
     // Mirror disabled_at so current_user_tenant_ids() excludes it consistently.
     patch.disabled_at = status === 'disabled' ? new Date().toISOString() : null

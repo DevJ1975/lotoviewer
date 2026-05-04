@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { isValidRole, isValidTenantNumber } from '@/lib/validation/tenants'
 import type { TenantRole } from '@/lib/types'
 
 // PATCH  /api/superadmin/tenants/[number]/members/[user_id]
@@ -18,9 +19,6 @@ import type { TenantRole } from '@/lib/types'
 // Both routes refuse to leave a tenant ownerless: if the membership being
 // changed/removed is the last 'owner', the request fails with 409. Promote
 // another member to owner first, then retry.
-
-const VALID_ROLES: ReadonlySet<TenantRole> =
-  new Set<TenantRole>(['owner', 'admin', 'member', 'viewer'])
 
 async function loadContext(number: string, userId: string) {
   const admin = supabaseAdmin()
@@ -59,7 +57,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ number: strin
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   const { number, user_id } = await ctx.params
-  if (!/^[0-9]{4}$/.test(number)) {
+  if (!isValidTenantNumber(number)) {
     return NextResponse.json({ error: 'Invalid tenant number' }, { status: 400 })
   }
 
@@ -67,10 +65,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ number: strin
   try { body = await req.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
-  const role = body.role as TenantRole
-  if (!VALID_ROLES.has(role)) {
+  if (!isValidRole(body.role)) {
     return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
   }
+  const role = body.role as TenantRole
 
   const ctxOrErr = await loadContext(number, user_id)
   if ('error' in ctxOrErr && ctxOrErr.error) {
@@ -111,7 +109,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ number: stri
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   const { number, user_id } = await ctx.params
-  if (!/^[0-9]{4}$/.test(number)) {
+  if (!isValidTenantNumber(number)) {
     return NextResponse.json({ error: 'Invalid tenant number' }, { status: 400 })
   }
 

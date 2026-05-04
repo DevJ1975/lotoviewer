@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getModules } from '@/lib/features'
+import { isValidSlug, normalizeName } from '@/lib/validation/tenants'
 
 // POST /api/superadmin/tenants
 //
@@ -23,8 +24,6 @@ import { getModules } from '@/lib/features'
 //   409 → { error } when the slug is already taken
 //   401/403 from requireSuperadmin
 
-const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/
-
 function validModuleKeys(): Set<string> {
   // The set of legitimate top-level module ids the form may post. Children
   // inherit their parent's flag, so they're not togglable; coming-soon
@@ -44,13 +43,13 @@ export async function POST(req: Request) {
   try { body = await req.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
-  const name = typeof body.name === 'string' ? body.name.trim() : ''
-  if (name.length < 1 || name.length > 200) {
+  const name = normalizeName(body.name)
+  if (!name) {
     return NextResponse.json({ error: 'Name is required (1–200 characters)' }, { status: 400 })
   }
 
   const slug = typeof body.slug === 'string' ? body.slug.trim().toLowerCase() : ''
-  if (!SLUG_RE.test(slug)) {
+  if (!isValidSlug(slug)) {
     return NextResponse.json({
       error: 'Slug must be lowercase letters, digits, and hyphens (3–64 chars, no leading/trailing hyphen)',
     }, { status: 400 })

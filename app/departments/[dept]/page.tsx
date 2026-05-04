@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { useReviews } from '@/hooks/useReviews'
 import { useToast } from '@/hooks/useToast'
 import { useTenant } from '@/components/TenantProvider'
+import { signedPlacardPath } from '@/lib/storagePaths'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
@@ -61,8 +62,7 @@ export default function DepartmentDetailPage() {
         if (!mountedRef.current) return  // user left the page
         try {
           const bytes       = await stampSignature(eq.placard_url!, signatureDataUrl, reviewerName, signedAt)
-          // Tenant-prefixed path (migration 033 enforces).
-          const storagePath = `${tenantId}/signed-placards/${eq.equipment_id}_${Date.now()}.pdf`
+          const storagePath = signedPlacardPath(tenantId, eq.equipment_id)
           const { error: upErr } = await supabase.storage
             .from('loto-photos')
             .upload(storagePath, bytes, { contentType: 'application/pdf', upsert: true })

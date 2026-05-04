@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { compressImage, heicToJpeg, isHeic } from '@/lib/imageUtils'
 import { useTenant } from '@/components/TenantProvider'
+import { confinedSpacePhotoPath } from '@/lib/storagePaths'
 
 // Photo slot for confined spaces. Simpler than PlacardPhotoSlot:
 //   • No subject validation (confined-space photos are diagnostic — interior
@@ -28,11 +29,6 @@ interface Props {
 
 const MAX_FILE_BYTES = 10_000_000
 const BUCKET = 'loto-photos'
-
-// Sanitize so a space_id like "CS/MIX-04" can't traverse out of its prefix.
-function sanitize(id: string): string {
-  return id.replace(/[^A-Za-z0-9_-]/g, '_')
-}
 
 export default function SpacePhotoSlot({ spaceId, slot, label, existingUrl, onUploaded, onError }: Props) {
   const { tenantId } = useTenant()
@@ -103,9 +99,7 @@ export default function SpacePhotoSlot({ spaceId, slot, label, existingUrl, onUp
     }
 
     setPhase('uploading')
-    const timestamp = Date.now()
-    // Tenant-prefixed path (migration 033 enforces the first segment).
-    const path = `${tenantId}/confined-spaces/${sanitize(spaceId)}/${slot}_${timestamp}.jpg`
+    const path = confinedSpacePhotoPath(tenantId, spaceId, slot)
     const bucket = supabase.storage.from(BUCKET)
 
     // upsert: false to fail loudly if path already exists. The timestamp
