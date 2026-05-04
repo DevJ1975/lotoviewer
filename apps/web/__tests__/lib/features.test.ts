@@ -104,6 +104,7 @@ describe('getFeaturesByCategory', () => {
       'loto-print',
       'loto-import',
       'loto-decommission',
+      'loto-review-portal',
       'confined-spaces',
       'cs-status-board',
       'cs-import',
@@ -179,6 +180,7 @@ describe('getChildren', () => {
       'loto-print',
       'loto-import',
       'loto-decommission',
+      'loto-review-portal',
     ])
   })
 
@@ -241,9 +243,9 @@ describe('FEATURES registry invariants', () => {
     }
   })
 
-  it('every live (enabled, not coming-soon) feature has a non-null href', () => {
+  it('every live (enabled, not coming-soon, not internal) feature has a non-null href', () => {
     for (const f of FEATURES) {
-      if (f.enabled && !f.comingSoon) {
+      if (f.enabled && !f.comingSoon && !f.internal) {
         expect(f.href, `${f.id} is live but has no href`).not.toBeNull()
       }
     }

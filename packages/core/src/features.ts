@@ -44,6 +44,13 @@ export interface FeatureDef {
   // wins for grouping purposes — children inherit it for the lookup
   // helpers below.
   parent?:     string
+  // Marks features that are live + tenant-toggleable but NOT reachable
+  // from the global drawer — they're surfaced via inline UI on a host
+  // page instead (e.g. the Client Review Portal lives inside the
+  // department detail page rather than as its own drawer entry).
+  // Allows href:null without tripping the "live features must be
+  // routable" registry invariant.
+  internal?:   boolean
 }
 
 // ─── The catalog ───────────────────────────────────────────────────────────
@@ -115,6 +122,24 @@ export const FEATURES: FeatureDef[] = [
     parent:      'loto',
     enabled:     true,
     comingSoon:  false,
+  },
+  {
+    // Public review portal — admins email a tokenized link to a
+    // non-Soteria reviewer (typically the customer's safety officer)
+    // who reviews the placards and signs off without an account.
+    // Admin UI lives on /departments/[dept]; public reviewer route is
+    // /review/[token]. href:null hides it from the drawer (it's
+    // surfaced inline via ClientReviewPanel) but keeps it in the
+    // FEATURES catalog so per-tenant disable via tenants.modules works.
+    id:          'loto-review-portal',
+    name:        'Client Review Portal',
+    description: 'Tokenized client signoff on completed placards',
+    href:        null,
+    category:    'safety',
+    parent:      'loto',
+    enabled:     true,
+    comingSoon:  false,
+    internal:    true,
   },
 
   // ── Confined Spaces module + sub-pages ──────────────────────────────────

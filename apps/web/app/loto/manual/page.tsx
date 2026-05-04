@@ -14,7 +14,7 @@ import { ArrowLeft, BookOpen } from 'lucide-react'
 // for instant first paint, and lets us link directly to other app
 // routes inline.
 
-const CURRENT_VERSION = '1.0.0'
+const CURRENT_VERSION = '1.1.0'
 const LAST_UPDATED   = '2026-05-04'
 
 interface ChangelogEntry {
@@ -25,6 +25,21 @@ interface ChangelogEntry {
 }
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.0',
+    date:    '2026-05-04',
+    changes: [
+      'Added the Client Review Portal: admins can email a tokenized ' +
+      'link to a non-Soteria reviewer (e.g. the customer’s safety ' +
+      'officer) who reviews the placards, leaves per-placard notes, ' +
+      'and signs off without needing an account. Admin entry point ' +
+      'is the new "Send for client review" button on each ' +
+      'department detail page.',
+      'New /review/[token] public route, /api/admin/review-links + ' +
+      '/api/review/[token] APIs, and migration 035 (loto_review_links ' +
+      'plus loto_placard_reviews tables).',
+    ],
+  },
   {
     version: '1.0.0',
     date:    '2026-05-04',
@@ -235,6 +250,42 @@ export default function LotoManualPage() {
           <li>QR code linking back to the equipment record for quick
               re-prints from the field.</li>
           <li>Last verified date + verifier&apos;s name (if applicable).</li>
+        </ul>
+      </Section>
+
+      <Section id="client-review" title="Client review portal">
+        <p>
+          When a department's placards are complete, you can send them out
+          for client signoff without giving the reviewer a Soteria account.
+          On any <code className="kbd">/departments/&#91;dept&#93;</code> page, scroll to
+          <strong> Client review portal</strong> → click <strong>Send for client review</strong>,
+          enter the reviewer's name + email + an optional message, and submit.
+          The reviewer gets an email with a tokenized link.
+        </p>
+        <ul>
+          <li>
+            <strong>Reviewer experience.</strong> Tap the email link, see
+            every placard for that department side-by-side, leave per-placard
+            notes (Approve / Needs changes), then sign off the whole batch
+            with a typed name + drawn signature + overall outcome.
+          </li>
+          <li>
+            <strong>What you see back.</strong> The same panel on
+            <code className="kbd"> /departments/&#91;dept&#93; </code>
+            shows status badges (Sent / Opened / Approved / Needs changes / Revoked),
+            the reviewer's overall comments, and per-placard notes. Revoke any
+            outstanding link at any time with the inline <strong>Revoke</strong> button.
+          </li>
+          <li>
+            <strong>Link lifetime.</strong> Default 30 days; revoke takes
+            effect immediately. Once a reviewer signs off, re-opening the
+            same link shows a read-only thank-you page.
+          </li>
+          <li>
+            <strong>Audit.</strong> The signoff captures the reviewer's
+            typed name, drawn signature, IP, and user-agent at submission
+            time so the record holds up in front of an inspector.
+          </li>
         </ul>
       </Section>
 

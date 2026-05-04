@@ -9,6 +9,7 @@ import EquipmentTable from '@/components/EquipmentTable'
 import ReviewModal from '@/components/ReviewModal'
 import Toast from '@/components/Toast'
 import { Button } from '@/components/ui/button'
+import ClientReviewPanel from '@/components/departments/ClientReviewPanel'
 import { useReviews } from '@/hooks/useReviews'
 import { useToast } from '@/hooks/useToast'
 import { useTenant } from '@/components/TenantProvider'
@@ -184,6 +185,8 @@ export default function DepartmentDetailPage() {
           </div>
         </div>
       )}
+
+      <ClientReviewPanel department={dept} />
 
       {showModal && (
         <ReviewModal
