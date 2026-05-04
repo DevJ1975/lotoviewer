@@ -2,28 +2,110 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin, generateTempPassword } from '@/lib/supabaseAdmin'
+import { sendInviteEmail, computeLoginUrl } from '@/lib/email/sendInvite'
 import type { TenantRole } from '@/lib/types'
 
+// GET  /api/superadmin/tenants/[number]/members
 // POST /api/superadmin/tenants/[number]/members
 //
-// Adds a user to a tenant. If the email already maps to a profiles row,
-// just creates the tenant_memberships link. If not, creates auth.users +
-// profile (must_change_password = true) and returns a temp password for
-// superadmin to share — Resend integration optional and not wired here.
+// GET returns enriched member data: membership row + profile + auth.users
+// fields (last_sign_in_at, must_change_password) so the UI can show
+// invite status (Invited / Pending / Active) and timestamps.
 //
-// Body:
-//   { email: string,
-//     role:  'owner' | 'admin' | 'member' | 'viewer',
-//     full_name?: string }
-//
-// Response:
-//   201 → { user_id, email, role, tempPassword?: string, alreadyExisted: boolean }
-//   400/404/409 with { error }
+// POST adds a user to a tenant. If the email already maps to a profiles
+// row, just creates the tenant_memberships link. If not, creates auth.users
+// + profile (must_change_password = true), generates a one-time password,
+// and emails the invite via Resend (lib/email/sendInvite). The temp
+// password is also returned in the response so the superadmin has a
+// copy-paste fallback when Resend isn't configured.
 
 const VALID_ROLES: ReadonlySet<TenantRole> =
   new Set<TenantRole>(['owner', 'admin', 'member', 'viewer'])
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+
+// ─── GET ───────────────────────────────────────────────────────────────────
+
+export interface EnrichedMember {
+  user_id:              string
+  role:                 TenantRole
+  joined_at:            string  // tenant_memberships.created_at
+  email:                string | null
+  full_name:            string | null
+  is_admin:             boolean
+  is_superadmin:        boolean
+  must_change_password: boolean
+  last_sign_in_at:      string | null
+  // Computed: 'invited' (never logged in) | 'active' (has signed in)
+  status:               'invited' | 'active'
+}
+
+export async function GET(req: Request, ctx: { params: Promise<{ number: string }> }) {
+  const gate = await requireSuperadmin(req.headers.get('authorization'))
+  if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
+  const { number } = await ctx.params
+  if (!/^[0-9]{4}$/.test(number)) {
+    return NextResponse.json({ error: 'Invalid tenant number' }, { status: 400 })
+  }
+
+  const admin = supabaseAdmin()
+
+  const { data: tenant, error: tErr } = await admin
+    .from('tenants')
+    .select('id, tenant_number')
+    .eq('tenant_number', number)
+    .maybeSingle()
+  if (tErr) return NextResponse.json({ error: tErr.message }, { status: 500 })
+  if (!tenant) return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+
+  const { data: rows, error: mErr } = await admin
+    .from('tenant_memberships')
+    .select('user_id, role, created_at, profiles:user_id(email, full_name, is_admin, is_superadmin, must_change_password)')
+    .eq('tenant_id', tenant.id)
+    .order('created_at', { ascending: true })
+  if (mErr) return NextResponse.json({ error: mErr.message }, { status: 500 })
+
+  type RawProfile = {
+    email: string | null; full_name: string | null
+    is_admin: boolean | null; is_superadmin: boolean | null
+    must_change_password: boolean | null
+  }
+  type RawRow = {
+    user_id: string; role: TenantRole; created_at: string
+    profiles: RawProfile | RawProfile[] | null
+  }
+
+  // Enrich with auth.users data — last_sign_in_at — via the admin auth API.
+  // listUsers paginates at 50 by default; we fetch all and look up by id.
+  // For tenants with > 50 members this'd need to page; acceptable for now.
+  const { data: authData, error: aErr } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 })
+  if (aErr) return NextResponse.json({ error: aErr.message }, { status: 500 })
+  const lastSignInByUserId = new Map<string, string | null>(
+    (authData?.users ?? []).map(u => [u.id, u.last_sign_in_at ?? null]),
+  )
+
+  const enriched: EnrichedMember[] = ((rows ?? []) as unknown as RawRow[]).map(r => {
+    const p = Array.isArray(r.profiles) ? r.profiles[0] ?? null : r.profiles
+    const lastSignInAt = lastSignInByUserId.get(r.user_id) ?? null
+    return {
+      user_id:              r.user_id,
+      role:                 r.role,
+      joined_at:            r.created_at,
+      email:                p?.email ?? null,
+      full_name:            p?.full_name ?? null,
+      is_admin:             p?.is_admin === true,
+      is_superadmin:        p?.is_superadmin === true,
+      must_change_password: p?.must_change_password === true,
+      last_sign_in_at:      lastSignInAt,
+      status:               lastSignInAt ? 'active' : 'invited',
+    }
+  })
+
+  return NextResponse.json({ members: enriched })
+}
+
+// ─── POST ──────────────────────────────────────────────────────────────────
 
 export async function POST(req: Request, ctx: { params: Promise<{ number: string }> }) {
   const gate = await requireSuperadmin(req.headers.get('authorization'))
@@ -54,7 +136,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
 
   const { data: tenant, error: tErr } = await admin
     .from('tenants')
-    .select('id, tenant_number')
+    .select('id, tenant_number, name')
     .eq('tenant_number', number)
     .maybeSingle()
   if (tErr) {
@@ -117,11 +199,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     return NextResponse.json({ error: insertErr.message }, { status: 500 })
   }
 
+  // Send the invite email only for newly-created users — they need the
+  // temp password. Existing users see the new tenant in their switcher
+  // on next login; emailing them with a "tempPassword: " section that
+  // doesn't apply would just confuse.
+  let emailSent = false
+  if (tempPassword) {
+    const loginUrl = computeLoginUrl(req)
+    emailSent = await sendInviteEmail({
+      to:           email,
+      fullName,
+      tempPassword,
+      loginUrl,
+      tenantName:   tenant.name,
+    })
+  }
+
   return NextResponse.json({
     user_id: userId,
     email,
     role,
     tempPassword,
+    emailSent,
     alreadyExisted,
   }, { status: 201 })
 }
