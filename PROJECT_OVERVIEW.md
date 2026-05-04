@@ -28,6 +28,9 @@
 
 ## Structure
 
+> Monorepo layout — the web app now lives at `apps/web/`. All paths
+> below are relative to `apps/web/`. See [README.md](./README.md).
+
 ```
 app/
 ├── page.tsx                   Dashboard (live stats, realtime)

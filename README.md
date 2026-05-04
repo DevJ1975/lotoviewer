@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Soteria FIELD — monorepo
 
-## Getting Started
+Single repo, multiple apps. Web ships today; iOS + Android ship from
+the same codebase via shared business logic in `packages/core`
+(coming in Phase 1 — see
+[plan](https://github.com/devj1975/lotoviewer/blob/claude/plan-multi-tenancy-zQ9ls/docs/)).
 
-First, run the development server:
+## Layout
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+lotoviewer/
+├── apps/
+│   └── web/      ← Next.js 16 app (Vercel)
+├── packages/     ← shared TS modules (Phase 1+)
+└── package.json  ← npm workspaces root
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Getting started
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install                  # installs both root + workspace deps
+npm run dev                  # starts apps/web at localhost:3000
+npm test                     # runs the 1078-test vitest suite
+npm run build                # production build of apps/web
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+These root-level scripts forward to `apps/web` via `npm --workspace web run …`.
 
-## Learn More
+## Per-workspace commands
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm --workspace web run dev
+npm --workspace web run lint
+npm --workspace web run test
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deploying
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The web app deploys to Vercel from `apps/web`. After the monorepo
+migration, set the Vercel project's **Root Directory** to `apps/web`
+(Project Settings → General → Root Directory). The `vercel.json`
+inside `apps/web` continues to define the cron schedules.
