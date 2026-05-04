@@ -43,16 +43,27 @@ Kept here so nothing leaks out of the plan.
 - **Blocks**: D1.2 (everything that imports `supabase`).
 - **Files**: `apps/web/lib/supabase.ts`.
 
-### D1.2 — Move metrics + queries to `packages/core`
-- **Why deferred**: Each of these imports `@/lib/supabase`. Once
-  D1.1 lands, they can move without changes.
-- **Files**:
-  - `apps/web/lib/scorecardMetrics.ts`
-  - `apps/web/lib/insightsMetrics.ts`
-  - `apps/web/lib/homeMetrics.ts`
-  - `apps/web/lib/queries/*.ts`
-- **Action**: After D1.1, `git mv` to `packages/core/src/`,
-  re-export shims in apps/web/lib, run vitest.
+### ~~D1.2 — Move metrics + queries to `packages/core`~~ — RESOLVED
+- **Resolution**: All 10 modules moved to `packages/core/src/`
+  (3 metrics + 7 queries) with thin re-export shims at
+  `apps/web/lib/{X,queries/X}.ts` so the 22 call sites stay
+  unchanged. Refactored to import the supabase singleton from
+  `@soteria/core/supabaseClient` (a Proxy that resolves through
+  a runtime registry) instead of `@/lib/supabase`. Each app's
+  own `lib/supabase.ts` calls `setActiveSupabaseClient(supabase)`
+  at module-load to install its platform-specific client into
+  the registry.
+- **Test bridging**: Added a `beforeEach` hook in
+  `apps/web/vitest.setup.ts` that re-imports `@/lib/supabase` and
+  re-registers it. This keeps the existing
+  `vi.mock('@/lib/supabase', …)` pattern working — the mocked
+  client is what gets installed into the registry per test.
+- **Verification**: vitest 1078/1078 still green; mobile iOS
+  bundle still 4.15 MB; mobile tsc clean.
+- **Files moved**:
+  - `lib/scorecardMetrics.ts`, `lib/insightsMetrics.ts`,
+    `lib/homeMetrics.ts`
+  - `lib/queries/{equipment,confinedSpaces,confinedSpacePermits,hotWorkPermits,lotoDevices,permitDetail,trainingRecords}.ts`
 
 ### D1.3 — Codemod call sites off the shims
 - **Why deferred**: Phase 1 left thin re-export shims at

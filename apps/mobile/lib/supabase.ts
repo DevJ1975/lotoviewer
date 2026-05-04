@@ -7,6 +7,7 @@ import {
   createSupabaseClient,
   type AuthStorageAdapter,
 } from '@soteria/core/supabase'
+import { setActiveSupabaseClient } from '@soteria/core/supabaseClient'
 
 // Native (Expo) instantiation of the shared Supabase client factory.
 // The cross-cutting bits (x-active-tenant injection, malformed-uuid
@@ -104,3 +105,8 @@ export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
     return Reflect.get(getClient(), prop, receiver)
   },
 })
+
+// Register the proxy with @soteria/core so shared business logic
+// (queries, metrics) can call getActiveSupabaseClient() at query
+// time. Same pattern as apps/web/lib/supabase.ts.
+setActiveSupabaseClient(supabase)

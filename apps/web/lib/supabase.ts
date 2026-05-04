@@ -4,6 +4,7 @@ import {
   createSupabaseClient,
   type AuthStorageAdapter,
 } from '@soteria/core/supabase'
+import { setActiveSupabaseClient } from '@soteria/core/supabaseClient'
 
 // Browser instantiation of the shared Supabase client factory in
 // @soteria/core. The cross-cutting bits (x-active-tenant injection,
@@ -78,3 +79,10 @@ export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
     return Reflect.get(getClient(), prop, receiver)
   },
 })
+
+// Register the proxy with @soteria/core so shared business logic
+// (queries, metrics) can call getActiveSupabaseClient() at query
+// time. Storing the proxy is cheap and preserves lazy init — the
+// real createClient() call is still deferred to first property
+// access.
+setActiveSupabaseClient(supabase)
