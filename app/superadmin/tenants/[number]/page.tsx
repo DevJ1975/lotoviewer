@@ -22,11 +22,14 @@ const CATEGORY_ORDER: FeatureCategory[] = ['safety', 'reports', 'admin']
 const STATUSES: TenantStatus[] = ['active', 'trial', 'disabled', 'archived']
 
 interface MemberRow {
-  user_id:    string
-  role:       TenantRole
-  created_at: string
-  email:      string | null
-  full_name:  string | null
+  user_id:              string
+  role:                 TenantRole
+  joined_at:            string
+  email:                string | null
+  full_name:            string | null
+  must_change_password: boolean
+  last_sign_in_at:      string | null
+  status:               'invited' | 'active'
 }
 
 export default function SuperadminTenantDetail({
@@ -82,31 +85,23 @@ export default function SuperadminTenantDetail({
     setIsDemo(t.is_demo)
     setModules({ ...t.modules })
 
-    // Members: join tenant_memberships → profiles via user_id. RLS allows
-    // superadmin to read both tables. Supabase types the embedded foreign
-    // table as an array even on a many-to-one relationship; we read the
-    // first row.
-    const { data: mRows } = await supabase
-      .from('tenant_memberships')
-      .select('user_id, role, created_at, profiles:user_id(email, full_name)')
-      .eq('tenant_id', t.id)
-      .order('created_at', { ascending: true })
-    type RawProfile = { email: string | null; full_name: string | null }
-    type RawMember = {
-      user_id: string; role: TenantRole; created_at: string
-      profiles: RawProfile | RawProfile[] | null
-    }
-    setMembers((mRows ?? []).map((row: unknown) => {
-      const r = row as RawMember
-      const p = Array.isArray(r.profiles) ? r.profiles[0] ?? null : r.profiles
-      return {
-        user_id:    r.user_id,
-        role:       r.role,
-        created_at: r.created_at,
-        email:      p?.email     ?? null,
-        full_name:  p?.full_name ?? null,
+    // Members: enriched fetch via the superadmin API. The route joins
+    // auth.users for last_sign_in_at so the UI can show invite status.
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+    if (token) {
+      const res = await fetch(`/api/superadmin/tenants/${number}/members`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const json = await res.json().catch(() => ({}))
+      if (res.ok && Array.isArray(json.members)) {
+        setMembers(json.members as MemberRow[])
+      } else {
+        setMembers([])
       }
-    }))
+    } else {
+      setMembers([])
+    }
 
     setLoading(false)
   }
@@ -437,6 +432,7 @@ interface InviteResult {
   email:          string
   role:           TenantRole
   tempPassword?:  string
+  emailSent?:     boolean
   alreadyExisted: boolean
 }
 
@@ -489,6 +485,7 @@ function MembersSection({
         email:          json.email,
         role:           json.role,
         tempPassword:   json.tempPassword,
+        emailSent:      json.emailSent === true,
         alreadyExisted: json.alreadyExisted,
       })
       setInviteEmail(''); setInviteName(''); setInviteRole('member')
@@ -532,6 +529,65 @@ function MembersSection({
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) { setRowError(json?.error ?? `Remove failed (${res.status})`); return }
+      await reload()
+    } catch (err: unknown) {
+      setRowError(err instanceof Error ? err.message : 'Network error')
+    } finally {
+      setBusyUserId(null)
+    }
+  }
+
+  // Cancel-invite path: remove the membership AND delete the auth.user
+  // when the invitee never signed in. Backed by ?cancel-invite=true on
+  // the membership DELETE — the server verifies "never signed in AND no
+  // other memberships" before nuking the account.
+  async function cancelInvite(userId: string, label: string) {
+    if (!confirm(`Cancel invite for ${label}? Their account will be deleted from the system entirely (they never signed in).`)) return
+    setBusyUserId(userId); setRowError(null)
+    try {
+      const token = await bearerToken()
+      if (!token) { setRowError('Not signed in'); return }
+      const res = await fetch(`/api/superadmin/tenants/${tenantNumber}/members/${userId}?cancel-invite=true`, {
+        method:  'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { setRowError(json?.error ?? `Cancel failed (${res.status})`); return }
+      if (json.userDeleted === false && json.userDeleteError) {
+        setRowError(`Membership removed but user delete failed: ${json.userDeleteError}`)
+      }
+      await reload()
+    } catch (err: unknown) {
+      setRowError(err instanceof Error ? err.message : 'Network error')
+    } finally {
+      setBusyUserId(null)
+    }
+  }
+
+  // System-wide delete: removes the user from every tenant + auth.users.
+  // Hidden behind a typed-confirmation prompt for safety.
+  async function deleteUserSystemWide(userId: string, email: string | null, label: string) {
+    const phrase = `DELETE ${email ?? label}`
+    const got = prompt(
+      `Permanently delete ${label} from Soteria FIELD?\n\n` +
+      `This removes them from EVERY tenant and deletes their account. ` +
+      `The action cannot be undone.\n\n` +
+      `Type "${phrase}" to confirm.`,
+    )
+    if (got !== phrase) {
+      if (got !== null) alert('Confirmation phrase did not match. Nothing was changed.')
+      return
+    }
+    setBusyUserId(userId); setRowError(null)
+    try {
+      const token = await bearerToken()
+      if (!token) { setRowError('Not signed in'); return }
+      const res = await fetch(`/api/superadmin/users/${userId}`, {
+        method:  'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { setRowError(json?.error ?? `Delete failed (${res.status})`); return }
       await reload()
     } catch (err: unknown) {
       setRowError(err instanceof Error ? err.message : 'Network error')
@@ -605,9 +661,21 @@ function MembersSection({
               <p className="font-medium text-emerald-900 dark:text-emerald-100">
                 {inviteResult.alreadyExisted ? 'Added existing user' : 'Invite created'}: {inviteResult.email} ({inviteResult.role})
               </p>
+              {!inviteResult.alreadyExisted && (
+                <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-200">
+                  {inviteResult.emailSent
+                    ? '✉ Invite emailed. The temp password is in the email.'
+                    : '⚠ Email not sent (Resend not configured or send failed). Copy the password below to share manually.'}
+                </p>
+              )}
+              {inviteResult.alreadyExisted && (
+                <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-200">
+                  Existing user — no email sent. They&apos;ll see this tenant in the switcher on next login.
+                </p>
+              )}
               {inviteResult.tempPassword && (
                 <p className="mt-2 text-emerald-800 dark:text-emerald-200 text-xs">
-                  Temporary password (share with the user — they&apos;ll be forced to rotate it on first login):
+                  Temporary password — copy if email failed:
                   <code className="block mt-1 p-2 bg-emerald-100 dark:bg-emerald-900/40 rounded font-mono text-sm select-all">
                     {inviteResult.tempPassword}
                   </code>
@@ -629,15 +697,27 @@ function MembersSection({
       ) : (
         <ul className="divide-y divide-slate-100 dark:divide-slate-700">
           {members.map(m => {
-            const label = m.full_name ?? m.email ?? m.user_id
-            const busy  = busyUserId === m.user_id
+            const label    = m.full_name ?? m.email ?? m.user_id
+            const busy     = busyUserId === m.user_id
+            const invited  = m.status === 'invited'
+            const lastSeen = m.last_sign_in_at
+              ? new Date(m.last_sign_in_at).toLocaleDateString()
+              : null
             return (
-              <li key={m.user_id} className="py-2 flex items-center justify-between gap-3">
+              <li key={m.user_id} className="py-3 flex items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{label}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{label}</p>
+                    <StatusBadge status={m.status} />
+                  </div>
                   {m.email && m.full_name && (
                     <p className="text-xs text-slate-500 dark:text-slate-400 truncate font-mono">{m.email}</p>
                   )}
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                    {invited
+                      ? `Invited ${new Date(m.joined_at).toLocaleDateString()} · never signed in`
+                      : `Last signed in ${lastSeen}`}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <select
@@ -648,14 +728,39 @@ function MembersSection({
                   >
                     {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
+                  {invited ? (
+                    <button
+                      type="button"
+                      onClick={() => cancelInvite(m.user_id, label)}
+                      disabled={busy}
+                      aria-label={`Cancel invite for ${label}`}
+                      title="Cancel invite (deletes the account)"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors disabled:opacity-50"
+                    >
+                      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+                      Cancel
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => removeMember(m.user_id, label)}
+                      disabled={busy}
+                      aria-label={`Remove ${label} from this tenant`}
+                      title="Remove from this tenant (account stays)"
+                      className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors disabled:opacity-50"
+                    >
+                      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => removeMember(m.user_id, label)}
+                    onClick={() => deleteUserSystemWide(m.user_id, m.email, label)}
                     disabled={busy}
-                    aria-label={`Remove ${label}`}
-                    className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors disabled:opacity-50"
+                    aria-label={`Delete ${label} from system`}
+                    title="Delete from Soteria FIELD entirely"
+                    className="text-slate-300 dark:text-slate-600 hover:text-rose-700 dark:hover:text-rose-400 transition-colors disabled:opacity-50 text-[10px] uppercase tracking-wider font-bold"
                   >
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    Sys
                   </button>
                 </div>
               </li>
@@ -664,6 +769,21 @@ function MembersSection({
         </ul>
       )}
     </Section>
+  )
+}
+
+function StatusBadge({ status }: { status: 'invited' | 'active' }) {
+  if (status === 'invited') {
+    return (
+      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200">
+        Invited
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200">
+      Active
+    </span>
   )
 }
 
