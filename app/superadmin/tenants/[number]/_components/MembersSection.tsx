@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Loader2, AlertCircle, CheckCircle2, UserPlus, X, Trash2 } from 'lucide-react'
+import Link from 'next/link'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { Loader2, AlertCircle, CheckCircle2, UserPlus, X, Trash2, Mail, Crown, Copy, MoreVertical } from 'lucide-react'
 import { superadminJson } from '@/lib/superadminFetch'
 import type { TenantRole } from '@/lib/types'
 import { Section } from './Section'
 import { StatusBadge } from './StatusBadge'
+import { UndoToast } from './UndoToast'
 import { ROLE_OPTIONS, type MemberRow } from './types'
 
 interface InviteResult {
@@ -61,6 +63,110 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
   function markRemoved(userId: string) {
     setOptimisticallyRemoved(prev => new Set([...prev, userId]))
   }
+  function unmarkRemoved(userId: string) {
+    setOptimisticallyRemoved(prev => {
+      const next = new Set(prev)
+      next.delete(userId)
+      return next
+    })
+  }
+
+  // Deferred-destroy queue. Holds the next destructive action that's
+  // waiting for the 30-second undo window. Only one pending action at a
+  // time — clicking another destructive action commits the previous
+  // one immediately (see queuePendingAction).
+  type PendingAction = {
+    type:    'remove' | 'cancel-invite' | 'sys-delete'
+    userId:  string
+    email:   string | null
+    label:   string
+    message: string
+  }
+  const [pending, setPending] = useState<PendingAction | null>(null)
+  // Guard against double-commits — UndoToast also fires onCommit on
+  // unmount, which can race with the timer's commit. Track which
+  // userIds we've already committed so the second invocation is a
+  // no-op.
+  const committedRef = useRef<Set<string>>(new Set())
+
+  async function commitPending(action: PendingAction): Promise<void> {
+    if (committedRef.current.has(action.userId)) return
+    committedRef.current.add(action.userId)
+    let url: string
+    if (action.type === 'cancel-invite')
+      url = `/api/superadmin/tenants/${tenantNumber}/members/${action.userId}?cancel-invite=true`
+    else if (action.type === 'sys-delete')
+      url = `/api/superadmin/users/${action.userId}`
+    else
+      url = `/api/superadmin/tenants/${tenantNumber}/members/${action.userId}`
+
+    const result = await superadminJson<{ userDeleted?: boolean; userDeleteError?: string }>(
+      url, { method: 'DELETE' },
+    )
+    if (!result.ok) {
+      // Rollback the optimistic hide — surface the error so the user
+      // knows nothing happened.
+      unmarkRemoved(action.userId)
+      committedRef.current.delete(action.userId)
+      setRowError(result.error ?? `${action.type} failed`)
+    } else {
+      if (result.body?.userDeleted === false && result.body.userDeleteError) {
+        setRowError(`Membership removed but user delete failed: ${result.body.userDeleteError}`)
+      }
+      await reload()
+    }
+    setPending(prev => (prev?.userId === action.userId ? null : prev))
+  }
+
+  function undoPending() {
+    if (!pending) return
+    unmarkRemoved(pending.userId)
+    setPending(null)
+  }
+
+  // Queue a new destructive action. If something's already pending, the
+  // toast will fire its onCommit on unmount before this new action
+  // takes its place — preserves intent on rapid clicks.
+  function queuePendingAction(a: PendingAction) {
+    setRowError(null)
+    markRemoved(a.userId)
+    setPending(a)
+  }
+
+  async function transferOwnership(newOwnerId: string, newOwnerLabel: string) {
+    if (!confirm(`Make ${newOwnerLabel} the sole owner of this tenant? Existing owner(s) become admin.`)) return
+    setBusyUserId(newOwnerId); setRowError(null)
+    const result = await superadminJson(
+      `/api/superadmin/tenants/${tenantNumber}/transfer-ownership`,
+      { method: 'POST', body: JSON.stringify({ new_owner_user_id: newOwnerId }) },
+    )
+    if (!result.ok) setRowError(result.error ?? 'Transfer failed')
+    else await reload()
+    setBusyUserId(null)
+  }
+
+  async function resendInvite(userId: string, label: string) {
+    setBusyUserId(userId); setRowError(null)
+    const result = await superadminJson<{ email: string; tempPassword: string; emailSent: boolean }>(
+      `/api/superadmin/tenants/${tenantNumber}/members/${userId}/resend-invite`,
+      { method: 'POST' },
+    )
+    if (!result.ok || !result.body) {
+      setRowError(result.error ?? 'Resend failed')
+    } else {
+      // Surface the new temp password through the existing invite-result
+      // panel so the superadmin can copy/paste if email failed.
+      setInviteResult({
+        email:          result.body.email,
+        role:           members.find(m => m.user_id === userId)?.role ?? 'member',
+        tempPassword:   result.body.tempPassword,
+        emailSent:      result.body.emailSent,
+        alreadyExisted: false,
+      })
+      void label  // for future toast wording
+    }
+    setBusyUserId(null)
+  }
 
   async function onInvite(e: FormEvent) {
     e.preventDefault()
@@ -97,6 +203,18 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
   }
 
   async function changeRole(userId: string, role: TenantRole) {
+    // If promoting to owner AND there's already a different owner,
+    // route through the transfer-ownership endpoint so the tenant
+    // ends up with exactly one owner. Without this, two PATCH calls
+    // would temporarily produce a 2-owner tenant.
+    if (role === 'owner') {
+      const otherOwnerExists = members.some(m => m.role === 'owner' && m.user_id !== userId)
+      if (otherOwnerExists) {
+        const target = members.find(m => m.user_id === userId)
+        await transferOwnership(userId, target?.full_name ?? target?.email ?? userId)
+        return
+      }
+    }
     setBusyUserId(userId); setRowError(null)
     const result = await superadminJson(
       `/api/superadmin/tenants/${tenantNumber}/members/${userId}`,
@@ -107,63 +225,47 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
     setBusyUserId(null)
   }
 
-  async function removeMember(userId: string, label: string) {
-    if (!confirm(`Remove ${label} from this tenant? Their account stays — only the membership is removed.`)) return
-    setBusyUserId(userId); setRowError(null)
-    const result = await superadminJson(
-      `/api/superadmin/tenants/${tenantNumber}/members/${userId}`,
-      { method: 'DELETE' },
-    )
-    if (!result.ok) setRowError(result.error ?? 'Remove failed')
-    else { markRemoved(userId); await reload() }
-    setBusyUserId(null)
+  // All three destructive actions go through the deferred-destroy queue.
+  // The row hides immediately + the UndoToast at the bottom of the
+  // section gives the superadmin 30 seconds to cancel before the API
+  // call fires. Removes the previous "single irreversible click" foot-
+  // gun; the typed-confirmation prompt for system-delete is also gone
+  // since Undo is the safer pattern for it too.
+
+  function removeMember(userId: string, label: string) {
+    queuePendingAction({
+      type:    'remove',
+      userId,
+      email:   members.find(m => m.user_id === userId)?.email ?? null,
+      label,
+      message: `Removed ${label} from this tenant`,
+    })
   }
 
-  // Cancel-invite path: removes the membership AND deletes the auth.user
-  // when the invitee never signed in. Backed by ?cancel-invite=true on
-  // the membership DELETE — server verifies "never signed in AND no
-  // other memberships" before nuking the account.
-  async function cancelInvite(userId: string, label: string) {
-    if (!confirm(`Cancel invite for ${label}? Their account will be deleted from the system entirely (they never signed in).`)) return
-    setBusyUserId(userId); setRowError(null)
-    const result = await superadminJson<{ userDeleted?: boolean; userDeleteError?: string }>(
-      `/api/superadmin/tenants/${tenantNumber}/members/${userId}?cancel-invite=true`,
-      { method: 'DELETE' },
-    )
-    if (!result.ok) {
-      setRowError(result.error ?? 'Cancel failed')
-    } else {
-      if (result.body?.userDeleted === false && result.body.userDeleteError) {
-        setRowError(`Membership removed but user delete failed: ${result.body.userDeleteError}`)
-      }
-      markRemoved(userId)
-      await reload()
-    }
-    setBusyUserId(null)
+  function cancelInvite(userId: string, label: string) {
+    queuePendingAction({
+      type:    'cancel-invite',
+      userId,
+      email:   members.find(m => m.user_id === userId)?.email ?? null,
+      label,
+      message: `Cancelled invite for ${label} (account will be deleted)`,
+    })
   }
 
-  // System-wide delete: removes the user from every tenant + auth.users.
-  // Hidden behind a typed-confirmation prompt for safety.
-  async function deleteUserSystemWide(userId: string, email: string | null, label: string) {
-    const phrase = `DELETE ${email ?? label}`
-    const got = prompt(
-      `Permanently delete ${label} from Soteria FIELD?\n\n` +
-      `This removes them from EVERY tenant and deletes their account. ` +
-      `The action cannot be undone.\n\n` +
-      `Type "${phrase}" to confirm.`,
-    )
-    if (got !== phrase) {
-      if (got !== null) alert('Confirmation phrase did not match. Nothing was changed.')
-      return
-    }
-    setBusyUserId(userId); setRowError(null)
-    const result = await superadminJson(
-      `/api/superadmin/users/${userId}`,
-      { method: 'DELETE' },
-    )
-    if (!result.ok) setRowError(result.error ?? 'Delete failed')
-    else { markRemoved(userId); await reload() }
-    setBusyUserId(null)
+  function deleteUserSystemWide(userId: string, email: string | null, label: string) {
+    queuePendingAction({
+      type:    'sys-delete',
+      userId,
+      email,
+      label,
+      message: `Deleted ${label} from Soteria FIELD entirely`,
+    })
+  }
+
+  async function copyTempPassword() {
+    if (!inviteResult?.tempPassword) return
+    try { await navigator.clipboard.writeText(inviteResult.tempPassword) }
+    catch { /* clipboard blocked — user can still select-all */ }
   }
 
   return (
@@ -246,12 +348,21 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
                 </p>
               )}
               {inviteResult.tempPassword && (
-                <p className="mt-2 text-emerald-800 dark:text-emerald-200 text-xs">
-                  Temporary password — copy if email failed:
+                <div className="mt-2 text-emerald-800 dark:text-emerald-200 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Temporary password — copy if email failed:</span>
+                    <button
+                      type="button"
+                      onClick={copyTempPassword}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-200 dark:bg-emerald-900/40 text-emerald-900 dark:text-emerald-200 hover:bg-emerald-300 dark:hover:bg-emerald-900/60 transition-colors"
+                    >
+                      <Copy className="h-3 w-3" /> Copy
+                    </button>
+                  </div>
                   <code className="block mt-1 p-2 bg-emerald-100 dark:bg-emerald-900/40 rounded font-mono text-sm select-all">
                     {inviteResult.tempPassword}
                   </code>
-                </p>
+                </div>
               )}
             </div>
           </div>
@@ -279,7 +390,12 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
               <li key={m.user_id} className="py-3 flex items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{label}</p>
+                    <Link
+                      href={`/superadmin/users/${m.user_id}`}
+                      className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate hover:text-brand-navy dark:hover:text-brand-yellow transition-colors"
+                    >
+                      {label}
+                    </Link>
                     <StatusBadge status={m.status} />
                   </div>
                   {m.email && m.full_name && (
@@ -300,28 +416,54 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
                   >
                     {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
-                  {invited ? (
+                  {/* Transfer ownership: only on non-owner rows AND when
+                      there's actually a current owner to transfer FROM. */}
+                  {m.role !== 'owner' && members.some(o => o.role === 'owner') && (
                     <button
                       type="button"
-                      onClick={() => cancelInvite(m.user_id, label)}
+                      onClick={() => transferOwnership(m.user_id, label)}
                       disabled={busy}
-                      aria-label={`Cancel invite for ${label}`}
-                      title="Cancel invite (deletes the account)"
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors disabled:opacity-50"
+                      aria-label={`Transfer ownership to ${label}`}
+                      title="Make this user the sole owner (existing owner becomes admin)"
+                      className="text-slate-400 dark:text-slate-500 hover:text-brand-yellow transition-colors disabled:opacity-50"
                     >
-                      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
-                      Cancel
+                      <Crown className="h-4 w-4" />
                     </button>
+                  )}
+                  {invited ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => resendInvite(m.user_id, label)}
+                        disabled={busy}
+                        aria-label={`Resend invite to ${label}`}
+                        title="Generate a fresh temp password and re-email the invite"
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-brand-navy dark:text-brand-yellow bg-brand-navy/5 dark:bg-brand-navy/20 hover:bg-brand-navy/10 dark:hover:bg-brand-navy/30 transition-colors disabled:opacity-50"
+                      >
+                        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+                        Resend
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => cancelInvite(m.user_id, label)}
+                        disabled={busy}
+                        aria-label={`Cancel invite for ${label}`}
+                        title="Cancel invite (deletes the account) — undoable for 30s"
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors disabled:opacity-50"
+                      >
+                        <X className="h-3.5 w-3.5" /> Cancel
+                      </button>
+                    </>
                   ) : (
                     <button
                       type="button"
                       onClick={() => removeMember(m.user_id, label)}
                       disabled={busy}
                       aria-label={`Remove ${label} from this tenant`}
-                      title="Remove from this tenant (account stays)"
+                      title="Remove from this tenant (account stays) — undoable for 30s"
                       className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors disabled:opacity-50"
                     >
-                      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   )}
                   <button
@@ -329,16 +471,25 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
                     onClick={() => deleteUserSystemWide(m.user_id, m.email, label)}
                     disabled={busy}
                     aria-label={`Delete ${label} from system`}
-                    title="Delete from Soteria FIELD entirely"
-                    className="text-slate-300 dark:text-slate-600 hover:text-rose-700 dark:hover:text-rose-400 transition-colors disabled:opacity-50 text-[10px] uppercase tracking-wider font-bold"
+                    title="Delete from Soteria FIELD entirely — undoable for 30s"
+                    className="text-slate-300 dark:text-slate-600 hover:text-rose-700 dark:hover:text-rose-400 transition-colors disabled:opacity-50"
                   >
-                    Sys
+                    <MoreVertical className="h-4 w-4" />
                   </button>
                 </div>
               </li>
             )
           })}
         </ul>
+      )}
+
+      {pending && (
+        <UndoToast
+          key={pending.userId}
+          message={pending.message}
+          onCommit={() => commitPending(pending)}
+          onUndo={undoPending}
+        />
       )}
     </Section>
   )
