@@ -86,31 +86,31 @@ Kept here so nothing leaks out of the plan.
 - **Blocks**: The "tap reset-password email link → app opens"
   smoke step.
 
-### D2.4 — Mobile Metro bundler: hoist expo-router so babel-preset-expo finds it
-- **Why deferred**: `expo export --platform ios` (and `expo start`)
-  fails to bundle `expo-router/_ctx.ios.js` because
-  `require.context(process.env.EXPO_ROUTER_APP_ROOT, …)` doesn't
-  get transformed. Root cause: `babel-preset-expo` resolves at the
-  root hoisted `/node_modules/`, where it calls
+### ~~D2.4 — Mobile Metro bundler: hoist expo-router so babel-preset-expo finds it~~ — RESOLVED
+- **Original problem**: `expo export --platform ios` (and `expo
+  start`) failed to bundle `expo-router/_ctx.ios.js` because
+  `require.context(process.env.EXPO_ROUTER_APP_ROOT, …)` was not
+  being transformed. Root cause: `babel-preset-expo` resolves at
+  the hoisted root `/node_modules/`, where it calls
   `require.resolve('expo-router')` to decide whether to register
   the babel plugin that inlines `EXPO_ROUTER_APP_ROOT`. But
-  `expo-router` lands in `apps/mobile/node_modules/expo-router`
-  (not hoisted), so the resolve fails and the plugin never
-  registers. This is the classic Expo + npm-workspaces
-  hoisting-mismatch bug.
-- **Action**: Pick one:
-  1. Add `expo-router` as a top-level dep of the root
-     `package.json` so it hoists.
-  2. Switch to pnpm + `public-hoist-pattern[]=*expo*` (resolves
-     D0.2 too).
-  3. Adopt the official Solito + Expo + Next.js monorepo template
-     wholesale — it pre-solves Metro `transformer.babelTransformerPath`
-     and the resolver paths.
-- **Blocks**: Any `expo export` / `expo start` / EAS Build —
-  i.e. all device verification (D2.1) and any subsequent mobile
-  development.
-- **Files**: `package.json` (root) and/or
-  `apps/mobile/metro.config.js`.
+  `expo-router` landed in `apps/mobile/node_modules/expo-router`
+  (npm wouldn't hoist it because of an unrelated React version
+  conflict), so the resolve failed and the plugin never registered.
+- **Resolution**: Pinned `expo-router` as a top-level dependency
+  in the root `package.json`. `npm install` then hoists it to
+  `/node_modules/expo-router`, where babel-preset-expo's
+  `require.resolve('expo-router')` succeeds and the plugin chain
+  fires correctly.
+- **Verification**: `npx expo export --platform ios|android`
+  from `apps/mobile/` both bundle cleanly (4.15 MB Hermes
+  bytecode each). Web vitest still 1078/1078 green.
+- **Note for future maintainers**: The root pin is _not_ a
+  regular consumer dependency — nothing at the monorepo root
+  imports from `expo-router`. It exists solely to coerce npm
+  workspaces into hoisting it so the babel plugin chain works.
+  Same trick may be needed for any future Expo plugin that does
+  `require.resolve('expo-…')` from a hoisted location.
 
 ### D2.3 — Apple Developer Program enrollment + Bundle ID claim
 - **Why deferred**: Paid annual program ($99/yr); requires user

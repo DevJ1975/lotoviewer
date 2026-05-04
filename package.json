@@ -12,5 +12,8 @@
     "start": "npm --workspace web run start",
     "lint": "npm --workspace web run lint",
     "test": "npm --workspace web run test"
+  },
+  "dependencies": {
+    "expo-router": "~6.0.23"
   }
 }
