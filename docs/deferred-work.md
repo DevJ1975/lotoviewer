@@ -123,12 +123,12 @@ Kept here so nothing leaks out of the plan.
   Same trick may be needed for any future Expo plugin that does
   `require.resolve('expo-…')` from a hoisted location.
 
-### D2.3 — Apple Developer Program enrollment + Bundle ID claim
-- **Why deferred**: Paid annual program ($99/yr); requires user
-  identity + DUNS or individual signup.
-- **Action**: User enrolls and reserves
-  `com.soteriafield.app` in App Store Connect.
-- **Blocks**: TestFlight build upload.
+### ~~D2.3 — Apple Developer Program enrollment + Bundle ID claim~~ — RESOLVED
+- **Resolution**: User confirmed already enrolled in the Apple
+  Developer Program. Reserve `com.soteriafield.app` in App Store
+  Connect → My Apps → New App when ready to upload the first
+  TestFlight build.
+- **Unblocks**: D2.1 (TestFlight build upload).
 
 ## Conventions
 
