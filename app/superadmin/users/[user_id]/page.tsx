@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { use, useEffect, useState } from 'react'
+import { use, useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, Loader2, AlertCircle, Mail, Calendar, Clock } from 'lucide-react'
 import { superadminJson } from '@/lib/superadminFetch'
 import type { TenantRole } from '@/lib/types'
@@ -34,16 +34,16 @@ export default function MemberDetailPage({ params }: { params: Promise<{ user_id
   const [user, setUser]     = useState<UserDetail | null>(null)
   const [error, setError]   = useState<string | null>(null)
 
-  useEffect(() => { void load() /* eslint-disable-next-line */ }, [user_id])
-
-  async function load() {
+  const load = useCallback(async () => {
     setError(null); setUser(null)
     const result = await superadminJson<{ user: UserDetail }>(
       `/api/superadmin/users/${user_id}`, { method: 'GET' },
     )
     if (!result.ok || !result.body) { setError(result.error ?? 'Could not load user'); return }
     setUser(result.body.user)
-  }
+  }, [user_id])
+
+  useEffect(() => { void load() }, [load])
 
   if (error) {
     return (

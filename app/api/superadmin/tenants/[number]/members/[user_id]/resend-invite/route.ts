@@ -68,7 +68,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     }, { status: 409 })
   }
   if (!email) {
-    return NextResponse.json({ error: 'User has no email on file' }, { status: 500 })
+    // No email on file → either the auth.users row doesn't exist
+    // anymore (race with a delete) or the row exists with a null email
+    // (corrupted state). Either way it's not a server fault — return
+    // 404 so the UI shows "user not found" rather than "server error."
+    return NextResponse.json({ error: 'User has no email on file' }, { status: 404 })
   }
 
   // Rotate password + force change on next login.

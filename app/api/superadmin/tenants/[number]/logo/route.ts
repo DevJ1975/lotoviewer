@@ -76,6 +76,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
   const path = `${tenant.id}.${ext}`
   const arrayBuffer = await file.arrayBuffer()
 
+  // Delete previous-format objects FIRST. upsert=true overwrites the
+  // same path, but uploading PNG → JPEG creates a new path
+  // (`{id}.jpg`) and leaves the prior `{id}.png` orphaned forever.
+  // List objects matching `{id}.` and remove anything that isn't the
+  // target extension we're about to write.
+  const { data: existing } = await admin
+    .storage
+    .from('tenant-logos')
+    .list('', { search: tenant.id })
+  const stale = (existing ?? [])
+    .filter(o => o.name.startsWith(`${tenant.id}.`) && o.name !== path)
+    .map(o => o.name)
+  if (stale.length > 0) {
+    await admin.storage.from('tenant-logos').remove(stale)
+  }
+
   // upsert: same path overwrites (avoids stale objects when admin replaces
   // a PNG with a new PNG). The path stays stable across re-uploads which
   // means logo_url is also stable, but cache-busting is the public CDN's

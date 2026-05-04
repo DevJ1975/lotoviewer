@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2, AlertCircle, Users, Search } from 'lucide-react'
 import { superadminJson } from '@/lib/superadminFetch'
 import type { TenantRole } from '@/lib/types'
@@ -26,9 +26,7 @@ export function AllMembersPanel() {
   const [error, setError]   = useState<string | null>(null)
   const [search, setSearch] = useState('')
 
-  useEffect(() => { void load() }, [])
-
-  async function load() {
+  const load = useCallback(async () => {
     setError(null)
     const result = await superadminJson<{ users: UserRow[] }>(
       '/api/superadmin/users', { method: 'GET' },
@@ -39,7 +37,9 @@ export function AllMembersPanel() {
       return
     }
     setUsers(result.body.users)
-  }
+  }, [])
+
+  useEffect(() => { void load() }, [load])
 
   const filtered = useMemo(() => {
     if (!users) return []
