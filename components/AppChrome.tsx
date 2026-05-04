@@ -15,6 +15,7 @@ import UnloadGuard from '@/components/UnloadGuard'
 import IdleLogout from '@/components/IdleLogout'
 import StorageQuotaBanner from '@/components/StorageQuotaBanner'
 import AppDrawer from '@/components/AppDrawer'
+import TenantHeaderPill from '@/components/TenantHeaderPill'
 import { useAuth } from '@/components/AuthProvider'
 import { requestPersistentStorage } from '@/lib/platform'
 
@@ -71,6 +72,8 @@ export default function AppChrome({ children }: { children: ReactNode }) {
                 Soteria <span className="text-brand-yellow font-bold tracking-wider">FIELD</span>
               </span>
             </Link>
+
+            <TenantHeaderPill />
 
             <div className="hidden md:block flex-1 min-w-0 max-w-md">
               <GlobalSearch />
