@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Loader2, AlertCircle, CheckCircle2, UserPlus, X, Trash2 } from 'lucide-react'
 import { superadminJson } from '@/lib/superadminFetch'
 import type { TenantRole } from '@/lib/types'
@@ -33,6 +33,34 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
 
   const [busyUserId, setBusyUserId] = useState<string | null>(null)
   const [rowError,   setRowError]   = useState<string | null>(null)
+
+  // Optimistic removals — when a Cancel / Remove / Sys delete succeeds
+  // we hide the row immediately. The server-side mutation already
+  // succeeded; this just bridges the gap until reload() returns the
+  // fresh list. Once the reload arrives WITHOUT the user, we drop
+  // them from the set so the filter is a no-op going forward. If the
+  // user is somehow still in the reloaded list (unexpected — would
+  // mean the DB delete didn't actually take), we KEEP them hidden so
+  // the UI never lies about what the click did.
+  const [optimisticallyRemoved, setOptimisticallyRemoved] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    setOptimisticallyRemoved(prev => {
+      const next = new Set<string>()
+      for (const id of prev) {
+        if (members.some(m => m.user_id === id)) next.add(id)
+      }
+      return next
+    })
+  }, [members])
+
+  const visibleMembers = useMemo(
+    () => members.filter(m => !optimisticallyRemoved.has(m.user_id)),
+    [members, optimisticallyRemoved],
+  )
+
+  function markRemoved(userId: string) {
+    setOptimisticallyRemoved(prev => new Set([...prev, userId]))
+  }
 
   async function onInvite(e: FormEvent) {
     e.preventDefault()
@@ -87,7 +115,7 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
       { method: 'DELETE' },
     )
     if (!result.ok) setRowError(result.error ?? 'Remove failed')
-    else await reload()
+    else { markRemoved(userId); await reload() }
     setBusyUserId(null)
   }
 
@@ -108,6 +136,7 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
       if (result.body?.userDeleted === false && result.body.userDeleteError) {
         setRowError(`Membership removed but user delete failed: ${result.body.userDeleteError}`)
       }
+      markRemoved(userId)
       await reload()
     }
     setBusyUserId(null)
@@ -133,12 +162,12 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
       { method: 'DELETE' },
     )
     if (!result.ok) setRowError(result.error ?? 'Delete failed')
-    else await reload()
+    else { markRemoved(userId); await reload() }
     setBusyUserId(null)
   }
 
   return (
-    <Section title={`Members (${members.length})`}>
+    <Section title={`Members (${visibleMembers.length})`}>
       <div className="flex justify-end mb-3">
         <button
           type="button"
@@ -235,11 +264,11 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
         </div>
       )}
 
-      {members.length === 0 ? (
+      {visibleMembers.length === 0 ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">No members yet. Use the invite button above.</p>
       ) : (
         <ul className="divide-y divide-slate-100 dark:divide-slate-700">
-          {members.map(m => {
+          {visibleMembers.map(m => {
             const label    = m.full_name ?? m.email ?? m.user_id
             const busy     = busyUserId === m.user_id
             const invited  = m.status === 'invited'
