@@ -11,10 +11,31 @@ import { getFeature } from '@/lib/features'
 // page. RLS prevents data leakage at the DB layer; this guard is the UX
 // confirmation that the route shouldn't be reachable at all.
 //
-// Loading behavior: while TenantProvider is fetching, render children
-// optimistically. The page may flash briefly but RLS still protects data,
-// and the guard re-renders correctly once tenant resolves. Better than
-// flashing a spinner for every route load.
+// LEARN: This component is a textbook "render-prop wrapper":
+//   - Takes children + a small config (moduleId)
+//   - Decides whether to render those children OR replacement UI
+//   - Owns NO state of its own — it just reads from useTenant()
+//
+// REACT 101: A component that returns `<>{children}</>` is "transparent"
+// — its parent's layout flows through unchanged. That's why this can
+// be dropped into any module's layout.tsx without breaking anything.
+//
+// LOADING BEHAVIOR (worth understanding):
+//   While TenantProvider is fetching, we render children optimistically.
+//   Why not show a spinner? Two reasons:
+//     1. RLS still protects data even if the guard hasn't decided yet
+//        — the user can't see another tenant's rows just because the
+//        guard hasn't rendered.
+//     2. Flashing a spinner on EVERY route load (because the provider
+//        always loads briefly) feels janky. The trade-off is: in the
+//        rare case where the guard would have blocked, the page
+//        renders for ~50ms then swaps to the "not enabled" screen.
+//
+// RECOMMENDATION TO FUTURE-YOU: if the brief flash becomes a problem
+// (e.g. for very expensive child renders), add a `loadingFallback` prop
+// that lets the caller choose what to show during the loading window.
+// Don't change the default — the optimistic render is the correct
+// trade-off for cheap renders.
 
 interface Props {
   moduleId: string

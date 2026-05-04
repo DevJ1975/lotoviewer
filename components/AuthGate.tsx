@@ -6,7 +6,15 @@ import { Loader2 } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 
 // Routes that should render WITHOUT requiring an authenticated session.
-const PUBLIC_PATHS = new Set(['/login', '/welcome'])
+//
+// LEARN: Adding to this set is the SINGLE place to allow a route to be
+// reachable when signed-out. /forgot-password lets the user request a
+// reset link without logging in; /reset-password handles the magic
+// link from that email and the user technically becomes authenticated
+// momentarily (Supabase exchanges the token for a recovery session)
+// — but we still allow it as "public" so the redirect below doesn't
+// fight the recovery flow.
+const PUBLIC_PATHS = new Set(['/login', '/welcome', '/forgot-password', '/reset-password'])
 
 // Client-side guard. Supabase stores the session in localStorage, so checking
 // here (after the provider hydrates) matches the source of truth. A dedicated

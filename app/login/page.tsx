@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2, Mail } from 'lucide-react'
@@ -73,7 +74,15 @@ function LoginForm() {
           </label>
 
           <label className="block">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Password</span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Password</span>
+              <Link
+                href={`/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ''}`}
+                className="text-xs text-brand-navy dark:text-brand-yellow hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
             <div className="mt-1">
               <PasswordField
                 required
