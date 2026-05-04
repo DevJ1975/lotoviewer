@@ -102,6 +102,23 @@ describe('sendInviteEmail', () => {
     const text = sendMock.mock.calls[0][0].text as string
     expect(text).toMatch(/^Hi jane\.doe,/)
   })
+
+  it('renders the existing-user notification template when tempPassword is empty', async () => {
+    await sendInviteEmail({
+      to:           'jane@example.com',
+      fullName:     'Jane',
+      tempPassword: '',
+      loginUrl:     'https://soteriafield.app',
+      tenantName:   'WLS Demo',
+    })
+    const call = sendMock.mock.calls[0][0]
+    expect(call.subject).toBe("You've been added to WLS Demo on Soteria FIELD")
+    // Body mentions tenant + tells them to sign in with existing account;
+    // never references a one-time password.
+    expect(call.text).toContain('You\'ve been added to WLS Demo')
+    expect(call.text).toContain('Sign in with your existing account')
+    expect(call.text).not.toContain('Password')
+  })
 })
 
 describe('computeLoginUrl', () => {
