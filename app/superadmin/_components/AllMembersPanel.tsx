@@ -127,7 +127,12 @@ export function AllMembersPanel() {
                 return (
                   <tr key={u.user_id} className="hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors">
                     <td className="px-4 py-3 align-top">
-                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{label}</p>
+                      <Link
+                        href={`/superadmin/users/${u.user_id}`}
+                        className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate hover:text-brand-navy dark:hover:text-brand-yellow transition-colors"
+                      >
+                        {label}
+                      </Link>
                       {u.full_name && u.email && (
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate">{u.email}</p>
                       )}
