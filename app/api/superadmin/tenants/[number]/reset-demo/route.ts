@@ -70,7 +70,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     .eq('tenant_number', number)
     .maybeSingle()
   if (tErr) {
-    Sentry.captureException(tErr)
+    Sentry.captureException(tErr, { tags: { route: '/api/superadmin/tenants/[number]/reset-demo', stage: 'tenant-lookup' } })
     return NextResponse.json({ error: tErr.message }, { status: 500 })
   }
   if (!tenant) return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
@@ -103,7 +103,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
           skipped.push(t)
           continue
         }
-        Sentry.captureException(delErr)
+        Sentry.captureException(delErr, { tags: { route: '/api/superadmin/tenants/[number]/reset-demo', stage: 'wipe' } })
         return NextResponse.json({
           error: `Wipe failed at ${t}: ${delErr.message}`,
           wiped,
@@ -111,7 +111,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
       }
       wiped[t] = count ?? 0
     } catch (err) {
-      Sentry.captureException(err)
+      Sentry.captureException(err, { tags: { route: '/api/superadmin/tenants/[number]/reset-demo', stage: 'error' } })
       return NextResponse.json({
         error: `Unexpected error at ${t}`,
         wiped,
@@ -127,7 +127,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
   if (tenant.tenant_number === '0002') {
     const { data, error: seedErr } = await admin.rpc('seed_wls_demo')
     if (seedErr) {
-      Sentry.captureException(seedErr)
+      Sentry.captureException(seedErr, { tags: { route: '/api/superadmin/tenants/[number]/reset-demo', stage: 'rpc-seed' } })
       return NextResponse.json({
         error: `Re-seed failed: ${seedErr.message}`,
         wiped,

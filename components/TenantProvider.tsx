@@ -100,11 +100,34 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     setAvailable(list)
 
     // Pick the active tenant: stored choice if still valid, else first.
+    // B3: if the previously-active tenant disappeared from the user's
+    // memberships (disabled OR removed), force a sign-out + reload so
+    // they get a clean session rather than silently empty pages.
     const stored = readStoredTenantId()
+    const previouslyActive = stored
     const pick = list.find(t => t.id === stored) ?? list[0] ?? null
     setTenantId(pick?.id ?? null)
     if (pick && pick.id !== stored) writeStoredTenantId(pick.id)
     setLoading(false)
+
+    if (
+      previouslyActive
+      && !list.find(t => t.id === previouslyActive)
+      // Don't fire for the "first sign-in / no stored tenant" case OR
+      // the "superadmin viewing a non-member tenant" case (the lazy
+      // externalTenant fetch handles that path).
+      && list.length > 0
+    ) {
+      console.warn('[tenant] previously-active tenant is no longer available — signing out')
+      if (typeof window !== 'undefined') {
+        // window.alert is intentional — a toast would race with the
+        // forced sign-out + redirect. Replace with a proper modal once
+        // the app has a global toast surface.
+        alert('Your access to that tenant has been changed. Signing you out.')
+        await supabase.auth.signOut()
+        window.location.href = '/login'
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -125,7 +148,17 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     // For non-superadmins this still falls through with a warning since
     // RLS would reject their reads anyway.
     writeStoredTenantId(id)
-    setTenantId(id)
+    // B1: hard reload after writing the new active tenant. This drops
+    // any in-flight requests carrying the old x-active-tenant header
+    // so a slow query can't return after the switch and render data
+    // labelled as the new tenant. Heavy-handed UX (one extra page
+    // load) but avoids per-component request-id plumbing across the
+    // ~150 .from('loto_*') call sites. Quiet no-op in SSR.
+    if (typeof window !== 'undefined') {
+      window.location.reload()
+    } else {
+      setTenantId(id)
+    }
   }, [userId])
 
   const refresh = useCallback(async () => {

@@ -59,7 +59,8 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ user_id: str
 
   const { error } = await admin.auth.admin.deleteUser(user_id)
   if (error) {
-    Sentry.captureException(error)
+    Sentry.captureException(error,
+      { tags: { route: '/api/superadmin/users/[user_id]', stage: 'delete' } })
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
   return NextResponse.json({ ok: true })

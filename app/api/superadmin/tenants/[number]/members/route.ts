@@ -73,13 +73,20 @@ export async function GET(req: Request, ctx: { params: Promise<{ number: string 
   }
 
   // Enrich with auth.users data — last_sign_in_at — via the admin auth API.
-  // listUsers paginates at 50 by default; we fetch all and look up by id.
-  // For tenants with > 50 members this'd need to page; acceptable for now.
-  const { data: authData, error: aErr } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 })
-  if (aErr) return NextResponse.json({ error: aErr.message }, { status: 500 })
-  const lastSignInByUserId = new Map<string, string | null>(
-    (authData?.users ?? []).map(u => [u.id, u.last_sign_in_at ?? null]),
-  )
+  // Pages through listUsers in 200-row batches so tenants with > 200
+  // members don't lose status enrichment for the rest. Hard cap at 50
+  // pages (10k users) to bound the worst case.
+  const lastSignInByUserId = new Map<string, string | null>()
+  const PAGE_SIZE = 200
+  const MAX_PAGES = 50
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const { data: authData, error: aErr } =
+      await admin.auth.admin.listUsers({ page, perPage: PAGE_SIZE })
+    if (aErr) return NextResponse.json({ error: aErr.message }, { status: 500 })
+    const users = authData?.users ?? []
+    for (const u of users) lastSignInByUserId.set(u.id, u.last_sign_in_at ?? null)
+    if (users.length < PAGE_SIZE) break  // last page
+  }
 
   const enriched: EnrichedMember[] = ((rows ?? []) as unknown as RawRow[]).map(r => {
     const p = Array.isArray(r.profiles) ? r.profiles[0] ?? null : r.profiles
@@ -136,7 +143,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     .eq('tenant_number', number)
     .maybeSingle()
   if (tErr) {
-    Sentry.captureException(tErr)
+    Sentry.captureException(tErr, { tags: { route: '/api/superadmin/tenants/[number]/members', stage: 'tenant-lookup' } })
     return NextResponse.json({ error: tErr.message }, { status: 500 })
   }
   if (!tenant) return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
@@ -191,7 +198,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
         error: `${email} is already a member of this tenant`,
       }, { status: 409 })
     }
-    Sentry.captureException(insertErr)
+    Sentry.captureException(insertErr, { tags: { route: '/api/superadmin/tenants/[number]/members', stage: 'membership-insert' } })
     return NextResponse.json({ error: insertErr.message }, { status: 500 })
   }
 

@@ -98,7 +98,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ number: strin
     .select('user_id, tenant_id, role, created_at, updated_at')
     .maybeSingle()
   if (error) {
-    Sentry.captureException(error)
+    Sentry.captureException(error, { tags: { route: '/api/superadmin/tenants/[number]/members/[user_id]', stage: 'error' } })
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
   return NextResponse.json({ membership: data })
@@ -154,14 +154,14 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ number: stri
     .eq('tenant_id', tenant.id)
     .eq('user_id', user_id)
   if (error) {
-    Sentry.captureException(error)
+    Sentry.captureException(error, { tags: { route: '/api/superadmin/tenants/[number]/members/[user_id]', stage: 'error' } })
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
   if (alsoDeleteUser) {
     const { error: delUserErr } = await admin.auth.admin.deleteUser(user_id)
     if (delUserErr) {
-      Sentry.captureException(delUserErr)
+      Sentry.captureException(delUserErr, { tags: { route: '/api/superadmin/tenants/[number]/members/[user_id]', stage: 'auth-user-delete' } })
       // Don't 500 — the membership was already removed cleanly. Surface
       // the user-delete failure so the UI can warn the superadmin.
       return NextResponse.json({

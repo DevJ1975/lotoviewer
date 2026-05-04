@@ -74,7 +74,8 @@ export async function POST(req: Request) {
   // if the insert path doesn't return all columns by default.
   const { data: numRow, error: numErr } = await admin.rpc('next_tenant_number')
   if (numErr || typeof numRow !== 'string') {
-    Sentry.captureException(numErr ?? new Error('next_tenant_number returned non-string'))
+    Sentry.captureException(numErr ?? new Error('next_tenant_number returned non-string'),
+      { tags: { route: '/api/superadmin/tenants', stage: 'rpc-next-number' } })
     return NextResponse.json({ error: 'Could not allocate tenant number' }, { status: 500 })
   }
   const tenantNumber = numRow
@@ -101,7 +102,8 @@ export async function POST(req: Request) {
         error: `Slug "${slug}" is already taken`,
       }, { status: 409 })
     }
-    Sentry.captureException(insertErr)
+    Sentry.captureException(insertErr,
+      { tags: { route: '/api/superadmin/tenants', stage: 'insert' } })
     return NextResponse.json({ error: insertErr.message }, { status: 500 })
   }
 
