@@ -26,6 +26,8 @@ function makeEquipment(overrides: Partial<Equipment> = {}): Equipment {
     verified_date: null, verified_by: null,
     needs_equip_photo: false, needs_iso_photo: false, needs_verification: false,
     decommissioned: false,
+    annotations: [],
+    iso_annotations: [],
     created_at: null, updated_at: null,
     ...overrides,
   }

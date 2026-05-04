@@ -37,6 +37,8 @@ function permit(partial: Partial<ConfinedSpacePermit>): ConfinedSpacePermit {
     attendant_signature_at:        null,
     attendant_signature_name:      null,
     entrant_acknowledgement_at:    null,
+    work_order_ref:                null,
+    signon_token:                  null,
     created_at:                    new Date(NOW).toISOString(),
     updated_at:                    new Date(NOW).toISOString(),
     ...partial,

@@ -45,10 +45,29 @@ export function reconcileEquipment(prev: Equipment[], payload: RealtimePayload):
   return next
 }
 
+// Annotations are stored as JSON-array columns; Supabase materializes
+// them as a fresh JS array on every fetch, so a `!==` reference check
+// would reject the optimization for any equipment that has
+// annotations (i.e. every annotated row, every realtime tick). Compare
+// these two fields structurally so the optimization actually fires.
+const ARRAY_FIELDS: ReadonlyArray<keyof Equipment> = ['annotations', 'iso_annotations']
+
+function arraysShallowEqual(a: unknown[], b: unknown[]): boolean {
+  if (a.length !== b.length) return false
+  // JSON-compare is fine: typical placards have <10 annotation entries.
+  // Switch to a per-element structural compare if profiling ever
+  // surfaces this as hot.
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
 function shallowEqualEquipment(a: Equipment, b: Equipment): boolean {
   const keys = Object.keys(a) as (keyof Equipment)[]
   if (keys.length !== Object.keys(b).length) return false
   for (const k of keys) {
+    if (ARRAY_FIELDS.includes(k)) {
+      if (!arraysShallowEqual(a[k] as unknown[], b[k] as unknown[])) return false
+      continue
+    }
     if (a[k] !== b[k]) return false
   }
   return true

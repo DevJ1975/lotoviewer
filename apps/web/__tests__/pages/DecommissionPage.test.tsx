@@ -30,7 +30,11 @@ vi.mock('@/lib/supabase', () => ({
 // { data, error } shape. The `updateResponses` queue lets individual tests
 // script per-call PATCH results (needed for undo scenarios).
 type UpdateResp = {
-  data:  Array<{ equipment_id: string }> | null
+  // The page selects `equipment_id, decommissioned` after the PATCH so it
+  // can verify the persisted value matches what was written. Mock data
+  // mirrors that shape — both fields optional so individual tests can
+  // omit either one.
+  data:  Array<{ equipment_id: string; decommissioned?: boolean }> | null
   error: { message: string } | null
 }
 
@@ -95,6 +99,8 @@ function makeEquipment(overrides: Partial<Equipment> = {}): Equipment {
     needs_iso_photo:     false,
     needs_verification:  false,
     decommissioned: false,
+    annotations: [],
+    iso_annotations: [],
     created_at: null,
     updated_at: null,
     ...overrides,

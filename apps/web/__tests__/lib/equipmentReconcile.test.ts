@@ -26,6 +26,8 @@ function mk(id: string, overrides: Partial<Equipment> = {}): Equipment {
     needs_iso_photo:    true,
     needs_verification: true,
     decommissioned:     false,
+    annotations:     [],
+    iso_annotations:     [],
     created_at:         null,
     updated_at:         null,
     ...overrides,
