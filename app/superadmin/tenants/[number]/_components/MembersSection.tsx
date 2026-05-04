@@ -36,14 +36,30 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
   const [busyUserId, setBusyUserId] = useState<string | null>(null)
   const [rowError,   setRowError]   = useState<string | null>(null)
 
-  // Optimistic removals — when a Cancel / Remove / Sys delete succeeds
-  // we hide the row immediately. The server-side mutation already
-  // succeeded; this just bridges the gap until reload() returns the
-  // fresh list. Once the reload arrives WITHOUT the user, we drop
-  // them from the set so the filter is a no-op going forward. If the
-  // user is somehow still in the reloaded list (unexpected — would
-  // mean the DB delete didn't actually take), we KEEP them hidden so
-  // the UI never lies about what the click did.
+  // ── Optimistic removals — a key React pattern, worth understanding ──
+  //
+  // GOAL: when a destructive action succeeds, the row should disappear
+  // INSTANTLY, not after the next API reload completes. The user clicked
+  // Trash; the row should vanish so they know it took effect.
+  //
+  // PATTERN: maintain a Set of "ids we've removed but the prop hasn't
+  // caught up yet." Render `members` filtered through the set.
+  //
+  // INTERESTING WRINKLE: when the prop DOES catch up (next reload),
+  // we want to clean the set so it doesn't grow forever. But we
+  // ONLY clean ids that have actually disappeared from the prop. If
+  // the user is somehow STILL in members after a reload (DB delete
+  // silently failed, network hiccup), keep them hidden — the UI must
+  // never lie about what the click did.
+  //
+  // LEARN: passing a function to setState (`setX(prev => ...)`) is the
+  // safe way to compute the next value from the current one. It avoids
+  // stale-closure bugs when multiple updates happen quickly.
+  //
+  // RECOMMENDATION: if you ever need to rebuild this pattern, consider
+  // a small useReducer instead — `dispatch({type: 'remove', id})` and
+  // a single state update is easier to reason about than parallel sets.
+  // Not worth refactoring today; the Set approach is clear enough.
   const [optimisticallyRemoved, setOptimisticallyRemoved] = useState<Set<string>>(new Set())
   useEffect(() => {
     setOptimisticallyRemoved(prev => {
@@ -55,6 +71,10 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
     })
   }, [members])
 
+  // useMemo here memoizes the filtered array so its identity is stable
+  // when neither `members` nor the optimistic set changed. Without it,
+  // EVERY render produces a new filtered array, and any child that
+  // depends on `visibleMembers` re-renders unnecessarily.
   const visibleMembers = useMemo(
     () => members.filter(m => !optimisticallyRemoved.has(m.user_id)),
     [members, optimisticallyRemoved],

@@ -16,17 +16,55 @@ import type { Tenant, TenantRole } from '@/lib/types'
 // Active tenant state for the signed-in user. Mounted under AuthProvider in
 // app/layout.tsx so userId is available; refetches whenever userId changes.
 //
-// Tenant selection rules:
+// ── React patterns used here (worth understanding) ──────────────────────────
+//
+// 1. CONTEXT (createContext + Provider)
+//    `Ctx` is a Context object. Its <Provider value={...}> wraps the
+//    whole app, and `useTenant()` (defined at the bottom) lets ANY
+//    descendant read the current value without prop-drilling. Every
+//    time `value` is a different object reference, all consumers
+//    re-render — that's why we wrap `value` in useMemo below.
+//
+// 2. CALLBACK STABILITY (useCallback)
+//    `fetchAll` and `switchTenant` are wrapped in useCallback so their
+//    function identity stays the same across renders unless their deps
+//    change. Important because: a) they go into useMemo's value below
+//    so consumers don't re-render unnecessarily, and b) any consumer
+//    that uses them as a useEffect dep won't fire that effect on
+//    every render.
+//
+// 3. STATE (useState)
+//    Three pieces of state: `available` (memberships), `tenantId`
+//    (active id), `loading` (bool). Splitting state finely gives you
+//    finer re-render control than one big object.
+//
+// 4. EFFECTS (useEffect)
+//    The `useEffect(..., [userId, authLoading, fetchAll])` runs the
+//    fetch whenever the user logs in/out OR when fetchAll is rebuilt.
+//    Listing the deps honestly is non-negotiable — eslint's
+//    `react-hooks/exhaustive-deps` will warn if you miss one.
+//
+// 5. REFS (useRef) — see UndoToast.tsx for a deeper dive
+//    Not used here directly but the pattern is referenced: refs are
+//    for non-render data (timer handles, "did this commit fire yet").
+//    NEVER read or write a ref's `.current` during render — it bypasses
+//    React's update cycle.
+//
+// ── Tenant selection rules ──────────────────────────────────────────────────
 //   1. If sessionStorage has a tenant_id AND the user has membership in it,
-//      use it.
+//      use it (resumes the user's last active tenant).
 //   2. Else, the user's first membership row (most users have only one).
 //   3. If the user has zero memberships, tenant is null. AuthGate /
 //      first-run flow handles redirecting them.
+//   4. SUPERADMIN special case: stored tenant doesn't have to be a
+//      membership — header-scoped RLS in migration 032 still lets them
+//      see/edit. We lazy-fetch the tenant row via the `externalTenant`
+//      cache below.
 //
-// switchTenant(id) updates sessionStorage and refetches the active tenant
-// row (so modules / logo / name re-render). The sessionStorage key is
-// scoped to userId so different users on the same browser don't pick up
-// each other's last-active tenant.
+// switchTenant(id) updates sessionStorage and full-reloads the page (B1
+// fix — drops in-flight requests carrying the old x-active-tenant
+// header so a slow query can't return after the switch and render
+// data labelled as the new tenant).
 
 interface TenantState {
   tenantId:       string | null
@@ -53,6 +91,12 @@ const Ctx = createContext<TenantState>({
 // Single sessionStorage key for the active tenant. Also read by the
 // fetch wrapper in lib/supabase.ts which forwards it as the
 // x-active-tenant header so RLS can scope the result.
+//
+// LEARN: Reading sessionStorage outside React's state means the value
+// can drift from what React thinks it is. We always pair a
+// sessionStorage write with a setTenantId state update so React + storage
+// stay in sync. If you only updated storage, components wouldn't
+// re-render until something else triggered a render.
 function readStoredTenantId(): string | null {
   if (typeof window === 'undefined') return null
   try { return window.sessionStorage.getItem(ACTIVE_TENANT_KEY) } catch { return null }
@@ -203,6 +247,18 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
   const role = (tenant && 'role' in tenant ? tenant.role : null) as TenantRole | null
 
+  // LEARN: This useMemo is THE most important hook in the file.
+  //
+  // Without it, every render creates a new `value` object. React's
+  // <Ctx.Provider> uses Object.is() to decide whether the value
+  // changed; a new object every time means EVERY consumer re-renders
+  // on every render of TenantProvider — including all the tenant-
+  // scoped pages which can be expensive.
+  //
+  // The deps array lists every value referenced in the object literal.
+  // If you add a new field (e.g. `currentRole`), you MUST add it here
+  // too OR consumers won't see updates to it. The eslint plugin
+  // `react-hooks/exhaustive-deps` enforces this.
   const value = useMemo<TenantState>(() => ({
     tenantId,
     tenant,
@@ -216,4 +272,9 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 
+// LEARN: A custom hook is just a function that calls other hooks.
+// Convention: name starts with `use`. Wrapping useContext like this
+// gives consumers a single import (`useTenant`) instead of two
+// (`useContext` + the Context object), and lets us swap the underlying
+// implementation later without touching call sites.
 export function useTenant() { return useContext(Ctx) }

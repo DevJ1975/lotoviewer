@@ -8,17 +8,43 @@ import { Undo2, Loader2 } from 'lucide-react'
 // "click Undo" path. When the timer expires we invoke `onCommit`; if
 // the user clicks Undo we invoke `onUndo` and dismiss.
 //
+// ── React patterns demonstrated here (this file is a great study) ──────────
+//
+// REF vs STATE — when to use which:
+//   useState  → drives RE-RENDER. Use when the JSX needs to react to
+//               a value change.
+//   useRef    → does NOT drive re-render. Use for non-render data:
+//               timer handles, "did this fire yet" flags, latest-value
+//               snapshots that callbacks need to see without going
+//               through closures.
+//
+//   COMMON BUG: setting a ref's `.current` will NOT trigger a re-
+//   render. If your JSX needs to change, you need state.
+//
+//   COMMON BUG: reading state inside a long-lived closure (setTimeout
+//   callback, useEffect cleanup) gives you the value AT CLOSURE TIME,
+//   not the latest. Refs solve this — the `.current` is shared.
+//
+//   This file uses BOTH for the `dismissed` signal:
+//     - `dismissed` STATE drives the JSX hide (return null)
+//     - `dismissedRef` MIRRORS state for the timer + cleanup so they
+//       see the latest value without restarting on every render.
+//
+// USEEFFECT cleanup pattern:
+//   The function you return from useEffect runs when the effect
+//   re-runs (deps changed) OR when the component unmounts. We use it
+//   here to:
+//     a) clear the setTimeout/setInterval handles (so timers don't
+//        fire after unmount and call setState on a dead component)
+//     b) commit defensively on unmount (the "user navigated away
+//        before clicking Undo" case)
+//
 // Pattern in MembersSection:
-//   1. User clicks Remove → membership row hidden optimistically + a
-//      pending action is queued (NO API call yet)
+//   1. User clicks Remove → row hidden optimistically + pending
+//      action queued (NO API call yet)
 //   2. UndoToast shows "Removed Bob — Undo (30s)"
 //   3. After 30s the toast fires `onCommit` which calls the API
 //   4. If the user clicks Undo, the row un-hides (no API call ever)
-//
-// On unmount with neither undo nor commit having fired we commit
-// defensively — preserves the user's intent if they navigate away.
-// We use refs (not closure-captured state) so the unmount path sees
-// the LATEST values, not the snapshot from when the effect first ran.
 
 interface Props {
   message: string
