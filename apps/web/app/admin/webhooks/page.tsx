@@ -6,7 +6,7 @@ import { ArrowLeft, Webhook, Loader2, Trash2, Plus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
-import type { WebhookEvent, WebhookSubscription } from '@/lib/types'
+import type { WebhookEvent, WebhookSubscription } from '@soteria/core/types'
 
 // Outbound webhook management. Admin-only at the route level (RLS in
 // migration 013 also enforces admin on the table itself, so even direct

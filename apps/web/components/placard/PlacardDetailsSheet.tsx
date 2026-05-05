@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Sheet } from '@/components/ui/sheet'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 import { isOffline, OFFLINE_WRITE_MESSAGE } from '@/lib/netGuard'
 
 type PlacardPatch = {

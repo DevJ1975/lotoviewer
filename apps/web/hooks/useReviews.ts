@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { LotoReview } from '@/lib/types'
+import type { LotoReview } from '@soteria/core/types'
 
 export function useReviews(department: string) {
   const [reviews, setReviews]   = useState<LotoReview[]>([])

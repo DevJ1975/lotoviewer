@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/components/AuthProvider'
 import { timeOfDayGreeting } from '@/components/Greeting'
-import { fetchHomeMetrics, type HomeMetrics } from '@/lib/homeMetrics'
+import { fetchHomeMetrics, type HomeMetrics } from '@soteria/core/homeMetrics'
 import ThemeToggle from '@/components/ThemeToggle'
 import { Hero }                 from './Hero'
 import { CriticalAlertBanner }  from './CriticalAlertBanner'
@@ -16,6 +16,8 @@ import { RecentActivityPanel }  from './RecentActivityPanel'
 import { ComingSoonStrip }      from './ComingSoonStrip'
 import { ModulesGrid }          from './ModulesGrid'
 import RiskKpiPanel             from './RiskKpiPanel'
+import NearMissKpiPanel         from './NearMissKpiPanel'
+import JhaKpiPanel              from './JhaKpiPanel'
 
 // Multi-module dashboard — the legacy default home rendered by
 // app/page.tsx for tenants who use more than one safety module.
@@ -137,6 +139,14 @@ export default function MultiModuleDashboard() {
       {/* Risk Intelligence — visibility-gated; no-op when the
           tenant's modules.risk-assessment is false. */}
       <RiskKpiPanel />
+
+      {/* Near-Miss Intelligence — same gating pattern, mounts only
+          when the tenant has near-miss visible. */}
+      <NearMissKpiPanel />
+
+      {/* JHA Intelligence — same gating pattern, mounts only when
+          the tenant has jha visible. */}
+      <JhaKpiPanel />
 
       <ComingSoonStrip />
       <ModulesGrid />

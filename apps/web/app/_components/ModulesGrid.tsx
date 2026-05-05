@@ -1,8 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { getModules } from '@/lib/features'
-import { isModuleVisible } from '@/lib/moduleVisibility'
+import { getModules } from '@soteria/core/features'
+import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { useTenant } from '@/components/TenantProvider'
 
 // Module navigation grid — deemphasized at the bottom of the dashboard

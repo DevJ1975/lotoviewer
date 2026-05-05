@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import PlacardView from '@/components/placard/PlacardView'
 import Toast from '@/components/Toast'
 import { useToast } from '@/hooks/useToast'
-import type { Equipment, LotoEnergyStep } from '@/lib/types'
+import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 
 interface Props {
   equipment: Equipment | null

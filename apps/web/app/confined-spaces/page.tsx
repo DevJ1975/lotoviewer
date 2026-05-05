@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import type { ConfinedSpace, ConfinedSpaceClassification, ConfinedSpaceType } from '@/lib/types'
-import { SPACE_TYPE_LABELS, CLASSIFICATION_LABELS } from '@/lib/confinedSpaceLabels'
+import type { ConfinedSpace, ConfinedSpaceClassification, ConfinedSpaceType } from '@soteria/core/types'
+import { SPACE_TYPE_LABELS, CLASSIFICATION_LABELS } from '@soteria/core/confinedSpaceLabels'
 import { DepartmentPicker } from '@/components/DepartmentPicker'
 
 // First slice of the Confined Space module per OSHA 29 CFR 1910.146.

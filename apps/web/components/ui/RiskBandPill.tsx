@@ -15,7 +15,7 @@
 // additional belt-and-suspenders for severe color-blindness.
 
 import { cn } from '@/lib/utils'
-import { colorFor, type Band } from '@/lib/risk'
+import { colorFor, type Band } from '@soteria/core/risk'
 
 interface Props {
   band:    Band

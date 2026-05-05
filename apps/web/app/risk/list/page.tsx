@@ -7,7 +7,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { parseRiskFilters, toApiParams, type RiskFilterState } from '@/lib/risk-filters'
-import { readRiskConfig } from '@/lib/risk'
+import { readRiskConfig } from '@soteria/core/risk'
 import RiskFilters from '../_components/RiskFilters'
 import RiskTable from '../_components/RiskTable'
 import type { RiskSummary } from '@soteria/core/queries/risks'
@@ -94,6 +94,12 @@ function RiskListPageInner() {
             Risk register
           </h1>
         </div>
+        <Link
+          href="/risk/import"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-brand-navy hover:underline"
+        >
+          Bulk import →
+        </Link>
       </header>
 
       <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5">

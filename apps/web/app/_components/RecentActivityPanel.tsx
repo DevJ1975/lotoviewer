@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import type { ActivityEvent } from '@/lib/homeMetrics'
+import type { ActivityEvent } from '@soteria/core/homeMetrics'
 
 // Recent audit-log feed. Admin-only at the data layer (RLS) — for non-
 // admin users this just shows an empty-state copy.

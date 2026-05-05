@@ -11,7 +11,7 @@ import {
 } from 'react'
 import { supabase, ACTIVE_TENANT_KEY } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
-import type { Tenant, TenantRole } from '@/lib/types'
+import type { Tenant, TenantRole } from '@soteria/core/types'
 
 // Active tenant state for the signed-in user. Mounted under AuthProvider in
 // app/layout.tsx so userId is available; refetches whenever userId changes.

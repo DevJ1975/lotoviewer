@@ -9,7 +9,7 @@ import {
   getChildren,
   resolveFeatureFlags,
   type FeatureCategory,
-} from '@/lib/features'
+} from '@soteria/core/features'
 
 const CATEGORIES: FeatureCategory[] = ['safety', 'reports', 'admin']
 
@@ -73,17 +73,13 @@ describe('isFeatureAccessible', () => {
     expect(isFeatureAccessible('cs-status-board')).toBe(true)
   })
 
-  it('returns false for coming-soon features even though they are enabled', () => {
-    // The whole point of the helper — distinguishes "visible" from
-    // "clickable" so route guards fail closed against advertised-only
-    // features. (hot-work flipped to live in batch G-2; near-miss
-    // and jha remain Coming Soon.)
-    expect(isFeatureAccessible('near-miss')).toBe(false)
-    expect(isFeatureAccessible('jha')).toBe(false)
-  })
-
-  it('returns true for hot-work now that the module is live', () => {
+  it('returns true for live modules', () => {
+    // Every safety module is live now — Coming Soon catalog is empty.
+    // (hot-work shipped in batch G-2; near-miss in slice 2 of its
+    // own module; jha in slice 2 of the JHA module.)
     expect(isFeatureAccessible('hot-work')).toBe(true)
+    expect(isFeatureAccessible('near-miss')).toBe(true)
+    expect(isFeatureAccessible('jha')).toBe(true)
   })
 
   it('returns false for unknown features', () => {
@@ -120,10 +116,13 @@ describe('getFeaturesByCategory', () => {
     ])
   })
 
-  it('includes coming-soon entries (they have enabled=true)', () => {
+  it('returns coming-soon entries with comingSoon=true when any exist', () => {
+    // Every safety module is live as of JHA slice 2 — the array is
+    // currently empty by design. Re-tighten this assertion the next
+    // time a module is added with comingSoon:true.
     const safety = getFeaturesByCategory('safety')
     const comingSoon = safety.filter(f => f.comingSoon)
-    expect(comingSoon.length).toBeGreaterThan(0)
+    for (const f of comingSoon) expect(f.enabled).toBe(true)
   })
 
   it('returns an empty array for a category with no enabled features', () => {

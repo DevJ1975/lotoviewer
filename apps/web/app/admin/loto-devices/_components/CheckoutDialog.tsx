@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import { useAuth } from '@/components/AuthProvider'
-import type { LotoDevice } from '@/lib/types'
+import type { LotoDevice } from '@soteria/core/types'
 
 // Modal for an admin to record a checkout on behalf of a worker. Picks
 // owner from the profile list. Equipment is free-text (not a select)

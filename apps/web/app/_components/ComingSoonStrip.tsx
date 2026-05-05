@@ -1,6 +1,6 @@
 'use client'
 
-import { getModules } from '@/lib/features'
+import { getModules } from '@soteria/core/features'
 import { useTenant } from '@/components/TenantProvider'
 
 // Advertises in-flight modules. Honors an explicit per-tenant

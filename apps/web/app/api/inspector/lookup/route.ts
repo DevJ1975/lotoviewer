@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { verifyInspectorToken, type InspectorTokenPayload } from '@/lib/inspectorToken'
-import type { ConfinedSpacePermit, HotWorkPermit } from '@/lib/types'
+import type { ConfinedSpacePermit, HotWorkPermit } from '@soteria/core/types'
 
 // POST /api/inspector/lookup
 // Stateless — no rate limit yet, but we do clamp the response shape so a

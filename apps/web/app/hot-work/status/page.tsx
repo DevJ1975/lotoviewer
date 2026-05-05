@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import type { HotWorkPermit } from '@/lib/types'
-import { hotWorkState, hotWorkCountdown, type HotWorkState } from '@/lib/hotWorkPermitStatus'
+import type { HotWorkPermit } from '@soteria/core/types'
+import { hotWorkState, hotWorkCountdown, type HotWorkState } from '@soteria/core/hotWorkPermitStatus'
 
 // Big-monitor status board for hot-work permits. Mirrors the CS status
 // board's structure (dark, large fonts, auto-refresh, stale-data banner,

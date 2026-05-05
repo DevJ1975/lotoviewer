@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { TrendingDown } from 'lucide-react'
-import type { SpaceFailureRow } from '@/lib/insightsMetrics'
+import type { SpaceFailureRow } from '@soteria/core/insightsMetrics'
 
 // Top spaces by atmospheric-test fail rate. The empty state matters here
 // — a brand-new deployment with no permits in the window should explain

@@ -1,8 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import type { ActivePermitSummary } from '@/lib/homeMetrics'
-import { permitCountdown, type CountdownTone } from '@/lib/permitStatus'
+import type { ActivePermitSummary } from '@soteria/core/homeMetrics'
+import { permitCountdown, type CountdownTone } from '@soteria/core/permitStatus'
 
 // Live list of active confined-space permits with a countdown timer per
 // row. `now` is passed in from the parent's 1Hz tick so all rows share

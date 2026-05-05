@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { energyCodeFor } from '@/lib/energyCodes'
+import { energyCodeFor } from '@soteria/core/energyCodes'
 import { Sheet } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
-import type { LotoEnergyStep } from '@/lib/types'
+import type { LotoEnergyStep } from '@soteria/core/types'
 
 interface Props {
   open:         boolean

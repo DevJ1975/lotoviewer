@@ -12,7 +12,7 @@ import {
   Cell,
 } from 'recharts'
 import { useAuth } from '@/components/AuthProvider'
-import { fetchScorecardMetrics, type ScorecardMetrics } from '@/lib/scorecardMetrics'
+import { fetchScorecardMetrics, type ScorecardMetrics } from '@soteria/core/scorecardMetrics'
 
 // EHS scorecard — the "what does my safety program look like over time"
 // view that an EHS director reads. Distinct from the home page (operational

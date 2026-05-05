@@ -3,7 +3,7 @@ import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { isValidRole, isValidTenantNumber } from '@/lib/validation/tenants'
-import type { TenantRole } from '@/lib/types'
+import type { TenantRole } from '@soteria/core/types'
 
 // PATCH  /api/superadmin/tenants/[number]/members/[user_id]
 //   Change role.

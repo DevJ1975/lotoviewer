@@ -241,10 +241,10 @@ export const FEATURES: FeatureDef[] = [
     id:          'near-miss',
     name:        'Near-Miss Reporting',
     description: 'Capture and track near-miss incidents',
-    href:        null,
+    href:        '/near-miss',
     category:    'safety',
     enabled:     true,
-    comingSoon:  true,
+    comingSoon:  false,
   },
   {
     id:          'hot-work',
@@ -269,10 +269,10 @@ export const FEATURES: FeatureDef[] = [
     id:          'jha',
     name:        'Job Hazard Analysis',
     description: 'Task-level hazard breakdowns',
-    href:        null,
+    href:        '/jha',
     category:    'safety',
     enabled:     true,
-    comingSoon:  true,
+    comingSoon:  false,
   },
 
   // ── Reports / oversight ─────────────────────────────────────────────────

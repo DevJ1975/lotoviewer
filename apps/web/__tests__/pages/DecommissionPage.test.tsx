@@ -3,7 +3,7 @@ import { render, screen, waitFor, fireEvent, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import { supabase } from '@/lib/supabase'
 import DecommissionPage from '@/app/decommission/page'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 
 // ─── Module mocks ────────────────────────────────────────────────────────────
 // Debounce → identity so search filters apply synchronously in tests. The

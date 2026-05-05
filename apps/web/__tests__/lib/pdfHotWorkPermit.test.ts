@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { PDFDocument } from 'pdf-lib'
 import { generateHotWorkPermitPdf } from '@/lib/pdfHotWorkPermit'
-import type { HotWorkPermit } from '@/lib/types'
+import type { HotWorkPermit } from '@soteria/core/types'
 
 // Smoke tests for the hot-work permit generator. Until this file existed
 // the only PDF coverage was the WinAnsi sanitiser; the 437-LOC generator

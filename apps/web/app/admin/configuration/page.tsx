@@ -5,9 +5,9 @@ import Link from 'next/link'
 import { ArrowLeft, Loader2, Settings } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
-import { formatWorkOrderUrl } from '@/lib/orgConfig'
+import { formatWorkOrderUrl } from '@soteria/core/orgConfig'
 import { formatSupabaseError } from '@/lib/supabaseError'
-import type { OrgConfig } from '@/lib/types'
+import type { OrgConfig } from '@soteria/core/types'
 
 // Org-level configuration. Two sections:
 //   - Work-order URL template (migration 014) — turns a free-text ref

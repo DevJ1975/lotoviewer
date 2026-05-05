@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AlertTriangle, ArrowRight, Loader2, ShieldAlert } from 'lucide-react'
-import { fetchRiskMetrics, type RiskMetrics } from '@/lib/riskMetrics'
+import { fetchRiskMetrics, type RiskMetrics } from '@soteria/core/riskMetrics'
 import { RiskBandPill } from '@/components/ui/RiskBandPill'
 import { useTenant } from '@/components/TenantProvider'
-import { isModuleVisible } from '@/lib/moduleVisibility'
+import { isModuleVisible } from '@soteria/core/moduleVisibility'
 
 // Risk Assessment intelligence panel for the home dashboard.
 //

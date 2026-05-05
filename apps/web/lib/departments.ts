@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { DepartmentStats, LotoReview } from './types'
+import type { DepartmentStats, LotoReview } from '@soteria/core/types'
 
 // Renames every equipment row in oldName to newName via a single bulk PATCH.
 // No-ops if the new name is empty or unchanged. Throws on Supabase error.

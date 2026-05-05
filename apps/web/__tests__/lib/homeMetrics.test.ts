@@ -16,7 +16,7 @@ import {
   type PermitSummaryRow,
   type PendingPermitRow,
   type HotWorkPermitRow,
-} from '@/lib/homeMetrics'
+} from '@soteria/core/homeMetrics'
 
 const NOW = new Date('2026-04-26T12:00:00Z').getTime()
 

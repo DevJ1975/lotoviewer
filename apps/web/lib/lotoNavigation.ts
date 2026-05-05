@@ -1,5 +1,5 @@
-import { needsPhoto } from '@/lib/photoStatus'
-import type { Equipment } from '@/lib/types'
+import { needsPhoto } from '@soteria/core/photoStatus'
+import type { Equipment } from '@soteria/core/types'
 
 // Pure helpers extracted from app/loto/page.tsx so the URL-builder and
 // auto-advance logic can be unit-tested without React. Both functions

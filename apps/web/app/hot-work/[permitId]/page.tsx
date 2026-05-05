@@ -11,17 +11,17 @@ import type {
   HotWorkCancelReason,
   HotWorkPermit,
   TrainingRecord,
-} from '@/lib/types'
+} from '@soteria/core/types'
 import {
   HOT_WORK_TYPE_LABELS,
   HOT_WORK_CANCEL_REASON_LABELS,
-} from '@/lib/types'
+} from '@soteria/core/types'
 import {
   hotWorkState,
   hotWorkCountdown,
   evaluateSignGates,
   type HotWorkState,
-} from '@/lib/hotWorkPermitStatus'
+} from '@soteria/core/hotWorkPermitStatus'
 import {
   validateHotWorkTraining,
   type HotWorkTrainingIssue,

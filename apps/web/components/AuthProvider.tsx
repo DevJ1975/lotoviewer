@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { Profile } from '@/lib/types'
+import type { Profile } from '@soteria/core/types'
 
 interface AuthState {
   userId:      string | null

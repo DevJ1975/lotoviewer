@@ -12,11 +12,11 @@ import type {
   Equipment,
   HotWorkPreChecks,
   HotWorkType,
-} from '@/lib/types'
+} from '@soteria/core/types'
 import {
   HOT_WORK_TYPE_LABELS,
-} from '@/lib/types'
-import { FIRE_EXTINGUISHER_TYPES } from '@/lib/hotWorkChecklist'
+} from '@soteria/core/types'
+import { FIRE_EXTINGUISHER_TYPES } from '@soteria/core/hotWorkChecklist'
 
 // New Hot Work Permit form. Creates a row in pending_signature state —
 // the actual sign happens on the detail page once the PAI has reviewed

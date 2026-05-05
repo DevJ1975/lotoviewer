@@ -16,7 +16,7 @@ import {
   type Band,
   type Severity,
   type Likelihood,
-} from '@/lib/risk'
+} from '@soteria/core/risk'
 
 // Risk scoring engine — full coverage of the 5x5 matrix + every
 // PDD §4.5 / §4.6 / §6.3 rule. The DB has parallel generated

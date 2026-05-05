@@ -29,9 +29,10 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url)
   const format = url.searchParams.get('format') ?? 'json'
-  if (format !== 'json') {
-    return NextResponse.json({ error: 'Unsupported format. Use ?format=json' }, { status: 400 })
+  if (format !== 'json' && format !== 'pdf') {
+    return NextResponse.json({ error: 'Unsupported format. Use ?format=json or ?format=pdf' }, { status: 400 })
   }
+  if (format === 'pdf') return handlePdf(req, gate)
 
   try {
     const admin = supabaseAdmin()
@@ -155,6 +156,57 @@ export async function GET(req: Request) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     Sentry.captureException(e, { tags: { route: 'risk/export/GET' } })
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// PDF branch — concise tabular register, one row per risk.
+// ───────────────────────────────────────────────────────────────────────────
+
+async function handlePdf(_req: Request, gate: { ok: true; userId: string; userEmail: string | null; tenantId: string; role: string }) {
+  try {
+    const { buildRiskRegisterPdf } = await import('@/lib/pdfRiskRegister')
+    const admin = supabaseAdmin()
+
+    const { data: tenantRow } = await admin
+      .from('tenants')
+      .select('id, name, tenant_number, slug')
+      .eq('id', gate.tenantId)
+      .maybeSingle()
+
+    const { data: risksRes, error: risksErr } = await admin
+      .from('risks')
+      .select('risk_number, title, hazard_category, status, inherent_band, inherent_score, residual_band, residual_score, next_review_date')
+      .eq('tenant_id', gate.tenantId)
+      .order('risk_number', { ascending: true })
+    if (risksErr) throw new Error(risksErr.message)
+
+    const generatedAt = new Date().toISOString()
+    const meta = {
+      tenantName:    tenantRow?.name ?? 'Tenant',
+      tenantNumber:  tenantRow?.tenant_number ?? '',
+      generatedAt,
+      generatedBy:   gate.userEmail,
+      totalRisks:    risksRes?.length ?? 0,
+    }
+
+    const bytes = await buildRiskRegisterPdf(meta, (risksRes ?? []) as never)
+
+    const slug = (tenantRow?.slug ?? gate.tenantId).replace(/[^a-z0-9-]/gi, '-')
+    const filename = `risk-register-${slug}-${generatedAt.slice(0, 10)}.pdf`
+
+    return new NextResponse(new Uint8Array(bytes), {
+      status: 200,
+      headers: {
+        'Content-Type':        'application/pdf',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Cache-Control':       'no-store',
+      },
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    Sentry.captureException(e, { tags: { route: 'risk/export/GET', format: 'pdf' } })
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

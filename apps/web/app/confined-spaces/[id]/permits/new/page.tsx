@@ -6,8 +6,8 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
-import type { ConfinedSpace } from '@/lib/types'
-import { effectiveThresholds, SITE_DEFAULTS } from '@/lib/confinedSpaceThresholds'
+import type { ConfinedSpace } from '@soteria/core/types'
+import { effectiveThresholds, SITE_DEFAULTS } from '@soteria/core/confinedSpaceThresholds'
 
 // Permit issuance — creates the row in `pending_signature` state. The
 // supervisor reviews the live permit page, takes the pre-entry atmospheric

@@ -1,11 +1,11 @@
 import { PDFDocument, PDFImage, StandardFonts, rgb } from 'pdf-lib'
-import { hexToRgb01 } from '@/lib/energyCodes'
-import { effectiveThresholds, evaluateTest } from '@/lib/confinedSpaceThresholds'
+import { hexToRgb01 } from '@soteria/core/energyCodes'
+import { effectiveThresholds, evaluateTest } from '@soteria/core/confinedSpaceThresholds'
 import type {
   AtmosphericTest,
   ConfinedSpace,
   ConfinedSpacePermit,
-} from '@/lib/types'
+} from '@soteria/core/types'
 import {
   AMBER, BLACK, EMERALD, FAINT, MARGIN, MUTED, NAVY, PAGE_H, PAGE_W, RED, RULE, SLATE, WHITE,
   createDrawCtx, drawBullets, drawDivider, drawKeyValue, drawSectionBar, embedQrCode,

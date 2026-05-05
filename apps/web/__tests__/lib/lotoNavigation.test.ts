@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildLotoUrl, findNextNeedsPhoto, LOTO_PATH } from '@/lib/lotoNavigation'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 
 // Test fixture builder. Spread-after-defaults so explicit nulls survive
 // (the same gotcha bit the photoStatus / homeMetrics tests).

@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import * as Sentry from '@sentry/nextjs'
-import { uploadPhotoForEquipment, type UploadType } from '@/lib/photoUpload'
+import { uploadPhotoForEquipment, type UploadType } from '@soteria/core/photoUpload'
 import {
   clearQueue,
   enqueueUpload,

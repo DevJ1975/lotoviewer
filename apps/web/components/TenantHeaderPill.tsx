@@ -6,7 +6,7 @@ import { ChevronDown, Check, Loader2 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
-import type { Tenant } from '@/lib/types'
+import type { Tenant } from '@soteria/core/types'
 
 // Tenant indicator + switcher in the app header. Three modes:
 //

@@ -1,8 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import type { HotWorkPermit } from '@/lib/types'
-import { hotWorkState } from '@/lib/hotWorkPermitStatus'
+import type { HotWorkPermit } from '@soteria/core/types'
+import { hotWorkState } from '@soteria/core/hotWorkPermitStatus'
 
 // Reverse cross-link of the FK on loto_hot_work_permits.associated_cs_permit_id.
 // Renders only when at least one hot-work permit points here. Shows

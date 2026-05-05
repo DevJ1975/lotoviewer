@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 import { loadPrintableEquipment } from '@/lib/queries/equipment'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'

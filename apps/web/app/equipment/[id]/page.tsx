@@ -12,7 +12,7 @@ import EditStepsSheet from '@/components/placard/EditStepsSheet'
 import SpanishTranslationSheet from '@/components/SpanishTranslationSheet'
 import { useSession } from '@/components/SessionProvider'
 import { useToast } from '@/hooks/useToast'
-import type { Equipment, LotoEnergyStep } from '@/lib/types'
+import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 import { AnnotatedPhoto } from '@/components/AnnotatedPhoto'
 import { parseAnnotations, type Annotation } from '@/lib/photoAnnotations'
 

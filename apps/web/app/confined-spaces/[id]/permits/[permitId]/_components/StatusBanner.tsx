@@ -1,7 +1,7 @@
 'use client'
 
-import type { ConfinedSpacePermit } from '@/lib/types'
-import { permitState } from '@/lib/confinedSpaceThresholds'
+import type { ConfinedSpacePermit } from '@soteria/core/types'
+import { permitState } from '@soteria/core/confinedSpaceThresholds'
 
 // Top-of-page status banner. Drives color and detail copy off the
 // derived `state` (active / pending_signature / canceled / expired).

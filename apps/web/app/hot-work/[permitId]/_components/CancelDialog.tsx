@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
-import type { HotWorkCancelReason, HotWorkPermit } from '@/lib/types'
-import { HOT_WORK_CANCEL_REASON_LABELS } from '@/lib/types'
+import type { HotWorkCancelReason, HotWorkPermit } from '@soteria/core/types'
+import { HOT_WORK_CANCEL_REASON_LABELS } from '@soteria/core/types'
 
 // Cancel + close-out dialog. The same form covers all cancel reasons —
 // the wording adapts (close-out vs. cancel-for-cause) so the supervisor

@@ -9,9 +9,9 @@ import type {
   ConfinedSpaceClassification,
   ConfinedSpaceType,
   ConfinedSpacePermit,
-} from '@/lib/types'
-import { permitState, SITE_DEFAULTS } from '@/lib/confinedSpaceThresholds'
-import { SPACE_TYPE_LABELS, CLASSIFICATION_LABELS } from '@/lib/confinedSpaceLabels'
+} from '@soteria/core/types'
+import { permitState, SITE_DEFAULTS } from '@soteria/core/confinedSpaceThresholds'
+import { SPACE_TYPE_LABELS, CLASSIFICATION_LABELS } from '@soteria/core/confinedSpaceLabels'
 import SpacePhotoSlot from '@/components/confined/SpacePhotoSlot'
 import { DepartmentPicker } from '@/components/DepartmentPicker'
 

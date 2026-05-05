@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2, AlertCircle, Users, Search } from 'lucide-react'
 import { superadminJson } from '@/lib/superadminFetch'
-import type { TenantRole } from '@/lib/types'
+import type { TenantRole } from '@soteria/core/types'
 
 interface UserRow {
   user_id:         string

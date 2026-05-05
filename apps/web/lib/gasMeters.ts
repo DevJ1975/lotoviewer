@@ -1,4 +1,4 @@
-import type { GasMeter } from '@/lib/types'
+import type { GasMeter } from '@soteria/core/types'
 
 // Pure helpers for the bump-test / calibration register from migration 012.
 // Kept tiny and side-effect-free so the test form can render the warning

@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { compressImage, heicToJpeg, isHeic } from '@/lib/imageUtils'
 import { useTenant } from '@/components/TenantProvider'
-import { confinedSpacePhotoPath } from '@/lib/storagePaths'
+import { confinedSpacePhotoPath } from '@soteria/core/storagePaths'
 
 // Photo slot for confined spaces. Simpler than PlacardPhotoSlot:
 //   • No subject validation (confined-space photos are diagnostic — interior

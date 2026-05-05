@@ -3,8 +3,8 @@ import {
   validateChecklist,
   checklistReady,
   FIRE_EXTINGUISHER_TYPES,
-} from '@/lib/hotWorkChecklist'
-import type { HotWorkPreChecks } from '@/lib/types'
+} from '@soteria/core/hotWorkChecklist'
+import type { HotWorkPreChecks } from '@soteria/core/types'
 
 // Convenience: a fully-passing checklist as a baseline for each test
 // to mutate one field at a time.

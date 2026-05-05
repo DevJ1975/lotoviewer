@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import type { TenantRole } from '@/lib/types'
+import type { TenantRole } from '@soteria/core/types'
 
 // GET    /api/superadmin/users/[user_id]
 //   Detail bundle: profile + auth.users metadata + memberships across

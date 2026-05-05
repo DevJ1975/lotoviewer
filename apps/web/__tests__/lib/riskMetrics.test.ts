@@ -8,7 +8,7 @@ import {
   highestAppliedControlByRisk,
   type RiskRowForMetrics,
   type RiskControlForMetrics,
-} from '@/lib/riskMetrics'
+} from '@soteria/core/riskMetrics'
 
 // All the riskMetrics.ts math tested without a DB. fetchRiskMetrics
 // itself is a thin Supabase wrapper over these pure helpers; the

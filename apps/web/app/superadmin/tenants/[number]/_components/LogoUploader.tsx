@@ -4,7 +4,7 @@ import Image from 'next/image'
 import { useState, type ChangeEvent } from 'react'
 import { Loader2, Upload, Trash2, AlertCircle } from 'lucide-react'
 import { superadminFetch, superadminJson } from '@/lib/superadminFetch'
-import type { Tenant } from '@/lib/types'
+import type { Tenant } from '@soteria/core/types'
 import { Section } from './Section'
 
 interface Props {

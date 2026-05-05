@@ -4,6 +4,7 @@ import {
   isActive,
   ageInDays,
   validateCreateInput,
+  deriveInherentScore,
   type NearMissRow,
 } from '@soteria/core/nearMiss'
 
@@ -95,6 +96,27 @@ describe('ageInDays', () => {
     const r = row({ reported_at: '2026-05-01T00:00:00Z', resolved_at: null })
     const now = new Date('2026-04-01T00:00:00Z')
     expect(ageInDays(r, now)).toBe(0)
+  })
+})
+
+describe('deriveInherentScore', () => {
+  // The map maps the 4-band severity onto the 1-5 severity axis used
+  // by the risk register, with a conservative likelihood=3 since a
+  // near-miss is a one-time observation. Catches accidental
+  // off-by-one drift if anyone adjusts the band thresholds.
+  // Maps the 4-band severity onto the 1-5 severity axis with a
+  // conservative likelihood=3 (single observation, no frequency
+  // data). Score lands in: low→6 moderate band, moderate→9 high
+  // band, high→12 high band, extreme→15 extreme band.
+  it.each([
+    ['low',      2],
+    ['moderate', 3],
+    ['high',     4],
+    ['extreme',  5],
+  ] as const)('maps %s to severity %i, likelihood always 3', (sev, expSev) => {
+    const r = deriveInherentScore(sev)
+    expect(r.severity).toBe(expSev)
+    expect(r.likelihood).toBe(3)
   })
 })
 

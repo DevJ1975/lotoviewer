@@ -16,14 +16,14 @@ import type {
   HotWorkPermit,
   OrgConfig,
   TrainingRecord,
-} from '@/lib/types'
-import { formatWorkOrderUrl } from '@/lib/orgConfig'
+} from '@soteria/core/types'
+import { formatWorkOrderUrl } from '@soteria/core/orgConfig'
 import {
   effectiveThresholds,
   evaluateTest,
   permitState,
   type ReadingStatus,
-} from '@/lib/confinedSpaceThresholds'
+} from '@soteria/core/confinedSpaceThresholds'
 import { validateTraining, type TrainingIssue } from '@/lib/trainingRecords'
 import { StatusBanner }          from './_components/StatusBanner'
 import { LinkedHotWorkBanner }   from './_components/LinkedHotWorkBanner'

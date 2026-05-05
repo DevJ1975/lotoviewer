@@ -10,7 +10,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
-import type { DepartmentStats } from '@/lib/types'
+import type { DepartmentStats } from '@soteria/core/types'
 
 interface Props {
   data: DepartmentStats[]

@@ -7,7 +7,7 @@ import { ChevronDown, Download, Loader2, Printer } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { parseRiskFilters, toApiParams, toUrlSearch, toQueryFilters, type RiskFilterState } from '@/lib/risk-filters'
-import { readRiskConfig, type Severity, type Likelihood } from '@/lib/risk'
+import { readRiskConfig, type Severity, type Likelihood } from '@soteria/core/risk'
 import HeatMapGrid from './_components/HeatMapGrid'
 import RiskFilters from './_components/RiskFilters'
 import RiskTable from './_components/RiskTable'
@@ -213,7 +213,7 @@ function ExportMenu() {
     return () => document.removeEventListener('mousedown', onClick)
   }, [open])
 
-  async function downloadJson() {
+  async function download(format: 'json' | 'pdf') {
     if (busy) return
     setBusy(true)
     try {
@@ -221,12 +221,13 @@ function ExportMenu() {
       const headers: Record<string, string> = {}
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
       if (tenant?.id)            headers['x-active-tenant'] = tenant.id
-      const res = await fetch('/api/risk/export?format=json', { headers })
+      const res = await fetch(`/api/risk/export?format=${format}`, { headers })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const blob = await res.blob()
+      const fallbackExt = format === 'pdf' ? 'pdf' : 'json'
       const filename = res.headers.get('content-disposition')
         ?.match(/filename="([^"]+)"/)?.[1]
-        ?? `risk-register-${new Date().toISOString().slice(0, 10)}.json`
+        ?? `risk-register-${new Date().toISOString().slice(0, 10)}.${fallbackExt}`
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -257,8 +258,21 @@ function ExportMenu() {
         <div className="absolute right-0 mt-1 w-64 bg-white dark:bg-slate-900 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 overflow-hidden z-10">
           <button
             type="button"
-            onClick={downloadJson}
+            onClick={() => download('pdf')}
             className="w-full flex items-start gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            <Download className="h-4 w-4 mt-0.5 shrink-0 text-slate-500" />
+            <div>
+              <div className="font-semibold">PDF register</div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                One row per risk · landscape Letter
+              </div>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => download('json')}
+            className="w-full flex items-start gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 dark:hover:bg-slate-800 border-t border-slate-100 dark:border-slate-800"
           >
             <Download className="h-4 w-4 mt-0.5 shrink-0 text-slate-500" />
             <div>

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import StatusBadge from './StatusBadge'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 
 type Filter  = 'all' | 'missing' | 'partial' | 'complete'
 type SortKey = 'equipment_id' | 'description' | 'photo_status'

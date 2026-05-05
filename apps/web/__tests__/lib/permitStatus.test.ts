@@ -6,8 +6,8 @@ import {
   summarize,
   TWO_HOURS_MS,
   THIRTY_MIN_MS,
-} from '@/lib/permitStatus'
-import type { ConfinedSpacePermit } from '@/lib/types'
+} from '@soteria/core/permitStatus'
+import type { ConfinedSpacePermit } from '@soteria/core/types'
 
 // Fixed reference time so every test is deterministic. All "now" inputs
 // are derived from this so we never get flaky behavior from real Date.now().

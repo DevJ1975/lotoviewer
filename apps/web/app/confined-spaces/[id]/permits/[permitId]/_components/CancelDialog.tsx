@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
-import type { CancelReason, ConfinedSpacePermit } from '@/lib/types'
-import { CANCEL_REASON_LABELS } from '@/lib/confinedSpaceLabels'
+import type { CancelReason, ConfinedSpacePermit } from '@soteria/core/types'
+import { CANCEL_REASON_LABELS } from '@soteria/core/confinedSpaceLabels'
 
 interface CancelProps {
   permit:          ConfinedSpacePermit

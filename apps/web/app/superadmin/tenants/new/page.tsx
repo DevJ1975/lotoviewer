@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useMemo, useState, type FormEvent } from 'react'
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react'
 import { superadminJson } from '@/lib/superadminFetch'
-import { getModules, type FeatureCategory, type FeatureDef } from '@/lib/features'
+import { getModules, type FeatureCategory, type FeatureDef } from '@soteria/core/features'
 
 // Create a new tenant. Submits to /api/superadmin/tenants which uses
 // requireSuperadmin() for both the env-allowlist check and the DB-flag

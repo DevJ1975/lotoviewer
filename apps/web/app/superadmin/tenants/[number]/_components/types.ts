@@ -2,7 +2,7 @@
 // sub-components. Kept in a separate file so the components don't have
 // to cross-import each other to share a row shape.
 
-import type { TenantRole } from '@/lib/types'
+import type { TenantRole } from '@soteria/core/types'
 
 export interface MemberRow {
   user_id:              string

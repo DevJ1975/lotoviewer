@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { resolveLandingPath } from '@/lib/landing'
-import type { Tenant } from '@/lib/types'
+import type { Tenant } from '@soteria/core/types'
 
 // Builds a Tenant fixture with sane defaults; pass `over` to flip
 // just the columns the test cares about.
@@ -34,6 +34,8 @@ describe('resolveLandingPath', () => {
         'confined-spaces': false,
         'hot-work':        false,
         'risk-assessment': false,
+        'near-miss':       false,
+        'jha':             false,
       },
     })
     expect(resolveLandingPath(t)).toBe('/loto')
@@ -67,7 +69,7 @@ describe('resolveLandingPath', () => {
     // Single-module tenant could auto-derive to /loto, but the
     // override should win — it's the explicit signal.
     const t = tenant({
-      modules:  { 'loto': true, 'confined-spaces': false, 'hot-work': false, 'risk-assessment': false },
+      modules:  { 'loto': true, 'confined-spaces': false, 'hot-work': false, 'risk-assessment': false, 'near-miss': false, 'jha': false },
       settings: { default_landing_path: '/status' },
     })
     expect(resolveLandingPath(t)).toBe('/status')
@@ -75,7 +77,7 @@ describe('resolveLandingPath', () => {
 
   it('ignores a malformed override that does not start with /', () => {
     const t = tenant({
-      modules:  { 'loto': true, 'confined-spaces': false, 'hot-work': false, 'risk-assessment': false },
+      modules:  { 'loto': true, 'confined-spaces': false, 'hot-work': false, 'risk-assessment': false, 'near-miss': false, 'jha': false },
       settings: { default_landing_path: 'https://evil.com/' },
     })
     expect(resolveLandingPath(t)).toBe('/loto')
@@ -83,7 +85,7 @@ describe('resolveLandingPath', () => {
 
   it('ignores an empty-string override', () => {
     const t = tenant({
-      modules:  { 'loto': true, 'confined-spaces': false, 'hot-work': false, 'risk-assessment': false },
+      modules:  { 'loto': true, 'confined-spaces': false, 'hot-work': false, 'risk-assessment': false, 'near-miss': false, 'jha': false },
       settings: { default_landing_path: '   ' },
     })
     expect(resolveLandingPath(t)).toBe('/loto')
@@ -103,6 +105,8 @@ describe('resolveLandingPath', () => {
         'confined-spaces': false,
         'hot-work':        false,
         'risk-assessment': false,
+        'near-miss':       false,
+        'jha':             false,
       },
     })
     expect(resolveLandingPath(t)).toBeNull()

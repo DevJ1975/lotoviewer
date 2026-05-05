@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 import AddEquipmentDialog from './AddEquipmentDialog'
 
 interface Props {

@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
-import { placardPdfPath } from '@/lib/storagePaths'
+import { placardPdfPath } from '@soteria/core/storagePaths'
 import { useWakeLock } from '@/hooks/useWakeLock'
-import type { Equipment, LotoEnergyStep } from '@/lib/types'
+import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 
 interface Props {
   open:      boolean

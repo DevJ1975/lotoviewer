@@ -2,7 +2,7 @@ import { renderHook, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { useReviews } from '@/hooks/useReviews'
 import { supabase } from '@/lib/supabase'
-import type { LotoReview } from '@/lib/types'
+import type { LotoReview } from '@soteria/core/types'
 
 vi.mock('@/lib/supabase', () => ({ supabase: { from: vi.fn() } }))
 

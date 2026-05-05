@@ -7,8 +7,8 @@ import {
   validateAcceptableConditions,
   SITE_DEFAULTS,
   type ThresholdSet,
-} from '@/lib/confinedSpaceThresholds'
-import type { AcceptableConditions, AtmosphericTest, ConfinedSpace, ConfinedSpacePermit } from '@/lib/types'
+} from '@soteria/core/confinedSpaceThresholds'
+import type { AcceptableConditions, AtmosphericTest, ConfinedSpace, ConfinedSpacePermit } from '@soteria/core/types'
 
 // Convenience builders for objects with optional fallback shapes.
 function mkSpace(overrides?: AcceptableConditions | null): Pick<ConfinedSpace, 'acceptable_conditions'> {

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { Camera, FileText, Plus } from 'lucide-react'
-import { isModuleVisible } from '@/lib/moduleVisibility'
+import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { useTenant } from '@/components/TenantProvider'
 
 // Three most common workflows. Sized for an iPad on a stand — 44pt+ tap

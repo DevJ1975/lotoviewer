@@ -6,7 +6,7 @@ import { ArrowLeft, GraduationCap, Loader2, Plus, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
 import { TRAINING_ROLE_LABELS } from '@/lib/trainingRecords'
-import type { TrainingRecord, TrainingRole } from '@/lib/types'
+import type { TrainingRecord, TrainingRole } from '@soteria/core/types'
 
 // Training-records register for §1910.146(g) compliance. Admin-only at
 // the route level (RLS in migration 017 also enforces admin on writes).

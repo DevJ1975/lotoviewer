@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ENERGY_CODES, energyCodeFor, hexToRgb01 } from '@/lib/energyCodes'
+import { ENERGY_CODES, energyCodeFor, hexToRgb01 } from '@soteria/core/energyCodes'
 
 // ── energyCodeFor ──────────────────────────────────────────────────────────
 

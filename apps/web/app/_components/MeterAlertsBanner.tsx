@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { AlertTriangle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { bumpStatus } from '@/lib/gasMeters'
-import type { GasMeter } from '@/lib/types'
+import type { GasMeter } from '@soteria/core/types'
 
 // Visual companion to the bump-test reminder push (cron route at
 // /api/cron/meter-bump-reminders). The push wakes a user who isn't

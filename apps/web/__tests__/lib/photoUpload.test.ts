@@ -1,5 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest'
-import { uploadPhotoForEquipment } from '@/lib/photoUpload'
+import { uploadPhotoForEquipment } from '@soteria/core/photoUpload'
 import { supabase } from '@/lib/supabase'
 
 vi.mock('@/lib/supabase', () => ({

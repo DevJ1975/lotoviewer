@@ -1,4 +1,4 @@
-import type { Equipment } from './types'
+import type { Equipment } from '@soteria/core/types'
 
 // Defends against CSV injection (Excel/Sheets/Numbers treat leading
 // = + - @ TAB CR as formulas) and quotes fields with special chars.

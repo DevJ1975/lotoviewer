@@ -65,15 +65,26 @@ Kept here so nothing leaks out of the plan.
     `lib/homeMetrics.ts`
   - `lib/queries/{equipment,confinedSpaces,confinedSpacePermits,hotWorkPermits,lotoDevices,permitDetail,trainingRecords}.ts`
 
-### D1.3 — Codemod call sites off the shims
-- **Why deferred**: Phase 1 left thin re-export shims at
-  `apps/web/lib/X.ts` so 175+ call sites stay untouched. Long-term
+### ~~D1.3 — Codemod call sites off the shims~~ — RESOLVED
+- **Original problem**: Phase 1 left thin re-export shims at
+  `apps/web/lib/X.ts` so 175+ call sites stayed untouched. Long-term
   the right thing is `import from '@soteria/core/X'` directly so
   there's no extra hop.
-- **Action**: Mechanical sed/jscodeshift across `apps/web/`. Drop
-  the shim files when the last caller is updated. Optional — the
-  shims are zero-cost at bundling time.
-- **Blocks**: Nothing.
+- **Resolution**: One-shot codemod at `scripts/codemod-shims.mjs`
+  rewrote 205 imports across 151 files; the 22 shim files at
+  `apps/web/lib/{types,database.types,features,moduleVisibility,
+  orgConfig,energyCodes,confinedSpaceLabels,confinedSpaceThresholds,
+  hotWorkChecklist,hotWorkPermitStatus,permitStatus,photoStatus,
+  photoUpload,storagePaths,equipmentReconcile,homeMetrics,
+  insightsMetrics,scorecardMetrics,risk,riskMetrics,nearMissMetrics,
+  jhaMetrics}.ts` were removed. tsc clean, 1304 tests pass.
+- **Note**: `apps/web/lib/supabase.ts` is the legitimate browser
+  instantiation glue (uses `window.localStorage` /
+  `window.sessionStorage`) and stays in apps/web. The cross-platform
+  factory (`createSupabaseClient`) lives in
+  `packages/core/src/supabase.ts` and the shared registry/Proxy
+  lives in `packages/core/src/supabaseClient.ts` — D1.1 is
+  effectively complete via that split.
 
 ## Phase 2 — Expo app skeleton (open)
 

@@ -13,7 +13,7 @@ import { loadConfinedSpacesByIds }  from '@/lib/queries/confinedSpaces'
 import type {
   AtmosphericTest,
   ConfinedSpace,
-} from '@/lib/types'
+} from '@soteria/core/types'
 
 // Admin-only "compliance report bundle" generator. The user picks a date
 // range, we fetch every permit issued in that window, and we hand back a

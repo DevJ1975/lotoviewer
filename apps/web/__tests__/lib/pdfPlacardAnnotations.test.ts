@@ -16,7 +16,7 @@
 import { describe, it, expect } from 'vitest'
 import { generatePlacardPdf, drawAnnotationsOnImage, sanitizeForWinAnsi } from '@/lib/pdfPlacard'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 
 // Build a blank PDF with one page and call drawAnnotationsOnImage
 // directly with a known image rectangle. Bypasses the network-fetch

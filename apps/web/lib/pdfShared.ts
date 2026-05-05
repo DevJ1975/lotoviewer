@@ -1,7 +1,7 @@
 import { PDFDocument, PDFFont, PDFImage, PDFPage, rgb } from 'pdf-lib'
 import QRCode from 'qrcode'
 import * as Sentry from '@sentry/nextjs'
-import { hexToRgb01 } from '@/lib/energyCodes'
+import { hexToRgb01 } from '@soteria/core/energyCodes'
 
 // Shared building blocks for the OSHA permit PDFs (Confined Space + Hot Work).
 // Both generators use single-page portrait Letter, navy section bars, the same

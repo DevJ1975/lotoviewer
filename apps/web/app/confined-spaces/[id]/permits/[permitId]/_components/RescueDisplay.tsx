@@ -1,6 +1,6 @@
 'use client'
 
-import type { ConfinedSpacePermit } from '@/lib/types'
+import type { ConfinedSpacePermit } from '@soteria/core/types'
 
 export function RescueDisplay({ rescue }: { rescue: ConfinedSpacePermit['rescue_service'] }) {
   if (!rescue || Object.keys(rescue).length === 0) {

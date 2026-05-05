@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { validateTraining, TRAINING_ROLE_LABELS } from '@/lib/trainingRecords'
-import type { TrainingRecord, TrainingRole } from '@/lib/types'
+import type { TrainingRecord, TrainingRole } from '@soteria/core/types'
 
 const ASOF = new Date('2026-04-26T12:00:00Z')
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { latestApprovedReviewByDept, computeDeptStats } from '@/lib/report'
-import type { Equipment, LotoReview } from '@/lib/types'
+import type { Equipment, LotoReview } from '@soteria/core/types'
 
 function eq(partial: Partial<Equipment>): Equipment {
   return {

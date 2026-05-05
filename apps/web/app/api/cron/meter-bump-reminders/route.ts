@@ -3,7 +3,7 @@ import webpush from 'web-push'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { bumpStatus } from '@/lib/gasMeters'
-import type { GasMeter } from '@/lib/types'
+import type { GasMeter } from '@soteria/core/types'
 
 // Scheduled bump-test reminder dispatcher. Runs on a cron — Vercel Cron,
 // Supabase pg_cron, or any external scheduler that can hit an HTTPS URL

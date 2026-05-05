@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { bumpStatus, calibrationOverdue, BUMP_TEST_WINDOW_MS } from '@/lib/gasMeters'
-import type { GasMeter } from '@/lib/types'
+import type { GasMeter } from '@soteria/core/types'
 
 const NOW = new Date('2026-04-26T12:00:00Z').getTime()
 

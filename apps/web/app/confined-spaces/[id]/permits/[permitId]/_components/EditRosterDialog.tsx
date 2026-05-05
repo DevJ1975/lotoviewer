@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
-import type { ConfinedSpaceEntry, ConfinedSpacePermit } from '@/lib/types'
+import type { ConfinedSpaceEntry, ConfinedSpacePermit } from '@soteria/core/types'
 import { validateRosterUpdate, namesCurrentlyInside } from '@/lib/permitRoster'
 
 // Mid-job add/remove of entrants and attendants. Validation lives in

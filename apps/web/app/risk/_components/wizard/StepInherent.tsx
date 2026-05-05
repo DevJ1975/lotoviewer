@@ -1,7 +1,7 @@
 'use client'
 
 import { useTenant } from '@/components/TenantProvider'
-import { readRiskConfig } from '@/lib/risk'
+import { readRiskConfig } from '@soteria/core/risk'
 import type { WizardState } from '@/lib/risk-wizard'
 import ScorePicker from './ScorePicker'
 
