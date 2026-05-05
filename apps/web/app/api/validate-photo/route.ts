@@ -114,7 +114,24 @@ export async function POST(req: NextRequest) {
       ],
     })
 
-    const text = message.content[0].type === 'text' ? message.content[0].text.trim() : ''
+    const firstBlock = message.content[0]
+    if (!firstBlock || firstBlock.type !== 'text') {
+      Sentry.captureMessage('validate-photo: no text block in response', {
+        level:  'warning',
+        tags:   { route: '/api/validate-photo', stage: 'no-text-block' },
+        extra:  { stop_reason: message.stop_reason, content_types: message.content.map(b => b.type) },
+      })
+      await logAiInvocation({
+        userId:   gate.userId,
+        tenantId: gate.tenantId,
+        surface:  'validate-photo',
+        model:    MODEL,
+        status:   'error',
+        context:  'no-text-block',
+      })
+      return NextResponse.json({ error: 'AI returned no usable output.' }, { status: 502 })
+    }
+    const text = firstBlock.text.trim()
 
     // Strip markdown code fences if model wraps response.
     const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
