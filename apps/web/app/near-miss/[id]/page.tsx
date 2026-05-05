@@ -2,7 +2,8 @@
 
 import { use, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, AlertTriangle, Loader2 } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, Loader2, ArrowUpRight } from 'lucide-react'
+import EscalateModal from '../_components/EscalateModal'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
@@ -56,9 +57,10 @@ export default function NearMissDetailPage({ params }: { params: Promise<{ id: s
   const { profile } = useAuth()
   const canEdit = !!profile?.is_admin || !!profile?.is_superadmin
 
-  const [bundle,  setBundle]  = useState<DetailBundle | null>(null)
-  const [error,   setError]   = useState<string | null>(null)
-  const [saving,  setSaving]  = useState(false)
+  const [bundle,        setBundle]        = useState<DetailBundle | null>(null)
+  const [error,         setError]         = useState<string | null>(null)
+  const [saving,        setSaving]        = useState(false)
+  const [showEscalate,  setShowEscalate]  = useState(false)
 
   const load = useCallback(async () => {
     if (!tenant?.id) return
@@ -153,7 +155,11 @@ export default function NearMissDetailPage({ params }: { params: Promise<{ id: s
               <Meta label="Age"        value={`${ageInDays(bundle.report)} d`} />
               <Meta label="Hazard"     value={bundle.report.hazard_category} capitalize />
               <Meta label="Location"   value={bundle.report.location ?? '—'} />
-              <Meta label="Linked risk" value={bundle.report.linked_risk_id ?? '—'} />
+              <Meta
+                label="Linked risk"
+                value={bundle.report.linked_risk_id ?? '—'}
+                href={bundle.report.linked_risk_id ? `/risk/${bundle.report.linked_risk_id}` : undefined}
+              />
             </dl>
           </header>
 
@@ -185,7 +191,7 @@ export default function NearMissDetailPage({ params }: { params: Promise<{ id: s
                 <label className="text-sm text-slate-600 dark:text-slate-300">Status</label>
                 <select
                   value={bundle.report.status}
-                  disabled={saving}
+                  disabled={saving || bundle.report.status === 'escalated_to_risk'}
                   onChange={e => patch({ status: e.target.value as NearMissStatus })}
                   className="rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-3 py-1.5 text-sm"
                 >
@@ -194,11 +200,30 @@ export default function NearMissDetailPage({ params }: { params: Promise<{ id: s
                   ))}
                 </select>
                 {saving && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+
+                {bundle.report.status !== 'escalated_to_risk' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowEscalate(true)}
+                    className="ml-auto inline-flex items-center gap-2 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-3 py-1.5 text-sm font-semibold text-amber-900 dark:text-amber-200 hover:bg-amber-100"
+                  >
+                    <ArrowUpRight className="h-4 w-4" />
+                    Escalate to Risk Register
+                  </button>
+                )}
               </div>
               <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
                 Status changes are logged to the audit timeline below.
+                {bundle.report.status === 'escalated_to_risk' && ' Escalated reports are read-only.'}
               </p>
             </Section>
+          )}
+
+          {showEscalate && (
+            <EscalateModal
+              nearMissId={bundle.report.id}
+              onClose={() => setShowEscalate(false)}
+            />
           )}
 
           <Section title="Audit timeline">
@@ -231,11 +256,18 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-function Meta({ label, value, capitalize }: { label: string; value: string; capitalize?: boolean }) {
+function Meta({ label, value, capitalize, href }: { label: string; value: string; capitalize?: boolean; href?: string }) {
+  const cls = 'text-sm text-slate-700 dark:text-slate-300 ' + (capitalize ? 'capitalize' : '')
   return (
     <div>
       <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</dt>
-      <dd className={'text-sm text-slate-700 dark:text-slate-300 ' + (capitalize ? 'capitalize' : '')}>{value}</dd>
+      <dd className={cls}>
+        {href ? (
+          <Link href={href} className="text-brand-navy hover:underline font-mono text-xs">
+            {value.slice(0, 8)}…
+          </Link>
+        ) : value}
+      </dd>
     </div>
   )
 }

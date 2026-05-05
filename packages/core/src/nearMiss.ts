@@ -109,6 +109,23 @@ export function ageInDays(row: Pick<NearMissRow, 'reported_at' | 'resolved_at'>,
   return Math.floor(diff / 86_400_000)
 }
 
+// Map a near-miss severity_potential band onto a starting inherent
+// severity for the linked risk register entry. The likelihood is
+// always a conservative 3 ("Possible") because the event happened
+// once but we have no frequency data yet — the user can re-score
+// after triage. Crossing the 4-band scheme onto the 1-5 severity
+// axis: low→2 (Minor), moderate→3 (Moderate), high→4 (Major),
+// extreme→5 (Catastrophic). The result lands in the matching band
+// (low→4=moderate, moderate→9=high, high→12=high, extreme→15=extreme)
+// after the *3 multiplier — high stays in the high band, which is
+// the conservative posture for an escalation.
+export function deriveInherentScore(severity: NearMissSeverity): { severity: 1|2|3|4|5; likelihood: 1|2|3|4|5 } {
+  const sev: Record<NearMissSeverity, 1|2|3|4|5> = {
+    low: 2, moderate: 3, high: 4, extreme: 5,
+  }
+  return { severity: sev[severity], likelihood: 3 }
+}
+
 // Validate the create input. Returns null if valid, error string
 // otherwise. The DB CHECK constraints are the authority — this is
 // just early feedback for the form.
