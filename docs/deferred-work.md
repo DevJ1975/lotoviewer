@@ -81,19 +81,49 @@ Kept here so nothing leaks out of the plan.
 - **Why deferred**: Requires Xcode + Android Studio + Apple
   Developer ID + Google Play console credentials. Cannot run from
   this environment.
-- **Action**: User runs `eas build --profile preview --platform
-  ios|android` after the auth shell lands; uploads via Transporter
-  / Play Console.
+- **Scaffolded**: `apps/mobile/eas.json` now defines three build
+  profiles (development / preview / production) and a submit
+  profile. Three placeholders the user must fill in before
+  uploading: `ascAppId` (App Store Connect numeric app id),
+  `appleTeamId` (10-char Apple Developer team id), and
+  `serviceAccountKeyPath` (path to the Play service-account JSON).
+- **Action**: User edits `apps/mobile/eas.json`, then runs
+  `eas build --profile preview --platform ios|android` after the
+  auth shell lands; uploads via Transporter / Play Console (or
+  `eas submit --profile production`).
 - **Blocks**: Phase 3 acceptance.
 
 ### D2.2 — Universal Links / App Links domain hosting
 - **Why deferred**: Requires uploading
   `apple-app-site-association` and
   `.well-known/assetlinks.json` to `soteriafield.app`. The web
-  domain and DNS are user-controlled.
-- **Action**: User adds the two well-known files to
-  `apps/web/public/.well-known/` and verifies via Apple's
-  Universal Link Validator.
+  domain and DNS are user-controlled, and the file contents
+  embed Apple Team ID + Android release-cert fingerprint.
+- **Scaffolded**:
+  - `apps/web/public/.well-known/apple-app-site-association` —
+    declares applinks for `/reset-password*`, `/review/*`,
+    `/risk/*`, `/loto/*`. Single placeholder
+    `REPLACE_WITH_APPLE_TEAM_ID` to fill in (10-char Apple Team
+    id, paired with bundle id `com.soteriafield.app`).
+  - `apps/web/public/.well-known/assetlinks.json` — Android
+    autoVerify entry. Single placeholder
+    `REPLACE_WITH_ANDROID_RELEASE_SHA_256_FINGERPRINT` (from
+    `keytool -list -v -keystore <release.keystore>` after EAS
+    issues the keystore on first production build).
+  - `next.config.ts` — `headers()` rule serving both files as
+    `application/json` (Apple's Universal-Link validator
+    rejects the default `application/octet-stream`).
+  - `scripts/check-deeplink-placeholders.mjs` — CI guard that
+    fails if any `REPLACE_WITH_*` token survives into a
+    production build. Wire into deploy via `npm run
+    check:deeplinks`. Bypass for local dev with
+    `ALLOW_DEEPLINK_PLACEHOLDERS=1`.
+- **Action**: User fills the three placeholders in the two
+  `.well-known/` files + the EAS submit profile, runs
+  `npm run check:deeplinks` to confirm clean, deploys, then
+  validates with Apple's Universal Link Validator
+  (`https://search.developer.apple.com/appsearch-validation-tool/`)
+  and Google's `assetlinks.json` Tester.
 - **Blocks**: The "tap reset-password email link → app opens"
   smoke step.
 

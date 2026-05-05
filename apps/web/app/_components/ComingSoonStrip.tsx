@@ -1,9 +1,19 @@
 'use client'
 
 import { getModules } from '@/lib/features'
+import { useTenant } from '@/components/TenantProvider'
+
+// Advertises in-flight modules. Honors an explicit per-tenant
+// `modules['<id>'] === false` opt-out so a tenant who has signaled
+// they will never license a feature doesn't see it advertised. By
+// default (key unset) the ad still renders.
 
 export function ComingSoonStrip() {
-  const upcoming = getModules('safety').filter(m => m.comingSoon)
+  const { tenant } = useTenant()
+  const tenantModules = tenant?.modules
+  const upcoming = getModules('safety')
+    .filter(m => m.comingSoon)
+    .filter(m => !(tenantModules && tenantModules[m.id] === false))
   if (upcoming.length === 0) return null
   return (
     <section className="rounded-xl border border-dashed border-violet-200 bg-violet-50 dark:bg-violet-950/40/40 p-4 space-y-2">

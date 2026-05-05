@@ -2,31 +2,37 @@
 
 import Link from 'next/link'
 import { Camera, FileText, Plus } from 'lucide-react'
+import { isModuleVisible } from '@/lib/moduleVisibility'
+import { useTenant } from '@/components/TenantProvider'
 
-// 3 most common workflows. Sized for an iPad on a stand — 44pt+ tap
-// targets, big icons. Keep to 3 so each tile gets 33% of the row.
+// Three most common workflows. Sized for an iPad on a stand — 44pt+ tap
+// targets, big icons. Each tile is gated on the underlying module being
+// visible for the active tenant; if none are visible the row collapses
+// to nothing instead of leaving dead links.
+
+interface ActionDef {
+  moduleId: string
+  href:     string
+  icon:     React.ReactNode
+  label:    string
+  sub:      string
+}
+
+const ACTIONS: ActionDef[] = [
+  { moduleId: 'confined-spaces', href: '/confined-spaces', icon: <FileText className="h-6 w-6" />, label: 'Issue Permit',   sub: 'Confined-space entry' },
+  { moduleId: 'loto',            href: '/loto',            icon: <Plus className="h-6 w-6" />,     label: 'Add Equipment', sub: 'LOTO inventory' },
+  { moduleId: 'loto',            href: '/loto',            icon: <Camera className="h-6 w-6" />,   label: 'Take Photo',    sub: 'Pick equipment first' },
+]
 
 export function QuickActions() {
+  const { tenant } = useTenant()
+  const visible = ACTIONS.filter(a => isModuleVisible(a.moduleId, tenant?.modules))
+  if (visible.length === 0) return null
   return (
     <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      <QuickAction
-        href="/confined-spaces"
-        icon={<FileText className="h-6 w-6" />}
-        label="Issue Permit"
-        sub="Confined-space entry"
-      />
-      <QuickAction
-        href="/loto"
-        icon={<Plus className="h-6 w-6" />}
-        label="Add Equipment"
-        sub="LOTO inventory"
-      />
-      <QuickAction
-        href="/loto"
-        icon={<Camera className="h-6 w-6" />}
-        label="Take Photo"
-        sub="Pick equipment first"
-      />
+      {visible.map((a, i) => (
+        <QuickAction key={i} href={a.href} icon={a.icon} label={a.label} sub={a.sub} />
+      ))}
     </section>
   )
 }

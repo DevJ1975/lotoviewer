@@ -1,0 +1,47 @@
+{
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "remote"
+  },
+
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development",
+      "ios":     { "simulator": true },
+      "android": { "buildType": "apk" },
+      "env":     { "EXPO_PUBLIC_ENV": "development" }
+    },
+
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "ios":     { "resourceClass": "m-medium" },
+      "android": { "buildType": "apk" },
+      "env":     { "EXPO_PUBLIC_ENV": "preview" }
+    },
+
+    "production": {
+      "distribution": "store",
+      "channel": "production",
+      "autoIncrement": true,
+      "ios":     { "resourceClass": "m-medium" },
+      "android": { "buildType": "app-bundle" },
+      "env":     { "EXPO_PUBLIC_ENV": "production" }
+    }
+  },
+
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId":    "REPLACE_WITH_APP_STORE_CONNECT_APP_ID",
+        "appleTeamId": "REPLACE_WITH_APPLE_TEAM_ID"
+      },
+      "android": {
+        "serviceAccountKeyPath": "REPLACE_WITH_PATH_TO_PLAY_SERVICE_ACCOUNT_JSON",
+        "track": "internal"
+      }
+    }
+  }
+}

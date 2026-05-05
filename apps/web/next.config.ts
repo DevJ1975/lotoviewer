@@ -26,6 +26,22 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Apple's Universal-Links validator demands `application/json` for the
+  // extensionless `apple-app-site-association` file. Without this rewrite
+  // the server defaults to `application/octet-stream` and iOS silently
+  // refuses to install the entitlement on first launch.
+  async headers() {
+    return [
+      {
+        source: '/.well-known/apple-app-site-association',
+        headers: [{ key: 'content-type', value: 'application/json' }],
+      },
+      {
+        source: '/.well-known/assetlinks.json',
+        headers: [{ key: 'content-type', value: 'application/json' }],
+      },
+    ]
+  },
 };
 
 // withSentryConfig wraps the Next config to enable source-map uploads

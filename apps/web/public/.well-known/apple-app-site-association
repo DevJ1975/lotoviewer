@@ -1,0 +1,18 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["REPLACE_WITH_APPLE_TEAM_ID.com.soteriafield.app"],
+        "components": [
+          { "/": "/reset-password*",  "comment": "Deep-link the reset-password email into the app." },
+          { "/": "/review/*",          "comment": "Deep-link the placard review portal into the app." },
+          { "/": "/risk/*",            "comment": "Deep-link risk register URLs into the app." },
+          { "/": "/loto/*",            "comment": "Deep-link LOTO equipment URLs into the app." }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["REPLACE_WITH_APPLE_TEAM_ID.com.soteriafield.app"]
+  }
+}

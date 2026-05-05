@@ -14,6 +14,9 @@ export function Hero({
     <section className="bg-gradient-to-br from-brand-navy to-[#1a3470] text-white rounded-2xl p-6 sm:p-8 shadow-md">
       <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-6 items-end">
         <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-yellow/90 mb-2">
+            Control Center
+          </p>
           <p className="text-2xl sm:text-3xl font-bold tracking-tight">
             {greeting}, <span className="text-brand-yellow">{firstName}</span>
           </p>
