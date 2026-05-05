@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { NextRequest, NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
+import { checkAiRateLimit, logAiInvocation } from '@/lib/ai/rateLimit'
 
 const client = new Anthropic()
 
@@ -98,6 +99,20 @@ export async function POST(req: NextRequest) {
   const gate = await requireTenantMember(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
+  // Rate limit before reading the body — body parsing burns no
+  // Anthropic tokens but it's still better to fail fast.
+  const limit = await checkAiRateLimit({
+    userId:   gate.userId,
+    tenantId: gate.tenantId,
+    surface:  'generate-loto-steps',
+  })
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: `AI rate limit reached (${limit.reason}). Try again later.` },
+      { status: 429, headers: { 'retry-after': String(limit.retryAfterSec) } },
+    )
+  }
+
   try {
     const body = (await req.json()) as RequestBody
 
@@ -165,10 +180,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'AI returned no steps.' }, { status: 502 })
     }
 
+    await logAiInvocation({
+      userId:       gate.userId,
+      tenantId:     gate.tenantId,
+      surface:      'generate-loto-steps',
+      model:        'claude-sonnet-4-6',
+      status:       'success',
+      inputTokens:  response.usage?.input_tokens,
+      outputTokens: response.usage?.output_tokens,
+      context:      body.equipment_id,
+    })
+
     return NextResponse.json(parsed)
   } catch (err) {
     Sentry.captureException(err, { tags: { route: '/api/generate-loto-steps' } })
     console.error('[generate-loto-steps]', err)
+    await logAiInvocation({
+      userId:   gate.userId,
+      tenantId: gate.tenantId,
+      surface:  'generate-loto-steps',
+      model:    'claude-sonnet-4-6',
+      status:   'error',
+    })
     if (err instanceof Anthropic.RateLimitError) {
       return NextResponse.json({ error: 'AI is rate-limited. Retry in a minute.' }, { status: 429 })
     }

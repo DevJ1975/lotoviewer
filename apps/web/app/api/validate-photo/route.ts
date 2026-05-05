@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { NextRequest, NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
+import { checkAiRateLimit, logAiInvocation } from '@/lib/ai/rateLimit'
 
 const client = new Anthropic()
 
@@ -25,6 +26,18 @@ export async function POST(req: NextRequest) {
   // a UX-helper validity check; nothing protected is returned.
   const gate = await requireTenantMember(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
+  const limit = await checkAiRateLimit({
+    userId:   gate.userId,
+    tenantId: gate.tenantId,
+    surface:  'validate-photo',
+  })
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: `AI rate limit reached (${limit.reason}). Try again later.` },
+      { status: 429, headers: { 'retry-after': String(limit.retryAfterSec) } },
+    )
+  }
 
   try {
     const formData = await req.formData()
@@ -59,10 +72,29 @@ export async function POST(req: NextRequest) {
     const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
 
     const parsed = JSON.parse(clean) as { valid: boolean; reason: string }
+
+    await logAiInvocation({
+      userId:       gate.userId,
+      tenantId:     gate.tenantId,
+      surface:      'validate-photo',
+      model:        'claude-haiku-4-5-20251001',
+      status:       'success',
+      inputTokens:  message.usage?.input_tokens,
+      outputTokens: message.usage?.output_tokens,
+      context:      type,
+    })
+
     return NextResponse.json(parsed)
   } catch (err) {
     Sentry.captureException(err, { tags: { route: '/api/validate-photo' } })
     console.error('[validate-photo]', err)
+    await logAiInvocation({
+      userId:   gate.userId,
+      tenantId: gate.tenantId,
+      surface:  'validate-photo',
+      model:    'claude-haiku-4-5-20251001',
+      status:   'error',
+    })
     return NextResponse.json({ error: 'Validation failed' }, { status: 500 })
   }
 }
