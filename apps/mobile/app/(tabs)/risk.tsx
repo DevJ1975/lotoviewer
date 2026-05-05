@@ -62,9 +62,20 @@ export default function RiskListScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Risk Register</Text>
-        <Text style={styles.subtitle}>ISO 45001 6.1 · sorted by residual score desc</Text>
+      <View style={styles.headerRow}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Risk Register</Text>
+          <Text style={styles.subtitle}>ISO 45001 6.1 · sorted by residual score desc</Text>
+        </View>
+        <Link href="/risk/heatmap" asChild>
+          <Pressable>
+            {({ pressed }) => (
+              <View style={[styles.heatmapBtn, pressed && { opacity: 0.6 }]}>
+                <Text style={styles.heatmapBtnText}>Heat map →</Text>
+              </View>
+            )}
+          </Pressable>
+        </Link>
       </View>
 
       <View style={styles.filterRow}>
@@ -135,9 +146,12 @@ export default function RiskListScreen() {
 
 const styles = StyleSheet.create({
   container:    { flex: 1 },
-  header:       { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, gap: 2 },
+  headerRow:    { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
+  header:       { gap: 2 },
   title:        { fontSize: 22, fontWeight: '700' },
   subtitle:     { fontSize: 12, opacity: 0.6 },
+  heatmapBtn:   { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#1e3a8a' },
+  heatmapBtnText: { fontSize: 12, fontWeight: '600', color: '#1e3a8a' },
 
   filterRow:    { paddingHorizontal: 16, paddingVertical: 6, alignItems: 'flex-end' },
   toggle:       { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, borderWidth: 1, borderColor: '#cbd5e1' },
