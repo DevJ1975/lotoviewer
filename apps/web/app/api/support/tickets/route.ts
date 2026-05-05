@@ -16,6 +16,10 @@ import { requireSuperadmin } from '@/lib/auth/superadmin'
 // service-role token still hits the env-allowlist gate.
 
 export const runtime = 'nodejs'
+// Bearer-token auth + per-request status filter = always dynamic;
+// caching this would mean a previous user's open-ticket list bleeds
+// into the next caller's response.
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
   const gate = await requireSuperadmin(req.headers.get('authorization'))

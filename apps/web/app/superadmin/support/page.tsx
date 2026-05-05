@@ -69,6 +69,7 @@ export default function SuperadminSupportPage() {
       if (!token) throw new Error('Sign-in expired — please log in again.')
       const res = await fetch(`/api/support/tickets?status=${filter}&limit=200`, {
         headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j.error ?? `Server returned ${res.status}`)
@@ -92,12 +93,22 @@ export default function SuperadminSupportPage() {
       const res = await fetch(`/api/support/tickets/${t.id}/resolve`, {
         method: wasResolved ? 'DELETE' : 'POST',
         headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j.error ?? `Server returned ${res.status}`)
-      // Optimistic-ish: refetch so the count tile + filter view stay
-      // correct. Cheap because the list is capped at 200.
-      await load()
+      // Apply the mutation locally first so the row drops out of the
+      // current filter view immediately, then refetch in the background
+      // to keep counts honest. Without the local update the user sees
+      // a perceived no-op while the (cached) refetch returns stale data.
+      const newResolvedAt = (j.resolved_at as string | null) ?? null
+      setTickets(prev => {
+        const next = prev.map(x => x.id === t.id ? { ...x, resolved_at: newResolvedAt } : x)
+        if (filter === 'open')     return next.filter(x => x.resolved_at === null)
+        if (filter === 'resolved') return next.filter(x => x.resolved_at !== null)
+        return next
+      })
+      void load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update ticket.')
     } finally {
