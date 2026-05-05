@@ -4,12 +4,14 @@ import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet } fr
 
 import { Text, View } from '@/components/Themed'
 import { useTenant } from '@/components/TenantProvider'
+import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import type { Band } from '@soteria/core/risk'
 import type { RiskSummary, RiskStatus } from '@soteria/core/queries/risks'
 
-// /risk tab — Register list. Read-only on this slice; the heat map
-// view lands in slice 2 and the new-risk wizard in slice 3.
+// /risk tab — Register list. Read in slice 1, heat map in slice 2,
+// create form in slice 3. Tap a row → /risk/[id]; tap "+ New" →
+// /risk/new (admin-gated).
 //
 // Default filter hides closed + accepted_exception so the list
 // shows the active register; toggle exposes them.
@@ -27,6 +29,9 @@ const STATUS_LABEL: Record<RiskStatus, string> = {
 
 export default function RiskListScreen() {
   const { tenant } = useTenant()
+  const { profile } = useAuth()
+  const canCreate = !!profile?.is_admin || !!profile?.is_superadmin
+
   const [rows, setRows] = useState<RiskSummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
@@ -103,7 +108,15 @@ export default function RiskListScreen() {
           <Text style={styles.emptyText}>
             {showClosed ? 'No risks in the register.' : 'No active risks.'}
           </Text>
-          <Text style={styles.emptyHint}>Create one from the web for now — mobile wizard ships in slice 3.</Text>
+          {canCreate && (
+            <Link href="/risk/new" asChild>
+              <Pressable>
+                {({ pressed }) => (
+                  <Text style={[styles.emptyCta, pressed && { opacity: 0.6 }]}>Create the first one →</Text>
+                )}
+              </Pressable>
+            </Link>
+          )}
         </View>
       ) : (
         <FlatList
@@ -140,6 +153,18 @@ export default function RiskListScreen() {
           }}
         />
       )}
+
+      {canCreate && (
+        <Link href="/risk/new" asChild>
+          <Pressable>
+            {({ pressed }) => (
+              <View style={[styles.fab, pressed && { opacity: 0.85 }]}>
+                <Text style={styles.fabText}>+ New Risk</Text>
+              </View>
+            )}
+          </Pressable>
+        </Link>
+      )}
     </View>
   )
 }
@@ -165,9 +190,9 @@ const styles = StyleSheet.create({
   center:       { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty:        { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 24 },
   emptyText:    { fontSize: 14, opacity: 0.6, textAlign: 'center' },
-  emptyHint:    { fontSize: 12, opacity: 0.5, textAlign: 'center', fontStyle: 'italic' },
+  emptyCta:     { fontSize: 14, fontWeight: '600', color: '#1e3a8a' },
 
-  listContent:  { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 24 },
+  listContent:  { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 88 },
 
   row:          { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 12, marginVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: '#cbd5e1' },
   bandPill:     { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
@@ -177,4 +202,7 @@ const styles = StyleSheet.create({
   rowNumber:    { fontFamily: 'SpaceMono', fontSize: 11, opacity: 0.6 },
   rowTitle:     { fontSize: 14, fontWeight: '600' },
   rowMeta:      { fontSize: 11, opacity: 0.6, marginTop: 2 },
+
+  fab:          { position: 'absolute', right: 16, bottom: 24, paddingHorizontal: 20, paddingVertical: 14, borderRadius: 28, backgroundColor: '#1e3a8a', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 6 },
+  fabText:      { color: '#fff', fontWeight: '700', fontSize: 14 },
 })
