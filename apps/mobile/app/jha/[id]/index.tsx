@@ -1,9 +1,10 @@
-import { Stack, useLocalSearchParams } from 'expo-router'
+import { Link, Stack, useLocalSearchParams } from 'expo-router'
 import { useEffect, useState } from 'react'
-import { ActivityIndicator, ScrollView, StyleSheet } from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet } from 'react-native'
 
 import { Text, View } from '@/components/Themed'
 import { useTenant } from '@/components/TenantProvider'
+import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import {
   groupHazardsByStep,
@@ -51,6 +52,8 @@ interface DetailBundle {
 export default function JhaDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const { tenant } = useTenant()
+  const { profile } = useAuth()
+  const canEdit = !!profile?.is_admin || !!profile?.is_superadmin
 
   const [bundle, setBundle] = useState<DetailBundle | null>(null)
   const [error,  setError]  = useState<string | null>(null)
@@ -105,6 +108,18 @@ export default function JhaDetailScreen() {
             <Text style={[styles.statusText, { color: STATUS_FG[jha.status] }]}>{jha.status.replace('_', ' ')}</Text>
           </View>
         </View>
+
+        {canEdit && jha.status !== 'superseded' && (
+          <Link href={{ pathname: '/jha/[id]/edit', params: { id: jha.id } }} asChild>
+            <Pressable>
+              {({ pressed }) => (
+                <View style={[styles.editBtn, pressed && { opacity: 0.7 }]}>
+                  <Text style={styles.editBtnText}>Edit breakdown</Text>
+                </View>
+              )}
+            </Pressable>
+          </Link>
+        )}
 
         <View style={styles.metaGrid}>
           <Meta label="Frequency"     value={FREQUENCY_LABEL[jha.frequency]} />
@@ -232,6 +247,9 @@ const styles = StyleSheet.create({
 
   statusPill:    { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   statusText:    { fontSize: 10, fontWeight: '700', textTransform: 'uppercase' },
+
+  editBtn:       { alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#cbd5e1' },
+  editBtnText:   { fontSize: 13, fontWeight: '600' },
 
   metaGrid:      { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingVertical: 8 },
   metaCell:      { width: '46%' },
