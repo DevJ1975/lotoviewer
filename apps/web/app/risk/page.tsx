@@ -130,12 +130,18 @@ function RiskHeatmapPageInner() {
             {filters.view === 'inherent' ? 'Inherent' : 'Residual'} view.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <Link
             href={`/risk/list?${toUrlSearch(filters)}`}
             className="text-xs font-semibold text-brand-navy hover:underline"
           >
             View as list →
+          </Link>
+          <Link
+            href="/risk/new"
+            className="text-sm font-bold inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-brand-navy text-white hover:bg-brand-navy/90 transition-colors"
+          >
+            + New risk
           </Link>
         </div>
       </header>

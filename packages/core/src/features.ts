@@ -181,15 +181,17 @@ export const FEATURES: FeatureDef[] = [
   },
   {
     // Hidden from drawer (internal:true) — surfaced via the +New
-    // Risk button on the heat map page (slice 3).
+    // Risk button on the heat map page. Slice 3b made the wizard
+    // live; this entry stays internal so the drawer doesn't gain
+    // a "New Risk" link of its own (that path is the +New button).
     id:          'risk-new',
     name:        'New Risk',
     description: 'Hazard-ID wizard',
-    href:        null,
+    href:        '/risk/new',
     category:    'safety',
     parent:      'risk-assessment',
     enabled:     true,
-    comingSoon:  true,
+    comingSoon:  false,
     internal:    true,
   },
   {
