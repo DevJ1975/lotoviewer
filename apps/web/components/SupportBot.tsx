@@ -325,6 +325,27 @@ function suggestionsFor(pathname: string | null): string[] {
       'How do I group the queue by department?',
     ]
   }
+  if (p.startsWith('/confined-spaces')) {
+    return [
+      'How do I issue a new confined-space entry permit?',
+      'Why is the Sign button disabled on the permit?',
+      'What happens if a periodic atmospheric test fails?',
+    ]
+  }
+  if (p.startsWith('/hot-work')) {
+    return [
+      'How do I create a hot-work permit?',
+      'How does the post-work fire watch work?',
+      'Why can\'t the PAI sign the permit?',
+    ]
+  }
+  if (p.startsWith('/risk')) {
+    return [
+      'How do I score a new risk?',
+      'What is the Hierarchy of Controls?',
+      'My residual score is still red — what do I do?',
+    ]
+  }
   return [
     'How do I switch tenants?',
     'How do I install Soteria as an app on my iPad?',

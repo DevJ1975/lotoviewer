@@ -40,6 +40,28 @@ const MODULE_DEFS: KbModule[] = [
     pathPrefixes: ['/loto', '/equipment', '/departments', '/print', '/import', '/decommission', '/status'],
     file:         'loto.md',
   },
+  {
+    id:           'confined-spaces',
+    featureId:    'confined-spaces',
+    // The CS module owns /confined-spaces/* including its sub-pages.
+    pathPrefixes: ['/confined-spaces'],
+    file:         'confined-spaces.md',
+  },
+  {
+    id:           'hot-work',
+    featureId:    'hot-work',
+    pathPrefixes: ['/hot-work'],
+    file:         'hot-work.md',
+  },
+  {
+    id:           'risk',
+    // The Risk module's top-level feature id is 'risk-assessment'; the
+    // /risk routes are children but moduleVisibility walks the parent
+    // chain, so this is the right id to gate on.
+    featureId:    'risk-assessment',
+    pathPrefixes: ['/risk'],
+    file:         'risk.md',
+  },
 ]
 
 // Lazy-loaded once per process. process.cwd() inside Next route handlers
