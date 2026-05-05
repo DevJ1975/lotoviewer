@@ -1,9 +1,9 @@
 'use client'
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
+import { ChevronDown, Download, Loader2, Printer } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { parseRiskFilters, toApiParams, toUrlSearch, toQueryFilters, type RiskFilterState } from '@/lib/risk-filters'
@@ -130,13 +130,14 @@ function RiskHeatmapPageInner() {
             {filters.view === 'inherent' ? 'Inherent' : 'Residual'} view.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <Link
             href={`/risk/list?${toUrlSearch(filters)}`}
             className="text-xs font-semibold text-brand-navy hover:underline"
           >
             View as list →
           </Link>
+          <ExportMenu />
           <Link
             href="/risk/new"
             className="text-sm font-bold inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-brand-navy text-white hover:bg-brand-navy/90 transition-colors"
@@ -190,6 +191,100 @@ function FullPageSpinner() {
   return (
     <div className="min-h-[60vh] flex items-center justify-center">
       <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+    </div>
+  )
+}
+
+// Export menu — JSON download (ISO 45001 audit format) + Cal/OSHA
+// IIPP printable layout (HTML page with print styles; Cmd-P → PDF).
+function ExportMenu() {
+  const { tenant } = useTenant()
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+
+  // Close on outside click — same pattern as the existing AppChrome
+  // drawer wrapper.
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [open])
+
+  async function downloadJson() {
+    if (busy) return
+    setBusy(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: Record<string, string> = {}
+      if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
+      if (tenant?.id)            headers['x-active-tenant'] = tenant.id
+      const res = await fetch('/api/risk/export?format=json', { headers })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const blob = await res.blob()
+      const filename = res.headers.get('content-disposition')
+        ?.match(/filename="([^"]+)"/)?.[1]
+        ?? `risk-register-${new Date().toISOString().slice(0, 10)}.json`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      setOpen(false)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Download failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        disabled={busy}
+        className="text-xs font-semibold inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40"
+      >
+        Export <ChevronDown className="h-3 w-3" />
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-1 w-64 bg-white dark:bg-slate-900 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 overflow-hidden z-10">
+          <button
+            type="button"
+            onClick={downloadJson}
+            className="w-full flex items-start gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            <Download className="h-4 w-4 mt-0.5 shrink-0 text-slate-500" />
+            <div>
+              <div className="font-semibold">JSON download</div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                ISO 45001 audit format · machine-readable
+              </div>
+            </div>
+          </button>
+          <Link
+            href="/risk/export/iipp"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setOpen(false)}
+            className="w-full flex items-start gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 dark:hover:bg-slate-800 border-t border-slate-100 dark:border-slate-800"
+          >
+            <Printer className="h-4 w-4 mt-0.5 shrink-0 text-slate-500" />
+            <div>
+              <div className="font-semibold">Cal/OSHA IIPP printable</div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                §3203 paper layout · Cmd-P to save as PDF
+              </div>
+            </div>
+          </Link>
+        </div>
+      )}
     </div>
   )
 }
