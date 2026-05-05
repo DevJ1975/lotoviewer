@@ -3,8 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { checkAiRateLimit, logAiInvocation } from '@/lib/ai/rateLimit'
+import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 
 const client = new Anthropic()
+const MODEL = MODEL_BY_SURFACE['validate-photo']
 
 const PROMPTS: Record<string, string> = {
   EQUIP: `You are validating a photo for a LOTO (Lockout/Tagout) safety system.
@@ -53,7 +55,7 @@ export async function POST(req: NextRequest) {
     const mediaType = (file.type as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif') || 'image/jpeg'
 
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: MODEL,
       max_tokens: 128,
       messages: [
         {
@@ -77,7 +79,7 @@ export async function POST(req: NextRequest) {
       userId:       gate.userId,
       tenantId:     gate.tenantId,
       surface:      'validate-photo',
-      model:        'claude-haiku-4-5-20251001',
+      model:        MODEL,
       status:       'success',
       inputTokens:  message.usage?.input_tokens,
       outputTokens: message.usage?.output_tokens,
@@ -92,7 +94,7 @@ export async function POST(req: NextRequest) {
       userId:   gate.userId,
       tenantId: gate.tenantId,
       surface:  'validate-photo',
-      model:    'claude-haiku-4-5-20251001',
+      model:    MODEL,
       status:   'error',
     })
     return NextResponse.json({ error: 'Validation failed' }, { status: 500 })

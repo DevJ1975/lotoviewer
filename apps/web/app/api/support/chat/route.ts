@@ -12,6 +12,7 @@ import {
   type CreateTicketInput,
   type EscalationReason,
 } from '@/lib/support/types'
+import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 
 // Only the two roles Anthropic accepts in messages[]. Internally
 // ChatMessage allows system/tool for transcript rendering, but we never
@@ -37,7 +38,7 @@ interface ApiTurn {
 //
 // Phase 1 contract: non-streaming. Streaming (SSE) lands in Phase 2.
 
-const MODEL = 'claude-sonnet-4-6'
+const MODEL = MODEL_BY_SURFACE['support-chat']
 const MAX_TOKENS = 1500
 const HISTORY_TURNS = 20    // last N messages from the conversation
 const MAX_USER_MESSAGES_PER_HOUR = 30

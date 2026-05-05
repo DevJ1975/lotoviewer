@@ -3,8 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { checkAiRateLimit, logAiInvocation } from '@/lib/ai/rateLimit'
+import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 
 const client = new Anthropic()
+const MODEL = MODEL_BY_SURFACE['generate-confined-space-hazards']
 
 // Hazard authoring is harder than LOTO authoring — there are more categories
 // and the wrong call can kill people. Prompt is scoped to food production
@@ -216,7 +218,7 @@ export async function POST(req: NextRequest) {
     })
 
     const response = await client.messages.create({
-      model:      'claude-sonnet-4-6',
+      model:      MODEL,
       max_tokens: 16000,
       thinking:   { type: 'adaptive' },
       system:     SYSTEM_PROMPT,
@@ -245,7 +247,7 @@ export async function POST(req: NextRequest) {
       userId:       gate.userId,
       tenantId:     gate.tenantId,
       surface:      'generate-confined-space-hazards',
-      model:        'claude-sonnet-4-6',
+      model:        MODEL,
       status:       'success',
       inputTokens:  response.usage?.input_tokens,
       outputTokens: response.usage?.output_tokens,
@@ -260,7 +262,7 @@ export async function POST(req: NextRequest) {
       userId:   gate.userId,
       tenantId: gate.tenantId,
       surface:  'generate-confined-space-hazards',
-      model:    'claude-sonnet-4-6',
+      model:    MODEL,
       status:   'error',
     })
     if (err instanceof Anthropic.RateLimitError) {
