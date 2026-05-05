@@ -39,6 +39,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="cogs" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="near-miss"
+        options={{
+          title: 'Near-Miss',
+          tabBarIcon: ({ color }) => <TabBarIcon name="exclamation-triangle" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }
