@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { usePathname } from 'next/navigation'
-import { LifeBuoy, X, Send, Loader2, MessageSquarePlus, AlertTriangle } from 'lucide-react'
+import { LifeBuoy, X, Send, Loader2, MessageSquarePlus, AlertTriangle, ThumbsUp, ThumbsDown } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 
@@ -20,9 +20,33 @@ import { supabase } from '@/lib/supabase'
 interface ChatTurn {
   role:    'user' | 'assistant'
   content: string
+  // Server-assigned message id. Present on assistant turns once the
+  // POST /chat response lands; null while the turn is still streaming
+  // or for synthetic local-only rows.
+  messageId?: string | null
   // Set on the assistant turn that completed the escalation. Used to
   // surface a small ticket badge in the UI.
   ticketId?: string | null
+  // 👍/👎 vote, persisted via /api/support/messages/[id]/feedback.
+  // null = not voted; true/false = the user's last vote. Local state
+  // is the source of truth between server roundtrips.
+  helpful?: boolean | null
+}
+
+// Two-letter language tag we hand to the API. Keep this list explicit
+// so we don't quietly forward whatever odd Accept-Language string the
+// browser produces — the model only has Spanish + English KB.
+type Lang = 'en' | 'es'
+
+function detectLang(): Lang {
+  if (typeof navigator === 'undefined') return 'en'
+  const langs = (navigator.languages?.length ? navigator.languages : [navigator.language]) ?? []
+  for (const raw of langs) {
+    const head = (raw ?? '').toLowerCase().split('-')[0]
+    if (head === 'es') return 'es'
+    if (head === 'en') return 'en'
+  }
+  return 'en'
 }
 
 const HUMAN_HANDOFF_PROMPT =
@@ -94,15 +118,18 @@ export default function SupportBot() {
           conversationId,
           message:  messageText,
           pathname,
+          lang:     detectLang(),
         }),
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j.error ?? `Server returned ${res.status}`)
       if (j.conversationId && !conversationId) setConvId(j.conversationId as string)
       setTurns(prev => [...prev, {
-        role:     'assistant',
-        content:  String(j.reply ?? ''),
-        ticketId: (j.ticketId as string | null) ?? null,
+        role:      'assistant',
+        content:   String(j.reply ?? ''),
+        messageId: (j.messageId as string | null) ?? null,
+        ticketId:  (j.ticketId as string | null) ?? null,
+        helpful:   null,
       }])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The assistant is unavailable.')
@@ -121,6 +148,33 @@ export default function SupportBot() {
   function onTalkToHuman() {
     if (sending) return
     void send(HUMAN_HANDOFF_PROMPT)
+  }
+
+  async function onVote(idx: number, helpful: boolean) {
+    const turn = turns[idx]
+    if (!turn || turn.role !== 'assistant' || !turn.messageId) return
+    // Toggle: clicking the same vote clears it.
+    const next: boolean | null = turn.helpful === helpful ? null : helpful
+    // Optimistic. Roll back on error.
+    setTurns(prev => prev.map((t, i) => i === idx ? { ...t, helpful: next } : t))
+    try {
+      const session = await supabase.auth.getSession()
+      const token = session.data.session?.access_token
+      if (!token) throw new Error('Sign in expired')
+      const res = await fetch(`/api/support/messages/${turn.messageId}/feedback`, {
+        method: next === null ? 'DELETE' : 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: next === null ? undefined : JSON.stringify({ helpful: next }),
+      })
+      if (!res.ok) throw new Error(`Server returned ${res.status}`)
+    } catch {
+      // Roll back optimistic update on failure. We deliberately don't
+      // surface an error toast — feedback is non-critical UX.
+      setTurns(prev => prev.map((t, i) => i === idx ? { ...t, helpful: turn.helpful ?? null } : t))
+    }
   }
 
   function onReset() {
@@ -192,7 +246,13 @@ export default function SupportBot() {
 
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
             {turns.length === 0 && <EmptyState pathname={pathname} onPick={t => { void send(t) }} />}
-            {turns.map((t, i) => <Bubble key={i} turn={t} />)}
+            {turns.map((t, i) => (
+              <Bubble
+                key={i}
+                turn={t}
+                onVote={t.role === 'assistant' && t.messageId ? (h: boolean) => { void onVote(i, h) } : undefined}
+              />
+            ))}
             {sending && (
               <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                 <Loader2 className="h-3 w-3 animate-spin" /> Thinking…
@@ -252,10 +312,10 @@ export default function SupportBot() {
 
 // ── Sub-components ────────────────────────────────────────────────────────
 
-function Bubble({ turn }: { turn: ChatTurn }) {
+function Bubble({ turn, onVote }: { turn: ChatTurn; onVote?: (helpful: boolean) => void }) {
   const isUser = turn.role === 'user'
   return (
-    <div className={isUser ? 'flex justify-end' : 'flex justify-start'}>
+    <div className={isUser ? 'flex justify-end' : 'flex flex-col items-start'}>
       <div
         className={
           isUser
@@ -273,7 +333,57 @@ function Bubble({ turn }: { turn: ChatTurn }) {
           </p>
         )}
       </div>
+      {!isUser && onVote && (
+        <div className="flex items-center gap-1 mt-1 ml-1">
+          <FeedbackButton
+            active={turn.helpful === true}
+            onClick={() => onVote(true)}
+            label="Helpful"
+            Icon={ThumbsUp}
+          />
+          <FeedbackButton
+            active={turn.helpful === false}
+            onClick={() => onVote(false)}
+            label="Not helpful"
+            Icon={ThumbsDown}
+          />
+          {turn.helpful === false && (
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 ml-1">
+              Tap <em>Talk to a human</em> below for personal help.
+            </span>
+          )}
+        </div>
+      )}
     </div>
+  )
+}
+
+function FeedbackButton({
+  active,
+  onClick,
+  label,
+  Icon,
+}: {
+  active:  boolean
+  onClick: () => void
+  label:   string
+  Icon:    typeof ThumbsUp
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={label}
+      title={label}
+      className={
+        active
+          ? 'h-6 w-6 rounded-md inline-flex items-center justify-center bg-brand-navy/10 dark:bg-brand-yellow/20 text-brand-navy dark:text-brand-yellow transition-colors'
+          : 'h-6 w-6 rounded-md inline-flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-brand-navy dark:hover:text-brand-yellow hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors'
+      }
+    >
+      <Icon className="h-3 w-3" />
+    </button>
   )
 }
 

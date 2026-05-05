@@ -49,6 +49,35 @@ interface RequestBody {
   conversationId?: string
   message:         string
   pathname?:       string
+  // 'en' | 'es'. Anything else falls back to English. The widget detects
+  // from navigator.language; we accept the Accept-Language header as a
+  // backup when the body field is missing.
+  lang?:           string
+}
+
+// Two-letter language tag the model can be told to reply in. KB stays
+// English so we don't have to maintain duplicate copies — the model
+// translates on the fly. Add new tags here as KB confidence in those
+// languages grows.
+type SupportedLang = 'en' | 'es'
+
+function pickLang(req: Request, bodyLang: string | undefined): SupportedLang {
+  const fromBody = (bodyLang ?? '').toLowerCase().split('-')[0]
+  if (fromBody === 'es') return 'es'
+  if (fromBody === 'en') return 'en'
+  // Accept-Language: "es-MX,es;q=0.9,en;q=0.5" → first 2-letter tag we recognise.
+  const al = req.headers.get('accept-language') ?? ''
+  for (const part of al.split(',')) {
+    const head = part.trim().split(';')[0].toLowerCase().split('-')[0]
+    if (head === 'es') return 'es'
+    if (head === 'en') return 'en'
+  }
+  return 'en'
+}
+
+const LANG_INSTRUCTION: Record<SupportedLang, string> = {
+  en: 'Respond in English (US).',
+  es: 'Responde en español. The KNOWLEDGE BASE below is in English; translate the relevant parts into natural Spanish for your reply. Keep technical terms (LOTO, OSHA, NFPA, IIPP, PPE, CIP, VFD) in their original form.',
 }
 
 interface Reporter {
@@ -228,6 +257,7 @@ export async function POST(req: Request) {
         user_id:     reporter.id,
         tenant_id:   reporter.tenantId,
         origin_path: body.pathname ?? null,
+        language:    pickLang(req, body.lang),
       })
       .select('id')
       .maybeSingle()
@@ -237,6 +267,12 @@ export async function POST(req: Request) {
     }
     conversationId = created.id as string
   }
+  // Per-turn language: prefer the body field (the widget always sends it),
+  // fall back to Accept-Language. The DB conversation.language is a
+  // first-turn snapshot for the digest; the model is told the *current*
+  // language so a user who switched browser locales mid-conversation still
+  // gets a response in the right language.
+  const lang = pickLang(req, body.lang)
 
   // Persist the user turn first — even if the model call fails downstream,
   // the user's message is in the history so they don't lose it.
@@ -261,7 +297,13 @@ export async function POST(req: Request) {
     .map(r => ({ role: r.role, content: r.content }))
 
   const kb = resolveKb({ pathname: body.pathname ?? null, tenantModules })
-  const systemPrompt = SYSTEM_PROMPT_PREAMBLE + kb.systemContext
+  // Language directive sits between the persona and the KB so the model
+  // sees it before it starts grounding. It's intentionally short — the
+  // hard work is done by the prompt-cached KB body.
+  const systemPrompt =
+    SYSTEM_PROMPT_PREAMBLE
+    + `LANGUAGE\n${LANG_INSTRUCTION[lang]}\n\n`
+    + kb.systemContext
 
   // First model call. The model either replies directly or asks to call
   // the escalation tool.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { renderSupportTicketSection, type DigestTicket } from '@/lib/support/digest'
+import { renderSupportTicketSection, type DigestTicket, type DigestFeedback } from '@/lib/support/digest'
 
 function ticket(p: Partial<DigestTicket> = {}): DigestTicket {
   return {
@@ -98,5 +98,58 @@ describe('renderSupportTicketSection', () => {
       openCount: 1,
     })
     expect(anon.some(l => l.includes('(unknown)'))).toBe(true)
+  })
+})
+
+// ── Feedback rollup line ─────────────────────────────────────────────────
+
+function fb(p: Partial<DigestFeedback> = {}): DigestFeedback {
+  return { thumbsUp: 0, thumbsDown: 0, unrated: 0, ...p }
+}
+
+describe('renderSupportTicketSection — feedback line', () => {
+  it('omits the feedback line when no feedback prop is passed', () => {
+    const out = renderSupportTicketSection({ recent: [], openCount: 0 })
+    expect(out.some(l => l.includes('feedback:'))).toBe(false)
+  })
+
+  it('says "no assistant turns logged" when the day had no replies', () => {
+    const out = renderSupportTicketSection({
+      recent: [], openCount: 0, feedback: fb(),
+    })
+    expect(out.some(l => l.includes('feedback: no assistant turns logged'))).toBe(true)
+  })
+
+  it('renders 👍/👎 counts and helpful% on a normal day', () => {
+    const out = renderSupportTicketSection({
+      recent: [], openCount: 0,
+      feedback: fb({ thumbsUp: 7, thumbsDown: 1, unrated: 12 }),
+    })
+    const line = out.find(l => l.includes('feedback:')) ?? ''
+    expect(line).toContain('👍 7')
+    expect(line).toContain('👎 1')
+    expect(line).toContain('unrated 12')
+    expect(line).toContain('of 20')
+    // 7 of 8 voted = 87.5% rounded to 88
+    expect(line).toContain('88% helpful')
+  })
+
+  it('shows "—" instead of dividing by zero when nobody voted', () => {
+    const out = renderSupportTicketSection({
+      recent: [], openCount: 0,
+      feedback: fb({ unrated: 5 }),
+    })
+    const line = out.find(l => l.includes('feedback:')) ?? ''
+    expect(line).toContain('(—)')
+  })
+
+  it('appears alongside ticket lines on a busy day', () => {
+    const out = renderSupportTicketSection({
+      recent: [ticket({ subject: 'Real ticket' })],
+      openCount: 1,
+      feedback: fb({ thumbsUp: 3, thumbsDown: 2, unrated: 4 }),
+    })
+    expect(out.some(l => l.includes('Real ticket'))).toBe(true)
+    expect(out.some(l => l.includes('feedback:'))).toBe(true)
   })
 })

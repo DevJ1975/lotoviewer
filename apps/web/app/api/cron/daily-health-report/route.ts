@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { renderSupportTicketSection, type DigestTicket } from '@/lib/support/digest'
+import { renderSupportTicketSection, type DigestTicket, type DigestFeedback } from '@/lib/support/digest'
 
 // Daily app-health digest. Aggregates the last 24h of bug reports +
 // audit log + tenant metrics + (when configured) Sentry top issues,
@@ -101,6 +101,21 @@ async function run(req: Request) {
     .select('*', { count: 'exact', head: true })
     .is('resolved_at', null)
 
+  // Assistant-feedback rollup. Fetch only the helpful column for the
+  // window — small payload, cheap aggregate.
+  const { data: feedbackRows } = await admin
+    .from('support_messages')
+    .select('helpful')
+    .eq('role', 'assistant')
+    .gte('created_at', since)
+  type FeedbackRow = { helpful: boolean | null }
+  const feedbackData = (feedbackRows ?? []) as FeedbackRow[]
+  const supportFeedback: DigestFeedback = {
+    thumbsUp:   feedbackData.filter(r => r.helpful === true).length,
+    thumbsDown: feedbackData.filter(r => r.helpful === false).length,
+    unrated:    feedbackData.filter(r => r.helpful === null).length,
+  }
+
   // ─── Audit-log activity (last 24h) ──────────────────────────────────────
   const { data: auditRows } = await admin
     .from('audit_log')
@@ -195,7 +210,7 @@ async function run(req: Request) {
   const text = renderText({
     dayLabel,
     bugs, bugsBySeverity, openBugs: openBugs ?? 0,
-    supportRecent, supportOpen: supportOpen ?? 0,
+    supportRecent, supportOpen: supportOpen ?? 0, supportFeedback,
     audit, auditByOp, topAuditTables,
     allTenants, newTenantsLast24h, tenantsByStatus,
     totalMembers, pendingInvites,
@@ -235,6 +250,7 @@ interface RenderArgs {
   openBugs:          number
   supportRecent:     DigestTicket[]
   supportOpen:       number
+  supportFeedback:   DigestFeedback
   audit:             unknown[]
   auditByOp:         Record<string, number>
   topAuditTables:    Array<[string, number]>
@@ -272,6 +288,7 @@ function renderText(a: RenderArgs): string {
   for (const line of renderSupportTicketSection({
     recent:    a.supportRecent,
     openCount: a.supportOpen,
+    feedback:  a.supportFeedback,
   })) lines.push(line)
   lines.push('')
 
