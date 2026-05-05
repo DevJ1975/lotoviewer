@@ -109,7 +109,7 @@ Total KB will fit in ~30k tokens. Keeping it as flat markdown injected
 under prompt caching is simpler, deterministic, and cheaper to operate
 than running pgvector + embeddings. Revisit if KB exceeds ~80k tokens.
 
-## Data model — migration `043_support_assistant.sql`
+## Data model — migration `045_support_assistant.sql`
 
 ```sql
 create table public.support_conversations (
@@ -376,7 +376,7 @@ emailing the same address; the subject prefix differentiates them
 
 ### Phase 1 — MVP (the ship target)
 
-- Migration 043.
+- Migration 045.
 - KB files for `general` + `loto` only.
 - `POST /api/support/chat` (non-streaming first; SSE in Phase 2).
 - `<SupportBot />` widget on layout.

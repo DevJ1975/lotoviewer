@@ -1,4 +1,4 @@
--- Migration 044: support_messages feedback + language columns
+-- Migration 046: support_messages feedback + language columns
 --
 -- Two small additions to support Phase 4 polish:
 --   • Per-assistant-turn helpfulness feedback so we can prioritise KB

@@ -1,4 +1,4 @@
--- Migration 043: AI support assistant — conversations, messages, tickets
+-- Migration 045: AI support assistant — conversations, messages, tickets
 --
 -- Persists chat sessions with the in-app support bot plus the human-handoff
 -- tickets it opens. Schema mirrors lib/support/types.ts. RLS follows the

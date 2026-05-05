@@ -13,7 +13,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { isModuleVisible } from '@/lib/moduleVisibility'
+import { isModuleVisible } from '@soteria/core/moduleVisibility'
 
 // Each entry pairs a feature ID (from packages/core/src/features.ts) with
 // the markdown filename and the route-prefix patterns that should auto-

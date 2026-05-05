@@ -1,7 +1,7 @@
 // Shared types for the AI support assistant. The chat route, the widget,
 // and the unit tests all import from here.
 //
-// The DB shape is the source of truth (migration 043) — these are the
+// The DB shape is the source of truth (migration 045) — these are the
 // in-memory representations the API route hands to the model and emits to
 // the client.
 
