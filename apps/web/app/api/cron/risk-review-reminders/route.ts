@@ -67,6 +67,17 @@ interface RiskRow {
   assigned_to:          string
 }
 
+// Shape of the JSON body this cron returns. Both the early-exit
+// (no overdues) and the main path use this same set of four keys
+// so consumers (Vercel cron dashboard, smoke-test curl,
+// monitoring) see a stable contract regardless of overdue count.
+interface CronResponse {
+  overdue:         number
+  ownersNotified:  number
+  emailsSent:      number
+  emailsSkipped:   number
+}
+
 export async function GET(req: Request)  { return run(req) }
 export async function POST(req: Request) { return run(req) }
 
@@ -92,7 +103,8 @@ async function run(req: Request) {
   }
 
   if (!rows || rows.length === 0) {
-    return NextResponse.json({ overdue: 0, ownersNotified: 0, emailsSent: 0, emailsSkipped: 0 })
+    const empty: CronResponse = { overdue: 0, ownersNotified: 0, emailsSent: 0, emailsSkipped: 0 }
+    return NextResponse.json(empty)
   }
 
   // ─── Resolve tenant names + owner emails ────────────────────────────────
@@ -171,10 +183,11 @@ async function run(req: Request) {
     else             skipCount += 1
   }))
 
-  return NextResponse.json({
+  const result: CronResponse = {
     overdue:        rows.length,
     ownersNotified: groups.size,
     emailsSent:     sentCount,
     emailsSkipped:  skipCount,
-  })
+  }
+  return NextResponse.json(result)
 }
