@@ -92,7 +92,7 @@ async function run(req: Request) {
   }
 
   if (!rows || rows.length === 0) {
-    return NextResponse.json({ overdue: 0, emailsSent: 0, ownersNotified: 0 })
+    return NextResponse.json({ overdue: 0, ownersNotified: 0, emailsSent: 0, emailsSkipped: 0 })
   }
 
   // ─── Resolve tenant names + owner emails ────────────────────────────────

@@ -48,6 +48,13 @@ State this honestly before starting so the user knows the trade.
    - `npx vitest run --reporter=dot` in the web app
    - `npx expo export --platform ios` for mobile (tolerant of
      sandbox flake — log the result but don't block on it)
+   - **Simulate the deploy-environment build, not just the dev
+     environment.** Run `npm run build` from the deploy root
+     with no env overrides (clear `ALLOW_*` bypass vars first).
+     Catches `prebuild` / `postbuild` / `predeploy` hooks that
+     dev-server boots skip. On lotoviewer this caught a
+     `check-deeplink-placeholders.mjs` failure that tsc + vitest
+     + dev-boot all passed cleanly.
    - Record numbers as the floor; any commit that drops them is
      a regression.
 
