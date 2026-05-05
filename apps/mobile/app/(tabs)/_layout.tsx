@@ -53,6 +53,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="list-alt" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="risk"
+        options={{
+          title: 'Risk',
+          tabBarIcon: ({ color }) => <TabBarIcon name="shield" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

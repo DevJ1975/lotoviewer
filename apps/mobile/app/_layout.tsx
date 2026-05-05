@@ -67,6 +67,7 @@ function RootLayoutNav() {
           <Stack.Screen name="jha/new" options={{ title: 'New JHA', presentation: 'modal' }} />
           <Stack.Screen name="jha/[id]" options={{ title: 'JHA' }} />
           <Stack.Screen name="jha/[id]/edit" options={{ title: 'Edit breakdown' }} />
+          <Stack.Screen name="risk/[id]" options={{ title: 'Risk' }} />
           <Stack.Screen name="tenant-switcher" options={{ presentation: 'modal', title: 'Switch tenant' }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
         </Stack>
