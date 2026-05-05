@@ -190,3 +190,99 @@ Phase 1.
 If user says "skip Phase 1, go straight to X" or "just fix the
 P0s," that's fine — Phase 1's commits are independent and can be
 selected à la carte.
+
+---
+
+# Phases 1–5 outcomes (close-out — 2026-05-05)
+
+User approved the full plan. Each phase shipped as one commit.
+1537 vitest cases pass; tsc clean across the monorepo.
+
+## Phase 1 — Code remediation (commits f79756d → 19b09cb)
+
+| # | Commit  | What landed                                             | Findings closed |
+|---|---------|---------------------------------------------------------|-----------------|
+| 1.1 | f79756d | `requireTenantMember` on the 3 unauthed AI routes + JWT/x-active-tenant headers in 3 callers | F#1 (auth)     |
+| 1.2 | 447070b | Migration 047 (`ai_invocations` table + RLS) + `lib/ai/rateLimit.ts` (per-surface hourly/daily caps) + wired into all 4 routes | F#2 (rate limit), F#5 (token logging substrate) |
+| 1.3 | 420c4ee | `lib/ai/models.ts` — `SONNET`/`HAIKU` constants + `MODEL_BY_SURFACE` map. All 4 routes refactored to use it. | F#3 (model consistency) |
+| 1.4 | 420c4ee | Alias-style pinning posture chosen + documented in `models.ts`. validate-photo migrated from date-stamped to alias. | F#4 (pinning posture) |
+| 1.5 | 19b09cb | validate-photo: 4 MB size cap (413), media-type allowlist (415) | F#6 (image cap) |
+| 1.6 | 19b09cb | validate-photo: `isValidityResponse` shape check + 502 on malformed JSON / shape mismatch (instead of 500 with no info) | F#7 (parse safety) |
+
+## Phase 2 — Skipped
+
+Phase 0 originally listed Phase 2 as "prompt drift between KB and
+UI." That work was already done out-of-band by the
+`27ec3ab` commit (regulatory-citation KB update across all 7 KB
+files). No additional Phase 2 commit was needed.
+
+## Phase 3 — Cost + observability dashboard (commit 2740845)
+
+`/superadmin/ai-usage` dashboard reading from the `ai_invocations`
+table:
+
+- **Aggregator** (`lib/ai/usageAggregator.ts`): pure function +
+  pricing table (Sonnet 4.6 = $3/$15 per MTok; Haiku 4.5 = $1/$5
+  per MTok). Returns totals, by-surface, by-tenant, by-status,
+  by-model, daily trend, recent failures.
+- **API** (`/api/superadmin/ai-usage?days=N`): superadmin-gated,
+  joins tenant names, hard-capped at 50K rows, 365 max days.
+- **Page** (`/superadmin/ai-usage`): KPI tiles + 5 breakdown
+  tables + daily-trend bar chart + failure table + billing
+  caveat.
+- 19 unit tests on the aggregator + cost math.
+
+Closes finding F#5 (per-tenant token attribution) end-to-end.
+
+## Phase 4 — Mocked-Anthropic integration tests (commit 2595be5)
+
+47 new tests across 5 files under `__tests__/api/ai/`:
+
+| File | Cases | What it covers |
+|---|---|---|
+| `_helpers.ts` | (harness) | Mocks `requireTenantMember`, `checkAiRateLimit`/`logAiInvocation`, Anthropic SDK class with queueable responses, Sentry. |
+| `validate-photo.test.ts` | 13 | Auth/rate, 413 oversized, 415 wrong mime, 502 malformed JSON, 502 shape mismatch, fence-stripping, no-text-block path, success/error logging. |
+| `generate-loto-steps.test.ts` | 13 | Auth/rate, body validation, image content-block forwarding, RateLimitError → 429, APIError → 502, generic → 500, success/error logging. |
+| `generate-confined-space-hazards.test.ts` | 11 | Same coverage shape; both-photo forwarding; known_hazards passthrough; empty-hazards → 502. |
+| `prompt-injection.test.ts` | 10 | System prompts retain "qualified safety professional will review" guardrail + OSHA citation; user-supplied context/known_hazards do NOT mutate the system prompt; HTML/JS in model output is never echoed in error responses; Content-Type stays application/json on parse failure; unknown `type` in validate-photo falls back to EQUIP prompt. |
+
+**Bonus fix discovered by Phase 4 tests:** validate-photo now
+returns 502 (was 500) when Anthropic's response has no text
+block — same shape as the other 502 paths.
+
+## Phase 5 — Verify + handoff
+
+This section. Operational handoff items below; smoke-test
+checklist in `docs/ai-configuration-smoke-test.md`.
+
+### Operational items the user must complete (out of code scope)
+
+| Item | Where | Blocking for | Who |
+|---|---|---|---|
+| Apply migration `047_ai_invocations.sql` to production | Supabase SQL editor | Rate-limit + dashboard | User |
+| Set `ANTHROPIC_API_KEY` in Vercel | Vercel project env | All AI routes | User |
+| Set `SUPERADMIN_EMAILS` env (comma-separated) | Vercel project env | `/superadmin/ai-usage` access | User (already set) |
+| Verify Anthropic Console → Privacy → "Use my data" toggle is OFF | console.anthropic.com | Privacy-page claim defensibility | User |
+| Confirm Anthropic data-retention setting matches `/privacy` page wording | console.anthropic.com | Same | User |
+
+### Items intentionally out of scope of this audit
+
+- **Streaming on `/api/support/chat`** — Phase 1 contract was
+  non-streaming; Phase 2 of the chat module would lift this.
+- **Per-conversation message cap** (Phase 0 finding F#8) — the
+  per-user hourly cap already covers the abuse case in
+  practice. Defer until usage data shows otherwise.
+- **Adding more AI surfaces to the registry** — the `MODEL_BY_SURFACE`
+  + `AI_LIMITS` + `requireTenantMember` triplet is now the
+  canonical pattern; new surfaces follow it.
+
+### Final test counts
+
+- Before audit: 1404 vitest cases (last green at commit 27ec3ab)
+- After Phase 1: +6 (rate-limit shape) → 1410
+- After Phase 1.3+1.4: +5 (models module) → 1415
+- After Phase 3: +19 (usageAggregator) → 1490
+- After Phase 4: +47 (AI route integration + injection) → **1537**
+
+All 1537 pass. tsc clean.
+
