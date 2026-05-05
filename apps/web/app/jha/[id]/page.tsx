@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, AlertTriangle, Loader2, FileText, ShieldCheck, Pencil } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, Loader2, FileText, ShieldCheck, Pencil, ArrowUpRight } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
@@ -28,12 +28,19 @@ interface AuditEvent {
   occurred_at:  string
 }
 
+interface LinkedRisk {
+  id:            string
+  risk_number:   string
+  source_ref_id: string   // hazard.id this risk was escalated from
+}
+
 interface DetailBundle {
-  jha:      JhaRow
-  steps:    JhaStep[]
-  hazards:  JhaHazard[]
-  controls: JhaHazardControl[]
-  audit:    AuditEvent[]
+  jha:           JhaRow
+  steps:         JhaStep[]
+  hazards:       JhaHazard[]
+  controls:      JhaHazardControl[]
+  audit:         AuditEvent[]
+  linked_risks:  LinkedRisk[]
 }
 
 const SEVERITY_PILL: Record<JhaSeverity, string> = {
@@ -174,7 +181,7 @@ export default function JhaDetailPage({ params }: { params: Promise<{ id: string
             {bundle.steps.length === 0 && bundle.hazards.length === 0 ? (
               <EmptyBreakdown />
             ) : (
-              <StepsAndHazards bundle={bundle} />
+              <StepsAndHazards bundle={bundle} canEdit={canEdit} onChange={load} />
             )}
           </Section>
 
@@ -199,9 +206,11 @@ export default function JhaDetailPage({ params }: { params: Promise<{ id: string
   )
 }
 
-function StepsAndHazards({ bundle }: { bundle: DetailBundle }) {
+function StepsAndHazards({ bundle, canEdit, onChange }: { bundle: DetailBundle; canEdit: boolean; onChange: () => void }) {
   const grouped = groupHazardsByStep(bundle.steps, bundle.hazards)
   const controlsByHazard = groupControlsByHazard(bundle.hazards, bundle.controls)
+  // Map hazard.id → linked risk so each hazard row can show "→ RSK-NNNN".
+  const linkByHazard = new Map(bundle.linked_risks.map(r => [r.source_ref_id, r] as const))
   return (
     <ol className="space-y-4">
       {grouped.map((g, i) => (
@@ -223,23 +232,74 @@ function StepsAndHazards({ bundle }: { bundle: DetailBundle }) {
           ) : (
             <ul className="mt-2 space-y-2">
               {g.hazards.map(h => (
-                <li key={h.id} className="rounded-lg bg-slate-50 dark:bg-slate-950 p-3">
-                  <div className="flex flex-wrap items-baseline gap-2">
-                    <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${SEVERITY_PILL[h.potential_severity]}`}>
-                      {h.potential_severity}
-                    </span>
-                    <span className="text-[11px] capitalize text-slate-500 dark:text-slate-400">{h.hazard_category}</span>
-                    <span className="text-sm text-slate-800 dark:text-slate-200">{h.description}</span>
-                  </div>
-                  {h.notes && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{h.notes}</p>}
-                  <ControlList controls={controlsByHazard.get(h.id) ?? []} />
-                </li>
+                <HazardRow
+                  key={h.id}
+                  hazard={h}
+                  controls={controlsByHazard.get(h.id) ?? []}
+                  linkedRisk={linkByHazard.get(h.id) ?? null}
+                  jhaId={bundle.jha.id}
+                  canEdit={canEdit}
+                  onChange={onChange}
+                />
               ))}
             </ul>
           )}
         </li>
       ))}
     </ol>
+  )
+}
+
+function HazardRow({
+  hazard, controls, linkedRisk, jhaId, canEdit, onChange,
+}: {
+  hazard:     JhaHazard
+  controls:   JhaHazardControl[]
+  linkedRisk: LinkedRisk | null
+  jhaId:      string
+  canEdit:    boolean
+  onChange:   () => void
+}) {
+  const [showEscalate, setShowEscalate] = useState(false)
+  return (
+    <li className="rounded-lg bg-slate-50 dark:bg-slate-950 p-3">
+      <div className="flex flex-wrap items-baseline gap-2">
+        <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${SEVERITY_PILL[hazard.potential_severity]}`}>
+          {hazard.potential_severity}
+        </span>
+        <span className="text-[11px] capitalize text-slate-500 dark:text-slate-400">{hazard.hazard_category}</span>
+        <span className="text-sm text-slate-800 dark:text-slate-200 flex-1">{hazard.description}</span>
+        {linkedRisk ? (
+          <Link
+            href={`/risk/${linkedRisk.id}`}
+            className="inline-flex items-center gap-1 rounded-md bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 px-2 py-0.5 text-[10px] font-bold font-mono"
+            title="Linked risk register entry"
+          >
+            <ArrowUpRight className="h-3 w-3" />
+            {linkedRisk.risk_number}
+          </Link>
+        ) : canEdit ? (
+          <button
+            type="button"
+            onClick={() => setShowEscalate(true)}
+            className="inline-flex items-center gap-1 rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 text-[10px] font-semibold text-amber-900 dark:text-amber-200 hover:bg-amber-100"
+          >
+            <ArrowUpRight className="h-3 w-3" />
+            Escalate
+          </button>
+        ) : null}
+      </div>
+      {hazard.notes && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{hazard.notes}</p>}
+      <ControlList controls={controls} />
+      {showEscalate && (
+        <EscalateHazardModal
+          jhaId={jhaId}
+          hazardId={hazard.id}
+          onClose={() => setShowEscalate(false)}
+          onSuccess={() => { setShowEscalate(false); onChange() }}
+        />
+      )}
+    </li>
   )
 }
 
@@ -258,6 +318,96 @@ function ControlList({ controls }: { controls: JhaHazardControl[] }) {
         </li>
       ))}
     </ul>
+  )
+}
+
+function EscalateHazardModal({
+  jhaId, hazardId, onClose, onSuccess,
+}: { jhaId: string; hazardId: string; onClose: () => void; onSuccess: () => void }) {
+  const { tenant } = useTenant()
+  const [activity, setActivity] = useState<'routine' | 'non_routine' | 'emergency' | ''>('')
+  const [exposure, setExposure] = useState<'continuous' | 'daily' | 'weekly' | 'monthly' | 'rare' | ''>('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!tenant?.id) { setError('No active tenant'); return }
+    if (!activity || !exposure) { setError('Both fields are required'); return }
+    setSubmitting(true); setError(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: Record<string, string> = {
+        'content-type':    'application/json',
+        'x-active-tenant': tenant.id,
+      }
+      if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
+      const res = await fetch(`/api/jha/${jhaId}/hazards/${hazardId}/escalate`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ activity_type: activity, exposure_frequency: exposure }),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
+      onSuccess()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 shadow-xl border border-slate-200 dark:border-slate-700" onClick={e => e.stopPropagation()}>
+        <header className="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Escalate to Risk Register</h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Creates a linked risks entry tied back to this hazard.
+          </p>
+        </header>
+        <form onSubmit={onSubmit} className="p-5 space-y-4">
+          {error && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:bg-rose-950/30 dark:text-rose-200">
+              {error}
+            </div>
+          )}
+          <div>
+            <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Activity type *</label>
+            <div className="mt-1 grid grid-cols-3 gap-2 text-xs">
+              {(['routine', 'non_routine', 'emergency'] as const).map(t => (
+                <label key={t} className={'flex items-center gap-2 rounded-lg border px-2 py-1.5 cursor-pointer ' + (activity === t ? 'border-brand-navy bg-brand-navy/5 dark:bg-brand-navy/20' : 'border-slate-300 dark:border-slate-700')}>
+                  <input type="radio" name="activity" value={t} checked={activity === t} onChange={() => setActivity(t)} />
+                  <span className="capitalize">{t.replace('_', ' ')}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Exposure frequency *</label>
+            <select
+              value={exposure}
+              onChange={e => setExposure(e.target.value as typeof exposure)}
+              required
+              className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm"
+            >
+              <option value="">Select frequency…</option>
+              <option value="continuous">Continuous</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="rare">Rare</option>
+            </select>
+          </div>
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">Cancel</button>
+            <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 rounded-lg bg-brand-navy text-white px-5 py-2 text-sm font-semibold hover:bg-brand-navy/90 disabled:opacity-60">
+              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              Escalate
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   )
 }
 

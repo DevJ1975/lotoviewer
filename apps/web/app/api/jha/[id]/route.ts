@@ -47,12 +47,30 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
     if (!jhaRes.data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+    // Linked-risk lookup: any risks rows with source='jsa' whose
+    // source_ref_id matches a hazard on this JHA. Powers the
+    // "→ RSK-NNNN" pill on the detail page.
+    const hazardIds = (hazardsRes.data ?? []).map(h => h.id)
+    type LinkedRisk = { id: string; risk_number: string; source_ref_id: string }
+    let linkedRisks: LinkedRisk[] = []
+    if (hazardIds.length > 0) {
+      const { data: linkRes, error: linkErr } = await gate.authedClient
+        .from('risks')
+        .select('id, risk_number, source_ref_id')
+        .eq('tenant_id', gate.tenantId)
+        .eq('source', 'jsa')
+        .in('source_ref_id', hazardIds)
+      if (linkErr) throw new Error(linkErr.message)
+      linkedRisks = (linkRes ?? []) as LinkedRisk[]
+    }
+
     return NextResponse.json({
-      jha:      jhaRes.data,
-      steps:    stepsRes.data    ?? [],
-      hazards:  hazardsRes.data  ?? [],
-      controls: controlsRes.data ?? [],
-      audit:    auditRes.data    ?? [],
+      jha:           jhaRes.data,
+      steps:         stepsRes.data    ?? [],
+      hazards:       hazardsRes.data  ?? [],
+      controls:      controlsRes.data ?? [],
+      audit:         auditRes.data    ?? [],
+      linked_risks:  linkedRisks,
     })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
