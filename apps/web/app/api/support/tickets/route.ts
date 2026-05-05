@@ -5,9 +5,10 @@ import { requireSuperadmin } from '@/lib/auth/superadmin'
 // GET /api/support/tickets — superadmin-only list of support tickets.
 //
 // Query params:
-//   status=open       (default) tickets with resolved_at IS NULL
-//   status=resolved   tickets with resolved_at IS NOT NULL
-//   status=all        every ticket
+//   status=open       (default) tickets with resolved_at IS NULL (and not archived)
+//   status=resolved   tickets resolved within the last 30 days (archived_at IS NULL)
+//   status=archive    tickets with archived_at IS NOT NULL (cold storage)
+//   status=all        every ticket regardless of state
 //   limit=50          row cap (max 200)
 //
 // Returns rows joined with tenants(name) so the client doesn't have to
@@ -33,11 +34,19 @@ export async function GET(req: Request) {
   const admin = supabaseAdmin()
   let q = admin
     .from('support_tickets')
-    .select('id, conversation_id, user_id, tenant_id, user_email, user_name, subject, summary, reason, emailed_ok, resolved_at, created_at, tenants(name)')
+    .select('id, conversation_id, user_id, tenant_id, user_email, user_name, subject, summary, reason, emailed_ok, resolved_at, archived_at, created_at, tenants(name)')
     .order('created_at', { ascending: false })
     .limit(limit)
-  if (status === 'open')     q = q.is('resolved_at', null)
-  if (status === 'resolved') q = q.not('resolved_at', 'is', null)
+  if (status === 'open') {
+    // Active triage: not resolved, not archived.
+    q = q.is('resolved_at', null).is('archived_at', null)
+  } else if (status === 'resolved') {
+    // Recent close-outs: resolved but not yet archived (within 30 days).
+    q = q.not('resolved_at', 'is', null).is('archived_at', null)
+  } else if (status === 'archive' || status === 'archived') {
+    q = q.not('archived_at', 'is', null)
+  }
+  // status === 'all' → no filter, returns every row including archived.
 
   const { data, error } = await q
   if (error) {
@@ -57,6 +66,7 @@ export async function GET(req: Request) {
     reason: string
     emailed_ok: boolean | null
     resolved_at: string | null
+    archived_at: string | null
     created_at: string
     tenants: { name: string | null } | { name: string | null }[] | null
   }
@@ -73,6 +83,7 @@ export async function GET(req: Request) {
     reason:          r.reason,
     emailed_ok:      r.emailed_ok,
     resolved_at:     r.resolved_at,
+    archived_at:     r.archived_at,
     created_at:      r.created_at,
   }))
   return NextResponse.json({ tickets: rows, count: rows.length })

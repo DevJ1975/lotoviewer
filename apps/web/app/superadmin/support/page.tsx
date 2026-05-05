@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import {
   ArrowLeft, AlertCircle, Loader2, RefreshCw, CheckCircle2, Undo2,
-  MessageSquare, X, AlertTriangle, ShieldAlert, UserRound,
+  MessageSquare, X, AlertTriangle, ShieldAlert, UserRound, Archive, BarChart3,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -18,7 +18,7 @@ import { supabase } from '@/lib/supabase'
 // by a client-side RLS bypass.
 
 type TicketReason = 'user_requested' | 'low_confidence' | 'safety_critical'
-type StatusFilter = 'open' | 'resolved' | 'all'
+type StatusFilter = 'open' | 'resolved' | 'archive' | 'all'
 
 interface TicketRow {
   id:              string
@@ -33,6 +33,7 @@ interface TicketRow {
   reason:          TicketReason
   emailed_ok:      boolean | null
   resolved_at:     string | null
+  archived_at:     string | null
   created_at:      string
 }
 
@@ -104,8 +105,9 @@ export default function SuperadminSupportPage() {
       const newResolvedAt = (j.resolved_at as string | null) ?? null
       setTickets(prev => {
         const next = prev.map(x => x.id === t.id ? { ...x, resolved_at: newResolvedAt } : x)
-        if (filter === 'open')     return next.filter(x => x.resolved_at === null)
-        if (filter === 'resolved') return next.filter(x => x.resolved_at !== null)
+        if (filter === 'open')     return next.filter(x => x.resolved_at === null && x.archived_at === null)
+        if (filter === 'resolved') return next.filter(x => x.resolved_at !== null && x.archived_at === null)
+        if (filter === 'archive')  return next.filter(x => x.archived_at !== null)
         return next
       })
       void load()
@@ -131,6 +133,13 @@ export default function SuperadminSupportPage() {
             Tickets opened by the in-app assistant when a user asks for human help, the bot gets stuck, or the question is safety-critical.
           </p>
         </div>
+        <Link
+          href="/superadmin/support/metrics"
+          className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-brand-navy dark:text-brand-yellow border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+        >
+          <BarChart3 className="h-4 w-4" />
+          Metrics
+        </Link>
         <button
           type="button"
           onClick={() => void load()}
@@ -144,18 +153,19 @@ export default function SuperadminSupportPage() {
       {/* Filter pills + count tile */}
       <section className="flex items-center justify-between gap-3 flex-wrap">
         <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden text-xs font-semibold">
-          {(['open', 'resolved', 'all'] as const).map(f => (
+          {(['open', 'resolved', 'archive', 'all'] as const).map(f => (
             <button
               key={f}
               type="button"
               onClick={() => setFilter(f)}
               className={
                 filter === f
-                  ? 'px-3 py-1.5 bg-brand-navy text-white'
-                  : 'px-3 py-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  ? 'px-3 py-1.5 bg-brand-navy text-white inline-flex items-center gap-1'
+                  : 'px-3 py-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center gap-1'
               }
             >
-              {f === 'open' ? 'Open' : f === 'resolved' ? 'Resolved' : 'All'}
+              {f === 'archive' && <Archive className="h-3 w-3" />}
+              {f === 'open' ? 'Open' : f === 'resolved' ? 'Resolved' : f === 'archive' ? 'Archive' : 'All'}
             </button>
           ))}
         </div>
@@ -179,7 +189,9 @@ export default function SuperadminSupportPage() {
           ? <div className="p-12 text-center text-slate-400 dark:text-slate-500"><Loader2 className="h-5 w-5 animate-spin inline" /></div>
           : tickets.length === 0
             ? <p className="p-12 text-center text-sm text-slate-500 dark:text-slate-400">
-                {filter === 'open' ? 'No open tickets — quiet day. ✅' : `No ${filter} tickets.`}
+                {filter === 'open'    ? 'No open tickets — quiet day. ✅'
+                : filter === 'archive' ? 'No archived tickets yet. Resolved tickets move here automatically after 30 days.'
+                : `No ${filter} tickets.`}
               </p>
             : (
               <ul className="divide-y divide-slate-200 dark:divide-slate-700">
@@ -220,9 +232,10 @@ function TicketRowCard({
   const ReasonIcon = Reason.icon
   const created = new Date(t.created_at)
   const resolved = !!t.resolved_at
+  const archived = !!t.archived_at
 
   return (
-    <li className={resolved ? 'p-4 bg-slate-50 dark:bg-slate-900/40' : 'p-4'}>
+    <li className={archived ? 'p-4 bg-slate-100/50 dark:bg-slate-950/40' : resolved ? 'p-4 bg-slate-50 dark:bg-slate-900/40' : 'p-4'}>
       <div className="flex items-start gap-3">
         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${Reason.cls} shrink-0`}>
           <ReasonIcon className="h-3 w-3" />
@@ -259,24 +272,31 @@ function TicketRowCard({
           >
             <MessageSquare className="h-4 w-4" />
           </button>
-          <button
-            type="button"
-            onClick={onToggleResolved}
-            disabled={busy}
-            title={resolved ? 'Re-open ticket' : 'Mark resolved'}
-            aria-label={resolved ? 'Re-open ticket' : 'Mark resolved'}
-            className={
-              resolved
-                ? 'px-2.5 py-1.5 rounded-md text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center gap-1 disabled:opacity-40 transition-colors'
-                : 'px-2.5 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 inline-flex items-center gap-1 disabled:opacity-40 transition-colors'
-            }
-          >
-            {busy
-              ? <Loader2 className="h-3 w-3 animate-spin" />
-              : resolved
-                ? <><Undo2 className="h-3 w-3" /> Re-open</>
-                : <><CheckCircle2 className="h-3 w-3" /> Resolve</>}
-          </button>
+          {archived ? (
+            <span className="px-2.5 py-1.5 text-[11px] font-mono text-slate-500 dark:text-slate-400 inline-flex items-center gap-1">
+              <Archive className="h-3 w-3" />
+              archived
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={onToggleResolved}
+              disabled={busy}
+              title={resolved ? 'Re-open ticket' : 'Mark resolved'}
+              aria-label={resolved ? 'Re-open ticket' : 'Mark resolved'}
+              className={
+                resolved
+                  ? 'px-2.5 py-1.5 rounded-md text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center gap-1 disabled:opacity-40 transition-colors'
+                  : 'px-2.5 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 inline-flex items-center gap-1 disabled:opacity-40 transition-colors'
+              }
+            >
+              {busy
+                ? <Loader2 className="h-3 w-3 animate-spin" />
+                : resolved
+                  ? <><Undo2 className="h-3 w-3" /> Re-open</>
+                  : <><CheckCircle2 className="h-3 w-3" /> Resolve</>}
+            </button>
+          )}
         </div>
       </div>
     </li>

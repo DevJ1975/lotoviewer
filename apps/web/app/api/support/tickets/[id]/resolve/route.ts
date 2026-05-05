@@ -36,6 +36,23 @@ async function setResolved(
   }
 
   const admin = supabaseAdmin()
+  // Refuse to mutate archived tickets — those are cold storage.
+  // (No application path archives a ticket; the archive cron is the
+  // only writer of archived_at, so this gate doesn't fire in normal
+  // use. It exists so a future endpoint that scopes the row by id
+  // alone can't accidentally re-open something that's been archived.)
+  const { data: existing } = await admin
+    .from('support_tickets')
+    .select('id, archived_at')
+    .eq('id', id)
+    .maybeSingle()
+  if (!existing) {
+    return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+  }
+  if (existing.archived_at) {
+    return NextResponse.json({ error: 'Ticket is archived (read-only).' }, { status: 409 })
+  }
+
   const { data, error } = await admin
     .from('support_tickets')
     .update({ resolved_at: resolved ? new Date().toISOString() : null })
