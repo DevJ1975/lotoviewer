@@ -6,6 +6,7 @@ import { usePhotoUpload, type UploadType } from '@/hooks/usePhotoUpload'
 import { useNetworkStatus } from '@/hooks/useNetworkStatus'
 import { useUploadQueue } from '@/components/UploadQueueProvider'
 import { useTenant } from '@/components/TenantProvider'
+import { supabase } from '@/lib/supabase'
 import { compressImage, heicToJpeg, isHeic } from '@/lib/imageUtils'
 import { haptic } from '@/lib/platform'
 import { AnnotationLayer } from '@/components/AnnotatedPhoto'
@@ -155,7 +156,11 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
         const fd = new FormData()
         fd.append('file', file)
         fd.append('type', type)
-        const res  = await fetch('/api/validate-photo', { method: 'POST', body: fd })
+        const { data: { session } } = await supabase.auth.getSession()
+        const headers: Record<string, string> = {}
+        if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
+        if (tenantId)              headers['x-active-tenant'] = tenantId
+        const res  = await fetch('/api/validate-photo', { method: 'POST', headers, body: fd })
         const json = await res.json() as { valid?: boolean; reason?: string }
         if (json && json.valid === false) {
           onErrorRef.current?.(json.reason ?? 'Photo does not appear to show the correct subject.')

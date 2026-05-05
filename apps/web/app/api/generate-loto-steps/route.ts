@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { NextRequest, NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
+import { requireTenantMember } from '@/lib/auth/tenantGate'
 
 const client = new Anthropic()
 
@@ -90,6 +91,13 @@ interface GeneratedStep {
 }
 
 export async function POST(req: NextRequest) {
+  // Auth gate first — burning Anthropic tokens without authentication
+  // is a P0 abuse vector. Tenant-member is the right granularity:
+  // anyone in the tenant can author steps; the qualified-personnel
+  // review gate is enforced at sign-off, not at draft time.
+  const gate = await requireTenantMember(req)
+  if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
   try {
     const body = (await req.json()) as RequestBody
 

@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useTenant } from '@/components/TenantProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import type { ConfinedSpace } from '@soteria/core/types'
 import { effectiveThresholds, SITE_DEFAULTS } from '@soteria/core/confinedSpaceThresholds'
@@ -46,6 +47,7 @@ export default function NewPermitPage() {
   const params  = useParams<{ id: string }>()
   const router  = useRouter()
   const { userId } = useAuth()
+  const { tenant } = useTenant()
   const spaceId = decodeURIComponent(params.id)
 
   const [space, setSpace]       = useState<ConfinedSpace | null>(null)
@@ -151,9 +153,14 @@ export default function NewPermitPage() {
     setGenerating(true)
     setAiError(null)
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: Record<string, string> = { 'content-type': 'application/json' }
+      if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
+      if (tenant?.id)            headers['x-active-tenant'] = tenant.id
+
       const res = await fetch('/api/generate-confined-space-hazards', {
         method:  'POST',
-        headers: { 'content-type': 'application/json' },
+        headers,
         body: JSON.stringify({
           space_id:           space.space_id,
           description:        space.description,

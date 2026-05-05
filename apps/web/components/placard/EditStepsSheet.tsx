@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useTenant } from '@/components/TenantProvider'
 import { ENERGY_CODES, energyCodeFor } from '@soteria/core/energyCodes'
 import { Sheet } from '@/components/ui/sheet'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
@@ -57,6 +58,7 @@ function makeNewKey(): string {
 }
 
 export default function EditStepsSheet({ open, onClose, equipment, steps, onSaved, onToast }: Props) {
+  const { tenant } = useTenant()
   const equipmentId = equipment.equipment_id
   const [drafts, setDrafts]         = useState<Draft[]>([])
   const [saving, setSaving]         = useState(false)
@@ -107,9 +109,14 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
   async function handleGenerate() {
     setGenerating(true)
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: Record<string, string> = { 'content-type': 'application/json' }
+      if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
+      if (tenant?.id)            headers['x-active-tenant'] = tenant.id
+
       const res = await fetch('/api/generate-loto-steps', {
         method:  'POST',
-        headers: { 'content-type': 'application/json' },
+        headers,
         body: JSON.stringify({
           equipment_id:    equipment.equipment_id,
           description:     equipment.description,

@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { NextRequest, NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
+import { requireTenantMember } from '@/lib/auth/tenantGate'
 
 const client = new Anthropic()
 
@@ -19,6 +20,12 @@ valid = false if it is a blank wall, random object, person, or unrelated image.`
 }
 
 export async function POST(req: NextRequest) {
+  // Auth gate first — anyone POSTing to this endpoint burns a Haiku
+  // vision call's tokens. Tenant-member is enough since this is purely
+  // a UX-helper validity check; nothing protected is returned.
+  const gate = await requireTenantMember(req)
+  if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
   try {
     const formData = await req.formData()
     const file = formData.get('file') as File | null
