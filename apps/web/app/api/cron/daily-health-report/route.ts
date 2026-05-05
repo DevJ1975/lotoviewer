@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { renderSupportTicketSection, type DigestTicket } from '@/lib/support/digest'
 
 // Daily app-health digest. Aggregates the last 24h of bug reports +
 // audit log + tenant metrics + (when configured) Sentry top issues,
@@ -69,6 +70,34 @@ async function run(req: Request) {
   }
   const { count: openBugs } = await admin
     .from('bug_reports')
+    .select('*', { count: 'exact', head: true })
+    .is('resolved_at', null)
+
+  // ─── AI support tickets (last 24h + open backlog) ──────────────────────
+  // Mirrors the bug-reports pattern. Joining tenants(name) gives the
+  // digest enough context that the user doesn't have to cross-reference
+  // tenant_id by hand.
+  const { data: ticketRows } = await admin
+    .from('support_tickets')
+    .select('id, subject, reason, user_email, user_name, emailed_ok, resolved_at, created_at, tenants(name)')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+  type TicketRow = Omit<DigestTicket, 'tenant_name'> & {
+    tenants: { name: string | null } | { name: string | null }[] | null
+  }
+  const supportRecent: DigestTicket[] = ((ticketRows ?? []) as unknown as TicketRow[]).map(r => ({
+    id:          r.id,
+    subject:     r.subject,
+    reason:      r.reason,
+    user_email:  r.user_email,
+    user_name:   r.user_name,
+    tenant_name: Array.isArray(r.tenants) ? r.tenants[0]?.name ?? null : r.tenants?.name ?? null,
+    emailed_ok:  r.emailed_ok,
+    resolved_at: r.resolved_at,
+    created_at:  r.created_at,
+  }))
+  const { count: supportOpen } = await admin
+    .from('support_tickets')
     .select('*', { count: 'exact', head: true })
     .is('resolved_at', null)
 
@@ -166,6 +195,7 @@ async function run(req: Request) {
   const text = renderText({
     dayLabel,
     bugs, bugsBySeverity, openBugs: openBugs ?? 0,
+    supportRecent, supportOpen: supportOpen ?? 0,
     audit, auditByOp, topAuditTables,
     allTenants, newTenantsLast24h, tenantsByStatus,
     totalMembers, pendingInvites,
@@ -203,6 +233,8 @@ interface RenderArgs {
   bugs:              Array<{ id: string; severity: string; title: string; reporter_email: string | null; created_at: string; emailed_ok: boolean | null }>
   bugsBySeverity:    Record<string, number>
   openBugs:          number
+  supportRecent:     DigestTicket[]
+  supportOpen:       number
   audit:             unknown[]
   auditByOp:         Record<string, number>
   topAuditTables:    Array<[string, number]>
@@ -234,6 +266,13 @@ function renderText(a: RenderArgs): string {
       lines.push(`  ${tag} ${b.title} — ${reporter}${flag}`)
     }
   }
+  lines.push('')
+
+  // AI support tickets
+  for (const line of renderSupportTicketSection({
+    recent:    a.supportRecent,
+    openCount: a.supportOpen,
+  })) lines.push(line)
   lines.push('')
 
   // Sentry

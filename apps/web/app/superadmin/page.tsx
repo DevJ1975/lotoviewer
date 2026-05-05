@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Building2, ArrowRight } from 'lucide-react'
+import { Building2, ArrowRight, LifeBuoy } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { AllMembersPanel } from './_components/AllMembersPanel'
 
@@ -44,6 +44,27 @@ export default function SuperadminHome() {
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-snug">
                   List, create, and configure tenant organizations and their modules.
+                </p>
+              </div>
+            </div>
+          </Link>
+        </li>
+        <li>
+          <Link
+            href="/superadmin/support"
+            className="block p-5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-brand-navy dark:hover:border-brand-yellow hover:shadow-sm transition-all group"
+          >
+            <div className="flex items-start gap-3">
+              <LifeBuoy className="h-5 w-5 text-brand-navy dark:text-brand-yellow shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                    AI support tickets
+                  </h2>
+                  <ArrowRight className="h-4 w-4 text-slate-300 dark:text-slate-600 group-hover:text-brand-navy dark:group-hover:text-brand-yellow transition-colors shrink-0" />
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-snug">
+                  Triage tickets opened by the in-app assistant, view conversation transcripts, mark resolved.
                 </p>
               </div>
             </div>
