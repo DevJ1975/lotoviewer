@@ -1,8 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronLeft, ChevronRight, Check, Loader2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Check, Loader2, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
 import {
@@ -27,6 +27,22 @@ import StepConfirm    from './wizard/StepConfirm'
 // Submit) lives at the bottom; the step indicator at the top is
 // non-interactive in slice 3 (slice 4 may make completed steps
 // clickable for jump-back).
+//
+// Refresh-state persistence: state + step index are mirrored to
+// sessionStorage on every change, scoped by `tenant.id` so an
+// accidental tenant switch in another tab can't poison the draft.
+// Cleared after a successful submit.
+
+const DRAFT_VERSION = 1
+function draftKey(tenantId: string) {
+  return `soteria.risk-wizard.draft.${tenantId}`
+}
+interface DraftEnvelope {
+  v:        number
+  state:    WizardState
+  stepIdx:  number
+  savedAt:  number
+}
 
 export default function RiskWizard() {
   const router = useRouter()
@@ -35,6 +51,56 @@ export default function RiskWizard() {
   const [stepIdx,  setStepIdx]  = useState<number>(0)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [hydrated, setHydrated] = useState<boolean>(false)
+  const [restored, setRestored] = useState<number | null>(null)
+
+  // Hydrate draft on mount once we know the tenant.
+  useEffect(() => {
+    if (!tenant?.id) return
+    if (typeof window === 'undefined') { setHydrated(true); return }
+    try {
+      const raw = window.sessionStorage.getItem(draftKey(tenant.id))
+      if (raw) {
+        const parsed = JSON.parse(raw) as DraftEnvelope
+        if (parsed && parsed.v === DRAFT_VERSION && parsed.state) {
+          setState(parsed.state)
+          if (typeof parsed.stepIdx === 'number'
+              && parsed.stepIdx >= 0
+              && parsed.stepIdx < WIZARD_STEPS.length) {
+            setStepIdx(parsed.stepIdx)
+          }
+          setRestored(parsed.savedAt)
+        }
+      }
+    } catch { /* malformed JSON / quota / private mode — start fresh */ }
+    setHydrated(true)
+  }, [tenant?.id])
+
+  // Persist on every state/step change. sessionStorage writes are
+  // sub-millisecond; the wizard fires changes at user typing speed
+  // at most so no debounce.
+  useEffect(() => {
+    if (!hydrated || !tenant?.id) return
+    if (typeof window === 'undefined') return
+    try {
+      const env: DraftEnvelope = { v: DRAFT_VERSION, state, stepIdx, savedAt: Date.now() }
+      window.sessionStorage.setItem(draftKey(tenant.id), JSON.stringify(env))
+    } catch { /* quota / private mode — silently lose persistence */ }
+  }, [hydrated, tenant?.id, state, stepIdx])
+
+  function clearDraft() {
+    if (!tenant?.id || typeof window === 'undefined') return
+    try { window.sessionStorage.removeItem(draftKey(tenant.id)) } catch { /* ignore */ }
+  }
+
+  function discardDraft() {
+    if (!confirm('Discard this draft and start over?')) return
+    clearDraft()
+    setState(makeInitialWizardState())
+    setStepIdx(0)
+    setRestored(null)
+    setSubmitError(null)
+  }
 
   const currentStep = WIZARD_STEPS[stepIdx]!
   const isFirst = stepIdx === 0
@@ -83,7 +149,8 @@ export default function RiskWizard() {
         }
         throw new Error(body.error ?? `HTTP ${res.status}`)
       }
-      // On success, navigate to the new risk's detail page.
+      // On success, drop the draft + navigate to the new risk.
+      clearDraft()
       const riskId = body?.risk?.id as string | undefined
       if (riskId) router.push(`/risk/${riskId}`)
       else        router.push('/risk')
@@ -96,6 +163,22 @@ export default function RiskWizard() {
 
   return (
     <div className="space-y-5">
+      {restored !== null && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs">
+          <div className="text-amber-900 dark:text-amber-200">
+            <span className="font-semibold">Draft restored.</span>{' '}
+            Picked up where you left off ({new Date(restored).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}).
+          </div>
+          <button
+            type="button"
+            onClick={discardDraft}
+            className="inline-flex items-center gap-1 text-amber-900 dark:text-amber-200 hover:underline"
+          >
+            <Trash2 className="h-3 w-3" /> Discard
+          </button>
+        </div>
+      )}
+
       <StepIndicator currentIdx={stepIdx} />
 
       <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5 space-y-4">
