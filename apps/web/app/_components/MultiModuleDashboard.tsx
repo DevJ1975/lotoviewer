@@ -16,6 +16,7 @@ import { RecentActivityPanel }  from './RecentActivityPanel'
 import { ComingSoonStrip }      from './ComingSoonStrip'
 import { ModulesGrid }          from './ModulesGrid'
 import RiskKpiPanel             from './RiskKpiPanel'
+import NearMissKpiPanel         from './NearMissKpiPanel'
 
 // Multi-module dashboard — the legacy default home rendered by
 // app/page.tsx for tenants who use more than one safety module.
@@ -137,6 +138,10 @@ export default function MultiModuleDashboard() {
       {/* Risk Intelligence — visibility-gated; no-op when the
           tenant's modules.risk-assessment is false. */}
       <RiskKpiPanel />
+
+      {/* Near-Miss Intelligence — same gating pattern, mounts only
+          when the tenant has near-miss visible. */}
+      <NearMissKpiPanel />
 
       <ComingSoonStrip />
       <ModulesGrid />
