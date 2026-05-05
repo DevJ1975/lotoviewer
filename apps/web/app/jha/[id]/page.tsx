@@ -2,8 +2,9 @@
 
 import { use, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, AlertTriangle, Loader2, FileText, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, Loader2, FileText, ShieldCheck, Pencil } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
+import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import {
   groupHazardsByStep,
@@ -62,6 +63,8 @@ const FREQUENCY_LABEL: Record<JhaFrequency, string> = {
 export default function JhaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { tenant } = useTenant()
+  const { profile } = useAuth()
+  const canEdit = !!profile?.is_admin || !!profile?.is_superadmin
 
   const [bundle, setBundle] = useState<DetailBundle | null>(null)
   const [error,  setError]  = useState<string | null>(null)
@@ -94,13 +97,24 @@ export default function JhaDetailPage({ params }: { params: Promise<{ id: string
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-5">
-      <Link
-        href="/jha"
-        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to JHAs
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          href="/jha"
+          className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to JHAs
+        </Link>
+        {canEdit && bundle && bundle.jha.status !== 'superseded' && (
+          <Link
+            href={`/jha/${id}/edit`}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Edit breakdown
+          </Link>
+        )}
+      </div>
 
       {error && (
         <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:bg-rose-950/30 dark:text-rose-200">
@@ -252,7 +266,7 @@ function EmptyBreakdown() {
     <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 p-4 text-center">
       <FileText className="h-6 w-6 mx-auto text-slate-300 dark:text-slate-600" />
       <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-        No steps or hazards yet. The editor lands in slice 3.
+        No steps or hazards yet. Click <span className="font-semibold">Edit breakdown</span> to add them.
       </p>
     </div>
   )
