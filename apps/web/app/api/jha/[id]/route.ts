@@ -36,7 +36,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       gate.authedClient.from('jha_steps').select('*').eq('jha_id', id).eq('tenant_id', gate.tenantId).order('sequence', { ascending: true }),
       gate.authedClient.from('jha_hazards').select('*').eq('jha_id', id).eq('tenant_id', gate.tenantId),
       gate.authedClient.from('jha_hazard_controls').select('*').eq('jha_id', id).eq('tenant_id', gate.tenantId),
-      gate.authedClient.from('jha_audit_log').select('id, event_type, before_row, after_row, actor_id, actor_email, context, occurred_at').eq('jha_id', id).order('occurred_at', { ascending: false }).limit(50),
+      gate.authedClient.from('jha_audit_log').select('id, event_type, before_row, after_row, actor_id, actor_email, context, occurred_at').eq('jha_id', id).eq('tenant_id', gate.tenantId).order('occurred_at', { ascending: false }).limit(50),
     ])
 
     if (jhaRes.error)      throw new Error(jhaRes.error.message)

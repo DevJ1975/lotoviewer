@@ -246,9 +246,10 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
         .insert(insertRows)
         .select('id, description')
       if (error) throw new Error(`jha_hazards.insert: ${error.message}`)
-      // Match by description + insertion order. Description isn't
-      // guaranteed unique, so we walk both arrays in parallel —
-      // .insert() preserves request order in the response.
+      // Walk both arrays in parallel — Supabase's bulk .insert()
+      // preserves request order in the response. (Description was
+      // an earlier candidate join key but isn't guaranteed unique;
+      // sticking to position is simpler.)
       const dbRows = data ?? []
       for (let i = 0; i < hazards.length && i < dbRows.length; i++) {
         hazardLocalToId.set(hazards[i].local_id, dbRows[i].id)

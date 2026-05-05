@@ -289,7 +289,7 @@ export async function POST(req: Request) {
       // PPE-alone trigger surfaces here. Surface the friendly code.
       if (typeof controlsErr.message === 'string' && controlsErr.message.includes('PPE-alone rule')) {
         // Roll back the risk row so the caller can fix + retry.
-        await admin.from('risks').delete().eq('id', created.id)
+        await admin.from('risks').delete().eq('id', created.id).eq('tenant_id', gate.tenantId)
         return NextResponse.json({
           error: 'PPE-alone rule violation: this risk has inherent_score >= 8 and only PPE-level controls. Document why higher-level controls are not feasible in ppe_only_justification, or add at least one non-PPE control.',
           code:  'ppe_only_justification_required',

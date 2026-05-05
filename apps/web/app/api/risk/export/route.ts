@@ -167,6 +167,7 @@ export async function GET(req: Request) {
 async function handlePdf(_req: Request, gate: { ok: true; userId: string; userEmail: string | null; tenantId: string; role: string }) {
   try {
     const { buildRiskRegisterPdf } = await import('@/lib/pdfRiskRegister')
+    type RiskRegisterRow = Parameters<typeof buildRiskRegisterPdf>[1][number]
     const admin = supabaseAdmin()
 
     const { data: tenantRow } = await admin
@@ -191,7 +192,7 @@ async function handlePdf(_req: Request, gate: { ok: true; userId: string; userEm
       totalRisks:    risksRes?.length ?? 0,
     }
 
-    const bytes = await buildRiskRegisterPdf(meta, (risksRes ?? []) as never)
+    const bytes = await buildRiskRegisterPdf(meta, (risksRes ?? []) as RiskRegisterRow[])
 
     const slug = (tenantRow?.slug ?? gate.tenantId).replace(/[^a-z0-9-]/gi, '-')
     const filename = `risk-register-${slug}-${generatedAt.slice(0, 10)}.pdf`
