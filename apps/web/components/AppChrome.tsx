@@ -16,6 +16,7 @@ import IdleLogout from '@/components/IdleLogout'
 import StorageQuotaBanner from '@/components/StorageQuotaBanner'
 import AppDrawer from '@/components/AppDrawer'
 import TenantHeaderPill from '@/components/TenantHeaderPill'
+import SupportBot from '@/components/SupportBot'
 import { useAuth } from '@/components/AuthProvider'
 import { requestPersistentStorage } from '@/lib/platform'
 
@@ -102,6 +103,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
       <UpdateBanner />
       <UnloadGuard />
       <IdleLogout />
+      <SupportBot />
 
       <footer
         className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-3 text-xs text-slate-500 dark:text-slate-400"
