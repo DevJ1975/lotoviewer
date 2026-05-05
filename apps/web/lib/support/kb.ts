@@ -62,6 +62,18 @@ const MODULE_DEFS: KbModule[] = [
     pathPrefixes: ['/risk'],
     file:         'risk.md',
   },
+  {
+    id:           'near-miss',
+    featureId:    'near-miss',
+    pathPrefixes: ['/near-miss'],
+    file:         'near-miss.md',
+  },
+  {
+    id:           'jha',
+    featureId:    'jha',
+    pathPrefixes: ['/jha'],
+    file:         'jha.md',
+  },
 ]
 
 // Lazy-loaded once per process. process.cwd() inside Next route handlers

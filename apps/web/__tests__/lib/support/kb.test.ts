@@ -12,6 +12,8 @@ const FIXTURE = {
   'confined-spaces': '# cs fixture body',
   'hot-work':        '# hot-work fixture body',
   risk:              '# risk fixture body',
+  'near-miss':       '# near-miss fixture body',
+  jha:               '# jha fixture body',
 }
 
 beforeEach(() => {
@@ -137,6 +139,44 @@ describe('risk module', () => {
     // toggles.
     const r = resolveKb({ pathname: '/risk', tenantModules: { 'risk-assessment': false } })
     expect(r.loadedIds).not.toContain('risk')
+  })
+})
+
+describe('near-miss module', () => {
+  it('loads on /near-miss and its sub-pages', () => {
+    for (const p of ['/near-miss', '/near-miss/new', '/near-miss/NM-2026-0001']) {
+      const r = resolveKb({ pathname: p, tenantModules: { 'near-miss': true } })
+      expect(r.loadedIds, `pathname ${p}`).toContain('near-miss')
+    }
+  })
+  it('does NOT leak into unrelated routes', () => {
+    const r = resolveKb({ pathname: '/risk', tenantModules: { 'near-miss': true, 'risk-assessment': true } })
+    expect(r.loadedIds).not.toContain('near-miss')
+  })
+  it('respects the tenant module toggle', () => {
+    const r = resolveKb({ pathname: '/near-miss', tenantModules: { 'near-miss': false } })
+    expect(r.loadedIds).not.toContain('near-miss')
+  })
+  it('treats prefix-only matches strictly — /near-miss-x should NOT load near-miss', () => {
+    const r = resolveKb({ pathname: '/near-miss-x', tenantModules: { 'near-miss': true } })
+    expect(r.loadedIds).not.toContain('near-miss')
+  })
+})
+
+describe('jha module', () => {
+  it('loads on /jha and its sub-pages', () => {
+    for (const p of ['/jha', '/jha/new', '/jha/J-2026-0001', '/jha/J-2026-0001/edit']) {
+      const r = resolveKb({ pathname: p, tenantModules: { jha: true } })
+      expect(r.loadedIds, `pathname ${p}`).toContain('jha')
+    }
+  })
+  it('does NOT leak into unrelated routes', () => {
+    const r = resolveKb({ pathname: '/risk', tenantModules: { jha: true, 'risk-assessment': true } })
+    expect(r.loadedIds).not.toContain('jha')
+  })
+  it('respects the tenant module toggle', () => {
+    const r = resolveKb({ pathname: '/jha', tenantModules: { jha: false } })
+    expect(r.loadedIds).not.toContain('jha')
   })
 })
 
