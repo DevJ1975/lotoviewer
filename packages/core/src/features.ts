@@ -269,10 +269,10 @@ export const FEATURES: FeatureDef[] = [
     id:          'jha',
     name:        'Job Hazard Analysis',
     description: 'Task-level hazard breakdowns',
-    href:        null,
+    href:        '/jha',
     category:    'safety',
     enabled:     true,
-    comingSoon:  true,
+    comingSoon:  false,
   },
 
   // ── Reports / oversight ─────────────────────────────────────────────────
