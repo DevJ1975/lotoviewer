@@ -15,9 +15,16 @@ import { hydrateActiveTenant, supabase } from '@/lib/supabase'
 //   3. supabase.auth.onAuthStateChange() — keep userId in sync as
 //      sign-in / sign-out / token-refresh events fire.
 
+interface ProfileLite {
+  id:             string
+  is_admin:       boolean | null
+  is_superadmin:  boolean | null
+}
+
 interface AuthContextValue {
   userId:    string | null
   session:   Session | null
+  profile:   ProfileLite | null
   loading:   boolean
   signIn:    (email: string, password: string) => Promise<{ error: string | null }>
   signOut:   () => Promise<void>
@@ -27,10 +34,20 @@ const Ctx = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
+  const [profile, setProfile] = useState<ProfileLite | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
+
+    async function loadProfile(uid: string) {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, is_admin, is_superadmin')
+        .eq('id', uid)
+        .maybeSingle()
+      if (!cancelled) setProfile((data as ProfileLite | null) ?? null)
+    }
 
     async function boot() {
       // Hydrate tenant id BEFORE the first Supabase call so the
@@ -41,6 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: { session } } = await supabase.auth.getSession()
       if (cancelled) return
       setSession(session)
+      if (session?.user?.id) await loadProfile(session.user.id)
       setLoading(false)
     }
     void boot()
@@ -49,6 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (_event: AuthChangeEvent, sess: Session | null) => {
         if (cancelled) return
         setSession(sess)
+        if (sess?.user?.id) void loadProfile(sess.user.id)
+        else setProfile(null)
       },
     )
     return () => {
@@ -72,10 +92,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(() => ({
     userId: session?.user?.id ?? null,
     session,
+    profile,
     loading,
     signIn,
     signOut,
-  }), [session, loading, signIn, signOut])
+  }), [session, profile, loading, signIn, signOut])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

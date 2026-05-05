@@ -4,6 +4,7 @@ import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet } fr
 
 import { Text, View } from '@/components/Themed'
 import { useTenant } from '@/components/TenantProvider'
+import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import type { JhaRow, JhaStatus, JhaFrequency } from '@soteria/core/jha'
 
@@ -32,6 +33,8 @@ const FREQUENCY_LABEL: Record<JhaFrequency, string> = {
 
 export default function JhaListScreen() {
   const { tenant } = useTenant()
+  const { profile } = useAuth()
+  const canCreate = !!profile?.is_admin || !!profile?.is_superadmin
 
   const [rows, setRows] = useState<JhaRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -81,7 +84,15 @@ export default function JhaListScreen() {
       ) : rows && rows.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyText}>No active JHAs yet.</Text>
-          <Text style={styles.emptyHint}>Create one from the web for now — mobile create form ships in slice 2.</Text>
+          {canCreate && (
+            <Link href="/jha/new" asChild>
+              <Pressable>
+                {({ pressed }) => (
+                  <Text style={[styles.emptyCta, pressed && { opacity: 0.6 }]}>Create the first one →</Text>
+                )}
+              </Pressable>
+            </Link>
+          )}
         </View>
       ) : (
         <FlatList
@@ -116,6 +127,17 @@ export default function JhaListScreen() {
         />
       )}
 
+      {canCreate && (
+        <Link href="/jha/new" asChild>
+          <Pressable>
+            {({ pressed }) => (
+              <View style={[styles.fab, pressed && { opacity: 0.85 }]}>
+                <Text style={styles.fabText}>+ New JHA</Text>
+              </View>
+            )}
+          </Pressable>
+        </Link>
+      )}
     </View>
   )
 }
@@ -132,9 +154,9 @@ const styles = StyleSheet.create({
   center:         { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty:          { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 24 },
   emptyText:      { fontSize: 14, opacity: 0.6, textAlign: 'center' },
-  emptyHint:      { fontSize: 12, opacity: 0.5, textAlign: 'center', fontStyle: 'italic' },
+  emptyCta:       { fontSize: 14, fontWeight: '600', color: '#1e3a8a' },
 
-  listContent:    { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 24 },
+  listContent:    { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 88 },
 
   row:            { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 12, marginVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: '#cbd5e1' },
   rowBody:        { flex: 1, gap: 2 },
@@ -143,4 +165,7 @@ const styles = StyleSheet.create({
   rowMeta:        { fontSize: 11, opacity: 0.6, marginTop: 2 },
   statusPill:     { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   statusText:     { fontSize: 10, fontWeight: '700', textTransform: 'uppercase' },
+
+  fab:            { position: 'absolute', right: 16, bottom: 24, paddingHorizontal: 20, paddingVertical: 14, borderRadius: 28, backgroundColor: '#1e3a8a', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 6 },
+  fabText:        { color: '#fff', fontWeight: '700', fontSize: 14 },
 })
