@@ -1,8 +1,47 @@
 # Confined Spaces module
 
-The Confined Spaces module manages OSHA permit-required confined-space
-inventory and entry permits under 29 CFR 1910.146. The user starts on
-`/confined-spaces`.
+The Confined Spaces module manages permit-required confined-space
+inventory and entry permits. The user starts on `/confined-spaces`.
+
+## Regulatory references
+
+Confined-space entry is heavily regulated. Both federal and state-plan
+standards apply for California sites; pure federal-OSHA sites need
+only the federal column.
+
+- **Federal OSHA — 29 CFR 1910.146** ("Permit-Required Confined
+  Spaces") — the foundational federal standard. The 15 fields the
+  permit form walks you through map to the elements 1910.146(f)
+  enumerates.
+- **Federal OSHA — 29 CFR 1910.146(d)(14)** — requires retention of
+  cancelled permits for at least 1 year for the annual program
+  review. The platform retains them indefinitely (audit log is
+  append-only) so this is satisfied automatically.
+- **Federal OSHA — 29 CFR 1910.146(e)(5)(ii)** — the "prohibited
+  condition" rule that forces evacuation when atmospheric readings
+  go out of acceptable range. The platform's auto-cancel-on-
+  prohibited-condition flow implements this directly.
+- **Federal OSHA — 29 CFR 1910.146(f)(15)** — requires concurrent
+  hot-work permits to be cross-referenced when hot work occurs
+  inside a permit-required space.
+- **Cal/OSHA — Title 8 §5157** ("Permit-Required Confined Spaces")
+  — the California parallel to 1910.146. Substantively similar; the
+  platform's form fields satisfy both.
+- **Cal/OSHA — Title 8 §5158** ("Other Confined Space Operations")
+  — covers non-permit confined spaces and reclassified spaces.
+  Relevant when a space's classification toggle changes.
+- **Cal/OSHA — Title 8 §5156** — definitions and scope.
+- **Federal OSHA — 29 CFR 1910.134** — respiratory-protection
+  standard, applicable when atmospheric controls require respirators
+  rather than ventilation alone.
+- **ANSI Z117.1** — voluntary consensus standard on safety
+  requirements for confined spaces; often treated as best-practice
+  guidance.
+
+The default acceptable atmospheric thresholds (O₂ 19.5–23.5%,
+LEL <10%, H₂S <10 ppm, CO <35 ppm) are the standard floor for both
+federal and California. Site-specific overrides are supported but
+should be backed by industrial-hygiene data.
 
 ## Key pages
 

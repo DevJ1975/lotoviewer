@@ -1,8 +1,47 @@
 # Hot Work module
 
 The Hot Work module manages welding, cutting, grinding, and other
-spark-producing work permits under OSHA 1910.252, Cal/OSHA Title 8
-§6777, and NFPA 51B. The user starts on `/hot-work`.
+spark-producing work permits. The user starts on `/hot-work`.
+
+## Regulatory references
+
+Hot work is governed by overlapping OSHA welding standards plus the
+NFPA fire-prevention standard. Both Federal OSHA and Cal/OSHA apply
+in California; the NFPA standard is industry consensus that OSHA
+references and many AHJs (Authorities Having Jurisdiction) treat as
+mandatory.
+
+- **Federal OSHA — 29 CFR 1910.252** ("General Requirements" for
+  welding, cutting, and brazing) — the foundational federal hot-work
+  standard. Covers fire prevention, protection of personnel, and
+  health protection requirements.
+- **Federal OSHA — 29 CFR 1910.253–.255** — oxygen-fuel gas welding
+  + arc welding/cutting + resistance welding specifics.
+- **Federal OSHA — 29 CFR 1910.146(f)(15)** — requires concurrent
+  confined-space + hot-work permits when work happens inside a
+  permit-required space.
+- **Cal/OSHA — Title 8 Article 90, §§4848–4854** ("Welding, Cutting,
+  and Heating") — the California general-industry parallel. §4848
+  covers fire-prevention requirements; subsequent sections cover
+  ventilation, confined spaces, preserved-coating welding, and
+  high-energy / high-frequency processes.
+- **Cal/OSHA — Title 8 §6777** (referenced in some site-specific
+  programs) — fire-watch separation-of-duties requirement; the watch
+  must be a person other than the operator.
+- **Cal/OSHA — Title 8 §1535** (Construction Safety Orders) — hot
+  work in construction context. The platform is general-industry
+  focused but a construction tenant should map to §1535 instead of
+  §4848.
+- **NFPA 51B** ("Standard for Fire Prevention During Welding,
+  Cutting, and Other Hot Work") — the NFPA consensus standard. §8.7
+  spells out post-work fire-watch duration (60-minute floor; many
+  sites + insurance carriers require 30 minutes monitoring AFTER the
+  watcher leaves, which is why 120-minute total is common).
+- **FM Global Property Loss Prevention Data Sheet 7-40** — the
+  insurance-side checklist many industrial sites are contractually
+  required to satisfy. The platform's pre-work checklist is
+  modeled on it (35-foot combustibles clearance, opening protection,
+  sprinkler operability, etc.).
 
 ## Key pages
 

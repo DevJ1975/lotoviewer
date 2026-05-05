@@ -1,7 +1,56 @@
 # Risk module
 
-The Risk module is the ISO 45001 §6.1 hazard identification and risk
-evaluation register. The user starts on `/risk` (the heat map).
+The Risk module is the hazard identification and risk evaluation
+register, aligned to ISO 45001 §6.1 and OSHA / Cal/OSHA recordkeeping
++ IIPP requirements. The user starts on `/risk` (the heat map).
+
+## Regulatory references
+
+The risk register isn't the subject of a single OSHA standard — it's
+the documentation surface that satisfies multiple overlapping
+requirements. The major ones the platform aligns to:
+
+- **ISO 45001:2018 §6.1** ("Actions to address risks and
+  opportunities") — the international occupational health-and-safety
+  management system standard. §6.1.2 covers hazard identification +
+  risk evaluation; §6.1.2.1 specifically requires the org to identify
+  hazards on an ongoing and proactive basis. The risk register is
+  the primary evidence artifact.
+- **ISO 45001:2018 §8.1.2** ("Eliminating hazards and reducing OH&S
+  risks") — the Hierarchy of Controls (elimination → substitution →
+  engineering → administrative → PPE). The wizard's Controls step
+  enforces this preference order.
+- **OSHA General Duty Clause — Section 5(a)(1) of the OSH Act of
+  1970** — employers must provide a workplace "free from recognized
+  hazards that are causing or are likely to cause death or serious
+  physical harm." The risk register is the proactive identification
+  of those recognized hazards.
+- **Cal/OSHA — Title 8 §3203** (the IIPP — Injury and Illness
+  Prevention Program) — the cornerstone of California's general-
+  industry safety program. §3203(a)(4) specifically requires
+  procedures to identify and evaluate workplace hazards. The IIPP
+  printable export at `/risk/export/iipp` is formatted for state
+  inspectors who expect this layout.
+- **OSHA Recommended Practices for Safety and Health Programs (2016)**
+  — federal guidance that mirrors Cal/OSHA's IIPP requirements. Used
+  by safety-program auditors at federal-OSHA-only sites.
+- **OSHA PPE — 29 CFR 1910.132(d)** — requires a workplace hazard
+  assessment to determine PPE requirements. The risk register's
+  PPE-only justification field captures the documentation §1910.132(d)
+  demands when PPE is the controlling measure for a high-severity
+  hazard.
+- **OSHA — 29 CFR 1910 Subpart I** (PPE), **Subpart Z** (toxic and
+  hazardous substances), **Subpart S** (electrical) — the
+  hazard-specific federal standards risks may need to reference.
+- **ANSI/ASSP Z10** — voluntary consensus standard for
+  occupational health-and-safety management; ISO 45001's predecessor
+  in the U.S. context.
+
+The PPE-alone rule in the wizard (residual score ≥ 8 with PPE-only
+controls requires written justification) is enforced at the database
+trigger level (migration 039) and traces to ISO 45001 §8.1.2 + OSHA
+§1910.132(d). The justification is what an auditor will read when
+asking "why isn't there a higher-tier control?"
 
 ## Key pages
 

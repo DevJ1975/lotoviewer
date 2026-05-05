@@ -12,6 +12,39 @@ procedures, confined-space permits, hot-work permits, risk assessments, and
 related compliance documentation. It runs in the browser on iPad, iPhone,
 Android, laptops, and desktops, and works offline for most read tasks.
 
+## Regulatory frameworks the platform addresses
+
+Soteria FIELD is built around overlapping U.S. Federal OSHA, Cal/OSHA
+Title 8, NFPA, ANSI, and ISO 45001 standards. The bot will surface
+the specific citations relevant to each module when asked. The major
+ones that span multiple modules:
+
+- **Federal OSHA — 29 CFR Part 1910** (Occupational Safety and Health
+  Standards for General Industry) — the federal floor.
+- **OSHA General Duty Clause — Section 5(a)(1) of the OSH Act** —
+  the catch-all employers must keep workplaces free from recognized
+  serious hazards even where no specific standard exists.
+- **OSHA recordkeeping — 29 CFR Part 1904** — what counts as a
+  recordable injury / illness; influences how near-misses + incidents
+  are tracked.
+- **Cal/OSHA — Title 8 of the California Code of Regulations (T8)** —
+  California-specific requirements that meet or exceed federal OSHA.
+  Cal/OSHA tenants typically need both the federal AND California
+  citations on documentation.
+- **ISO 45001:2018** — international occupational health and safety
+  management system standard. The Risk + Near-Miss + JHA modules align
+  to ISO 45001 §6.1 (hazard ID + risk eval), §8.1.2 (hierarchy of
+  controls), and §9.1 (monitoring and measurement).
+- **NFPA 51B** — fire-prevention standard for hot work.
+- **ANSI/ASSP Z490.1** — guideline cadence for periodic JHA review
+  (annual minimum, plus on every significant process change).
+
+The bot can cite specific subsections per module — e.g. it knows that
+LOTO maps to 29 CFR 1910.147 and Cal/OSHA T8 §3314, that confined
+spaces maps to 29 CFR 1910.146 and Cal/OSHA T8 §5157, and so on.
+**Citations are pointers, not legal advice.** A qualified safety
+professional must make the actual compliance call.
+
 ## Signing in
 
 - Open the app and tap **Sign in** at `/login`.

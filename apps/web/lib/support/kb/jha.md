@@ -3,11 +3,61 @@
 The JHA module captures task-level hazard breakdowns: a job is
 broken into ordered steps, each step has identified hazards, and
 each hazard has applied controls from the Hierarchy of Controls.
-Required by Cal/OSHA T8 §3203 IIPP §(a)(4) ("identify and evaluate
-workplace hazards"), OSHA Voluntary Protection Program practice,
-and ISO 45001 §6.1.2.2.
 
 The user starts on `/jha` (the register list).
+
+## Regulatory references
+
+A JHA isn't directly mandated by name in most OSHA standards, but
+multiple standards require the *practice* a JHA documents.
+
+- **Cal/OSHA — Title 8 §3203(a)(4)** — the IIPP requires "procedures
+  for identifying and evaluating work place hazards including
+  scheduled periodic inspections to identify unsafe conditions
+  AND work practices." The JHA register documents the work-practice
+  side of this requirement. State inspectors typically expect to
+  see JHAs for any non-routine task that's been performed since the
+  last IIPP review.
+- **Cal/OSHA — Title 8 §3203(a)(6)** — IIPP requires correction of
+  unsafe conditions and work practices in a timely manner. The JHA's
+  Hierarchy-of-Controls breakdown is the corrective-action plan;
+  required_ppe is the interim measure.
+- **Federal OSHA — General Duty Clause, Section 5(a)(1) of the OSH
+  Act of 1970** — the catch-all that JHA practice satisfies for
+  task-specific hazards not covered by a vertical standard.
+- **Federal OSHA — 29 CFR 1910.132(d)** — PPE hazard assessment.
+  Each JHA hazard's PPE-level controls + the rolled-up required_ppe
+  field together satisfy the §1910.132(d) written certification
+  requirement when the JHA is approved.
+- **Federal OSHA — 29 CFR 1910 Subparts I, S, Z** — PPE / electrical
+  / toxic-substance vertical standards JHA hazards may need to map
+  to depending on the task.
+- **OSHA Voluntary Protection Programs (VPP)** — VPP star sites are
+  expected to maintain JHAs for all routine and non-routine tasks
+  with hazard exposure. The JHA module supplies the evidence layer.
+- **ISO 45001:2018 §6.1.2.2** ("Assessment of OH&S risks and
+  other risks to the OH&S management system") — task-level hazard
+  ID is one of the documented methods §6.1.2.2 expects.
+- **ISO 45001:2018 §8.1.2** — the Hierarchy of Controls (elimination
+  → substitution → engineering → administrative → PPE) the JHA
+  editor enforces visually + in the PPE-alone warning logic.
+- **ANSI/ASSP Z490.1** ("Criteria for Accepted Practices in Safety,
+  Health, and Environmental Training") — the source of the
+  annual-review-cadence convention for approved JHAs. The platform's
+  `next_review_date` column drives the Control Center "Overdue
+  review" KPI accordingly.
+- **OSHA Publication 3071 ("Job Hazard Analysis")** — federal
+  guidance document that describes the canonical JHA structure
+  (job → steps → hazards → controls). The platform's data model
+  mirrors this structure exactly.
+
+The PPE-alone warning in the editor is informational rather than
+blocking — JHAs legitimately capture transitional states ("PPE
+today, engineering control coming Q3"). The Risk module's PPE-alone
+check is harder (DB constraint) because risks are durable; JHA is a
+planning surface. The hazard's notes field is where the "why isn't
+there a higher-tier control?" justification lives, which is what an
+auditor will look for under §1910.132(d) or §3203 evidence reviews.
 
 ## Key pages
 

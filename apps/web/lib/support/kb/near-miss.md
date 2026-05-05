@@ -1,12 +1,50 @@
 # Near-Miss Reporting module
 
 The Near-Miss module captures events that *almost* caused harm but
-didn't — the leading-indicator signal that drives ISO 45001 §9.1
-monitoring and Cal/OSHA T8 §3203 IIPP investigation requirements.
-Reporting is intentionally low-friction: anyone in the tenant can
-file, not just admins.
+didn't — the leading-indicator signal that drives multiple OSHA,
+Cal/OSHA, and ISO 45001 requirements. Reporting is intentionally
+low-friction: anyone in the tenant can file, not just admins.
 
 The user starts on `/near-miss` (the triage list).
+
+## Regulatory references
+
+Near-miss reporting isn't covered by a single regulation — it's the
+investigation artifact that satisfies multiple overlapping
+requirements + provides the leading-indicator data the OSHA recordable
+metric can't capture.
+
+- **ISO 45001:2018 §9.1** ("Monitoring, measurement, analysis and
+  performance evaluation") — requires the org to monitor and measure
+  OH&S performance. Near-miss volume + severity_potential + age
+  metrics are the input data.
+- **ISO 45001:2018 §10.2** ("Incident, nonconformity and corrective
+  action") — requires investigation of incidents AND near-misses to
+  determine root causes and prevent recurrence. The triage workflow
+  + escalation-to-risk path implement this directly.
+- **Cal/OSHA — Title 8 §3203(a)(7)** — the IIPP requires investigating
+  occupational injuries / illnesses AND, by reasonable extension under
+  §3203(a)(4) hazard evaluation, near-misses that reveal new or
+  ongoing hazards.
+- **Federal OSHA — 29 CFR 1904** ("Recording and Reporting
+  Occupational Injuries and Illnesses") — defines what counts as an
+  OSHA-recordable. Most near-misses are NOT recordable by definition
+  (no injury), but a near-miss that's later determined to involve
+  loss of consciousness, days-away time, or medical-treatment
+  exposure WILL flip to recordable. The platform doesn't make that
+  determination — qualified safety personnel do.
+- **Cal/OSHA — Title 8 §14300** — California's parallel to 29 CFR
+  1904 for recordkeeping.
+- **OSHA Recommended Practices for Safety and Health Programs
+  (2016) — Hazard Identification and Assessment** — federal
+  guidance that explicitly recommends near-miss reporting as a
+  hazard-identification method.
+
+The 4-band severity_potential scheme (low / moderate / high / extreme)
+is shared with the Risk module so a near-miss that escalates carries
+its severity assessment forward into the risk register as inherent
+severity (low → 2, moderate → 3, high → 4, extreme → 5 on the 1–5
+axis the risk module uses).
 
 ## Key pages
 

@@ -1,8 +1,38 @@
 # LOTO module — Lockout/Tagout
 
 The LOTO module manages equipment-specific energy-isolation procedures
-for food-production equipment under OSHA 29 CFR 1910.147. The user starts
-on `/loto` (the equipment dashboard).
+for industrial equipment, primarily food-production but applicable to
+any general-industry workplace. The user starts on `/loto` (the
+equipment dashboard).
+
+## Regulatory references
+
+LOTO procedures must satisfy both the federal floor and any
+state-plan equivalent. For California sites, both apply.
+
+- **Federal OSHA — 29 CFR 1910.147** ("The Control of Hazardous
+  Energy / Lockout-Tagout") — the foundational federal standard.
+  Covers servicing and maintenance of machines and equipment in
+  which the unexpected energization, start-up, or release of stored
+  energy could cause injury.
+- **Federal OSHA — 29 CFR 1910.333** — selection and use of
+  electrical work practices, including lockout/tagout for
+  electrical equipment specifically.
+- **Cal/OSHA — Title 8 §3314** ("Cleaning, Repairing, Servicing,
+  Setting-Up, and Adjusting Operations of Machines or Equipment") —
+  the California parallel. T8 §3314 is more prescriptive than the
+  federal standard in some places — required minimum content for
+  isolation procedures is spelled out subsection-by-subsection.
+- **Cal/OSHA — Title 8 §2320.4** (electrical safety LOTO subset).
+- **ANSI/ASSP Z244.1** — voluntary consensus standard that's often
+  treated as best-practice guidance for "equivalent alternative
+  methods" some OSHA standards reference.
+
+The platform's energy-source codes (E electrical / G gas / H hydraulic
+/ P pneumatic / O mechanical / OG compressed gas) map to the energy
+types these standards enumerate. Each isolation step on a placard
+captures the three things every standard expects: **identify the
+energy source**, **isolate it physically**, **verify zero energy**.
 
 ## Key pages
 
@@ -60,9 +90,10 @@ source.
 
 On the steps panel, **Generate with AI** sends the description, photos,
 and notes to Claude Sonnet, which proposes one step per energy source
-following OSHA 1910.147 conventions. **A qualified safety professional
-must review every generated step before signing the placard.** The AI is
-a drafting tool, not the authority.
+following 29 CFR 1910.147 + Cal/OSHA T8 §3314 conventions (identify
+source → isolate → verify zero energy). **A qualified safety
+professional must review every generated step before signing the
+placard.** The AI is a drafting tool, not the authority.
 
 ## Department sign-off
 
