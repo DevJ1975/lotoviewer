@@ -76,14 +76,14 @@ describe('isFeatureAccessible', () => {
   it('returns false for coming-soon features even though they are enabled', () => {
     // The whole point of the helper — distinguishes "visible" from
     // "clickable" so route guards fail closed against advertised-only
-    // features. (hot-work flipped to live in batch G-2; near-miss
-    // and jha remain Coming Soon.)
-    expect(isFeatureAccessible('near-miss')).toBe(false)
+    // features. jha is the last remaining Coming Soon entry (near-miss
+    // shipped in slice 2; hot-work shipped in batch G-2).
     expect(isFeatureAccessible('jha')).toBe(false)
   })
 
-  it('returns true for hot-work now that the module is live', () => {
+  it('returns true for live modules', () => {
     expect(isFeatureAccessible('hot-work')).toBe(true)
+    expect(isFeatureAccessible('near-miss')).toBe(true)
   })
 
   it('returns false for unknown features', () => {

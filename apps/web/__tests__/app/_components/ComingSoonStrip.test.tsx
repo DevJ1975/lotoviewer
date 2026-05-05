@@ -17,23 +17,22 @@ describe('ComingSoonStrip', () => {
   it('advertises coming-soon modules by default', () => {
     mockUseTenant.mockReturnValue({ tenant: tenantWith({}) })
     render(<ComingSoonStrip />)
-    // 'Near-Miss Reporting' + 'Job Hazard Analysis' are coming-soon today
-    expect(screen.getByText('Near-Miss Reporting')).toBeInTheDocument()
+    // 'Job Hazard Analysis' is the last remaining coming-soon entry
+    // (near-miss shipped in slice 2).
     expect(screen.getByText('Job Hazard Analysis')).toBeInTheDocument()
   })
 
   it('hides a coming-soon module when the tenant has explicitly opted out', () => {
     mockUseTenant.mockReturnValue({
-      tenant: tenantWith({ 'near-miss': false }),
+      tenant: tenantWith({ jha: false }),
     })
     render(<ComingSoonStrip />)
-    expect(screen.queryByText('Near-Miss Reporting')).not.toBeInTheDocument()
-    expect(screen.getByText('Job Hazard Analysis')).toBeInTheDocument()
+    expect(screen.queryByText('Job Hazard Analysis')).not.toBeInTheDocument()
   })
 
   it('returns null when every coming-soon module is opted out', () => {
     mockUseTenant.mockReturnValue({
-      tenant: tenantWith({ 'near-miss': false, jha: false }),
+      tenant: tenantWith({ jha: false }),
     })
     const { container } = render(<ComingSoonStrip />)
     expect(container.firstChild).toBeNull()
