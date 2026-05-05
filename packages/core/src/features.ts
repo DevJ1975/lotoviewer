@@ -198,11 +198,11 @@ export const FEATURES: FeatureDef[] = [
     id:          'risk-controls',
     name:        'Controls Library',
     description: 'Tenant-scoped catalog of available controls',
-    href:        null,
+    href:        '/risk/controls',
     category:    'safety',
     parent:      'risk-assessment',
     enabled:     true,
-    comingSoon:  true,
+    comingSoon:  false,
   },
 
   // ── Confined Spaces module + sub-pages ──────────────────────────────────
