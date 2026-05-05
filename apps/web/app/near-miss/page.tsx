@@ -10,9 +10,9 @@ import {
   compareForTriage,
   ageInDays,
   type NearMissRow,
-  type NearMissSeverity,
   type NearMissStatus,
 } from '@soteria/core/nearMiss'
+import { SEVERITY_TW } from '@soteria/core/severityColors'
 
 // /near-miss — Triage list. Default view shows active reports
 // (new + triaged + investigating), severity desc → oldest first.
@@ -21,13 +21,6 @@ import {
 // State lives in component state, not the URL — single-page
 // triage view doesn't benefit from shareable URLs the way the
 // risk register does (every report links to its own detail page).
-
-const SEVERITY_PILL: Record<NearMissSeverity, string> = {
-  extreme:  'bg-rose-600 text-white',
-  high:     'bg-orange-500 text-white',
-  moderate: 'bg-amber-400 text-slate-900',
-  low:      'bg-emerald-500 text-white',
-}
 
 const STATUS_LABEL: Record<NearMissStatus, string> = {
   new:                 'New',
@@ -158,7 +151,7 @@ export default function NearMissListPage() {
                     </Link>
                   </td>
                   <td className="px-3 py-2">
-                    <span className={`inline-block rounded-md px-2 py-0.5 text-[11px] font-bold uppercase ${SEVERITY_PILL[r.severity_potential]}`}>
+                    <span className={`inline-block rounded-md px-2 py-0.5 text-[11px] font-bold uppercase ${SEVERITY_TW[r.severity_potential]}`}>
                       {r.severity_potential}
                     </span>
                   </td>

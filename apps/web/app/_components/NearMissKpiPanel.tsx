@@ -6,7 +6,7 @@ import { AlertTriangle, ArrowRight, Clock, Loader2, TrendingUp } from 'lucide-re
 import { fetchNearMissMetrics, type NearMissMetrics } from '@soteria/core/nearMissMetrics'
 import { useTenant } from '@/components/TenantProvider'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
-import type { NearMissSeverity } from '@soteria/core/nearMiss'
+import { SEVERITY_TW } from '@soteria/core/severityColors'
 
 // Near-Miss intelligence panel for the Control Center home dashboard.
 // Same pattern as RiskKpiPanel: gated by isModuleVisible, mounts only
@@ -16,13 +16,6 @@ import type { NearMissSeverity } from '@soteria/core/nearMiss'
 // links into the /near-miss list view so the user can drill down.
 
 const REFRESH_MS = 5 * 60 * 1000
-
-const SEVERITY_PILL: Record<NearMissSeverity, string> = {
-  extreme:  'bg-rose-600 text-white',
-  high:     'bg-orange-500 text-white',
-  moderate: 'bg-amber-400 text-slate-900',
-  low:      'bg-emerald-500 text-white',
-}
 
 export default function NearMissKpiPanel() {
   const { tenant, loading: tenantLoading } = useTenant()
@@ -148,7 +141,7 @@ function Inner({ metrics }: { metrics: NearMissMetrics }) {
                 >
                   {r.description}
                 </Link>
-                <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${SEVERITY_PILL[r.severity_potential]}`}>
+                <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${SEVERITY_TW[r.severity_potential]}`}>
                   {r.severity_potential}
                 </span>
               </li>

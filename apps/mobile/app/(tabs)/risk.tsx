@@ -6,8 +6,8 @@ import { Text, View } from '@/components/Themed'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
-import type { Band } from '@soteria/core/risk'
 import type { RiskSummary, RiskStatus } from '@soteria/core/queries/risks'
+import { SEVERITY_HEX, SEVERITY_FG_HEX } from '@soteria/core/severityColors'
 
 // /risk tab — Register list. Read in slice 1, heat map in slice 2,
 // create form in slice 3. Tap a row → /risk/[id]; tap "+ New" →
@@ -16,12 +16,6 @@ import type { RiskSummary, RiskStatus } from '@soteria/core/queries/risks'
 // Default filter hides closed + accepted_exception so the list
 // shows the active register; toggle exposes them.
 
-const BAND_BG: Record<Band, string> = {
-  extreme: '#DC2626', high: '#F97316', moderate: '#FBBF24', low: '#10B981',
-}
-const BAND_FG: Record<Band, string> = {
-  extreme: '#fff', high: '#fff', moderate: '#0F172A', low: '#fff',
-}
 const STATUS_LABEL: Record<RiskStatus, string> = {
   open: 'Open', in_review: 'In review', controls_in_progress: 'Controls',
   monitoring: 'Monitoring', closed: 'Closed', accepted_exception: 'Accepted',
@@ -132,8 +126,8 @@ export default function RiskListScreen() {
                 <Pressable>
                   {({ pressed }) => (
                     <View style={[styles.row, pressed && { opacity: 0.7 }]}>
-                      <View style={[styles.bandPill, { backgroundColor: BAND_BG[effBand] }]}>
-                        <Text style={[styles.bandScore, { color: BAND_FG[effBand] }]}>
+                      <View style={[styles.bandPill, { backgroundColor: SEVERITY_HEX[effBand] }]}>
+                        <Text style={[styles.bandScore, { color: SEVERITY_FG_HEX[effBand] }]}>
                           {effScore}
                         </Text>
                       </View>

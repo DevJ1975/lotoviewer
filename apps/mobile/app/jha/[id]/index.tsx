@@ -19,17 +19,12 @@ import {
   type JhaFrequency,
 } from '@soteria/core/jha'
 import { HIERARCHY_LABELS } from '@soteria/core/risk'
+import { SEVERITY_HEX, SEVERITY_FG_HEX } from '@soteria/core/severityColors'
 
 // /jha/[id] — Read-only detail. Mirrors the web detail page (header
 // + meta grid + required PPE + steps/hazards/controls tree + audit
 // timeline). Editor lands in slice 3.
 
-const SEVERITY_BG: Record<JhaSeverity, string> = {
-  extreme: '#DC2626', high: '#F97316', moderate: '#FBBF24', low: '#10B981',
-}
-const SEVERITY_FG: Record<JhaSeverity, string> = {
-  extreme: '#fff', high: '#fff', moderate: '#0F172A', low: '#fff',
-}
 const STATUS_BG: Record<JhaStatus, string> = {
   draft: '#e2e8f0', in_review: '#fef3c7', approved: '#d1fae5', superseded: '#f1f5f9',
 }
@@ -174,8 +169,8 @@ export default function JhaDetailScreen() {
                     g.hazards.map(h => (
                       <View key={h.id} style={styles.hazardCard}>
                         <View style={styles.hazardHeader}>
-                          <View style={[styles.sevPill, { backgroundColor: SEVERITY_BG[h.potential_severity] }]}>
-                            <Text style={[styles.sevText, { color: SEVERITY_FG[h.potential_severity] }]}>
+                          <View style={[styles.sevPill, { backgroundColor: SEVERITY_HEX[h.potential_severity] }]}>
+                            <Text style={[styles.sevText, { color: SEVERITY_FG_HEX[h.potential_severity] }]}>
                               {h.potential_severity}
                             </Text>
                           </View>

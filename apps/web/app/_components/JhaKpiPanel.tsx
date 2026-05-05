@@ -6,19 +6,12 @@ import { AlertTriangle, ArrowRight, ClipboardCheck, Clock, Loader2, ShieldAlert 
 import { fetchJhaMetrics, type JhaMetrics } from '@soteria/core/jhaMetrics'
 import { useTenant } from '@/components/TenantProvider'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
-import type { JhaSeverity } from '@soteria/core/jha'
+import { SEVERITY_TW } from '@soteria/core/severityColors'
 
 // JHA intelligence panel for the Control Center home dashboard.
 // Same gating + render pattern as RiskKpiPanel + NearMissKpiPanel.
 
 const REFRESH_MS = 5 * 60 * 1000
-
-const SEVERITY_PILL: Record<JhaSeverity, string> = {
-  extreme:  'bg-rose-600 text-white',
-  high:     'bg-orange-500 text-white',
-  moderate: 'bg-amber-400 text-slate-900',
-  low:      'bg-emerald-500 text-white',
-}
 
 export default function JhaKpiPanel() {
   const { tenant, loading: tenantLoading } = useTenant()
@@ -144,7 +137,7 @@ function Inner({ metrics }: { metrics: JhaMetrics }) {
                   {r.title}
                 </Link>
                 {r.worst_case ? (
-                  <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${SEVERITY_PILL[r.worst_case]}`}>
+                  <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${SEVERITY_TW[r.worst_case]}`}>
                     {r.worst_case}
                   </span>
                 ) : (

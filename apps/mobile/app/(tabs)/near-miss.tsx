@@ -13,6 +13,7 @@ import {
   type NearMissSeverity,
   type NearMissStatus,
 } from '@soteria/core/nearMiss'
+import { SEVERITY_HEX, SEVERITY_FG_HEX } from '@soteria/core/severityColors'
 
 // /near-miss tab — Triage list. Reuses the same types + helpers as
 // the web build via @soteria/core. Default view = active reports
@@ -20,19 +21,6 @@ import {
 //
 // Pull to refresh; tap a row to open the detail screen; FAB-style
 // "+ Report" button bottom-right routes to /near-miss/new.
-
-const SEVERITY_BG: Record<NearMissSeverity, string> = {
-  extreme:  '#DC2626',  // rose-600
-  high:     '#F97316',  // orange-500
-  moderate: '#FBBF24',  // amber-400
-  low:      '#10B981',  // emerald-500
-}
-const SEVERITY_FG: Record<NearMissSeverity, string> = {
-  extreme:  '#fff',
-  high:     '#fff',
-  moderate: '#0F172A',
-  low:      '#fff',
-}
 
 const STATUS_LABEL: Record<NearMissStatus, string> = {
   new: 'New', triaged: 'Triaged', investigating: 'Investigating',
@@ -110,8 +98,8 @@ export default function NearMissListScreen() {
               <Pressable>
                 {({ pressed }) => (
                   <View style={[styles.row, pressed && { opacity: 0.7 }]}>
-                    <View style={[styles.sevPill, { backgroundColor: SEVERITY_BG[item.severity_potential] }]}>
-                      <Text style={[styles.sevText, { color: SEVERITY_FG[item.severity_potential] }]}>
+                    <View style={[styles.sevPill, { backgroundColor: SEVERITY_HEX[item.severity_potential] }]}>
+                      <Text style={[styles.sevText, { color: SEVERITY_FG_HEX[item.severity_potential] }]}>
                         {item.severity_potential.slice(0, 1).toUpperCase()}
                       </Text>
                     </View>

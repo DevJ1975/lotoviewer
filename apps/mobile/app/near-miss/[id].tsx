@@ -11,17 +11,12 @@ import {
   type NearMissSeverity,
   type NearMissStatus,
 } from '@soteria/core/nearMiss'
+import { SEVERITY_HEX, SEVERITY_FG_HEX } from '@soteria/core/severityColors'
 
 // /near-miss/[id] — Read-only detail. Mobile defers triage actions
 // (status change, escalate) to the web app for now; field workers
 // who land here are reviewing what they or a teammate filed.
 
-const SEVERITY_BG: Record<NearMissSeverity, string> = {
-  extreme: '#DC2626', high: '#F97316', moderate: '#FBBF24', low: '#10B981',
-}
-const SEVERITY_FG: Record<NearMissSeverity, string> = {
-  extreme: '#fff', high: '#fff', moderate: '#0F172A', low: '#fff',
-}
 const STATUS_LABEL: Record<NearMissStatus, string> = {
   new: 'New', triaged: 'Triaged', investigating: 'Investigating',
   closed: 'Closed', escalated_to_risk: 'Escalated',
@@ -68,8 +63,8 @@ export default function NearMissDetailScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.headerRow}>
           <Text style={styles.reportNumber}>{report.report_number}</Text>
-          <View style={[styles.sevPill, { backgroundColor: SEVERITY_BG[report.severity_potential] }]}>
-            <Text style={[styles.sevText, { color: SEVERITY_FG[report.severity_potential] }]}>
+          <View style={[styles.sevPill, { backgroundColor: SEVERITY_HEX[report.severity_potential] }]}>
+            <Text style={[styles.sevText, { color: SEVERITY_FG_HEX[report.severity_potential] }]}>
               {report.severity_potential}
             </Text>
           </View>

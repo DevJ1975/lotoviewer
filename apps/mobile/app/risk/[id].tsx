@@ -11,17 +11,12 @@ import {
   type HierarchyLevel,
 } from '@soteria/core/risk'
 import type { RiskDetail, RiskControl, RiskReviewRow, RiskStatus } from '@soteria/core/queries/risks'
+import { SEVERITY_HEX, SEVERITY_FG_HEX } from '@soteria/core/severityColors'
 
 // /risk/[id] — Read-only detail. Shows the score card, controls
 // table, review history, and last-N audit-log entries. Quick
 // actions (status change, mark-reviewed) live on the web for now.
 
-const BAND_BG: Record<Band, string> = {
-  extreme: '#DC2626', high: '#F97316', moderate: '#FBBF24', low: '#10B981',
-}
-const BAND_FG: Record<Band, string> = {
-  extreme: '#fff', high: '#fff', moderate: '#0F172A', low: '#fff',
-}
 const STATUS_BG: Record<RiskStatus, string> = {
   open: '#dbeafe', in_review: '#fef3c7', controls_in_progress: '#e0e7ff',
   monitoring: '#cffafe', closed: '#d1fae5', accepted_exception: '#fee2e2',
@@ -199,13 +194,13 @@ function ScoreTile({ label, severity, likelihood, score, band }: {
   label: string; severity: number; likelihood: number; score: number; band: Band
 }) {
   return (
-    <View style={[styles.scoreTile, { borderColor: BAND_BG[band] }]}>
+    <View style={[styles.scoreTile, { borderColor: SEVERITY_HEX[band] }]}>
       <Text style={styles.scoreLabel}>{label}</Text>
-      <View style={[styles.scoreBand, { backgroundColor: BAND_BG[band] }]}>
-        <Text style={[styles.scoreValue, { color: BAND_FG[band] }]}>{score}</Text>
+      <View style={[styles.scoreBand, { backgroundColor: SEVERITY_HEX[band] }]}>
+        <Text style={[styles.scoreValue, { color: SEVERITY_FG_HEX[band] }]}>{score}</Text>
       </View>
       <Text style={styles.scoreFormula}>{severity} × {likelihood}</Text>
-      <Text style={[styles.scoreBandLabel, { color: BAND_BG[band] }]}>{band.toUpperCase()}</Text>
+      <Text style={[styles.scoreBandLabel, { color: SEVERITY_HEX[band] }]}>{band.toUpperCase()}</Text>
     </View>
   )
 }

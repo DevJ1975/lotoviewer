@@ -16,6 +16,7 @@ import {
   type HierarchyLevel,
 } from '@soteria/core/risk'
 import type { HazardCategory } from '@soteria/core/queries/risks'
+import { SEVERITY_HEX, SEVERITY_FG_HEX } from '@soteria/core/severityColors'
 
 // /risk/new — single-page mobile form. The web ships an 8-step
 // wizard; on iPad a single scrollable form reads better and the
@@ -36,13 +37,6 @@ const EXPOSURE_FREQS = ['continuous','daily','weekly','monthly','rare'] as const
 type Source       = typeof SOURCES[number]
 type ActivityType = typeof ACTIVITY_TYPES[number]
 type ExposureFreq = typeof EXPOSURE_FREQS[number]
-
-const BAND_BG: Record<Band, string> = {
-  extreme: '#DC2626', high: '#F97316', moderate: '#FBBF24', low: '#10B981',
-}
-const BAND_FG: Record<Band, string> = {
-  extreme: '#fff', high: '#fff', moderate: '#0F172A', low: '#fff',
-}
 
 interface DraftControl {
   local_id:        string
@@ -267,10 +261,10 @@ export default function NewRiskScreen() {
         <Section title="Inherent risk (no controls)">
           <ScoreSelector label="Severity"   value={inhSev} onChange={setInhSev} />
           <ScoreSelector label="Likelihood" value={inhLik} onChange={setInhLik} />
-          <View style={[styles.scorePreview, { backgroundColor: BAND_BG[inhBand] }]}>
-            <Text style={[styles.scorePreviewLabel, { color: BAND_FG[inhBand] }]}>Score</Text>
-            <Text style={[styles.scorePreviewValue, { color: BAND_FG[inhBand] }]}>{inhScore}</Text>
-            <Text style={[styles.scorePreviewBand, { color: BAND_FG[inhBand] }]}>{inhBand.toUpperCase()}</Text>
+          <View style={[styles.scorePreview, { backgroundColor: SEVERITY_HEX[inhBand] }]}>
+            <Text style={[styles.scorePreviewLabel, { color: SEVERITY_FG_HEX[inhBand] }]}>Score</Text>
+            <Text style={[styles.scorePreviewValue, { color: SEVERITY_FG_HEX[inhBand] }]}>{inhScore}</Text>
+            <Text style={[styles.scorePreviewBand, { color: SEVERITY_FG_HEX[inhBand] }]}>{inhBand.toUpperCase()}</Text>
           </View>
         </Section>
 
@@ -345,10 +339,10 @@ export default function NewRiskScreen() {
             <>
               <ScoreSelector label="Severity"   value={resSev} onChange={setResSev} />
               <ScoreSelector label="Likelihood" value={resLik} onChange={setResLik} />
-              <View style={[styles.scorePreview, { backgroundColor: BAND_BG[resBand] }]}>
-                <Text style={[styles.scorePreviewLabel, { color: BAND_FG[resBand] }]}>Score</Text>
-                <Text style={[styles.scorePreviewValue, { color: BAND_FG[resBand] }]}>{resScore}</Text>
-                <Text style={[styles.scorePreviewBand, { color: BAND_FG[resBand] }]}>{resBand.toUpperCase()}</Text>
+              <View style={[styles.scorePreview, { backgroundColor: SEVERITY_HEX[resBand] }]}>
+                <Text style={[styles.scorePreviewLabel, { color: SEVERITY_FG_HEX[resBand] }]}>Score</Text>
+                <Text style={[styles.scorePreviewValue, { color: SEVERITY_FG_HEX[resBand] }]}>{resScore}</Text>
+                <Text style={[styles.scorePreviewBand, { color: SEVERITY_FG_HEX[resBand] }]}>{resBand.toUpperCase()}</Text>
               </View>
             </>
           )}

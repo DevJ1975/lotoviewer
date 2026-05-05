@@ -13,6 +13,7 @@ import {
   type NearMissHazardCategory,
   type NearMissSeverity,
 } from '@soteria/core/nearMiss'
+import { SEVERITY_HEX } from '@soteria/core/severityColors'
 
 // Mobile-first capture form. Field workers tap "Report" on the
 // list, fill description + severity + category in 30 seconds, hit
@@ -25,10 +26,6 @@ const SEVERITY_HELP: Record<NearMissSeverity, string> = {
   high:     'Lost-time injury possible',
   extreme:  'Life-threatening or fatal outcome possible',
 }
-const SEVERITY_BG: Record<NearMissSeverity, string> = {
-  extreme: '#DC2626', high: '#F97316', moderate: '#FBBF24', low: '#10B981',
-}
-
 export default function NewNearMissScreen() {
   const { tenant } = useTenant()
   const { userId } = useAuth()
@@ -128,7 +125,7 @@ export default function NewNearMissScreen() {
               <Pressable key={s} onPress={() => setSeverity(s)}>
                 {({ pressed }) => (
                   <View style={[styles.sevRow, severity === s && styles.sevRowActive, pressed && { opacity: 0.6 }]}>
-                    <View style={[styles.sevDot, { backgroundColor: SEVERITY_BG[s] }]} />
+                    <View style={[styles.sevDot, { backgroundColor: SEVERITY_HEX[s] }]} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.sevLabel}>{s}</Text>
                       <Text style={styles.sevHelp}>{SEVERITY_HELP[s]}</Text>

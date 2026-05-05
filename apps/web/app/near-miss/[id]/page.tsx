@@ -19,6 +19,7 @@ import {
   type NearMissSeverity,
   type NearMissStatus,
 } from '@soteria/core/nearMiss'
+import { SEVERITY_TW } from '@soteria/core/severityColors'
 
 interface AuditEvent {
   id:           number
@@ -36,12 +37,7 @@ interface DetailBundle {
   audit:  AuditEvent[]
 }
 
-const SEVERITY_PILL: Record<NearMissSeverity, string> = {
-  extreme:  'bg-rose-600 text-white',
-  high:     'bg-orange-500 text-white',
-  moderate: 'bg-amber-400 text-slate-900',
-  low:      'bg-emerald-500 text-white',
-}
+// SEVERITY_PILL replaced by SEVERITY_TW from @soteria/core/severityColors
 
 const STATUS_LABEL: Record<NearMissStatus, string> = {
   new:                 'New',
@@ -141,7 +137,7 @@ export default function NearMissDetailPage({ params }: { params: Promise<{ id: s
                 </h1>
               </div>
               <div className="flex items-center gap-2">
-                <span className={`rounded-md px-2 py-1 text-[11px] font-bold uppercase ${SEVERITY_PILL[bundle.report.severity_potential]}`}>
+                <span className={`rounded-md px-2 py-1 text-[11px] font-bold uppercase ${SEVERITY_TW[bundle.report.severity_potential]}`}>
                   {bundle.report.severity_potential}
                 </span>
                 <span className="rounded-md px-2 py-1 text-[11px] font-semibold uppercase bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300">

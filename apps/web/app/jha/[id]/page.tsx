@@ -19,6 +19,7 @@ import {
   type JhaFrequency,
 } from '@soteria/core/jha'
 import { HIERARCHY_LABELS } from '@soteria/core/risk'
+import { SEVERITY_TW } from '@soteria/core/severityColors'
 
 interface AuditEvent {
   id:           number
@@ -41,13 +42,6 @@ interface DetailBundle {
   controls:      JhaHazardControl[]
   audit:         AuditEvent[]
   linked_risks:  LinkedRisk[]
-}
-
-const SEVERITY_PILL: Record<JhaSeverity, string> = {
-  extreme:  'bg-rose-600 text-white',
-  high:     'bg-orange-500 text-white',
-  moderate: 'bg-amber-400 text-slate-900',
-  low:      'bg-emerald-500 text-white',
 }
 
 const STATUS_PILL: Record<JhaStatus, string> = {
@@ -264,7 +258,7 @@ function HazardRow({
   return (
     <li className="rounded-lg bg-slate-50 dark:bg-slate-950 p-3">
       <div className="flex flex-wrap items-baseline gap-2">
-        <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${SEVERITY_PILL[hazard.potential_severity]}`}>
+        <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${SEVERITY_TW[hazard.potential_severity]}`}>
           {hazard.potential_severity}
         </span>
         <span className="text-[11px] capitalize text-slate-500 dark:text-slate-400">{hazard.hazard_category}</span>

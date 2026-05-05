@@ -7,6 +7,7 @@ import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { bandFor, scoreRisk, type Band } from '@soteria/core/risk'
 import type { RiskSummary, RiskStatus } from '@soteria/core/queries/risks'
+import { SEVERITY_HEX, SEVERITY_FG_HEX } from '@soteria/core/severityColors'
 
 // /risk/heatmap — 5×5 ISO 45001 risk matrix. iPad target so the
 // full grid fits on one screen at a glance; on phones it scales
@@ -16,12 +17,6 @@ import type { RiskSummary, RiskStatus } from '@soteria/core/queries/risks'
 // Toggle between "inherent" and "residual" view. Default is
 // residual (post-control), matching the web heat map page.
 
-const BAND_BG: Record<Band, string> = {
-  extreme: '#DC2626', high: '#F97316', moderate: '#FBBF24', low: '#10B981',
-}
-const BAND_FG: Record<Band, string> = {
-  extreme: '#fff', high: '#fff', moderate: '#0F172A', low: '#fff',
-}
 const STATUS_LABEL: Record<RiskStatus, string> = {
   open: 'Open', in_review: 'In review', controls_in_progress: 'Controls',
   monitoring: 'Monitoring', closed: 'Closed', accepted_exception: 'Accepted',
@@ -137,12 +132,12 @@ export default function RiskHeatmapScreen() {
                     {({ pressed }) => (
                       <View style={[
                         styles.cell,
-                        { backgroundColor: BAND_BG[band] },
+                        { backgroundColor: SEVERITY_HEX[band] },
                         pressed && cellRisks.length > 0 && { opacity: 0.7 },
                       ]}>
-                        <Text style={[styles.cellScore, { color: BAND_FG[band] }]}>{score}</Text>
+                        <Text style={[styles.cellScore, { color: SEVERITY_FG_HEX[band] }]}>{score}</Text>
                         {cellRisks.length > 0 && (
-                          <Text style={[styles.cellCount, { color: BAND_FG[band] }]}>
+                          <Text style={[styles.cellCount, { color: SEVERITY_FG_HEX[band] }]}>
                             {cellRisks.length}
                           </Text>
                         )}
@@ -158,7 +153,7 @@ export default function RiskHeatmapScreen() {
         <View style={styles.legend}>
           {(['low', 'moderate', 'high', 'extreme'] as const).map(b => (
             <View key={b} style={styles.legendItem}>
-              <View style={[styles.legendSwatch, { backgroundColor: BAND_BG[b] }]} />
+              <View style={[styles.legendSwatch, { backgroundColor: SEVERITY_HEX[b] }]} />
               <Text style={styles.legendText}>{b}</Text>
             </View>
           ))}
