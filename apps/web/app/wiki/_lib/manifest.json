@@ -55,6 +55,15 @@
       "sources":  ["apps/web/app/near-miss/**"]
     },
     {
+      "slug":     "jha",
+      "module":   "Job Hazard Analysis",
+      "tagline":  "Per-task hazard breakdowns with steps, hazards, controls, and review cadence.",
+      "category": "safety",
+      "href":     "/jha",
+      "wikiPage": "apps/web/app/wiki/jha/page.tsx",
+      "sources":  ["apps/web/app/jha/**", "apps/web/app/api/jha/**", "packages/core/src/jha.ts"]
+    },
+    {
       "slug":     "scorecard",
       "module":   "EHS Scorecard",
       "tagline":  "KPI dashboard with selectable time windows.",

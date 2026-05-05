@@ -96,10 +96,13 @@ try {
   process.exit(2)
 }
 
-// Look for wiki-sync-skip: in the commit body of any commit on the branch.
+// Look for `wiki-sync-skip: <reason>` at the start of a line in any
+// commit body on the branch. Anchored to ^ so quoting the directive in
+// prose (like this comment, or in a commit that explains how the bypass
+// works) does not accidentally trip it.
 try {
   const log = git('git log -50 --pretty=%B')
-  const m = log.match(/wiki-sync-skip:\s*(.+)/i)
+  const m = log.match(/^[ \t]*wiki-sync-skip:\s*(\S.*)$/im)
   if (m) bypassReason = m[1].trim()
 } catch { /* ignore */ }
 
