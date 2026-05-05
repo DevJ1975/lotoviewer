@@ -1,0 +1,202 @@
+{
+  "$comment": "Wiki manifest — single source of truth for: (1) which modules show on the /wiki index, (2) which source paths the wiki-sync check (scripts/check-wiki-sync.mjs) watches. Edit this JSON; the TypeScript wrapper at manifest.ts re-exports it with types.",
+  "entries": [
+    {
+      "slug":     "loto",
+      "module":   "Lockout / Tagout",
+      "tagline":  "Equipment, photos, placards, decommission.",
+      "category": "safety",
+      "href":     "/loto",
+      "wikiPage": "apps/web/app/wiki/loto/page.tsx",
+      "sources":  [
+        "apps/web/app/loto/**",
+        "apps/web/app/equipment/**",
+        "apps/web/app/departments/**",
+        "apps/web/app/print/**",
+        "apps/web/app/import/**",
+        "apps/web/app/decommission/**",
+        "apps/web/app/status/**"
+      ]
+    },
+    {
+      "slug":     "confined-spaces",
+      "module":   "Confined Spaces",
+      "tagline":  "OSHA 1910.146 permit-required spaces and atmospheric tests.",
+      "category": "safety",
+      "href":     "/confined-spaces",
+      "wikiPage": "apps/web/app/wiki/confined-spaces/page.tsx",
+      "sources":  ["apps/web/app/confined-spaces/**"]
+    },
+    {
+      "slug":     "hot-work",
+      "module":   "Hot Work",
+      "tagline":  "Hot-work permits with countdowns and post-work fire watch.",
+      "category": "safety",
+      "href":     "/hot-work",
+      "wikiPage": "apps/web/app/wiki/hot-work/page.tsx",
+      "sources":  ["apps/web/app/hot-work/**"]
+    },
+    {
+      "slug":     "risk",
+      "module":   "Risk Assessment",
+      "tagline":  "5×5 heat-map, risk register, controls library.",
+      "category": "safety",
+      "href":     "/risk",
+      "wikiPage": "apps/web/app/wiki/risk/page.tsx",
+      "sources":  ["apps/web/app/risk/**"]
+    },
+    {
+      "slug":     "near-miss",
+      "module":   "Near-Miss",
+      "tagline":  "Triage incident reports and escalate to the risk register.",
+      "category": "safety",
+      "href":     "/near-miss",
+      "wikiPage": "apps/web/app/wiki/near-miss/page.tsx",
+      "sources":  ["apps/web/app/near-miss/**"]
+    },
+    {
+      "slug":     "scorecard",
+      "module":   "EHS Scorecard",
+      "tagline":  "KPI dashboard with selectable time windows.",
+      "category": "reports",
+      "href":     "/admin/scorecard",
+      "wikiPage": "apps/web/app/wiki/scorecard/page.tsx",
+      "sources":  ["apps/web/app/admin/scorecard/**"]
+    },
+    {
+      "slug":     "insights",
+      "module":   "Risk Intelligence",
+      "tagline":  "Worst spaces, anomalous tests, supervisor activity.",
+      "category": "reports",
+      "href":     "/admin/insights",
+      "wikiPage": "apps/web/app/wiki/insights/page.tsx",
+      "sources":  ["apps/web/app/admin/insights/**"]
+    },
+    {
+      "slug":     "compliance-bundle",
+      "module":   "Compliance Bundle",
+      "tagline":  "Single-PDF audit export for a date range.",
+      "category": "reports",
+      "href":     "/admin/compliance-bundle",
+      "wikiPage": "apps/web/app/wiki/compliance-bundle/page.tsx",
+      "sources":  ["apps/web/app/admin/compliance-bundle/**"]
+    },
+    {
+      "slug":     "inspector",
+      "module":   "Inspector Access",
+      "tagline":  "Mint signed read-only URLs for inspectors and clients.",
+      "category": "reports",
+      "href":     "/admin/inspector",
+      "wikiPage": "apps/web/app/wiki/inspector/page.tsx",
+      "sources":  ["apps/web/app/admin/inspector/**", "apps/web/app/inspector/**"]
+    },
+    {
+      "slug":     "users",
+      "module":   "Users & Roles",
+      "tagline":  "Invite users, mark admins, revoke access.",
+      "category": "admin",
+      "href":     "/admin/users",
+      "wikiPage": "apps/web/app/wiki/users/page.tsx",
+      "sources":  ["apps/web/app/admin/users/**"]
+    },
+    {
+      "slug":     "loto-devices",
+      "module":   "LOTO Devices",
+      "tagline":  "Physical lock + tag inventory and checkouts.",
+      "category": "admin",
+      "href":     "/admin/loto-devices",
+      "wikiPage": "apps/web/app/wiki/loto-devices/page.tsx",
+      "sources":  ["apps/web/app/admin/loto-devices/**"]
+    },
+    {
+      "slug":     "audit",
+      "module":   "Audit Log",
+      "tagline":  "Per-row change history with filtering.",
+      "category": "admin",
+      "href":     "/admin/audit",
+      "wikiPage": "apps/web/app/wiki/audit/page.tsx",
+      "sources":  ["apps/web/app/admin/audit/**"]
+    },
+    {
+      "slug":     "training-records",
+      "module":   "Training Records",
+      "tagline":  "§1910.146(g) certs by role.",
+      "category": "admin",
+      "href":     "/admin/training-records",
+      "wikiPage": "apps/web/app/wiki/training-records/page.tsx",
+      "sources":  ["apps/web/app/admin/training-records/**"]
+    },
+    {
+      "slug":     "configuration",
+      "module":   "Configuration",
+      "tagline":  "Work-order URL template and push-dispatch webhook.",
+      "category": "admin",
+      "href":     "/admin/configuration",
+      "wikiPage": "apps/web/app/wiki/configuration/page.tsx",
+      "sources":  ["apps/web/app/admin/configuration/**"]
+    },
+    {
+      "slug":     "webhooks",
+      "module":   "Webhooks",
+      "tagline":  "Outbound event subscriptions for external systems.",
+      "category": "admin",
+      "href":     "/admin/webhooks",
+      "wikiPage": "apps/web/app/wiki/webhooks/page.tsx",
+      "sources":  ["apps/web/app/admin/webhooks/**"]
+    },
+    {
+      "slug":     "hygiene-log",
+      "module":   "Hygiene Log",
+      "tagline":  "High-level data-cleanup operations log.",
+      "category": "admin",
+      "href":     "/admin/hygiene-log",
+      "wikiPage": "apps/web/app/wiki/hygiene-log/page.tsx",
+      "sources":  ["apps/web/app/admin/hygiene-log/**"]
+    },
+    {
+      "slug":     "notifications",
+      "module":   "Notifications",
+      "tagline":  "Web Push subscription and per-event toggles.",
+      "category": "workspace",
+      "href":     "/settings/notifications",
+      "wikiPage": "apps/web/app/wiki/notifications/page.tsx",
+      "sources":  ["apps/web/app/settings/notifications/**"]
+    },
+    {
+      "slug":     "support",
+      "module":   "Support",
+      "tagline":  "Submit a bug or feedback report.",
+      "category": "workspace",
+      "href":     "/support",
+      "wikiPage": "apps/web/app/wiki/support/page.tsx",
+      "sources":  ["apps/web/app/support/**"]
+    },
+    {
+      "slug":     "welcome",
+      "module":   "Welcome / First Login",
+      "tagline":  "First-login flow: name + password.",
+      "category": "workspace",
+      "href":     "/welcome",
+      "wikiPage": "apps/web/app/wiki/welcome/page.tsx",
+      "sources":  ["apps/web/app/welcome/**"]
+    },
+    {
+      "slug":     "review-portal",
+      "module":   "Client Review Portal",
+      "tagline":  "Tokenized link for non-Soteria reviewers to sign off placards.",
+      "category": "public",
+      "href":     null,
+      "wikiPage": "apps/web/app/wiki/review-portal/page.tsx",
+      "sources":  ["apps/web/app/review/**"]
+    },
+    {
+      "slug":     "permit-signon",
+      "module":   "Permit Sign-on",
+      "tagline":  "Tokenized sign-off link for confined-space and hot-work permits.",
+      "category": "public",
+      "href":     null,
+      "wikiPage": "apps/web/app/wiki/permit-signon/page.tsx",
+      "sources":  ["apps/web/app/permit-signon/**"]
+    }
+  ]
+}

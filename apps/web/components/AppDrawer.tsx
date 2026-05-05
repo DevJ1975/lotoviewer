@@ -14,7 +14,7 @@ import {
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { isModuleVisible } from '@/lib/moduleVisibility'
-import { Shield } from 'lucide-react'
+import { Shield, BookOpen } from 'lucide-react'
 
 // Side drawer that hosts every feature in the app. Replaces the inline
 // top-nav links so the chrome stays minimal as more modules ship.
@@ -185,6 +185,14 @@ export default function AppDrawer({ open, onClose }: Props) {
         </nav>
 
         <footer className="border-t border-slate-100 dark:border-slate-800 shrink-0">
+          <Link
+            href="/wiki"
+            onClick={onClose}
+            className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border-b border-slate-100 dark:border-slate-800"
+          >
+            <BookOpen className="h-4 w-4" />
+            Help &amp; Wiki
+          </Link>
           {profile?.is_superadmin && (
             <Link
               href="/superadmin"
