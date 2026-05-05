@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { reconcileEquipment, type RealtimePayload } from '@/lib/equipmentReconcile'
-import type { Equipment } from '@/lib/types'
+import { reconcileEquipment, type RealtimePayload } from '@soteria/core/equipmentReconcile'
+import type { Equipment } from '@soteria/core/types'
 
 function mk(id: string, overrides: Partial<Equipment> = {}): Equipment {
   return {

@@ -18,7 +18,7 @@
 import { describe, it, expect } from 'vitest'
 import { PDFDocument } from 'pdf-lib'
 import { generatePlacardPdf } from '@/lib/pdfPlacard'
-import type { Equipment, LotoEnergyStep } from '@/lib/types'
+import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 
 function makeEquipment(partial: Partial<Equipment> = {}): Equipment {
   return {

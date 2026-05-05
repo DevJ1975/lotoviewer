@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { ENERGY_CODES, energyCodeFor } from '@/lib/energyCodes'
+import { ENERGY_CODES, energyCodeFor } from '@soteria/core/energyCodes'
 import { Sheet } from '@/components/ui/sheet'
-import type { Equipment, LotoEnergyStep } from '@/lib/types'
+import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 
 interface Props {
   open:         boolean

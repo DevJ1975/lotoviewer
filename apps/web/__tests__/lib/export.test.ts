@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { csvEscape, buildEquipmentCsv } from '@/lib/export'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 
 function eq(partial: Partial<Equipment>): Equipment {
   return {

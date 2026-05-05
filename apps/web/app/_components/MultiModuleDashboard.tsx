@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/components/AuthProvider'
 import { timeOfDayGreeting } from '@/components/Greeting'
-import { fetchHomeMetrics, type HomeMetrics } from '@/lib/homeMetrics'
+import { fetchHomeMetrics, type HomeMetrics } from '@soteria/core/homeMetrics'
 import ThemeToggle from '@/components/ThemeToggle'
 import { Hero }                 from './Hero'
 import { CriticalAlertBanner }  from './CriticalAlertBanner'

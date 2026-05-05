@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useFormDraft } from '@/hooks/useFormDraft'
 

@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from 'pdf-lib'
-import type { Equipment, LotoReview } from './types'
+import type { Equipment, LotoReview } from '@soteria/core/types'
 
 // ------------------------------ types ------------------------------
 

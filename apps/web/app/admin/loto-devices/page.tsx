@@ -13,7 +13,7 @@ import {
   STALE_CHECKOUT_HOURS,
   type OpenCheckoutRow,
 } from '@/lib/queries/lotoDevices'
-import type { LotoDevice, LotoDeviceStatus } from '@/lib/types'
+import type { LotoDevice, LotoDeviceStatus } from '@soteria/core/types'
 import { AddDeviceForm }   from './_components/AddDeviceForm'
 import { CheckoutDialog }  from './_components/CheckoutDialog'
 

@@ -1,11 +1,11 @@
 import { PDFDocument, PDFImage, StandardFonts, rgb } from 'pdf-lib'
-import { hexToRgb01 } from '@/lib/energyCodes'
+import { hexToRgb01 } from '@soteria/core/energyCodes'
 import {
   HOT_WORK_TYPE_LABELS,
   HOT_WORK_CANCEL_REASON_LABELS,
   type HotWorkPermit,
-} from '@/lib/types'
-import { hotWorkState } from '@/lib/hotWorkPermitStatus'
+} from '@soteria/core/types'
+import { hotWorkState } from '@soteria/core/hotWorkPermitStatus'
 import {
   AMBER, EMERALD, FAINT, MARGIN, MUTED, NAVY, PAGE_H, PAGE_W, RED, RULE, SLATE, WHITE,
   createDrawCtx, drawBullets, drawDivider, drawKeyValue, drawSectionBar, embedQrCode,

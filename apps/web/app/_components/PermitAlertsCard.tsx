@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { AlertTriangle, FileText, Flame } from 'lucide-react'
-import type { PermitAlertSummary, HotWorkAlertSummary } from '@/lib/homeMetrics'
+import type { PermitAlertSummary, HotWorkAlertSummary } from '@soteria/core/homeMetrics'
 
 // Sits below the critical alert banner (expired permits) but above the KPI
 // strip. Only renders when there's at least one alert — empty state would

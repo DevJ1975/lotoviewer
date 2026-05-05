@@ -8,7 +8,7 @@ import type {
   ConfinedSpace,
   ConfinedSpacePermit,
   HotWorkPermit,
-} from '@/lib/types'
+} from '@soteria/core/types'
 
 // GET /api/inspector/bundle?start=…&end=…&exp=…&label=…&sig=…
 //

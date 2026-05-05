@@ -4,9 +4,9 @@ import {
   cancelReasonBreakdown,
   avgPermitDurationMinutes,
   summarizeScorecardFromRows,
-} from '@/lib/scorecardMetrics'
-import { SITE_DEFAULTS } from '@/lib/confinedSpaceThresholds'
-import type { AtmosphericTest, ConfinedSpacePermit } from '@/lib/types'
+} from '@soteria/core/scorecardMetrics'
+import { SITE_DEFAULTS } from '@soteria/core/confinedSpaceThresholds'
+import type { AtmosphericTest, ConfinedSpacePermit } from '@soteria/core/types'
 
 const NOW = new Date('2026-04-26T12:00:00Z').getTime()
 const DAY_MS = 24 * 60 * 60 * 1000

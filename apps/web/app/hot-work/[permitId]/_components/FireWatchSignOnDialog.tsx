@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
-import type { HotWorkPermit } from '@/lib/types'
+import type { HotWorkPermit } from '@soteria/core/types'
 
 // Sign-on dialog for fire watchers acknowledging NFPA 51B §6.5 duties.
 // Fire watchers are picked from the permit's roster (fire_watch_personnel)

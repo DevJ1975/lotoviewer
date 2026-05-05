@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Download, Loader2, Search, Wrench } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
-import type { HygieneAction, HygieneLogRow } from '@/lib/types'
+import type { HygieneAction, HygieneLogRow } from '@soteria/core/types'
 
 // Hygiene-log viewer. Surfaces rows from loto_hygiene_log — populated
 // by one-off data-hygiene scripts run in the Supabase SQL Editor (e.g.

@@ -9,7 +9,7 @@ import {
   getChildren,
   resolveFeatureFlags,
   type FeatureCategory,
-} from '@/lib/features'
+} from '@soteria/core/features'
 
 const CATEGORIES: FeatureCategory[] = ['safety', 'reports', 'admin']
 

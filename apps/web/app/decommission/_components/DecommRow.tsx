@@ -1,7 +1,7 @@
 'use client'
 
 import { Check, Loader2 } from 'lucide-react'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 
 interface DecommRowProps {
   eq:             Equipment

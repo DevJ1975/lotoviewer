@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import DepartmentChart from '@/components/DepartmentChart'
-import type { DepartmentStats } from '@/lib/types'
+import type { DepartmentStats } from '@soteria/core/types'
 
 // Recharts uses ResizeObserver + SVG layout which don't work in jsdom.
 // Mock at the module level so tests focus on our component logic.

@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "prebuild": "node ../../scripts/check-deeplink-placeholders.mjs",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",

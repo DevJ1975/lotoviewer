@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import EquipmentTable from '@/components/EquipmentTable'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 
 function makeEquipment(overrides: Partial<Equipment> = {}): Equipment {
   return {

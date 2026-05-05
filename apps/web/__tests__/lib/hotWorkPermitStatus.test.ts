@@ -4,8 +4,8 @@ import {
   hotWorkCountdown,
   hotWorkTone,
   evaluateSignGates,
-} from '@/lib/hotWorkPermitStatus'
-import type { HotWorkPermit } from '@/lib/types'
+} from '@soteria/core/hotWorkPermitStatus'
+import type { HotWorkPermit } from '@soteria/core/types'
 
 const NOW = new Date('2026-04-27T12:00:00Z').getTime()
 

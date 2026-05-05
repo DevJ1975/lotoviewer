@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { supabase } from '@/lib/supabase'
-import type { DepartmentStats, LotoReview } from '@/lib/types'
+import type { DepartmentStats, LotoReview } from '@soteria/core/types'
 import {
   renameDepartment,
   applyRenameToStats,

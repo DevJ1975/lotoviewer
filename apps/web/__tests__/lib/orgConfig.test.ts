@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatWorkOrderUrl } from '@/lib/orgConfig'
+import { formatWorkOrderUrl } from '@soteria/core/orgConfig'
 
 describe('formatWorkOrderUrl', () => {
   it('returns null when the template is not configured', () => {

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useWakeLock } from '@/hooks/useWakeLock'
-import type { Equipment, LotoEnergyStep } from '@/lib/types'
+import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 
 interface Props {
   open:      boolean

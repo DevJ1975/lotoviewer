@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import SignaturePad, { type SignaturePadRef } from '@/components/SignaturePad'
-import type { Equipment, LotoEnergyStep } from '@/lib/types'
+import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 
 // Public reviewer client. Per-placard cards with notes + status; bottom
 // signoff section with typed name, drawn signature, overall outcome.

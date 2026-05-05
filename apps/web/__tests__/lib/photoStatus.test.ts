@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { computePhotoStatus, computePhotoStatusFromUrls, computePhotoStatusFromEquipment, needsPhoto } from '@/lib/photoStatus'
-import type { Equipment } from '@/lib/types'
+import { computePhotoStatus, computePhotoStatusFromUrls, computePhotoStatusFromEquipment, needsPhoto } from '@soteria/core/photoStatus'
+import type { Equipment } from '@soteria/core/types'
 
 // ── computePhotoStatus (boolean API) ────────────────────────────────────────
 

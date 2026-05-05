@@ -13,7 +13,7 @@ import type {
   ConfinedSpacePermit,
   HotWorkPermit,
   OrgConfig,
-} from '@/lib/types'
+} from '@soteria/core/types'
 
 // Compliance report bundle. Concatenates every confined-space and hot-work
 // permit issued during a date range into a single inspector-ready PDF

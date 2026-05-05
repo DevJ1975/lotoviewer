@@ -1,4 +1,4 @@
-import type { ConfinedSpaceEntry, ConfinedSpacePermit } from '@/lib/types'
+import type { ConfinedSpaceEntry, ConfinedSpacePermit } from '@soteria/core/types'
 
 // Pure helpers for editing the entrant/attendant rosters on an active
 // permit. The validation pivots on §1910.146(i)(4): the attendant must

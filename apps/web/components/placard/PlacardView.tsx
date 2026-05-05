@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { Languages } from 'lucide-react'
-import type { Equipment, LotoEnergyStep } from '@/lib/types'
-import { ENERGY_CODES, energyCodeFor } from '@/lib/energyCodes'
+import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
+import { ENERGY_CODES, energyCodeFor } from '@soteria/core/energyCodes'
 import { PLACARD_TEXT } from '@/lib/placardText'
 import { parseAnnotations } from '@/lib/photoAnnotations'
 import PlacardPhotoSlot from './PlacardPhotoSlot'

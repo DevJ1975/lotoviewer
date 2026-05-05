@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { supabase } from '@/lib/supabase'
 import DepartmentDetailPage from '@/app/departments/[dept]/page'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 
 vi.mock('@/lib/supabase', () => ({ supabase: { from: vi.fn() } }))
 

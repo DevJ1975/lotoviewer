@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { PDFDocument } from 'pdf-lib'
 import { generatePlacardPdf, generateBilingualPlacardPdf } from '@/lib/pdfPlacard'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 
 // generateBilingualPlacardPdf composes the EN and ES placard pages into
 // a single side-by-side letter-landscape sheet. We don't snapshot pixel

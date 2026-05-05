@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
-import type { ConfinedSpacePermit } from '@/lib/types'
+import type { ConfinedSpacePermit } from '@soteria/core/types'
 
 // Two optional signatures on top of the supervisor's mandatory authorization:
 //   - Attendant on duty (§(i)) — picks a name from the attendants[] roster,

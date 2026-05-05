@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
-import type { LotoDeviceKind } from '@/lib/types'
+import type { LotoDeviceKind } from '@soteria/core/types'
 
 const KIND_LABELS: Record<LotoDeviceKind, string> = {
   padlock:   'Padlock',

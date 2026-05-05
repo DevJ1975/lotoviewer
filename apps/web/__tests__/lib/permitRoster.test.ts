@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { namesCurrentlyInside, validateRosterUpdate, rosterDiff } from '@/lib/permitRoster'
-import type { ConfinedSpaceEntry } from '@/lib/types'
+import type { ConfinedSpaceEntry } from '@soteria/core/types'
 
 function entry(partial: Partial<ConfinedSpaceEntry>): ConfinedSpaceEntry {
   return {

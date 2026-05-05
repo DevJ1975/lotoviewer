@@ -3,8 +3,8 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { superadminJson } from '@/lib/superadminFetch'
-import { getModules, type FeatureCategory, type FeatureDef } from '@/lib/features'
-import type { Tenant, TenantStatus } from '@/lib/types'
+import { getModules, type FeatureCategory, type FeatureDef } from '@soteria/core/features'
+import type { Tenant, TenantStatus } from '@soteria/core/types'
 import { Section } from './Section'
 
 const CATEGORY_LABELS: Record<FeatureCategory, string> = {

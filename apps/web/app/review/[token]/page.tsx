@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import type { Equipment, LotoEnergyStep } from '@/lib/types'
+import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 import ReviewClient from './_components/ReviewClient'
 
 // Public reviewer page. Token is the only auth — the URL is the

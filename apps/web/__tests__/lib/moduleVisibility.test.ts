@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isModuleVisible } from '@/lib/moduleVisibility'
+import { isModuleVisible } from '@soteria/core/moduleVisibility'
 
 // Pure-logic tests for the per-tenant module resolver. These cover the
 // matrix of (tenant override × static enabled × parent inheritance) so

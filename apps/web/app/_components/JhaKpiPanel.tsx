@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AlertTriangle, ArrowRight, ClipboardCheck, Clock, Loader2, ShieldAlert } from 'lucide-react'
-import { fetchJhaMetrics, type JhaMetrics } from '@/lib/jhaMetrics'
+import { fetchJhaMetrics, type JhaMetrics } from '@soteria/core/jhaMetrics'
 import { useTenant } from '@/components/TenantProvider'
-import { isModuleVisible } from '@/lib/moduleVisibility'
+import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import type { JhaSeverity } from '@soteria/core/jha'
 
 // JHA intelligence panel for the Control Center home dashboard.

@@ -17,7 +17,7 @@ import { render } from '@testing-library/react'
 import { act } from 'react'
 import PlacardDetailPanel from '@/components/dashboard/PlacardDetailPanel'
 import { supabase } from '@/lib/supabase'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 
 // Capture the full fetch chain so we can both mock the returned data and
 // count how many times it was invoked across renders.

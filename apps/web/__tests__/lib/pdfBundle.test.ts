@@ -5,7 +5,7 @@ import type {
   ConfinedSpace,
   ConfinedSpacePermit,
   HotWorkPermit,
-} from '@/lib/types'
+} from '@soteria/core/types'
 
 // Smoke + integration tests for the compliance bundle generator.
 // We don't snapshot PDF bytes (date stamps + QR PNG seeds are not

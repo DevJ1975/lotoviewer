@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { AlertCircle } from 'lucide-react'
-import type { ReadingAnomaly } from '@/lib/insightsMetrics'
+import type { ReadingAnomaly } from '@soteria/core/insightsMetrics'
 
 const CHANNEL_LABEL: Record<ReadingAnomaly['channel'], string> = {
   o2:  'O₂',

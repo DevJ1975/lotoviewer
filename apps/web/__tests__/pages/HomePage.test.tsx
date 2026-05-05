@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { supabase } from '@/lib/supabase'
 import HomePage from '@/app/loto/page'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 
 vi.mock('next/navigation', () => ({
   useRouter:       () => ({ replace: vi.fn() }),

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { uploadPhotoForEquipment, type UploadType } from '@/lib/photoUpload'
+import { uploadPhotoForEquipment, type UploadType } from '@soteria/core/photoUpload'
 import { useTenant } from '@/components/TenantProvider'
 
 export type { UploadType }

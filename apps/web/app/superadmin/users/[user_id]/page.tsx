@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { use, useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, Loader2, AlertCircle, Mail, Calendar, Clock } from 'lucide-react'
 import { superadminJson } from '@/lib/superadminFetch'
-import type { TenantRole } from '@/lib/types'
+import type { TenantRole } from '@soteria/core/types'
 
 // Member detail page. Renders profile + memberships across all tenants
 // + per-user audit feed. Linked from AllMembersPanel + MembersSection.

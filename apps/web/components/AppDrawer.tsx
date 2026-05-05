@@ -10,10 +10,10 @@ import {
   isFeatureAccessible,
   type FeatureCategory,
   type FeatureDef,
-} from '@/lib/features'
+} from '@soteria/core/features'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
-import { isModuleVisible } from '@/lib/moduleVisibility'
+import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { Shield } from 'lucide-react'
 
 // Side drawer that hosts every feature in the app. Replaces the inline

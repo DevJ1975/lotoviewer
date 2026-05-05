@@ -1,7 +1,7 @@
 'use client'
 
-import type { HotWorkPreChecks } from '@/lib/types'
-import { validateChecklist } from '@/lib/hotWorkChecklist'
+import type { HotWorkPreChecks } from '@soteria/core/types'
+import { validateChecklist } from '@soteria/core/hotWorkChecklist'
 
 // Read-only render of the FM Global 7-40 / NFPA 51B pre-work checklist.
 // Failure highlighting comes from validateChecklist (lib/hotWorkChecklist)

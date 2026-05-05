@@ -1,11 +1,11 @@
 'use client'
 
 import { memo, useCallback, useMemo, useState, type MouseEvent } from 'react'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useUploadQueue } from '@/components/UploadQueueProvider'
 import { useSession } from '@/components/SessionProvider'
-import { computePhotoStatusFromEquipment, needsPhoto, type PhotoStatus } from '@/lib/photoStatus'
+import { computePhotoStatusFromEquipment, needsPhoto, type PhotoStatus } from '@soteria/core/photoStatus'
 
 type StatusFilter = 'all' | 'needs-photo' | 'missing' | 'partial' | 'complete'
 type SortKey      = 'id' | 'status'

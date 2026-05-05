@@ -3,8 +3,8 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { useTenant } from '@/components/TenantProvider'
-import { isModuleVisible } from '@/lib/moduleVisibility'
-import { getFeature } from '@/lib/features'
+import { isModuleVisible } from '@soteria/core/moduleVisibility'
+import { getFeature } from '@soteria/core/features'
 
 // Wraps a module's pages so direct URL navigation to a tenant-disabled
 // module shows a friendly "not available" screen instead of a half-rendered

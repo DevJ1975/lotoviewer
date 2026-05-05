@@ -1,4 +1,4 @@
-import type { TrainingRecord, TrainingRole } from '@/lib/types'
+import type { TrainingRecord, TrainingRole } from '@soteria/core/types'
 
 // Pure helpers for §1910.146(g) training-record compliance. Used by the
 // permit-sign gate: walk the entrants[] and attendants[] rosters and

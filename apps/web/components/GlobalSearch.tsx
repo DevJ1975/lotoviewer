@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useDebounce } from '@/hooks/useDebounce'
 import StatusBadge from './StatusBadge'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 
 type SearchResult = Pick<Equipment, 'equipment_id' | 'description' | 'department' | 'photo_status'>
 

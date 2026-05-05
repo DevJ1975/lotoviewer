@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { getModules } from '@/lib/features'
+import { getModules } from '@soteria/core/features'
 import { isValidSlug, normalizeName } from '@/lib/validation/tenants'
 
 // POST /api/superadmin/tenants

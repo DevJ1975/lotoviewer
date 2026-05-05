@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { resolveLandingPath } from '@/lib/landing'
-import type { Tenant } from '@/lib/types'
+import type { Tenant } from '@soteria/core/types'
 
 // Builds a Tenant fixture with sane defaults; pass `over` to flip
 // just the columns the test cares about.

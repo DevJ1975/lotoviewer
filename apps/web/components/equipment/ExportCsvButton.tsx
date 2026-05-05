@@ -1,7 +1,7 @@
 'use client'
 
 import { Download } from 'lucide-react'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 import { downloadEquipmentCsv } from '@/lib/export'
 
 interface Props {

@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AlertTriangle, ArrowRight, Clock, Loader2, TrendingUp } from 'lucide-react'
-import { fetchNearMissMetrics, type NearMissMetrics } from '@/lib/nearMissMetrics'
+import { fetchNearMissMetrics, type NearMissMetrics } from '@soteria/core/nearMissMetrics'
 import { useTenant } from '@/components/TenantProvider'
-import { isModuleVisible } from '@/lib/moduleVisibility'
+import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import type { NearMissSeverity } from '@soteria/core/nearMiss'
 
 // Near-Miss intelligence panel for the Control Center home dashboard.

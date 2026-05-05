@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import type { Equipment } from '@/lib/types'
+import type { Equipment } from '@soteria/core/types'
 import EquipmentTable from '@/components/EquipmentTable'
 import ReviewModal from '@/components/ReviewModal'
 import Toast from '@/components/Toast'
@@ -13,7 +13,7 @@ import ClientReviewPanel from '@/components/departments/ClientReviewPanel'
 import { useReviews } from '@/hooks/useReviews'
 import { useToast } from '@/hooks/useToast'
 import { useTenant } from '@/components/TenantProvider'
-import { signedPlacardPath } from '@/lib/storagePaths'
+import { signedPlacardPath } from '@soteria/core/storagePaths'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })

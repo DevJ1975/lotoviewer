@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Users } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import type { SupervisorRow } from '@/lib/insightsMetrics'
+import type { SupervisorRow } from '@soteria/core/insightsMetrics'
 
 // Per-supervisor permit activity. Resolves supervisor IDs to email
 // (via profiles table) lazily on first render so the metrics card can

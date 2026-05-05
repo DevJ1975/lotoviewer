@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
-import type { ConfinedSpaceEntry, ConfinedSpacePermit } from '@/lib/types'
+import type { ConfinedSpaceEntry, ConfinedSpacePermit } from '@soteria/core/types'
 
 // Entrant in/out log — one row per name in permit.entrants[]. Status comes
 // from the entries table — if there's a row with exited_at IS NULL, the

@@ -6,7 +6,7 @@ import type {
   ConfinedSpaceEntry,
   ConfinedSpacePermit,
   TrainingRecord,
-} from '@/lib/types'
+} from '@soteria/core/types'
 
 // Worker QR sign-on API. Three actions over one POST endpoint:
 //

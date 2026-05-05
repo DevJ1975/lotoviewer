@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { FileText, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import type { Equipment, LotoReview } from '@/lib/types'
+import type { Equipment, LotoReview } from '@soteria/core/types'
 
 interface Props {
   equipment:      Equipment[]

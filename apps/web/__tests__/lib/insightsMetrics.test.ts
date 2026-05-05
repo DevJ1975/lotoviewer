@@ -5,12 +5,12 @@ import {
   computeSupervisorRows,
   MIN_BASELINE_SAMPLES,
   MIN_FAIL_RANK_TESTS,
-} from '@/lib/insightsMetrics'
+} from '@soteria/core/insightsMetrics'
 import type {
   AtmosphericTest,
   ConfinedSpace,
   ConfinedSpacePermit,
-} from '@/lib/types'
+} from '@soteria/core/types'
 
 // Each test feeds the pure summarizers fixtures; we never touch supabase.
 // Date math is anchored to a fixed nowMs so tests stay deterministic

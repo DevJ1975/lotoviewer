@@ -7,7 +7,7 @@ import {
 import type {
   ConfinedSpaceClassification,
   ConfinedSpaceType,
-} from '@/lib/types'
+} from '@soteria/core/types'
 
 // CSV bulk-seed for confined spaces. Mirrors the LOTO equipment importer
 // shape (parse → preview → batch insert) but with the columns the

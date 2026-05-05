@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { Plus, Loader2, AlertCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import type { Tenant } from '@/lib/types'
+import type { Tenant } from '@soteria/core/types'
 
 // Superadmin tenants list. RLS lets superadmin read all tenants directly,
 // so no API route is needed for the read; the future create/edit actions

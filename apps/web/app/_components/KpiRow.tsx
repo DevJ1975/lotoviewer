@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import type { HomeMetrics } from '@/lib/homeMetrics'
+import type { HomeMetrics } from '@soteria/core/homeMetrics'
 
 // 4-tile KPI strip plus a freshness/refresh row underneath. The wrapper
 // owns the error-banner-with-retry path; each Kpi is a dumb display tile.

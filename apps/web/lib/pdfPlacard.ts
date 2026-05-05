@@ -1,8 +1,8 @@
 import { PDFDocument, PDFFont, PDFPage, RGB, StandardFonts, degrees, rgb } from 'pdf-lib'
-import { ENERGY_CODES, energyCodeFor, hexToRgb01 } from '@/lib/energyCodes'
+import { ENERGY_CODES, energyCodeFor, hexToRgb01 } from '@soteria/core/energyCodes'
 import { PLACARD_TEXT } from '@/lib/placardText'
 import { type Annotation, parseAnnotations } from '@/lib/photoAnnotations'
-import type { Equipment, LotoEnergyStep } from '@/lib/types'
+import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 
 // ── Constants ───────────────────────────────────────────────────────────────
 const PAGE_W = 792

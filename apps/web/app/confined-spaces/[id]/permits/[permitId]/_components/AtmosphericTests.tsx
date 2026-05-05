@@ -4,14 +4,14 @@ import { useEffect, useState } from 'react'
 import { Bluetooth, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
-import type { AtmosphericTest, AtmosphericTestKind, GasMeter } from '@/lib/types'
+import type { AtmosphericTest, AtmosphericTestKind, GasMeter } from '@soteria/core/types'
 import {
   effectiveThresholds,
   evaluateChannel,
   evaluateTest,
   type ReadingStatus,
   type ThresholdSet,
-} from '@/lib/confinedSpaceThresholds'
+} from '@soteria/core/confinedSpaceThresholds'
 import { bumpStatus, calibrationOverdue } from '@/lib/gasMeters'
 import { createMeterReader, meterReaderSupported } from '@/lib/meterReader'
 

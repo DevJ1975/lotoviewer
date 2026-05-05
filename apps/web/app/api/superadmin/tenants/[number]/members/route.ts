@@ -4,7 +4,7 @@ import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin, generateTempPassword } from '@/lib/supabaseAdmin'
 import { sendInviteEmail, computeLoginUrl } from '@/lib/email/sendInvite'
 import { isValidRole, isValidTenantNumber, normalizeEmail } from '@/lib/validation/tenants'
-import type { TenantRole } from '@/lib/types'
+import type { TenantRole } from '@soteria/core/types'
 
 // GET  /api/superadmin/tenants/[number]/members
 // POST /api/superadmin/tenants/[number]/members

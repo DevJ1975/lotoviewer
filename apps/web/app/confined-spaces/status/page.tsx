@@ -3,16 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import type { ConfinedSpace, ConfinedSpacePermit, AtmosphericTest } from '@/lib/types'
+import type { ConfinedSpace, ConfinedSpacePermit, AtmosphericTest } from '@soteria/core/types'
 import {
   permitCountdown,
   summarize,
-} from '@/lib/permitStatus'
+} from '@soteria/core/permitStatus'
 import {
   effectiveThresholds,
   evaluateTest,
   type ReadingStatus,
-} from '@/lib/confinedSpaceThresholds'
+} from '@soteria/core/confinedSpaceThresholds'
 
 // Big-monitor status board for active permits. Designed for a 55"+ TV
 // hung in a control room — dark background, large fonts, high-contrast

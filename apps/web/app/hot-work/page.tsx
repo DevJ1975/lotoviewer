@@ -4,13 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Flame, Monitor, Plus, Search } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import type { HotWorkPermit } from '@/lib/types'
-import { HOT_WORK_TYPE_LABELS } from '@/lib/types'
+import type { HotWorkPermit } from '@soteria/core/types'
+import { HOT_WORK_TYPE_LABELS } from '@soteria/core/types'
 import {
   hotWorkState,
   hotWorkCountdown,
   type HotWorkState,
-} from '@/lib/hotWorkPermitStatus'
+} from '@soteria/core/hotWorkPermitStatus'
 
 // Hot Work permit list. Mirrors the layout of /confined-spaces but
 // operates on permits directly (there's no inventory parent for hot
