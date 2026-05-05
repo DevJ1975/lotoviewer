@@ -46,6 +46,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="exclamation-triangle" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="jha"
+        options={{
+          title: 'JHA',
+          tabBarIcon: ({ color }) => <TabBarIcon name="list-alt" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }
