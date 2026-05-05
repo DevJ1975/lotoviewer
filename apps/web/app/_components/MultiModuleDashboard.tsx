@@ -15,6 +15,7 @@ import { ActivePermitsPanel }   from './ActivePermitsPanel'
 import { RecentActivityPanel }  from './RecentActivityPanel'
 import { ComingSoonStrip }      from './ComingSoonStrip'
 import { ModulesGrid }          from './ModulesGrid'
+import RiskKpiPanel             from './RiskKpiPanel'
 
 // Multi-module dashboard — the legacy default home rendered by
 // app/page.tsx for tenants who use more than one safety module.
@@ -132,6 +133,10 @@ export default function MultiModuleDashboard() {
         <ActivePermitsPanel permits={metrics?.activePermits ?? null} now={now} />
         <RecentActivityPanel events={metrics?.recentActivity ?? null} />
       </div>
+
+      {/* Risk Intelligence — visibility-gated; no-op when the
+          tenant's modules.risk-assessment is false. */}
+      <RiskKpiPanel />
 
       <ComingSoonStrip />
       <ModulesGrid />
