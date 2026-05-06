@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient'
-import type { LotoDevice, LotoDeviceCheckout } from '../types'
+import type { LotoDevice, LotoDeviceCheckout, LotoWorker } from '../types'
 
 // Centralised loto_devices + loto_device_checkouts queries. Same shape
 // as lib/queries/equipment.ts — helpers throw on Supabase error so
@@ -73,4 +73,17 @@ export async function findDeviceByLabel(label: string): Promise<LotoDevice | nul
     .maybeSingle()
   if (error) throw new Error(`findDeviceByLabel(${label}): ${error.message}`)
   return data as LotoDevice | null
+}
+
+// All active non-app workers (loto_workers.active = true). Used by the
+// CheckoutDialog dropdown alongside profiles, so an admin can issue a
+// locktag to a shop-floor worker without an app account.
+export async function loadAllWorkers(): Promise<LotoWorker[]> {
+  const { data, error } = await supabase
+    .from('loto_workers')
+    .select('*')
+    .eq('active', true)
+    .order('full_name', { ascending: true })
+  if (error) throw new Error(`loadAllWorkers: ${error.message}`)
+  return (data ?? []) as LotoWorker[]
 }

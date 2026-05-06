@@ -509,7 +509,13 @@ export interface LotoDevice {
 export interface LotoDeviceCheckout {
   id:             string
   device_id:      string
-  owner_id:       string
+  // Exactly one of owner_id / worker_id is non-null (XOR enforced by
+  // the chk_loto_checkout_owner_xor constraint). owner_id points to a
+  // profile (app user); worker_id points to a non-app shop-floor
+  // worker in loto_workers. The display layer picks whichever is set
+  // and resolves the human name from the appropriate table.
+  owner_id:       string | null
+  worker_id:      string | null
   // The equipment this lock is on. Free-text because group locks may
   // apply to bays / circuits not in loto_equipment. Null = "I'm
   // taking this lock" without a specific tag yet.
@@ -520,4 +526,17 @@ export interface LotoDeviceCheckout {
   returned_by:    string | null
   notes:          string | null
   created_at:     string
+}
+
+export interface LotoWorker {
+  id:           string
+  tenant_id:    string
+  full_name:    string
+  employee_id:  string | null
+  email:        string | null
+  notes:        string | null
+  active:       boolean
+  created_at:   string
+  updated_at:   string
+  created_by:   string | null
 }

@@ -8,12 +8,13 @@ import { useAuth } from '@/components/AuthProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import {
   loadAllDevices,
+  loadAllWorkers,
   loadOpenCheckouts,
   isStaleCheckout,
   STALE_CHECKOUT_HOURS,
   type OpenCheckoutRow,
 } from '@/lib/queries/lotoDevices'
-import type { LotoDevice, LotoDeviceStatus } from '@soteria/core/types'
+import type { LotoDevice, LotoDeviceStatus, LotoWorker } from '@soteria/core/types'
 import { AddDeviceForm }   from './_components/AddDeviceForm'
 import { CheckoutDialog }  from './_components/CheckoutDialog'
 
@@ -35,6 +36,7 @@ export default function LotoDevicesPage() {
   const [devices, setDevices]       = useState<LotoDevice[] | null>(null)
   const [openCheckouts, setOpenCheckouts] = useState<OpenCheckoutRow[] | null>(null)
   const [profileById, setProfileById] = useState<Map<string, ProfileLite>>(new Map())
+  const [workerById,  setWorkerById]  = useState<Map<string, LotoWorker>>(new Map())
   const [loadError, setLoadError]   = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [busyId, setBusyId]         = useState<string | null>(null)
@@ -52,11 +54,17 @@ export default function LotoDevicesPage() {
   const load = useCallback(async () => {
     setLoadError(null)
     try {
-      const [d, o] = await Promise.all([loadAllDevices(), loadOpenCheckouts()])
+      const [d, o, allWorkers] = await Promise.all([
+        loadAllDevices(),
+        loadOpenCheckouts(),
+        loadAllWorkers().catch(() => [] as LotoWorker[]),
+      ])
       setDevices(d)
       setOpenCheckouts(o)
       // Resolve profile names for the open-checkout owner column.
-      const ownerIds = Array.from(new Set(o.map(r => r.checkout.owner_id)))
+      const ownerIds = Array.from(new Set(
+        o.map(r => r.checkout.owner_id).filter((x): x is string => !!x),
+      ))
       if (ownerIds.length > 0) {
         const { data: profs } = await supabase
           .from('profiles')
@@ -68,10 +76,42 @@ export default function LotoDevicesPage() {
       } else {
         setProfileById(new Map())
       }
+      // Build worker lookup from the active roster — covers the case
+      // where a checkout points at a worker who's now inactive too,
+      // since we additionally pull worker_ids referenced by open
+      // checkouts on top of the active list.
+      const workerIds = Array.from(new Set(
+        o.map(r => r.checkout.worker_id).filter((x): x is string => !!x),
+      ))
+      const wm = new Map<string, LotoWorker>()
+      for (const w of allWorkers) wm.set(w.id, w)
+      const missing = workerIds.filter(id => !wm.has(id))
+      if (missing.length > 0) {
+        const { data: extra } = await supabase
+          .from('loto_workers')
+          .select('*')
+          .in('id', missing)
+        for (const w of (extra ?? []) as LotoWorker[]) wm.set(w.id, w)
+      }
+      setWorkerById(wm)
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Could not load devices')
     }
   }, [])
+
+  // Resolve a checkout's owner display name from whichever side of the
+  // XOR is set. Returns a short label suitable for tables + banners.
+  function ownerLabel(checkout: { owner_id: string | null; worker_id: string | null }): string {
+    if (checkout.worker_id) {
+      const w = workerById.get(checkout.worker_id)
+      return w?.full_name ?? `worker ${checkout.worker_id.slice(0, 8)}`
+    }
+    if (checkout.owner_id) {
+      const p = profileById.get(checkout.owner_id)
+      return p?.full_name ?? p?.email ?? checkout.owner_id.slice(0, 8)
+    }
+    return '—'
+  }
 
   useEffect(() => { load() }, [load])
 
@@ -167,13 +207,12 @@ export default function LotoDevicesPage() {
           </p>
           <ul className="mt-2 text-[11px] text-rose-900/90 dark:text-rose-100/90 space-y-0.5">
             {staleCheckouts.slice(0, 5).map(r => {
-              const owner = profileById.get(r.checkout.owner_id)
               const heldH = Math.floor((now - new Date(r.checkout.checked_out_at).getTime()) / 3_600_000)
               return (
                 <li key={r.checkout.id}>
                   <span className="font-mono font-semibold">{r.device.device_label}</span>
                   {' — '}
-                  {owner?.full_name || owner?.email || r.checkout.owner_id.slice(0, 8)}
+                  {ownerLabel(r.checkout)}
                   {' · '}{heldH}h
                   {r.checkout.equipment_id && <> · {r.checkout.equipment_id}</>}
                 </li>
@@ -227,7 +266,6 @@ export default function LotoDevicesPage() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {devices.map(d => {
                   const open = openByDeviceId.get(d.id)
-                  const owner = open ? profileById.get(open.checkout.owner_id) : null
                   const isBusy = busyId === d.id
                   return (
                     <tr key={d.id}>
@@ -250,7 +288,7 @@ export default function LotoDevicesPage() {
                       <td className="py-2 pr-2 text-slate-500 dark:text-slate-400">
                         {open ? (
                           <>
-                            {owner?.full_name || owner?.email || open.checkout.owner_id.slice(0, 8)}
+                            {ownerLabel(open.checkout)}
                             {open.checkout.equipment_id && <> · <span className="font-mono">{open.checkout.equipment_id}</span></>}
                           </>
                         ) : '—'}
