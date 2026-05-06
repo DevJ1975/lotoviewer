@@ -2,11 +2,27 @@
 --  SNAK KING — LOTO DATABASE HYGIENE (FINAL — 2026-05-06)
 --  Target: Supabase SQL Editor (PostgreSQL 15)
 --  Project: zwtnpyjifbdytlektxlc (Soteria Main Project)
---  Tables: loto_equipment | loto_energy_steps | loto_hygiene_log
+--  Tenant : Snak King - COI (ae3f1973-4c3e-4b6e-b91f-9de5ff10529e)
+--  Tables : loto_equipment | loto_energy_steps | loto_hygiene_log
 --
---  Reconstructed by Claude Code on 2026-05-06 from
---  HANDOFF_TO_CLAUDE_CODE_2026-05-06.md §6, mirroring the
---  conventions of data_hygiene_snak_king_2026-04-27.sql.
+--  STATUS: APPLIED 2026-05-06 via apply_migration as
+--          `data_hygiene_snak_king_2026_05_06`. This file is the
+--          reproducible record of exactly what ran.
+--
+--  Reconstructed from HANDOFF_TO_CLAUDE_CODE_2026-05-06.md §6,
+--  mirroring the conventions of data_hygiene_snak_king_2026-04-27.sql,
+--  with one important difference: tenant_id is now passed
+--  explicitly on every INSERT into loto_hygiene_log, and every
+--  read/write against loto_equipment is scoped by tenant_id.
+--
+--  Why: between 04-27 and 05-06 the database went multi-tenant
+--  (migrations 027/028/032/033/052/054). loto_hygiene_log gained
+--  a NOT NULL tenant_id column with default `active_tenant_id()`,
+--  which reads from the request.headers GUC. In an apply_migration
+--  / psql context with no header, that returns NULL and the
+--  insert fails on NOT NULL. Setting the GUC at the top of the
+--  script + scoping every statement by tenant_id makes this file
+--  re-runnable from any context (SQL editor, MCP, psql).
 --
 --  Scope: 26 decommissions across 5 groups, field-confirmed by
 --  the 2026-05-01 walkdown (Cain, Raf, Karen):
@@ -19,8 +35,7 @@
 --  Several IDs in this file SUPERSEDE classifications applied by
 --  the 2026-04-27 hygiene run. Field walkdown is the source of
 --  truth (per project §12 "Don't decom without field
---  confirmation"). Affected reversals are called out in the
---  per-item notes:
+--  confirmation"). Affected reversals:
 --    - SKPC-810 / SKPC-820  (was "Combined LOTO — Popcorn Tumbler + Blower")
 --    - JEGN-500 / JEGN-510  (was "Combined LOTO — Jensen Fryer")
 --    - JEGN-880 / JEGN-920  (was "Cross-ref — paired with bucket elevator")
@@ -34,17 +49,23 @@
 --       the first error and inspect.
 --
 --  Pre-run state (verified 2026-05-06): all 26 IDs present and
---  active in loto_equipment.
---  Expected delta: active 850 → 824, decommissioned 116 → 142.
+--  active in loto_equipment under the Snak King tenant.
+--  Verified delta after run: active 838 → 812, decommissioned
+--  total 116 → 142 (Snak King tenant only).
 -- ============================================================
 
 
 -- ============================================================
--- SECTION -1 — Idempotent baseline snapshot for today's run.
---              loto_hygiene_log + RLS already exist from the
---              2026-04-27 setup. We just capture today's "active
---              count before this run" for the §6 summary delta.
+-- SECTION -1 — Idempotent baseline snapshot for today's run +
+--              tenant header for any active_tenant_id() callers.
 -- ============================================================
+
+-- Set request.headers so any RLS / column-default that calls
+-- active_tenant_id() inside this script's transaction(s) resolves
+-- to the Snak King tenant. Each transaction below also passes
+-- tenant_id explicitly, so this is belt-and-suspenders.
+select set_config('request.headers',
+  '{"x-active-tenant":"ae3f1973-4c3e-4b6e-b91f-9de5ff10529e"}', false);
 
 do $$
 declare
@@ -54,20 +75,23 @@ begin
   select exists (
     select 1 from public.loto_hygiene_log
      where section = 'baseline_2026_05_06'
+       and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
        and ran_at >= current_date::timestamptz
   ) into exists_today;
 
   if not exists_today then
     select count(*) into active_count
       from public.loto_equipment
-     where decommissioned = false;
+     where decommissioned = false
+       and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid;
 
-    insert into public.loto_hygiene_log (section, action, reason, detail)
-    values ('baseline_2026_05_06', 'snapshot',
+    insert into public.loto_hygiene_log (tenant_id, section, action, reason, detail)
+    values ('ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid,
+            'baseline_2026_05_06', 'snapshot',
             'Active equipment count at start of 2026-05-06 hygiene run',
             jsonb_build_object('active_count', active_count));
 
-    raise notice '✓ Baseline 2026-05-06 captured: % active equipment rows', active_count;
+    raise notice '✓ Baseline 2026-05-06 captured: % active rows', active_count;
   else
     raise notice 'ℹ Baseline 2026-05-06 already captured today — skipping.';
   end if;
@@ -86,9 +110,11 @@ select
     eq.department,
     eq.decommissioned,
     (select count(*) from public.loto_energy_steps es
-       where es.equipment_id = eq.equipment_id) as energy_step_count
+       where es.equipment_id = eq.equipment_id
+         and es.tenant_id = eq.tenant_id) as energy_step_count
 from public.loto_equipment eq
-where eq.equipment_id in (
+where eq.tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
+  and eq.equipment_id in (
   -- Pita Line (13)
   'SKPI-100','SKPI-120','SKPI-140','SKPI-160','SKPI-180',
   'SKPI-500-1','SKPI-500-2','SKPI-520','SKPI-540','SKPI-560',
@@ -124,7 +150,8 @@ begin
      'SKPI-100','SKPI-120','SKPI-140','SKPI-160','SKPI-180',
      'SKPI-500-1','SKPI-500-2','SKPI-520','SKPI-540','SKPI-560',
      'SKPI-580','SKPI-600','SKPI-620'
-   ) and decommissioned = false;
+   ) and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
+     and decommissioned = false;
   if active_cnt <> 13 then
     raise exception 'Section 1 pre-flight failed: expected 13 active Pita Line rows, found %.', active_cnt;
   end if;
@@ -143,11 +170,13 @@ with changed as (
      'SKPI-100','SKPI-120','SKPI-140','SKPI-160','SKPI-180',
      'SKPI-500-1','SKPI-500-2','SKPI-520','SKPI-540','SKPI-560',
      'SKPI-580','SKPI-600','SKPI-620'
-   ) and decommissioned = false
+   ) and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
+     and decommissioned = false
    returning equipment_id
 )
-insert into public.loto_hygiene_log (section, equipment_id, action, reason)
-select 'section_1_pita_line', equipment_id, 'decommission',
+insert into public.loto_hygiene_log (tenant_id, section, equipment_id, action, reason)
+select 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid,
+       'section_1_pita_line', equipment_id, 'decommission',
        'Pita Line removed from facility (field walkdown 2026-05-01).'
   from changed;
 
@@ -156,7 +185,9 @@ declare
   cnt int;
 begin
   select count(*) into cnt from public.loto_hygiene_log
-   where section = 'section_1_pita_line' and ran_at >= current_date::timestamptz;
+   where section = 'section_1_pita_line'
+     and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
+     and ran_at >= current_date::timestamptz;
   if cnt <> 13 then
     raise exception 'Section 1 verification failed: expected 13 logged rows, found %.', cnt;
   end if;
@@ -186,6 +217,7 @@ begin
   select count(*) into active_cnt
     from public.loto_equipment
    where equipment_id in ('JEGN-500','JEGN-510','JEGN-880','JEGN-920')
+     and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
      and decommissioned = false;
   if active_cnt <> 4 then
     raise exception 'Section 2 pre-flight failed: expected 4 active Jensen rows, found %.', active_cnt;
@@ -220,11 +252,13 @@ with changed as (
                    else notes
                  end
    where equipment_id in ('JEGN-500','JEGN-510','JEGN-880','JEGN-920')
+     and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
      and decommissioned = false
    returning equipment_id
 )
-insert into public.loto_hygiene_log (section, equipment_id, action, reason, detail)
-select 'section_2_jensen', equipment_id, 'decommission',
+insert into public.loto_hygiene_log (tenant_id, section, equipment_id, action, reason, detail)
+select 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid,
+       'section_2_jensen', equipment_id, 'decommission',
        case
          when equipment_id in ('JEGN-500','JEGN-510')
            then 'Jensen Fryer system not on floor — supersedes 04-27 combined-LOTO designation.'
@@ -240,7 +274,9 @@ declare
   cnt int;
 begin
   select count(*) into cnt from public.loto_hygiene_log
-   where section = 'section_2_jensen' and ran_at >= current_date::timestamptz;
+   where section = 'section_2_jensen'
+     and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
+     and ran_at >= current_date::timestamptz;
   if cnt <> 4 then
     raise exception 'Section 2 verification failed: expected 4 logged rows, found %.', cnt;
   end if;
@@ -254,9 +290,7 @@ commit;
 -- SECTION 3 — POP CARAMEL "we don't use" (5 items)
 --   Field walkdown 2026-05-01: this equipment is not used.
 --   SKPC-810 / SKPC-820 SUPERSEDE the 2026-04-27
---   "section_4_popcorn_tumbler" combined-LOTO designation —
---   the desk audit assumed they were active; field walkdown
---   confirmed they are not in use.
+--   "section_4_popcorn_tumbler" combined-LOTO designation.
 -- ============================================================
 
 begin;
@@ -268,6 +302,7 @@ begin
   select count(*) into active_cnt
     from public.loto_equipment
    where equipment_id in ('SKPC-200','SKPC-500','SKPC-800','SKPC-810','SKPC-820')
+     and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
      and decommissioned = false;
   if active_cnt <> 5 then
     raise exception 'Section 3 pre-flight failed: expected 5 active Pop Caramel rows, found %.', active_cnt;
@@ -290,11 +325,13 @@ with changed as (
                      'Field-confirmed 2026-05-01 walkdown (Cain/Raf/Karen).'
                  end
    where equipment_id in ('SKPC-200','SKPC-500','SKPC-800','SKPC-810','SKPC-820')
+     and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
      and decommissioned = false
    returning equipment_id
 )
-insert into public.loto_hygiene_log (section, equipment_id, action, reason, detail)
-select 'section_3_pop_caramel', equipment_id, 'decommission',
+insert into public.loto_hygiene_log (tenant_id, section, equipment_id, action, reason, detail)
+select 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid,
+       'section_3_pop_caramel', equipment_id, 'decommission',
        case
          when equipment_id in ('SKPC-810','SKPC-820')
            then 'Not in use — supersedes 04-27 popcorn-tumbler combined-LOTO designation.'
@@ -312,7 +349,9 @@ declare
   cnt int;
 begin
   select count(*) into cnt from public.loto_hygiene_log
-   where section = 'section_3_pop_caramel' and ran_at >= current_date::timestamptz;
+   where section = 'section_3_pop_caramel'
+     and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
+     and ran_at >= current_date::timestamptz;
   if cnt <> 5 then
     raise exception 'Section 3 verification failed: expected 5 logged rows, found %.', cnt;
   end if;
@@ -326,7 +365,6 @@ commit;
 -- SECTION 4 — USDA PACKAGING (2 items)
 --   Atlas Baggers #2 (USPK-502) and #3 (USPK-503) — confirmed
 --   gone from USDA Packaging area. Field walkdown 2026-05-01.
---   Note: both rows currently have 0 energy steps in DB.
 -- ============================================================
 
 begin;
@@ -338,6 +376,7 @@ begin
   select count(*) into active_cnt
     from public.loto_equipment
    where equipment_id in ('USPK-502','USPK-503')
+     and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
      and decommissioned = false;
   if active_cnt <> 2 then
     raise exception 'Section 4 pre-flight failed: expected 2 active USDA Packaging rows, found %.', active_cnt;
@@ -353,11 +392,13 @@ with changed as (
                  'DECOMMISSIONED 2026-05-06: Atlas Bagger removed from USDA Packaging. ' ||
                  'Field-confirmed 2026-05-01 walkdown.'
    where equipment_id in ('USPK-502','USPK-503')
+     and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
      and decommissioned = false
    returning equipment_id
 )
-insert into public.loto_hygiene_log (section, equipment_id, action, reason)
-select 'section_4_usda_pkg', equipment_id, 'decommission',
+insert into public.loto_hygiene_log (tenant_id, section, equipment_id, action, reason)
+select 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid,
+       'section_4_usda_pkg', equipment_id, 'decommission',
        'Atlas Bagger removed from USDA Packaging (field walkdown 2026-05-01).'
   from changed;
 
@@ -366,7 +407,9 @@ declare
   cnt int;
 begin
   select count(*) into cnt from public.loto_hygiene_log
-   where section = 'section_4_usda_pkg' and ran_at >= current_date::timestamptz;
+   where section = 'section_4_usda_pkg'
+     and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
+     and ran_at >= current_date::timestamptz;
   if cnt <> 2 then
     raise exception 'Section 4 verification failed: expected 2 logged rows, found %.', cnt;
   end if;
@@ -391,6 +434,7 @@ begin
   select count(*) into active_cnt
     from public.loto_equipment
    where equipment_id in ('BGGN-006','BGGN-010')
+     and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
      and decommissioned = false;
   if active_cnt <> 2 then
     raise exception 'Section 5 pre-flight failed: expected 2 active Building & Grounds rows, found %.', active_cnt;
@@ -406,11 +450,13 @@ with changed as (
                  'DECOMMISSIONED 2026-05-06: Equipment removed/replaced. ' ||
                  'Field-confirmed 2026-05-01 walkdown.'
    where equipment_id in ('BGGN-006','BGGN-010')
+     and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
      and decommissioned = false
    returning equipment_id
 )
-insert into public.loto_hygiene_log (section, equipment_id, action, reason)
-select 'section_5_bldg_grounds', equipment_id, 'decommission',
+insert into public.loto_hygiene_log (tenant_id, section, equipment_id, action, reason)
+select 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid,
+       'section_5_bldg_grounds', equipment_id, 'decommission',
        'Equipment removed/replaced (field walkdown 2026-05-01).'
   from changed;
 
@@ -419,7 +465,9 @@ declare
   cnt int;
 begin
   select count(*) into cnt from public.loto_hygiene_log
-   where section = 'section_5_bldg_grounds' and ran_at >= current_date::timestamptz;
+   where section = 'section_5_bldg_grounds'
+     and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
+     and ran_at >= current_date::timestamptz;
   if cnt <> 2 then
     raise exception 'Section 5 verification failed: expected 2 logged rows, found %.', cnt;
   end if;
@@ -434,25 +482,33 @@ commit;
 --   Run AFTER all five mutating sections complete.
 -- ============================================================
 
--- Headline delta
+-- Headline delta (Snak King tenant only)
 select
     (select (detail->>'active_count')::int
        from public.loto_hygiene_log
       where section = 'baseline_2026_05_06'
+        and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
         and ran_at >= current_date::timestamptz
       order by ran_at limit 1)                     as active_before,
     (select count(*) from public.loto_hygiene_log
       where action = 'decommission'
-        and section like 'section_%'
+        and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
+        and section in ('section_1_pita_line','section_2_jensen','section_3_pop_caramel',
+                        'section_4_usda_pkg','section_5_bldg_grounds')
         and ran_at >= current_date::timestamptz)   as decommissioned_today,
     (select count(*) from public.loto_equipment
-      where decommissioned = false)                as active_after;
+      where decommissioned = false
+        and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid) as active_after,
+    (select count(*) from public.loto_equipment
+      where decommissioned = true
+        and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid) as decommissioned_total;
 
 -- Per-section breakdown for today's run
 select section, action, count(*) as n
   from public.loto_hygiene_log
  where ran_at >= current_date::timestamptz
-   and section like 'section_%'
+   and tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
+   and (section like 'section_%' or section = 'baseline_2026_05_06')
  group by section, action
  order by section, action;
 
@@ -463,10 +519,11 @@ select
     eq.description,
     left(eq.notes, 240) as notes_preview
   from public.loto_equipment eq
-  join public.loto_hygiene_log hl on hl.equipment_id = eq.equipment_id
+  join public.loto_hygiene_log hl on hl.equipment_id = eq.equipment_id and hl.tenant_id = eq.tenant_id
  where hl.ran_at >= current_date::timestamptz
    and hl.action = 'decommission'
    and hl.section like 'section_%'
+   and eq.tenant_id = 'ae3f1973-4c3e-4b6e-b91f-9de5ff10529e'::uuid
    and eq.decommissioned = true
  group by eq.equipment_id, eq.department, eq.description, eq.notes
  order by eq.department, eq.equipment_id;
