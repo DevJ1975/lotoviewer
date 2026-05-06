@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { superadminJson } from '@/lib/superadminFetch'
 import { getModules, type FeatureCategory, type FeatureDef } from '@soteria/core/features'
@@ -24,11 +24,38 @@ interface Props {
 // Single Save button persists name + status + is_demo + modules in one
 // PATCH. Local state mirrors the tenant; resets when `tenant` changes
 // (e.g. parent re-fetched after a logo upload).
+//
+// Module-state seeding is deliberate: the drawer's visibility resolver
+// treats a MISSING key as "use static `enabled`" (defaults to visible
+// for top-level admin entries). If we initialised the form purely from
+// tenant.modules, those defaulted-true entries would show as unchecked
+// and a save would persist them as false, silently hiding modules
+// that were visible. Seed every catalog feature from its static
+// enabled value, then overlay the tenant's explicit overrides.
+function seedModulesFromTenant(tenant: Tenant): Record<string, boolean> {
+  const seeded: Record<string, boolean> = {}
+  const allFeatures: FeatureDef[] = (['safety', 'reports', 'admin'] as const)
+    .flatMap(cat => getModules(cat))
+    .filter(m => !m.comingSoon)
+  for (const f of allFeatures) seeded[f.id] = f.enabled
+  for (const [k, v] of Object.entries(tenant.modules ?? {})) seeded[k] = v === true
+  return seeded
+}
+
 export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
   const [name,    setName]    = useState(tenant.name)
   const [status,  setStatus]  = useState<TenantStatus>(tenant.status)
   const [isDemo,  setIsDemo]  = useState(tenant.is_demo)
-  const [modules, setModules] = useState<Record<string, boolean>>({ ...tenant.modules })
+  const [modules, setModules] = useState<Record<string, boolean>>(() => seedModulesFromTenant(tenant))
+
+  // Re-seed when the parent re-fetches the tenant (e.g. after logo
+  // upload). Keep the user's in-flight checkbox edits if they've
+  // touched the form — otherwise the re-fetch would clobber them.
+  // We use an effect with a tenant.id dep; checkboxes don't refresh
+  // unless the underlying tenant identity changes.
+  useEffect(() => {
+    setModules(seedModulesFromTenant(tenant))
+  }, [tenant.id])
 
   const [saving,      setSaving]      = useState(false)
   const [saveError,   setSaveError]   = useState<string | null>(null)

@@ -24,7 +24,11 @@ const CATEGORY_LABELS: Record<FeatureCategory, string> = {
 const CATEGORY_ORDER: FeatureCategory[] = ['safety', 'reports', 'admin']
 
 // Defaults match what most tenants will want — full safety stack on, the
-// expensive analytics off. Superadmin can tick more before submit.
+// Default modules for a brand-new tenant. Mirrors the Snak King /
+// WLS Demo seed posture from migration 028: production-grade modules
+// on by default; expensive analytics off; ALL admin tools on so
+// onboarding admins can configure tenancy without superadmin help.
+// Superadmin can tick more before submit.
 const DEFAULT_MODULES: Record<string, boolean> = {
   loto:                       true,
   'confined-spaces':          true,
@@ -32,7 +36,11 @@ const DEFAULT_MODULES: Record<string, boolean> = {
   'reports-scorecard':        true,
   'reports-compliance-bundle':true,
   'reports-inspector':        true,
+  'admin-loto-devices':       true,
   'admin-configuration':      true,
+  'admin-webhooks':           true,
+  'admin-training':           true,
+  'admin-hygiene-log':        true,
   'settings-notifications':   true,
   'support':                  true,
 }
