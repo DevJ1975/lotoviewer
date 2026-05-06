@@ -91,7 +91,7 @@ create trigger trg_audit_loto_workers
 drop trigger if exists trg_loto_workers_updated_at on public.loto_workers;
 create trigger trg_loto_workers_updated_at
   before update on public.loto_workers
-  for each row execute function public.set_updated_at();
+  for each row execute function public.touch_updated_at();
 
 -- ────────────────────────────────────────────────────────────────────────
 -- 4. loto_device_checkouts — owner_id nullable, add worker_id, XOR check
