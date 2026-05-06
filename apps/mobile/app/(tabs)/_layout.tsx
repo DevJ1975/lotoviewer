@@ -60,6 +60,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="shield" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="loto-devices"
+        options={{
+          title: 'Devices',
+          tabBarIcon: ({ color }) => <TabBarIcon name="key" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }
