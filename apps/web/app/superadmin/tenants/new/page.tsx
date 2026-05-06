@@ -37,6 +37,7 @@ const DEFAULT_MODULES: Record<string, boolean> = {
   'reports-compliance-bundle':true,
   'reports-inspector':        true,
   'admin-loto-devices':       true,
+  'admin-workers':            true,
   'admin-configuration':      true,
   'admin-webhooks':           true,
   'admin-training':           true,

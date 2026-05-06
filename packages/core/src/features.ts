@@ -324,6 +324,15 @@ export const FEATURES: FeatureDef[] = [
     enabled:     true,
     comingSoon:  false,
   },
+  {
+    id:          'admin-workers',
+    name:        'Workers',
+    description: 'Shop-floor worker roster — names, employee IDs, training status',
+    href:        '/admin/workers',
+    category:    'admin',
+    enabled:     true,
+    comingSoon:  false,
+  },
 
   // ── Admin / configuration ───────────────────────────────────────────────
   {
