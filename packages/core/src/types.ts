@@ -300,6 +300,7 @@ export type TrainingRole =
   | 'rescuer'
   | 'hot_work_operator'
   | 'fire_watcher'
+  | 'authorized_employee'   // LOTO §1910.147 — worker issued a locktag
   | 'other'
 
 export interface TrainingRecord {

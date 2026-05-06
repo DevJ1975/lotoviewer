@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { validateTraining, TRAINING_ROLE_LABELS } from '@/lib/trainingRecords'
+import {
+  validateTraining,
+  evaluateLotoTraining,
+  TRAINING_ROLE_LABELS,
+} from '@/lib/trainingRecords'
 import type { TrainingRecord, TrainingRole } from '@soteria/core/types'
 
 const ASOF = new Date('2026-04-26T12:00:00Z')
@@ -164,5 +168,78 @@ describe('TRAINING_ROLE_LABELS', () => {
     for (const role of ['entrant', 'attendant', 'entry_supervisor', 'rescuer', 'other'] as TrainingRole[]) {
       expect(TRAINING_ROLE_LABELS[role]).toBeTruthy()
     }
+  })
+})
+
+describe('evaluateLotoTraining', () => {
+  const ASOF_LOTO = new Date('2026-05-05T12:00:00Z')
+  it('returns missing when no authorized_employee record exists', () => {
+    expect(evaluateLotoTraining({
+      workerName: 'Maria',
+      records: [rec({ worker_name: 'Maria', role: 'entrant' })],  // wrong role
+      asOf: ASOF_LOTO,
+    })).toEqual({ status: 'missing' })
+  })
+
+  it('returns current when record has no expiry', () => {
+    expect(evaluateLotoTraining({
+      workerName: 'Maria',
+      records: [rec({ worker_name: 'Maria', role: 'authorized_employee', expires_at: null })],
+      asOf: ASOF_LOTO,
+    })).toEqual({ status: 'current', expires_on: null })
+  })
+
+  it('returns expired when expires_at < today', () => {
+    expect(evaluateLotoTraining({
+      workerName: 'Maria',
+      records: [rec({ worker_name: 'Maria', role: 'authorized_employee', expires_at: '2026-04-01' })],
+      asOf: ASOF_LOTO,
+    })).toEqual({ status: 'expired', expires_on: '2026-04-01' })
+  })
+
+  it('returns expiring when expires_at within 30 days', () => {
+    const r = evaluateLotoTraining({
+      workerName: 'Maria',
+      records: [rec({ worker_name: 'Maria', role: 'authorized_employee', expires_at: '2026-05-20' })],
+      asOf: ASOF_LOTO,
+    })
+    expect(r.status).toBe('expiring')
+    if (r.status === 'expiring') {
+      expect(r.expires_on).toBe('2026-05-20')
+      expect(r.days_remaining).toBe(15)
+    }
+  })
+
+  it('returns current with expires_on when far in the future', () => {
+    expect(evaluateLotoTraining({
+      workerName: 'Maria',
+      records: [rec({ worker_name: 'Maria', role: 'authorized_employee', expires_at: '2027-05-05' })],
+      asOf: ASOF_LOTO,
+    })).toEqual({ status: 'current', expires_on: '2027-05-05' })
+  })
+
+  it('matches case-insensitively + tolerates whitespace', () => {
+    expect(evaluateLotoTraining({
+      workerName: '  MARIA ',
+      records: [rec({ worker_name: 'maria', role: 'authorized_employee', expires_at: null })],
+      asOf: ASOF_LOTO,
+    })).toEqual({ status: 'current', expires_on: null })
+  })
+
+  it('picks the freshest record on multiple', () => {
+    expect(evaluateLotoTraining({
+      workerName: 'Maria',
+      records: [
+        rec({ worker_name: 'Maria', role: 'authorized_employee', completed_at: '2024-01-01', expires_at: '2025-01-01' }),
+        rec({ worker_name: 'Maria', role: 'authorized_employee', completed_at: '2026-04-01', expires_at: '2028-04-01' }),
+      ],
+      asOf: ASOF_LOTO,
+    })).toEqual({ status: 'current', expires_on: '2028-04-01' })
+  })
+})
+
+describe('TRAINING_ROLE_LABELS', () => {
+  it('includes a label for the LOTO authorized_employee role', () => {
+    expect(TRAINING_ROLE_LABELS.authorized_employee).toBe('LOTO authorized employee')
   })
 })

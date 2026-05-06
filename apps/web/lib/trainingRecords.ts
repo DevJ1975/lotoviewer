@@ -9,16 +9,19 @@ import type { TrainingRecord, TrainingRole } from '@soteria/core/types'
 // gap that's been verified off-app.
 
 export const TRAINING_ROLE_LABELS: Record<TrainingRole, string> = {
-  entrant:           'Authorized entrant',
-  attendant:         'Attendant',
-  entry_supervisor:  'Entry supervisor',
-  rescuer:           'Rescuer',
+  entrant:             'Authorized entrant',
+  attendant:           'Attendant',
+  entry_supervisor:    'Entry supervisor',
+  rescuer:             'Rescuer',
   // Hot-work roles (migration 019). hot_work_operator covers welders,
   // cutters, grinders, etc.; fire_watcher is the dedicated fire-watch
   // role required during AND for ≥60 min after hot work per NFPA 51B.
-  hot_work_operator: 'Hot-work operator',
-  fire_watcher:      'Fire watcher',
-  other:             'Other',
+  hot_work_operator:   'Hot-work operator',
+  fire_watcher:        'Fire watcher',
+  // LOTO role (migration 050). 29 CFR 1910.147 calls a worker who
+  // applies a personal locktag an "authorized employee."
+  authorized_employee: 'LOTO authorized employee',
+  other:               'Other',
 }
 
 // What roles satisfy a given roster slot. An entrant can be qualified
@@ -175,4 +178,56 @@ function checkHotWork(
     if (!bestExpiry || rec.expires_at > bestExpiry) bestExpiry = rec.expires_at
   }
   return [{ worker_name: name, slot, kind: 'expired', expired_on: bestExpiry }]
+}
+
+// ── LOTO training validation (§1910.147(c)(7)(i)) ────────────────────────
+//
+// Same kind/missing/expired output shape as the entry- and hot-work
+// helpers, but for a single worker (the locktag owner). The LOTO
+// Devices checkout dialog calls this with the selected owner's
+// full_name and the table's records; the dialog disables Check out
+// when status !== 'current'.
+//
+// Only role 'authorized_employee' satisfies the gate. There is no
+// higher-standard role that subsumes it (entry supervisor for CS,
+// fire watcher for HW were each role-specific too).
+
+export type LotoTrainingStatus =
+  | { status: 'current';  expires_on: string | null }
+  | { status: 'expiring'; expires_on: string;        days_remaining: number }
+  | { status: 'expired';  expires_on: string }
+  | { status: 'missing' }
+
+const EXPIRING_SOON_DAYS = 30
+
+export function evaluateLotoTraining(args: {
+  workerName: string
+  records:    TrainingRecord[]
+  asOf:       Date
+}): LotoTrainingStatus {
+  const { workerName, records, asOf } = args
+  const today = ymd(asOf)
+  // Pick the freshest authorized_employee record for this worker.
+  // Names are matched case-insensitively, same as the CS gate, so
+  // a profile.full_name like "Jamil Jones" matches a training row
+  // entered as "JAMIL JONES" or "jamil jones".
+  const lc = workerName.trim().toLowerCase()
+  let best: TrainingRecord | null = null
+  for (const r of records) {
+    if (r.role !== 'authorized_employee') continue
+    if (r.worker_name.trim().toLowerCase() !== lc) continue
+    if (!best || r.completed_at > best.completed_at) best = r
+  }
+  if (!best) return { status: 'missing' }
+  if (!best.expires_at) return { status: 'current', expires_on: null }
+  if (best.expires_at < today) return { status: 'expired', expires_on: best.expires_at }
+  // expires today or later → current. If within EXPIRING_SOON_DAYS,
+  // surface the warning so an admin can renew before the next checkout.
+  const expiry  = Date.parse(best.expires_at + 'T00:00:00Z')
+  const nowMs   = Date.parse(today + 'T00:00:00Z')
+  const remaining = Math.floor((expiry - nowMs) / (24 * 60 * 60 * 1000))
+  if (remaining <= EXPIRING_SOON_DAYS) {
+    return { status: 'expiring', expires_on: best.expires_at, days_remaining: remaining }
+  }
+  return { status: 'current', expires_on: best.expires_at }
 }

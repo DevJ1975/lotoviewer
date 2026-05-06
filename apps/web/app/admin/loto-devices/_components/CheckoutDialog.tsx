@@ -1,21 +1,30 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Loader2, UserPlus, X as XIcon } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Loader2, UserPlus, X as XIcon, ShieldCheck, ShieldAlert, ShieldX } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import { useAuth } from '@/components/AuthProvider'
-import type { LotoDevice } from '@soteria/core/types'
+import { evaluateLotoTraining, type LotoTrainingStatus } from '@/lib/trainingRecords'
+import type { LotoDevice, TrainingRecord } from '@soteria/core/types'
 
 // Modal for an admin to record a checkout on behalf of a worker. Picks
 // owner from the profile list. Equipment is free-text (not a select)
 // because group locks may apply to bays / circuits not in loto_equipment.
 //
-// Inline "Invite new worker" affordance posts to /api/admin/users (the
-// same endpoint /admin/users uses) so an admin can add a missing worker
-// without leaving the checkout flow. New worker is auto-selected after
-// invite. Owner remains a profile FK on loto_device_checkouts —
-// non-app workers are out of scope here; that needs a workers table.
+// Self-enroll affordance: the admin can hand the device to the worker,
+// who fills out their email, name, and LOTO training (completion date,
+// cert authority, optional expiry). On submit we create the auth user
+// via /api/admin/users (same as /admin/users) AND insert a
+// loto_training_records row in role 'authorized_employee' so the
+// checkout gate sees them as trained immediately. Owner remains a
+// profile FK; non-app shop-floor workers without an email are still
+// out of scope (they need a workers table).
+//
+// Training gate: when the admin selects an owner, we look up
+// training_records for that worker_name (case-insensitive, same
+// pattern as the CS permit gate) and disable Check out unless the
+// status is 'current' or 'expiring' (still valid, but warn).
 
 interface ProfileLite {
   id:        string
@@ -36,15 +45,26 @@ export function CheckoutDialog({ device, onClose, onCheckedOut }: {
   const [busy, setBusy]         = useState(false)
   const [error, setError]       = useState<string | null>(null)
 
-  // Inline-invite state — visible when the admin clicks "Invite new worker"
+  // Inline-invite state — visible when the admin clicks "Add new worker"
   // beneath the dropdown. Kept local because the only thing the parent
   // needs is the eventual new owner_id, and we set it via setOwnerId().
-  const [inviteOpen,    setInviteOpen]    = useState(false)
-  const [inviteEmail,   setInviteEmail]   = useState('')
-  const [inviteName,    setInviteName]    = useState('')
-  const [inviteBusy,    setInviteBusy]    = useState(false)
-  const [inviteError,   setInviteError]   = useState<string | null>(null)
-  const [inviteSuccess, setInviteSuccess] = useState<{ tempPassword: string; emailSent: boolean } | null>(null)
+  const [inviteOpen,         setInviteOpen]         = useState(false)
+  const [inviteEmail,        setInviteEmail]        = useState('')
+  const [inviteName,         setInviteName]         = useState('')
+  // LOTO §1910.147(c)(7) requires a current authorized-employee
+  // qualification before issuing a locktag. Worker fills these in on
+  // the device; admin verifies the cert paperwork before clicking.
+  const [trainingCompleted,  setTrainingCompleted]  = useState('')   // YYYY-MM-DD
+  const [trainingExpires,    setTrainingExpires]    = useState('')   // YYYY-MM-DD or ''
+  const [trainingAuthority,  setTrainingAuthority]  = useState('')
+  const [inviteBusy,         setInviteBusy]         = useState(false)
+  const [inviteError,        setInviteError]        = useState<string | null>(null)
+  const [inviteSuccess,      setInviteSuccess]      = useState<{ tempPassword: string; emailSent: boolean } | null>(null)
+
+  // Training records for the current tenant — used to evaluate the
+  // selected owner's status. Refetched after a successful invite so
+  // the new authorized-employee row shows up immediately.
+  const [trainingRecords, setTrainingRecords] = useState<TrainingRecord[]>([])
 
   async function loadProfiles({ selectId }: { selectId?: string } = {}) {
     const { data, error: err } = await supabase
@@ -60,24 +80,66 @@ export function CheckoutDialog({ device, onClose, onCheckedOut }: {
     else if (profile?.id && !ownerId) setOwnerId(profile.id)
   }
 
-  // Load the profile list once. Small site = small list — no need to
-  // paginate. If a workplace grows large, swap to a typeahead.
+  async function loadTrainingRecords() {
+    const { data, error: err } = await supabase
+      .from('loto_training_records')
+      .select('*')
+      .eq('role', 'authorized_employee')
+    if (err || !data) return  // soft-fail: gate falls through to "missing"
+    setTrainingRecords(data as TrainingRecord[])
+  }
+
+  // Load the profile list + training records once. Small site = small
+  // list — no need to paginate. If a workplace grows large, swap to a
+  // typeahead.
   useEffect(() => {
     let cancelled = false
     void (async () => {
       if (cancelled) return
-      await loadProfiles()
+      await Promise.all([loadProfiles(), loadTrainingRecords()])
     })()
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id])
 
+  // Resolve training status for the currently-selected owner.
+  const selectedOwnerName = useMemo(() => {
+    const p = profiles.find(p => p.id === ownerId)
+    return p?.full_name ?? p?.email ?? ''
+  }, [profiles, ownerId])
+
+  const trainingStatus: LotoTrainingStatus | null = useMemo(() => {
+    if (!ownerId || !selectedOwnerName) return null
+    return evaluateLotoTraining({
+      workerName: selectedOwnerName,
+      records:    trainingRecords,
+      asOf:       new Date(),
+    })
+  }, [ownerId, selectedOwnerName, trainingRecords])
+
+  const trainingBlocks = trainingStatus?.status === 'missing' || trainingStatus?.status === 'expired'
+
   async function onInviteSubmit() {
     if (inviteBusy) return
     const email = inviteEmail.trim().toLowerCase()
     const fullName = inviteName.trim()
+    const completedAt = trainingCompleted.trim()
+    const expiresAt   = trainingExpires.trim() || null
+    const authority   = trainingAuthority.trim() || null
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       setInviteError('A valid email is required.')
+      return
+    }
+    if (!fullName) {
+      setInviteError('Full name is required for the training record.')
+      return
+    }
+    if (!completedAt || !/^\d{4}-\d{2}-\d{2}$/.test(completedAt)) {
+      setInviteError('LOTO training completion date is required.')
+      return
+    }
+    if (expiresAt && expiresAt < completedAt) {
+      setInviteError('Training expiry cannot be before the completion date.')
       return
     }
     setInviteBusy(true)
@@ -96,16 +158,41 @@ export function CheckoutDialog({ device, onClose, onCheckedOut }: {
         setInviteError(body.error ?? `Server returned ${res.status}`)
         return
       }
-      // Refresh the profile list so the new user shows up, and auto-select
-      // them so the checkout flow continues without a second click.
-      await loadProfiles()
-      // Look up the new profile by email — handle_new_user trigger
-      // already created the row, loadProfiles just pulled it.
+      // Insert the training record. RLS policy on loto_training_records
+      // permits admin writes, so the authenticated client works directly.
+      // We tolerate a failure here — the user IS created — but surface
+      // the issue prominently so the admin can re-enter via /admin/training-records.
+      const { error: trainErr } = await supabase
+        .from('loto_training_records')
+        .insert({
+          worker_name:    fullName,
+          role:           'authorized_employee',
+          completed_at:   completedAt,
+          expires_at:     expiresAt,
+          cert_authority: authority,
+          notes:          'Self-enrolled at LOTO device checkout',
+        })
+      if (trainErr) {
+        setInviteError(
+          `User created, but training record failed: ${trainErr.message}. ` +
+          `Add it manually under Admin → Training records before checkout.`,
+        )
+      }
+      // Refresh the profile + training lists so the new user + cert show
+      // up, and auto-select them so the checkout flow continues without
+      // a second click.
+      await Promise.all([loadProfiles(), loadTrainingRecords()])
       const created = (await supabase.from('profiles').select('id').eq('email', body.email).maybeSingle()).data
       if (created?.id) setOwnerId(created.id)
       setInviteSuccess({ tempPassword: body.tempPassword, emailSent: body.emailSent === true })
       setInviteEmail('')
       setInviteName('')
+      setTrainingCompleted('')
+      setTrainingExpires('')
+      setTrainingAuthority('')
+      // Auto-collapse on full success so the dialog goes back to the
+      // checkout view with the new user selected.
+      if (!trainErr) setInviteOpen(false)
     } catch (e) {
       setInviteError(e instanceof Error ? e.message : 'Invite failed.')
     } finally {
@@ -182,7 +269,7 @@ export function CheckoutDialog({ device, onClose, onCheckedOut }: {
                 className="text-[11px] font-semibold text-brand-navy dark:text-brand-yellow hover:underline inline-flex items-center gap-1 disabled:opacity-40"
               >
                 <UserPlus className="h-3 w-3" />
-                Invite new worker
+                Add new worker
               </button>
             )}
           </div>
@@ -200,23 +287,34 @@ export function CheckoutDialog({ device, onClose, onCheckedOut }: {
             ))}
           </select>
 
+          {/* Training-status badge under the dropdown — visible whenever an
+              owner is selected. Hand the device to the worker before
+              issuing a locktag and they can confirm their cert is current. */}
+          {trainingStatus && (
+            <TrainingBadge status={trainingStatus} workerName={selectedOwnerName} />
+          )}
+
           {inviteOpen && (
             <div className="mt-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">Invite new worker</p>
+                <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">Add new worker</p>
                 <button
                   type="button"
                   onClick={() => { setInviteOpen(false); setInviteError(null); setInviteSuccess(null) }}
                   disabled={inviteBusy}
-                  aria-label="Cancel invite"
+                  aria-label="Cancel"
                   className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 disabled:opacity-40"
                 >
                   <XIcon className="h-3.5 w-3.5" />
                 </button>
               </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+                Hand the device to the worker — they fill out their email, name, and LOTO
+                training. Verify the certification document before submitting.
+              </p>
               <input
                 type="email"
-                placeholder="worker@company.com"
+                placeholder="Email — worker@company.com"
                 value={inviteEmail}
                 onChange={e => setInviteEmail(e.target.value)}
                 disabled={inviteBusy}
@@ -224,12 +322,51 @@ export function CheckoutDialog({ device, onClose, onCheckedOut }: {
               />
               <input
                 type="text"
-                placeholder="Full name (optional)"
+                placeholder="Full name (required)"
                 value={inviteName}
                 onChange={e => setInviteName(e.target.value)}
                 disabled={inviteBusy}
                 className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy disabled:opacity-50"
               />
+
+              {/* LOTO training fields — required by §1910.147(c)(7) */}
+              <div className="pt-1 border-t border-slate-200 dark:border-slate-700">
+                <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 mt-2 mb-1">
+                  LOTO training (29 CFR 1910.147)
+                </p>
+                <label className="block text-[11px] text-slate-500 dark:text-slate-400">
+                  Completed on
+                  <input
+                    type="date"
+                    value={trainingCompleted}
+                    onChange={e => setTrainingCompleted(e.target.value)}
+                    disabled={inviteBusy}
+                    className="block w-full mt-0.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy disabled:opacity-50"
+                  />
+                </label>
+                <label className="block text-[11px] text-slate-500 dark:text-slate-400 mt-2">
+                  Expires (optional — leave blank for "no expiry")
+                  <input
+                    type="date"
+                    value={trainingExpires}
+                    onChange={e => setTrainingExpires(e.target.value)}
+                    disabled={inviteBusy}
+                    className="block w-full mt-0.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy disabled:opacity-50"
+                  />
+                </label>
+                <label className="block text-[11px] text-slate-500 dark:text-slate-400 mt-2">
+                  Issued by
+                  <input
+                    type="text"
+                    placeholder="e.g. Plant Safety, ABC Training Inc."
+                    value={trainingAuthority}
+                    onChange={e => setTrainingAuthority(e.target.value)}
+                    disabled={inviteBusy}
+                    className="block w-full mt-0.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy disabled:opacity-50"
+                  />
+                </label>
+              </div>
+
               {inviteError && (
                 <p className="text-[11px] text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 rounded-md px-2 py-1">
                   {inviteError}
@@ -237,7 +374,7 @@ export function CheckoutDialog({ device, onClose, onCheckedOut }: {
               )}
               {inviteSuccess && (
                 <p className="text-[11px] text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900 rounded-md px-2 py-1">
-                  Worker invited.
+                  Worker added.
                   {inviteSuccess.emailSent
                     ? ' Login email sent.'
                     : <> Email send failed — share the temp password manually: <code className="font-mono">{inviteSuccess.tempPassword}</code></>}
@@ -251,7 +388,7 @@ export function CheckoutDialog({ device, onClose, onCheckedOut }: {
                   className="px-3 py-1.5 rounded-md bg-brand-navy text-white text-xs font-semibold disabled:opacity-40 hover:bg-brand-navy/90 transition-colors inline-flex items-center gap-1.5"
                 >
                   {inviteBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserPlus className="h-3 w-3" />}
-                  {inviteBusy ? 'Inviting…' : 'Invite & select'}
+                  {inviteBusy ? 'Saving…' : 'Add & select'}
                 </button>
               </div>
             </div>
@@ -303,7 +440,10 @@ export function CheckoutDialog({ device, onClose, onCheckedOut }: {
           <button
             type="button"
             onClick={submit}
-            disabled={busy || !ownerId}
+            disabled={busy || !ownerId || trainingBlocks}
+            title={trainingBlocks
+              ? 'LOTO training is missing or expired for this worker. Add or renew before issuing a locktag.'
+              : undefined}
             className="px-5 py-2 rounded-lg bg-brand-navy text-white text-sm font-semibold disabled:opacity-40 hover:bg-brand-navy/90 transition-colors flex items-center gap-1.5"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -312,5 +452,48 @@ export function CheckoutDialog({ device, onClose, onCheckedOut }: {
         </div>
       </div>
     </div>
+  )
+}
+
+// ── Training badge ──────────────────────────────────────────────────────
+// Shown beneath the Owner dropdown whenever a worker is selected. The
+// status string is supplied by lib/trainingRecords.evaluateLotoTraining.
+function TrainingBadge({ status, workerName }: {
+  status:     LotoTrainingStatus
+  workerName: string
+}) {
+  if (status.status === 'current') {
+    return (
+      <p className="text-[11px] text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900 rounded-md px-2 py-1 inline-flex items-center gap-1.5 mt-2">
+        <ShieldCheck className="h-3 w-3" />
+        LOTO training current
+        {status.expires_on
+          ? <> · expires {status.expires_on}</>
+          : <> · no expiry on file</>}
+      </p>
+    )
+  }
+  if (status.status === 'expiring') {
+    return (
+      <p className="text-[11px] text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 rounded-md px-2 py-1 inline-flex items-center gap-1.5 mt-2">
+        <ShieldAlert className="h-3 w-3" />
+        Training expires in {status.days_remaining} day{status.days_remaining === 1 ? '' : 's'} ({status.expires_on}). Renew soon.
+      </p>
+    )
+  }
+  if (status.status === 'expired') {
+    return (
+      <p className="text-[11px] text-rose-800 dark:text-rose-200 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 rounded-md px-2 py-1 inline-flex items-center gap-1.5 mt-2">
+        <ShieldX className="h-3 w-3" />
+        Training expired on {status.expires_on}. Renew before issuing a locktag.
+      </p>
+    )
+  }
+  // 'missing'
+  return (
+    <p className="text-[11px] text-rose-800 dark:text-rose-200 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 rounded-md px-2 py-1 inline-flex items-center gap-1.5 mt-2">
+      <ShieldX className="h-3 w-3" />
+      No LOTO training record on file for {workerName || 'this worker'}. Add one before issuing a locktag.
+    </p>
   )
 }
