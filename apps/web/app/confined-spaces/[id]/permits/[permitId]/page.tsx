@@ -395,7 +395,15 @@ export default function PermitDetailPage() {
             kindHint={preEntryTest ? 'periodic' : 'pre_entry'}
             thresholds={thresholds}
             meters={meters}
-            onSaved={(t) => setTests(prev => [t, ...prev])}
+            onSaved={(t) => {
+              // Append optimistically so the test is visible immediately,
+              // then refetch the permit. Migration 053's trigger
+              // auto-cancels the permit when any channel fails — the
+              // refetch is what surfaces the canceled state in the
+              // header banner without requiring a manual reload.
+              setTests(prev => [t, ...prev])
+              void load()
+            }}
           />
         )}
         {tests.length === 0 ? (
