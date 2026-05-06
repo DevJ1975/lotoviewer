@@ -242,4 +242,79 @@ describe('TRAINING_ROLE_LABELS', () => {
   it('includes a label for the LOTO authorized_employee role', () => {
     expect(TRAINING_ROLE_LABELS.authorized_employee).toBe('LOTO authorized employee')
   })
+
+  it('every TrainingRole union member has a label', () => {
+    const required: TrainingRole[] = [
+      'entrant', 'attendant', 'entry_supervisor', 'rescuer',
+      'hot_work_operator', 'fire_watcher', 'authorized_employee', 'other',
+    ]
+    for (const r of required) {
+      expect(TRAINING_ROLE_LABELS[r], `label for ${r}`).toBeTruthy()
+      expect(TRAINING_ROLE_LABELS[r].length, `label-length for ${r}`).toBeGreaterThan(0)
+    }
+  })
+})
+
+// ── evaluateLotoTraining — name-matching edge cases ─────────────────────
+describe('evaluateLotoTraining — special-char worker names', () => {
+  const ASOF = new Date('2026-05-05T12:00:00Z')
+
+  it("matches O'Brien against o'brien (apostrophe + lowercase)", () => {
+    const r = evaluateLotoTraining({
+      workerName: "O'BRIEN",
+      records: [rec({ worker_name: "o'brien", role: 'authorized_employee', expires_at: null })],
+      asOf: ASOF,
+    })
+    expect(r.status).toBe('current')
+  })
+
+  it('matches Müller against müller (umlaut, case-insensitive)', () => {
+    const r = evaluateLotoTraining({
+      workerName: 'Müller',
+      records: [rec({ worker_name: 'müller', role: 'authorized_employee', expires_at: null })],
+      asOf: ASOF,
+    })
+    expect(r.status).toBe('current')
+  })
+
+  it('does NOT collapse different unicode codepoints (Müller vs Müller)', () => {
+    // Composed (U+00FC) vs decomposed (u + U+0308). These look identical
+    // but are different strings. The evaluator does plain lowercase
+    // comparison; document that NFC normalization is the caller's job.
+    // If a future change adds normalization, flip this test.
+    const r = evaluateLotoTraining({
+      workerName: 'Müller',  // decomposed
+      records: [rec({ worker_name: 'Müller', role: 'authorized_employee', expires_at: null })],
+      asOf: ASOF,
+    })
+    expect(r.status).toBe('missing')
+  })
+
+  it('handles worker name with embedded newline (paste accident)', () => {
+    const r = evaluateLotoTraining({
+      workerName: 'Maria\nSantos',
+      records: [rec({ worker_name: 'Maria Santos', role: 'authorized_employee', expires_at: null })],
+      asOf: ASOF,
+    })
+    // Newline ≠ space — won't match. Documents fail-closed posture.
+    expect(r.status).toBe('missing')
+  })
+
+  it('handles empty worker name without crashing', () => {
+    const r = evaluateLotoTraining({
+      workerName: '',
+      records: [rec({ worker_name: 'Maria', role: 'authorized_employee', expires_at: null })],
+      asOf: ASOF,
+    })
+    expect(r.status).toBe('missing')
+  })
+
+  it('handles records with empty worker_name field', () => {
+    const r = evaluateLotoTraining({
+      workerName: 'Maria',
+      records: [rec({ worker_name: '', role: 'authorized_employee', expires_at: null })],
+      asOf: ASOF,
+    })
+    expect(r.status).toBe('missing')
+  })
 })

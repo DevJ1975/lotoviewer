@@ -9,7 +9,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
-import { evaluateLotoTraining, type LotoTrainingStatus } from '@/lib/trainingRecords'
+import { evaluateLotoTraining, lotoTrainingStatusTone, type LotoTrainingStatus } from '@/lib/trainingRecords'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import type { LotoWorker, TrainingRecord } from '@soteria/core/types'
 
@@ -315,10 +315,11 @@ function AddWorkerForm({
       return
     }
 
+    let trainErr: { message: string } | null = null
     if (completedAt) {
       // Best-effort training record. Same case-insensitive name match
       // pattern as the checkout dialog.
-      const { error: trainErr } = await supabase
+      const trainRes = await supabase
         .from('loto_training_records')
         .insert({
           worker_name:    fullName.trim(),
@@ -328,14 +329,17 @@ function AddWorkerForm({
           cert_authority: authority.trim() || null,
           notes:          'Added via /admin/workers',
         })
-      if (trainErr) {
-        setError(`Worker added, but training record failed: ${trainErr.message}. Add it under Admin → Training records.`)
-        setBusy(false)
-        // Don't return — onSaved() refreshes the list, the worker DOES exist.
-      }
+      trainErr = trainRes.error
     }
 
     setBusy(false)
+    if (trainErr) {
+      // Worker DOES exist; surface the partial-success message and keep
+      // the form open so the admin can fix it without losing context.
+      // Closing via onSaved() here would hide the warning entirely.
+      setError(`Worker added, but training record failed: ${trainErr.message}. Add it under Admin → Training records.`)
+      return
+    }
     onSaved()
   }
 
@@ -548,35 +552,31 @@ function WorkerRowView({
   )
 }
 
+// Compact pill used in the worker table. Different short labels from
+// the verbose CheckoutDialog badge — same tone mapping via the shared
+// lotoTrainingStatusTone() helper.
+const PILL_TONE_CLS: Record<'success' | 'warn' | 'danger', string> = {
+  success: 'text-emerald-800 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-950/40',
+  warn:    'text-amber-900 dark:text-amber-200 bg-amber-100 dark:bg-amber-950/40',
+  danger:  'text-rose-900 dark:text-rose-200 bg-rose-100 dark:bg-rose-950/40',
+}
+
 function TrainingPill({ status }: { status: LotoTrainingStatus }) {
-  if (status.status === 'current') {
-    return (
-      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-800 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded font-medium">
-        <ShieldCheck className="h-3 w-3" />
-        current
-      </span>
-    )
-  }
-  if (status.status === 'expiring') {
-    return (
-      <span className="inline-flex items-center gap-1 text-[11px] text-amber-900 dark:text-amber-200 bg-amber-100 dark:bg-amber-950/40 px-1.5 py-0.5 rounded font-medium" title={`expires ${status.expires_on}`}>
-        <ShieldAlert className="h-3 w-3" />
-        expires in {status.days_remaining}d
-      </span>
-    )
-  }
-  if (status.status === 'expired') {
-    return (
-      <span className="inline-flex items-center gap-1 text-[11px] text-rose-900 dark:text-rose-200 bg-rose-100 dark:bg-rose-950/40 px-1.5 py-0.5 rounded font-medium" title={`expired ${status.expires_on}`}>
-        <ShieldX className="h-3 w-3" />
-        expired
-      </span>
-    )
-  }
+  const tone = lotoTrainingStatusTone(status)
+  const Icon = tone === 'success' ? ShieldCheck : tone === 'warn' ? ShieldAlert : ShieldX
+  const title =
+    status.status === 'expiring' ? `expires ${status.expires_on}`
+  : status.status === 'expired'  ? `expired ${status.expires_on}`
+  : undefined
+  const label =
+    status.status === 'current'  ? 'current'
+  : status.status === 'expiring' ? `expires in ${status.days_remaining}d`
+  : status.status === 'expired'  ? 'expired'
+  :                                'no record'
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] text-rose-900 dark:text-rose-200 bg-rose-100 dark:bg-rose-950/40 px-1.5 py-0.5 rounded font-medium">
-      <ShieldX className="h-3 w-3" />
-      no record
+    <span className={`inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded font-medium ${PILL_TONE_CLS[tone]}`} title={title}>
+      <Icon className="h-3 w-3" />
+      {label}
     </span>
   )
 }

@@ -198,6 +198,41 @@ export type LotoTrainingStatus =
   | { status: 'expired';  expires_on: string }
   | { status: 'missing' }
 
+export type LotoTrainingTone = 'success' | 'warn' | 'danger'
+
+/** Map a status to a 3-bucket tone the display layer maps to its own
+ *  palette (Tailwind classes on web, StyleSheet objects on mobile). */
+export function lotoTrainingStatusTone(s: LotoTrainingStatus): LotoTrainingTone {
+  switch (s.status) {
+    case 'current':  return 'success'
+    case 'expiring': return 'warn'
+    case 'expired':
+    case 'missing':  return 'danger'
+  }
+}
+
+/** Plain-text summary of the status. Pure TS so it works in PDFs +
+ *  emails too if needed later. */
+export function lotoTrainingStatusText(
+  s: LotoTrainingStatus,
+  workerName: string = '',
+): string {
+  switch (s.status) {
+    case 'current':
+      return s.expires_on
+        ? `LOTO training current · expires ${s.expires_on}`
+        : 'LOTO training current · no expiry on file'
+    case 'expiring':
+      return `Training expires in ${s.days_remaining} day${s.days_remaining === 1 ? '' : 's'} (${s.expires_on}). Renew soon.`
+    case 'expired':
+      return `Training expired on ${s.expires_on}. Renew before issuing a locktag.`
+    case 'missing':
+      return workerName
+        ? `No LOTO training record on file for ${workerName}. Add one before issuing a locktag.`
+        : 'No LOTO training record on file. Add one before issuing a locktag.'
+  }
+}
+
 const EXPIRING_SOON_DAYS = 30
 
 export function evaluateLotoTraining(args: {

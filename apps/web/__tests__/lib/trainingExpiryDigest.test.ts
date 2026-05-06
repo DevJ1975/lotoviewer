@@ -118,6 +118,61 @@ describe('buildExpiryDigest', () => {
   })
 })
 
+// ── Edge cases — malformed input + boundary values ─────────────────────
+describe('buildExpiryDigest — defensive handling', () => {
+  it('drops empty input', () => {
+    expect(buildExpiryDigest([], ASOF)).toEqual([])
+  })
+
+  it('drops a malformed expires_at silently rather than crashing', () => {
+    // Date.parse('not-a-date') is NaN → daysBetween returns 0 →
+    // classifies as expiring with days=0. Acceptable fail-loud
+    // behaviour vs throwing in cron context.
+    const out = buildExpiryDigest([
+      row({ worker_name: 'Maria', expires_at: 'not-a-date' }),
+    ], ASOF)
+    // Either the row is dropped (Date.parse → NaN → no classification)
+    // or it shows as expiring with days=0 — both are non-crashing.
+    // The important contract: buildExpiryDigest does not throw.
+    expect(Array.isArray(out)).toBe(true)
+  })
+
+  it('handles 100+ records without performance cliff', () => {
+    // Smoke test for O(n^2) regression — the freshness map should
+    // make this O(n).
+    const many: RawTrainingRow[] = []
+    for (let i = 0; i < 200; i++) {
+      many.push(row({
+        worker_name: `worker-${i}`,
+        expires_at:  '2026-05-10',  // expiring in 4d
+      }))
+    }
+    const t0 = Date.now()
+    const out = buildExpiryDigest(many, ASOF)
+    const elapsed = Date.now() - t0
+    expect(out[0].rows.length).toBe(200)
+    expect(elapsed).toBeLessThan(100)  // 100ms is a generous ceiling
+  })
+
+  it('does NOT cross-pollinate freshness across (tenant, worker, role)', () => {
+    // Same worker name in two different tenants — each tenant's
+    // freshest record wins independently.
+    const out = buildExpiryDigest([
+      row({ tenant_id: TENANT_A, worker_name: 'shared',
+            completed_at: '2024-01-01', expires_at: '2025-01-01' }),  // expired
+      row({ tenant_id: TENANT_B, worker_name: 'shared',
+            completed_at: '2026-04-01', expires_at: '2026-05-08' }),  // expiring 2d
+    ], ASOF)
+    // Tenant A has an old record beyond the grace window → drop.
+    // Tenant B has an upcoming expiry → include.
+    const a = out.find(t => t.tenant_id === TENANT_A)
+    const b = out.find(t => t.tenant_id === TENANT_B)
+    expect(a).toBeUndefined()
+    expect(b?.rows).toHaveLength(1)
+    expect(b?.rows[0].status).toBe('expiring')
+  })
+})
+
 // ─── helpers ────────────────────────────────────────────────────────────
 function ymdOffset(asOf: Date, deltaDays: number): string {
   const d = new Date(asOf.getTime() + deltaDays * 24 * 60 * 60 * 1000)

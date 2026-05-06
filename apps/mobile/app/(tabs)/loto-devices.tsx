@@ -21,7 +21,13 @@ import {
   loadOpenCheckouts,
   type OpenCheckoutRow,
 } from '@soteria/core/queries/lotoDevices'
-import { evaluateLotoTraining, type LotoTrainingStatus } from '@soteria/core/trainingRecords'
+import {
+  evaluateLotoTraining,
+  lotoTrainingStatusText,
+  lotoTrainingStatusTone,
+  type LotoTrainingStatus,
+  type LotoTrainingTone,
+} from '@soteria/core/trainingRecords'
 import type { LotoDevice, LotoWorker, TrainingRecord } from '@soteria/core/types'
 
 // Mobile parity for /admin/loto-devices.
@@ -635,23 +641,22 @@ function CheckoutModal({
   )
 }
 
+// RN tone palette mirrors the web (CheckoutDialog) — different
+// styling system, same 3-bucket meaning so a future color tweak
+// only needs to land in one place if we centralise the palette.
+const TONE_COLORS: Record<LotoTrainingTone, { bg: string; fg: string }> = {
+  success: { bg: '#d1fae5', fg: '#065f46' },
+  warn:    { bg: '#fef3c7', fg: '#92400e' },
+  danger:  { bg: '#fee2e2', fg: '#991b1b' },
+}
+
 function TrainingBadge({ status, workerName }: { status: LotoTrainingStatus; workerName: string }) {
-  const text =
-    status.status === 'current'  ? `LOTO training current${status.expires_on ? ` · expires ${status.expires_on}` : ''}` :
-    status.status === 'expiring' ? `Training expires in ${status.days_remaining}d (${status.expires_on}). Renew soon.` :
-    status.status === 'expired'  ? `Training expired ${status.expires_on}. Renew first.` :
-                                   `No LOTO training record on file for ${workerName || 'this worker'}.`
-  const bg =
-    status.status === 'current'  ? '#d1fae5' :
-    status.status === 'expiring' ? '#fef3c7' :
-                                   '#fee2e2'
-  const fg =
-    status.status === 'current'  ? '#065f46' :
-    status.status === 'expiring' ? '#92400e' :
-                                   '#991b1b'
+  const { bg, fg } = TONE_COLORS[lotoTrainingStatusTone(status)]
   return (
     <View style={[styles.badge, { backgroundColor: bg }]}>
-      <Text style={[styles.badgeText, { color: fg }]}>{text}</Text>
+      <Text style={[styles.badgeText, { color: fg }]}>
+        {lotoTrainingStatusText(status, workerName)}
+      </Text>
     </View>
   )
 }

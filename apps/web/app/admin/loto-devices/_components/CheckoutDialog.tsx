@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
-import { evaluateLotoTraining, type LotoTrainingStatus } from '@/lib/trainingRecords'
+import { evaluateLotoTraining, lotoTrainingStatusText, lotoTrainingStatusTone, type LotoTrainingStatus } from '@/lib/trainingRecords'
 import { loadAllWorkers } from '@/lib/queries/lotoDevices'
 import type { LotoDevice, LotoWorker, TrainingRecord } from '@soteria/core/types'
 
@@ -574,41 +574,26 @@ export function CheckoutDialog({ device, onClose, onCheckedOut }: {
 }
 
 // ── Training badge ──────────────────────────────────────────────────────
+// Visual layer over lotoTrainingStatusTone() / lotoTrainingStatusText() —
+// the tone-to-class map is the single piece of styling logic here, the
+// rest (text, icon mapping) is shared with the mobile and the workers
+// page versions.
+const TONE_CLS: Record<'success' | 'warn' | 'danger', string> = {
+  success: 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100 dark:border-emerald-900',
+  warn:    'text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border-amber-100 dark:border-amber-900',
+  danger:  'text-rose-800 dark:text-rose-200 bg-rose-50 dark:bg-rose-950/40 border-rose-100 dark:border-rose-900',
+}
+
 function TrainingBadge({ status, workerName }: {
   status:     LotoTrainingStatus
   workerName: string
 }) {
-  if (status.status === 'current') {
-    return (
-      <p className="text-[11px] text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900 rounded-md px-2 py-1 inline-flex items-center gap-1.5 mt-2">
-        <ShieldCheck className="h-3 w-3" />
-        LOTO training current
-        {status.expires_on
-          ? <> · expires {status.expires_on}</>
-          : <> · no expiry on file</>}
-      </p>
-    )
-  }
-  if (status.status === 'expiring') {
-    return (
-      <p className="text-[11px] text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 rounded-md px-2 py-1 inline-flex items-center gap-1.5 mt-2">
-        <ShieldAlert className="h-3 w-3" />
-        Training expires in {status.days_remaining} day{status.days_remaining === 1 ? '' : 's'} ({status.expires_on}). Renew soon.
-      </p>
-    )
-  }
-  if (status.status === 'expired') {
-    return (
-      <p className="text-[11px] text-rose-800 dark:text-rose-200 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 rounded-md px-2 py-1 inline-flex items-center gap-1.5 mt-2">
-        <ShieldX className="h-3 w-3" />
-        Training expired on {status.expires_on}. Renew before issuing a locktag.
-      </p>
-    )
-  }
+  const tone = lotoTrainingStatusTone(status)
+  const Icon = tone === 'success' ? ShieldCheck : tone === 'warn' ? ShieldAlert : ShieldX
   return (
-    <p className="text-[11px] text-rose-800 dark:text-rose-200 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 rounded-md px-2 py-1 inline-flex items-center gap-1.5 mt-2">
-      <ShieldX className="h-3 w-3" />
-      No LOTO training record on file for {workerName || 'this worker'}. Add one before issuing a locktag.
+    <p className={`text-[11px] border rounded-md px-2 py-1 inline-flex items-center gap-1.5 mt-2 ${TONE_CLS[tone]}`}>
+      <Icon className="h-3 w-3" />
+      {lotoTrainingStatusText(status, workerName)}
     </p>
   )
 }
