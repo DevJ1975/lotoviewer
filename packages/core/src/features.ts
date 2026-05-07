@@ -262,6 +262,16 @@ export const FEATURES: FeatureDef[] = [
     enabled:     true,
     comingSoon:  false,
   },
+  {
+    id:          'incidents-osha',
+    name:        'OSHA Recordkeeping',
+    description: '300 log, 300A annual summary, ITA upload',
+    href:        '/osha',
+    category:    'safety',
+    parent:      'incidents',
+    enabled:     true,
+    comingSoon:  false,
+  },
 
   // Legacy near-miss surface — kept enabled during the Phase 1 → Phase 6
   // transition so existing tenants don't lose their bookmarks. The new

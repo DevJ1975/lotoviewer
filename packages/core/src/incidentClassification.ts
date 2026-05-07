@@ -151,19 +151,119 @@ export function firstAidVsMedical(treatments: ReadonlyArray<string>): 'first_aid
   return 'first_aid'
 }
 
-// Phase 1 stub — returns "needs Phase 4 implementation". The Phase 4
-// migration will replace the body with the full decision tree; the
-// signature is fixed now so callers can be written against it.
-export function decideRecordability(_answers: RecordabilityAnswers): RecordabilityDecision {
-  return {
-    recordable: false,
-    classification: null,
-    path: [{
-      question: 'OSHA recordability classifier not yet implemented',
-      answer:   'n/a',
-      reason:   'Ships in Phase 4 — Phase 1 only persists raw answers for audit.',
-    }],
+// Phase 4 — full OSHA 1904.7 recordability decision tree.
+//
+// Implements the standard logical flow:
+//   1. Was the case work-related? (1904.5)
+//        → no → not recordable
+//   2. Is it a new case (vs continuation of an old one)? (1904.6)
+//        → no → not recordable
+//   3. Did it result in death?
+//        → yes → recordable, classification='death'
+//   4. Did it result in days away from work?
+//        → yes → recordable, classification='days_away'
+//   5. Did it result in restricted work or job transfer?
+//        → yes → recordable, classification='restricted'
+//   6. Did it result in medical treatment beyond first aid? (1904.7(b)(5))
+//        → yes → recordable, classification='other_recordable'
+//   7. Loss of consciousness?
+//        → yes → recordable, classification='other_recordable'
+//   8. A significant injury or illness diagnosed by a healthcare professional? (1904.7(b)(7))
+//        → yes → recordable, classification='other_recordable'
+//   else → not recordable.
+//
+// We evaluate questions in order and short-circuit on the first
+// "yes" that classifies the case (death > days away > restricted >
+// other-recordable). This matches the OSHA single-classification
+// rule: "Check only one box for each case based on the most serious
+// outcome".
+//
+// The full Q&A path is returned on `path`; the API persists it to
+// incident_classifications.decision_path for audit.
+export function decideRecordability(answers: RecordabilityAnswers): RecordabilityDecision {
+  const path: RecordabilityDecision['path'] = []
+
+  // 1904.5 — work-relatedness gate.
+  path.push({
+    question: 'Was the injury or illness work-related? (1904.5)',
+    answer:   answers.is_work_related ? 'yes' : 'no',
+  })
+  if (!answers.is_work_related) {
+    return { recordable: false, classification: null, path }
   }
+
+  // 1904.6 — new-case gate.
+  path.push({
+    question: 'Is this a new case (not a continuation of an existing recorded case)? (1904.6)',
+    answer:   answers.is_new_case ? 'yes' : 'no',
+  })
+  if (!answers.is_new_case) {
+    return { recordable: false, classification: null, path }
+  }
+
+  // 1904.7 — outcomes, in OSHA's "most serious wins" order.
+  if (answers.resulted_in_death) {
+    path.push({ question: 'Did the case result in death?', answer: 'yes' })
+    return { recordable: true, classification: 'death', path }
+  }
+  path.push({ question: 'Did the case result in death?', answer: 'no' })
+
+  if (answers.resulted_in_days_away) {
+    path.push({
+      question: 'Did the case result in days away from work?',
+      answer:   'yes',
+      reason:   `${answers.days_away_count ?? 0} day(s)`,
+    })
+    return { recordable: true, classification: 'days_away', path }
+  }
+  path.push({ question: 'Did the case result in days away from work?', answer: 'no' })
+
+  if (answers.resulted_in_restricted_duty) {
+    path.push({
+      question: 'Did the case result in restricted work or job transfer?',
+      answer:   'yes',
+      reason:   `${answers.days_restricted_count ?? 0} day(s)`,
+    })
+    return { recordable: true, classification: 'restricted', path }
+  }
+  path.push({ question: 'Did the case result in restricted work or job transfer?', answer: 'no' })
+
+  // The remaining four "other_recordable" triggers — any one is enough.
+  if (answers.medical_treatment_beyond_first_aid) {
+    path.push({
+      question: 'Was there medical treatment beyond first aid? (1904.7(b)(5))',
+      answer:   'yes',
+    })
+    return { recordable: true, classification: 'other_recordable', path }
+  }
+  path.push({
+    question: 'Was there medical treatment beyond first aid? (1904.7(b)(5))',
+    answer:   'no',
+  })
+
+  if (answers.loss_of_consciousness) {
+    path.push({
+      question: 'Did the worker lose consciousness?',
+      answer:   'yes',
+    })
+    return { recordable: true, classification: 'other_recordable', path }
+  }
+  path.push({ question: 'Did the worker lose consciousness?', answer: 'no' })
+
+  if (answers.significant_diagnosed_condition) {
+    path.push({
+      question: 'Was a significant injury / illness diagnosed by a physician or other healthcare professional? (1904.7(b)(7))',
+      answer:   'yes',
+    })
+    return { recordable: true, classification: 'other_recordable', path }
+  }
+  path.push({
+    question: 'Was a significant injury / illness diagnosed by a physician or other healthcare professional? (1904.7(b)(7))',
+    answer:   'no',
+  })
+
+  // Walked the whole tree — not recordable.
+  return { recordable: false, classification: null, path }
 }
 
 // Convenience — derive an OSHA classification from severity_actual

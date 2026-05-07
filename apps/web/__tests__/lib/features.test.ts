@@ -111,6 +111,7 @@ describe('getFeaturesByCategory', () => {
       'cs-import',
       'incidents',
       'incidents-new',
+      'incidents-osha',
       'near-miss',
       'hot-work',
       'hot-work-status',

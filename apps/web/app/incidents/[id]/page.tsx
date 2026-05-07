@@ -161,6 +161,11 @@ export default function IncidentDetailPage() {
             Care
           </Link>
         )}
+        {incident.incident_type === 'injury_illness' && (
+          <Link href={`/incidents/${id}/classify`} className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">
+            Classify
+          </Link>
+        )}
       </nav>
 
       {/* ── Header ───────────────────────────────────────────────── */}
