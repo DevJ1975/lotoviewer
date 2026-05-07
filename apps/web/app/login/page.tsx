@@ -4,8 +4,9 @@ import Link from 'next/link'
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2, Mail } from 'lucide-react'
-import { useAuth } from '@/components/AuthProvider'
+import { readLastLogin, useAuth, type LastLoginHint } from '@/components/AuthProvider'
 import PasswordField from '@/components/PasswordField'
+import { Avatar } from '@/components/ui/Avatar'
 
 export default function LoginPage() {
   return (
@@ -25,6 +26,19 @@ function LoginForm() {
   const [password, setPassword] = useState('')
   const [busy, setBusy]         = useState(false)
   const [error, setError]       = useState<string | null>(null)
+  const [hint, setHint]         = useState<LastLoginHint | null>(null)
+
+  // Read the "welcome back" hint from localStorage on mount so the
+  // login screen can show the previous user's avatar + prefill their
+  // email. Reads are SSR-guarded inside readLastLogin.
+  useEffect(() => {
+    const h = readLastLogin()
+    if (h) {
+      setHint(h)
+      // Prefill the email field unless the URL already provided one.
+      setEmail(prev => prev || h.email)
+    }
+  }, [])
 
   // If already signed in, bounce away from /login.
   useEffect(() => {
@@ -33,6 +47,10 @@ function LoginForm() {
     if (profile?.must_change_password) router.replace('/welcome')
     else router.replace(next)
   }, [loading, userId, profile, next, router])
+
+  // Hide the hint as soon as the user types a different email — they
+  // are signing in as someone else and the old avatar would be wrong.
+  const showHint = !!hint && email.trim().toLowerCase() === hint.email.toLowerCase()
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -56,6 +74,20 @@ function LoginForm() {
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">Sign in to continue</p>
         </div>
+
+        {showHint && hint && (
+          <div className="flex flex-col items-center gap-2 pt-1">
+            <Avatar
+              src={hint.avatar_url}
+              name={hint.full_name}
+              email={hint.email}
+              size="xl"
+            />
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Welcome back, <span className="font-medium">{hint.full_name || hint.email}</span>
+            </p>
+          </div>
+        )}
 
         <div className="space-y-3">
           <label className="block">
