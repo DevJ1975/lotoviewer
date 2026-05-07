@@ -72,23 +72,18 @@ export async function POST(req: Request) {
       rate_limit_per_hour: number | null; total_reports: number;
     }
 
-    // Rate limit, if configured. We count anonymous incidents
-    // attributed to this token's location in the prior hour. The
-    // `legacy_near_miss_id` column happens to be uuid-typed and
-    // unused for anonymous intake — re-purposing it here would be
-    // confusing, so instead we filter by description-prefix tag
-    // we'll write below ("[anon-token:<id>]") for the rate window
-    // count. Slightly hackish but avoids a schema change for a
-    // best-effort counter.
+    // Rate limit, if configured. Counts prior anonymous incidents
+    // that referenced this token via the anon_token_id FK
+    // (migration 068). Replaces the earlier description-prefix tag
+    // approach which leaked the marker into every downstream
+    // surface (300 log, 301 PDF, lessons library, AI suggest).
     if (t.rate_limit_per_hour && t.rate_limit_per_hour > 0) {
       const sinceIso = new Date(Date.now() - RATE_WINDOW_MS).toISOString()
       const { count } = await admin
         .from('incidents')
         .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', t.tenant_id)
-        .eq('is_anonymous', true)
+        .eq('anon_token_id', t.id)
         .gte('reported_at', sinceIso)
-        .ilike('description', `[anon-token:${t.id}]%`)
       if ((count ?? 0) >= t.rate_limit_per_hour) {
         return NextResponse.json({
           error: 'Too many anonymous reports from this location in the last hour. Please try again later.',
@@ -96,16 +91,10 @@ export async function POST(req: Request) {
       }
     }
 
-    // Resolve a tenant service-account user to satisfy the (now
-    // nullable) reported_by FK if a tenant has one configured. We
-    // don't require it — Phase 6 leaves reported_by NULL on
-    // anonymous reports.
-
-    // Compose the insert. We tag the description so audit + rate
-    // limiting can identify anonymous reports later, then strip the
-    // tag for display in the UI via a CSS rule (the marker is the
-    // first line; UI hides anything matching the marker pattern).
-    const description = `[anon-token:${t.id}] ${(body.description ?? '').trim()}`
+    // Compose the insert. The token reference rides on anon_token_id;
+    // the description carries only the worker's narrative — no
+    // marker prefix.
+    const description = (body.description ?? '').trim()
 
     const insert = {
       tenant_id:               t.tenant_id,
@@ -114,6 +103,7 @@ export async function POST(req: Request) {
       description,
       reported_by:             null,
       is_anonymous:            true,
+      anon_token_id:           t.id,
       location_text:           body.location_text?.trim() || t.label,
       shift:                   body.shift ?? null,
       immediate_action_taken:  body.immediate_action_taken?.trim() || null,
@@ -218,7 +208,8 @@ export async function POST(req: Request) {
       const appUrl = computeLoginUrl(req)
       const tenantName = (tenantData as { name?: string | null } | null)?.name ?? null
       // Strip the anon marker from the description for the email.
-      const displayDescription = (insert.description as string).replace(/^\[anon-token:[^\]]+\]\s*/, '')
+      // Description is now stored unmodified (no token-prefix tag).
+      const displayDescription = insert.description as string
       const logRows: Array<Record<string, unknown>> = []
       for (const r of recipients.values()) {
         const ok = await sendIncidentAlertEmail({

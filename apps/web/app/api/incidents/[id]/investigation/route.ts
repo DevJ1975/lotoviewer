@@ -223,6 +223,16 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     // table rather than ship the full canCompleteInvestigation check
     // here — the table choice is method-specific.
     if (body.completed_at) {
+      // Clamp future completed_at — investigations cannot be back- or
+      // forward-dated. We allow a 5-minute clock-skew tolerance to
+      // match the validateCreateInput convention on incidents.
+      const completedMs = Date.parse(body.completed_at)
+      if (Number.isNaN(completedMs)) {
+        return NextResponse.json({ error: 'completed_at is not a valid timestamp' }, { status: 400 })
+      }
+      if (completedMs > Date.now() + 5 * 60_000) {
+        return NextResponse.json({ error: 'completed_at cannot be in the future' }, { status: 400 })
+      }
       const method = (body.rca_method ?? existing.rca_method) as RcaMethod
       const tableByMethod: Record<RcaMethod, string | null> = {
         '5_whys':   'incident_rca_5whys',
