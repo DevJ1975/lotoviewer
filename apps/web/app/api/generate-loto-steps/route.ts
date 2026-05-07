@@ -35,8 +35,7 @@ RULES
 4. method_of_verification must be a concrete zero-energy test the technician performs before work begins (meter reading, attempted start, gauge check, visual confirmation of blocking pin). Never just "Verify de-energized."
 5. Flag stored energy technicians commonly miss: VFD DC bus capacitors, trapped hydraulic pressure in capped lines, residual pneumatic volume, hot CIP chemicals or steam lines, gravity loads on raised carriages.
 6. When the equipment description is ambiguous about the specific configuration, propose the most common arrangement for that equipment class and state your assumption in isolation_procedure (e.g., "Assuming single 480V feed from the MCC — verify on site before use.").
-7. If images are attached, use them to identify visible disconnects, valves, isolation points, and nameplates. Prefer what you see over assumptions.
-8. Keep each field concise but complete — one or two short sentences. Avoid bullet characters; write in prose.`
+7. Keep each field concise but complete — one or two short sentences. Avoid bullet characters; write in prose.`
 
 // Strict JSON Schema for the structured output. `additionalProperties: false`
 // is required on every object for the structured-outputs path to compile.
