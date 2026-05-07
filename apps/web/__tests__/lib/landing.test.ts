@@ -35,6 +35,7 @@ describe('resolveLandingPath', () => {
         'hot-work':        false,
         'risk-assessment': false,
         'near-miss':       false,
+        'incidents':       false,
         'jha':             false,
       },
     })
@@ -69,7 +70,7 @@ describe('resolveLandingPath', () => {
     // Single-module tenant could auto-derive to /loto, but the
     // override should win — it's the explicit signal.
     const t = tenant({
-      modules:  { 'loto': true, 'confined-spaces': false, 'hot-work': false, 'risk-assessment': false, 'near-miss': false, 'jha': false },
+      modules:  { 'loto': true, 'confined-spaces': false, 'hot-work': false, 'risk-assessment': false, 'near-miss': false, 'incidents': false, 'jha': false },
       settings: { default_landing_path: '/status' },
     })
     expect(resolveLandingPath(t)).toBe('/status')
@@ -77,7 +78,7 @@ describe('resolveLandingPath', () => {
 
   it('ignores a malformed override that does not start with /', () => {
     const t = tenant({
-      modules:  { 'loto': true, 'confined-spaces': false, 'hot-work': false, 'risk-assessment': false, 'near-miss': false, 'jha': false },
+      modules:  { 'loto': true, 'confined-spaces': false, 'hot-work': false, 'risk-assessment': false, 'near-miss': false, 'incidents': false, 'jha': false },
       settings: { default_landing_path: 'https://evil.com/' },
     })
     expect(resolveLandingPath(t)).toBe('/loto')
@@ -85,7 +86,7 @@ describe('resolveLandingPath', () => {
 
   it('ignores an empty-string override', () => {
     const t = tenant({
-      modules:  { 'loto': true, 'confined-spaces': false, 'hot-work': false, 'risk-assessment': false, 'near-miss': false, 'jha': false },
+      modules:  { 'loto': true, 'confined-spaces': false, 'hot-work': false, 'risk-assessment': false, 'near-miss': false, 'incidents': false, 'jha': false },
       settings: { default_landing_path: '   ' },
     })
     expect(resolveLandingPath(t)).toBe('/loto')
@@ -106,6 +107,7 @@ describe('resolveLandingPath', () => {
         'hot-work':        false,
         'risk-assessment': false,
         'near-miss':       false,
+        'incidents':       false,
         'jha':             false,
       },
     })

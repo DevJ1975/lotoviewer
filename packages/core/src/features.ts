@@ -236,7 +236,37 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
   },
 
-  // ── Coming-soon modules ─────────────────────────────────────────────────
+  // ── Incident Reporting & Investigation module ─────────────────────────
+  // Unified intake for injuries/illnesses, near-misses, property damage,
+  // and environmental spills. Folds the legacy near-miss feature into
+  // its own type discriminator (see migration 059b). The standalone
+  // `near-miss` feature below remains for the transition window —
+  // tenants can keep its drawer entry while the new module rolls out;
+  // a follow-up release will retire it.
+  {
+    id:          'incidents',
+    name:        'Incident Reporting',
+    description: 'Injury, near-miss, damage, and spill intake → investigation → CAPA → OSHA',
+    href:        '/incidents',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'incidents-new',
+    name:        'Report Incident',
+    description: 'Mobile-friendly intake wizard',
+    href:        '/incidents/new',
+    category:    'safety',
+    parent:      'incidents',
+    enabled:     true,
+    comingSoon:  false,
+  },
+
+  // Legacy near-miss surface — kept enabled during the Phase 1 → Phase 6
+  // transition so existing tenants don't lose their bookmarks. The new
+  // unified `incidents` module (above) replaces it; remove this entry
+  // when the legacy near_misses table is dropped.
   {
     id:          'near-miss',
     name:        'Near-Miss Reporting',
