@@ -4,8 +4,10 @@ import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { checkAiRateLimit, logAiInvocation } from '@/lib/ai/rateLimit'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
+import { getTenantApiKey } from '@/lib/ai/getTenantApiKey'
 
-const client = new Anthropic()
+// Per-request Anthropic client so the tenant's
+// settings.anthropic_api_key override is honored.
 const MODEL = MODEL_BY_SURFACE['generate-confined-space-hazards']
 
 // Hazard authoring is harder than LOTO authoring — there are more categories
@@ -203,6 +205,7 @@ export async function POST(req: NextRequest) {
       text: `Propose hazards, isolation steps, equipment, and rescue gear for this confined space entry permit.\n\n${brief}`,
     })
 
+    const client = new Anthropic({ apiKey: await getTenantApiKey(gate.tenantId) })
     const response = await client.messages.create({
       model:      MODEL,
       max_tokens: 16000,

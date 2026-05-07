@@ -15,6 +15,7 @@ import UnloadGuard from '@/components/UnloadGuard'
 import IdleLogout from '@/components/IdleLogout'
 import StorageQuotaBanner from '@/components/StorageQuotaBanner'
 import { SuperadminImpersonationBanner } from '@/components/SuperadminImpersonationBanner'
+import { ReleaseNotesBanner } from '@/components/ReleaseNotesBanner'
 import AppDrawer from '@/components/AppDrawer'
 import TenantHeaderPill from '@/components/TenantHeaderPill'
 import SupportBot from '@/components/SupportBot'
@@ -99,6 +100,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
       <PwaRegister />
       <OfflineBanner />
       <SuperadminImpersonationBanner />
+      <ReleaseNotesBanner />
       <StorageQuotaBanner />
       <main>{children}</main>
       <InstallPrompt />

@@ -4,8 +4,12 @@ import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { checkAiRateLimit, logAiInvocation } from '@/lib/ai/rateLimit'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
+import { getTenantApiKey } from '@/lib/ai/getTenantApiKey'
 
-const client = new Anthropic()
+// Anthropic client is constructed per-request (after the auth gate
+// resolves the tenant) so each request can use the tenant's
+// override key from tenants.settings.anthropic_api_key. Falls
+// through to the env var when no override is set.
 const MODEL = MODEL_BY_SURFACE['generate-loto-steps']
 
 // LOTO is safety-critical — OSHA 29 CFR 1910.147 governs authoring standards.
@@ -140,6 +144,7 @@ export async function POST(req: NextRequest) {
       text: `Propose LOTO energy-isolation steps for this food-production equipment. Return one step per independent energy source.\n\n${brief}`,
     })
 
+    const client = new Anthropic({ apiKey: await getTenantApiKey(gate.tenantId) })
     const response = await client.messages.create({
       model:      MODEL,
       max_tokens: 16000,

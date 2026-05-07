@@ -13,6 +13,7 @@ import {
   type EscalationReason,
 } from '@/lib/support/types'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
+import { getTenantApiKey } from '@/lib/ai/getTenantApiKey'
 
 // Only the two roles Anthropic accepts in messages[]. Internally
 // ChatMessage allows system/tool for transcript rendering, but we never
@@ -44,7 +45,9 @@ const HISTORY_TURNS = 20    // last N messages from the conversation
 const MAX_USER_MESSAGES_PER_HOUR = 30
 const MAX_USER_MESSAGES_PER_DAY  = 200
 
-const client = new Anthropic()
+// Anthropic client is constructed per-request inside the handler so
+// the tenant's settings.anthropic_api_key override (when set) wins
+// over the env-var default.
 
 interface RequestBody {
   conversationId?: string
@@ -308,6 +311,9 @@ export async function POST(req: Request) {
 
   // First model call. The model either replies directly or asks to call
   // the escalation tool.
+  // Per-request client so the tenant's
+  // settings.anthropic_api_key override is honored.
+  const client = new Anthropic({ apiKey: await getTenantApiKey(reporter.tenantId) })
   let response: Anthropic.Message
   try {
     response = await client.messages.create({
