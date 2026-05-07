@@ -221,6 +221,77 @@ If every item passes, the devjr session is operationally
 verified. Anything that fails — paste the symptom back so we
 can fix.
 
+## 10. Photo-AI removal (commits 64368cf + 847df38)
+
+Goal: confirm the photo-validation gate is gone from the upload
+path and that the generation routes still produce reasonable
+drafts without image inputs.
+
+### 10.1 Upload latency (no validate-photo step)
+
+- [ ] Open any equipment placard or confined-space detail page
+      with a photo slot.
+- [ ] Upload a clear photo. The status overlay should cycle
+      `Compressing… → Uploading…` with NO `Checking…` step.
+      Open DevTools → Network and confirm no
+      `POST /api/validate-photo` request fires.
+- [ ] Direct URL test: `https://YOUR-DOMAIN/api/validate-photo`
+      should 404 (route deleted).
+
+### 10.2 Upload an obviously-wrong photo
+
+- [ ] Upload a blank wall, a meme, or anything not industrial.
+      The upload should SUCCEED (no AI gate). The supervisor's
+      review at sign-off is the only check now — confirms the
+      operator's decision that AI photo validation was redundant.
+
+### 10.3 LOTO step generation — text-only
+
+- [ ] Go to a placard with no photos at all. Click **Edit
+      steps** → **Generate with AI**.
+- [ ] Drafts should still arrive within ~10-30s. Open DevTools
+      Network, find the `/api/generate-loto-steps` request, and
+      confirm:
+  - Request body has NO `equip_photo_url` or `iso_photo_url`
+    fields.
+  - Steps are reasonable for the equipment description (one per
+    independent energy source). Quality may differ slightly
+    from photo-augmented runs — supervisors should still review
+    every step.
+- [ ] Repeat on a placard WITH photos. The route should ignore
+      any stale `*_photo_url` fields if a cached client sends
+      them; same step quality as the no-photo case.
+
+### 10.4 Confined-space hazard generation — text-only
+
+- [ ] Go to `/confined-spaces/<space>/permits/new`. Click
+      **Suggest hazards with AI**.
+- [ ] DevTools Network → `/api/generate-confined-space-hazards`
+      request body has NO `equip_photo_url` or
+      `interior_photo_url`. Suggestions arrive populated.
+- [ ] Confirm the SYSTEM_PROMPT no longer references
+      photos by checking that the suggestion text doesn't
+      reference visual cues like "as visible in the attached
+      photo" or "the manway visible at the top of the tank."
+
+### 10.5 AI usage dashboard — historical data preserved
+
+- [ ] `/superadmin/ai-usage`. Switch the window to 90 days.
+- [ ] **By surface** table shows three rows (support-chat,
+      generate-loto-steps, generate-confined-space-hazards).
+      `validate-photo` may still appear with historical
+      invocations from BEFORE the removal — that's correct,
+      the dashboard reads `ai_invocations.surface` text and
+      doesn't filter to the current AiSurface union.
+- [ ] Switch to 7d / 24h. Expect zero new validate-photo rows.
+
+### 10.6 KB updated
+
+- [ ] In the in-app support chat, ask "Does the AI look at my
+      photos?". The `loto.md` and `confined-spaces.md` KB
+      passages now state explicitly that the AI is text-only.
+      The bot's answer should reflect that.
+
 ## Known deferred items
 
 - **Deeplink prebuild guard fails locally** (apple-app-site-
@@ -233,3 +304,8 @@ can fix.
   load handler. Matches the existing pattern in
   apps/mobile/app/(tabs)/equipment.tsx — both should add a
   cancelled flag eventually. Not a crash, just a React warning.
+- **Historical `validate-photo` rows in `ai_invocations`.** The
+  table still has any rows logged before commit 64368cf. They
+  surface in the AI usage dashboard's by-surface breakdown for
+  windows that include the pre-removal period. Not a bug —
+  intentional preservation of audit history.
