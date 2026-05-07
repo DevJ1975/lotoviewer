@@ -11,6 +11,7 @@ import { LogoUploader }      from './_components/LogoUploader'
 import { EditTenantForm }    from './_components/EditTenantForm'
 import { MembersSection }    from './_components/MembersSection'
 import { ResetDemoSection }  from './_components/ResetDemoSection'
+import { ExportSection }     from './_components/ExportSection'
 import type { MemberRow }    from './_components/types'
 
 // Tenant edit page. Composes the sub-sections in _components/. Each
@@ -119,6 +120,13 @@ export default function SuperadminTenantDetail({
           tenantNumber={number}
           members={members}
           reload={load}
+        />
+      </div>
+
+      <div className="mt-10">
+        <ExportSection
+          tenantNumber={number}
+          tenantName={tenant.name}
         />
       </div>
 

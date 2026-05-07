@@ -16,6 +16,7 @@ import IdleLogout from '@/components/IdleLogout'
 import StorageQuotaBanner from '@/components/StorageQuotaBanner'
 import { SuperadminImpersonationBanner } from '@/components/SuperadminImpersonationBanner'
 import { ReleaseNotesBanner } from '@/components/ReleaseNotesBanner'
+import { VERSION_LINE } from '@/lib/version'
 import AppDrawer from '@/components/AppDrawer'
 import TenantHeaderPill from '@/components/TenantHeaderPill'
 import SupportBot from '@/components/SupportBot'
@@ -119,6 +120,8 @@ export default function AppChrome({ children }: { children: ReactNode }) {
             <Link href="/privacy" className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors">Privacy</Link>
             <span aria-hidden="true">·</span>
             <Link href="/terms"   className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors">Terms</Link>
+            <span aria-hidden="true">·</span>
+            <span className="font-mono text-[11px] opacity-70" title="Build version">{VERSION_LINE}</span>
           </span>
         </div>
       </footer>
