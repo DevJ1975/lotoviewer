@@ -282,6 +282,26 @@ export const FEATURES: FeatureDef[] = [
     enabled:     true,
     comingSoon:  false,
   },
+  {
+    id:          'incidents-lessons',
+    name:        'Lessons Learned',
+    description: 'Tenant-wide library of published investigation findings',
+    href:        '/incidents/lessons',
+    category:    'safety',
+    parent:      'incidents',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'incidents-qr',
+    name:        'Anonymous QR Codes',
+    description: 'Per-location QR signs for anonymous reporting (OSHA 1904.35)',
+    href:        '/incidents/qr',
+    category:    'safety',
+    parent:      'incidents',
+    enabled:     true,
+    comingSoon:  false,
+  },
 
   // Legacy near-miss surface — kept enabled during the Phase 1 → Phase 6
   // transition so existing tenants don't lose their bookmarks. The new

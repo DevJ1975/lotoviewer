@@ -42,6 +42,7 @@ const SELECT_COLS = [
   'scope_summary', 'sequence_of_events',
   'immediate_causes', 'underlying_causes', 'root_causes', 'lessons_learned',
   'signoff_by', 'signoff_at', 'signoff_typed_name',
+  'publish_lesson', 'lesson_summary', 'lesson_published_at', 'lesson_published_by',
   'created_at', 'updated_at', 'created_by', 'updated_by',
 ].join(', ')
 
@@ -163,6 +164,7 @@ const PATCHABLE: ReadonlyArray<keyof IncidentInvestigationPatchInput> = [
   'scope_summary', 'sequence_of_events',
   'immediate_causes', 'underlying_causes', 'root_causes', 'lessons_learned',
   'signoff_typed_name',
+  'publish_lesson', 'lesson_summary',
 ]
 
 export async function PATCH(req: Request, ctx: RouteContext) {
@@ -252,6 +254,24 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     if (body.signoff_typed_name && body.signoff_typed_name.trim()) {
       update.signoff_at = new Date().toISOString()
       update.signoff_by = gate.userId
+    }
+
+    // Lessons-learned publish flow: when publish_lesson flips to
+    // true with a non-empty summary, stamp the published_at +
+    // published_by audit columns. Flipping it back to false clears
+    // them — the lesson row drops out of the library next refresh.
+    if (body.publish_lesson === true) {
+      const summary = body.lesson_summary ?? null
+      if (!summary || !summary.trim()) {
+        return NextResponse.json({
+          error: 'lesson_summary is required when publishing a lesson',
+        }, { status: 400 })
+      }
+      update.lesson_published_at = new Date().toISOString()
+      update.lesson_published_by = gate.userId
+    } else if (body.publish_lesson === false) {
+      update.lesson_published_at = null
+      update.lesson_published_by = null
     }
 
     const { data, error } = await admin

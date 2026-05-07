@@ -7,6 +7,7 @@ import { ArrowLeft, AlertTriangle, Loader2 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import RepeatIncidentBanner from '@/app/_components/RepeatIncidentBanner'
+import EpaRqBanner from '@/app/_components/EpaRqBanner'
 import {
   INCIDENT_TYPE_LABEL,
   SEVERITY_ACTUAL_LABEL,
@@ -196,6 +197,15 @@ export default function IncidentDetailPage() {
 
       {/* ── Repeat-incident detector ─────────────────────────────── */}
       <RepeatIncidentBanner incidentId={incident.id} />
+
+      {/* ── EPA RQ check (environmental incidents only) ──────────── */}
+      {incident.incident_type === 'environmental' && (
+        <EpaRqBanner
+          substance={incident.spill_substance}
+          quantity={incident.spill_quantity}
+          quantity_unit={incident.spill_quantity_unit}
+        />
+      )}
 
       {/* ── Description ──────────────────────────────────────────── */}
       <section className="rounded-xl border border-slate-200 dark:border-slate-800 p-4">

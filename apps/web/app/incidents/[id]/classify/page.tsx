@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, AlertTriangle, Loader2, ShieldCheck, ShieldAlert, FileText } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, Loader2, ShieldCheck, ShieldAlert, FileText, Sparkles } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import {
@@ -52,6 +52,16 @@ export default function ClassifyPage() {
   const [busy,       setBusy]    = useState(false)
   const [forbidden,  setForbidden] = useState(false)
   const [submittedDecision, setSubmittedDecision] = useState<ReturnType<typeof decideRecordability> | null>(null)
+
+  // AI suggestion state — fetched on demand via the Sparkles button.
+  const [aiBusy,        setAiBusy]        = useState(false)
+  const [aiSuggestion,  setAiSuggestion]  = useState<{
+    classification: 'death' | 'days_away' | 'restricted' | 'other_recordable' | null
+    confidence:     number
+    reasoning:      string
+    missing_info:   string[]
+  } | null>(null)
+  const [aiError,       setAiError]       = useState<string | null>(null)
 
   // Wizard state — start "no" everywhere; the operator flips them on.
   const [answers, setAnswers] = useState<RecordabilityAnswers>({
@@ -121,6 +131,31 @@ export default function ClassifyPage() {
 
   const livePreview = decideRecordability(answers)
 
+  async function fetchAiSuggestion() {
+    if (!tenant?.id || !id) return
+    setAiBusy(true); setAiError(null); setAiSuggestion(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: Record<string, string> = {
+        'content-type':    'application/json',
+        'x-active-tenant': tenant.id,
+      }
+      if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
+      const res = await fetch(`/api/incidents/${id}/classify/ai-suggest`, {
+        method:  'POST',
+        headers,
+        body:    JSON.stringify({}),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
+      setAiSuggestion(body.suggestion)
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setAiBusy(false)
+    }
+  }
+
   async function submit() {
     if (!tenant?.id || !id) return
     setBusy(true); setError(null)
@@ -140,6 +175,11 @@ export default function ClassifyPage() {
           injury_type:      injuryType,
           establishment_id: estId || null,
           override_reason:  overrideReason.trim() || undefined,
+          // Pass through any AI suggestion the user reviewed; the
+          // server compares it to the human's classification and
+          // records human_overrode_ai if they differ.
+          ai_suggested_classification: aiSuggestion?.classification ?? null,
+          ai_confidence:               aiSuggestion?.confidence ?? null,
         }),
       })
       const body = await res.json()
@@ -308,6 +348,48 @@ export default function ClassifyPage() {
             (intimate-body-part injury, sexual assault, mental illness, HIV/hepatitis/TB, or worker request in writing).
           </span>
         </label>
+      </section>
+
+      <section className="rounded-xl border border-violet-200 dark:border-violet-900 bg-violet-50/40 dark:bg-violet-950/20 p-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-violet-700 dark:text-violet-300" />
+            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">AI assist · Claude Haiku</h2>
+          </div>
+          <button
+            type="button"
+            disabled={aiBusy}
+            onClick={() => void fetchAiSuggestion()}
+            className="inline-flex items-center gap-2 rounded-lg bg-violet-600 text-white px-3 py-1.5 text-xs font-semibold hover:bg-violet-700 disabled:opacity-50"
+          >
+            {aiBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+            {aiBusy ? 'Asking Claude…' : 'Get AI suggestion'}
+          </button>
+        </div>
+        <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-300">
+          Suggestions are advisory only — your classification is the final word. The AI&apos;s suggestion + your decision are both saved for audit.
+        </p>
+        {aiError && (
+          <p className="mt-2 text-[11px] text-rose-600 dark:text-rose-400">{aiError}</p>
+        )}
+        {aiSuggestion && (
+          <div className="mt-3 rounded-lg bg-white dark:bg-slate-900 border border-violet-200 dark:border-violet-900 p-3 space-y-1.5">
+            <p className="text-[11px] uppercase tracking-wide text-violet-700 dark:text-violet-300">
+              Suggested: <strong className="text-slate-900 dark:text-slate-100">{aiSuggestion.classification ?? 'not recordable'}</strong>
+              {' · '}
+              <span className="font-mono">{Math.round(aiSuggestion.confidence * 100)}% confidence</span>
+            </p>
+            <p className="text-xs text-slate-700 dark:text-slate-200">{aiSuggestion.reasoning}</p>
+            {aiSuggestion.missing_info.length > 0 && (
+              <div className="mt-1">
+                <p className="text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-300 font-semibold">Sharpen the call by adding:</p>
+                <ul className="list-disc pl-4 text-[11px] text-slate-600 dark:text-slate-300">
+                  {aiSuggestion.missing_info.map((m, i) => <li key={i}>{m}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       <section className={

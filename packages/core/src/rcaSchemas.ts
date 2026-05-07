@@ -58,6 +58,11 @@ export type IncidentInvestigationRow = {
   signoff_by:          string | null
   signoff_at:          string | null
   signoff_typed_name:  string | null
+  // Lessons-learned library — see migration 067.
+  publish_lesson?:      boolean
+  lesson_summary?:      string | null
+  lesson_published_at?: string | null
+  lesson_published_by?: string | null
   created_at:          string
   updated_at:          string
   created_by:          string | null
@@ -86,6 +91,11 @@ export interface IncidentInvestigationPatchInput {
   root_causes?:         string | null
   lessons_learned?:     string | null
   signoff_typed_name?:  string | null
+  // Lessons-learned library — see migration 067. Toggling
+  // publish_lesson true (with a non-empty lesson_summary) surfaces
+  // the investigation in the tenant-wide library.
+  publish_lesson?:      boolean
+  lesson_summary?:      string | null
 }
 
 // ──────────────────────────────────────────────────────────────────────────

@@ -297,12 +297,25 @@ export default function InvestigatePage() {
           )}
 
           {investigation.completed_at && (
-            <section className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/40 dark:bg-emerald-950/20 p-4">
-              <p className="text-sm text-emerald-800 dark:text-emerald-200">
-                Completed {new Date(investigation.completed_at).toLocaleString()}
-                {investigation.signoff_typed_name && <> · signed by {investigation.signoff_typed_name}</>}.
-              </p>
-            </section>
+            <>
+              <section className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/40 dark:bg-emerald-950/20 p-4">
+                <p className="text-sm text-emerald-800 dark:text-emerald-200">
+                  Completed {new Date(investigation.completed_at).toLocaleString()}
+                  {investigation.signoff_typed_name && <> · signed by {investigation.signoff_typed_name}</>}.
+                </p>
+              </section>
+
+              <PublishLessonSection
+                investigationId={investigation.id}
+                initial={{
+                  publish_lesson:    investigation.publish_lesson ?? false,
+                  lesson_summary:    investigation.lesson_summary ?? '',
+                  lesson_published_at: investigation.lesson_published_at ?? null,
+                }}
+                tenantId={tenant?.id ?? null}
+                onSaved={() => void load()}
+              />
+            </>
           )}
         </>
       )}
@@ -316,5 +329,116 @@ function Stat({ label, value }: { label: string; value: string }) {
       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</p>
       <p className="mt-0.5 text-slate-800 dark:text-slate-200">{value}</p>
     </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Publish-lesson controls — only renders once the investigation is
+// completed. Toggling publish_lesson true with a non-empty
+// lesson_summary surfaces the row on /incidents/lessons.
+// ──────────────────────────────────────────────────────────────────────────
+
+function PublishLessonSection({
+  investigationId, initial, tenantId, onSaved,
+}: {
+  investigationId: string
+  initial: { publish_lesson: boolean; lesson_summary: string; lesson_published_at: string | null }
+  tenantId: string | null
+  onSaved: () => void
+}) {
+  const [publish, setPublish] = useState(initial.publish_lesson)
+  const [summary, setSummary] = useState(initial.lesson_summary)
+  const [busy,    setBusy]    = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  // Reuse the parent's incident id for the URL — recoverable from
+  // the route. Pulling it via useParams here keeps the section
+  // self-contained.
+  const params = useParams<{ id: string }>()
+
+  async function save() {
+    if (!tenantId) return
+    if (publish && !summary.trim()) {
+      setError('Type a short lesson summary before publishing.')
+      return
+    }
+    setBusy(true); setError(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: Record<string, string> = {
+        'content-type':    'application/json',
+        'x-active-tenant': tenantId,
+      }
+      if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
+      const res = await fetch(`/api/incidents/${params.id}/investigation`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          publish_lesson: publish,
+          lesson_summary: summary.trim() || null,
+        }),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
+      onSaved()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  void investigationId   // referenced for stability across re-renders
+  return (
+    <section className="rounded-xl border border-violet-200 dark:border-violet-900 bg-violet-50/30 dark:bg-violet-950/20 p-4 space-y-2">
+      <h2 className="text-sm font-semibold flex items-center gap-2 text-violet-900 dark:text-violet-100">
+        <BookOpenIcon /> Lessons-learned library
+      </h2>
+      <p className="text-[11px] text-slate-600 dark:text-slate-300">
+        Publish a short, anonymised summary so other teams can learn from this case. Privacy-case incidents auto-redact the description in the library.
+      </p>
+      <textarea
+        value={summary}
+        onChange={e => setSummary(e.target.value)}
+        rows={3}
+        placeholder="What should other teams do differently to avoid a recurrence?"
+        className="w-full rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm"
+      />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
+          <input
+            type="checkbox"
+            checked={publish}
+            onChange={e => setPublish(e.target.checked)}
+          />
+          Publish to library
+          {initial.lesson_published_at && (
+            <span className="ml-1 text-[10px] text-slate-500">
+              — currently published {new Date(initial.lesson_published_at).toLocaleDateString()}
+            </span>
+          )}
+        </label>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void save()}
+          className="rounded-lg bg-violet-600 text-white px-3 py-1.5 text-xs font-semibold hover:bg-violet-700 disabled:opacity-50"
+        >
+          {busy ? 'Saving…' : 'Save lesson'}
+        </button>
+      </div>
+      {error && <p className="text-[11px] text-rose-600 dark:text-rose-400">{error}</p>}
+    </section>
+  )
+}
+
+// Local SVG icon — avoids re-importing lucide just for one glyph
+// in this section.
+function BookOpenIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2 6.5A2.5 2.5 0 0 1 4.5 4H10v16H4.5A2.5 2.5 0 0 1 2 17.5v-11ZM22 6.5A2.5 2.5 0 0 0 19.5 4H14v16h5.5a2.5 2.5 0 0 0 2.5-2.5v-11Z"/>
+    </svg>
   )
 }

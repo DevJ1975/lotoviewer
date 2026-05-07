@@ -113,6 +113,8 @@ describe('getFeaturesByCategory', () => {
       'incidents-new',
       'incidents-osha',
       'incidents-scorecard',
+      'incidents-lessons',
+      'incidents-qr',
       'near-miss',
       'hot-work',
       'hot-work-status',
