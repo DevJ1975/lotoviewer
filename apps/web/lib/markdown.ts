@@ -80,6 +80,42 @@ export function renderReleaseNoteMd(md: string): string {
   return html.join('')
 }
 
+/**
+ * Render a toolbox-talk body to HTML. Same posture as the release-note
+ * renderer — pre-escape, then re-allow only known-safe constructs —
+ * but adds `### subheading` (h3) support, which AI-generated talk
+ * bodies frequently produce. h1/h2 are deliberately not supported:
+ * the talk's title is the page's h1 already.
+ */
+export function renderTalkMd(md: string): string {
+  const escaped = escape(md)
+  const blocks = escaped.split(/\n\s*\n/)
+  const html: string[] = []
+  for (const raw of blocks) {
+    const trimmed = raw.trim()
+    if (!trimmed) continue
+
+    const lines = trimmed.split('\n').map(l => l.trim())
+
+    // Single-line ### Heading. Keeps the renderer simple — multi-line
+    // heading blocks are vanishingly rare in this surface.
+    if (lines.length === 1 && lines[0].startsWith('### ')) {
+      html.push(`<h3 class="text-base font-semibold mt-4 mb-2 text-slate-900 dark:text-slate-100">${renderInlineSafe(lines[0].slice(4))}</h3>`)
+      continue
+    }
+
+    if (lines.every(l => l.startsWith('- '))) {
+      const items = lines.map(l => `<li>${renderInlineSafe(l.slice(2))}</li>`).join('')
+      html.push(`<ul class="list-disc ml-5 space-y-1">${items}</ul>`)
+      continue
+    }
+
+    const para = lines.map(l => renderInlineSafe(l)).join('<br>')
+    html.push(`<p class="mb-3 leading-relaxed">${para}</p>`)
+  }
+  return html.join('')
+}
+
 /** Inline rendering on already-escaped text. Recognises **bold** and
  *  [text](url) without re-escaping. */
 function renderInlineSafe(text: string): string {

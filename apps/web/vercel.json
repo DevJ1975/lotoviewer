@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/training-expiry-reminders",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/generate-toolbox-talks",
+      "schedule": "0 5 * * 0"
     }
   ]
 }

@@ -345,6 +345,21 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
   },
 
+  // ── Toolbox Talks module ───────────────────────────────────────────────
+  // Daily pre-shift safety briefing + sign-in roster. Talk content is
+  // produced by a weekly server-side cron (Sonnet) — there is
+  // intentionally no client-side generate button. Workers and admins
+  // can read + sign; only the cron creates new talks.
+  {
+    id:          'toolbox-talks',
+    name:        'Toolbox Talks',
+    description: 'AI-generated daily safety briefings + crew sign-in sheet',
+    href:        '/toolbox-talks',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+  },
+
   // ── Reports / oversight ─────────────────────────────────────────────────
   // The scorecard is the cross-module trend view aimed at safety directors.
   // Admin-gated at the route level — the drawer surfaces it here so admins
