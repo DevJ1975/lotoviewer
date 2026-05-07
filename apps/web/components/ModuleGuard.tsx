@@ -62,7 +62,7 @@ export default function ModuleGuard({ moduleId, children }: Props) {
           {moduleName} isn&apos;t enabled for {tenant.name}
         </h1>
         <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
-          This module is part of Soteria Field but isn&apos;t turned on for
+          This module is part of SoteriaField but isn&apos;t turned on for
           tenant <span className="font-mono">#{tenant.tenant_number}</span>.
           Contact your administrator if you need access.
         </p>

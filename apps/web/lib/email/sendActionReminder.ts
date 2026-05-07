@@ -44,7 +44,7 @@ export async function sendActionReminderEmail(args: ActionReminderArgs): Promise
 
   const from = process.env.INVITE_FROM_EMAIL
             ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'Soteria FIELD <onboarding@resend.dev>'
+            ?? 'SoteriaField <onboarding@resend.dev>'
 
   const link = `${args.appUrl.replace(/\/$/, '')}/incidents/${args.incidentId}/actions`
   const name = args.recipientName?.trim() || args.to.split('@')[0]!
@@ -64,7 +64,7 @@ ${dueLabel}: ${ACTION_TYPE_LABEL[args.actionType]} action on incident ${args.rep
 Open the action:
   ${link}
 
-— Soteria FIELD
+— SoteriaField
 `
 
   const safe = (s: string) => s
@@ -77,7 +77,7 @@ Open the action:
 <tr><td align="center">
   <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,0.06);">
     <tr><td style="background:${headerBg};padding:24px 28px;color:#fff;">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">Soteria FIELD · Action ${overdue ? 'overdue' : 'due soon'}</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">SoteriaField · Action ${overdue ? 'overdue' : 'due soon'}</div>
       <div style="font-size:22px;font-weight:800;margin-top:4px;">${safe(args.reportNumber)} — ${safe(ACTION_TYPE_LABEL[args.actionType])}</div>
     </td></tr>
     <tr><td style="padding:28px;">

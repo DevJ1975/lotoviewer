@@ -286,7 +286,7 @@ export default function PermitStatusBoard() {
       )}
 
       <footer className="text-[11px] text-slate-600 dark:text-slate-300 text-center pt-4">
-        Soteria Field · {active.length + expired.length} permit{active.length + expired.length === 1 ? '' : 's'} on display
+        SoteriaField · {active.length + expired.length} permit{active.length + expired.length === 1 ? '' : 's'} on display
       </footer>
     </div>
   )

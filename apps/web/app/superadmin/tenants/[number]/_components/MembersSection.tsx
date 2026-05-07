@@ -278,7 +278,7 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
       userId,
       email,
       label,
-      message: `Deleted ${label} from Soteria FIELD entirely`,
+      message: `Deleted ${label} from SoteriaField entirely`,
     })
   }
 
@@ -491,7 +491,7 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
                     onClick={() => deleteUserSystemWide(m.user_id, m.email, label)}
                     disabled={busy}
                     aria-label={`Delete ${label} from system`}
-                    title="Delete from Soteria FIELD entirely — undoable for 30s"
+                    title="Delete from SoteriaField entirely — undoable for 30s"
                     className="text-slate-300 dark:text-slate-600 hover:text-rose-700 dark:hover:text-rose-400 transition-colors disabled:opacity-50"
                   >
                     <MoreVertical className="h-4 w-4" />

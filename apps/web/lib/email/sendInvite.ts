@@ -56,17 +56,17 @@ export async function sendInviteEmail(args: InviteEmailArgs): Promise<boolean> {
   //   onboarding@resend.dev — Resend's test sender (works without DNS)
   const from = process.env.INVITE_FROM_EMAIL
             ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'Soteria FIELD <onboarding@resend.dev>'
+            ?? 'SoteriaField <onboarding@resend.dev>'
 
   const displayName = args.fullName || args.to.split('@')[0]!
   const isExisting = !args.tempPassword
   const subject = isExisting
     ? (args.tenantName
-        ? `You've been added to ${args.tenantName} on Soteria FIELD`
-        : "You've been added to a tenant on Soteria FIELD")
+        ? `You've been added to ${args.tenantName} on SoteriaField`
+        : "You've been added to a tenant on SoteriaField")
     : (args.tenantName
-        ? `You're invited to ${args.tenantName} on Soteria FIELD`
-        : "You're invited to Soteria FIELD")
+        ? `You're invited to ${args.tenantName} on SoteriaField`
+        : "You're invited to SoteriaField")
 
   const text = renderText({ displayName, isExisting, ...args })
   const html = renderHtml({ displayName, isExisting, ...args })
@@ -103,7 +103,7 @@ function renderText(a: InviteEmailArgs & { displayName: string; isExisting: bool
   if (a.isExisting) {
     return `Hi ${a.displayName},
 
-You've been added to ${a.tenantName ?? 'a new tenant'} on Soteria FIELD.
+You've been added to ${a.tenantName ?? 'a new tenant'} on SoteriaField.
 
 Sign in with your existing account:
   ${a.loginUrl}/login
@@ -113,14 +113,14 @@ in the app header.
 
 If you have any trouble signing in, just reply to this email.
 
-— Soteria FIELD
+— SoteriaField
 `
   }
 
   const tenantLine = a.tenantName ? `\n  Tenant:    ${a.tenantName}\n` : ''
   return `Hi ${a.displayName},
 
-You've been invited to Soteria FIELD — your team's safety operations app
+You've been invited to SoteriaField — your team's safety operations app
 (LOTO + Confined Space + Hot Work permits).
 
 Sign in here:
@@ -135,7 +135,7 @@ it, and you must change it on first login.
 
 If you have any trouble signing in, just reply to this email.
 
-— Soteria FIELD
+— SoteriaField
 `
 }
 
@@ -152,21 +152,21 @@ function renderHtml(a: InviteEmailArgs & { displayName: string; isExisting: bool
 <tr><td align="center">
   <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,0.06);">
     <tr><td style="background:#214488;padding:24px 28px;color:#ffffff;">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">Soteria FIELD</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">SoteriaField</div>
       <div style="font-size:22px;font-weight:800;margin-top:4px;">You've been added to ${tenantPhrase}</div>
     </td></tr>
     <tr><td style="padding:28px;">
       <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;">Hi ${safe(a.displayName)},</p>
-      <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;">A superadmin added you to <strong>${tenantPhrase}</strong> on Soteria FIELD. Sign in with your existing account — the new tenant will show up in the tenant switcher in the app header.</p>
+      <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;">A superadmin added you to <strong>${tenantPhrase}</strong> on SoteriaField. Sign in with your existing account — the new tenant will show up in the tenant switcher in the app header.</p>
       <p style="margin:0 0 22px 0;text-align:center;">
-        <a href="${safe(a.loginUrl)}/login" style="display:inline-block;background:#214488;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 24px;border-radius:10px;">Sign in to Soteria FIELD →</a>
+        <a href="${safe(a.loginUrl)}/login" style="display:inline-block;background:#214488;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 24px;border-radius:10px;">Sign in to SoteriaField →</a>
       </p>
       <p style="margin:18px 0 0 0;font-size:12px;line-height:1.55;color:#5b6675;">
         Trouble signing in? Just reply to this email.
       </p>
     </td></tr>
     <tr><td style="background:#f6f8fb;padding:16px 28px;text-align:center;font-size:11px;color:#5b6675;border-top:1px solid #e6ebf2;">
-      Sent from Soteria FIELD · <a href="${safe(a.loginUrl)}" style="color:#214488;text-decoration:none;">${safe(a.loginUrl.replace(/^https?:\/\//, ''))}</a>
+      Sent from SoteriaField · <a href="${safe(a.loginUrl)}" style="color:#214488;text-decoration:none;">${safe(a.loginUrl.replace(/^https?:\/\//, ''))}</a>
     </td></tr>
   </table>
 </td></tr>
@@ -183,15 +183,15 @@ function renderHtml(a: InviteEmailArgs & { displayName: string; isExisting: bool
 <tr><td align="center">
   <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,0.06);">
     <tr><td style="background:#214488;padding:24px 28px;color:#ffffff;">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">Soteria FIELD</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">SoteriaField</div>
       <div style="font-size:22px;font-weight:800;margin-top:4px;">You're invited</div>
     </td></tr>
     <tr><td style="padding:28px;">
       <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;">Hi ${safe(a.displayName)},</p>
-      <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;">You've been invited to Soteria FIELD — your team's safety operations app (LOTO, Confined Space, and Hot Work permits).</p>
+      <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;">You've been invited to SoteriaField — your team's safety operations app (LOTO, Confined Space, and Hot Work permits).</p>
       <p style="margin:0 0 22px 0;font-size:15px;line-height:1.55;">Tap the button below to sign in. Your one-time password is just under it — you'll be asked to set your own password on first login.</p>
       <p style="margin:0 0 22px 0;text-align:center;">
-        <a href="${safe(a.loginUrl)}/login" style="display:inline-block;background:#214488;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 24px;border-radius:10px;">Sign in to Soteria FIELD →</a>
+        <a href="${safe(a.loginUrl)}/login" style="display:inline-block;background:#214488;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 24px;border-radius:10px;">Sign in to SoteriaField →</a>
       </p>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f6f8fb;border-radius:10px;border:1px solid #e6ebf2;">
         <tr><td style="padding:14px 16px;font-size:13px;font-family:ui-monospace,Menlo,Consolas,monospace;color:#1a2230;">
@@ -209,7 +209,7 @@ function renderHtml(a: InviteEmailArgs & { displayName: string; isExisting: bool
       </p>
     </td></tr>
     <tr><td style="background:#f6f8fb;padding:16px 28px;text-align:center;font-size:11px;color:#5b6675;border-top:1px solid #e6ebf2;">
-      Sent from Soteria FIELD · <a href="${safe(a.loginUrl)}" style="color:#214488;text-decoration:none;">${safe(a.loginUrl.replace(/^https?:\/\//, ''))}</a>
+      Sent from SoteriaField · <a href="${safe(a.loginUrl)}" style="color:#214488;text-decoration:none;">${safe(a.loginUrl.replace(/^https?:\/\//, ''))}</a>
     </td></tr>
   </table>
 </td></tr>

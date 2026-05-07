@@ -92,7 +92,7 @@ export default function InstallPrompt() {
     return (
       <div
         role="region"
-        aria-label="Install Soteria Field"
+        aria-label="Install SoteriaField"
         className="fixed left-4 right-4 bottom-4 sm:left-auto sm:right-6 sm:max-w-sm z-40 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl ring-1 ring-slate-200 dark:ring-slate-700 p-4 flex items-center gap-3"
         style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
       >

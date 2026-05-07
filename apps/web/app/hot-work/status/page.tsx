@@ -218,7 +218,7 @@ export default function HotWorkStatusBoard() {
       )}
 
       <footer className="text-[11px] text-slate-600 dark:text-slate-300 text-center pt-4">
-        Soteria Field · {active.length + postWatch.length + needsAction.length} hot-work permit
+        SoteriaField · {active.length + postWatch.length + needsAction.length} hot-work permit
         {active.length + postWatch.length + needsAction.length === 1 ? '' : 's'} on display
       </footer>
     </div>

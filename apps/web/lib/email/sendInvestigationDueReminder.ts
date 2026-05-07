@@ -50,7 +50,7 @@ export async function sendInvestigationDueReminder(args: InvestigationDueArgs): 
 
   const from = process.env.INVITE_FROM_EMAIL
             ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'Soteria FIELD <onboarding@resend.dev>'
+            ?? 'SoteriaField <onboarding@resend.dev>'
 
   const text = renderText(args)
   const html = renderHtml(args)
@@ -103,7 +103,7 @@ the status to "Investigating" — that stops further escalation.
 
   ${deepLink(a)}
 
-— Soteria FIELD
+— SoteriaField
 `
 }
 
@@ -123,7 +123,7 @@ function renderHtml(a: InvestigationDueArgs): string {
 <tr><td align="center">
   <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,0.06);">
     <tr><td style="background:#9f1239;padding:24px 28px;color:#ffffff;">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">Soteria FIELD · Escalation</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">SoteriaField · Escalation</div>
       <div style="font-size:22px;font-weight:800;margin-top:4px;">${safe(a.reportNumber)} — investigation overdue</div>
     </td></tr>
     <tr><td style="padding:28px;">
@@ -150,7 +150,7 @@ function renderHtml(a: InvestigationDueArgs): string {
       </p>
     </td></tr>
     <tr><td style="background:#f6f8fb;padding:16px 28px;text-align:center;font-size:11px;color:#5b6675;border-top:1px solid #e6ebf2;">
-      Sent from Soteria FIELD
+      Sent from SoteriaField
     </td></tr>
   </table>
 </td></tr>

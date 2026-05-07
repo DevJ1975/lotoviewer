@@ -164,7 +164,7 @@ self.addEventListener('message', event => {
 // to '/' if absent. The whole handler is wrapped so a malformed payload
 // still produces a generic notification rather than dropping silently.
 self.addEventListener('push', event => {
-  let payload = { title: 'Soteria FIELD', body: 'New notification', url: '/', tag: undefined }
+  let payload = { title: 'SoteriaField', body: 'New notification', url: '/', tag: undefined }
   try {
     if (event.data) {
       const parsed = event.data.json()

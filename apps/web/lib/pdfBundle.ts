@@ -139,7 +139,7 @@ function drawCover(
   ctx.page.drawText(sanitizeForWinAnsi('OSHA 29 CFR 1910.146 + 1910.252 / NFPA 51B / Cal/OSHA §6777'), {
     x: MARGIN + 14, y: ctx.y - 44, size: 9, font: ctx.font, color: WHITE,
   })
-  ctx.page.drawText(sanitizeForWinAnsi(args.orgName ?? 'Soteria FIELD — Compliance Report'), {
+  ctx.page.drawText(sanitizeForWinAnsi(args.orgName ?? 'SoteriaField — Compliance Report'), {
     x: MARGIN + 14, y: ctx.y - 58, size: 9, font: ctx.bold, color: WHITE,
   })
   ctx.y -= 72
@@ -156,7 +156,7 @@ function drawCover(
   // can run them.
   drawSectionBar(ctx, 'How to verify')
   const verify = sanitizeForWinAnsi(
-    'Each row in the manifest below lists the SHA-256 of one permit PDF as it was issued by Soteria FIELD. ' +
+    'Each row in the manifest below lists the SHA-256 of one permit PDF as it was issued by SoteriaField. ' +
     'To verify a permit has not been altered after issuance, extract its pages from this bundle, save them as ' +
     'a standalone PDF, and compute SHA-256 of the file. The result must match the hash on this cover. ' +
     'Hash mismatch indicates the permit was modified after issue.',

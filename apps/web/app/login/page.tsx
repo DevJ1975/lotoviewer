@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2, Mail } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import PasswordField from '@/components/PasswordField'
+import SoteriaLogo from '@/components/SoteriaLogo'
 
 export default function LoginPage() {
   return (
@@ -45,15 +46,18 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900/40 px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#1B3A6B] px-4 py-10">
+      {/* Brand hero — colour-transparent variant on the navy backdrop
+          so the cream "Soteria" + teal "Field" land at full contrast. */}
+      <div className="mb-8">
+        <SoteriaLogo variant="color" width={320} priority />
+      </div>
+
       <form
         onSubmit={onSubmit}
-        className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl shadow-sm ring-1 ring-slate-200 dark:ring-slate-700 p-6 space-y-5"
+        className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl shadow-lg ring-1 ring-slate-200 dark:ring-slate-700 p-6 space-y-5"
       >
-        <div className="text-center space-y-1">
-          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">
-            Soteria <span className="text-brand-navy dark:text-brand-yellow tracking-wider">FIELD</span>
-          </h1>
+        <div className="text-center">
           <p className="text-sm text-slate-500 dark:text-slate-400">Sign in to continue</p>
         </div>
 
@@ -122,3 +126,4 @@ function LoginForm() {
     </div>
   )
 }
+

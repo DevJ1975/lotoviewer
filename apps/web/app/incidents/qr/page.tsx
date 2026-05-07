@@ -253,7 +253,7 @@ function TokenRow({
   .protect { margin-top: 32px; font-size: 12px; color: #5b6675; max-width: 480px; margin-left: auto; margin-right: auto; line-height: 1.55; }
   @media print { body { padding: 0; } }
 </style></head><body>
-  <p class="label">Soteria FIELD · Anonymous report</p>
+  <p class="label">SoteriaField · Anonymous report</p>
   <h1>Scan to report a safety concern</h1>
   <p class="location">${escapeHtml(token.label)}</p>
   <div class="qr">${qrSvg ?? ''}</div>

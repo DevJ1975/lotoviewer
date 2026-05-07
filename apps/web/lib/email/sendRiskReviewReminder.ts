@@ -46,7 +46,7 @@ export async function sendRiskReviewReminder(
   }
   const from = process.env.INVITE_FROM_EMAIL
             ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'Soteria FIELD <onboarding@resend.dev>'
+            ?? 'SoteriaField <onboarding@resend.dev>'
 
   const subject = args.risks.length === 1
     ? `1 risk review is overdue — ${args.tenantName}`
@@ -108,7 +108,7 @@ Open each risk above to record a review (Mark reviewed → notes →
 submit). The next-review date will reset based on the band's
 cadence.
 
-— Soteria FIELD on behalf of ${a.tenantName}
+— SoteriaField on behalf of ${a.tenantName}
 `
 }
 
@@ -150,7 +150,7 @@ function renderHtml(a: RiskReviewReminderArgs): string {
   <table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0" style="max-width:640px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,0.06);">
     <tr><td style="background:#214488;padding:24px 28px;color:#ffffff;">
       <div style="font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">
-        Soteria FIELD · Risk reviews
+        SoteriaField · Risk reviews
       </div>
       <div style="font-size:22px;font-weight:800;margin-top:4px;">
         ${a.risks.length} review${a.risks.length === 1 ? '' : 's'} overdue · ${safe(a.tenantName)}

@@ -96,9 +96,9 @@ export default function AdminUsersPage() {
     const displayName = justInvited.fullName || justInvited.email.split('@')[0]
     return `Hi ${displayName},
 
-You've been invited to Soteria Field. Here's how to log in for the first time:
+You've been invited to SoteriaField. Here's how to log in for the first time:
 
-1. Open Soteria Field in your browser.
+1. Open SoteriaField in your browser.
 2. Sign in with:
      Email:     ${justInvited.email}
      Password:  ${justInvited.tempPassword}

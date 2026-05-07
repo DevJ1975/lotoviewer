@@ -20,6 +20,26 @@
     {
       "path": "/api/cron/training-expiry-reminders",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/incident-investigation-sla",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/incident-action-reminders",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/incident-care-followup",
+      "schedule": "30 13 * * *"
+    },
+    {
+      "path": "/api/cron/incident-trends-weekly",
+      "schedule": "0 14 * * 1"
+    },
+    {
+      "path": "/api/cron/osha-300a-posting-prompt",
+      "schedule": "0 14 15 1 *"
     }
   ]
 }

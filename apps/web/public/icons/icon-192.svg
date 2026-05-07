@@ -1,4 +1,31 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
-  <rect width="192" height="192" rx="32" fill="#1B3A6B"/>
-  <text x="96" y="126" font-family="Arial, sans-serif" font-size="84" font-weight="bold" text-anchor="middle" fill="#FFD900">SL</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="SoteriaField">
+  <!-- 192×192 PWA icon — same target/reticle motif as app/icon.svg,
+       scaled up. Brand navy + teal-500 accent. Replaces the prior
+       "SL" placeholder so the install prompt + home-screen icon
+       on Android matches the favicon. -->
+  <rect width="192" height="192" rx="30" fill="#1B3A6B"/>
+
+  <!-- Crosshair lines, fading near the centre to clear room for the
+       scope frame + dot. -->
+  <g stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" opacity="0.85">
+    <line x1="96"  y1="18"  x2="96"  y2="54"/>
+    <line x1="96"  y1="138" x2="96"  y2="174"/>
+    <line x1="18"  y1="96"  x2="54"  y2="96"/>
+    <line x1="138" y1="96"  x2="174" y2="96"/>
+  </g>
+
+  <!-- Scope frame: rounded square, hollow. -->
+  <rect x="42" y="42" width="108" height="108" rx="12"
+        fill="none" stroke="#FFFFFF" stroke-width="7.5"/>
+
+  <!-- Corner brackets. -->
+  <g stroke="#FFFFFF" stroke-width="7.5" stroke-linecap="round" fill="none">
+    <path d="M 54 66 V 54 H 66"/>
+    <path d="M 126 54 H 138 V 66"/>
+    <path d="M 138 126 V 138 H 126"/>
+    <path d="M 66 138 H 54 V 126"/>
+  </g>
+
+  <!-- Focal dot — teal-500. -->
+  <circle cx="96" cy="96" r="11" fill="#14B8A6"/>
 </svg>

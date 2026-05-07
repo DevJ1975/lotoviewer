@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-// Privacy policy — starter template for Soteria FIELD. Functional for
+// Privacy policy — starter template for SoteriaField. Functional for
 // small/mid B2B SaaS but should be reviewed by counsel before any
 // enterprise customer signs an MSA. Update LAST_UPDATED whenever
 // material changes ship.
@@ -18,12 +18,12 @@ export default function PrivacyPolicyPage() {
 
       <Section title="1. Who we are">
         <p>
-          Soteria FIELD (&ldquo;Soteria&rdquo;, &ldquo;we&rdquo;, &ldquo;our&rdquo;) is a field-safety operations
+          SoteriaField (&ldquo;Soteria&rdquo;, &ldquo;we&rdquo;, &ldquo;our&rdquo;) is a field-safety operations
           platform operated by Trainovate Technologies. We provide tools for managing Lockout/Tagout
           procedures, Permit-Required Confined Space entries, and Hot Work permits at industrial and
           manufacturing sites.
         </p>
-        <p>This policy describes what personal information we collect when you use Soteria FIELD, how we use it, and the choices you have.</p>
+        <p>This policy describes what personal information we collect when you use SoteriaField, how we use it, and the choices you have.</p>
       </Section>
 
       <Section title="2. What we collect">
@@ -35,7 +35,7 @@ export default function PrivacyPolicyPage() {
           <li><strong>Device + session data.</strong> Browser type, OS, IP address, and timestamps for security and abuse prevention. Standard for any web service.</li>
           <li><strong>Push subscription data.</strong> If you opt into push notifications, your device&rsquo;s push endpoint and crypto keys.</li>
         </ul>
-        <p>We do <strong>not</strong> collect: location data beyond IP-derived approximate geolocation, device contact lists, or analytics from sites outside Soteria FIELD.</p>
+        <p>We do <strong>not</strong> collect: location data beyond IP-derived approximate geolocation, device contact lists, or analytics from sites outside SoteriaField.</p>
       </Section>
 
       <Section title="3. How we use it">
@@ -91,7 +91,7 @@ export default function PrivacyPolicyPage() {
       </Section>
 
       <Section title="8. Children">
-        <p>Soteria FIELD is a workplace-safety tool for adult professionals. We do not knowingly collect data from anyone under 18.</p>
+        <p>SoteriaField is a workplace-safety tool for adult professionals. We do not knowingly collect data from anyone under 18.</p>
       </Section>
 
       <Section title="9. Changes">
@@ -113,7 +113,7 @@ export default function PrivacyPolicyPage() {
 
       <footer className="pt-6 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
         <Link href="/terms" className="hover:underline">Terms of Service →</Link>
-        <span>Soteria FIELD · Trainovate Technologies</span>
+        <span>SoteriaField · Trainovate Technologies</span>
       </footer>
     </div>
   )

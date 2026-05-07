@@ -45,7 +45,7 @@ export async function sendActionAssignmentEmail(args: ActionAssignmentArgs): Pro
 
   const from = process.env.INVITE_FROM_EMAIL
             ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'Soteria FIELD <onboarding@resend.dev>'
+            ?? 'SoteriaField <onboarding@resend.dev>'
 
   const link = `${args.appUrl.replace(/\/$/, '')}/incidents/${args.incidentId}/actions`
   const dueLine = args.dueAt
@@ -69,7 +69,7 @@ Open the action:
 When the work is done, mark the action Complete. A different team member
 will verify it (separation of duty).
 
-— Soteria FIELD
+— SoteriaField
 `
 
   const safe = (s: string) => s
@@ -82,7 +82,7 @@ will verify it (separation of duty).
 <tr><td align="center">
   <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,0.06);">
     <tr><td style="background:#214488;padding:24px 28px;color:#fff;">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">Soteria FIELD · Action assigned</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">SoteriaField · Action assigned</div>
       <div style="font-size:22px;font-weight:800;margin-top:4px;">${safe(args.reportNumber)} — ${safe(ACTION_TYPE_LABEL[args.actionType])}</div>
     </td></tr>
     <tr><td style="padding:28px;">

@@ -99,7 +99,7 @@ export default function AnonymousReportPage() {
       <div className="max-w-xl mx-auto">
         <header className="text-center mb-6">
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-            Soteria FIELD
+            SoteriaField
           </p>
           <h1 className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
             Anonymous incident report
