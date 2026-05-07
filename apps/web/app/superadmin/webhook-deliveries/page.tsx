@@ -1,10 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, Loader2, AlertCircle, Webhook, RefreshCw,
-  CheckCircle2, XCircle, Clock,
+  CheckCircle2, XCircle, Clock, Copy, Check, ExternalLink,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useUrlState } from '@/hooks/useUrlState'
@@ -68,6 +68,24 @@ export default function WebhookDeliveriesPage() {
 
   useEffect(() => { void load() }, [load])
 
+  // Auto-poll every 15s while the tab is visible AND there's at least
+  // one pending delivery — the reconciler runs on a 5-min cron so the
+  // operator otherwise has to F5 to see results land. When everything
+  // is OK or failed (no pending), polling stops to avoid useless load.
+  const loadRef = useRef(load)
+  loadRef.current = load
+  useEffect(() => {
+    if (!data || data.counts.pending === 0) return
+    let cancelled = false
+    function tick() {
+      if (cancelled) return
+      if (typeof document !== 'undefined' && document.hidden) return
+      void loadRef.current()
+    }
+    const id = setInterval(tick, 15000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [data])
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-5">
       <header className="flex items-start justify-between gap-4">
@@ -106,10 +124,14 @@ export default function WebhookDeliveriesPage() {
             type="button"
             onClick={() => void load()}
             disabled={loading}
-            aria-label="Refresh"
-            className="p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors disabled:opacity-50"
+            aria-label={data && data.counts.pending > 0 ? 'Refresh (auto-refreshing)' : 'Refresh'}
+            title={data && data.counts.pending > 0 ? `Auto-refreshing every 15s while ${data.counts.pending} pending` : 'Refresh'}
+            className="p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors disabled:opacity-50 relative"
           >
             <RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+            {data && data.counts.pending > 0 && !loading && (
+              <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+            )}
           </button>
         </div>
       </header>
@@ -256,14 +278,25 @@ function Row({
           <div className="font-medium truncate" title={r.subscription_name ?? ''}>
             {r.subscription_name ?? <span className="italic text-slate-400">deleted</span>}
           </div>
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate" title={r.subscription_url}>
-            {r.subscription_url}
+          <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+            <span className="truncate" title={r.subscription_url}>{r.subscription_url}</span>
+            <CopyButton value={r.subscription_url} />
           </div>
         </td>
         <td className="px-3 py-2 text-slate-500 dark:text-slate-400 max-w-[160px]">
-          <div className="truncate" title={r.tenant_name ?? ''}>
-            {r.tenant_name ?? <span className="italic text-slate-400">—</span>}
-          </div>
+          {r.tenant_id && r.tenant_number ? (
+            <Link
+              href={`/superadmin/tenants/${r.tenant_number}`}
+              onClick={e => e.stopPropagation()}
+              className="inline-flex items-center gap-1 truncate text-brand-navy dark:text-brand-yellow hover:underline"
+              title={`#${r.tenant_number} · ${r.tenant_name ?? ''}`}
+            >
+              <span className="truncate">{r.tenant_name ?? `#${r.tenant_number}`}</span>
+              <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
+            </Link>
+          ) : (
+            <span className="italic text-slate-400">—</span>
+          )}
         </td>
         <td className="px-3 py-2 text-right text-[11px] text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap">
           {r.duration_ms != null ? `${r.duration_ms} ms` : '—'}
@@ -293,6 +326,31 @@ function Row({
         </tr>
       )}
     </>
+  )
+}
+
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false)
+  async function copy(e: React.MouseEvent) {
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch { /* clipboard blocked — fail silently, user can still triple-click */ }
+  }
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      aria-label={copied ? 'Copied' : 'Copy URL'}
+      title={copied ? 'Copied' : 'Copy URL'}
+      className="shrink-0 p-0.5 rounded hover:bg-slate-200/70 dark:hover:bg-slate-700/70 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+    >
+      {copied
+        ? <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+        : <Copy className="h-3 w-3" />}
+    </button>
   )
 }
 

@@ -25,6 +25,7 @@ export interface WebhookDeliveryRow {
   id:                number
   tenant_id:         string | null
   tenant_name:       string | null
+  tenant_number:     string | null
   subscription_id:   string | null
   subscription_name: string | null
   subscription_url:  string
@@ -95,21 +96,28 @@ export async function GET(req: Request) {
   const { data, error } = await q
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const rows = (data ?? []) as Array<Omit<WebhookDeliveryRow, 'tenant_name'>>
+  const rows = (data ?? []) as Array<Omit<WebhookDeliveryRow, 'tenant_name' | 'tenant_number'>>
 
   const tenantIds = Array.from(new Set(rows.map(r => r.tenant_id).filter((x): x is string => !!x)))
-  const tenantNameById = new Map<string, string>()
+  const tenantById = new Map<string, { name: string; tenant_number: string }>()
   if (tenantIds.length > 0) {
-    const { data: tenants } = await admin.from('tenants').select('id, name').in('id', tenantIds)
-    for (const t of (tenants ?? []) as Array<{ id: string; name: string }>) {
-      tenantNameById.set(t.id, t.name)
+    const { data: tenants } = await admin
+      .from('tenants')
+      .select('id, name, tenant_number')
+      .in('id', tenantIds)
+    for (const t of (tenants ?? []) as Array<{ id: string; name: string; tenant_number: string }>) {
+      tenantById.set(t.id, { name: t.name, tenant_number: t.tenant_number })
     }
   }
 
-  const enriched: WebhookDeliveryRow[] = rows.map(r => ({
-    ...r,
-    tenant_name: r.tenant_id ? tenantNameById.get(r.tenant_id) ?? null : null,
-  }))
+  const enriched: WebhookDeliveryRow[] = rows.map(r => {
+    const meta = r.tenant_id ? tenantById.get(r.tenant_id) : null
+    return {
+      ...r,
+      tenant_name:   meta?.name          ?? null,
+      tenant_number: meta?.tenant_number ?? null,
+    }
+  })
 
   const counts = { ok: 0, fail: 0, pending: 0 }
   for (const r of enriched) {

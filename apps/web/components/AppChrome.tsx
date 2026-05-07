@@ -121,7 +121,13 @@ export default function AppChrome({ children }: { children: ReactNode }) {
             <span aria-hidden="true">·</span>
             <Link href="/terms"   className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors">Terms</Link>
             <span aria-hidden="true">·</span>
-            <span className="font-mono text-[11px] opacity-70" title="Build version">{VERSION_LINE}</span>
+            <Link
+              href="/whats-new"
+              className="font-mono text-[11px] opacity-70 hover:opacity-100 hover:text-slate-700 dark:hover:text-slate-200 transition-opacity"
+              title="Build version — click for release notes"
+            >
+              {VERSION_LINE}
+            </Link>
           </span>
         </div>
       </footer>
