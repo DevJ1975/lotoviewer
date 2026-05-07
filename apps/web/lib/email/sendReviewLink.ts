@@ -59,7 +59,7 @@ export async function sendReviewLinkEmail(
   // From-address precedence — same fallback ladder as the invite helper.
   const from = process.env.INVITE_FROM_EMAIL
             ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'Soteria FIELD <onboarding@resend.dev>'
+            ?? 'SoteriaField <onboarding@resend.dev>'
 
   // Subject + plain-text body come from the shared pure renderer so
   // the manual-send (mailto) path produces identical wording. HTML
@@ -152,7 +152,7 @@ function renderHtml(a: ReviewLinkEmailArgs): string {
 <tr><td align="center">
   <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,0.06);">
     <tr><td style="background:#214488;padding:24px 28px;color:#ffffff;">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">Soteria FIELD · Placard review</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">SoteriaField · Placard review</div>
       <div style="font-size:22px;font-weight:800;margin-top:4px;">${safe(a.tenantName)} · ${safe(a.department)}</div>
     </td></tr>
     <tr><td style="padding:28px;">

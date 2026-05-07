@@ -24,7 +24,7 @@ export const runtime = 'nodejs'
 const RECIPIENT  = process.env.DEV_DIGEST_EMAIL ?? 'jamil@trainovations.com'
 const FROM_EMAIL = process.env.DIGEST_FROM_EMAIL
               ?? process.env.SUPPORT_FROM_EMAIL
-              ?? 'Soteria FIELD <onboarding@resend.dev>'
+              ?? 'SoteriaField <onboarding@resend.dev>'
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false
@@ -210,7 +210,7 @@ async function run(req: Request): Promise<NextResponse> {
 
   // ─── Compose ────────────────────────────────────────────────────────────
   const dayLabel = new Date().toISOString().slice(0, 10)
-  const subject = `Soteria FIELD — daily health · ${dayLabel}`
+  const subject = `SoteriaField — daily health · ${dayLabel}`
   const text = renderText({
     dayLabel,
     bugs, bugsBySeverity, openBugs: openBugs ?? 0,
@@ -268,7 +268,7 @@ interface RenderArgs {
 
 function renderText(a: RenderArgs): string {
   const lines: string[] = []
-  lines.push(`Soteria FIELD — Daily Health Report`)
+  lines.push(`SoteriaField — Daily Health Report`)
   lines.push(`============================================`)
   lines.push(`Date: ${a.dayLabel}`)
   lines.push('')

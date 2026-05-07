@@ -121,7 +121,7 @@ async function authedReporter(req: Request): Promise<Reporter | null> {
   }
 }
 
-const SYSTEM_PROMPT_PREAMBLE = `You are the in-app support assistant for Soteria FIELD, a multi-tenant safety PWA used by food-production teams to manage Lockout/Tagout (LOTO), confined spaces, hot-work permits, risk assessments, and related compliance documentation.
+const SYSTEM_PROMPT_PREAMBLE = `You are the in-app support assistant for SoteriaField, a multi-tenant safety PWA used by food-production teams to manage Lockout/Tagout (LOTO), confined spaces, hot-work permits, risk assessments, and related compliance documentation.
 
 ROLE
 - Help users do things in the app. Walk them through workflows. Point at the right page or button.
@@ -507,7 +507,7 @@ async function createTicketAndEmail(args: CreateTicketArgs): Promise<CreateTicke
     return { ok: false, ticketId, errorMessage: 'RESEND_API_KEY not configured' }
   }
   const to   = process.env.SUPPORT_EMAIL      ?? 'jamil@trainovations.com'
-  const from = process.env.SUPPORT_FROM_EMAIL ?? 'Soteria FIELD <onboarding@resend.dev>'
+  const from = process.env.SUPPORT_FROM_EMAIL ?? 'SoteriaField <onboarding@resend.dev>'
 
   const text = renderSupportTicketEmail({
     ticket_id:   ticketId,
@@ -544,7 +544,7 @@ async function createTicketAndEmail(args: CreateTicketArgs): Promise<CreateTicke
               `Ticket: #${ticketId.slice(0, 8)}\n` +
               `Subject: ${input.subject.trim()}\n\n` +
               `The Soteria team will follow up at this address. You can reply to this email and it will reach us.\n\n` +
-              `— Soteria FIELD support`,
+              `— SoteriaField support`,
             replyTo: 'jamil@trainovations.com',
           })
         : Promise.resolve({ data: null, error: null }),

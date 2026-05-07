@@ -82,7 +82,7 @@ export async function POST(req: Request) {
   }
 
   const to   = process.env.SUPPORT_EMAIL      ?? 'jamil@trainovations.com'
-  const from = process.env.SUPPORT_FROM_EMAIL ?? 'Soteria FIELD <onboarding@resend.dev>'
+  const from = process.env.SUPPORT_FROM_EMAIL ?? 'SoteriaField <onboarding@resend.dev>'
 
   // After validation we know the required fields are present.
   const payload = body as BugReportPayload

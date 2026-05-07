@@ -14,15 +14,15 @@ const inter    = Inter({ variable: '--font-inter', subsets: ['latin'], display: 
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Soteria Field',
-  description: 'Soteria Field — real-time field-safety tracking (LOTO, confined spaces, hot work) for production teams',
+  title: 'SoteriaField',
+  description: 'SoteriaField — real-time field-safety tracking (LOTO, confined spaces, hot work) for production teams',
   manifest: '/manifest.json',
   // Icons come from app/icon.tsx and app/apple-icon.tsx — Next auto-emits
   // <link rel="icon"> and <link rel="apple-touch-icon"> for those files.
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Soteria Field',
+    title: 'SoteriaField',
   },
   other: {
     'mobile-web-app-capable': 'yes',

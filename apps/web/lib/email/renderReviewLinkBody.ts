@@ -79,7 +79,7 @@ You can leave notes on any placard, then sign off on the whole batch
 
 If you have any trouble, just reply to this email.
 
-— Soteria FIELD on behalf of ${args.tenantName}
+— SoteriaField on behalf of ${args.tenantName}
 `
 
   return { subject, body }

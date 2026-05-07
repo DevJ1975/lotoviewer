@@ -125,7 +125,7 @@ export default function PermitSignonPage() {
         <ShieldAlert className="h-12 w-12 text-rose-500 mx-auto" />
         <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">Invalid sign-on link</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          The link you scanned doesn&apos;t look like a valid Soteria FIELD permit QR.
+          The link you scanned doesn&apos;t look like a valid SoteriaField permit QR.
           Make sure you scanned the QR from the printed permit at the work site.
         </p>
       </div>

@@ -38,7 +38,7 @@ export default function GlobalError({
       }}>
         <div style={{ maxWidth: '480px', textAlign: 'center' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '.18em', textTransform: 'uppercase', opacity: 0.6, marginBottom: '8px' }}>
-            Soteria FIELD
+            SoteriaField
           </div>
           <h1 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 12px' }}>
             Something went seriously wrong.

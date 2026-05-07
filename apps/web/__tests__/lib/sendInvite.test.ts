@@ -57,7 +57,7 @@ describe('sendInviteEmail', () => {
     expect(sendMock).toHaveBeenCalledTimes(1)
     const call = sendMock.mock.calls[0][0]
     expect(call.to).toBe('jane@example.com')
-    expect(call.subject).toBe("You're invited to Soteria FIELD")
+    expect(call.subject).toBe("You're invited to SoteriaField")
     // Plain-text body must include the login URL and the temp password.
     expect(call.text).toContain('https://soteriafield.app/login')
     expect(call.text).toContain('X1y2-Z3a4')
@@ -72,7 +72,7 @@ describe('sendInviteEmail', () => {
       tenantName:   'Acme Refining',
     })
     const subject = sendMock.mock.calls[0][0].subject as string
-    expect(subject).toBe("You're invited to Acme Refining on Soteria FIELD")
+    expect(subject).toBe("You're invited to Acme Refining on SoteriaField")
   })
 
   it('returns false when Resend rejects the send (does not throw)', async () => {
@@ -117,7 +117,7 @@ describe('sendInviteEmail', () => {
       tenantName:   'WLS Demo',
     })
     const call = sendMock.mock.calls[0][0]
-    expect(call.subject).toBe("You've been added to WLS Demo on Soteria FIELD")
+    expect(call.subject).toBe("You've been added to WLS Demo on SoteriaField")
     // Body mentions tenant + tells them to sign in with existing account;
     // never references a one-time password.
     expect(call.text).toContain('You\'ve been added to WLS Demo')

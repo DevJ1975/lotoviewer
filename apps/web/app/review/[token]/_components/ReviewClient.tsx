@@ -171,7 +171,7 @@ export default function ReviewClient({
       <div className="max-w-3xl mx-auto space-y-5">
         <header className="bg-brand-navy text-white rounded-xl p-5">
           <div className="text-[11px] font-bold tracking-widest uppercase opacity-90">
-            Soteria FIELD · Placard review
+            SoteriaField · Placard review
           </div>
           <h1 className="text-2xl font-bold mt-1">
             {tenantName} · {department}

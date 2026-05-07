@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-// Terms of Service — starter template for Soteria FIELD. Functional for
+// Terms of Service — starter template for SoteriaField. Functional for
 // small/mid B2B SaaS but should be reviewed by counsel before any
 // enterprise customer signs an MSA. Update LAST_UPDATED whenever
 // material changes ship.
@@ -18,7 +18,7 @@ export default function TermsOfServicePage() {
 
       <Section title="1. The agreement">
         <p>
-          These Terms of Service (&ldquo;Terms&rdquo;) govern your use of Soteria FIELD
+          These Terms of Service (&ldquo;Terms&rdquo;) govern your use of SoteriaField
           (&ldquo;Service&rdquo;), a field-safety operations platform provided by Trainovate
           Technologies (&ldquo;Soteria&rdquo;, &ldquo;we&rdquo;, &ldquo;our&rdquo;). By creating an
           account or using the Service, you agree to these Terms.
@@ -31,7 +31,7 @@ export default function TermsOfServicePage() {
 
       <Section title="2. What the Service is — and isn't">
         <p>
-          Soteria FIELD is a software tool that helps your team manage safety permits and procedures.
+          SoteriaField is a software tool that helps your team manage safety permits and procedures.
           It surfaces relevant regulatory citations (OSHA 29 CFR 1910.146, 1910.252, NFPA 51B,
           Cal/OSHA Title 8 §6777, and others), enforces lifecycle gates, and produces an audit trail.
         </p>
@@ -67,7 +67,7 @@ export default function TermsOfServicePage() {
 
       <Section title="5. Your data">
         <p>
-          You own the operational data you put into Soteria FIELD &mdash; permits, equipment records,
+          You own the operational data you put into SoteriaField &mdash; permits, equipment records,
           photos, signatures, audit log entries. We hold it on your behalf to make the Service work.
           You can export it at any time; we&rsquo;ll help if the export tooling doesn&rsquo;t cover
           something you need.
@@ -161,7 +161,7 @@ export default function TermsOfServicePage() {
 
       <footer className="pt-6 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
         <Link href="/privacy" className="hover:underline">← Privacy Policy</Link>
-        <span>Soteria FIELD · Trainovate Technologies</span>
+        <span>SoteriaField · Trainovate Technologies</span>
       </footer>
     </div>
   )

@@ -40,7 +40,7 @@ export async function sendTrainingExpiryReminder(
   }
   const from = process.env.INVITE_FROM_EMAIL
             ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'Soteria FIELD <onboarding@resend.dev>'
+            ?? 'SoteriaField <onboarding@resend.dev>'
 
   const expired = args.rows.filter(r => r.status === 'expired').length
   const expiring = args.rows.length - expired
@@ -105,7 +105,7 @@ both flows automatically — renewing them keeps work moving.
 Update training records:  ${a.trainingUrl}
 Worker roster:            ${a.workersUrl}
 
-— Soteria FIELD on behalf of ${a.tenantName}
+— SoteriaField on behalf of ${a.tenantName}
 `
 }
 
@@ -166,7 +166,7 @@ function renderHtml(a: TrainingExpiryReminderArgs): string {
   <table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0" style="max-width:640px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,0.06);">
     <tr><td style="background:#214488;padding:24px 28px;color:#ffffff;">
       <div style="font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">
-        Soteria FIELD · Training expiry
+        SoteriaField · Training expiry
       </div>
       <div style="font-size:22px;font-weight:800;margin-top:4px;">
         ${a.rows.length} certification${a.rows.length === 1 ? '' : 's'} need attention · ${safe(a.tenantName)}

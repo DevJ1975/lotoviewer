@@ -237,3 +237,93 @@ export function drawDivider(ctx: DrawCtx): void {
   })
   ctx.y -= 8
 }
+
+// ── Brand glyph + wordmark ────────────────────────────────────────────────
+//
+// drawBrandMark renders the SoteriaField reticle + wordmark inline at
+// (x, y), suitable for header bands or footers. Mirrors the SVG
+// favicon design (rounded scope frame, corner brackets, teal centre
+// dot) in pdf-lib primitives. height controls the mark size; the
+// wordmark scales proportionally and sits to the right of the mark.
+//
+// Two render modes:
+//   colour='light'  → cream + teal (use on dark/navy backdrops)
+//   colour='dark'   → navy + teal (use on white/cream backdrops)
+
+const CREAM = rgb(...hexToRgb01('#F0EDDA'))
+const TEAL  = rgb(...hexToRgb01('#14B8A6'))
+
+export interface BrandMarkOpts {
+  page:      PDFPage
+  font:      PDFFont
+  bold:      PDFFont
+  /** Lower-left corner of the mark. */
+  x:         number
+  y:         number
+  /** Height in points. The full mark+wordmark group is ~3.75× as wide. */
+  height:    number
+  /** 'light' = cream/teal on dark backdrops; 'dark' = navy/teal on light. */
+  tone:      'light' | 'dark'
+  /** Render the wordmark to the right of the mark? Defaults to true. */
+  withWordmark?: boolean
+}
+
+export function drawBrandMark(opts: BrandMarkOpts): void {
+  const { page, x, y, height, tone, font, bold } = opts
+  const withWordmark = opts.withWordmark ?? true
+
+  const stroke = tone === 'light' ? CREAM : NAVY
+  const wordmarkSoteria = tone === 'light' ? CREAM : NAVY
+  // Field colour: teal in colour-accent variant (used by both tones).
+  const wordmarkField   = TEAL
+
+  // Reticle mark — square, side = height. Scaling factor `s` maps
+  // the SVG's 240-unit reticle to `height` points.
+  const s = height / 240
+  // Helper aliases so the math stays readable.
+  const px = (a: number) => x + a * s
+  const py = (a: number) => y + (240 - a) * s   // SVG y grows downward; PDF up
+
+  // Crosshair lines.
+  const cw = Math.max(1.5, height * 0.025)
+  const lines: Array<[number, number, number, number]> = [
+    [120, 6,  120, 46],
+    [120, 194, 120, 234],
+    [6,   120, 46,  120],
+    [194, 120, 234, 120],
+  ]
+  for (const [ax, ay, bx, by] of lines) {
+    page.drawLine({
+      start: { x: px(ax), y: py(ay) },
+      end:   { x: px(bx), y: py(by) },
+      thickness: cw, color: stroke, opacity: 0.85,
+    })
+  }
+  // Scope frame — rounded square. pdf-lib doesn't draw rounded
+  // corners with strokeRect, so we approximate with four straight
+  // segments that stop short of the corner — close enough at this
+  // size that the missing radius isn't visible.
+  const frameW = Math.max(1.8, height * 0.038)
+  const frameInset = 8 * s
+  const fx0 = px(46), fy0 = py(46), fx1 = px(194), fy1 = py(194)
+  page.drawLine({ start: { x: fx0 + frameInset, y: fy0 }, end: { x: fx1 - frameInset, y: fy0 }, thickness: frameW, color: stroke })
+  page.drawLine({ start: { x: fx0 + frameInset, y: fy1 }, end: { x: fx1 - frameInset, y: fy1 }, thickness: frameW, color: stroke })
+  page.drawLine({ start: { x: fx0, y: fy0 + frameInset }, end: { x: fx0, y: fy1 - frameInset }, thickness: frameW, color: stroke })
+  page.drawLine({ start: { x: fx1, y: fy0 + frameInset }, end: { x: fx1, y: fy1 - frameInset }, thickness: frameW, color: stroke })
+  // Centre dot — teal accent.
+  page.drawCircle({ x: px(120), y: py(120), size: 14 * s, color: TEAL })
+
+  if (!withWordmark) return
+
+  // Wordmark — "Soteria" + "Field". Helvetica-Bold sits to the right
+  // of the mark, vertical-centred on the mark's centre line.
+  const wmSize  = height * 0.62
+  const wmX     = x + height + 8 * s
+  const wmY     = y + (height - wmSize) / 2 + wmSize * 0.18
+  const sotW    = bold.widthOfTextAtSize('Soteria', wmSize)
+  page.drawText('Soteria', { x: wmX, y: wmY, size: wmSize, font: bold, color: wordmarkSoteria })
+  page.drawText('Field',   { x: wmX + sotW, y: wmY, size: wmSize, font: bold, color: wordmarkField })
+
+  // Reference font to keep tsc happy when bold is unused above.
+  void font
+}

@@ -51,7 +51,7 @@ export async function buildRiskRegisterPdf(
 ): Promise<Uint8Array> {
   const pdf  = await PDFDocument.create()
   pdf.setTitle(`Risk Register · ${meta.tenantName}`)
-  pdf.setAuthor('Soteria Field')
+  pdf.setAuthor('SoteriaField')
   pdf.setSubject('ISO 45001 6.1 Risk Register')
   pdf.setCreationDate(new Date(meta.generatedAt))
 
@@ -179,7 +179,7 @@ function drawBand(
 
 function drawFooter(page: PDFPage, font: PDFFont, meta: RiskRegisterMeta) {
   const text = sanitizeForWinAnsi(
-    `Soteria Field · ISO 45001 6.1 risk register · ${meta.tenantName}` +
+    `SoteriaField · ISO 45001 6.1 risk register · ${meta.tenantName}` +
     (meta.generatedBy ? ` · exported by ${meta.generatedBy}` : ''),
   )
   page.drawText(text, { x: MARGIN, y: 18, size: 7, font, color: MUTED })

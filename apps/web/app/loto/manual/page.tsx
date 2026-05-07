@@ -85,7 +85,7 @@ export default function LotoManualPage() {
         title="What this module is for"
       >
         <p>
-          The LOTO module is the equipment-and-placard side of Soteria FIELD.
+          The LOTO module is the equipment-and-placard side of SoteriaField.
           Every piece of equipment that needs lockout/tagout has a record
           here, with two photos (the equipment itself and the
           isolation/energy-source point), an energy-source tag, an optional
@@ -300,7 +300,7 @@ export default function LotoManualPage() {
 
       <Section id="mobile" title="Using the mobile app">
         <p>
-          The Soteria FIELD mobile app (iOS + Android) is a focused
+          The SoteriaField mobile app (iOS + Android) is a focused
           companion to the web dashboard. It mirrors the equipment list,
           equipment detail, and photo capture, with the device&apos;s
           native camera for fastest in-the-field captures. Permits,

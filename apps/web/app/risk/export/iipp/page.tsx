@@ -150,7 +150,7 @@ function Inner() {
         </dl>
         <p className="iipp__notice">
           This export is a snapshot of the risk register at the time of generation.
-          The append-only audit log inside the Soteria FIELD database is the source
+          The append-only audit log inside the SoteriaField database is the source
           of truth (DB-enforced; see migration 038).
         </p>
       </section>
@@ -165,7 +165,7 @@ function Inner() {
       </section>
 
       <footer className="iipp__footer">
-        Soteria FIELD · soteriafield.app · {generatedDate}
+        SoteriaField · soteriafield.app · {generatedDate}
       </footer>
 
       {/* Print-friendly styling. The page reads cleanly on screen and

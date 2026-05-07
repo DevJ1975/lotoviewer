@@ -107,7 +107,7 @@ export default function NotificationsSettingsPage() {
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          title: 'Soteria FIELD test',
+          title: 'SoteriaField test',
           body:  'If you see this, Web Push is working on this device.',
           tag:   'push-self-test',
           // Limit to the current user only — don't blast every device.
@@ -179,7 +179,7 @@ export default function NotificationsSettingsPage() {
           <div className="rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 p-3 space-y-1">
             <p className="text-sm font-bold text-amber-900 dark:text-amber-100">Push notifications unavailable.</p>
             <p className="text-xs text-amber-900/80 dark:text-amber-100/80">
-              Your browser doesn&apos;t expose the Push API. On iPad, install Soteria FIELD to your home screen
+              Your browser doesn&apos;t expose the Push API. On iPad, install SoteriaField to your home screen
               (Share → Add to Home Screen) and open it from there — Web Push only works in installed PWAs on iOS.
             </p>
           </div>
@@ -188,7 +188,7 @@ export default function NotificationsSettingsPage() {
             <p className="text-sm font-bold text-rose-900 dark:text-rose-100">Permission blocked.</p>
             <p className="text-xs text-rose-900/80 dark:text-rose-100/80">
               You previously denied notification permission in this browser. To re-enable, open your browser&apos;s
-              site settings for Soteria FIELD and switch Notifications to Allow, then reload.
+              site settings for SoteriaField and switch Notifications to Allow, then reload.
             </p>
           </div>
         ) : (

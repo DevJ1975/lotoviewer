@@ -1,11 +1,11 @@
-# Soteria FIELD — general usage
+# SoteriaField — general usage
 
 This is the general help that applies anywhere in the app. Module-specific
 help (LOTO, Confined Spaces, Hot Work, Risk, Inspector, Permit Sign-on) lives
 in separate sections that are loaded automatically when the user is on those
 pages.
 
-## What Soteria FIELD is
+## What SoteriaField is
 
 A field-safety PWA used by production teams to manage Lockout/Tagout
 procedures, confined-space permits, hot-work permits, risk assessments, and
@@ -14,7 +14,7 @@ Android, laptops, and desktops, and works offline for most read tasks.
 
 ## Regulatory frameworks the platform addresses
 
-Soteria FIELD is built around overlapping U.S. Federal OSHA, Cal/OSHA
+SoteriaField is built around overlapping U.S. Federal OSHA, Cal/OSHA
 Title 8, NFPA, ANSI, and ISO 45001 standards. The bot will surface
 the specific citations relevant to each module when asked. The major
 ones that span multiple modules:

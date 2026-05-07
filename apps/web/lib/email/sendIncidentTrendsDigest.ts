@@ -38,7 +38,7 @@ export async function sendIncidentTrendsDigest(args: IncidentTrendsDigestArgs): 
 
   const from = process.env.INVITE_FROM_EMAIL
             ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'Soteria FIELD <onboarding@resend.dev>'
+            ?? 'SoteriaField <onboarding@resend.dev>'
 
   const link = `${args.appUrl.replace(/\/$/, '')}/incidents/scorecard`
   const name = args.recipientName?.trim() || args.to.split('@')[0]!
@@ -61,7 +61,7 @@ Right now
 Open the full scorecard:
   ${link}
 
-— Soteria FIELD
+— SoteriaField
 `
 
   const safe = (s: string) => s
@@ -80,7 +80,7 @@ Open the full scorecard:
 <tr><td align="center">
   <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,0.06);">
     <tr><td style="background:#214488;padding:24px 28px;color:#fff;">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">Soteria FIELD · Weekly digest</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">SoteriaField · Weekly digest</div>
       <div style="font-size:22px;font-weight:800;margin-top:4px;">Safety scorecard — ${safe(args.weekStart)}</div>
     </td></tr>
     <tr><td style="padding:28px;">
