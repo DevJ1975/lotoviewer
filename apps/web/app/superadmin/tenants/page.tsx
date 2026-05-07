@@ -1,10 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
-import { Plus, Loader2, AlertCircle } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Plus, Loader2, AlertCircle, X as XIcon, ToggleLeft, ToggleRight } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { getModules, type FeatureCategory } from '@soteria/core/features'
+import { superadminJson } from '@/lib/superadminFetch'
 import type { Tenant } from '@soteria/core/types'
+
+const MODULE_GROUPS: FeatureCategory[] = ['safety', 'reports', 'admin']
 
 // Superadmin tenants list. RLS lets superadmin read all tenants directly,
 // so no API route is needed for the read; the future create/edit actions
@@ -30,6 +34,69 @@ export default function SuperadminTenants() {
   const [tenants, setTenants] = useState<TenantWithMembers[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
+
+  // Bulk-module-toggle state. Selecting tenants reveals a sticky
+  // bottom bar; from there an admin picks one module + Enable/Disable
+  // and the action fires via /api/superadmin/tenants/bulk-modules.
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkModuleId, setBulkModuleId] = useState<string>('')
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkResult, setBulkResult] = useState<string | null>(null)
+
+  // Module catalog flat list for the dropdown.
+  const moduleOptions = useMemo(
+    () => MODULE_GROUPS.flatMap(cat =>
+      getModules(cat)
+        .filter(m => !m.comingSoon)
+        .map(m => ({ id: m.id, label: m.name, category: cat })),
+    ),
+    [],
+  )
+
+  function toggleSelected(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else              next.add(id)
+      return next
+    })
+  }
+  function toggleSelectAll() {
+    setSelected(prev =>
+      prev.size === tenants.length ? new Set() : new Set(tenants.map(t => t.id)),
+    )
+  }
+
+  async function bulkToggle(enabled: boolean) {
+    if (!bulkModuleId) { setBulkResult('Pick a module first.'); return }
+    if (selected.size === 0) { setBulkResult('Select at least one tenant.'); return }
+    setBulkBusy(true)
+    setBulkResult(null)
+    const result = await superadminJson<{ updated: number; failed: Array<{ tenant_id: string; error: string }> }>(
+      '/api/superadmin/tenants/bulk-modules',
+      {
+        method: 'POST',
+        body:   JSON.stringify({
+          tenant_ids: Array.from(selected),
+          module_id:  bulkModuleId,
+          enabled,
+        }),
+      },
+    )
+    setBulkBusy(false)
+    if (!result.ok || !result.body) {
+      setBulkResult(result.error ?? 'Bulk update failed')
+      return
+    }
+    const failed = result.body.failed.length
+    setBulkResult(
+      failed === 0
+        ? `Updated ${result.body.updated} tenant${result.body.updated === 1 ? '' : 's'}.`
+        : `Updated ${result.body.updated}, failed ${failed}: ${result.body.failed.slice(0, 3).map(f => f.error).join('; ')}`,
+    )
+    // Refresh so the "Modules on" count column updates.
+    await load()
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -105,6 +172,14 @@ export default function SuperadminTenants() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 dark:bg-slate-900/40 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider">
               <tr>
+                <th className="px-2 py-3 w-8">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all"
+                    checked={tenants.length > 0 && selected.size === tenants.length}
+                    onChange={toggleSelectAll}
+                  />
+                </th>
                 <th className="text-left font-semibold px-4 py-3">#</th>
                 <th className="text-left font-semibold px-4 py-3">Name</th>
                 <th className="text-left font-semibold px-4 py-3">Slug</th>
@@ -121,8 +196,16 @@ export default function SuperadminTenants() {
                 return (
                   <tr
                     key={t.id}
-                    className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors"
+                    className={`hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors ${selected.has(t.id) ? 'bg-brand-yellow/10 dark:bg-brand-yellow/5' : ''}`}
                   >
+                    <td className="px-2 py-3 w-8">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${t.name}`}
+                        checked={selected.has(t.id)}
+                        onChange={() => toggleSelected(t.id)}
+                      />
+                    </td>
                     <td className="px-4 py-3 font-mono text-slate-500 dark:text-slate-400 tabular-nums">
                       {t.tenant_number}
                     </td>
@@ -161,6 +244,64 @@ export default function SuperadminTenants() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Sticky bulk-action bar — visible only when ≥1 tenant selected */}
+      {selected.size > 0 && (
+        <div
+          className="fixed bottom-0 inset-x-0 z-30 bg-brand-navy text-white border-t border-white/10 shadow-2xl"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        >
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-3">
+            <span className="text-sm font-semibold shrink-0">
+              {selected.size} tenant{selected.size === 1 ? '' : 's'} selected
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              aria-label="Clear selection"
+              className="text-white/70 hover:text-white"
+            >
+              <XIcon className="h-4 w-4" />
+            </button>
+            <div className="flex items-center gap-2 ml-auto flex-wrap">
+              <select
+                value={bulkModuleId}
+                onChange={e => setBulkModuleId(e.target.value)}
+                disabled={bulkBusy}
+                className="px-2 py-1 text-xs rounded-md bg-white/10 text-white border border-white/20 focus:outline-none focus:ring-2 focus:ring-brand-yellow disabled:opacity-50"
+              >
+                <option value="">— pick a module —</option>
+                {moduleOptions.map(opt => (
+                  <option key={opt.id} value={opt.id}>
+                    [{opt.category}] {opt.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => void bulkToggle(true)}
+                disabled={bulkBusy || !bulkModuleId}
+                className="inline-flex items-center gap-1 px-3 py-1 rounded-md bg-emerald-500 text-white text-xs font-semibold hover:bg-emerald-600 disabled:opacity-40"
+              >
+                <ToggleRight className="h-3.5 w-3.5" />
+                Enable
+              </button>
+              <button
+                type="button"
+                onClick={() => void bulkToggle(false)}
+                disabled={bulkBusy || !bulkModuleId}
+                className="inline-flex items-center gap-1 px-3 py-1 rounded-md bg-rose-500 text-white text-xs font-semibold hover:bg-rose-600 disabled:opacity-40"
+              >
+                <ToggleLeft className="h-3.5 w-3.5" />
+                Disable
+              </button>
+            </div>
+            {bulkResult && (
+              <p className="basis-full text-[11px] text-white/80">{bulkResult}</p>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -47,6 +47,15 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
   const [status,  setStatus]  = useState<TenantStatus>(tenant.status)
   const [isDemo,  setIsDemo]  = useState(tenant.is_demo)
   const [modules, setModules] = useState<Record<string, boolean>>(() => seedModulesFromTenant(tenant))
+  // tenants.settings is a free-form jsonb. We expose three known
+  // keys with explicit form fields; everything else is editable as
+  // raw JSON below. Saving merges the explicit fields back into
+  // the JSON before PATCH so the server receives one settings
+  // object.
+  const [settingsJson, setSettingsJson] = useState<string>(() =>
+    JSON.stringify(tenant.settings ?? {}, null, 2),
+  )
+  const [settingsError, setSettingsError] = useState<string | null>(null)
 
   // Re-seed when the parent re-fetches the tenant (e.g. after logo
   // upload). Keep the user's in-flight checkbox edits if they've
@@ -55,6 +64,8 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
   // unless the underlying tenant identity changes.
   useEffect(() => {
     setModules(seedModulesFromTenant(tenant))
+    setSettingsJson(JSON.stringify(tenant.settings ?? {}, null, 2))
+    setSettingsError(null)
   }, [tenant.id])
 
   const [saving,      setSaving]      = useState(false)
@@ -77,12 +88,35 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
-    setSaving(true); setSaveError(null); setSaveSuccess(false)
+    setSaving(true); setSaveError(null); setSaveSuccess(false); setSettingsError(null)
+
+    // Validate the settings JSON before sending. A typo here
+    // shouldn't lose the rest of the form's edits, so surface the
+    // error inline + abort the PATCH.
+    let parsedSettings: Record<string, unknown> = {}
+    try {
+      const trimmed = settingsJson.trim()
+      parsedSettings = trimmed === '' ? {} : JSON.parse(trimmed)
+      if (typeof parsedSettings !== 'object' || Array.isArray(parsedSettings) || parsedSettings === null) {
+        throw new Error('Settings must be a JSON object (not array, not primitive).')
+      }
+    } catch (e) {
+      setSettingsError(e instanceof Error ? e.message : 'Invalid JSON')
+      setSaving(false)
+      return
+    }
+
     const result = await superadminJson<{ tenant: Tenant }>(
       `/api/superadmin/tenants/${tenantNumber}`,
       {
         method: 'PATCH',
-        body:   JSON.stringify({ name: name.trim(), status, is_demo: isDemo, modules }),
+        body:   JSON.stringify({
+          name:     name.trim(),
+          status,
+          is_demo:  isDemo,
+          modules,
+          settings: parsedSettings,
+        }),
       },
     )
     if (!result.ok || !result.body) {
@@ -163,6 +197,27 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
             </div>
           ))}
         </div>
+      </Section>
+
+      <Section title="Settings (advanced)">
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+          Free-form JSON. Common keys: <code className="font-mono text-[11px]">default_landing_path</code>,
+          {' '}<code className="font-mono text-[11px]">risk_band_scheme</code>,
+          {' '}<code className="font-mono text-[11px]">risk_acceptance_threshold</code>.
+          See <code className="font-mono text-[11px]">tenants.settings</code> in the schema.
+        </p>
+        <textarea
+          value={settingsJson}
+          onChange={e => { setSettingsJson(e.target.value); setSettingsError(null) }}
+          rows={8}
+          spellCheck={false}
+          className="w-full px-3 py-2 text-xs font-mono rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-navy"
+        />
+        {settingsError && (
+          <p className="mt-2 text-xs text-rose-700 dark:text-rose-300">
+            {settingsError}
+          </p>
+        )}
       </Section>
 
       {saveError && (

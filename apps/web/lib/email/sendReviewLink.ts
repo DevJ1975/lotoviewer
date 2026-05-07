@@ -11,6 +11,7 @@
 
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
+import { logEmailSend } from '@/lib/email/instrument'
 import { renderReviewLinkBody } from './renderReviewLinkBody'
 
 export interface ReviewLinkEmailArgs {
@@ -48,6 +49,10 @@ export async function sendReviewLinkEmail(
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) {
     console.warn('[review-link-email] RESEND_API_KEY not set — skipping send')
+    void logEmailSend({
+      kind: 'review-link', to: args.to,
+      status: 'skipped', errorText: 'RESEND_API_KEY not set',
+    })
     return { sent: false, providerId: null }
   }
 
@@ -84,12 +89,24 @@ export async function sendReviewLinkEmail(
     if (error) {
       Sentry.captureException(error, { tags: { module: 'sendReviewLinkEmail', stage: 'resend' } })
       console.error('[review-link-email] Resend rejected the send', error)
+      void logEmailSend({
+        kind: 'review-link', to: args.to, subject,
+        status: 'failed', errorText: error.message,
+      })
       return { sent: false, providerId: null }
     }
+    void logEmailSend({
+      kind: 'review-link', to: args.to, subject,
+      status: 'sent', providerId: data?.id ?? null,
+    })
     return { sent: true, providerId: data?.id ?? null }
   } catch (err) {
     Sentry.captureException(err, { tags: { module: 'sendReviewLinkEmail', stage: 'resend' } })
     console.error('[review-link-email] send threw', err)
+    void logEmailSend({
+      kind: 'review-link', to: args.to, subject,
+      status: 'failed', errorText: err instanceof Error ? err.message : String(err),
+    })
     return { sent: false, providerId: null }
   }
 }
