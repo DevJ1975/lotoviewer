@@ -23,7 +23,7 @@ import Image from 'next/image'
 //
 // SVG-only — no image processing, no font loading. Width is
 // configurable via the `width` prop; height auto-scales by the SVG's
-// 1200×320 viewBox aspect ratio (~3.75:1).
+// 1400×320 viewBox aspect ratio (~4.375:1).
 
 export type SoteriaLogoVariant = 'color' | 'dark' | 'mono'
 
@@ -47,8 +47,8 @@ export default function SoteriaLogo({
   className,
   priority,
 }: Props) {
-  // 1200×320 viewBox → height = width * (320/1200) ≈ 0.267 × width.
-  const height = Math.round(width * (320 / 1200))
+  // 1400×320 viewBox → height = width * (320/1400) ≈ 0.229 × width.
+  const height = Math.round(width * (320 / 1400))
   return (
     <Image
       src={SRC[variant]}
