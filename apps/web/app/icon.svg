@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Soteria FIELD">
+  <!--
+    Soteria FIELD favicon — target/reticle motif evoking situational
+    awareness (the entire app is built around "see what's happening
+    on your floor right now"). Brand navy background, white scope
+    frame + crosshairs, teal accent dot at the focal point.
+    Single static SVG so Next.js serves it directly with no runtime
+    image rendering. Replaces the prior "SL" placeholder in icon.tsx.
+  -->
+  <rect width="64" height="64" rx="10" fill="#1B3A6B"/>
+
+  <!-- Crosshair lines, fading out near the centre to clear room for
+       the scope frame + dot. Drawn as four short strokes rather than
+       two long lines to avoid bisecting the frame. -->
+  <g stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" opacity="0.85">
+    <line x1="32" y1="6"  x2="32" y2="18"/>
+    <line x1="32" y1="46" x2="32" y2="58"/>
+    <line x1="6"  y1="32" x2="18" y2="32"/>
+    <line x1="46" y1="32" x2="58" y2="32"/>
+  </g>
+
+  <!-- Scope frame: a rounded square, hollow. -->
+  <rect x="14" y="14" width="36" height="36" rx="4"
+        fill="none" stroke="#FFFFFF" stroke-width="2.5"/>
+
+  <!-- Corner brackets emphasise the "reticle" feel without
+       hiding the scope frame. Each L-shape sits just inside a
+       corner of the square. -->
+  <g stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" fill="none">
+    <path d="M 18 22 V 18 H 22"/>
+    <path d="M 42 18 H 46 V 22"/>
+    <path d="M 46 42 V 46 H 42"/>
+    <path d="M 22 46 H 18 V 42"/>
+  </g>
+
+  <!-- Focal dot — teal accent. Tailwind teal-500 (#14B8A6). -->
+  <circle cx="32" cy="32" r="3.5" fill="#14B8A6"/>
+</svg>
