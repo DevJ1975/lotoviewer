@@ -64,6 +64,8 @@ export {
 export * from './incidentClassification'
 export * from './incidentNotificationRules'
 export * from './rcaSchemas'
+export * from './incidentAction'
+export * from './incidentCare'
 export * from './jha'
 export * from './jhaMetrics'
 export * from './severityColors'
