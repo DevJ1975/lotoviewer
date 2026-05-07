@@ -43,7 +43,7 @@ export async function sendInviteEmail(args: InviteEmailArgs): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) {
     console.warn('[invite-email] RESEND_API_KEY not set — skipping send')
-    void logEmailSend({
+    await logEmailSend({
       kind: 'invite', to: args.to,
       status: 'skipped', errorText: 'RESEND_API_KEY not set',
     })
@@ -77,13 +77,13 @@ export async function sendInviteEmail(args: InviteEmailArgs): Promise<boolean> {
     if (error) {
       Sentry.captureException(error, { tags: { module: 'sendInviteEmail', stage: 'resend' } })
       console.error('[invite-email] Resend rejected the send', error)
-      void logEmailSend({
+      await logEmailSend({
         kind: 'invite', to: args.to, subject,
         status: 'failed', errorText: error.message,
       })
       return false
     }
-    void logEmailSend({
+    await logEmailSend({
       kind: 'invite', to: args.to, subject,
       status: 'sent', providerId: data?.id ?? null,
     })
@@ -91,7 +91,7 @@ export async function sendInviteEmail(args: InviteEmailArgs): Promise<boolean> {
   } catch (err) {
     Sentry.captureException(err, { tags: { module: 'sendInviteEmail', stage: 'resend' } })
     console.error('[invite-email] send threw', err)
-    void logEmailSend({
+    await logEmailSend({
       kind: 'invite', to: args.to, subject,
       status: 'failed', errorText: err instanceof Error ? err.message : String(err),
     })

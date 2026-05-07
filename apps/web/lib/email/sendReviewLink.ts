@@ -49,7 +49,7 @@ export async function sendReviewLinkEmail(
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) {
     console.warn('[review-link-email] RESEND_API_KEY not set — skipping send')
-    void logEmailSend({
+    await logEmailSend({
       kind: 'review-link', to: args.to,
       status: 'skipped', errorText: 'RESEND_API_KEY not set',
     })
@@ -89,13 +89,13 @@ export async function sendReviewLinkEmail(
     if (error) {
       Sentry.captureException(error, { tags: { module: 'sendReviewLinkEmail', stage: 'resend' } })
       console.error('[review-link-email] Resend rejected the send', error)
-      void logEmailSend({
+      await logEmailSend({
         kind: 'review-link', to: args.to, subject,
         status: 'failed', errorText: error.message,
       })
       return { sent: false, providerId: null }
     }
-    void logEmailSend({
+    await logEmailSend({
       kind: 'review-link', to: args.to, subject,
       status: 'sent', providerId: data?.id ?? null,
     })
@@ -103,7 +103,7 @@ export async function sendReviewLinkEmail(
   } catch (err) {
     Sentry.captureException(err, { tags: { module: 'sendReviewLinkEmail', stage: 'resend' } })
     console.error('[review-link-email] send threw', err)
-    void logEmailSend({
+    await logEmailSend({
       kind: 'review-link', to: args.to, subject,
       status: 'failed', errorText: err instanceof Error ? err.message : String(err),
     })

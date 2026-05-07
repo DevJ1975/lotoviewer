@@ -309,3 +309,136 @@ drafts without image inputs.
   surface in the AI usage dashboard's by-surface breakdown for
   windows that include the pre-removal period. Not a bug —
   intentional preservation of audit history.
+
+## 11. Superadmin operations toolkit (P0 — commit cedd95b, migration 056)
+
+### 11.1 Cron dashboard
+- [ ] `/superadmin/cron` loads. If migration 056 is fresh, no
+      tiles show — fire any cron manually to populate.
+- [ ] Click **Run now** on one tile (e.g.
+      archive-resolved-tickets). Banner shows "Upstream 200 in
+      Nms". A new row with `trigger=manual` appears in the
+      Recent runs table.
+- [ ] Verify the row in Supabase:
+      ```sql
+      select cron_path, status, summary, trigger, triggered_by,
+             extract(epoch from (ended_at - started_at)) * 1000 as duration_ms
+        from public.cron_runs order by started_at desc limit 5;
+      ```
+- [ ] Wait for the next Vercel-scheduled fire (or check `vercel.json`
+      for the cadence). A `trigger=scheduled` row should land with
+      no `triggered_by`.
+
+### 11.2 Tenant health
+- [ ] `/superadmin/health` loads. Each tenant has a row with
+      counts that match a quick SQL spot-check:
+      ```sql
+      select count(*) from public.loto_equipment
+       where tenant_id = '<your-tenant-uuid>' and decommissioned = false;
+      ```
+- [ ] Tenants with open tickets show the Open tickets cell in
+      amber (warn tone). 0-counts in normal slate.
+- [ ] Click a tenant name → opens `/superadmin/tenants/<n>`.
+
+### 11.3 Cross-tenant audit
+- [ ] `/superadmin/audit` loads with no filter. Recent rows
+      across all tenants visible.
+- [ ] Pick a tenant from the dropdown → URL gains `?tenant=<uuid>`,
+      list narrows.
+- [ ] Add a table filter (e.g. `loto_equipment`), op filter
+      (UPDATE), actor email filter — all three persist in URL.
+- [ ] Refresh the page → filters intact (URL state).
+- [ ] Click any row → expanded diff with red `old_row` / green
+      `new_row` JSON blocks.
+
+### 11.4 Migrations
+- [ ] `/superadmin/migrations` lists every `.sql` file in
+      `apps/web/migrations/` with size + GitHub link.
+- [ ] Cross-check via the suggested SQL block on the page:
+      ```sql
+      select * from supabase_migrations.schema_migrations
+       order by version desc limit 20;
+      ```
+      Note: the page does NOT claim "applied" because most ops
+      paste through the SQL editor (which doesn't write to
+      schema_migrations).
+
+### 11.5 Impersonation banner
+- [ ] As a superadmin, switch to a tenant you're NOT a member
+      of (via `/superadmin/tenants/<n>` → Open or via tenant
+      switcher). Top of every page now shows a yellow banner:
+      "Superadmin context: viewing TENANT_NAME (#NNNN). Any
+      writes will be attributed to you in this tenant's audit log."
+- [ ] Banner has a "Switch to <my home tenant>" button + a
+      "Superadmin home" link. Both work.
+- [ ] Switch to a tenant you ARE a member of → banner disappears.
+
+## 12. Superadmin support toolkit (P1 — commit 7df0fd2, migration 057)
+
+### 12.1 Cross-tenant search
+- [ ] `/superadmin/search` loads. Search box autofocused.
+- [ ] Type 2+ chars (e.g. `EQ`) → results group by kind
+      (equipment, CS permits, hot-work permits, workers, app
+      users, support tickets).
+- [ ] Bucket chips at the top jump to the relevant section on
+      click.
+- [ ] **Defensive sanitization (devjr Bug 1 fix):** type a
+      query with commas and parens, e.g. `foo, (bar)` —
+      should NOT 500. Returns hits matching "foo bar" (commas /
+      parens stripped to spaces).
+- [ ] Each hit click navigates to the right tenant-scoped detail
+      page. (Note: links assume your active tenant; if the hit
+      is in a different tenant you may need to switch first.)
+
+### 12.2 Settings JSON editor
+- [ ] `/superadmin/tenants/<n>` → scroll to "Settings (advanced)".
+- [ ] Edit the JSON → click Save → confirm via SQL:
+      ```sql
+      select settings from public.tenants where tenant_number = 'NNNN';
+      ```
+- [ ] Type invalid JSON (e.g. trailing comma) → red error inline,
+      Save aborts, OTHER fields' edits are NOT lost.
+
+### 12.3 Module bulk toggle
+- [ ] `/superadmin/tenants` → check 2+ tenant rows. Sticky bottom
+      bar appears with "N tenants selected".
+- [ ] Pick a module (e.g. `[admin] Workers`) + click Enable.
+      Banner shows "Updated N tenants." Modules-on count column
+      bumps for those rows.
+- [ ] Refresh, verify in SQL:
+      ```sql
+      select tenant_number, modules->'admin-workers' from public.tenants;
+      ```
+- [ ] Disable from the same picker → flips back. Verify same SQL
+      now shows `false` for those tenants.
+
+### 12.4 Email log
+- [ ] Apply migration 057. Trigger any sender (e.g. invite a
+      user via `/admin/users` → Invite). Then `/superadmin/email-log`
+      shows the row.
+- [ ] **Devjr Bug 2 fix verification:** the row appears even
+      if the route returned in <100ms. (Before the fix, the
+      `void logEmailSend(...)` could be killed by Vercel's
+      function suspension; now the await ensures the INSERT
+      lands.)
+- [ ] Filter by `kind=invite` → only invite rows. Filter by
+      `status=failed` → only failed sends.
+- [ ] If RESEND_API_KEY is unset on the deployment, every send
+      logs as `status='skipped'` with errorText "RESEND_API_KEY
+      not set" — handy way to confirm the env var is
+      configured before testing real sends.
+
+## Known deferred items (P0+P1 audit)
+
+- **Cron instrumentation silently skips on Supabase insert error**
+  — if the initial INSERT into cron_runs fails (RLS regression
+  or transient), the wrapper continues without recording the
+  run. Sentry catches the thrown exception, but a Supabase
+  `{ error }` return is silent. Acceptable for best-effort
+  telemetry; revisit if cron observability gets brittle.
+- **Settings JSON textarea has no max length.** A pathological
+  paste could store a multi-MB jsonb. Rate-limited by
+  superadmin role; defer until it's an actual problem.
+- **Tenant export ZIP (P1.8)** intentionally unshipped — needs
+  decisions about photo handling + streaming pattern. Plan
+  available, not built.

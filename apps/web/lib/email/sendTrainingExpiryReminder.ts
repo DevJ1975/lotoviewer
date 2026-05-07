@@ -32,7 +32,7 @@ export async function sendTrainingExpiryReminder(
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) {
     console.warn('[training-expiry-reminder] RESEND_API_KEY not set — skipping send')
-    void logEmailSend({
+    await logEmailSend({
       kind: 'training-expiry', to: args.to, subject: undefined,
       status: 'skipped', errorText: 'RESEND_API_KEY not set',
     })
@@ -61,20 +61,20 @@ export async function sendTrainingExpiryReminder(
     })
     if (error) {
       Sentry.captureException(error, { tags: { module: 'sendTrainingExpiryReminder', stage: 'resend' } })
-      void logEmailSend({
+      await logEmailSend({
         kind: 'training-expiry', to: args.to, subject,
         status: 'failed', errorText: error.message,
       })
       return { sent: false, providerId: null }
     }
-    void logEmailSend({
+    await logEmailSend({
       kind: 'training-expiry', to: args.to, subject,
       status: 'sent', providerId: data?.id ?? null,
     })
     return { sent: true, providerId: data?.id ?? null }
   } catch (err) {
     Sentry.captureException(err, { tags: { module: 'sendTrainingExpiryReminder', stage: 'resend' } })
-    void logEmailSend({
+    await logEmailSend({
       kind: 'training-expiry', to: args.to, subject,
       status: 'failed', errorText: err instanceof Error ? err.message : String(err),
     })

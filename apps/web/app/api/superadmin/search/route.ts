@@ -52,7 +52,14 @@ export async function GET(req: Request) {
     } as SearchResponse)
   }
 
-  const ilike = `%${q}%`
+  // Sanitize the query before embedding it inside .or() filter strings.
+  // PostgREST's .or() expression is comma-delimited; a literal comma in
+  // the value breaks the parser. Parentheses + slashes are also reserved
+  // in some PostgREST versions. Stripping these means the user can
+  // search for "foo, bar" and get hits for "foo bar" instead of an
+  // error. The % wildcard is allowed because it's the ilike wildcard.
+  const sanitized = q.replace(/[,()/]/g, ' ').replace(/\s+/g, ' ').trim()
+  const ilike = `%${sanitized}%`
   const admin = supabaseAdmin()
 
   const [equip, csp, hwp, workers, profiles, tickets, tenantRows] = await Promise.all([
