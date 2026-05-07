@@ -50,7 +50,7 @@ function LoginForm() {
       {/* Brand hero — colour-transparent variant on the navy backdrop
           so the cream "Soteria" + teal "Field" land at full contrast. */}
       <div className="mb-8">
-        <SoteriaLogo variant="color" width={320} priority />
+        <SoteriaLogo variant="color" width={380} priority />
       </div>
 
       <form
