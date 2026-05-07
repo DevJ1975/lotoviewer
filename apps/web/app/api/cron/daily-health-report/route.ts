@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { withCronLogging } from '@/lib/cronInstrumentation'
 import { renderSupportTicketSection, type DigestTicket, type DigestFeedback } from '@/lib/support/digest'
 
 // Daily app-health digest. Aggregates the last 24h of bug reports +
@@ -44,13 +45,16 @@ function authorize(req: Request): boolean {
   return false
 }
 
-export async function GET(req: Request)  { return run(req) }
-export async function POST(req: Request) { return run(req) }
+export async function GET(req: Request)  {
+  if (!authorize(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  return withCronLogging(req, () => run(req))
+}
+export async function POST(req: Request) {
+  if (!authorize(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  return withCronLogging(req, () => run(req))
+}
 
-async function run(req: Request) {
-  if (!authorize(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+async function run(req: Request): Promise<NextResponse> {
 
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
   const admin = supabaseAdmin()

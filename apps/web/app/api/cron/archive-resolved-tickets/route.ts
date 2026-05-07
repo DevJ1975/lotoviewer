@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { withCronLogging } from '@/lib/cronInstrumentation'
 
 // Daily cron: archive support tickets that have been resolved for ≥ 30 days.
 //
@@ -44,7 +45,10 @@ export async function GET(req: Request) {
   if (!authorize(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  return withCronLogging(req, () => runCron())
+}
 
+async function runCron(): Promise<NextResponse> {
   const cutoff = new Date(Date.now() - ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000).toISOString()
   const admin = supabaseAdmin()
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import webpush from 'web-push'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { withCronLogging } from '@/lib/cronInstrumentation'
 import { bumpStatus } from '@/lib/gasMeters'
 import type { GasMeter } from '@soteria/core/types'
 
@@ -81,13 +82,16 @@ interface AlertedMeter {
   hours_since:   number | null
 }
 
-export async function GET(req: Request) { return runCron(req) }
-export async function POST(req: Request) { return runCron(req) }
+export async function GET(req: Request) {
+  if (!authorize(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  return withCronLogging(req, () => runCron(req))
+}
+export async function POST(req: Request) {
+  if (!authorize(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  return withCronLogging(req, () => runCron(req))
+}
 
-async function runCron(req: Request) {
-  if (!authorize(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+async function runCron(req: Request): Promise<NextResponse> {
 
   const admin = supabaseAdmin()
   const nowMs = Date.now()
