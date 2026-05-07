@@ -63,6 +63,7 @@ export {
 } from './incident'
 export * from './incidentClassification'
 export * from './incidentNotificationRules'
+export * from './rcaSchemas'
 export * from './jha'
 export * from './jhaMetrics'
 export * from './severityColors'

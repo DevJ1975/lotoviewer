@@ -144,6 +144,17 @@ export default function IncidentDetailPage() {
         Back to incidents
       </Link>
 
+      {/* ── Tabs ─────────────────────────────────────────────────── */}
+      <nav className="flex gap-1 border-b border-slate-200 dark:border-slate-800 -mb-2">
+        <span className="border-b-2 border-brand-navy px-3 py-1.5 text-xs font-semibold text-brand-navy">Overview</span>
+        <Link href={`/incidents/${id}/investigate`} className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">
+          Investigate
+        </Link>
+        <Link href={`/incidents/${id}/rca`} className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">
+          RCA
+        </Link>
+      </nav>
+
       {/* ── Header ───────────────────────────────────────────────── */}
       <header className="space-y-2">
         <div className="flex items-center gap-2">
