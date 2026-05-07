@@ -272,6 +272,16 @@ export const FEATURES: FeatureDef[] = [
     enabled:     true,
     comingSoon:  false,
   },
+  {
+    id:          'incidents-scorecard',
+    name:        'Scorecard',
+    description: 'TRIR/DART/LTIR + leading indicators + heatmaps',
+    href:        '/incidents/scorecard',
+    category:    'safety',
+    parent:      'incidents',
+    enabled:     true,
+    comingSoon:  false,
+  },
 
   // Legacy near-miss surface — kept enabled during the Phase 1 → Phase 6
   // transition so existing tenants don't lose their bookmarks. The new

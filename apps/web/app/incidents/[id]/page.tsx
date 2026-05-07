@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import { ArrowLeft, AlertTriangle, Loader2 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
+import RepeatIncidentBanner from '@/app/_components/RepeatIncidentBanner'
 import {
   INCIDENT_TYPE_LABEL,
   SEVERITY_ACTUAL_LABEL,
@@ -192,6 +193,9 @@ export default function IncidentDetailPage() {
           {' · Reported '}{new Date(incident.reported_at).toLocaleString()}
         </p>
       </header>
+
+      {/* ── Repeat-incident detector ─────────────────────────────── */}
+      <RepeatIncidentBanner incidentId={incident.id} />
 
       {/* ── Description ──────────────────────────────────────────── */}
       <section className="rounded-xl border border-slate-200 dark:border-slate-800 p-4">

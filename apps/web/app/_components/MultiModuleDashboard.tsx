@@ -18,6 +18,8 @@ import { ModulesGrid }          from './ModulesGrid'
 import RiskKpiPanel             from './RiskKpiPanel'
 import NearMissKpiPanel         from './NearMissKpiPanel'
 import JhaKpiPanel              from './JhaKpiPanel'
+import IncidentKpiPanel         from './IncidentKpiPanel'
+import OpenActionsPanel         from './OpenActionsPanel'
 
 // Multi-module dashboard — the legacy default home rendered by
 // app/page.tsx for tenants who use more than one safety module.
@@ -147,6 +149,13 @@ export default function MultiModuleDashboard() {
       {/* JHA Intelligence — same gating pattern, mounts only when
           the tenant has jha visible. */}
       <JhaKpiPanel />
+
+      {/* Incident program scorecard + per-user CAPA list — both
+          gated by isModuleVisible('incidents'). The CAPA panel
+          self-hides when the user has no open actions, so it's
+          a no-op for new users. */}
+      <IncidentKpiPanel />
+      <OpenActionsPanel />
 
       <ComingSoonStrip />
       <ModulesGrid />
