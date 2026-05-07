@@ -25,6 +25,8 @@ const ALLOWED_PATHS = new Set<string>([
   '/api/cron/risk-review-reminders',
   '/api/cron/archive-resolved-tickets',
   '/api/cron/training-expiry-reminders',
+  '/api/cron/webhook-reconcile',
+  '/api/cron/superadmin-daily-report',
 ])
 
 function publicAppUrl(req: Request): string {

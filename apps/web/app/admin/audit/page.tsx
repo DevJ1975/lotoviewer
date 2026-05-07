@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
 import { TableSkeleton } from '@/components/Skeleton'
 import { useUrlState } from '@/hooks/useUrlState'
+import { AuditNarrativeCard } from './_components/AuditNarrativeCard'
 
 interface AuditRow {
   id:           number
@@ -100,6 +101,8 @@ export default function AuditLogPage() {
           </p>
         </div>
       </header>
+
+      <AuditNarrativeCard />
 
       {/* Filters + export */}
       <div className="flex items-center justify-end">

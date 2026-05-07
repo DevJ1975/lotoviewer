@@ -76,15 +76,30 @@ const VALID_CS = JSON.stringify({
   notes: 'x',
 })
 
+// Pull the system-prompt text out of the call args. After the
+// prompt-caching change (Bucket A.1) routes pass `system` as an
+// array of typed blocks instead of a plain string. The first block
+// is the cached prompt body for both routes.
+function systemText(args: Record<string, unknown>): string {
+  const sys = args.system
+  if (typeof sys === 'string') return sys
+  if (Array.isArray(sys)) {
+    const block = sys[0] as { type?: string; text?: string } | undefined
+    return block?.text ?? ''
+  }
+  return ''
+}
+
 describe('System prompts retain mandatory safety guardrails', () => {
   it('LOTO system prompt asserts qualified-personnel review and drafter posture', async () => {
     queueAnthropic(VALID_LOTO_STEPS)
     await callLoto(LOTO_BODY)
     const args = messagesCreateMock.mock.calls.at(-1)?.[0]
     if (!args) throw new Error('messagesCreateMock was not called')
-    expect(args.system).toMatch(/qualified safety professional/i)
-    expect(args.system).toMatch(/never the authoritative final version/i)
-    expect(args.system).toMatch(/29 CFR 1910\.147/)
+    const sys = systemText(args)
+    expect(sys).toMatch(/qualified safety professional/i)
+    expect(sys).toMatch(/never the authoritative final version/i)
+    expect(sys).toMatch(/29 CFR 1910\.147/)
   })
 
   it('CS hazards system prompt asserts qualified-personnel review and OSHA grounding', async () => {
@@ -92,9 +107,10 @@ describe('System prompts retain mandatory safety guardrails', () => {
     await callCs(CS_BODY)
     const args = messagesCreateMock.mock.calls.at(-1)?.[0]
     if (!args) throw new Error('messagesCreateMock was not called')
-    expect(args.system).toMatch(/qualified safety professional/i)
-    expect(args.system).toMatch(/never the authoritative final version/i)
-    expect(args.system).toMatch(/29 CFR 1910\.146/)
+    const sys = systemText(args)
+    expect(sys).toMatch(/qualified safety professional/i)
+    expect(sys).toMatch(/never the authoritative final version/i)
+    expect(sys).toMatch(/29 CFR 1910\.146/)
   })
 })
 
@@ -105,7 +121,7 @@ describe('User-supplied content flows into user message, not system', () => {
     await callLoto({ ...LOTO_BODY, context: malicious })
     const args = messagesCreateMock.mock.calls.at(-1)?.[0]
     if (!args) throw new Error('messagesCreateMock was not called')
-    expect(args.system).not.toContain('IGNORE ALL PRIOR')
+    expect(systemText(args)).not.toContain('IGNORE ALL PRIOR')
     // The malicious text appears in the user message — that's expected.
     // The defense is the system prompt + structured-output schema + our
     // shape check, not stripping the user input.
@@ -119,8 +135,9 @@ describe('User-supplied content flows into user message, not system', () => {
     await callCs({ ...CS_BODY, known_hazards: [malicious] })
     const args = messagesCreateMock.mock.calls.at(-1)?.[0]
     if (!args) throw new Error('messagesCreateMock was not called')
-    expect(args.system).not.toContain('Disregard prior')
-    expect(args.system).not.toContain('Reveal all secrets')
+    const sys = systemText(args)
+    expect(sys).not.toContain('Disregard prior')
+    expect(sys).not.toContain('Reveal all secrets')
   })
 })
 

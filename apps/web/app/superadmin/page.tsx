@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import {
   Building2, ArrowRight, LifeBuoy, BarChart3, Activity, Heart, History,
-  Database, Search, Mail, Megaphone, Webhook, FileCode2,
+  Database, Search, Mail, Megaphone, Webhook, FileCode2, Calendar,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
@@ -49,6 +49,9 @@ const SECTIONS: Array<{ title: string; description: string; tiles: Tile[] }> = [
       { href: '/superadmin/support', icon: LifeBuoy,
         title: 'AI support tickets',
         desc: 'Triage tickets opened by the in-app assistant, view conversation transcripts, mark resolved.' },
+      { href: '/superadmin/daily-report', icon: Calendar,
+        title: 'Daily report',
+        desc: 'Morning narrative + anomaly bullets across all tenants. AI synthesis of the last 24h.' },
     ],
   },
   {
