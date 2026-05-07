@@ -34,6 +34,9 @@ export const MODEL_BY_SURFACE = {
   'support-chat':                     SONNET,
   'generate-loto-steps':              SONNET,
   'generate-confined-space-hazards':  SONNET,
+  // Recordability assist runs Haiku — small reasoning surface,
+  // structured Q&A, human always reviews before save.
+  'classify-recordability':           HAIKU,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

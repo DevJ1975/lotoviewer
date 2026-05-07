@@ -23,15 +23,21 @@ export type AiSurface =
   | 'support-chat'
   | 'generate-loto-steps'
   | 'generate-confined-space-hazards'
+  | 'classify-recordability'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
 //   generate-confined-space-haz. — heavy reasoning, low frequency
 //   support-chat                 — conversational
+//   classify-recordability       — light reasoning per incident; we
+//                                  cap at 30/hr because the wizard
+//                                  is interactive and the user might
+//                                  iterate while typing.
 export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> = {
   'support-chat':                     { perHour: 30, perDay: 200 },
   'generate-loto-steps':              { perHour: 20, perDay: 100 },
   'generate-confined-space-hazards':  { perHour: 20, perDay: 100 },
+  'classify-recordability':           { perHour: 30, perDay: 200 },
 }
 
 interface CheckArgs {
