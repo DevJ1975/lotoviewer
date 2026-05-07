@@ -6,10 +6,9 @@
 //   3. Import the route handler dynamically and invoke
 //
 // Why a custom harness here instead of reusing _helpers.ts: the AI
-// routes use requireTenantMember (not requireSuperadmin), need an
-// Anthropic client mock, and validate-photo uses FormData instead of
-// JSON. The two harnesses don't share scope cleanly — vi.mock is
-// hoisted per file.
+// routes use requireTenantMember (not requireSuperadmin) and need an
+// Anthropic client mock. vi.mock is hoisted per file so the two
+// harnesses don't share scope cleanly.
 
 import { vi } from 'vitest'
 

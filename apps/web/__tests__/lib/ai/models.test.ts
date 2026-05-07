@@ -21,7 +21,6 @@ describe('ai/models constants', () => {
       'support-chat',
       'generate-loto-steps',
       'generate-confined-space-hazards',
-      'validate-photo',
     ]
     for (const s of surfaces) {
       expect(MODEL_BY_SURFACE[s]).toBeTruthy()
@@ -29,13 +28,17 @@ describe('ai/models constants', () => {
     }
   })
 
-  it('the three reasoning surfaces use Sonnet', () => {
+  it('all three text-only surfaces use Sonnet', () => {
     expect(MODEL_BY_SURFACE['support-chat']).toBe(SONNET)
     expect(MODEL_BY_SURFACE['generate-loto-steps']).toBe(SONNET)
     expect(MODEL_BY_SURFACE['generate-confined-space-hazards']).toBe(SONNET)
   })
 
-  it('validate-photo uses Haiku (cost optimization for the simple validity check)', () => {
-    expect(MODEL_BY_SURFACE['validate-photo']).toBe(HAIKU)
+  it('photo-related surfaces are NOT in MODEL_BY_SURFACE', () => {
+    // validate-photo was removed; image content blocks were removed
+    // from the generation routes. If someone re-introduces a photo
+    // surface, this test forces a deliberate decision about what to
+    // wire here.
+    expect('validate-photo' in MODEL_BY_SURFACE).toBe(false)
   })
 })

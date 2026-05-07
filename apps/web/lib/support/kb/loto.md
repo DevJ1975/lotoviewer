@@ -88,12 +88,13 @@ source.
 
 ### AI draft assistant
 
-On the steps panel, **Generate with AI** sends the description, photos,
-and notes to Claude Sonnet, which proposes one step per energy source
+On the steps panel, **Generate with AI** sends the description and
+notes to Claude Sonnet, which proposes one step per energy source
 following 29 CFR 1910.147 + Cal/OSHA T8 §3314 conventions (identify
-source → isolate → verify zero energy). **A qualified safety
-professional must review every generated step before signing the
-placard.** The AI is a drafting tool, not the authority.
+source → isolate → verify zero energy). The AI is text-only — it does
+not look at uploaded photos. **A qualified safety professional must
+review every generated step before signing the placard.** The AI is
+a drafting tool, not the authority.
 
 ## Department sign-off
 

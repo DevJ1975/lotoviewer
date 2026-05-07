@@ -82,17 +82,18 @@ describe('POST /api/generate-loto-steps — Anthropic happy path', () => {
     expect(body.steps[0].energy_type).toBe('E')
   })
 
-  it('passes equip_photo_url through as image content block', async () => {
+  it('does NOT include image content blocks (text-only after photo-AI removal)', async () => {
     queueAnthropic(VALID_STEPS)
     await POST(jsonRequest({
       ...VALID_BODY,
+      // Even if a stale caller sends photo URLs, the route ignores them.
       equip_photo_url: 'https://example.com/equip.jpg',
-    }))
+      iso_photo_url:   'https://example.com/iso.jpg',
+    } as Record<string, unknown>))
     const lastCall = messagesCreateMock.mock.calls.at(-1)?.[0]
     if (!lastCall) throw new Error('messagesCreateMock was not called')
     const userContent = lastCall.messages[0].content
-    const imageBlock = userContent.find(c => c.type === 'image')
-    expect(imageBlock?.source?.url).toBe('https://example.com/equip.jpg')
+    expect(userContent.find(c => c.type === 'image')).toBeUndefined()
   })
 
   it('logs success with token usage', async () => {

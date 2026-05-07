@@ -87,12 +87,13 @@ should be backed by industrial-hygiene data.
 ### AI hazard / isolation suggestions
 
 On the new-permit form, **Suggest hazards with AI** uses the space
-description, photos, and any context you supply (e.g. "recently CIP'd,
-caustic residual possible") to propose additional hazards, isolation
-measures, atmospheric overrides, rescue equipment, and notes. The
-suggestions are appended to the form for you to review — never accepted
-automatically. **A qualified entry supervisor must verify every
-suggestion before signing.**
+description and any context you supply (e.g. "recently CIP'd, caustic
+residual possible") to propose additional hazards, isolation measures,
+atmospheric overrides, rescue equipment, and notes. The AI is
+text-only — it does not look at uploaded photos. The suggestions are
+appended to the form for you to review — never accepted automatically.
+**A qualified entry supervisor must verify every suggestion before
+signing.**
 
 ## Pre-entry atmospheric test
 

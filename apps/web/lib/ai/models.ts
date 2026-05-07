@@ -1,12 +1,6 @@
 // Single source of truth for Anthropic model ids used by the app.
 //
-// Why this exists: pre-Phase-1.3, three routes hardcoded
-// `claude-sonnet-4-6` and one hardcoded `claude-haiku-4-5-20251001`
-// independently. Updating to a new Sonnet release meant editing
-// three separate files; updating posture (alias vs date-stamped)
-// was inconsistent across surfaces.
-//
-// Pinning posture: alias-style for both families.
+// Pinning posture: alias-style.
 //
 //   - SONNET = 'claude-sonnet-4-6'   (NOT claude-sonnet-4-6-20250930)
 //   - HAIKU  = 'claude-haiku-4-5'    (NOT claude-haiku-4-5-20251001)
@@ -18,11 +12,14 @@
 // to this file, which is the right blast radius — one PR review,
 // one test pass, one env-var unchanged.
 //
-// The validate-photo surface previously used the date-stamped form
-// (`claude-haiku-4-5-20251001`); aligned to the alias here for
-// consistency. If a specific surface ever needs to pin to a date
-// (e.g. to lock behavior for a regulatory eval), declare a separate
-// constant — don't switch the shared one back to date-stamped.
+// Photo-related AI surfaces were dropped per the operator's call:
+// every uploaded photo gets reviewed by a human before sign-off
+// anyway, so an AI gate added latency + cost without changing the
+// review burden. validate-photo (the per-upload subject check),
+// plus the image-content blocks in the two generation routes, are
+// gone. Sonnet 4.6 stays on the chat + structured-output surfaces.
+// Haiku is kept available in this module in case a future
+// lightweight text-only surface wants it.
 
 export const SONNET = 'claude-sonnet-4-6' as const
 export const HAIKU  = 'claude-haiku-4-5'  as const
@@ -37,9 +34,6 @@ export const MODEL_BY_SURFACE = {
   'support-chat':                     SONNET,
   'generate-loto-steps':              SONNET,
   'generate-confined-space-hazards':  SONNET,
-  // validate-photo uses Haiku because the task is a simple visual
-  // validity check + cost matters (per-upload).
-  'validate-photo':                   HAIKU,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

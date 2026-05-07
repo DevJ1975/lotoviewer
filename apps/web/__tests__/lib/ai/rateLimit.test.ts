@@ -12,7 +12,6 @@ const ALL_SURFACES: AiSurface[] = [
   'support-chat',
   'generate-loto-steps',
   'generate-confined-space-hazards',
-  'validate-photo',
 ]
 
 describe('AI_LIMITS', () => {
@@ -36,20 +35,16 @@ describe('AI_LIMITS', () => {
   })
 
   it('chat surface limits match the constants hardcoded in support/chat/route.ts', () => {
-    // If MAX_USER_MESSAGES_PER_HOUR / _PER_DAY in that route ever
-    // change, this test catches the drift.
     expect(AI_LIMITS['support-chat']).toEqual({ perHour: 30, perDay: 200 })
-  })
-
-  it('validate-photo allows the highest hourly rate (called per upload)', () => {
-    const photo = AI_LIMITS['validate-photo']
-    for (const s of ALL_SURFACES) {
-      if (s === 'validate-photo') continue
-      expect(photo.perHour, `${s} should not exceed validate-photo's hourly cap`).toBeGreaterThanOrEqual(AI_LIMITS[s].perHour)
-    }
   })
 
   it('the two heavy generation surfaces have identical limits (consistency)', () => {
     expect(AI_LIMITS['generate-loto-steps']).toEqual(AI_LIMITS['generate-confined-space-hazards'])
+  })
+
+  it('validate-photo is NOT a surface (photo AI was dropped)', () => {
+    // Type-level check: AiSurface union no longer includes 'validate-photo'.
+    // A future re-add will need to update this test deliberately.
+    expect('validate-photo' in AI_LIMITS).toBe(false)
   })
 })

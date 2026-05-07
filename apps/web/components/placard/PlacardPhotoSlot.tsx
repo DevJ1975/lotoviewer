@@ -6,7 +6,6 @@ import { usePhotoUpload, type UploadType } from '@/hooks/usePhotoUpload'
 import { useNetworkStatus } from '@/hooks/useNetworkStatus'
 import { useUploadQueue } from '@/components/UploadQueueProvider'
 import { useTenant } from '@/components/TenantProvider'
-import { supabase } from '@/lib/supabase'
 import { compressImage, heicToJpeg, isHeic } from '@/lib/imageUtils'
 import { haptic } from '@/lib/platform'
 import { AnnotationLayer } from '@/components/AnnotatedPhoto'
@@ -37,7 +36,6 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
   const { tenantId } = useTenant()
 
   const fileRef = useRef<HTMLInputElement>(null)
-  const [validating, setValidating] = useState(false)
   const [queueing, setQueueing]     = useState(false)
   const [compressing, setCompressing] = useState(false)
   const [localPreview, setLocalPreview] = useState<string | null>(null)
@@ -76,7 +74,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
   // no separate flag needed.
   const isQueuedForThisSlot = queuedKeys.has(`${equipmentId}:${type}`)
   const displayUrl  = url ?? localPreview ?? existingUrl
-  const isBusy      = validating || queueing || compressing || status === 'uploading'
+  const isBusy      = queueing || compressing || status === 'uploading'
   const showQueued  = isQueuedForThisSlot && !url
   // Once the photo is safely in the offline queue, hide the live-upload
   // error surface — the queue drain will retry it and "Upload failed"
@@ -142,37 +140,17 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
     }
 
     // Show the (possibly-converted) file as a preview immediately — without
-    // this, the user stares at a spinner for ~500ms-2s while validation +
-    // compression run, with no visual confirmation of what they just
-    // selected. Preview is swapped for the EXIF-corrected compressed blob
-    // when compressImage finishes. CSS image-orientation:from-image on
-    // the <Image> keeps raw-file orientation correct in the meantime.
+    // this, the user stares at a spinner for ~500ms-2s while compression
+    // runs, with no visual confirmation of what they just selected. Preview
+    // is swapped for the EXIF-corrected compressed blob when compressImage
+    // finishes. CSS image-orientation:from-image on the <Image> keeps
+    // raw-file orientation correct in the meantime.
     setLocalPreview(URL.createObjectURL(file))
 
-    // Validate subject (skip if offline — don't waste time)
-    if (online) {
-      setValidating(true)
-      try {
-        const fd = new FormData()
-        fd.append('file', file)
-        fd.append('type', type)
-        const { data: { session } } = await supabase.auth.getSession()
-        const headers: Record<string, string> = {}
-        if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
-        if (tenantId)              headers['x-active-tenant'] = tenantId
-        const res  = await fetch('/api/validate-photo', { method: 'POST', headers, body: fd })
-        const json = await res.json() as { valid?: boolean; reason?: string }
-        if (json && json.valid === false) {
-          onErrorRef.current?.(json.reason ?? 'Photo does not appear to show the correct subject.')
-          setValidating(false)
-          return
-        }
-      } catch {
-        // Validation unreachable — proceed anyway
-      } finally {
-        setValidating(false)
-      }
-    }
+    // No AI subject-validation step — uploads go straight to compression
+    // + storage. Per the operator's call: every photo gets reviewed by a
+    // human before sign-off anyway, so an AI gate adds latency + cost
+    // without preventing any work that the supervisor wouldn't catch.
 
     // Compress locally so we have a bounded Blob for both upload and queue.
     // The upload hook does NOT re-compress — we own compression here so it
@@ -248,8 +226,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/30 dark:bg-slate-900/30 backdrop-blur-[1px]">
                 <div className="w-7 h-7 border-[3px] border-brand-navy/30 border-t-brand-navy rounded-full animate-spin" />
                 <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold drop-shadow-sm">
-                  {validating  ? 'Checking…'  :
-                   queueing    ? 'Queueing…'  :
+                  {queueing    ? 'Queueing…'  :
                    compressing ? 'Compressing…' : 'Uploading…'}
                 </p>
               </div>
@@ -279,8 +256,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
             <div className="w-7 h-7 border-[3px] border-brand-navy/30 border-t-brand-navy rounded-full animate-spin" />
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              {validating  ? 'Checking…'  :
-               queueing    ? 'Queueing…'  :
+              {queueing    ? 'Queueing…'  :
                compressing ? 'Compressing…' : 'Uploading…'}
             </p>
           </div>

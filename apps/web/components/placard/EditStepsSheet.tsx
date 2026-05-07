@@ -118,13 +118,11 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
         method:  'POST',
         headers,
         body: JSON.stringify({
-          equipment_id:    equipment.equipment_id,
-          description:     equipment.description,
-          department:      equipment.department,
-          notes:           equipment.notes,
-          context:         aiContext.trim() || undefined,
-          equip_photo_url: equipment.equip_photo_url,
-          iso_photo_url:   equipment.iso_photo_url,
+          equipment_id: equipment.equipment_id,
+          description:  equipment.description,
+          department:   equipment.department,
+          notes:        equipment.notes,
+          context:      aiContext.trim() || undefined,
         }),
       })
       if (!res.ok) {

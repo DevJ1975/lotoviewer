@@ -199,30 +199,7 @@ describe('Response Content-Type is JSON regardless of model output', () => {
   })
 })
 
-describe('validate-photo: prompt routing cannot be hijacked by `type` field', () => {
-  it('falls back to EQUIP prompt when type is unknown — no arbitrary prompt injection', async () => {
-    queueAnthropic('{"valid": true, "reason": "ok"}')
-    const { POST } = await import('@/app/api/validate-photo/route')
-    const fakeFile = {
-      size: 1000,
-      type: 'image/jpeg',
-      arrayBuffer: async () => new ArrayBuffer(0),
-    }
-    const fakeForm = {
-      get: (k: string) => k === 'file' ? fakeFile : k === 'type' ? '../../../etc/passwd' : null,
-    }
-    const req = new NextRequest('http://x/api/validate-photo', {
-      method:  'POST',
-      headers: { authorization: 'Bearer t', 'x-active-tenant': '00000000-0000-0000-0000-000000000001' },
-    });
-    (req as unknown as { formData: () => Promise<unknown> }).formData = async () => fakeForm
-    const res = await POST(req)
-    expect(res.status).toBe(200)
-    const args = messagesCreateMock.mock.calls.at(-1)?.[0]
-    if (!args) throw new Error('messagesCreateMock was not called')
-    const textBlock = args.messages[0].content.find(c => c.type === 'text')
-    // Falls back to the EQUIP prompt — verify it's the canonical text.
-    expect(textBlock?.text).toMatch(/industrial equipment/i)
-    expect(textBlock?.text).not.toContain('etc/passwd')
-  })
-})
+// (validate-photo route was removed; the prompt-routing-hijack test it
+// guarded is gone with it. Generation routes are text-only now — the
+// surface area for prompt injection is the user-supplied context /
+// known_hazards strings, both already covered above.)

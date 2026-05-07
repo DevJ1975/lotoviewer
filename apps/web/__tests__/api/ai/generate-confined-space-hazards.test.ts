@@ -87,17 +87,18 @@ describe('POST /api/generate-confined-space-hazards — happy path', () => {
     expect(typeof body.notes).toBe('string')
   })
 
-  it('attaches both photo URLs as image content blocks when provided', async () => {
+  it('does NOT include image content blocks (text-only after photo-AI removal)', async () => {
     queueAnthropic(VALID_FIELDS)
     await POST(jsonRequest({
       ...VALID_BODY,
+      // Stale callers may still send photo URLs; the route ignores them.
       equip_photo_url:    'https://example.com/equip.jpg',
       interior_photo_url: 'https://example.com/interior.jpg',
-    }))
+    } as Record<string, unknown>))
     const lastCall = messagesCreateMock.mock.calls.at(-1)?.[0]
     if (!lastCall) throw new Error('messagesCreateMock was not called')
     const images = lastCall.messages[0].content.filter(c => c.type === 'image')
-    expect(images).toHaveLength(2)
+    expect(images).toHaveLength(0)
   })
 
   it('forwards known_hazards in the user brief', async () => {

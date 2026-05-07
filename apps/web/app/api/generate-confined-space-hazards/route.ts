@@ -77,17 +77,16 @@ PPE / EQUIPMENT BASELINE for permit-required entry:
 - Eye/face protection rated for hazard
 
 RULES
-1. Tailor to THIS space — generic lists don't help anyone. Cite the space's type, classification, dept, and any visible details from photos.
+1. Tailor to THIS space — generic lists don't help anyone. Cite the space's type, classification, and dept.
 2. Be SPECIFIC. "PPE required" → unacceptable. "Tyvek QC125 chemical-resistant suit + nitrile gloves" → acceptable.
-3. Reference visible equipment in attached photos (manways, disconnects, drains, agitator shafts, CIP connections).
-4. Cite hazards that follow from the space TYPE even if not stated:
+3. Cite hazards that follow from the space TYPE even if not stated:
    - Silos → dust explosion (LEL), engulfment, O2 deficiency from biological respiration
    - Fermenters → CO2 displacement, residual ethanol vapors
    - CIP-served vessels → residual caustic at 140-180°F, peracetic acid vapors
    - Sumps/drains → H2S from organic decomp, biohazard
-5. Order isolation steps so atmospheric isolation comes AFTER process and
+4. Order isolation steps so atmospheric isolation comes AFTER process and
    energy isolation — otherwise ventilation can mobilize trapped vapors.
-6. When uncertain, propose the conservative configuration and flag the
+5. When uncertain, propose the conservative configuration and flag the
    assumption in notes (e.g. "Assuming top-entry only — verify on site").
 
 OUTPUT
@@ -138,8 +137,6 @@ interface RequestBody {
   classification:     string
   known_hazards?:     string[]
   isolation_required?: string | null
-  equip_photo_url?:    string | null
-  interior_photo_url?: string | null
   context?:            string
 }
 
@@ -180,22 +177,11 @@ export async function POST(req: NextRequest) {
 
     const userContent: Anthropic.ContentBlockParam[] = []
 
-    // Photos massively improve hazard ID — interior shots especially because
-    // residue, agitator shafts, drain configuration, and visible chemical
-    // staining are all there to be seen. Both URLs are public Supabase
-    // storage links, so the API can fetch directly.
-    if (body.equip_photo_url) {
-      userContent.push({
-        type:   'image',
-        source: { type: 'url', url: body.equip_photo_url },
-      })
-    }
-    if (body.interior_photo_url) {
-      userContent.push({
-        type:   'image',
-        source: { type: 'url', url: body.interior_photo_url },
-      })
-    }
+    // Text-only inputs. Photo attachments were dropped per the
+    // operator's call: every CS hazard inventory is reviewed by a
+    // qualified safety pro before sign-off, so the model "seeing"
+    // photos didn't change the verification burden — and the wrong
+    // hazard call kills people, so a 100% review pass is mandatory.
 
     const knownHazardsText = body.known_hazards && body.known_hazards.length > 0
       ? `Already-recorded persistent hazards on this space: ${body.known_hazards.join('; ')}`
@@ -214,7 +200,7 @@ export async function POST(req: NextRequest) {
 
     userContent.push({
       type: 'text',
-      text: `Propose hazards, isolation steps, equipment, and rescue gear for this confined space entry permit. If photos are attached, identify visible disconnects, drains, manways, agitator shafts, CIP connections, and chemical residues, and reference them in your output.\n\n${brief}`,
+      text: `Propose hazards, isolation steps, equipment, and rescue gear for this confined space entry permit.\n\n${brief}`,
     })
 
     const response = await client.messages.create({

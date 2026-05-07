@@ -169,8 +169,6 @@ export default function NewPermitPage() {
           classification:     space.classification,
           known_hazards:      space.known_hazards,
           isolation_required: space.isolation_required,
-          equip_photo_url:    space.equip_photo_url,
-          interior_photo_url: space.interior_photo_url,
           context:            aiContext.trim() || undefined,
         }),
       })

@@ -82,8 +82,6 @@ interface RequestBody {
   department:      string
   notes?:          string | null
   context?:        string
-  equip_photo_url?: string | null
-  iso_photo_url?:   string | null
 }
 
 interface GeneratedStep {
@@ -124,21 +122,11 @@ export async function POST(req: NextRequest) {
 
     const userContent: Anthropic.ContentBlockParam[] = []
 
-    // Attach photos so Sonnet 4.6 can reason about visible disconnects/valves
-    // rather than guessing from description alone. Supabase public URLs are
-    // fetchable by the API. Skip silently if the equipment has no photos yet.
-    if (body.equip_photo_url) {
-      userContent.push({
-        type:   'image',
-        source: { type: 'url', url: body.equip_photo_url },
-      })
-    }
-    if (body.iso_photo_url) {
-      userContent.push({
-        type:   'image',
-        source: { type: 'url', url: body.iso_photo_url },
-      })
-    }
+    // Text-only inputs. Photo attachments were dropped per the
+    // operator's call: every AI draft gets reviewed by a human anyway,
+    // and the supervisor cross-checks against the actual placard +
+    // disconnect locations on site, so the model "seeing" photos
+    // didn't change the verification burden.
 
     const brief = [
       `Equipment ID: ${body.equipment_id}`,
@@ -150,7 +138,7 @@ export async function POST(req: NextRequest) {
 
     userContent.push({
       type: 'text',
-      text: `Propose LOTO energy-isolation steps for this food-production equipment. Return one step per independent energy source. If the attached photos show specific disconnects, valves, or nameplates, reference them in your procedure.\n\n${brief}`,
+      text: `Propose LOTO energy-isolation steps for this food-production equipment. Return one step per independent energy source.\n\n${brief}`,
     })
 
     const response = await client.messages.create({

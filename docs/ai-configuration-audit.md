@@ -286,3 +286,41 @@ checklist in `docs/ai-configuration-smoke-test.md`.
 
 All 1537 pass. tsc clean.
 
+---
+
+# Post-audit: photo-AI removal
+
+Operator's call after several months of running the photo flow:
+"every photo gets reviewed by a human before sign-off anyway, so
+an AI gate adds latency + cost without changing the review burden."
+
+What was removed:
+
+- `/api/validate-photo` route — every uploaded equipment / ISO
+  photo no longer runs through Claude Haiku. PlacardPhotoSlot
+  uploads straight to Supabase Storage.
+- Image content blocks in `/api/generate-loto-steps` and
+  `/api/generate-confined-space-hazards` — both routes are now
+  text-only. The system prompts had referenced "attached photos"
+  in their rules (one rule each); those mentions were excised.
+- `validate-photo` from `MODEL_BY_SURFACE` and `AI_LIMITS`. The
+  `AiSurface` union shrinks from 4 to 3 entries.
+- `EditStepsSheet` and the new-permit page no longer send photo
+  URLs in their request bodies.
+- KB pages updated: `loto.md` and `confined-spaces.md` now state
+  "AI is text-only — it does not look at uploaded photos."
+
+What stayed:
+
+- Photo storage + display flows are unchanged. `equip_photo_url`,
+  `iso_photo_url`, `interior_photo_url` columns still drive the
+  PlacardView, EquipmentList badges, Review Portal, and the
+  printed permit PDF QR layout.
+- The chat surface (`/api/support/chat`) — text-only, never used
+  vision.
+- `/superadmin/ai-usage` dashboard — still works, will show no
+  new validate-photo invocations after the removal but historical
+  rows remain queryable.
+
+Migrations: none. The schema is unchanged.
+
