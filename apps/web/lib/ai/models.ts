@@ -34,6 +34,12 @@ export const MODEL_BY_SURFACE = {
   'support-chat':                     SONNET,
   'generate-loto-steps':              SONNET,
   'generate-confined-space-hazards':  SONNET,
+  // Read-only triage / summarization surfaces. Haiku for the cheap +
+  // fast aggregation summary; Sonnet for safety-adjacent classification
+  // and the daily synthesis where reasoning quality matters more.
+  'summarize-audit':                  HAIKU,
+  'classify-near-miss':               SONNET,
+  'superadmin-daily-report':          SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

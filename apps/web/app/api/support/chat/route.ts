@@ -14,6 +14,7 @@ import {
 } from '@/lib/support/types'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 import { getTenantApiKey } from '@/lib/ai/getTenantApiKey'
+import { checkTenantBudget } from '@/lib/ai/rateLimit'
 
 // Only the two roles Anthropic accepts in messages[]. Internally
 // ChatMessage allows system/tool for transcript rendering, but we never
@@ -199,6 +200,20 @@ export async function POST(req: Request) {
   }
   if (userText.length > 4000) {
     return NextResponse.json({ error: 'Message is too long (max 4,000 characters).' }, { status: 400 })
+  }
+
+  // Tenant kill switch + daily budget cap. Tenantless callers
+  // (support-chat allows no active tenant) skip the check.
+  const budget = await checkTenantBudget({
+    userId:   reporter.id,
+    tenantId: reporter.tenantId,
+    surface:  'support-chat',
+  })
+  if (!budget.ok) {
+    return NextResponse.json(
+      { error: budget.message },
+      { status: 429, headers: budget.reason === 'budget_exceeded' ? { 'retry-after': String(budget.retryAfterSec) } : {} },
+    )
   }
 
   const admin = supabaseAdmin()

@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { NextRequest, NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
-import { checkAiRateLimit, logAiInvocation } from '@/lib/ai/rateLimit'
+import { checkAiRateLimit, checkTenantBudget, logAiInvocation } from '@/lib/ai/rateLimit'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 import { getTenantApiKey } from '@/lib/ai/getTenantApiKey'
 
@@ -102,6 +102,21 @@ export async function POST(req: NextRequest) {
   const gate = await requireTenantMember(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
+  // Tenant-level kill switch + daily budget cap. Runs before the
+  // per-user rate limit so a tenant that disabled AI doesn't even
+  // burn rate-limit slots.
+  const budget = await checkTenantBudget({
+    userId:   gate.userId,
+    tenantId: gate.tenantId,
+    surface:  'generate-loto-steps',
+  })
+  if (!budget.ok) {
+    return NextResponse.json(
+      { error: budget.message },
+      { status: 429, headers: budget.reason === 'budget_exceeded' ? { 'retry-after': String(budget.retryAfterSec) } : {} },
+    )
+  }
+
   // Rate limit before reading the body — body parsing burns no
   // Anthropic tokens but it's still better to fail fast.
   const limit = await checkAiRateLimit({
@@ -149,7 +164,10 @@ export async function POST(req: NextRequest) {
       model:      MODEL,
       max_tokens: 16000,
       thinking:   { type: 'adaptive' },
-      system:     SYSTEM_PROMPT,
+      // Cache the static system prompt — every authoring session
+      // calls this surface multiple times (generate, tweak, regen)
+      // with the same prompt. ~50% input-token savings on hot paths.
+      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
       messages:   [{ role: 'user', content: userContent }],
       output_config: {
         format: { type: 'json_schema', schema: STEPS_SCHEMA },
@@ -175,13 +193,15 @@ export async function POST(req: NextRequest) {
     }
 
     await logAiInvocation({
-      userId:       gate.userId,
-      tenantId:     gate.tenantId,
-      surface:      'generate-loto-steps',
-      model:        MODEL,
-      status:       'success',
-      inputTokens:  response.usage?.input_tokens,
-      outputTokens: response.usage?.output_tokens,
+      userId:           gate.userId,
+      tenantId:         gate.tenantId,
+      surface:          'generate-loto-steps',
+      model:            MODEL,
+      status:           'success',
+      inputTokens:      response.usage?.input_tokens,
+      outputTokens:     response.usage?.output_tokens,
+      cacheReadTokens:  response.usage?.cache_read_input_tokens     ?? undefined,
+      cacheWriteTokens: response.usage?.cache_creation_input_tokens ?? undefined,
       context:      body.equipment_id,
     })
 

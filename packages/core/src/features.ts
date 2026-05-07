@@ -372,6 +372,15 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
   },
   {
+    id:          'admin-ai-usage',
+    name:        'AI usage',
+    description: 'Your tenant’s Claude invocations: trend, surface breakdown, today’s spend vs cap',
+    href:        '/admin/ai-usage',
+    category:    'admin',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
     id:          'settings-notifications',
     name:        'Notifications',
     description: 'Enable Web Push for permit + atmospheric-test alerts',

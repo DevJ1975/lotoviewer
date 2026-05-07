@@ -57,6 +57,18 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
   )
   const [settingsError, setSettingsError] = useState<string | null>(null)
 
+  // Explicit AI controls — keep them top-of-mind for the operator
+  // even though the underlying values live in tenants.settings jsonb.
+  // On save we merge these back into the parsed settings object so
+  // the textarea + form fields are kept in sync.
+  const initialSettings = (tenant.settings ?? {}) as { ai_disabled?: boolean; ai_daily_budget_cents?: number }
+  const [aiDisabled,    setAiDisabled]    = useState<boolean>(initialSettings.ai_disabled === true)
+  const [aiBudgetUsd,   setAiBudgetUsd]   = useState<string>(
+    typeof initialSettings.ai_daily_budget_cents === 'number'
+      ? (initialSettings.ai_daily_budget_cents / 100).toFixed(2)
+      : '',
+  )
+
   // Re-seed when the parent re-fetches the tenant (e.g. after logo
   // upload). Keep the user's in-flight checkbox edits if they've
   // touched the form — otherwise the re-fetch would clobber them.
@@ -66,6 +78,11 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
     setModules(seedModulesFromTenant(tenant))
     setSettingsJson(JSON.stringify(tenant.settings ?? {}, null, 2))
     setSettingsError(null)
+    const s = (tenant.settings ?? {}) as { ai_disabled?: boolean; ai_daily_budget_cents?: number }
+    setAiDisabled(s.ai_disabled === true)
+    setAiBudgetUsd(
+      typeof s.ai_daily_budget_cents === 'number' ? (s.ai_daily_budget_cents / 100).toFixed(2) : '',
+    )
   }, [tenant.id])
 
   const [saving,      setSaving]      = useState(false)
@@ -104,6 +121,23 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
       setSettingsError(e instanceof Error ? e.message : 'Invalid JSON')
       setSaving(false)
       return
+    }
+
+    // Merge the explicit AI fields into the parsed settings. The form
+    // checkbox / number input is the source of truth for these two
+    // keys; the JSON textarea may have been edited but we overwrite
+    // these specific keys before save.
+    parsedSettings.ai_disabled = aiDisabled
+    if (aiBudgetUsd.trim() === '') {
+      delete parsedSettings.ai_daily_budget_cents
+    } else {
+      const usd = Number(aiBudgetUsd)
+      if (!Number.isFinite(usd) || usd <= 0) {
+        setSettingsError('Daily AI budget must be a positive number, or empty for no cap.')
+        setSaving(false)
+        return
+      }
+      parsedSettings.ai_daily_budget_cents = Math.round(usd * 100)
     }
 
     const result = await superadminJson<{ tenant: Tenant }>(
@@ -196,6 +230,52 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
               </div>
             </div>
           ))}
+        </div>
+      </Section>
+
+      <Section title="AI controls">
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+          Spend protection for this tenant&apos;s use of Claude. Both write into{' '}
+          <code className="font-mono text-[11px]">settings.ai_disabled</code> and{' '}
+          <code className="font-mono text-[11px]">settings.ai_daily_budget_cents</code>;
+          the routes refuse calls when triggered (logged as <code className="font-mono text-[11px]">budget_blocked</code>).
+        </p>
+        <div className="space-y-4">
+          <div className="flex items-start gap-2">
+            <input
+              id="ai_disabled"
+              type="checkbox"
+              checked={aiDisabled}
+              onChange={e => { setAiDisabled(e.target.checked); setSaveSuccess(false) }}
+              className="mt-1 h-4 w-4 rounded border-slate-300 dark:border-slate-700 text-rose-600 focus:ring-rose-600"
+            />
+            <label htmlFor="ai_disabled" className="text-sm text-slate-700 dark:text-slate-200">
+              <span className="font-medium">Disable AI for this tenant</span>
+              <span className="block text-xs text-slate-500 dark:text-slate-400">
+                Hard kill switch: every AI route returns 429 immediately. Use during incidents or for tenants on a non-AI tier.
+              </span>
+            </label>
+          </div>
+
+          <div>
+            <label htmlFor="ai_budget_usd" className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
+              Daily AI budget (USD)
+            </label>
+            <input
+              id="ai_budget_usd"
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              placeholder="No cap"
+              value={aiBudgetUsd}
+              onChange={e => { setAiBudgetUsd(e.target.value); setSaveSuccess(false) }}
+              className="w-32 px-3 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-navy"
+            />
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Estimated daily spend cap. Empty = no cap. Resets at midnight UTC. Estimate uses the same cost math as the dashboard (cache reads at 10%, cache writes at 125%).
+            </p>
+          </div>
         </div>
       </Section>
 

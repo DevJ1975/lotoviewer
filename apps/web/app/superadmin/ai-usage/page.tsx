@@ -36,10 +36,15 @@ function fmtTokens(n: number): string {
   return n.toString()
 }
 
-const STATUS_PILL: Record<'success' | 'rate_limited' | 'error', string> = {
-  success:      'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
-  rate_limited: 'bg-amber-100   text-amber-800   dark:bg-amber-900/40   dark:text-amber-200',
-  error:        'bg-rose-100    text-rose-800    dark:bg-rose-900/40    dark:text-rose-200',
+const STATUS_PILL: Record<'success' | 'rate_limited' | 'error' | 'budget_blocked', string> = {
+  success:        'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
+  rate_limited:   'bg-amber-100   text-amber-800   dark:bg-amber-900/40   dark:text-amber-200',
+  error:          'bg-rose-100    text-rose-800    dark:bg-rose-900/40    dark:text-rose-200',
+  budget_blocked: 'bg-violet-100  text-violet-800  dark:bg-violet-900/40  dark:text-violet-200',
+}
+
+function fmtPct(n: number): string {
+  return `${(n * 100).toFixed(0)}%`
 }
 
 export default function AiUsagePage() {
@@ -151,9 +156,9 @@ export default function AiUsagePage() {
             <KpiTile
               icon={<AlertTriangle className="h-4 w-4" />}
               label="Failures"
-              value={fmtNum(summary.totals.errors + summary.totals.rateLimited)}
-              sub={`${summary.totals.errors} err / ${summary.totals.rateLimited} rl`}
-              tone={summary.totals.errors + summary.totals.rateLimited > 0 ? 'warn' : 'normal'}
+              value={fmtNum(summary.totals.errors + summary.totals.rateLimited + summary.totals.budgetBlocked)}
+              sub={`${summary.totals.errors} err · ${summary.totals.rateLimited} rl · ${summary.totals.budgetBlocked} bb`}
+              tone={summary.totals.errors + summary.totals.rateLimited + summary.totals.budgetBlocked > 0 ? 'warn' : 'normal'}
             />
           </section>
 
@@ -166,26 +171,34 @@ export default function AiUsagePage() {
               <p className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">No invocations in this window.</p>
             ) : (
               <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[560px]">
+              <table className="w-full text-sm min-w-[640px]">
                 <thead className="bg-slate-50 dark:bg-slate-900/40 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   <tr>
-                    <th className="text-left px-4 py-2">Surface</th>
+                    <th className="text-left  px-4 py-2">Surface</th>
                     <th className="text-right px-4 py-2">Invocations</th>
-                    <th className="text-right px-4 py-2">Input tokens</th>
-                    <th className="text-right px-4 py-2">Output tokens</th>
+                    <th className="text-right px-4 py-2">Input</th>
+                    <th className="text-right px-4 py-2">Output</th>
+                    <th className="text-right px-4 py-2" title="Cache reads / (cache reads + uncached input)">Cache hit</th>
                     <th className="text-right px-4 py-2">Est. cost</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                  {summary.bySurface.map(s => (
-                    <tr key={s.surface}>
-                      <td className="px-4 py-2 font-mono text-xs text-slate-700 dark:text-slate-300">{s.surface}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">{fmtNum(s.invocations)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtTokens(s.inputTokens)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtTokens(s.outputTokens)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums font-medium">{fmtUsd(s.estCostUsd)}</td>
-                    </tr>
-                  ))}
+                  {summary.bySurface.map(s => {
+                    const hit = s.cacheHitRate
+                    const hitTone = hit >= 0.5 ? 'text-emerald-700 dark:text-emerald-400'
+                                  : hit >  0    ? 'text-slate-700 dark:text-slate-300'
+                                  :               'text-slate-400 dark:text-slate-500'
+                    return (
+                      <tr key={s.surface}>
+                        <td className="px-4 py-2 font-mono text-xs text-slate-700 dark:text-slate-300">{s.surface}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{fmtNum(s.invocations)}</td>
+                        <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtTokens(s.inputTokens)}</td>
+                        <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtTokens(s.outputTokens)}</td>
+                        <td className={`px-4 py-2 text-right tabular-nums ${hitTone}`}>{hit > 0 ? fmtPct(hit) : '—'}</td>
+                        <td className="px-4 py-2 text-right tabular-nums font-medium">{fmtUsd(s.estCostUsd)}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
               </div>
