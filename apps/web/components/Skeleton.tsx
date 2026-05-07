@@ -77,6 +77,35 @@ export function StatusSkeleton() {
   )
 }
 
+// Generic N-row table skeleton. Used by every admin / superadmin
+// list page that previously rendered a centered Loader2 spinner —
+// a placeholder grid feels noticeably faster on slow networks
+// because the page chrome doesn't jump on hydration.
+//
+// Defaults: 6 rows, 4 columns. Each row matches the px-4 py-3
+// padding the dashboards use. The key prop is required because the
+// rows are siblings of each other in JSX.
+export function TableSkeleton({ rows = 6, columns = 4, className = '' }: {
+  rows?:    number
+  columns?: number
+  className?: string
+}) {
+  // Pre-compute column widths so they're stable across rows; varied
+  // widths read as "real data" rather than uniform stripes.
+  const widths = ['w-20', 'w-32', 'w-24', 'w-16', 'w-28', 'w-12']
+  return (
+    <div aria-hidden="true" aria-busy="true" className={className}>
+      {Array.from({ length: rows }).map((_, r) => (
+        <div key={r} className="px-4 py-3 border-t border-slate-100 dark:border-slate-800 first:border-t-0 flex items-center gap-4">
+          {Array.from({ length: columns }).map((_, c) => (
+            <Skeleton key={c} className={`h-3.5 ${widths[(r * 7 + c) % widths.length]}`} />
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // Composed skeleton for the home dashboard's three-pane layout. Mirrors the
 // final shape so the user sees structure first, content second.
 export function DashboardSkeleton() {

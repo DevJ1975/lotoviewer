@@ -7,6 +7,8 @@ import {
   MessageSquare, X, AlertTriangle, ShieldAlert, UserRound, Archive, BarChart3,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { TableSkeleton } from '@/components/Skeleton'
+import { useUrlState } from '@/hooks/useUrlState'
 
 // Superadmin triage page for AI-support tickets. Shows the open queue
 // by default; toggle to see resolved or all. Click a row to open the
@@ -54,7 +56,7 @@ const REASON_BADGE: Record<TicketReason, { label: string; cls: string; icon: typ
 }
 
 export default function SuperadminSupportPage() {
-  const [filter,    setFilter]    = useState<StatusFilter>('open')
+  const [filter,    setFilter]    = useUrlState<StatusFilter>('filter', 'open')
   const [tickets,   setTickets]   = useState<TicketRow[]>([])
   const [loading,   setLoading]   = useState(true)
   const [error,     setError]     = useState<string | null>(null)
@@ -186,7 +188,7 @@ export default function SuperadminSupportPage() {
       {/* Ticket list */}
       <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
         {loading && tickets.length === 0
-          ? <div className="p-12 text-center text-slate-400 dark:text-slate-500"><Loader2 className="h-5 w-5 animate-spin inline" /></div>
+          ? <TableSkeleton rows={6} columns={3} />
           : tickets.length === 0
             ? <p className="p-12 text-center text-sm text-slate-500 dark:text-slate-400">
                 {filter === 'open'    ? 'No open tickets — quiet day. ✅'

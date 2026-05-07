@@ -67,14 +67,27 @@ async function runCron(req: Request) {
   const appUrl = publicAppUrl(req)
 
   try {
-    // 1. Pull every training record with a tenant_id + expiry. The
-    //    table is small (one row per worker per cert event) so a
-    //    full scan is fine; the digest helper trims to the relevant
-    //    window.
+    // 1. Pull training records whose expires_at is in the alert
+    //    window: from EXPIRED_GRACE_DAYS in the past through
+    //    EXPIRING_WINDOW_DAYS in the future. Constants live in the
+    //    aggregator (don't drift them apart).
+    //
+    // The window-narrowing is what lets the cron stay fast at scale —
+    // pre-filter aligns with the partial idx_loto_training_records_expires_at
+    // index from migration 055. Without the date filter, a tenant with
+    // years of historical training data would force a full table scan
+    // every day at 07:00.
+    const now = new Date()
+    const lower = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    const upper = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+    const lowerYmd = lower.toISOString().slice(0, 10)
+    const upperYmd = upper.toISOString().slice(0, 10)
     const { data: trainingRows, error: tErr } = await admin
       .from('loto_training_records')
       .select('tenant_id, worker_name, role, expires_at, completed_at')
       .not('expires_at', 'is', null)
+      .gte('expires_at', lowerYmd)
+      .lte('expires_at', upperYmd)
     if (tErr) {
       Sentry.captureException(tErr, { tags: { route: '/api/cron/training-expiry-reminders', stage: 'fetch' } })
       return NextResponse.json({ error: tErr.message }, { status: 500 })

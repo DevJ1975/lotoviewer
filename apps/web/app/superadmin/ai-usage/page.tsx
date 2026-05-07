@@ -165,7 +165,8 @@ export default function AiUsagePage() {
             {summary.bySurface.length === 0 ? (
               <p className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">No invocations in this window.</p>
             ) : (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[560px]">
                 <thead className="bg-slate-50 dark:bg-slate-900/40 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   <tr>
                     <th className="text-left px-4 py-2">Surface</th>
@@ -187,6 +188,7 @@ export default function AiUsagePage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </section>
 
@@ -198,7 +200,8 @@ export default function AiUsagePage() {
             {summary.byTenant.length === 0 ? (
               <p className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">No invocations in this window.</p>
             ) : (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[560px]">
                 <thead className="bg-slate-50 dark:bg-slate-900/40 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   <tr>
                     <th className="text-left px-4 py-2">Tenant</th>
@@ -222,6 +225,7 @@ export default function AiUsagePage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </section>
 
@@ -242,7 +246,8 @@ export default function AiUsagePage() {
             <h2 className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-700">
               By model
             </h2>
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[560px]">
               <thead className="bg-slate-50 dark:bg-slate-900/40 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 <tr>
                   <th className="text-left px-4 py-2">Model</th>
@@ -264,6 +269,7 @@ export default function AiUsagePage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </section>
 
           {/* Recent failures */}
@@ -272,7 +278,8 @@ export default function AiUsagePage() {
               <h2 className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-700">
                 Recent failures (last {summary.recentFailures.length})
               </h2>
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[560px]">
                 <thead className="bg-slate-50 dark:bg-slate-900/40 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   <tr>
                     <th className="text-left px-4 py-2">When</th>
@@ -300,6 +307,7 @@ export default function AiUsagePage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </section>
           )}
 

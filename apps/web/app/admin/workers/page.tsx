@@ -8,6 +8,8 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { TableSkeleton } from '@/components/Skeleton'
+import { useUrlState } from '@/hooks/useUrlState'
 import { useTenant } from '@/components/TenantProvider'
 import { evaluateLotoTraining, lotoTrainingStatusTone, type LotoTrainingStatus } from '@/lib/trainingRecords'
 import { formatSupabaseError } from '@/lib/supabaseError'
@@ -39,8 +41,9 @@ export default function WorkersPage() {
   const [trainingByName, setTrainingByName] = useState<Map<string, TrainingRecord[]>>(new Map())
   const [loadError, setLoadError] = useState<string | null>(null)
 
-  const [filter, setFilter] = useState<StatusFilter>('active')
-  const [search, setSearch] = useState('')
+  // URL-backed state so refresh + share-link + browser-back work.
+  const [filter, setFilter] = useUrlState<StatusFilter>('filter', 'active')
+  const [search, setSearch] = useUrlState<string>('q', '')
 
   const [addOpen, setAddOpen] = useState(false)
   const [busyId,  setBusyId]  = useState<string | null>(null)
@@ -214,15 +217,43 @@ export default function WorkersPage() {
       {/* Worker table */}
       <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
         {workers === null
-          ? <div className="p-12 flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-slate-400 dark:text-slate-500" /></div>
+          ? <TableSkeleton rows={6} columns={5} />
           : filtered.length === 0
-            ? <p className="p-12 text-center text-sm text-slate-500 dark:text-slate-400">
-                {filter === 'active' ? 'No active workers — use New worker above to add one.'
-                : filter === 'inactive' ? 'No inactive workers.'
-                : 'No workers yet.'}
-              </p>
+            ? (
+              <div className="p-12 text-center space-y-3">
+                <Users className="h-10 w-10 text-slate-300 dark:text-slate-600 mx-auto" />
+                {(filter === 'active' || filter === 'all') && decorated.length === 0 ? (
+                  // First-time empty state — no workers in any state.
+                  // Most onboarding flows hit this on day one; the CTA
+                  // points straight at the inline form above.
+                  <>
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-200">No workers yet</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                      Add your shop-floor crew + their LOTO training to start issuing locktags.
+                      Workers don&apos;t need an app login.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setAddOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-navy text-white text-xs font-semibold hover:bg-brand-navy/90 transition-colors"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add the first worker
+                    </button>
+                  </>
+                ) : (
+                  // Has workers, just none in this filter / search.
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    {filter === 'inactive' ? 'No inactive workers.'
+                      : search.trim() ? `No workers match "${search.trim()}".`
+                      : 'No active workers in this filter.'}
+                  </p>
+                )}
+              </div>
+            )
             : (
-              <table className="w-full text-xs">
+              <div className="overflow-x-auto">
+              <table className="w-full text-xs min-w-[640px]">
                 <thead className="bg-slate-50 dark:bg-slate-900/40 text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   <tr>
                     <th className="text-left px-3 py-2">Worker</th>
@@ -248,6 +279,7 @@ export default function WorkersPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
       </section>
     </div>
@@ -496,14 +528,16 @@ function WorkerRowView({
 
   return (
     <tr>
-      <td className="px-3 py-2 text-slate-900 dark:text-slate-100 font-medium">
-        {worker.full_name}
+      <td className="px-3 py-2 text-slate-900 dark:text-slate-100 font-medium max-w-[240px]">
+        <div className="truncate" title={worker.full_name}>{worker.full_name}</div>
         {worker.email && (
-          <span className="block text-[10px] text-slate-500 dark:text-slate-400">{worker.email}</span>
+          <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate" title={worker.email}>{worker.email}</div>
         )}
       </td>
-      <td className="px-3 py-2 font-mono text-slate-600 dark:text-slate-300">
-        {worker.employee_id ?? <span className="text-slate-400 dark:text-slate-500 italic">—</span>}
+      <td className="px-3 py-2 font-mono text-slate-600 dark:text-slate-300 max-w-[160px]">
+        <div className="truncate" title={worker.employee_id ?? undefined}>
+          {worker.employee_id ?? <span className="text-slate-400 dark:text-slate-500 italic">—</span>}
+        </div>
       </td>
       <td className="px-3 py-2"><TrainingPill status={worker.trainingStatus} /></td>
       <td className="px-3 py-2">

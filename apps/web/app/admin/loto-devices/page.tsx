@@ -14,6 +14,7 @@ import {
   STALE_CHECKOUT_HOURS,
   type OpenCheckoutRow,
 } from '@/lib/queries/lotoDevices'
+import { TableSkeleton } from '@/components/Skeleton'
 import type { LotoDevice, LotoDeviceStatus, LotoWorker } from '@soteria/core/types'
 import { AddDeviceForm }   from './_components/AddDeviceForm'
 import { CheckoutDialog }  from './_components/CheckoutDialog'
@@ -41,6 +42,7 @@ export default function LotoDevicesPage() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [busyId, setBusyId]         = useState<string | null>(null)
   const [checkoutFor, setCheckoutFor] = useState<LotoDevice | null>(null)
+  const [returnFor,   setReturnFor]   = useState<LotoDevice | null>(null)
   const [now, setNow]               = useState(() => Date.now())
 
   // 1-min tick so the held-time pill in each open-checkout row updates
@@ -61,39 +63,40 @@ export default function LotoDevicesPage() {
       ])
       setDevices(d)
       setOpenCheckouts(o)
-      // Resolve profile names for the open-checkout owner column.
+
+      // Resolve owner names for the open-checkout column. Both the
+      // profiles fetch (for owner_id checkouts) and the inactive-
+      // workers fetch (for worker_id checkouts where the worker is
+      // no longer active) are independent — fire them in parallel
+      // instead of sequentially. Each is conditional, so the
+      // common-case "no follow-up needed" still costs zero
+      // round-trips.
       const ownerIds = Array.from(new Set(
         o.map(r => r.checkout.owner_id).filter((x): x is string => !!x),
       ))
-      if (ownerIds.length > 0) {
-        const { data: profs } = await supabase
-          .from('profiles')
-          .select('id, email, full_name')
-          .in('id', ownerIds)
-        const m = new Map<string, ProfileLite>()
-        for (const p of (profs ?? []) as ProfileLite[]) m.set(p.id, p)
-        setProfileById(m)
-      } else {
-        setProfileById(new Map())
-      }
-      // Build worker lookup from the active roster — covers the case
-      // where a checkout points at a worker who's now inactive too,
-      // since we additionally pull worker_ids referenced by open
-      // checkouts on top of the active list.
       const workerIds = Array.from(new Set(
         o.map(r => r.checkout.worker_id).filter((x): x is string => !!x),
       ))
-      const wm = new Map<string, LotoWorker>()
-      for (const w of allWorkers) wm.set(w.id, w)
-      const missing = workerIds.filter(id => !wm.has(id))
-      if (missing.length > 0) {
-        const { data: extra } = await supabase
-          .from('loto_workers')
-          .select('*')
-          .in('id', missing)
-        for (const w of (extra ?? []) as LotoWorker[]) wm.set(w.id, w)
-      }
-      setWorkerById(wm)
+      const initialWorkerById = new Map<string, LotoWorker>()
+      for (const w of allWorkers) initialWorkerById.set(w.id, w)
+      const missingWorkerIds = workerIds.filter(id => !initialWorkerById.has(id))
+
+      const [profsResult, missingWorkersResult] = await Promise.all([
+        ownerIds.length > 0
+          ? supabase.from('profiles').select('id, email, full_name').in('id', ownerIds)
+          : Promise.resolve({ data: [] as ProfileLite[] }),
+        missingWorkerIds.length > 0
+          ? supabase.from('loto_workers').select('*').in('id', missingWorkerIds)
+          : Promise.resolve({ data: [] as LotoWorker[] }),
+      ])
+
+      const profileMap = new Map<string, ProfileLite>()
+      for (const p of (profsResult.data ?? []) as ProfileLite[]) profileMap.set(p.id, p)
+      setProfileById(profileMap)
+
+      const workerMap = new Map(initialWorkerById)
+      for (const w of (missingWorkersResult.data ?? []) as LotoWorker[]) workerMap.set(w.id, w)
+      setWorkerById(workerMap)
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Could not load devices')
     }
@@ -125,7 +128,7 @@ export default function LotoDevicesPage() {
 
   async function returnDevice(device: LotoDevice) {
     if (!profile?.id) return
-    if (!confirm(`Return ${device.device_label}? This closes the open checkout.`)) return
+    setReturnFor(null)  // close the modal before the network call so a slow return doesn't keep the user waiting on the dialog
     setBusyId(device.id); setActionError(null)
     const open = openByDeviceId.get(device.id)
     if (!open) {
@@ -244,13 +247,16 @@ export default function LotoDevicesPage() {
           </span>
         </header>
         {devices === null ? (
-          <div className="py-6 flex items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-slate-400 dark:text-slate-500" />
-          </div>
+          <TableSkeleton rows={6} columns={4} />
         ) : devices.length === 0 ? (
-          <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">
-            No devices yet. Use the form above to add the first lock.
-          </p>
+          <div className="py-12 text-center space-y-3">
+            <KeyRound className="h-10 w-10 text-slate-300 dark:text-slate-600 mx-auto" />
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">No locks in inventory yet</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+              Use the form above to register your first physical lock + tag.
+              Each row is one trackable device with checkout history.
+            </p>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -318,7 +324,7 @@ export default function LotoDevicesPage() {
                           {d.status === 'checked_out' && (
                             <button
                               type="button"
-                              onClick={() => returnDevice(d)}
+                              onClick={() => setReturnFor(d)}
                               disabled={isBusy}
                               className="px-2 py-1 rounded-md text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
                             >
@@ -372,6 +378,40 @@ export default function LotoDevicesPage() {
           onClose={() => setCheckoutFor(null)}
           onCheckedOut={() => { setCheckoutFor(null); load() }}
         />
+      )}
+
+      {/* Return-confirmation modal — replaces window.confirm() so the
+          dialog matches app branding + style and isn't subject to
+          mobile browsers' inconsistent native confirm UX. */}
+      {returnFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/40">
+          <div role="dialog" aria-label="Confirm return" className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-5 space-y-4">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                Return <span className="font-mono">{returnFor.device_label}</span>?
+              </h2>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                This closes the open checkout. The device returns to AVAILABLE.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReturnFor(null)}
+                className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => returnDevice(returnFor)}
+                className="px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors"
+              >
+                Return
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -196,3 +196,31 @@
     background-size: 5px 5px;
   }
 }
+/* Browser-print rules. Most printable artifacts (placard PDF, permit
+   PDF, compliance bundle) are generated via pdf-lib so the print
+   dialog isn't typically the path. But a tenant admin might Cmd+P
+   the equipment list, the audit log, or the workers roster — these
+   rules drop chrome (drawer, header, action buttons) so the
+   printed output is just the data. Components that should be
+   suppressed wear className="no-print"; components that SHOULD
+   print but need different sizing wear className="print-only". */
+@media print {
+  nav,
+  header[role="banner"],
+  .no-print {
+    display: none !important;
+  }
+  /* Strip dark-mode tints + shadows so toner/ink doesn't smear. */
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  table {
+    page-break-inside: avoid;
+  }
+  /* Reveal print-only helpers (e.g. a footer "Printed YYYY-MM-DD"). */
+  .print-only {
+    display: block !important;
+  }
+}
+.print-only { display: none; }

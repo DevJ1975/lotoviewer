@@ -177,9 +177,40 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
       {/* List */}
       <div className="flex-1 overflow-y-auto">
         {sorted.length === 0 ? (
-          <div className="flex items-center justify-center h-48 text-slate-400 dark:text-slate-500 text-sm">
-            No equipment matches your filters.
-          </div>
+          equipment.length === 0 ? (
+            // First-time empty state — tenant has zero equipment.
+            // The CTA points at /import (CSV) or /admin/loto-devices,
+            // not at an inline form, because adding equipment lives
+            // on a separate page.
+            <div className="flex flex-col items-center justify-center text-center px-6 py-16 gap-3">
+              <div className="text-4xl">🔌</div>
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                No equipment yet
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs">
+                Start by importing your equipment list (CSV) or add one piece at a time
+                from the equipment detail page.
+              </p>
+              <div className="flex gap-2 pt-1">
+                <a
+                  href="/import"
+                  className="px-3 py-1.5 rounded-md bg-brand-navy text-white text-xs font-semibold hover:bg-brand-navy/90 transition-colors"
+                >
+                  Import CSV
+                </a>
+                <a
+                  href="/admin/loto-devices"
+                  className="px-3 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Manage devices
+                </a>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-48 text-slate-400 dark:text-slate-500 text-sm">
+              No equipment matches your filters.
+            </div>
+          )
         ) : (
           grouped.map(group => (
             <div key={group.dept}>

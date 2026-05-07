@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { ArrowLeft, Download, History, Loader2, Search } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { TableSkeleton } from '@/components/Skeleton'
+import { useUrlState } from '@/hooks/useUrlState'
 
 interface AuditRow {
   id:           number
@@ -31,9 +33,12 @@ export default function AuditLogPage() {
   const [rows, setRows]               = useState<AuditRow[]>([])
   const [loading, setLoading]         = useState(true)
   const [loadError, setLoadError]     = useState<string | null>(null)
-  const [tableFilter, setTableFilter] = useState<string>('')
-  const [opFilter, setOpFilter]       = useState<'' | 'INSERT' | 'UPDATE' | 'DELETE'>('')
-  const [search, setSearch]           = useState('')
+  // URL-backed so refresh + share-link + browser-back keep the
+  // filter context intact. The empty-string default keeps URLs
+  // clean when no filter is active.
+  const [tableFilter, setTableFilter] = useUrlState<string>('table', '')
+  const [opFilter, setOpFilter]       = useUrlState<'' | 'INSERT' | 'UPDATE' | 'DELETE'>('op', '')
+  const [search, setSearch]           = useUrlState<string>('q', '')
   const [expandedId, setExpandedId]   = useState<number | null>(null)
 
   const fetchRows = useCallback(async () => {
@@ -145,7 +150,7 @@ export default function AuditLogPage() {
       {/* Table */}
       <section className="bg-white dark:bg-slate-900 rounded-xl ring-1 ring-slate-200 dark:ring-slate-700 overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-slate-400 dark:text-slate-500" /></div>
+          <TableSkeleton rows={8} columns={5} />
         ) : loadError ? (
           <p className="px-5 py-6 text-sm text-rose-700 dark:text-rose-300">{loadError}</p>
         ) : filtered.length === 0 ? (
