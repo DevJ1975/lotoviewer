@@ -351,7 +351,8 @@ function hasAnyValue(obj: object | null | undefined): boolean {
 // ─── Inventory items (Phase D) ───────────────────────────────────────────
 
 export const INVENTORY_STATUSES = [
-  'requested', 'in_stock', 'in_use', 'empty', 'quarantined', 'disposed',
+  'requested', 'in_stock', 'in_use', 'empty',
+  'quarantined', 'disposed', 'rejected',
 ] as const
 export type InventoryStatus = typeof INVENTORY_STATUSES[number]
 
@@ -362,13 +363,39 @@ export const INVENTORY_STATUS_LABEL: Record<InventoryStatus, string> = {
   empty:       'Empty',
   quarantined: 'Quarantined',
   disposed:    'Disposed',
+  rejected:    'Rejected',
 }
 
 /** Statuses that count as "live" — visible by default in the catalog
- * and on the chemical detail page. Disposed/empty containers are
- * historical and only surface via filters. */
+ * and on the chemical detail page. Disposed/empty/rejected containers
+ * are historical and only surface via filters. */
 export const ACTIVE_INVENTORY_STATUSES: readonly InventoryStatus[] =
   ['requested', 'in_stock', 'in_use', 'quarantined'] as const
+
+/**
+ * Decide whether a status transition is legal. The approval workflow
+ * disallows skipping straight from 'requested' to states that imply
+ * physical use (`in_use`, `empty`, `quarantined`, `disposed`); the
+ * worker has to be approved to in_stock first. 'rejected' is a
+ * dead-end terminal state.
+ */
+export function isLegalStatusTransition(
+  from: InventoryStatus,
+  to:   InventoryStatus,
+): boolean {
+  if (from === to) return true
+
+  if (from === 'rejected') return false  // terminal
+  if (from === 'disposed') return false  // terminal
+
+  if (from === 'requested') {
+    // Approve → in_stock; reject → rejected; or cancel back to disposed.
+    return to === 'in_stock' || to === 'rejected' || to === 'disposed'
+  }
+  // Once approved, the live-state machine is permissive.
+  if (to === 'rejected') return false   // can't retroactively reject post-approval
+  return true
+}
 
 export const INVENTORY_UNITS = [
   'gal', 'L', 'mL', 'kg', 'g', 'lb', 'oz', 'ea', 'other',

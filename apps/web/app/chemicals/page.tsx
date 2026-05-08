@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Loader2, Search, Filter, Sparkles, ScanLine, Package, FileBarChart2 } from 'lucide-react'
+import { Plus, Loader2, Search, Filter, Sparkles, ScanLine, Package, FileBarChart2, ClipboardCheck } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { useDebounce } from '@/hooks/useDebounce'
@@ -35,6 +35,7 @@ export default function ChemicalsListPage() {
   const [pictogram, setPictogram] = useState<GhsPictogram | ''>('')
   const [pendingCount, setPendingCount] = useState<number>(0)
   const [expiringCount, setExpiringCount] = useState<number>(0)
+  const [approvalCount, setApprovalCount] = useState<number>(0)
   const debouncedSearch = useDebounce(search, 250)
 
   const load = useCallback(async () => {
@@ -50,10 +51,11 @@ export default function ChemicalsListPage() {
     if (pictogram) params.set('pictogram', pictogram)
 
     try {
-      const [res, queueRes, expRes] = await Promise.all([
+      const [res, queueRes, expRes, apprRes] = await Promise.all([
         fetch(`/api/chemicals/products?${params.toString()}`, { headers }),
         fetch('/api/chemicals/review-queue', { headers }),
         fetch('/api/chemicals/inventory/expiring', { headers }),
+        fetch('/api/chemicals/approvals', { headers }),
       ])
       const body = await res.json()
       if (!res.ok) {
@@ -69,6 +71,10 @@ export default function ChemicalsListPage() {
       if (expRes.ok) {
         const expBody = await expRes.json()
         setExpiringCount(expBody.total ?? 0)
+      }
+      if (apprRes.ok) {
+        const apprBody = await apprRes.json()
+        setApprovalCount(apprBody.total ?? 0)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -104,6 +110,15 @@ export default function ChemicalsListPage() {
             >
               <Sparkles className="w-4 h-4" />
               {pendingCount} pending review{pendingCount === 1 ? '' : 's'}
+            </Link>
+          )}
+          {approvalCount > 0 && (
+            <Link
+              href="/chemicals/approvals"
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded border border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+            >
+              <ClipboardCheck className="w-4 h-4" />
+              {approvalCount} await{approvalCount === 1 ? 's' : ''} approval
             </Link>
           )}
           <Link

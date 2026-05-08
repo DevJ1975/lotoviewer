@@ -484,6 +484,16 @@ export const FEATURES: FeatureDef[] = [
     enabled:     true,
     comingSoon:  false,
   },
+  {
+    id:          'chemicals-approvals',
+    name:        'Approval Queue',
+    description: 'Approve or reject pending chemical container requests',
+    href:        '/chemicals/approvals',
+    category:    'safety',
+    parent:      'chemicals',
+    enabled:     true,
+    comingSoon:  false,
+  },
 
   // Legacy near-miss surface — kept enabled during the Phase 1 → Phase 6
   // transition so existing tenants don't lose their bookmarks. The new

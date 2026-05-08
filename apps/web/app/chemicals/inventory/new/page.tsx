@@ -41,6 +41,7 @@ export default function NewContainerPage() {
   const [locationId,   setLocationId]   = useState('')
   const [conflicts,    setConflicts]    = useState<{ product_id: string; product_name: string; findings: { reason: string }[] }[]>([])
   const [acknowledgedConflict, setAcknowledgedConflict] = useState(false)
+  const [requestApproval, setRequestApproval] = useState(false)
   const [barcode,      setBarcode]      = useState('')
   const [quantity,     setQuantity]     = useState<string>('1')
   const [unit,         setUnit]         = useState<InventoryUnit>('ea')
@@ -143,6 +144,7 @@ export default function NewContainerPage() {
           lot_number:     lotNumber.trim() || null,
           purchase_order: purchaseOrder.trim() || null,
           notes:          notes.trim() || null,
+          status:         requestApproval ? 'requested' : 'in_stock',
         }),
       })
       const body = await res.json()
@@ -320,6 +322,22 @@ export default function NewContainerPage() {
             className="mt-1 w-full px-3 py-2 text-sm rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
           />
         </Field>
+
+        <label className="flex items-start gap-2 text-sm rounded border border-slate-200 dark:border-slate-800 px-3 py-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={requestApproval}
+            onChange={e => setRequestApproval(e.target.checked)}
+            className="mt-0.5 rounded"
+          />
+          <span>
+            <span className="font-medium text-slate-900 dark:text-slate-100">File as request</span>
+            <span className="block text-xs text-slate-500 dark:text-slate-400">
+              Container is created with status &quot;requested&quot; and waits in the approval queue
+              before it counts as in-stock. Use this when your tenant requires safety review on every receipt.
+            </span>
+          </span>
+        </label>
 
         <div className="flex items-center justify-end gap-2 pt-2">
           <Link

@@ -15,11 +15,14 @@ import {
   isBlockedByRestrictions,
   findIncompatibilities,
   checkLocationCompatibility,
+  isLegalStatusTransition,
+  INVENTORY_STATUSES,
   GHS_PICTOGRAMS,
   type ParsedSdsPayload,
   type TierTwoRow,
   type RestrictionRule,
   type OverrideRule,
+  type InventoryStatus,
 } from '@soteria/core/chemicals'
 
 function basePayload(over: Partial<ParsedSdsPayload> = {}): ParsedSdsPayload {
@@ -588,6 +591,52 @@ describe('checkLocationCompatibility', () => {
 
   it('returns empty when nothing else is in the location', () => {
     expect(checkLocationCompatibility(flammable, [])).toEqual([])
+  })
+})
+
+describe('isLegalStatusTransition', () => {
+  it('approves the requested → in_stock transition', () => {
+    expect(isLegalStatusTransition('requested', 'in_stock')).toBe(true)
+  })
+
+  it('rejects the requested → in_use shortcut (must approve first)', () => {
+    expect(isLegalStatusTransition('requested', 'in_use')).toBe(false)
+    expect(isLegalStatusTransition('requested', 'empty')).toBe(false)
+    expect(isLegalStatusTransition('requested', 'quarantined')).toBe(false)
+  })
+
+  it('allows reject from requested', () => {
+    expect(isLegalStatusTransition('requested', 'rejected')).toBe(true)
+  })
+
+  it('rejects retroactive reject after approval', () => {
+    expect(isLegalStatusTransition('in_stock',    'rejected')).toBe(false)
+    expect(isLegalStatusTransition('in_use',      'rejected')).toBe(false)
+    expect(isLegalStatusTransition('quarantined', 'rejected')).toBe(false)
+  })
+
+  it('treats rejected and disposed as terminal states', () => {
+    for (const t of INVENTORY_STATUSES) {
+      if (t === 'rejected') continue
+      expect(isLegalStatusTransition('rejected', t as InventoryStatus)).toBe(false)
+    }
+    for (const t of INVENTORY_STATUSES) {
+      if (t === 'disposed') continue
+      expect(isLegalStatusTransition('disposed', t as InventoryStatus)).toBe(false)
+    }
+  })
+
+  it('is reflexive — same status to same status is always legal', () => {
+    for (const s of INVENTORY_STATUSES) {
+      expect(isLegalStatusTransition(s, s)).toBe(true)
+    }
+  })
+
+  it('permits live-state transitions once approved', () => {
+    expect(isLegalStatusTransition('in_stock',    'in_use')).toBe(true)
+    expect(isLegalStatusTransition('in_use',      'empty')).toBe(true)
+    expect(isLegalStatusTransition('in_use',      'disposed')).toBe(true)
+    expect(isLegalStatusTransition('quarantined', 'in_stock')).toBe(true)
   })
 })
 

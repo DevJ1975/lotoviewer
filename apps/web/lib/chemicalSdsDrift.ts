@@ -29,6 +29,7 @@ import { chemicalSdsStoragePath } from '@soteria/core/chemicals'
 import { logAiInvocation } from '@/lib/ai/rateLimit'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 import { getTenantApiKey } from '@/lib/ai/getTenantApiKey'
+import { dispatchPushToProfiles } from '@/lib/notifications/pushFanout'
 
 const REVISION_MODEL = MODEL_BY_SURFACE['parse-sds']
 
@@ -399,6 +400,48 @@ export async function runDriftCheck(args: RunArgs): Promise<DriftCheckResult> {
     new_sds_id:         inserted.id,
     notes:              extraction.notes ?? undefined,
   })
+
+  // Push fanout to tenant safety leads (owner / admin) so the new
+  // revision doesn't sit unnoticed in the review queue. Best-effort —
+  // VAPID-misconfigured tenants are expected to still have the row.
+  try {
+    const { data: admins } = await admin
+      .from('tenant_memberships')
+      .select('user_id')
+      .eq('tenant_id', product.tenant_id)
+      .in('role', ['owner', 'admin'])
+    const profileIds = Array.from(new Set(
+      (admins ?? []).map(a => a.user_id).filter((u): u is string => !!u),
+    ))
+
+    const { data: prod } = await admin
+      .from('chemical_products')
+      .select('name, manufacturer')
+      .eq('id', product.id)
+      .eq('tenant_id', product.tenant_id)
+      .maybeSingle<{ name: string; manufacturer: string | null }>()
+    const productLabel = prod?.name
+      ? prod.manufacturer ? `${prod.name} (${prod.manufacturer})` : prod.name
+      : 'a chemical'
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, '')
+      ?? 'https://soteriafield.app'
+
+    if (profileIds.length > 0) {
+      await dispatchPushToProfiles({
+        payload: {
+          title: 'New SDS revision detected',
+          body:  `${productLabel} has a newer SDS dated ${latest}. Review the parsed fields before they apply.`,
+          url:   `${appUrl}/chemicals/review`,
+          tag:   `sds-drift:${product.id}`,
+        },
+        profileIds,
+        source: 'chemicals/drift-newer',
+      })
+    }
+  } catch (pushErr) {
+    Sentry.captureException(pushErr, { tags: { source: 'drift-push' } })
+  }
 
   return {
     outcome:              'newer',

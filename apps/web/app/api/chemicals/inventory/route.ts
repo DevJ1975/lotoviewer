@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { dispatchPushToProfiles } from '@/lib/notifications/pushFanout'
 import {
   validateInventoryInput,
   ACTIVE_INVENTORY_STATUSES,
@@ -163,6 +165,37 @@ export async function POST(req: Request) {
       }
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+
+    // Push fanout to tenant admins when this row needs their review.
+    if (data.status === 'requested') {
+      try {
+        const { data: admins } = await admin
+          .from('tenant_memberships')
+          .select('user_id')
+          .eq('tenant_id', gate.tenantId)
+          .in('role', ['owner', 'admin'])
+        const profileIds = Array.from(new Set(
+          (admins ?? []).map(a => a.user_id).filter((u): u is string => !!u),
+        ))
+        if (profileIds.length > 0) {
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, '')
+            ?? new URL(req.url).origin
+          await dispatchPushToProfiles({
+            payload: {
+              title: 'Chemical container request filed',
+              body:  `${product?.id ? '' : ''}A new container request is awaiting review.`,
+              url:   `${appUrl}/chemicals/approvals`,
+              tag:   `chemical-approval-queue`,
+            },
+            profileIds,
+            source: 'chemicals/request-filed',
+          })
+        }
+      } catch (pushErr) {
+        Sentry.captureException(pushErr, { tags: { route: 'chemicals/inventory', stage: 'request-push' } })
+      }
+    }
+
     return NextResponse.json({ item: data }, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })

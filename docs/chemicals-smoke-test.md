@@ -11,8 +11,9 @@ locations, barcode scan, and the expiring-soon dashboard; Phase E
 adds the SDS drift monitor (nightly cron + manual trigger + drift
 audit log); Phase F adds compliance rollups — Tier II export,
 OSHA 300 chemical-exposure linkage, and fire-code MAQ scaffolding;
-Phase G adds guardrails — restricted/banned chemical list and
-storage-compatibility checker.
+Phase G adds guardrails — restricted/banned chemical list,
+storage-compatibility checker, container-approval workflow, and
+push notifications on new SDS revisions + filed approval requests.
 
 See `docs/chemical-management-system-plan.md` for the full roadmap.
 
@@ -540,10 +541,67 @@ audit log table exists.
 - [ ] Tenant A's product against tenant B's location → 404 product
       not found
 
-## Known follow-ups (not in Phase G slice 1)
+## 33 · Approval workflow (Phase G slice 2)
 
-- Approval workflow on inventory (`requested → approved → received`
-  state machine, separate from `in_stock`) → Phase G+
+- [ ] Migration 088 applied; `chemical_inventory_items` has the new
+      `approved_at`, `approved_by`, `rejection_reason`, `requested_by`,
+      `requested_at` columns and the status check now allows `rejected`
+- [ ] Open `/chemicals/inventory/new`, tick "File as request",
+      submit → container is created with status `requested`, the trigger
+      stamps `requested_at` + `requested_by = auth.uid()`
+- [ ] Tenant admin gets a Web Push notification "Chemical container
+      request filed" → tap → lands on `/chemicals/approvals`
+- [ ] Inventory list (default filter) shows the requested container
+      because `requested` is in `ACTIVE_INVENTORY_STATUSES`
+- [ ] As a viewer / member (NOT owner / admin), POSTing
+      `/api/chemicals/inventory/{id}/approve` → 403
+- [ ] As an admin, POSTing the same → status flips to `in_stock`,
+      `approved_at` + `approved_by` get stamped by the trigger,
+      requester receives a Web Push "Approved: …"
+- [ ] Re-attempting approve on the now-approved container → 409
+      "Container is in status \"in_stock\", not \"requested\""
+      (optimistic-concurrency guard via second `eq('status', 'requested')`)
+- [ ] As an admin, DELETE the approve endpoint with `{reason: ""}`
+      → 400 "reason is required"
+- [ ] DELETE with valid reason → status flips to `rejected`,
+      `rejection_reason` stored, requester receives "Rejected: …" push
+- [ ] On a rejected row, attempts to PATCH back to in_stock or
+      in_use → blocked client-side via `isLegalStatusTransition`
+      (rejected and disposed are terminal in core helpers)
+
+## 34 · Drift push notifications (Phase G slice 2)
+
+- [ ] With `VAPID_*` env configured and at least one
+      tenant-admin Web Push subscription registered, run the manual
+      drift "Check for revision" on a chemical whose source URL has
+      a newer revision
+- [ ] When the outcome is `newer`, the pipeline:
+      (a) inserts the new SDS row,
+      (b) writes the `chemical_sds_revision_checks` audit row,
+      (c) sends a push to all tenant owner/admin profiles with title
+      "New SDS revision detected" and a deep-link to `/chemicals/review`
+- [ ] When the outcome is `unchanged` / `older` / `unknown` /
+      `fetch_failed`, no push is fired
+- [ ] If VAPID env is missing, the drift result is still `newer`
+      and the row is still queued for review; the push is simply
+      logged as `{sent:0, reason:'VAPID not configured'}` in
+      Sentry, never blocking the business outcome
+- [ ] Multi-tenant: tenant B's admins do NOT receive a push for a
+      drift event in tenant A (membership lookup is tenant-scoped)
+
+## 35 · Catalog header + drawer wiring
+
+- [ ] `/chemicals/approvals` is reachable from the chemicals drawer
+      entry "Approval Queue"
+- [ ] When the queue is non-empty, the catalog header renders an
+      amber "N awaits approval" pill linking to the queue
+- [ ] Pill disappears once the queue is empty
+- [ ] Add-container form: "File as request" checkbox toggles
+      whether the new row writes status='in_stock' (default) or
+      status='requested' (file-as-request)
+
+## Known follow-ups (not in Phase G slice 2)
+
 - Per-storage-class MAQ admin UI + dashboard tile → Phase F+
 - HazCom training topic → 017_training_records.training_role enum +
   per-chemical training cross-link → Phase G+
@@ -556,9 +614,8 @@ audit log table exists.
 - Bulk parse on import (queue many SDSs at once) → Phase B follow-up
 - Per-tenant pictogram override (upload official UN artwork) → Phase C+
 - Live label-printer integration (WebUSB to Brother/Zebra) → post-D
-- Email/push notification when a new revision lands in the review
-  queue → Phase E follow-up (the drift cron writes the row; piping
-  it through 016_push_subscriptions + 057_email_log is straight-line work)
+- Email digest summarizing the drift + approval queues nightly
+  (push covers real-time; email is the "I missed it" backstop) → Phase G+
 - Inventory containers + locations + scan → Phase D
 - Label printing + GHS pictogram SVGs → Phase C
 - HazCom training topic, Tier II export, OSHA 300 linkage → Phase F
