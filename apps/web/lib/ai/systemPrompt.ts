@@ -1,4 +1,5 @@
 import { FEATURES } from '@soteria/core/features'
+import type { RetrievedChunk } from '@/lib/ai/rag'
 
 // Builds the system prompt for the home-page assistant.
 //
@@ -28,6 +29,14 @@ interface BuildArgs {
   /** Path the assistant was opened from. Optional, used as a context
    *  cue: "the user is on /equipment/MIX-04 — tailor your answer". */
   pathname?: string | null
+  /** Optional retrieved-context block from RAG. When present the model
+   *  is told to ground its reply in these chunks and cite them. */
+  retrievedContext?: string
+  /** Raw chunks (not used in the prompt directly — the formatted
+   *  contextBlock above already contains them — but exposed here so
+   *  callers can pass them through to the response payload for the
+   *  UI to render citations. */
+  retrievedChunks?: RetrievedChunk[]
 }
 
 interface SystemPromptResult {
@@ -46,9 +55,10 @@ YOUR JOB
 - Be concise. Field workers have one hand on a wrench. Use markdown lists, short paragraphs, and link to in-app pages with plain markdown like [Print queue](/print).
 
 CITATION RULES
-- When you cite OSHA, DOT, EPA, or state regulations, use the section number in brackets, e.g. [29 CFR 1910.147(c)(4)] or [49 CFR 172.101].
-- When you cite a company policy uploaded for this tenant, name the document, e.g. [Acme LOTO Procedure §3.2].
-- If you do not have a citation for a regulatory claim, say so plainly: "I don't have a citation for that — verify in 29 CFR before acting."
+- When the RETRIEVED CONTEXT below contains <doc> blocks, ground your answer in those blocks. Each block carries a "cite" attribute — copy that citation tag VERBATIM into your reply at the end of any sentence drawn from that doc. Example: "The energy-isolation procedure must include verification [29 CFR 1910.147 § 1910.147(c)(4)]."
+- If multiple docs support the same point, list them all in order: [Doc A] [Doc B].
+- If your answer is NOT grounded in a retrieved doc, say so plainly: "I don't have a retrieved citation for that — verify in 29 CFR (or the relevant company policy) before acting."
+- Do NOT invent citations. If the retrieved context doesn't support a claim, omit the citation rather than making one up.
 
 SAFETY BOUNDARIES (HARD LIMITS)
 - You are a drafting and reference tool. You DO NOT authorize compliance decisions. Whenever a user asks "is this compliant?" or "is it safe to do X?", recommend they have a qualified safety professional verify before acting.
@@ -106,7 +116,9 @@ export function buildAssistantSystemPrompt(args: BuildArgs): SystemPromptResult 
     pathname ? `Current page: ${pathname}` : `Current page: (unknown)`,
     ``,
     `RETRIEVED CONTEXT`,
-    `(none — PR2 will inject retrieved regulation + policy chunks here)`,
+    args.retrievedContext && args.retrievedContext.length > 0
+      ? args.retrievedContext
+      : `(no matching documents in the knowledge base for this query)`,
   ].join('\n')
 
   const staticBlock = [

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Bot, Send, Loader2, Wrench, Plus } from 'lucide-react'
+import { Bot, Send, Loader2, Wrench, Plus, BookOpen } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase, ACTIVE_TENANT_KEY } from '@/lib/supabase'
 import { Markdown } from '@/components/ui/markdown'
@@ -17,11 +17,31 @@ interface ToolCall {
   result: string
 }
 
+interface Citation {
+  document_id:  string
+  chunk_index:  number
+  title:        string
+  source_type:  string
+  jurisdiction: string | null
+  source_url:   string | null
+  similarity:   number
+}
+
 interface Turn {
   role:    'user' | 'assistant'
   content: string
   messageId?: string | null
   tools?:     ToolCall[]
+  citations?: Citation[]
+}
+
+function dedupeCitations(citations: Citation[]): Citation[] {
+  const seen = new Map<string, Citation>()
+  for (const c of citations) {
+    const e = seen.get(c.document_id)
+    if (!e || c.similarity > e.similarity) seen.set(c.document_id, c)
+  }
+  return [...seen.values()].sort((a, b) => b.similarity - a.similarity)
 }
 
 function readActiveTenant(): string | null {
@@ -76,6 +96,7 @@ export default function AssistantPage() {
         content:   String(j.reply ?? ''),
         messageId: (j.messageId as string | null) ?? null,
         tools:     Array.isArray(j.tools) ? (j.tools as ToolCall[]) : undefined,
+        citations: Array.isArray(j.citations) ? (j.citations as Citation[]) : undefined,
       }])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The assistant is unavailable.')
@@ -155,6 +176,27 @@ export default function AssistantPage() {
               {t.role === 'assistant'
                 ? <Markdown text={t.content} />
                 : <p className="whitespace-pre-wrap">{t.content}</p>}
+              {t.role === 'assistant' && t.citations && t.citations.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                  <p className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1">
+                    <BookOpen className="h-3 w-3" /> Sources
+                  </p>
+                  <ul className="space-y-0.5">
+                    {dedupeCitations(t.citations).map((c, i) => (
+                      <li key={i} className="text-xs text-slate-600 dark:text-slate-300">
+                        {c.source_url ? (
+                          <a href={c.source_url} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
+                            {c.title}
+                          </a>
+                        ) : (
+                          <span>{c.title}</span>
+                        )}
+                        {c.jurisdiction && <span className="text-slate-400"> · {c.jurisdiction}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
         ))}

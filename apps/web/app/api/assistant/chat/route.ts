@@ -8,6 +8,7 @@ import { checkAiRateLimit, logAiInvocation } from '@/lib/ai/rateLimit'
 import { getAnthropic, aiErrorToResponse } from '@/lib/ai/client'
 import { buildAssistantSystemPrompt } from '@/lib/ai/systemPrompt'
 import { getToolDefinitions, runTool, type UserRole } from '@/lib/ai/tools'
+import { retrieveContext, type RetrievedChunk } from '@/lib/ai/rag'
 
 // POST /api/assistant/chat
 //
@@ -128,11 +129,28 @@ export async function POST(req: Request) {
     )
     .map(r => ({ role: r.role, content: r.content, metadata: r.metadata ?? null }))
 
-  // System prompt with cache-control on the static block.
+  // RAG retrieval. Embeds the user's query via Voyage and matches it
+  // against the knowledge_chunks corpus (regulations + this tenant's
+  // policies). Failures degrade silently — the assistant still answers,
+  // just without grounded citations.
+  let retrieved: { contextBlock: string; chunks: RetrievedChunk[]; voyageTokens: number } = {
+    contextBlock: '', chunks: [], voyageTokens: 0,
+  }
+  try {
+    retrieved = await retrieveContext({ query: userText, tenantId: gate.tenantId, k: 8 })
+  } catch (err) {
+    Sentry.captureException(err, { tags: { route: '/api/assistant/chat', stage: 'rag' } })
+  }
+
+  // System prompt with cache-control on the static block. The dynamic
+  // block now includes the retrieved chunks so citation rules in the
+  // static block have something concrete to anchor to.
   const { staticBlock, dynamicBlock } = buildAssistantSystemPrompt({
-    tenant:   { id: gate.tenantId, name: tenantName, modules: tenantModules },
-    user:     { role: gate.role as UserRole },
-    pathname: body.pathname ?? null,
+    tenant:           { id: gate.tenantId, name: tenantName, modules: tenantModules },
+    user:             { role: gate.role as UserRole },
+    pathname:         body.pathname ?? null,
+    retrievedContext: retrieved.contextBlock,
+    retrievedChunks:  retrieved.chunks,
   })
 
   // Get a configured client. getAnthropic throws on missing/malformed keys;
@@ -242,14 +260,31 @@ export async function POST(req: Request) {
   const reply = assistantBlocks.map(b => b.text).join('\n').trim()
                 || 'I do not have an answer for that. Try rephrasing your question, or open a support ticket.'
 
-  // Persist the assistant turn (with tool history in metadata for the UI).
+  // Citation summary for the UI. We only ship a small projection (id,
+  // title, source_type, jurisdiction, source_url, similarity) so the
+  // payload stays lean — the full chunk text already lived in the
+  // model's context, no need to send it back to the browser.
+  const citations = retrieved.chunks.map(c => ({
+    document_id:  c.document_id,
+    chunk_index:  c.chunk_index,
+    title:        c.title,
+    source_type:  c.source_type,
+    jurisdiction: c.jurisdiction,
+    source_url:   c.source_url,
+    similarity:   c.similarity,
+  }))
+
+  // Persist the assistant turn (with tool history + citations in metadata).
   const { data: assistantRow } = await admin
     .from('assistant_messages')
     .insert({
       conversation_id:    conversationId,
       role:               'assistant',
       content:            reply,
-      metadata:           toolHistory.length > 0 ? { tools: toolHistory } : null,
+      metadata: (toolHistory.length > 0 || citations.length > 0)
+        ? { tools: toolHistory.length > 0 ? toolHistory : undefined,
+            citations: citations.length > 0 ? citations : undefined }
+        : null,
       input_tokens:       totalInputTokens,
       output_tokens:      totalOutputTokens,
       cache_read_tokens:  totalCacheRead,
@@ -279,11 +314,13 @@ export async function POST(req: Request) {
     messageId:    assistantRow?.id ?? null,
     reply,
     tools:        toolHistory,
+    citations,
     stopReason:   lastResponse?.stop_reason ?? null,
     usage: {
       inputTokens:     totalInputTokens,
       outputTokens:    totalOutputTokens,
       cacheReadTokens: totalCacheRead,
+      voyageTokens:    retrieved.voyageTokens,
     },
   })
 }
