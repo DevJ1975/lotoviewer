@@ -1,13 +1,14 @@
-# Chemical Management module — smoke checklist (Phases A + B + C + D)
+# Chemical Management module — smoke checklist (Phases A–E)
 
 Use this after applying migrations `082_chemicals_module.sql`,
-`083_chemical_label_prints.sql`, and `084_chemical_inventory.sql`
-and deploying the branch. Phase A ships the foundation (catalog,
-detail, manual SDS upload, search/filter); Phase B layers AI SDS
-parsing + the human review queue; Phase C adds GHS-compliant label
-printing; Phase D adds inventory containers, locations, barcode
-scan, and the expiring-soon dashboard. Drift monitoring (Phase E)
-is still out of scope.
+`083_chemical_label_prints.sql`, `084_chemical_inventory.sql`, and
+`085_chemical_sds_drift.sql` and deploying the branch. Phase A ships
+the foundation (catalog, detail, manual SDS upload, search/filter);
+Phase B layers AI SDS parsing + the human review queue; Phase C adds
+GHS-compliant label printing; Phase D adds inventory containers,
+locations, barcode scan, and the expiring-soon dashboard; Phase E
+adds the SDS drift monitor (nightly cron + manual trigger + drift
+audit log). Compliance rollups (Phase F) are still out of scope.
 
 See `docs/chemical-management-system-plan.md` for the full roadmap.
 
@@ -317,13 +318,107 @@ audit log table exists.
 - [ ] Storage path on the chemical-sds bucket is unchanged — Phase
       D does NOT add new storage objects, only DB rows
 
-## Known follow-ups (not in Phase D)
+## 21 · SDS drift fetcher (Phase E) — host allowlist + SSRF guard
+
+- [ ] Migration 085 applied; `chemical_sds_revision_checks` table
+      visible with the `outcome` enum + RLS
+- [ ] On a chemical WITHOUT `sds_source_url`, the "Check for
+      revision" button is hidden; `POST .../check-revision` returns
+      409 with "No manufacturer SDS source URL set"
+- [ ] On a chemical WITH `sds_source_url = "http://example.com/x.pdf"`
+      (http instead of https), drift outcome is `fetch_failed`,
+      audit row `notes` reads "invalid_scheme: http:"
+- [ ] On a chemical with `sds_source_url = "https://evil.com/x.pdf"`
+      (host not on allowlist), outcome is `fetch_failed`, notes
+      contains "is not in CHEMICAL_SDS_HOST_ALLOWLIST"
+- [ ] Setting `CHEMICAL_SDS_HOST_ALLOWLIST=evil.com` env var lets
+      that tenant's URL through (after redeploy)
+- [ ] On a URL that resolves to `127.0.0.1`, `169.254.169.254`,
+      `10.x.x.x`, or `192.168.x.x`, outcome is `fetch_failed`,
+      notes contain "private/loopback address"
+- [ ] On a URL that returns text/html instead of PDF, outcome is
+      `fetch_failed` with `wrong_content_type` in notes
+- [ ] On a URL serving a > 25 MB PDF, outcome is `fetch_failed`
+      with `too_large` in notes (cap respected even when the server
+      omits Content-Length)
+- [ ] On a URL that times out > 30 s, outcome is `fetch_failed`
+      with `timeout` in notes
+
+## 22 · Manual drift trigger
+
+- [ ] On a chemical with `sds_source_url` and an active SDS, click
+      "Check for revision" on the SDS section
+- [ ] If the bytes are byte-identical to the active SDS, the inline
+      message reads "No change since last check." and an `unchanged`
+      audit row is written; AI is NOT invoked (no ai_invocations row)
+- [ ] If bytes differ but Anthropic isn't configured for the tenant,
+      outcome `unknown`, notes "AI not configured"
+- [ ] If bytes differ and AI returns a NEWER revision date,
+      a new `chemical_sds_documents` row is inserted with
+      `source = 'ai_fetch'`, `parse_review_status = 'pending'`,
+      `revision_date` = the AI-extracted date, byte hash matches
+      `latest_file_hash`. Inline message: "Newer revision detected.
+      Review it on the SDS review queue."
+- [ ] The pending row appears in `/chemicals/review`; reviewer can
+      Apply selected fields onto the product (Phase B flow)
+- [ ] If the AI returns an OLDER revision date, outcome `older`;
+      no new SDS row is created; inline message warns to investigate
+- [ ] Hammering `check-revision` past the parse-sds rate cap (30/hr)
+      → 429 with retry-after; manual triggers do not bypass the cap
+- [ ] An `ai_invocations` row is written with surface `parse-sds`,
+      status `success`, `user_id = auth.uid()`, `context = product_id`
+
+## 23 · Nightly cron
+
+- [ ] `vercel.json` has `/api/cron/check-sds-revisions` at `0 6 * * *`
+- [ ] Hitting `GET /api/cron/check-sds-revisions` without
+      `Authorization: Bearer ${CRON_SECRET}` → 401
+- [ ] With the correct secret, cron returns
+      `{ candidates_considered, counts: { unchanged, newer, … } }`
+- [ ] Per-run cap respected: at most 50 products checked per run
+      regardless of how many candidates exist
+- [ ] Products checked within the last 30 days are skipped (interval
+      window prevents re-running until the next cycle)
+- [ ] `cron_runs` table has a row with `cron_path = /api/cron/check-sds-revisions`,
+      `status = 'success'`, summary line including the counts
+- [ ] Each product touched produces ONE `chemical_sds_revision_checks`
+      row with `trigger = 'scheduled'`, `triggered_by = NULL`
+- [ ] Scheduled runs do NOT log to `ai_invocations` (the table
+      requires a non-null user_id; the per-product audit lives in
+      the drift table)
+
+## 24 · Drift admin page
+
+- [ ] `/chemicals/drift` is reachable from the chemicals drawer
+      entry "SDS Drift Log"
+- [ ] Filter chips (All / Newer / Older / Fetch failed / Unchanged
+      / Unknown) filter the list correctly
+- [ ] Each row shows the outcome chip with the matching icon, the
+      product name (link to detail), baseline vs latest revision
+      dates, HTTP status, and the trigger source
+- [ ] `newer` rows show a "→ review queue" link that lands on
+      `/chemicals/review`
+- [ ] `fetch_failed` and `older` rows show the notes inline
+- [ ] Empty state renders cleanly when no checks exist yet
+
+## 25 · Multi-tenant + permission isolation (Phase E)
+
+- [ ] As tenant B, POST tenant A's `/check-revision` URL → 404
+- [ ] As tenant B, GET `/api/chemicals/drift` returns only tenant
+      B's checks (no tenant A rows leak)
+- [ ] Cron is single-handler; tenant scoping comes from the per-row
+      tenant_id flowing through chemical_sds_revision_checks RLS
+
+## Known follow-ups (not in Phase E)
 
 - Bulk parse on import (queue many SDSs at once) → Phase B follow-up
 - Per-tenant pictogram override (upload official UN artwork) → Phase C+
 - Live label-printer integration (WebUSB to Brother/Zebra) → post-D
 - Compatibility checker (block storing acid + base in same cabinet) → Phase G
-- Drift monitoring (nightly cron) → Phase E
+- Email/push notification when a new revision lands in the review
+  queue → Phase E follow-up (the drift cron writes the row; piping
+  it through 016_push_subscriptions + 057_email_log is straight-line work)
+- EPCRA Tier II export, OSHA 300 chemical exposure linkage → Phase F
 - Inventory containers + locations + scan → Phase D
 - Label printing + GHS pictogram SVGs → Phase C
 - HazCom training topic, Tier II export, OSHA 300 linkage → Phase F

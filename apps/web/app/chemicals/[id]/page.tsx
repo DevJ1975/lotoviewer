@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Download, ExternalLink, FileText, Loader2, Sparkles, Upload } from 'lucide-react'
+import { ArrowLeft, Download, ExternalLink, FileText, Loader2, RefreshCw, Sparkles, Upload } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { PictogramBadges, SignalWordBadge } from '../_components/PictogramBadges'
@@ -64,6 +64,8 @@ export default function ChemicalDetailPage() {
   const [loading,    setLoading]   = useState(true)
   const [uploading,  setUploading] = useState(false)
   const [parsingId,  setParsingId]  = useState<string | null>(null)
+  const [checkingDrift, setCheckingDrift] = useState(false)
+  const [driftMessage, setDriftMessage] = useState<string | null>(null)
   const [revisionDate, setRevisionDate] = useState('')
 
   const buildHeaders = useCallback(async () => {
@@ -105,6 +107,40 @@ export default function ChemicalDetailPage() {
       return
     }
     window.open(body.url, '_blank', 'noopener,noreferrer')
+  }
+
+  async function checkRevision() {
+    if (!id) return
+    setCheckingDrift(true)
+    setError(null)
+    setDriftMessage(null)
+    try {
+      const headers = await buildHeaders()
+      const res  = await fetch(`/api/chemicals/products/${id}/check-revision`, {
+        method:  'POST',
+        headers,
+      })
+      const body = await res.json()
+      if (!res.ok) {
+        setError(body.error ?? `HTTP ${res.status}`)
+        return
+      }
+      const out = body.result?.outcome as string | undefined
+      if (out === 'newer') {
+        setDriftMessage('Newer revision detected. Review it on the SDS review queue.')
+      } else if (out === 'unchanged') {
+        setDriftMessage('No change since last check.')
+      } else if (out === 'older') {
+        setDriftMessage('Manufacturer URL serves an older revision than the one on file. Investigate.')
+      } else if (out === 'fetch_failed') {
+        setDriftMessage(`Could not fetch the source URL${body.result?.notes ? `: ${body.result.notes}` : ''}.`)
+      } else {
+        setDriftMessage('Could not determine revision change.')
+      }
+      await load()
+    } finally {
+      setCheckingDrift(false)
+    }
   }
 
   async function parseSds(sdsId: string) {
@@ -279,21 +315,41 @@ export default function ChemicalDetailPage() {
             An SDS parse is awaiting review — click to approve or reject the AI-proposed fields.
           </Link>
         )}
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-wrap items-center justify-between mb-3 gap-2">
           <h2 className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <FileText className="w-4 h-4" /> Safety Data Sheets
           </h2>
-          {product.sds_source_url && (
-            <a
-              href={product.sds_source_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"
-            >
-              Manufacturer source <ExternalLink className="w-3 h-3" />
-            </a>
-          )}
+          <div className="flex items-center gap-3">
+            {product.sds_source_url && (
+              <>
+                <a
+                  href={product.sds_source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"
+                >
+                  Manufacturer source <ExternalLink className="w-3 h-3" />
+                </a>
+                <button
+                  onClick={() => void checkRevision()}
+                  disabled={checkingDrift}
+                  className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline disabled:opacity-60"
+                  title="Fetch the manufacturer URL and compare with the active SDS"
+                >
+                  {checkingDrift
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <RefreshCw className="w-3 h-3" />}
+                  {checkingDrift ? 'Checking…' : 'Check for revision'}
+                </button>
+              </>
+            )}
+          </div>
         </div>
+        {driftMessage && (
+          <div className="mb-3 rounded border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/20 px-3 py-2 text-sm text-indigo-800 dark:text-indigo-300">
+            {driftMessage}
+          </div>
+        )}
 
         <label className="block mb-3">
           <div className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">

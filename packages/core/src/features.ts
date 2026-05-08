@@ -454,6 +454,16 @@ export const FEATURES: FeatureDef[] = [
     enabled:     true,
     comingSoon:  false,
   },
+  {
+    id:          'chemicals-drift',
+    name:        'SDS Drift Log',
+    description: 'Nightly + manual checks of manufacturer SDS revisions',
+    href:        '/chemicals/drift',
+    category:    'safety',
+    parent:      'chemicals',
+    enabled:     true,
+    comingSoon:  false,
+  },
 
   // Legacy near-miss surface — kept enabled during the Phase 1 → Phase 6
   // transition so existing tenants don't lose their bookmarks. The new

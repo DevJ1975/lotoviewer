@@ -48,6 +48,10 @@
     {
       "path": "/api/cron/generate-toolbox-talks",
       "schedule": "0 5 * * 0"
+    },
+    {
+      "path": "/api/cron/check-sds-revisions",
+      "schedule": "0 6 * * *"
     }
   ]
 }

@@ -126,6 +126,7 @@ describe('getFeaturesByCategory', () => {
       'chemicals-inventory',
       'chemicals-scan',
       'chemicals-locations',
+      'chemicals-drift',
       'near-miss',
       'hot-work',
       'hot-work-status',
