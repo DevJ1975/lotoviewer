@@ -533,6 +533,17 @@ export const FEATURES: FeatureDef[] = [
     color:       'indigo',
   },
   {
+    id:          'manuals',
+    name:        'User manuals',
+    description: 'Module-by-module wiki + master changelog',
+    href:        '/manuals',
+    category:    'admin',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'BookOpen',
+    color:       'slate',
+  },
+  {
     id:          'support',
     name:        'Support',
     description: 'Report a bug — emails the maintainer',

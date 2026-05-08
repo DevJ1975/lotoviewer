@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   BarChart3,
   Bell,
+  BookOpen,
   Box,
   Brush,
   ClipboardList,
@@ -146,7 +147,7 @@ export const MODULE_COLOR_CLASSES: Record<ModuleColor, ColorClasses> = {
 const FALLBACK_COLOR: ModuleColor = 'slate'
 
 const MODULE_ICONS: Record<string, LucideIcon> = {
-  AlertOctagon, AlertTriangle, BarChart3, Bell, Brush, ClipboardList,
+  AlertOctagon, AlertTriangle, BarChart3, Bell, BookOpen, Brush, ClipboardList,
   DoorClosed, FileArchive, Flame, GraduationCap, LifeBuoy, Lock,
   Megaphone, MessageSquare, Settings, ShieldCheck, Siren, Sparkles,
   Tag, Users, Webhook,

@@ -20,6 +20,7 @@ import AppDrawer from '@/components/AppDrawer'
 import TenantHeaderPill from '@/components/TenantHeaderPill'
 import SupportBot from '@/components/SupportBot'
 import ChatHeaderButton from '@/components/chat/ChatHeaderButton'
+import HelpHeaderButton from '@/components/manuals/HelpHeaderButton'
 import SoteriaLogo from '@/components/SoteriaLogo'
 import { useAuth } from '@/components/AuthProvider'
 import { requestPersistentStorage } from '@/lib/platform'
@@ -88,6 +89,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
 
             <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-auto">
               <Greeting className="hidden md:inline-flex text-white/80" />
+              <HelpHeaderButton />
               <ChatHeaderButton />
               <UserMenu />
             </div>
