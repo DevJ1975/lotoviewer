@@ -494,6 +494,16 @@ export const FEATURES: FeatureDef[] = [
     enabled:     true,
     comingSoon:  false,
   },
+  {
+    id:          'chemicals-maq',
+    name:        'MAQ Caps',
+    description: 'Fire-code maximum allowable quantity rules per location',
+    href:        '/chemicals/maq',
+    category:    'safety',
+    parent:      'chemicals',
+    enabled:     true,
+    comingSoon:  false,
+  },
 
   // Legacy near-miss surface — kept enabled during the Phase 1 → Phase 6
   // transition so existing tenants don't lose their bookmarks. The new

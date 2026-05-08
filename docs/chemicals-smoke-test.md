@@ -708,9 +708,43 @@ audit log table exists.
 - [ ] Multi-tenant: tenant A's admins do NOT receive tenant B's
       digest (membership lookup is tenant-scoped)
 
-## Known follow-ups (not in Phase G slice 5)
+## 39 · MAQ caps admin (Phase G slice 6)
 
-- Per-storage-class MAQ admin UI + dashboard tile → Phase F+
+- [ ] Migration 091 applied; `v_chemical_maq_status` view exists
+      and inherits tenant RLS via security_invoker
+- [ ] `/chemicals/maq` is reachable from the chemicals drawer
+      entry "MAQ Caps"
+- [ ] Add a storage-class rule: storage_class "flammable",
+      location "Cabinet 3", unit "gal", max_quantity 50,
+      reference "IFC 2018 Tbl 5003.1.1(1)" → row appears
+- [ ] Submitting with neither storage_class nor product_id → 400
+      "Provide exactly one of storage_class or product_id"
+- [ ] Submitting with both → 400 same error
+- [ ] Submitting with `unit: 'other'` → 400
+- [ ] Submitting with negative max_quantity → 400
+- [ ] Submitting with a product_id from a different tenant → 404
+- [ ] With 60 gal of flammable_cabinet stock in Cabinet 3 (e.g.
+      Acetone × 2 drums @ 30 gal each), the rule shows
+      `60 / 50 gal`, fill bar is rose, `exceeds_cap = true`
+- [ ] Catalog header shows the rose "1 MAQ exceeded" pill
+      linking to `/chemicals/maq`
+- [ ] Reducing one container's quantity to 15 gal → next reload
+      shows `45 / 50 gal`, fill bar amber (>80%), pill removed
+- [ ] Containers in a different unit than the rule are NOT
+      counted in the total but ARE flagged in the per-row notes
+      ("N container(s) in another unit are not counted")
+- [ ] Containers with status `disposed` / `empty` / `rejected`
+      do NOT count toward the total
+- [ ] Archived chemicals do NOT count toward the total
+- [ ] Storage-class match is ILIKE — a rule for "flammable"
+      catches products whose storage_class is "flammable_cabinet"
+      or "Flammable Cabinet (Class IB)"
+- [ ] Trash-can deletes the rule with confirm prompt
+- [ ] As tenant B, GET `/api/chemicals/maq` returns only tenant
+      B's rules (no tenant A leakage)
+
+## Known follow-ups (not in Phase G slice 6)
+
 - HazCom training topic → 017_training_records.training_role enum +
   per-chemical training cross-link → Phase G+
 - Cross-tenant SDS catalog opt-in (massive cost win at parse time) → Phase G+

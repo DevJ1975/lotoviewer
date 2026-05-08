@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Loader2, Search, Filter, Sparkles, ScanLine, Package, FileBarChart2, ClipboardCheck } from 'lucide-react'
+import { Plus, Loader2, Search, Filter, Sparkles, ScanLine, Package, FileBarChart2, ClipboardCheck, FlameKindling } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { useDebounce } from '@/hooks/useDebounce'
@@ -36,6 +36,7 @@ export default function ChemicalsListPage() {
   const [pendingCount, setPendingCount] = useState<number>(0)
   const [expiringCount, setExpiringCount] = useState<number>(0)
   const [approvalCount, setApprovalCount] = useState<number>(0)
+  const [maqExceededCount, setMaqExceededCount] = useState<number>(0)
   const debouncedSearch = useDebounce(search, 250)
 
   const load = useCallback(async () => {
@@ -51,11 +52,12 @@ export default function ChemicalsListPage() {
     if (pictogram) params.set('pictogram', pictogram)
 
     try {
-      const [res, queueRes, expRes, apprRes] = await Promise.all([
+      const [res, queueRes, expRes, apprRes, maqRes] = await Promise.all([
         fetch(`/api/chemicals/products?${params.toString()}`, { headers }),
         fetch('/api/chemicals/review-queue', { headers }),
         fetch('/api/chemicals/inventory/expiring', { headers }),
         fetch('/api/chemicals/approvals', { headers }),
+        fetch('/api/chemicals/maq', { headers }),
       ])
       const body = await res.json()
       if (!res.ok) {
@@ -75,6 +77,10 @@ export default function ChemicalsListPage() {
       if (apprRes.ok) {
         const apprBody = await apprRes.json()
         setApprovalCount(apprBody.total ?? 0)
+      }
+      if (maqRes.ok) {
+        const maqBody = await maqRes.json()
+        setMaqExceededCount(maqBody.exceeded_count ?? 0)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -119,6 +125,16 @@ export default function ChemicalsListPage() {
             >
               <ClipboardCheck className="w-4 h-4" />
               {approvalCount} await{approvalCount === 1 ? 's' : ''} approval
+            </Link>
+          )}
+          {maqExceededCount > 0 && (
+            <Link
+              href="/chemicals/maq"
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+              title="Fire-code MAQ exceeded — reduce on-hand quantity"
+            >
+              <FlameKindling className="w-4 h-4" />
+              {maqExceededCount} MAQ exceeded
             </Link>
           )}
           <Link

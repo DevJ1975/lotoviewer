@@ -130,6 +130,7 @@ describe('getFeaturesByCategory', () => {
       'chemicals-tier-two',
       'chemicals-restricted',
       'chemicals-approvals',
+      'chemicals-maq',
       'near-miss',
       'hot-work',
       'hot-work-status',
