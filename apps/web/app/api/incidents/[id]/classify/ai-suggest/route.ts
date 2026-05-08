@@ -156,7 +156,16 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       careRow ? `Days counters: ${careRow.days_away_from_work} away · ${careRow.days_restricted} restricted · ${careRow.days_lost} lost` : null,
     ].filter(Boolean).join('\n')
 
-    const client = new Anthropic({ apiKey: await getTenantApiKey(gate.tenantId) })
+    // Short-circuit when no API key is configured — clearer 503
+    // than the SDK's opaque 401 from a missing key.
+    const apiKey = await getTenantApiKey(gate.tenantId)
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'AI is not configured for this deployment. Contact your administrator.' },
+        { status: 503 },
+      )
+    }
+    const client = new Anthropic({ apiKey })
     const response = await client.messages.create({
       model:      MODEL,
       max_tokens: 4096,

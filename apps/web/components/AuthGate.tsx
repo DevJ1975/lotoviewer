@@ -16,6 +16,21 @@ import { useAuth } from '@/components/AuthProvider'
 // fight the recovery flow.
 const PUBLIC_PATHS = new Set(['/login', '/welcome', '/forgot-password', '/reset-password'])
 
+// Token-gated public routes. Each entry matches when the pathname
+// equals the prefix or starts with `${prefix}/`. Used for QR-scanned
+// flows whose authorization is the URL token, not a Supabase session.
+const PUBLIC_PREFIXES = [
+  '/r/bbs',     // Behavior-Based Safety anonymous QR submission
+] as const
+
+function isPublicPath(pathname: string): boolean {
+  if (PUBLIC_PATHS.has(pathname)) return true
+  for (const prefix of PUBLIC_PREFIXES) {
+    if (pathname === prefix || pathname.startsWith(`${prefix}/`)) return true
+  }
+  return false
+}
+
 // Client-side guard. Supabase stores the session in localStorage, so checking
 // here (after the provider hydrates) matches the source of truth. A dedicated
 // server middleware would require @supabase/ssr — kept simple for now.
@@ -24,7 +39,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const { userId, profile, loading } = useAuth()
 
-  const isPublic = PUBLIC_PATHS.has(pathname)
+  const isPublic = isPublicPath(pathname)
 
   useEffect(() => {
     if (loading) return

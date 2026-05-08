@@ -14,6 +14,7 @@ import {
 } from '@/lib/support/types'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 import { getTenantApiKey } from '@/lib/ai/getTenantApiKey'
+import { logAiInvocation } from '@/lib/ai/rateLimit'
 
 // Only the two roles Anthropic accepts in messages[]. Internally
 // ChatMessage allows system/tool for transcript rendering, but we never
@@ -311,9 +312,17 @@ export async function POST(req: Request) {
 
   // First model call. The model either replies directly or asks to call
   // the escalation tool.
-  // Per-request client so the tenant's
-  // settings.anthropic_api_key override is honored.
-  const client = new Anthropic({ apiKey: await getTenantApiKey(reporter.tenantId) })
+  // Per-request client so the tenant's settings.anthropic_api_key
+  // override is honored. Short-circuit when no API key is configured
+  // anywhere — clearer 503 than the SDK's opaque 401.
+  const apiKey = await getTenantApiKey(reporter.tenantId)
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: 'The assistant is not configured for this deployment. Contact your administrator.' },
+      { status: 503 },
+    )
+  }
+  const client = new Anthropic({ apiKey })
   let response: Anthropic.Message
   try {
     response = await client.messages.create({
@@ -330,6 +339,18 @@ export async function POST(req: Request) {
     })
   } catch (err) {
     Sentry.captureException(err, { tags: { route: '/api/support/chat', stage: 'first-call' } })
+    // Mirror the pattern in the other AI surfaces — every Anthropic
+    // call (success OR error) gets a row in ai_invocations so the
+    // superadmin usage dashboard sees support-chat alongside the
+    // other surfaces. Token counts unavailable on the error path.
+    await logAiInvocation({
+      userId:   reporter.id,
+      tenantId: reporter.tenantId,
+      surface:  'support-chat',
+      model:    MODEL,
+      status:   'error',
+      context:  err instanceof Error ? err.message.slice(0, 200) : 'first-call threw',
+    })
     return NextResponse.json({ error: 'The assistant is unavailable right now.' }, { status: 502 })
   }
 
@@ -398,6 +419,18 @@ export async function POST(req: Request) {
       })
     } catch (err) {
       Sentry.captureException(err, { tags: { route: '/api/support/chat', stage: 'second-call' } })
+      // Log the second-call failure separately so the dashboard
+      // surfaces escalation-path failures even when the first call
+      // succeeded. The first call's tokens still flow into the
+      // success row at the bottom of this handler.
+      await logAiInvocation({
+        userId:   reporter.id,
+        tenantId: reporter.tenantId,
+        surface:  'support-chat',
+        model:    MODEL,
+        status:   'error',
+        context:  err instanceof Error ? err.message.slice(0, 200) : 'second-call threw',
+      })
       // Fall back to a hand-written confirmation so the UX still completes.
       secondResponse = {
         ...response,
@@ -444,6 +477,26 @@ export async function POST(req: Request) {
     .from('support_conversations')
     .update({ last_message_at: new Date().toISOString() })
     .eq('id', conversationId)
+
+  // Mirror token spend into ai_invocations so the superadmin usage
+  // dashboard counts support-chat alongside the structured-output
+  // surfaces. The cache_read_tokens are NOT folded into input_tokens
+  // — that would overcount; tracking cache reads separately requires
+  // a column the audit table doesn't have yet (harden-later #4 in the
+  // devjr punch list). For now we log the chargeable input + output
+  // tokens; the dashboard's USD estimate will undercount slightly on
+  // turns that hit the system-prompt cache, which is the right
+  // direction (better than overcounting).
+  await logAiInvocation({
+    userId:       reporter.id,
+    tenantId:     reporter.tenantId,
+    surface:      'support-chat',
+    model:        MODEL,
+    status:       'success',
+    inputTokens:  totalInputTokens,
+    outputTokens: totalOutputTokens,
+    context:      conversationId,
+  })
 
   return NextResponse.json({
     conversationId,

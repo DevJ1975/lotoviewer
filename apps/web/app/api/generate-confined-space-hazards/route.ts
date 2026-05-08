@@ -205,7 +205,16 @@ export async function POST(req: NextRequest) {
       text: `Propose hazards, isolation steps, equipment, and rescue gear for this confined space entry permit.\n\n${brief}`,
     })
 
-    const client = new Anthropic({ apiKey: await getTenantApiKey(gate.tenantId) })
+    // Short-circuit when no API key is configured — clearer 503
+    // than the SDK's opaque 401 from a missing key.
+    const apiKey = await getTenantApiKey(gate.tenantId)
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'AI is not configured for this deployment. Contact your administrator.' },
+        { status: 503 },
+      )
+    }
+    const client = new Anthropic({ apiKey })
     const response = await client.messages.create({
       model:      MODEL,
       max_tokens: 16000,

@@ -8,6 +8,7 @@ import {
   Brush,
   ClipboardList,
   DoorClosed,
+  Eye,
   FileArchive,
   Flame,
   GraduationCap,
@@ -148,7 +149,7 @@ const FALLBACK_COLOR: ModuleColor = 'slate'
 
 const MODULE_ICONS: Record<string, LucideIcon> = {
   AlertOctagon, AlertTriangle, BarChart3, Bell, BookOpen, Brush, ClipboardList,
-  DoorClosed, FileArchive, Flame, GraduationCap, LifeBuoy, Lock,
+  DoorClosed, Eye, FileArchive, Flame, GraduationCap, LifeBuoy, Lock,
   Megaphone, MessageSquare, Settings, ShieldCheck, Siren, Sparkles,
   Tag, Users, Webhook,
 }

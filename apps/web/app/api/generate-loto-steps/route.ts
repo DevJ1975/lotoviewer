@@ -144,7 +144,18 @@ export async function POST(req: NextRequest) {
       text: `Propose LOTO energy-isolation steps for this food-production equipment. Return one step per independent energy source.\n\n${brief}`,
     })
 
-    const client = new Anthropic({ apiKey: await getTenantApiKey(gate.tenantId) })
+    // Short-circuit when neither the env nor the tenant override is
+    // set — the SDK would otherwise produce an opaque 401 that lands
+    // as a generic "AI error" toast in the UI. A clear 503 with a
+    // concrete message tells the operator what to do.
+    const apiKey = await getTenantApiKey(gate.tenantId)
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'AI is not configured for this deployment. Contact your administrator.' },
+        { status: 503 },
+      )
+    }
+    const client = new Anthropic({ apiKey })
     const response = await client.messages.create({
       model:      MODEL,
       max_tokens: 16000,
