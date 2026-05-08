@@ -635,13 +635,50 @@ audit log table exists.
 - [ ] As tenant B, the chemical detail's JHA-usage panel does NOT
       show tenant A's JHAs
 
-## Known follow-ups (not in Phase G slice 3)
+## 37 · Webhook events (Phase G slice 4)
+
+- [ ] Migration 090 applied; the 4 trigger functions
+      (`chemical_products_emit_webhooks`, `chemical_inv_emit_webhooks`,
+      `chemical_exposure_emit_webhooks`, `chemical_sds_emit_webhooks`)
+      and their AFTER triggers exist
+- [ ] `loto_webhook_subscriptions` table comment lists the 9 new
+      `chemical.*` event names
+- [ ] With pg_net enabled and a subscription whose `events` array
+      contains `chemical.product_created`, inserting a chemical
+      via `/api/chemicals/products` POSTs to the subscriber URL
+      with `{ "event": "chemical.product_created", "occurred_at",
+      "data": { ...row... } }`
+- [ ] HMAC signature header `X-Soteria-Signature` is present when
+      the subscription has a `secret` set (verifies via SHA-256 of
+      the body)
+- [ ] Container insert with `status='requested'` fires
+      `chemical.container_requested`; transition to `in_stock`
+      fires `chemical.container_approved`; transition to `rejected`
+      fires `chemical.container_rejected`; transition to `disposed`
+      fires `chemical.container_disposed`
+- [ ] Repeat insert of same status (no transition) does NOT
+      double-fire (verified by trigger logic, not just behavior)
+- [ ] Inserting a `chemical_exposure_events` row fires
+      `chemical.exposure_logged`
+- [ ] Drift cron writing a new SDS row with `source='ai_fetch'` AND
+      `parse_review_status='pending'` fires
+      `chemical.sds_revision_pending`; manual SDS upload
+      (source='upload', already approved) does NOT fire it
+- [ ] Archiving a chemical fires `chemical.product_archived`;
+      un-archiving fires `chemical.product_unarchived`
+- [ ] On a Postgres without pg_net installed, all triggers no-op
+      gracefully (per migration 013's design); business INSERTs/
+      UPDATEs still succeed
+- [ ] Subscriptions list belongs to NO tenant — it's a
+      superadmin-managed integration table. Multi-tenant routing
+      is the subscriber's responsibility (filter on
+      `data.tenant_id` in the payload)
+
+## Known follow-ups (not in Phase G slice 4)
 
 - Per-storage-class MAQ admin UI + dashboard tile → Phase F+
 - HazCom training topic → 017_training_records.training_role enum +
   per-chemical training cross-link → Phase G+
-- Webhooks for "chemical approved", "spill incident logged", "new
-  SDS revision detected" via 013_webhooks → Phase G+
 - Cross-tenant SDS catalog opt-in (massive cost win at parse time) → Phase G+
 - Per-state Tier II form mappings (T2S file format, etc.) → Phase F+
 - Bulk parse on import (queue many SDSs at once) → Phase B follow-up
@@ -653,6 +690,7 @@ audit log table exists.
   on save → Phase G+ (today the gap is flagged but not auto-applied)
 - Sweep cron: when a chemical's PPE updates (drift apply), flag
   every linked JHA for re-review → Phase G+
+- Per-tenant webhook subscriptions (today the table is global) → Phase G+
 - Inventory containers + locations + scan → Phase D
 - Label printing + GHS pictogram SVGs → Phase C
 - HazCom training topic, Tier II export, OSHA 300 linkage → Phase F
