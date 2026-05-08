@@ -8,6 +8,7 @@ import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import RepeatIncidentBanner from '@/app/_components/RepeatIncidentBanner'
 import EpaRqBanner from '@/app/_components/EpaRqBanner'
+import ChemicalExposuresPanel from './_components/ChemicalExposuresPanel'
 import {
   INCIDENT_TYPE_LABEL,
   SEVERITY_ACTUAL_LABEL,
@@ -316,6 +317,8 @@ export default function IncidentDetailPage() {
           </ul>
         )}
       </section>
+
+      <ChemicalExposuresPanel incidentId={incident.id} />
 
       <p className="text-[11px] text-slate-400 dark:text-slate-500">
         Investigation, RCA, CAPA actions, care management, and OSHA classification ship in later phases.

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Loader2, Search, Filter, Sparkles, ScanLine, Package } from 'lucide-react'
+import { Plus, Loader2, Search, Filter, Sparkles, ScanLine, Package, FileBarChart2 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { useDebounce } from '@/hooks/useDebounce'
@@ -106,6 +106,13 @@ export default function ChemicalsListPage() {
               {pendingCount} pending review{pendingCount === 1 ? '' : 's'}
             </Link>
           )}
+          <Link
+            href="/chemicals/tier-two"
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+            title="EPCRA Tier II rollup + CSV export"
+          >
+            <FileBarChart2 className="w-4 h-4" /> Tier II
+          </Link>
           <Link
             href="/chemicals/scan"
             className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"

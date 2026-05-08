@@ -473,6 +473,148 @@ export function expiryTier(isoDate: string | null | undefined, today = new Date(
   return 'ok'
 }
 
+// ─── Compliance (Phase F) ────────────────────────────────────────────────
+
+export const EXPOSURE_ROUTES = [
+  'inhalation', 'skin_absorption', 'eye_contact',
+  'ingestion', 'injection', 'unknown',
+] as const
+export type ExposureRoute = typeof EXPOSURE_ROUTES[number]
+
+export const EXPOSURE_ROUTE_LABEL: Record<ExposureRoute, string> = {
+  inhalation:      'Inhalation',
+  skin_absorption: 'Skin absorption',
+  eye_contact:     'Eye contact',
+  ingestion:       'Ingestion',
+  injection:       'Injection',
+  unknown:         'Unknown',
+}
+
+export const EXPOSURE_SEVERITIES = [
+  'no_symptoms', 'first_aid', 'medical_treatment', 'lost_time', 'fatality',
+] as const
+export type ExposureSeverity = typeof EXPOSURE_SEVERITIES[number]
+
+export const EXPOSURE_SEVERITY_LABEL: Record<ExposureSeverity, string> = {
+  no_symptoms:       'No symptoms',
+  first_aid:         'First aid only',
+  medical_treatment: 'Medical treatment',
+  lost_time:         'Lost time',
+  fatality:          'Fatality',
+}
+
+export interface ExposureEventInput {
+  incident_id:                string
+  product_id:                 string
+  inventory_item_id?:         string | null
+  person_id?:                 string | null
+  route:                      ExposureRoute
+  estimated_quantity?:        string | null
+  exposure_duration_minutes?: number | null
+  severity?:                  ExposureSeverity | null
+  ppe_in_use?:                string[]
+  measured_ppm?:              number | null
+  notes?:                     string | null
+}
+
+export interface ExposureInputErrors {
+  field:   keyof ExposureEventInput
+  message: string
+}
+
+export function validateExposureInput(input: ExposureEventInput): ExposureInputErrors[] {
+  const errs: ExposureInputErrors[] = []
+  if (!input.incident_id) errs.push({ field: 'incident_id', message: 'Required' })
+  if (!input.product_id)  errs.push({ field: 'product_id',  message: 'Required' })
+  if (!(EXPOSURE_ROUTES as readonly string[]).includes(input.route)) {
+    errs.push({ field: 'route', message: 'Unknown exposure route' })
+  }
+  if (input.severity
+      && !(EXPOSURE_SEVERITIES as readonly string[]).includes(input.severity)) {
+    errs.push({ field: 'severity', message: 'Unknown severity' })
+  }
+  if (input.exposure_duration_minutes !== null
+      && input.exposure_duration_minutes !== undefined
+      && (!Number.isFinite(input.exposure_duration_minutes)
+          || input.exposure_duration_minutes < 0)) {
+    errs.push({ field: 'exposure_duration_minutes', message: 'Must be a non-negative number' })
+  }
+  if (input.measured_ppm !== null
+      && input.measured_ppm !== undefined
+      && (!Number.isFinite(input.measured_ppm) || input.measured_ppm < 0)) {
+    errs.push({ field: 'measured_ppm', message: 'Must be a non-negative number' })
+  }
+  return errs
+}
+
+// ─── Tier II export ──────────────────────────────────────────────────────
+//
+// Tier II is a per-state report, but the columns the EPA + every state
+// expects are largely the same. We emit a "universal" CSV that matches
+// the EPA's Tier2 Submit fields; tenants who need a state-specific
+// format can transform from this column set without losing data.
+
+export interface TierTwoRow {
+  product_id:        string
+  product_name:      string
+  manufacturer:      string | null
+  cas_numbers:       string[] | null
+  storage_class:     string | null
+  physical_state:    string | null
+  ghs_signal_word:   string | null
+  ghs_pictograms:    string[] | null
+  location_id:       string | null
+  location_name:     string | null
+  location_path:     string | null
+  unit:              string
+  total_quantity:         number
+  max_daily_quantity:     number
+  average_daily_quantity: number
+  container_count:        number
+  earliest_expiration:    string | null
+}
+
+const TIER_TWO_COLUMNS = [
+  'product_name',
+  'manufacturer',
+  'cas_numbers',
+  'storage_class',
+  'physical_state',
+  'ghs_signal_word',
+  'ghs_pictograms',
+  'location_path',
+  'unit',
+  'total_quantity',
+  'max_daily_quantity',
+  'average_daily_quantity',
+  'container_count',
+  'earliest_expiration',
+] as const
+
+function csvEscape(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  const s = Array.isArray(value) ? value.join('; ') : String(value)
+  // RFC 4180: wrap in quotes if it contains a comma, quote, or newline;
+  // double internal quotes.
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+  return s
+}
+
+/**
+ * Render a Tier II rollup as a CSV string. RFC 4180 compliant; emits
+ * a UTF-8 BOM so Excel opens it correctly.
+ */
+export function tierTwoToCsv(rows: TierTwoRow[]): string {
+  const lines: string[] = []
+  // BOM + header
+  lines.push('﻿' + TIER_TWO_COLUMNS.map(c => csvEscape(c)).join(','))
+  for (const r of rows) {
+    const dict = r as unknown as Record<string, unknown>
+    lines.push(TIER_TWO_COLUMNS.map(c => csvEscape(dict[c])).join(','))
+  }
+  return lines.join('\r\n') + '\r\n'
+}
+
 // Storage path layout for the chemical-sds bucket. Tenant-scoped first
 // segment so storage_path_tenant() (migration 033) gates writes.
 export function chemicalSdsStoragePath(

@@ -1,14 +1,16 @@
-# Chemical Management module — smoke checklist (Phases A–E)
+# Chemical Management module — smoke checklist (Phases A–F)
 
 Use this after applying migrations `082_chemicals_module.sql`,
-`083_chemical_label_prints.sql`, `084_chemical_inventory.sql`, and
-`085_chemical_sds_drift.sql` and deploying the branch. Phase A ships
-the foundation (catalog, detail, manual SDS upload, search/filter);
-Phase B layers AI SDS parsing + the human review queue; Phase C adds
-GHS-compliant label printing; Phase D adds inventory containers,
-locations, barcode scan, and the expiring-soon dashboard; Phase E
-adds the SDS drift monitor (nightly cron + manual trigger + drift
-audit log). Compliance rollups (Phase F) are still out of scope.
+`083_chemical_label_prints.sql`, `084_chemical_inventory.sql`,
+`085_chemical_sds_drift.sql`, and `086_chemical_compliance.sql` and
+deploying the branch. Phase A ships the foundation (catalog, detail,
+manual SDS upload, search/filter); Phase B layers AI SDS parsing +
+the human review queue; Phase C adds GHS-compliant label printing;
+Phase D adds inventory containers, locations, barcode scan, and the
+expiring-soon dashboard; Phase E adds the SDS drift monitor (nightly
+cron + manual trigger + drift audit log); Phase F adds compliance
+rollups — Tier II export, OSHA 300 chemical-exposure linkage, and
+fire-code MAQ scaffolding.
 
 See `docs/chemical-management-system-plan.md` for the full roadmap.
 
@@ -409,8 +411,68 @@ audit log table exists.
 - [ ] Cron is single-handler; tenant scoping comes from the per-row
       tenant_id flowing through chemical_sds_revision_checks RLS
 
-## Known follow-ups (not in Phase E)
+## 26 · Tier II report (Phase F)
 
+- [ ] `/chemicals/tier-two` is reachable from the catalog header
+      "Tier II" button and the chemicals drawer entry "Tier II Report"
+- [ ] On a tenant with no inventory, the page shows the empty
+      state "No active inventory…" and the Download CSV button is
+      disabled
+- [ ] After adding three containers (different products, different
+      locations, in_stock + in_use statuses), the rollup shows
+      three rows; "Distinct chemicals" / "Distinct locations" tiles
+      reflect the right counts
+- [ ] Disposed and archived containers are EXCLUDED from the rollup
+- [ ] Group-by toggle: "product" groups rows under each chemical;
+      "location" groups under each location path
+- [ ] Search filters on name, manufacturer, CAS, and location path
+- [ ] Click "Download CSV" → file downloads with name
+      `tier-two-YYYY-MM-DD.csv`; opening in Excel shows the BOM is
+      handled, the header row reads `product_name,manufacturer,...`,
+      arrays render as `67-64-1; 7732-18-5`, commas in product names
+      are RFC-4180 quoted
+
+## 27 · OSHA 300 chemical-exposure linkage (Phase F)
+
+- [ ] On any incident detail page, scroll to the new "Chemical
+      exposures" panel below the notification log
+- [ ] Empty state reads "No chemical exposures recorded for this
+      incident."
+- [ ] Click "Add exposure", pick chemical "Acetone", route
+      "Inhalation", severity "First aid only", duration 15,
+      measured_ppm 95 → save → row appears with the chemical name
+      (link to detail), route + severity, and a per-row PPE list
+- [ ] Add a second exposure with measured_ppm 1500 on a chemical
+      whose `pel_twa_ppm = 1000` → row shows the "EXCEEDS PEL
+      (1000 ppm)" rose pill
+- [ ] Submitting with an unknown route (POSTing `route="oral"`)
+      → 400 inline; submitting without product_id → 400
+- [ ] Trash-can on a row deletes the event with confirm prompt;
+      gone from list after refresh
+- [ ] As tenant B, POSTing to tenant A's
+      `/api/incidents/{A_id}/chemical-exposures` → 404
+- [ ] As tenant B, POSTing with `product_id` belonging to tenant A
+      but `incident_id` belonging to tenant B → 404
+
+## 28 · Compliance schema + Tier II view
+
+- [ ] Migration 086 applied; `chemical_exposure_events`,
+      `chemical_max_allowable_quantities`, and
+      `v_chemical_tier_two` all exist with tenant-scoped RLS
+- [ ] Inserting two MAQ rows for the same location with both
+      storage_class set + product_id null is OK; setting both at
+      once on the same row is rejected by the CHECK constraint
+- [ ] `v_chemical_tier_two` returns rows only for the active
+      tenant (security_invoker view inherits underlying RLS)
+- [ ] Adding a container with status='disposed' does not appear
+      in the view; flipping it back to 'in_stock' brings it back
+- [ ] An archived chemical's containers do not appear in the view
+
+## Known follow-ups (not in Phase F)
+
+- Per-state Tier II form mappings (T2S file format, etc.) → Phase F+
+- MAQ admin UI + dashboard tile that reads
+  `chemical_max_allowable_quantities` → Phase F+
 - Bulk parse on import (queue many SDSs at once) → Phase B follow-up
 - Per-tenant pictogram override (upload official UN artwork) → Phase C+
 - Live label-printer integration (WebUSB to Brother/Zebra) → post-D
@@ -418,7 +480,10 @@ audit log table exists.
 - Email/push notification when a new revision lands in the review
   queue → Phase E follow-up (the drift cron writes the row; piping
   it through 016_push_subscriptions + 057_email_log is straight-line work)
-- EPCRA Tier II export, OSHA 300 chemical exposure linkage → Phase F
+- HazCom training topic → 017_training_records.training_role enum +
+  per-chemical training cross-link → Phase G
+- PPE matrix per JHA step (chemicals used → required PPE auto-derived
+  from the product PPE field) → Phase G
 - Inventory containers + locations + scan → Phase D
 - Label printing + GHS pictogram SVGs → Phase C
 - HazCom training topic, Tier II export, OSHA 300 linkage → Phase F

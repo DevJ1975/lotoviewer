@@ -6,10 +6,13 @@ import {
   parseToProductFields,
   canAutoApplyParse,
   validateInventoryInput,
+  validateExposureInput,
+  tierTwoToCsv,
   daysUntil,
   expiryTier,
   GHS_PICTOGRAMS,
   type ParsedSdsPayload,
+  type TierTwoRow,
 } from '@soteria/core/chemicals'
 
 function basePayload(over: Partial<ParsedSdsPayload> = {}): ParsedSdsPayload {
@@ -327,6 +330,124 @@ describe('expiryTier', () => {
     [null,         'unknown'],
   ] as const)('buckets %s as %s', (date, expected) => {
     expect(expiryTier(date, today)).toBe(expected)
+  })
+})
+
+describe('validateExposureInput', () => {
+  const baseInput = {
+    incident_id: '00000000-0000-0000-0000-000000000001',
+    product_id:  '00000000-0000-0000-0000-000000000002',
+    route:       'inhalation' as const,
+  }
+
+  it('requires incident_id, product_id, and a known route', () => {
+    const errs = validateExposureInput({
+      ...baseInput,
+      incident_id: '',
+      product_id:  '',
+      route:       'oral' as never,
+    })
+    expect(errs.map(e => e.field)).toEqual(
+      expect.arrayContaining(['incident_id', 'product_id', 'route']),
+    )
+  })
+
+  it('flags unknown severity', () => {
+    const errs = validateExposureInput({ ...baseInput, severity: 'severe' as never })
+    expect(errs.find(e => e.field === 'severity')).toBeTruthy()
+  })
+
+  it('flags negative duration / ppm', () => {
+    const errs = validateExposureInput({
+      ...baseInput,
+      exposure_duration_minutes: -5,
+      measured_ppm:              -1,
+    })
+    expect(errs.map(e => e.field)).toEqual(
+      expect.arrayContaining(['exposure_duration_minutes', 'measured_ppm']),
+    )
+  })
+
+  it('accepts a fully-valid input', () => {
+    expect(validateExposureInput({
+      ...baseInput,
+      route:    'inhalation',
+      severity: 'first_aid',
+      exposure_duration_minutes: 15,
+      measured_ppm:              95,
+      ppe_in_use:                ['Half-face respirator'],
+    })).toEqual([])
+  })
+})
+
+describe('tierTwoToCsv', () => {
+  const r1: TierTwoRow = {
+    product_id:        '00000000-0000-0000-0000-000000000001',
+    product_name:      'Acetone',
+    manufacturer:      'Acme',
+    cas_numbers:       ['67-64-1'],
+    storage_class:     'Flammable cabinet',
+    physical_state:    'liquid',
+    ghs_signal_word:   'danger',
+    ghs_pictograms:    ['GHS02', 'GHS07'],
+    location_id:       '00000000-0000-0000-0000-000000000010',
+    location_name:     'Cabinet 3',
+    location_path:     'Building A / Wash Bay 2 / Cabinet 3',
+    unit:              'gal',
+    total_quantity:         55,
+    max_daily_quantity:     55,
+    average_daily_quantity: 55,
+    container_count:        2,
+    earliest_expiration:    '2026-12-31',
+  }
+
+  it('starts with a UTF-8 BOM and includes the header row', () => {
+    const csv = tierTwoToCsv([r1])
+    expect(csv.charCodeAt(0)).toBe(0xFEFF)
+    expect(csv).toContain('product_name,manufacturer,cas_numbers')
+  })
+
+  it('escapes commas and quotes per RFC 4180', () => {
+    const csv = tierTwoToCsv([{
+      ...r1,
+      product_name:  'Solvent, Industrial',
+      manufacturer:  'Acme "Best" Co.',
+    }])
+    expect(csv).toContain('"Solvent, Industrial"')
+    expect(csv).toContain('"Acme ""Best"" Co."')
+  })
+
+  it('joins array fields with semicolons', () => {
+    const csv = tierTwoToCsv([{
+      ...r1,
+      cas_numbers:    ['67-64-1', '7732-18-5'],
+      ghs_pictograms: ['GHS02', 'GHS07'],
+    }])
+    expect(csv).toContain('67-64-1; 7732-18-5')
+    expect(csv).toContain('GHS02; GHS07')
+  })
+
+  it('renders nulls as empty cells', () => {
+    const csv = tierTwoToCsv([{
+      ...r1,
+      manufacturer:        null,
+      storage_class:       null,
+      earliest_expiration: null,
+    }])
+    // ,, sequences are empty cells.
+    expect(csv).toContain(',,')
+  })
+
+  it('emits CRLF line endings', () => {
+    const csv = tierTwoToCsv([r1])
+    expect(csv).toContain('\r\n')
+    expect(csv.endsWith('\r\n')).toBe(true)
+  })
+
+  it('returns header-only CSV when given no rows', () => {
+    const csv = tierTwoToCsv([])
+    const lines = csv.split('\r\n').filter(l => l.length > 0)
+    expect(lines.length).toBe(1)
   })
 })
 
