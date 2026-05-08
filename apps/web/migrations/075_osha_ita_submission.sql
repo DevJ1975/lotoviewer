@@ -1,4 +1,4 @@
--- 069_osha_ita_submission.sql
+-- 075_osha_ita_submission.sql
 -- Adds the columns the app needs to track electronic submissions of
 -- annual injury/illness records to OSHA's Injury Tracking Application
 -- (ITA). The actual API call lives in app code; this migration only
