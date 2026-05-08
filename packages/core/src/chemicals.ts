@@ -1,5 +1,5 @@
 // Cross-platform types + constants for the Chemical Management module.
-// Mirrors the shape of migration 082_chemicals_module.sql so the web
+// Mirrors the shape of migration 089_chemicals_module.sql so the web
 // app and a future mobile shell stay aligned.
 
 export const GHS_PICTOGRAMS = [

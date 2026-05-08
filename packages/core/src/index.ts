@@ -29,20 +29,21 @@ export * from './riskMetrics'
 export * from './nearMiss'
 export * from './nearMissMetrics'
 export * from './bbs'
-// bbsMetrics shares `selectActive` with nearMissMetrics — the API
-// surface is intentionally parallel (one per module). Callers that
-// want both should use the sub-path (`@soteria/core/bbsMetrics`).
-// The barrel re-exports the BBS-unique names only.
+// bbsMetrics exports a `selectActive` that collides with the same
+// name in nearMissMetrics. Re-export everything else by name and
+// alias `selectActive` to keep the barrel unambiguous. Callers that
+// want either selectActive specifically should import via the
+// sub-path (`@soteria/core/bbsMetrics` or `/nearMissMetrics`).
 export {
-  computeCloseOutRate,
-  computeAvgRiskScore,
-  computeEhsScore,
-  countCreatedSince as countBBSCreatedSince,
-  selectActive       as selectActiveBBSObservations,
-  fetchBBSMetrics,
   type BBSObservationForMetrics,
   type BBSLeaderboardRow,
   type BBSMetrics,
+  selectActive as selectActiveBbs,
+  countCreatedSince,
+  computeCloseOutRate,
+  computeAvgRiskScore,
+  computeEhsScore,
+  fetchBBSMetrics,
 } from './bbsMetrics'
 export * from './chemicals'
 // Incident module reuses some helper names from nearMiss

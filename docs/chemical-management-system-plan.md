@@ -40,7 +40,7 @@ Status: **proposed** — not yet scheduled. All paths relative to
 
 ## 3. Data model
 
-New migration: `082_chemicals_module.sql`. All tables
+New migration: `089_chemicals_module.sql`. All tables
 `tenant_id`-scoped with RLS mirroring existing modules
 (`027_multi_tenant_schema.sql` patterns).
 

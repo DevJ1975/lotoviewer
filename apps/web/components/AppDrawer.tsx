@@ -16,6 +16,7 @@ import { useAuth } from '@/components/AuthProvider'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { Shield } from 'lucide-react'
 import { getModuleVisuals } from '@/lib/moduleVisuals'
+import SoteriaLogo from '@/components/SoteriaLogo'
 
 // Side drawer that hosts every feature in the app. Replaces the inline
 // top-nav links so the chrome stays minimal as more modules ship.
@@ -145,14 +146,15 @@ export default function AppDrawer({ open, onClose }: Props) {
 
       <aside className="relative bg-white dark:bg-slate-900 w-72 sm:w-80 max-w-[85vw] h-full flex flex-col shadow-2xl">
         <header className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-7 h-7 rounded-md flex items-center justify-center font-bold text-xs bg-brand-yellow text-brand-navy tracking-tight shrink-0">
-              SL
-            </div>
-            <span className="text-slate-900 dark:text-slate-100 font-semibold text-sm tracking-tight truncate">
-              Soteria <span className="text-brand-navy dark:text-brand-yellow font-bold tracking-wider">FIELD</span>
-            </span>
-          </div>
+          <Link
+            href="/"
+            onClick={onClose}
+            aria-label="SoteriaField home"
+            className="flex items-center min-w-0 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow"
+          >
+            <SoteriaLogo variant="dark" width={150} className="block dark:hidden" />
+            <SoteriaLogo variant="color" width={150} className="hidden dark:block" />
+          </Link>
           <button
             type="button"
             onClick={onClose}

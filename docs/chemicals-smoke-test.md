@@ -1,9 +1,9 @@
 # Chemical Management module — smoke checklist (Phases A–G)
 
-Use this after applying migrations `082_chemicals_module.sql`,
-`083_chemical_label_prints.sql`, `084_chemical_inventory.sql`,
-`085_chemical_sds_drift.sql`, `086_chemical_compliance.sql`, and
-`087_chemical_guardrails.sql` and deploying the branch. Phase A ships
+Use this after applying migrations `089_chemicals_module.sql`,
+`090_chemical_label_prints.sql`, `091_chemical_inventory.sql`,
+`092_chemical_sds_drift.sql`, `093_chemical_compliance.sql`, and
+`094_chemical_guardrails.sql` and deploying the branch. Phase A ships
 the foundation (catalog, detail, manual SDS upload, search/filter);
 Phase B layers AI SDS parsing + the human review queue; Phase C adds
 GHS-compliant label printing; Phase D adds inventory containers,
