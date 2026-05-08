@@ -4,10 +4,11 @@ import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { checkAiRateLimit, logAiInvocation } from '@/lib/ai/rateLimit'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
-import { getTenantApiKey } from '@/lib/ai/getTenantApiKey'
+import { getAnthropic, aiErrorToResponse } from '@/lib/ai/client'
 
-// Per-request Anthropic client so the tenant's
-// settings.anthropic_api_key override is honored.
+// Anthropic client comes from the shared lib/ai/client wrapper so
+// every AI route inherits the same timeout, retry, and key-handling
+// posture.
 const MODEL = MODEL_BY_SURFACE['generate-confined-space-hazards']
 
 // Hazard authoring is harder than LOTO authoring — there are more categories
@@ -205,16 +206,14 @@ export async function POST(req: NextRequest) {
       text: `Propose hazards, isolation steps, equipment, and rescue gear for this confined space entry permit.\n\n${brief}`,
     })
 
-    // Short-circuit when no API key is configured — clearer 503
-    // than the SDK's opaque 401 from a missing key.
-    const apiKey = await getTenantApiKey(gate.tenantId)
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'AI is not configured for this deployment. Contact your administrator.' },
-        { status: 503 },
-      )
+    let client: Anthropic
+    try {
+      client = await getAnthropic(gate.tenantId)
+    } catch (err) {
+      const mapped = aiErrorToResponse(err, 'generate-confined-space-hazards')
+      Sentry.captureException(err, { tags: { ...mapped.tags, route: '/api/generate-confined-space-hazards' } })
+      return NextResponse.json(mapped.body, { status: mapped.status })
     }
-    const client = new Anthropic({ apiKey })
     const response = await client.messages.create({
       model:      MODEL,
       max_tokens: 16000,

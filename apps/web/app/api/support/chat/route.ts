@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
+import type Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
@@ -13,7 +13,7 @@ import {
   type EscalationReason,
 } from '@/lib/support/types'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
-import { getTenantApiKey } from '@/lib/ai/getTenantApiKey'
+import { getAnthropic, aiErrorToResponse } from '@/lib/ai/client'
 import { logAiInvocation } from '@/lib/ai/rateLimit'
 
 // Only the two roles Anthropic accepts in messages[]. Internally
@@ -312,17 +312,14 @@ export async function POST(req: Request) {
 
   // First model call. The model either replies directly or asks to call
   // the escalation tool.
-  // Per-request client so the tenant's settings.anthropic_api_key
-  // override is honored. Short-circuit when no API key is configured
-  // anywhere — clearer 503 than the SDK's opaque 401.
-  const apiKey = await getTenantApiKey(reporter.tenantId)
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: 'The assistant is not configured for this deployment. Contact your administrator.' },
-      { status: 503 },
-    )
+  let client: Anthropic
+  try {
+    client = await getAnthropic(reporter.tenantId)
+  } catch (err) {
+    const mapped = aiErrorToResponse(err, 'support-chat')
+    Sentry.captureException(err, { tags: { ...mapped.tags, route: '/api/support/chat' } })
+    return NextResponse.json(mapped.body, { status: mapped.status })
   }
-  const client = new Anthropic({ apiKey })
   let response: Anthropic.Message
   try {
     response = await client.messages.create({

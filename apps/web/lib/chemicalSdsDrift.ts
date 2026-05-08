@@ -21,14 +21,14 @@
 // /api/chemicals/.../parse endpoint, kicked off after the new SDS row
 // is inserted.
 
-import Anthropic from '@anthropic-ai/sdk'
+import type Anthropic from '@anthropic-ai/sdk'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { fetchSdsPdf, type FetchOutcome } from '@/lib/chemicalSdsFetch'
 import { chemicalSdsStoragePath } from '@soteria/core/chemicals'
 import { logAiInvocation } from '@/lib/ai/rateLimit'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
-import { getTenantApiKey } from '@/lib/ai/getTenantApiKey'
+import { getAnthropic } from '@/lib/ai/client'
 import { dispatchPushToProfiles } from '@/lib/notifications/pushFanout'
 
 const REVISION_MODEL = MODEL_BY_SURFACE['parse-sds']
@@ -91,10 +91,9 @@ const REV_PROMPT =
   `for any ambiguity.`
 
 async function extractRevisionDate(
-  apiKey:   string,
+  client:   Anthropic,
   pdfBytes: Uint8Array,
 ): Promise<RevisionExtractionResult> {
-  const client = new Anthropic({ apiKey })
   const base64 = Buffer.from(pdfBytes).toString('base64')
   const response = await client.messages.create({
     model:      REVISION_MODEL,
@@ -231,13 +230,20 @@ export async function runDriftCheck(args: RunArgs): Promise<DriftCheckResult> {
   }
 
   // Different bytes → ask the AI for the revision date.
-  const apiKey = await getTenantApiKey(product.tenant_id)
-  if (!apiKey) {
+  let aiClient: Anthropic
+  try {
+    aiClient = await getAnthropic(product.tenant_id)
+  } catch (err) {
+    // Either env-key missing (AnthropicNotConfiguredError) or tenant
+    // override mangled (MalformedTenantKeyError). Either way we can't
+    // extract a date — record 'unknown' so the per-product audit trail
+    // shows the gap, and let the operator notice via Sentry.
+    Sentry.captureException(err, { tags: { source: 'sds-drift', tenant_id: product.tenant_id } })
     await writeRow('unknown', {
       http_status:      fetched.httpStatus,
       latest_file_hash: fetched.sha256,
       baseline_file_hash: baselineHash,
-      notes:            'AI not configured; cannot extract revision date',
+      notes:            'AI not configured or tenant key malformed; cannot extract revision date',
     })
     return {
       outcome:          'unknown',
@@ -249,7 +255,7 @@ export async function runDriftCheck(args: RunArgs): Promise<DriftCheckResult> {
 
   let extraction: RevisionExtractionResult
   try {
-    extraction = await extractRevisionDate(apiKey, fetched.bytes)
+    extraction = await extractRevisionDate(aiClient, fetched.bytes)
     // ai_invocations.user_id is NOT NULL — log only on manual
     // triggers where we have a real user. Scheduled cron rows live
     // in chemical_sds_revision_checks for the per-product audit.

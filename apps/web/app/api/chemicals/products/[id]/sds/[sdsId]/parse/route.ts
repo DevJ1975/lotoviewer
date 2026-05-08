@@ -5,7 +5,7 @@ import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { checkAiRateLimit, logAiInvocation } from '@/lib/ai/rateLimit'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
-import { getTenantApiKey } from '@/lib/ai/getTenantApiKey'
+import { getAnthropic, aiErrorToResponse } from '@/lib/ai/client'
 import {
   GHS_PICTOGRAMS,
   GHS_SIGNAL_WORDS,
@@ -275,15 +275,14 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     const buf = Buffer.from(await blob.arrayBuffer())
     const base64 = buf.toString('base64')
 
-    const apiKey = await getTenantApiKey(tenantId)
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'AI is not configured for this deployment. Contact your administrator.' },
-        { status: 503 },
-      )
+    let client: Anthropic
+    try {
+      client = await getAnthropic(tenantId)
+    } catch (err) {
+      const mapped = aiErrorToResponse(err, 'parse-sds')
+      Sentry.captureException(err, { tags: { ...mapped.tags, route: '/api/chemicals/products/sds/parse' } })
+      return NextResponse.json(mapped.body, { status: mapped.status })
     }
-
-    const client = new Anthropic({ apiKey })
     const response = await client.messages.create({
       model:      MODEL,
       max_tokens: 16000,

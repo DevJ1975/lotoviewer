@@ -19,6 +19,7 @@ import { ReleaseNotesBanner } from '@/components/ReleaseNotesBanner'
 import AppDrawer from '@/components/AppDrawer'
 import TenantHeaderPill from '@/components/TenantHeaderPill'
 import SupportBot from '@/components/SupportBot'
+import AssistantDock from '@/components/AssistantDock'
 import ChatHeaderButton from '@/components/chat/ChatHeaderButton'
 import HelpHeaderButton from '@/components/manuals/HelpHeaderButton'
 import SoteriaLogo from '@/components/SoteriaLogo'
@@ -124,6 +125,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
       <UnloadGuard />
       <IdleLogout />
       <SupportBot />
+      <AssistantDock />
 
       <footer
         className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-3 text-xs text-slate-500 dark:text-slate-400"

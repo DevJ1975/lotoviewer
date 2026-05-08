@@ -25,6 +25,9 @@ export type AiSurface =
   | 'generate-confined-space-hazards'
   | 'classify-recordability'
   | 'parse-sds'
+  | 'assistant-chat'
+  | 'assistant-scan-photo'
+  | 'assistant-hazards'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
@@ -44,6 +47,17 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   'generate-confined-space-hazards':  { perHour: 20, perDay: 100 },
   'classify-recordability':           { perHour: 30, perDay: 200 },
   'parse-sds':                        { perHour: 30, perDay: 200 },
+  // Home-page assistant — conversational, expected to be the
+  // highest-volume AI surface once it lands.
+  'assistant-chat':                   { perHour: 60, perDay: 400 },
+  // Vision-on-nameplate scan. Field workers scan once per
+  // equipment-touch, but the model call is on the heavier side so
+  // we cap at modest rates per user.
+  'assistant-scan-photo':             { perHour: 30, perDay: 100 },
+  // Hazard report generation — heavy reasoning + RAG. Capped low
+  // because each call is expensive and the per-equipment result is
+  // cached server-side (24h) so honest usage stays well under.
+  'assistant-hazards':                { perHour: 30, perDay: 100 },
 }
 
 interface CheckArgs {
@@ -119,14 +133,18 @@ export async function checkAiRateLimit(args: CheckArgs): Promise<RateLimitResult
 }
 
 interface LogArgs {
-  userId:        string
-  tenantId:      string | null
-  surface:       AiSurface
-  model:         string
-  status:        'success' | 'rate_limited' | 'error'
-  inputTokens?:  number
-  outputTokens?: number
-  context?:      string
+  userId:           string
+  tenantId:         string | null
+  surface:          AiSurface
+  model:            string
+  status:           'success' | 'rate_limited' | 'error'
+  inputTokens?:     number
+  outputTokens?:    number
+  /** Tokens served from the prompt cache. Logged separately from
+   *  inputTokens so the dashboard can distinguish chargeable from
+   *  cached input. Older callers omit this. */
+  cacheReadTokens?: number
+  context?:         string
 }
 
 /**
@@ -138,14 +156,15 @@ export async function logAiInvocation(args: LogArgs): Promise<void> {
   try {
     const admin = supabaseAdmin()
     await admin.from('ai_invocations').insert({
-      user_id:       args.userId,
-      tenant_id:     args.tenantId,
-      surface:       args.surface,
-      model:         args.model,
-      status:        args.status,
-      input_tokens:  args.inputTokens ?? null,
-      output_tokens: args.outputTokens ?? null,
-      context:       args.context ?? null,
+      user_id:           args.userId,
+      tenant_id:         args.tenantId,
+      surface:           args.surface,
+      model:             args.model,
+      status:            args.status,
+      input_tokens:      args.inputTokens     ?? null,
+      output_tokens:     args.outputTokens    ?? null,
+      cache_read_tokens: args.cacheReadTokens ?? null,
+      context:           args.context         ?? null,
     })
   } catch (e) {
     Sentry.captureException(e, {

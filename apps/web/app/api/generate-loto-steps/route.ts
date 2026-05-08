@@ -4,12 +4,13 @@ import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { checkAiRateLimit, logAiInvocation } from '@/lib/ai/rateLimit'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
-import { getTenantApiKey } from '@/lib/ai/getTenantApiKey'
+import { getAnthropic, aiErrorToResponse } from '@/lib/ai/client'
 
-// Anthropic client is constructed per-request (after the auth gate
-// resolves the tenant) so each request can use the tenant's
-// override key from tenants.settings.anthropic_api_key. Falls
-// through to the env var when no override is set.
+// Anthropic client comes from the shared lib/ai/client wrapper so
+// every AI route inherits the same timeout, retry, and key-handling
+// posture. The wrapper resolves the tenant override (or env fallback)
+// and throws typed errors when the configuration is wrong — those map
+// to 502/503 responses via aiErrorToResponse.
 const MODEL = MODEL_BY_SURFACE['generate-loto-steps']
 
 // LOTO is safety-critical — OSHA 29 CFR 1910.147 governs authoring standards.
@@ -144,18 +145,17 @@ export async function POST(req: NextRequest) {
       text: `Propose LOTO energy-isolation steps for this food-production equipment. Return one step per independent energy source.\n\n${brief}`,
     })
 
-    // Short-circuit when neither the env nor the tenant override is
-    // set — the SDK would otherwise produce an opaque 401 that lands
-    // as a generic "AI error" toast in the UI. A clear 503 with a
-    // concrete message tells the operator what to do.
-    const apiKey = await getTenantApiKey(gate.tenantId)
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'AI is not configured for this deployment. Contact your administrator.' },
-        { status: 503 },
-      )
+    // Resolve the Anthropic client for this tenant. Throws when the
+    // env key is missing (503) or when the tenant override is mangled
+    // (502) — aiErrorToResponse maps both to clear operator messages.
+    let client: Anthropic
+    try {
+      client = await getAnthropic(gate.tenantId)
+    } catch (err) {
+      const mapped = aiErrorToResponse(err, 'generate-loto-steps')
+      Sentry.captureException(err, { tags: { ...mapped.tags, route: '/api/generate-loto-steps' } })
+      return NextResponse.json(mapped.body, { status: mapped.status })
     }
-    const client = new Anthropic({ apiKey })
     const response = await client.messages.create({
       model:      MODEL,
       max_tokens: 16000,

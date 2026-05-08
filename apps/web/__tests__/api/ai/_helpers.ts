@@ -98,7 +98,9 @@ export const messagesCreateMock = vi.fn(async (_args: AnthropicCreateArgs) => {
 // returns empty. Default the mock to a well-formed-looking key so
 // existing tests don't trip the new gate; tests for the
 // missing-key path use returnEmptyApiKey() below.
-export const getTenantApiKeyMock = vi.fn(async () => 'sk-ant-test-' + 'a'.repeat(40))
+export const getTenantApiKeyMock = vi.fn(
+  async (_tenantId: string | null) => 'sk-ant-test-' + 'a'.repeat(40),
+)
 
 vi.mock('@/lib/ai/getTenantApiKey', () => ({
   getTenantApiKey: (tenantId: string | null) => getTenantApiKeyMock(tenantId),
