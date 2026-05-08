@@ -1,5 +1,22 @@
 import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs';
+import { execSync } from 'node:child_process';
+import pkg from './package.json';
+
+// Iteration number = total git commits on the current branch. Bumps
+// automatically with every build, so the footer reflects exactly which
+// build the user is on without anyone editing a counter by hand. Falls
+// back to "0" when git isn't available (shallow CI checkout, tarball).
+function buildIteration(): string {
+  try {
+    return execSync('git rev-list --count HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  } catch {
+    return '0';
+  }
+}
+
 
 // Derive the Supabase storage hostname from NEXT_PUBLIC_SUPABASE_URL so
 // a different Supabase project can be deployed without a code edit.
@@ -17,6 +34,10 @@ function supabaseImageHost(): string {
 }
 
 const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_APP_VERSION: pkg.version,
+    NEXT_PUBLIC_BUILD_ITERATION: buildIteration(),
+  },
   images: {
     remotePatterns: [
       {
