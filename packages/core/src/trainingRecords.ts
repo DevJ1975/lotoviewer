@@ -21,6 +21,11 @@ export const TRAINING_ROLE_LABELS: Record<TrainingRole, string> = {
   // LOTO role (migration 050). 29 CFR 1910.147 calls a worker who
   // applies a personal locktag an "authorized employee."
   authorized_employee: 'LOTO authorized employee',
+  // HazCom roles (migration 092). HazCom 2012 (29 CFR 1910.1200) is
+  // the generic baseline; chemical_specific is per-product handler
+  // training the tenant configures via chemical_training_requirements.
+  hazcom:              'HazCom 2012',
+  chemical_specific:   'Chemical-specific handler',
   other:               'Other',
 }
 

@@ -33,6 +33,7 @@ const DEFAULT_MODULES: Record<string, boolean> = {
   loto:                       true,
   'confined-spaces':          true,
   'hot-work':                 true,
+  chemicals:                  true,
   'reports-scorecard':        true,
   'reports-compliance-bundle':true,
   'reports-inspector':        true,

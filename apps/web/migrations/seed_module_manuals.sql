@@ -23,6 +23,7 @@ values
   ('toolbox-talks',   'Toolbox Talks',       'AI-generated daily talks + crew sign-in roster.',     E'## Overview\n\nThis manual covers Toolbox Talks. **Edit me.**'),
   ('safety-boards',   'Safety Boards',       'Internal threaded forums for safety discussion.',     E'## Overview\n\nThis manual covers Safety Boards. **Edit me.**'),
   ('bbs',             'Behavior-Based Safety','QR-driven unsafe act / condition / safe behavior observations.', E'## Overview\n\nThis manual covers Behavior-Based Safety (BBS). **Edit me.**'),
+  ('chemicals',       'Chemical Management', 'Chemical inventory, GHS labeling, SDS storage + AI parsing + drift monitor.', E'## Overview\n\nThis manual covers the Chemical Management module. **Edit me.**'),
   ('reports-scorecard',         'EHS Scorecard',      'Leading + lagging indicators rolled up tenant-wide.',    E'## Overview\n\nThis manual covers the EHS Scorecard. **Edit me.**'),
   ('reports-insights',          'Insights',           'Auto-surfaced trends across the safety modules.',        E'## Overview\n\nThis manual covers the Insights module. **Edit me.**'),
   ('reports-compliance-bundle', 'Compliance bundle',  'One-click PDF pack of OSHA forms + records.',            E'## Overview\n\nThis manual covers the Compliance bundle export. **Edit me.**'),

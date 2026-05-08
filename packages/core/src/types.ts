@@ -302,6 +302,8 @@ export type TrainingRole =
   | 'hot_work_operator'
   | 'fire_watcher'
   | 'authorized_employee'   // LOTO §1910.147 — worker issued a locktag
+  | 'hazcom'                // HazCom 2012 baseline (29 CFR 1910.1200)
+  | 'chemical_specific'     // per-chemical handler training
   | 'other'
 
 export interface TrainingRecord {
@@ -336,6 +338,17 @@ export type WebhookEvent =
   | 'hot_work.work_complete'
   | 'hot_work.canceled'
   | 'hot_work.fire_observed'
+  // Chemicals lifecycle (migrations 090 + 088). All payloads include
+  // tenant_id so per-tenant webhooks (migration 093) route correctly.
+  | 'chemical.product_created'
+  | 'chemical.product_archived'
+  | 'chemical.product_unarchived'
+  | 'chemical.container_requested'
+  | 'chemical.container_approved'
+  | 'chemical.container_rejected'
+  | 'chemical.container_disposed'
+  | 'chemical.exposure_logged'
+  | 'chemical.sds_revision_pending'
 
 export interface WebhookSubscription {
   id:         string
@@ -346,6 +359,10 @@ export interface WebhookSubscription {
   secret:     string | null
   events:     WebhookEvent[]
   active:     boolean
+  // Migration 093: per-tenant scope. NULL = global (superadmin),
+  // non-null = scoped to that tenant. fire_webhooks() routes by
+  // matching this against payload.tenant_id.
+  tenant_id:  string | null
   created_by: string | null
   created_at: string
   updated_at: string
