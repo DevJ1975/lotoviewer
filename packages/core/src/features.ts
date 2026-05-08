@@ -329,6 +329,65 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
   },
 
+  // ── Behavior-Based Safety (BBS) module ───────────────────────────────
+  // QR-driven observation program. Workers scan a QR posted at a
+  // location, then submit an Unsafe Act, Unsafe Condition, or Safe
+  // Behavior. Anonymous submissions are accepted via the QR token;
+  // logged-in submissions earn gamification points and appear on the
+  // leaderboard. Feeds the EHS scorecard via a weighted formula
+  // (participation × close-out × severity).
+  {
+    id:          'bbs',
+    name:        'Behavior-Based Safety',
+    description: 'QR-driven unsafe act / condition / safe behavior observations',
+    href:        '/bbs',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'Eye',
+    color:       'teal',
+  },
+  {
+    id:          'bbs-new',
+    name:        'New Observation',
+    description: 'Submit an unsafe act / condition / safe behavior',
+    href:        '/bbs/new',
+    category:    'safety',
+    parent:      'bbs',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'bbs-leaderboard',
+    name:        'Leaderboard',
+    description: 'Top BBS contributors this period',
+    href:        '/bbs/leaderboard',
+    category:    'safety',
+    parent:      'bbs',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'bbs-qr',
+    name:        'QR Codes',
+    description: 'Generate per-location QR signs for BBS reporting',
+    href:        '/bbs/qr',
+    category:    'safety',
+    parent:      'bbs',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'bbs-scorecard',
+    name:        'BBS Scorecard',
+    description: 'Participation × close-out × severity weighted score',
+    href:        '/bbs/scorecard',
+    category:    'safety',
+    parent:      'bbs',
+    enabled:     true,
+    comingSoon:  false,
+  },
+
   // Legacy near-miss surface — kept enabled during the Phase 1 → Phase 6
   // transition so existing tenants don't lose their bookmarks. The new
   // unified `incidents` module (above) replaces it; remove this entry

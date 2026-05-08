@@ -171,9 +171,38 @@ Kept here so nothing leaks out of the plan.
   TestFlight build.
 - **Unblocks**: D2.1 (TestFlight build upload).
 
+## Phase 3 — BBS module (open)
+
+### D3.1 — Rate limit the public BBS intake endpoint
+- **Status**: Deferred from migration 081 / commit 3c472a8.
+- **Surface**: `POST /api/bbs/intake/[token]`. The token grants
+  anonymous insert into `bbs_observations`. There is no per-token
+  per-IP rate limit, so a bot that scrapes a printed QR URL can
+  spam the table.
+- **Risk**: Low for printed-only QRs (URLs aren't indexed) but
+  rises if a tenant publishes the URL on a public website. Worst
+  case is storage / row noise — no PII leak (writes only).
+- **Fix**: Mirror migration 067's `incident_anon_intake_tokens`
+  pattern — add a `bbs_intake_throttle` table keyed by
+  `(qr_location_id, ip_hash, minute)` and reject inserts that
+  exceed N/minute via an atomic upsert-and-count.
+- **Unblocks**: Publishing BBS QRs on public-facing signage
+  (vendor lobbies, contractor entrances).
+
+### D3.2 — Photo upload UX for BBS observations
+- **Status**: Deferred from migration 081 / commit 3c472a8.
+- **Surface**: `bbs_observation_photos` table + RLS + indexes
+  are in place; the form-side uploader is not wired.
+- **Fix**: Reuse the tenant-scoped `loto-photos` bucket pattern.
+  Path convention `{tenant_id}/bbs/{observation_id}/{ts}.jpg`.
+  Add a `<PhotoUploadZone>`-style component in
+  `app/bbs/_components/` and a
+  `POST /api/bbs/observations/[id]/photos` endpoint that records
+  the path on insert.
+
 ## Conventions
 
-- Add new entries with the next sequential ID (D2.4, D2.5, …).
+- Add new entries with the next sequential ID (D3.3, D3.4, …).
 - Cross-link by ID from commit messages and PRs ("unblocks D1.1").
 - Strike out a row (`~~D…~~`) when complete; don't delete — keep
   the audit trail.
