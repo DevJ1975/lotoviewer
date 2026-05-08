@@ -35,10 +35,15 @@ interface Props {
   priority?: boolean
 }
 
+// File paths intentionally suffixed `-v2`: when the layout was
+// fixed (single <text> + auto-flowing tspans, replacing the
+// hardcoded x= positions that overlapped), the rename guaranteed a
+// fresh URL at every cache layer (browser, Next/Image optimizer,
+// the PWA service worker in public/sw.js, Vercel CDN).
 const SRC: Record<SoteriaLogoVariant, string> = {
-  color: '/brand/logo-color.svg',
-  dark:  '/brand/logo-dark.svg',
-  mono:  '/brand/logo-mono-cream.svg',
+  color: '/brand/logo-color-v2.svg',
+  dark:  '/brand/logo-dark-v2.svg',
+  mono:  '/brand/logo-mono-cream-v2.svg',
 }
 
 export default function SoteriaLogo({
@@ -57,6 +62,12 @@ export default function SoteriaLogo({
       height={height}
       className={className}
       priority={priority}
+      // Pass-through the SVG without rasterising. Next.js's image
+      // optimiser would otherwise convert the SVG to a PNG and
+      // cache the result under a 1-year `immutable` key — a stale
+      // entry then survives across deploys until the URL changes.
+      // SVG is already vector so optimisation buys nothing.
+      unoptimized
     />
   )
 }
