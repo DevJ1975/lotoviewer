@@ -13,6 +13,18 @@ import { dispatchPushToProfiles } from '@/lib/notifications/pushFanout'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+const THREAD_KINDS = [
+  'hazard_report', 'near_miss_reflection', 'lesson_learned',
+  'alert', 'question', 'discussion',
+] as const
+type ThreadKind = typeof THREAD_KINDS[number]
+
+const LINK_TYPES = [
+  'incident', 'near_miss', 'equipment', 'hot_work_permit',
+  'confined_space', 'incident_action', 'jha', 'toolbox_talk',
+] as const
+type LinkType = typeof LINK_TYPES[number]
+
 interface RouteContext { params: Promise<{ boardId: string }> }
 
 interface ThreadRow {
@@ -29,6 +41,11 @@ interface ThreadRow {
   deleted_at: string | null
   created_at: string
   last_reply_at: string
+  kind: ThreadKind
+  metadata: Record<string, unknown>
+  linked_entity_type: LinkType | null
+  linked_entity_id: string | null
+  acknowledgement_required: boolean
 }
 
 export async function GET(req: Request, ctx: RouteContext) {
@@ -103,6 +120,11 @@ export async function GET(req: Request, ctx: RouteContext) {
           created_at: t.created_at,
           last_reply_at: t.last_reply_at,
           reply_count: replyCountById.get(t.id) ?? 0,
+          kind: t.kind,
+          metadata: t.metadata,
+          linked_entity_type: t.linked_entity_type,
+          linked_entity_id: t.linked_entity_id,
+          acknowledgement_required: t.acknowledgement_required,
         }
       }),
     })
@@ -119,7 +141,16 @@ export async function POST(req: Request, ctx: RouteContext) {
   const gate = await requireTenantMember(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
-  let body: { title?: string; body?: string }
+  let body: {
+    title?: string
+    body?: string
+    kind?: ThreadKind
+    metadata?: Record<string, unknown>
+    linked_entity_type?: LinkType | null
+    linked_entity_id?: string | null
+    acknowledgement_required?: boolean
+    attachment_ids?: string[]
+  }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
   const title = (body.title ?? '').trim()
@@ -130,6 +161,37 @@ export async function POST(req: Request, ctx: RouteContext) {
   if (text.length < 1 || text.length > 20000) {
     return NextResponse.json({ error: 'body must be 1-20000 chars' }, { status: 400 })
   }
+
+  // Default the kind so existing callers (the simple "post a thread"
+  // form) still work; new structured composer sends an explicit kind.
+  const kind: ThreadKind = body.kind && (THREAD_KINDS as readonly string[]).includes(body.kind)
+    ? body.kind
+    : 'discussion'
+
+  // Validate linked entity. Both fields must be set together or both null.
+  const linkType = body.linked_entity_type ?? null
+  const linkId   = body.linked_entity_id ?? null
+  if ((linkType && !linkId) || (!linkType && linkId)) {
+    return NextResponse.json({
+      error: 'linked_entity_type and linked_entity_id must be set together.',
+    }, { status: 400 })
+  }
+  if (linkType && !(LINK_TYPES as readonly string[]).includes(linkType)) {
+    return NextResponse.json({ error: `linked_entity_type must be one of ${LINK_TYPES.join(', ')}` }, { status: 400 })
+  }
+  if (linkId && !UUID_RE.test(linkId)) {
+    return NextResponse.json({ error: 'linked_entity_id must be a uuid' }, { status: 400 })
+  }
+
+  // Acknowledgement-required is admin/owner-only. Members can post
+  // threads but cannot mark them as required-ack.
+  const isPriv = gate.role === 'owner' || gate.role === 'admin' || gate.role === 'superadmin'
+  if (body.acknowledgement_required && !isPriv) {
+    return NextResponse.json({ error: 'Only admins can mark a thread as requiring acknowledgement.' }, { status: 403 })
+  }
+
+  const attachmentIds = (body.attachment_ids ?? []).filter(s => UUID_RE.test(s))
+  const metadata = body.metadata && typeof body.metadata === 'object' ? body.metadata : {}
 
   try {
     const admin = supabaseAdmin()
@@ -151,12 +213,17 @@ export async function POST(req: Request, ctx: RouteContext) {
     const { data: inserted, error: insertErr } = await admin
       .from('safety_board_threads')
       .insert({
-        tenant_id:      gate.tenantId,
-        board_id:       boardId,
-        author_user_id: gate.userId,
+        tenant_id:                gate.tenantId,
+        board_id:                 boardId,
+        author_user_id:           gate.userId,
         title,
-        body:           text,
-        body_mentions:  mentionedIds,
+        body:                     text,
+        body_mentions:            mentionedIds,
+        kind,
+        metadata,
+        linked_entity_type:       linkType,
+        linked_entity_id:         linkId,
+        acknowledgement_required: body.acknowledgement_required === true,
       })
       .select('*')
       .single()
@@ -165,6 +232,19 @@ export async function POST(req: Request, ctx: RouteContext) {
       return NextResponse.json({ error: insertErr.message }, { status: 500 })
     }
     const thread = (inserted as unknown) as ThreadRow
+
+    // Claim attachments uploaded ahead of POST. Same pattern as chat:
+    // only attachments uploaded by THIS user that aren't already
+    // claimed are attached, so a peer can't hijack a pending upload.
+    if (attachmentIds.length > 0) {
+      await admin
+        .from('safety_board_attachments')
+        .update({ target_type: 'thread', target_id: thread.id })
+        .in('id', attachmentIds)
+        .eq('tenant_id', gate.tenantId)
+        .eq('uploaded_by', gate.userId)
+        .is('target_id', null)
+    }
 
     if (mentionedIds.length > 0) {
       await admin.from('mentions').insert(mentionedIds.map(uid => ({

@@ -3,6 +3,95 @@
 
 import { supabase } from '@/lib/supabase'
 
+// ─── Tier 1 types ──────────────────────────────────────────────────────────
+
+export const THREAD_KINDS = [
+  'hazard_report', 'near_miss_reflection', 'lesson_learned',
+  'alert', 'question', 'discussion',
+] as const
+export type ThreadKind = typeof THREAD_KINDS[number]
+
+export const KIND_LABEL: Record<ThreadKind, string> = {
+  hazard_report:        'Hazard report',
+  near_miss_reflection: 'Near-miss reflection',
+  lesson_learned:       'Lesson learned',
+  alert:                'Safety alert',
+  question:             'Question',
+  discussion:           'Discussion',
+}
+
+export const KIND_DESCRIPTIONS: Record<ThreadKind, string> = {
+  hazard_report:        'Report an unsafe condition you observed.',
+  near_miss_reflection: 'Reflect on an incident that almost happened.',
+  lesson_learned:       'Share a takeaway from an incident or near-miss.',
+  alert:                'Notify the team about a safety concern.',
+  question:             'Ask the team about a procedure or hazard.',
+  discussion:           'Open-ended conversation.',
+}
+
+export const ENTITY_LINK_TYPES = [
+  'incident', 'near_miss', 'equipment', 'hot_work_permit',
+  'confined_space', 'incident_action', 'jha', 'toolbox_talk',
+] as const
+export type EntityLinkType = typeof ENTITY_LINK_TYPES[number]
+
+export const ENTITY_LINK_LABEL: Record<EntityLinkType, string> = {
+  incident:        'Incident',
+  near_miss:       'Near-miss',
+  equipment:       'Equipment (LOTO)',
+  hot_work_permit: 'Hot-work permit',
+  confined_space:  'Confined space',
+  incident_action: 'Action item',
+  jha:             'JHA',
+  toolbox_talk:    'Toolbox talk',
+}
+
+// Hrefs from a (type, id) pair. Returns null when the type doesn't
+// have a known route (template gracefully degrades to no link).
+export function entityHref(type: EntityLinkType, id: string): string | null {
+  switch (type) {
+    case 'incident':         return `/incidents/${id}`
+    case 'near_miss':        return `/near-miss/${id}`
+    case 'equipment':        return `/equipment/${id}`
+    case 'hot_work_permit':  return `/hot-work/${id}`
+    case 'confined_space':   return `/confined-spaces/${id}`
+    case 'incident_action':  return null  // detail lives inline on incident
+    case 'jha':              return `/jha/${id}`
+    case 'toolbox_talk':     return `/toolbox-talks/${id}`
+  }
+}
+
+export interface ThreadAttachment {
+  id:           string
+  storage_path: string
+  mime_type:    string
+  size_bytes:   number
+  width:        number | null
+  height:       number | null
+  filename:     string | null
+}
+
+export interface SpawnedAction {
+  id:             string
+  description:    string
+  status:         string
+  due_at:         string | null
+  owner_user_id:  string | null
+  incident_id:    string
+}
+
+export interface AckSummary {
+  mine: { acknowledged_at: string; comment: string | null } | null
+  count: number
+  acks: Array<{
+    user_id: string
+    acknowledged_at: string
+    comment: string | null
+    full_name: string | null
+    email: string | null
+  }>
+}
+
 export interface SafetyBoardSummary {
   id:           string
   name:         string
@@ -35,6 +124,11 @@ export interface SafetyThreadSummary {
   created_at:         string
   last_reply_at:      string
   reply_count:        number
+  kind:               ThreadKind
+  metadata:           Record<string, unknown>
+  linked_entity_type: EntityLinkType | null
+  linked_entity_id:   string | null
+  acknowledgement_required: boolean
 }
 
 export interface SafetyThreadDetail {
@@ -53,6 +147,13 @@ export interface SafetyThreadDetail {
   created_at: string
   last_reply_at: string
   reactions: SafetyReaction[]
+  kind: ThreadKind
+  metadata: Record<string, unknown>
+  linked_entity_type: EntityLinkType | null
+  linked_entity_id: string | null
+  acknowledgement_required: boolean
+  attachments: ThreadAttachment[]
+  spawned_actions: SpawnedAction[]
 }
 
 export interface SafetyReply {
@@ -68,6 +169,7 @@ export interface SafetyReply {
   edited_at:          string | null
   created_at:         string
   reactions:          SafetyReaction[]
+  attachments:        ThreadAttachment[]
 }
 
 async function authHeader(): Promise<Record<string, string>> {
@@ -111,7 +213,16 @@ export async function listThreads(tenantId: string, boardId: string): Promise<Sa
   return j.threads
 }
 
-export async function createThread(tenantId: string, boardId: string, p: { title: string; body: string }) {
+export async function createThread(tenantId: string, boardId: string, p: {
+  title: string
+  body: string
+  kind?: ThreadKind
+  metadata?: Record<string, unknown>
+  linked_entity_type?: EntityLinkType | null
+  linked_entity_id?: string | null
+  acknowledgement_required?: boolean
+  attachment_ids?: string[]
+}) {
   const res = await fetch(`/api/safety-boards/${boardId}/threads`, {
     method: 'POST',
     headers: await jsonHeaders(tenantId),
@@ -159,7 +270,7 @@ export async function listReplies(tenantId: string, boardId: string, threadId: s
 
 export async function createReply(
   tenantId: string, boardId: string, threadId: string,
-  p: { body: string; parent_reply_id?: string },
+  p: { body: string; parent_reply_id?: string; attachment_ids?: string[] },
 ): Promise<SafetyReply> {
   const res = await fetch(`/api/safety-boards/${boardId}/threads/${threadId}/replies`, {
     method: 'POST',
@@ -168,6 +279,89 @@ export async function createReply(
   })
   const j = await readJson<{ reply: SafetyReply }>(res)
   return j.reply
+}
+
+// ─── Tier 1 fetchers ───────────────────────────────────────────────────────
+
+export async function uploadBoardAttachment(tenantId: string, file: File): Promise<{ id: string; mime_type: string; filename: string | null }> {
+  const form = new FormData()
+  form.set('file', file)
+  const res = await fetch('/api/safety-boards/attachments', {
+    method: 'POST',
+    headers: { ...tenantHeader(tenantId), ...(await authHeader()) },
+    body: form,
+  })
+  const j = await readJson<{ attachment: { id: string; mime_type: string; filename: string | null } }>(res)
+  return j.attachment
+}
+
+export async function getBoardAttachmentUrl(tenantId: string, attId: string): Promise<string> {
+  const res = await fetch(`/api/safety-boards/attachments/${attId}/url`, {
+    headers: { ...tenantHeader(tenantId), ...(await authHeader()) },
+  })
+  const j = await readJson<{ url: string }>(res)
+  return j.url
+}
+
+export async function fetchAcknowledgements(tenantId: string, threadId: string): Promise<AckSummary> {
+  const res = await fetch(`/api/safety-boards/threads/${threadId}/acknowledge`, {
+    headers: { ...tenantHeader(tenantId), ...(await authHeader()) },
+  })
+  return readJson<AckSummary>(res)
+}
+
+export async function acknowledgeThread(tenantId: string, threadId: string, comment?: string): Promise<void> {
+  const res = await fetch(`/api/safety-boards/threads/${threadId}/acknowledge`, {
+    method: 'POST',
+    headers: await jsonHeaders(tenantId),
+    body: JSON.stringify(comment ? { comment } : {}),
+  })
+  await readJson<unknown>(res)
+}
+
+export async function spawnActionFromThread(
+  tenantId: string, threadId: string,
+  p: {
+    action_type: 'corrective' | 'preventive' | 'interim'
+    description?: string
+    hierarchy_of_controls?: 'elimination' | 'substitution' | 'engineering' | 'administrative' | 'ppe' | null
+    owner_user_id?: string | null
+    due_at?: string | null
+    incident_id?: string
+  },
+): Promise<{ action: { id: string }; incident_id: string }> {
+  const res = await fetch(`/api/safety-boards/threads/${threadId}/spawn-action`, {
+    method: 'POST',
+    headers: await jsonHeaders(tenantId),
+    body: JSON.stringify(p),
+  })
+  return readJson<{ action: { id: string }; incident_id: string }>(res)
+}
+
+export async function searchEntities(
+  tenantId: string, type: EntityLinkType, q: string,
+): Promise<Array<{ id: string; label: string; sub: string }>> {
+  const u = new URL('/api/safety-boards/entity-search', window.location.origin)
+  u.searchParams.set('type', type)
+  u.searchParams.set('q', q)
+  const res = await fetch(u.pathname + u.search, {
+    headers: { ...tenantHeader(tenantId), ...(await authHeader()) },
+  })
+  const j = await readJson<{ items: Array<{ id: string; label: string; sub: string }> }>(res)
+  return j.items
+}
+
+export async function listThreadsByEntity(
+  tenantId: string, type: EntityLinkType, id: string,
+): Promise<Array<{ id: string; board_id: string; kind: ThreadKind; title: string; pinned: boolean; locked: boolean; last_reply_at: string }>> {
+  const u = new URL('/api/safety-boards/by-entity', window.location.origin)
+  u.searchParams.set('type', type)
+  u.searchParams.set('id', id)
+  const res = await fetch(u.pathname + u.search, {
+    headers: { ...tenantHeader(tenantId), ...(await authHeader()) },
+  })
+  const j = await readJson<{ threads: Array<{ id: string; board_id: string; kind: ThreadKind; title: string; pinned: boolean; locked: boolean; last_reply_at: string }> }>(res)
+  return j.threads
 }
 
 export async function patchReply(tenantId: string, replyId: string, body: string) {
