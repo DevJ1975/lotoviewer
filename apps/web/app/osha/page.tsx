@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Loader2, AlertTriangle, FileText, Download, Settings, ShieldCheck } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
+import OshaDeadlineBanner from '@/app/_components/OshaDeadlineBanner'
 import {
   build300ASummary,
   trirFromSummary,
@@ -265,6 +266,12 @@ export default function OshaDashboardPage() {
 
       {summary && (
         <>
+          <OshaDeadlineBanner
+            year={year}
+            certified={Boolean(cert?.certified_at)}
+            certifiedAt={cert?.certified_at ?? null}
+          />
+
           <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <CountTile label="Deaths"             value={summary.total_deaths} />
             <CountTile label="Days-away cases"    value={summary.total_days_away} />
