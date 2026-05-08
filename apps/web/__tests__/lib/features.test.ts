@@ -119,6 +119,7 @@ describe('getFeaturesByCategory', () => {
       'hot-work',
       'hot-work-status',
       'jha',
+      'safety-boards',
     ])
   })
 
@@ -158,6 +159,7 @@ describe('getModules', () => {
       'near-miss',
       'hot-work',
       'jha',
+      'safety-boards',
     ])
   })
 

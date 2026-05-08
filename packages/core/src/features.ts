@@ -451,6 +451,15 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
   },
   {
+    id:          'safety-boards',
+    name:        'Safety boards',
+    description: 'Internal threaded forums for safety discussion',
+    href:        '/safety-boards',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
     id:          'support',
     name:        'Support',
     description: 'Report a bug — emails the maintainer',
