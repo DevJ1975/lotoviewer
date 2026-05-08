@@ -29,7 +29,22 @@ export * from './riskMetrics'
 export * from './nearMiss'
 export * from './nearMissMetrics'
 export * from './bbs'
-export * from './bbsMetrics'
+// bbsMetrics exports a `selectActive` that collides with the same
+// name in nearMissMetrics. Re-export everything else by name and
+// alias `selectActive` to keep the barrel unambiguous. Callers that
+// want either selectActive specifically should import via the
+// sub-path (`@soteria/core/bbsMetrics` or `/nearMissMetrics`).
+export {
+  type BBSObservationForMetrics,
+  type BBSLeaderboardRow,
+  type BBSMetrics,
+  selectActive as selectActiveBbs,
+  countCreatedSince,
+  computeCloseOutRate,
+  computeAvgRiskScore,
+  computeEhsScore,
+  fetchBBSMetrics,
+} from './bbsMetrics'
 // Incident module reuses some helper names from nearMiss
 // (compareForTriage, isActive, ageInDays, validateCreateInput) since
 // the API surface is intentionally parallel. Callers should pull
