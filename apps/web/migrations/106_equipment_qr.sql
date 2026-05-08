@@ -18,7 +18,9 @@ begin;
 -- We don't need cryptographic strength — pgcrypto's gen_random_uuid()
 -- is sufficient entropy and we store unique ones anyway.
 create or replace function public._gen_qr_token() returns text
-language sql volatile as $$
+language sql volatile
+set search_path = public, pg_catalog
+as $$
   select substr(
     -- Use the v4 UUID's hex digits as a 32-char alphabet of [0-9a-f].
     -- That's only 4 bits/char (vs 5 for true base32) but the column
@@ -63,7 +65,9 @@ create unique index if not exists ux_loto_equipment_qr_token
 -- New rows auto-generate a token. Apps still see the column on
 -- insert; this is a safety net for direct SQL inserts.
 create or replace function public._loto_equipment_qr_token_default()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql
+set search_path = public, pg_catalog
+as $$
 begin
   if new.qr_token is null or length(new.qr_token) = 0 then
     new.qr_token := public._gen_qr_token();
