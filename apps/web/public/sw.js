@@ -13,7 +13,13 @@
 // v6 (2026-04-27) — added Web Push handlers (push + notificationclick).
 // Bumping the version so existing PWA clients re-register the worker
 // and pick up the new event listeners.
-const CACHE_VERSION = 'v6'
+// v7 (2026-05-08) — skip the SW entirely for /api/* GETs. These were
+// falling through to the same-origin cacheFirst branch, which froze
+// list endpoints (e.g. /api/safety-boards) on the first 200 response;
+// newly created rows never appeared in the UI until the cache was
+// cleared. API calls are short and JWT-bound — let the network handle
+// them.
+const CACHE_VERSION = 'v7'
 const STATIC_CACHE  = `loto-static-${CACHE_VERSION}`
 const HTML_CACHE    = `loto-html-${CACHE_VERSION}`
 const IMAGE_CACHE   = `loto-images-${CACHE_VERSION}`
@@ -70,6 +76,12 @@ self.addEventListener('fetch', event => {
   // Never cache Supabase API or auth responses — too risky and they need
   // fresh JWTs/RLS evaluations on every call.
   if (url.hostname.endsWith('.supabase.co') && !url.pathname.startsWith('/storage/')) return
+
+  // Never cache our own API routes. They return JWT/tenant-scoped JSON
+  // that has to reflect the latest writes (creating a board, posting a
+  // message, etc.). The default same-origin branch below is cache-first
+  // and would happily freeze the first 200 response forever.
+  if (url.origin === self.location.origin && url.pathname.startsWith('/api/')) return
 
   // Strategy: cache-first for hashed Next.js static assets.
   if (url.pathname.startsWith('/_next/static/')) {
