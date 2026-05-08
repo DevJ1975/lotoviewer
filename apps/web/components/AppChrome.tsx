@@ -19,6 +19,7 @@ import { ReleaseNotesBanner } from '@/components/ReleaseNotesBanner'
 import AppDrawer from '@/components/AppDrawer'
 import TenantHeaderPill from '@/components/TenantHeaderPill'
 import SupportBot from '@/components/SupportBot'
+import ChatHeaderButton from '@/components/chat/ChatHeaderButton'
 import { useAuth } from '@/components/AuthProvider'
 import { requestPersistentStorage } from '@/lib/platform'
 
@@ -84,6 +85,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
 
             <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-auto">
               <Greeting className="hidden md:inline-flex text-white/80" />
+              <ChatHeaderButton />
               <UserMenu />
             </div>
           </div>
