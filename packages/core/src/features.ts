@@ -388,6 +388,33 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
   },
 
+  // ── Chemical Management (HazCom / GHS / SDS) ─────────────────────────
+  // Tenant-wide chemical catalog with versioned SDS storage. Phase A
+  // ships catalog + manual SDS upload + search. Phase B layers AI SDS
+  // parsing; Phase E adds nightly drift monitoring. See
+  // docs/chemical-management-system-plan.md for the full roadmap.
+  {
+    id:          'chemicals',
+    name:        'Chemical Management',
+    description: 'Chemical inventory, GHS labeling, and SDS storage',
+    href:        '/chemicals',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'FlaskConical',
+    color:       'indigo',
+  },
+  {
+    id:          'chemicals-new',
+    name:        'Add Chemical',
+    description: 'Add a chemical product and upload its SDS',
+    href:        '/chemicals/new',
+    category:    'safety',
+    parent:      'chemicals',
+    enabled:     true,
+    comingSoon:  false,
+  },
+
   // Legacy near-miss surface — kept enabled during the Phase 1 → Phase 6
   // transition so existing tenants don't lose their bookmarks. The new
   // unified `incidents` module (above) replaces it; remove this entry

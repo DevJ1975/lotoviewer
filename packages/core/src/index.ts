@@ -30,6 +30,7 @@ export * from './nearMiss'
 export * from './nearMissMetrics'
 export * from './bbs'
 export * from './bbsMetrics'
+export * from './chemicals'
 // Incident module reuses some helper names from nearMiss
 // (compareForTriage, isActive, ageInDays, validateCreateInput) since
 // the API surface is intentionally parallel. Callers should pull
