@@ -15,6 +15,7 @@ import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { Shield } from 'lucide-react'
+import { getModuleVisuals } from '@/lib/moduleVisuals'
 
 // Side drawer that hosts every feature in the app. Replaces the inline
 // top-nav links so the chrome stays minimal as more modules ship.
@@ -220,29 +221,40 @@ function ModuleRow({
   const hasChildren = children.length > 0
   const active = pathname === mod.href
   const isClickable = isFeatureAccessible(mod.id)
+  const { Icon, classes } = getModuleVisuals(mod.id)
 
   // Module name + chevron live on the same row but are independent tap
   // targets. Both meet the 44pt iPad guideline (the chevron button is
   // 40pt wide × full row height, and the name link is row height tall).
   const nameContent = (
-    <div className="flex flex-col gap-0.5 min-w-0">
-      <span className="flex items-center gap-2 flex-wrap">
-        <span className={`text-[14px] font-semibold ${
-          active ? 'text-brand-navy dark:text-brand-yellow'
-          : mod.comingSoon ? 'text-slate-500 dark:text-slate-400'
-          : 'text-slate-900 dark:text-slate-100'
-        }`}>
-          {mod.name}
-        </span>
-        {mod.comingSoon && (
-          <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
-            Coming Soon
+    <div className="flex items-start gap-2.5 min-w-0">
+      <span
+        className={`shrink-0 mt-0.5 w-7 h-7 rounded-md flex items-center justify-center ${classes.tile} ${
+          active ? classes.ring : ''
+        }`}
+        aria-hidden="true"
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+        <span className="flex items-center gap-2 flex-wrap">
+          <span className={`text-[14px] font-semibold ${
+            active ? 'text-brand-navy dark:text-brand-yellow'
+            : mod.comingSoon ? 'text-slate-500 dark:text-slate-400'
+            : 'text-slate-900 dark:text-slate-100'
+          }`}>
+            {mod.name}
           </span>
-        )}
-      </span>
-      <span className={`text-[11px] leading-snug ${mod.comingSoon ? 'text-slate-400 dark:text-slate-500' : 'text-slate-500 dark:text-slate-400'}`}>
-        {mod.description}
-      </span>
+          {mod.comingSoon && (
+            <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+              Coming Soon
+            </span>
+          )}
+        </span>
+        <span className={`text-[11px] leading-snug ${mod.comingSoon ? 'text-slate-400 dark:text-slate-500' : 'text-slate-500 dark:text-slate-400'}`}>
+          {mod.description}
+        </span>
+      </div>
     </div>
   )
 
