@@ -6,6 +6,8 @@ import { useParams } from 'next/navigation'
 import { ArrowLeft, AlertTriangle, Loader2, Plus, Trash2, ChevronDown } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
+import ActionCommentThread from '@/components/ActionCommentThread'
+import type { MentionMember } from '@/components/MentionInput'
 import {
   INCIDENT_ACTION_TYPES,
   ACTION_TYPE_LABEL,
@@ -35,7 +37,12 @@ const STATUS_PILL: Record<IncidentActionStatus, string> = {
   cancelled:   'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200',
 }
 
-interface MemberOption { user_id: string; email: string | null; full_name: string | null }
+interface MemberOption {
+  user_id:    string
+  email:      string | null
+  full_name:  string | null
+  avatar_url: string | null
+}
 
 export default function ActionsPage() {
   const { id } = useParams<{ id: string }>()
@@ -67,22 +74,28 @@ export default function ActionsPage() {
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
       setActions(body.actions as IncidentActionRow[])
 
-      // Best-effort member lookup for the owner picker. We hit the
-      // tenant_memberships RLS-scoped view directly via supabase.
+      // Best-effort member lookup for the owner picker + comment
+      // mention autocomplete. We hit the tenant_memberships
+      // RLS-scoped view directly via supabase.
       const { data: mems } = await supabase
         .from('tenant_memberships')
-        .select('user_id, profiles:profiles!inner(email, full_name)')
+        .select('user_id, profiles:profiles!inner(email, full_name, avatar_url)')
         .eq('tenant_id', tenant.id)
       type Row = {
         user_id: string
         profiles:
-          | { email: string | null; full_name: string | null }
-          | { email: string | null; full_name: string | null }[]
+          | { email: string | null; full_name: string | null; avatar_url: string | null }
+          | { email: string | null; full_name: string | null; avatar_url: string | null }[]
           | null
       }
       const opts: MemberOption[] = ((mems as Row[] | null) ?? []).map(m => {
         const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles
-        return { user_id: m.user_id, email: p?.email ?? null, full_name: p?.full_name ?? null }
+        return {
+          user_id:    m.user_id,
+          email:      p?.email ?? null,
+          full_name:  p?.full_name ?? null,
+          avatar_url: p?.avatar_url ?? null,
+        }
       })
       setMembers(opts)
     } catch (e) {
@@ -301,6 +314,7 @@ export default function ActionsPage() {
           {actions.map(a => (
             <ActionRow
               key={a.id}
+              incidentId={id}
               action={a}
               members={members}
               onUpdate={updateAction}
@@ -315,8 +329,9 @@ export default function ActionsPage() {
 }
 
 function ActionRow({
-  action, members, onUpdate, onDelete, busy,
+  incidentId, action, members, onUpdate, onDelete, busy,
 }: {
+  incidentId: string
   action:   IncidentActionRow
   members:  MemberOption[]
   onUpdate: (id: string, patch: Partial<{ status: IncidentActionStatus; verification_evidence: string; cancel_reason: string }>) => Promise<void>
@@ -415,6 +430,12 @@ function ActionRow({
           </button>
         </div>
       )}
+
+      <ActionCommentThread
+        incidentId={incidentId}
+        actionId={action.id}
+        members={members as MentionMember[]}
+      />
     </li>
   )
 }
