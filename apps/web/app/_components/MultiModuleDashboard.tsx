@@ -19,6 +19,7 @@ import RiskKpiPanel             from './RiskKpiPanel'
 import NearMissKpiPanel         from './NearMissKpiPanel'
 import JhaKpiPanel              from './JhaKpiPanel'
 import IncidentKpiPanel         from './IncidentKpiPanel'
+import BBSKpiPanel              from './BBSKpiPanel'
 import OpenActionsPanel         from './OpenActionsPanel'
 
 // Multi-module dashboard — the legacy default home rendered by
@@ -155,6 +156,11 @@ export default function MultiModuleDashboard() {
           self-hides when the user has no open actions, so it's
           a no-op for new users. */}
       <IncidentKpiPanel />
+
+      {/* Behavior-Based Safety — QR-driven observation program with
+          gamification leaderboard. Self-gates via isModuleVisible. */}
+      <BBSKpiPanel />
+
       <OpenActionsPanel />
 
       <ComingSoonStrip />
