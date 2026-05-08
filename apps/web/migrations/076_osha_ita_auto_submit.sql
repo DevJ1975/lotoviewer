@@ -1,4 +1,4 @@
--- 070_osha_ita_auto_submit.sql
+-- 076_osha_ita_auto_submit.sql
 -- Per-establishment opt-in for the daily auto-submit cron.
 --
 -- When `ita_auto_submit_enabled` is true on an establishment, and:
