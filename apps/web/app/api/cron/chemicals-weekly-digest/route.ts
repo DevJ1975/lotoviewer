@@ -83,7 +83,7 @@ async function runCron(req: Request): Promise<NextResponse> {
       admin.from('chemical_sds_documents')
         .select(`
           id, tenant_id, product_id, revision_date, created_at,
-          chemical_products ( id, name, manufacturer, archived_at )
+          chemical_products!product_id ( id, name, manufacturer, archived_at )
         `)
         .eq('parse_review_status', 'pending')
         .limit(2000),

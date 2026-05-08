@@ -23,7 +23,7 @@ export async function GET(req: Request) {
         parse_review_status,
         parsed_payload,
         created_at,
-        chemical_products (
+        chemical_products!product_id (
           id,
           name,
           manufacturer,
