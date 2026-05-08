@@ -163,7 +163,28 @@ export default function ChemicalScanPage() {
           )}
           {active && (
             <div className="absolute inset-0 pointer-events-none">
-              <div className="absolute inset-x-8 top-1/2 -translate-y-1/2 h-32 border-2 border-indigo-400 rounded" />
+              <div className="absolute inset-x-8 top-1/2 -translate-y-1/2 h-32 border-2 border-indigo-400 rounded overflow-hidden">
+                <div className="chem-scan-laser" aria-hidden />
+              </div>
+              <style>{`
+                .chem-scan-laser {
+                  position: absolute;
+                  left: 0;
+                  right: 0;
+                  height: 2px;
+                  background: linear-gradient(90deg, transparent, rgba(239, 68, 68, 0.95), transparent);
+                  box-shadow: 0 0 8px 2px rgba(239, 68, 68, 0.7), 0 0 18px 6px rgba(239, 68, 68, 0.35);
+                  animation: chem-scan-sweep 1.6s ease-in-out infinite alternate;
+                  will-change: top;
+                }
+                @keyframes chem-scan-sweep {
+                  from { top: 0; }
+                  to   { top: calc(100% - 2px); }
+                }
+                @media (prefers-reduced-motion: reduce) {
+                  .chem-scan-laser { animation: none; top: 50%; }
+                }
+              `}</style>
             </div>
           )}
         </div>
