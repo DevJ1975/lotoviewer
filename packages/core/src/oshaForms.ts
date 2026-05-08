@@ -430,3 +430,149 @@ export function csvEscape(cell: string): string {
 export function rowsToCsv(rows: ReadonlyArray<ReadonlyArray<string>>): string {
   return rows.map(r => r.map(csvEscape).join(',')).join('\n') + '\n'
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// OSHA ITA (Injury Tracking Application) electronic submission payload.
+//
+// Mirrors the established CSV column shape but emits JSON suitable
+// for posting to OSHA's ITA submission endpoint. The exact endpoint
+// URL + auth flow are configured at runtime in the API route — this
+// helper only shapes the payload, so it stays unit-testable and
+// pure.
+//
+// We expose this as a typed builder rather than a free-form record
+// so a typo in a field name shows up at compile time instead of
+// after OSHA rejects the submission.
+// ──────────────────────────────────────────────────────────────────────────
+
+export interface ItaSubmissionPayload {
+  reporting_year:               number
+  /** OSHA-issued Establishment ID assigned during ITA registration. */
+  establishment_id:             string
+  establishment_name:           string
+  street:                       string | null
+  city:                         string | null
+  state:                        string | null
+  zip:                          string | null
+  naics_code:                   string | null
+  industry_description:         string | null
+  annual_average_employees:     number
+  total_hours_worked:           number
+  /** True when the establishment had no recordable cases this year. */
+  no_injuries:                  boolean
+  totals: {
+    deaths:                     number
+    days_away_cases:            number
+    job_transfer_cases:         number
+    other_recordable_cases:     number
+    days_away_days:             number
+    job_transfer_days:          number
+  }
+  illness_types: {
+    injury:                     number
+    skin_disorder:              number
+    respiratory_condition:      number
+    poisoning:                  number
+    hearing_loss:               number
+    other_illness:              number
+  }
+  certification: {
+    /** Typed name from `osha_annual_summaries.certified_typed_name`. */
+    executive_typed_name:       string | null
+    /** ISO timestamp of the in-app certification. */
+    certified_at:               string | null
+  }
+  /** When `include_cases` is true (Appendix B large establishments) the
+   *  300 + 301 case rows ride along with the 300A summary. */
+  cases?:                       Osha300Row[]
+}
+
+export interface BuildItaSubmissionInput {
+  year:                       number
+  establishment_id:           string
+  establishment_name:         string
+  street:                     string | null
+  city:                       string | null
+  state:                      string | null
+  zip:                        string | null
+  naics_code:                 string | null
+  industry_description:       string | null
+  summary:                    Osha300ASummary
+  certified_typed_name:       string | null
+  certified_at:               string | null
+  /** Set true for Appendix B 100+-employee establishments — sends
+   *  the per-case 300/301 rows alongside the summary. */
+  include_cases?:             boolean
+  cases?:                     ReadonlyArray<Osha300Row>
+}
+
+export function buildItaSubmissionPayload(
+  input: BuildItaSubmissionInput,
+): ItaSubmissionPayload {
+  const totalRecordables =
+    input.summary.total_deaths + input.summary.total_days_away
+    + input.summary.total_restricted + input.summary.total_other_recordable
+
+  const payload: ItaSubmissionPayload = {
+    reporting_year:           input.year,
+    establishment_id:         input.establishment_id,
+    establishment_name:       input.establishment_name,
+    street:                   input.street,
+    city:                     input.city,
+    state:                    input.state,
+    zip:                      input.zip,
+    naics_code:               input.naics_code,
+    industry_description:     input.industry_description,
+    annual_average_employees: input.summary.annual_avg_employees,
+    total_hours_worked:       input.summary.total_hours_worked,
+    no_injuries:              totalRecordables === 0,
+    totals: {
+      deaths:                 input.summary.total_deaths,
+      days_away_cases:        input.summary.total_days_away,
+      job_transfer_cases:     input.summary.total_restricted,
+      other_recordable_cases: input.summary.total_other_recordable,
+      days_away_days:         input.summary.total_days_away_count,
+      job_transfer_days:      input.summary.total_days_restricted_count,
+    },
+    illness_types: {
+      injury:                 input.summary.by_injury_type.injury,
+      skin_disorder:          input.summary.by_injury_type.skin_disorder,
+      respiratory_condition:  input.summary.by_injury_type.respiratory,
+      poisoning:              input.summary.by_injury_type.poisoning,
+      hearing_loss:           input.summary.by_injury_type.hearing_loss,
+      other_illness:          input.summary.by_injury_type.other_illness,
+    },
+    certification: {
+      executive_typed_name:   input.certified_typed_name,
+      certified_at:           input.certified_at,
+    },
+  }
+  if (input.include_cases && input.cases?.length) {
+    payload.cases = [...input.cases]
+  }
+  return payload
+}
+
+// Heuristic for whether an establishment's CY-N records must be
+// submitted to ITA at all. Returns one of:
+//   'summary_only'  — 300A only (>=250 employees any industry, OR
+//                     20-249 in Appendix A industries)
+//   'summary_and_cases' — 300A + 300 + 301 (>=100 in Appendix B
+//                     industries, post-CY2023)
+//   'not_required'  — outside the covered population
+//
+// Industry-list classification is not embedded here because the
+// Appendix A/B NAICS-prefix tables drift; the caller passes the
+// classification result. This helper just applies the size cutoff.
+export type ItaCoverage = 'summary_only' | 'summary_and_cases' | 'not_required'
+
+export function classifyItaCoverage(opts: {
+  annual_avg_employees: number
+  appendix:             'a' | 'b' | null
+}): ItaCoverage {
+  const n = opts.annual_avg_employees
+  if (opts.appendix === 'b' && n >= 100) return 'summary_and_cases'
+  if (n >= 250)                          return 'summary_only'
+  if (opts.appendix === 'a' && n >= 20 && n <= 249) return 'summary_only'
+  return 'not_required'
+}

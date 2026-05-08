@@ -72,7 +72,7 @@ export async function GET(req: Request) {
         .eq('year', year),
       gate.authedClient
         .from('osha_annual_summaries')
-        .select('totals_json, total_hours_worked, annual_avg_employees, certified_by, certified_at, certified_typed_name, posted_at')
+        .select('totals_json, total_hours_worked, annual_avg_employees, certified_by, certified_at, certified_typed_name, posted_at, submitted_to_ita_at, ita_submission_id')
         .eq('tenant_id', gate.tenantId)
         .eq('establishment_id', establishmentId)
         .eq('year', year)
@@ -94,6 +94,8 @@ export async function GET(req: Request) {
       certified_at:          string | null
       certified_typed_name:  string | null
       posted_at:             string | null
+      submitted_to_ita_at:   string | null
+      ita_submission_id:     string | null
     } | null
 
     const yearKey = String(year)
