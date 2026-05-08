@@ -1,30 +1,45 @@
 // OSHA Form 300 — Log of Work-Related Injuries and Illnesses.
 //
-// Layout-faithful replica of the official OSHA Form 300 (Rev. 01/2004),
-// reproduced from the public-domain government form. Drawn from
-// scratch — no fillable template overlay — so we can paginate
-// dynamically and avoid drift on OSHA-published PDFs.
+// Visual replica of the official OSHA Form 300 (Rev. 01/2004),
+// reproduced from the public-domain U.S. government form
+// (17 USC § 105). Drawn from scratch — no fillable template
+// overlay — so we can paginate dynamically across any number of
+// cases (the official template only has ~13 fixed rows).
 //
-// Differences from the official form: SoteriaField provenance line
-// in the bottom margin (form body is unmodified), colour palette
-// is pure black on white for printability + audit fidelity.
-// Privacy-case rows ship "Privacy Case" in column B and blank
-// columns C + E per 1904.29(b)(7).
+// Visual conventions copied from the official form:
+//   - Navy "Step 1.." through "Step 5." band header strip across
+//     the column header.
+//   - Sub-band "Remained at Work" spanning columns I–J.
+//   - Sub-band "Illness" with vertical-rotated column labels
+//     for injury/illness types 1–6.
+//   - Open circles in classification columns (G/H/I/J) and
+//     illness-type columns (1–6); ✕ inside a circle for "checked".
+//   - Light-blue ruled lines inside data cells.
+//   - "Page totals ▶" row at the bottom of the data area.
+//   - Establishment name / City / State fillable strip in the
+//     top-right corner. Per-row "Reset" buttons + "Add a Form
+//     Page" button on the official fillable PDF are omitted —
+//     they are interactive-PDF UI, not form content.
 
-import { PDFDocument, StandardFonts, type PDFPage, type PDFFont, rgb } from 'pdf-lib'
-import { sanitizeForWinAnsi } from '@/lib/pdfShared'
 import {
-  type Osha300Row,
-} from '@soteria/core/oshaForms'
+  PDFDocument, StandardFonts, type PDFPage, type PDFFont, rgb, degrees,
+} from 'pdf-lib'
+import { sanitizeForWinAnsi, wrap } from '@/lib/pdfShared'
+import { type Osha300Row } from '@soteria/core/oshaForms'
 
 // Landscape Letter: 11" × 8.5" (792 × 612).
 const PAGE_W   = 792
 const PAGE_H   = 612
-const MARGIN_X = 24
-const MARGIN_Y = 28
+const MARGIN_X = 16
+const MARGIN_Y = 18
 
-const BLACK = rgb(0, 0, 0)
-const GREY  = rgb(0.4, 0.4, 0.4)
+const NAVY      = rgb(0.13, 0.18, 0.34)
+const SUB_NAVY  = rgb(0.20, 0.27, 0.42)
+const RULE_BLUE = rgb(0.74, 0.80, 0.89)
+const FAINT_BG  = rgb(0.96, 0.97, 0.99)
+const BLACK     = rgb(0, 0, 0)
+const WHITE     = rgb(1, 1, 1)
+const GREY      = rgb(0.42, 0.45, 0.50)
 
 interface RenderOpts {
   rows:                ReadonlyArray<Osha300Row>
@@ -32,58 +47,42 @@ interface RenderOpts {
   city:                string | null
   state:               string | null
   year:                number
-  // Optional company display info.
   companyName?:        string | null
 }
 
-// Column geometry — replicates the official 300's three-zone layout:
-//   ZONE 1 "Identify the person":       A, B, C
-//   ZONE 2 "Describe the case":          D, E, F
-//   ZONE 3 "Classify the case":          G H I J  (single-X box)
-//                                        K L      (day counters)
-//                                        1 2 3 4 5 6 (illness type)
-//
-// Width % values are tuned so all 16 columns + the three zone
-// headers fit on landscape Letter without crowding column F
-// (Description), which carries the bulk of the prose.
 interface ColumnDef {
   key:    string
+  letter: string
   label:  string
-  sub?:   string             // second header line (for narrow numeric cols)
+  example?: string                // italic "(e.g., …)" beneath the label
   widthPct: number
-  align?: 'left' | 'center'
+  align:  'left' | 'center'
+  step:   1 | 2 | 3 | 4 | 5
+  subBand?: 'remainedAtWork' | 'illness'
+  vertical?: boolean              // header label rotated 90° (illness cols)
 }
 
 const COLUMNS: ColumnDef[] = [
-  // Zone 1 — identify the person
-  { key: 'A',  label: '(A)',   sub: 'Case no.',     widthPct: 4.5, align: 'center' },
-  { key: 'B',  label: '(B)',   sub: 'Employee',     widthPct: 9.5, align: 'left'   },
-  { key: 'C',  label: '(C)',   sub: 'Job title',    widthPct: 7.5, align: 'left'   },
-  // Zone 2 — describe the case
-  { key: 'D',  label: '(D)',   sub: 'Date of injury', widthPct: 5.5, align: 'center' },
-  { key: 'E',  label: '(E)',   sub: 'Where event occurred', widthPct: 9, align: 'left' },
-  { key: 'F',  label: '(F)',   sub: 'Describe injury/illness, parts of body, object/substance', widthPct: 19.5, align: 'left' },
-  // Zone 3a — classify (check only one)
-  { key: 'G',  label: '(G)',   sub: 'Death',        widthPct: 3.0, align: 'center' },
-  { key: 'H',  label: '(H)',   sub: 'Days away',    widthPct: 3.0, align: 'center' },
-  { key: 'I',  label: '(I)',   sub: 'Restricted',   widthPct: 3.0, align: 'center' },
-  { key: 'J',  label: '(J)',   sub: 'Other rec.',   widthPct: 3.0, align: 'center' },
-  // Zone 3b — number of days
-  { key: 'K',  label: '(K)',   sub: 'Away days',    widthPct: 4.0, align: 'center' },
-  { key: 'L',  label: '(L)',   sub: 'Restr. days',  widthPct: 4.0, align: 'center' },
-  // Zone 3c — type of illness/injury (one X per row)
-  { key: '1',  label: '(1)',   sub: 'Injury',       widthPct: 3.5, align: 'center' },
-  { key: '2',  label: '(2)',   sub: 'Skin',         widthPct: 3.5, align: 'center' },
-  { key: '3',  label: '(3)',   sub: 'Respir.',      widthPct: 3.5, align: 'center' },
-  { key: '4',  label: '(4)',   sub: 'Poisoning',    widthPct: 3.5, align: 'center' },
-  { key: '5',  label: '(5)',   sub: 'Hearing',      widthPct: 3.0, align: 'center' },
-  { key: '6',  label: '(6)',   sub: 'Other ill.',   widthPct: 3.5, align: 'center' },
+  { key: 'A', letter: '(A)', label: 'Case no.',                  widthPct: 4.0,  align: 'center', step: 1 },
+  { key: 'B', letter: '(B)', label: "Employee’s name",           widthPct: 11.0, align: 'left',   step: 1 },
+  { key: 'C', letter: '(C)', label: 'Job title',                 example: 'e.g., Welder', widthPct: 8.5, align: 'left', step: 1 },
+  { key: 'D', letter: '(D)', label: 'Date of injury or onset of illness', example: 'e.g., 2/10', widthPct: 7.0, align: 'center', step: 2 },
+  { key: 'E', letter: '(E)', label: 'Where the event occurred',  example: 'e.g., Loading dock north end', widthPct: 11.0, align: 'left', step: 2 },
+  { key: 'F', letter: '(F)', label: 'Describe injury or illness, parts of body affected, and object/substance that directly injured or made person ill',
+    example: 'e.g., Second degree burns on right forearm from acetylene torch', widthPct: 19.5, align: 'left', step: 2 },
+  { key: 'G', letter: '(G)', label: 'Death',                     widthPct: 3.5, align: 'center', step: 3 },
+  { key: 'H', letter: '(H)', label: 'Days away from work',       widthPct: 3.5, align: 'center', step: 3 },
+  { key: 'I', letter: '(I)', label: 'Job transfer or restriction', widthPct: 3.5, align: 'center', step: 3, subBand: 'remainedAtWork' },
+  { key: 'J', letter: '(J)', label: 'Other recordable cases',    widthPct: 3.5, align: 'center', step: 3, subBand: 'remainedAtWork' },
+  { key: 'K', letter: '(K)', label: 'Away from work',            widthPct: 4.0, align: 'center', step: 4 },
+  { key: 'L', letter: '(L)', label: 'On job transfer or restriction', widthPct: 4.0, align: 'center', step: 4 },
+  { key: '1', letter: '(1)', label: 'Injury',                    widthPct: 2.85, align: 'center', step: 5, subBand: 'illness', vertical: true },
+  { key: '2', letter: '(2)', label: 'Skin disorder',             widthPct: 2.85, align: 'center', step: 5, subBand: 'illness', vertical: true },
+  { key: '3', letter: '(3)', label: 'Respiratory condition',     widthPct: 2.85, align: 'center', step: 5, subBand: 'illness', vertical: true },
+  { key: '4', letter: '(4)', label: 'Poisoning',                 widthPct: 2.85, align: 'center', step: 5, subBand: 'illness', vertical: true },
+  { key: '5', letter: '(5)', label: 'Hearing loss',              widthPct: 2.85, align: 'center', step: 5, subBand: 'illness', vertical: true },
+  { key: '6', letter: '(6)', label: 'All other illnesses',       widthPct: 2.85, align: 'center', step: 5, subBand: 'illness', vertical: true },
 ]
-
-const ROW_H = 26
-const COL_HEAD_H = 26
-const ZONE_HEAD_H = 14
-const HEADER_BAND_H = 56     // form title + agency block + establishment line
 
 const TYPE_TO_COL_INDEX: Record<string, number> = {
   injury:        12,
@@ -93,6 +92,12 @@ const TYPE_TO_COL_INDEX: Record<string, number> = {
   hearing_loss:  16,
   other_illness: 17,
 }
+
+const ROW_H = 38                     // tall enough for 2 ruled lines
+const STEP_BAND_H = 14
+const SUB_BAND_H = 12
+const COL_HEAD_H = 60                // taller to fit vertical illness labels
+const TOP_BLOCK_H = 130              // title + please-record + reminders + estab strip
 
 export async function renderOsha300Pdf(opts: RenderOpts): Promise<Uint8Array> {
   const pdf  = await PDFDocument.create()
@@ -112,26 +117,27 @@ export async function renderOsha300Pdf(opts: RenderOpts): Promise<Uint8Array> {
     cx += w
   }
 
-  const headerTop = PAGE_H - MARGIN_Y
-  const tableTop  = headerTop - HEADER_BAND_H - 4
-  const bodyBottom = MARGIN_Y + 22
-  const rowSlots = Math.max(1, Math.floor((tableTop - ZONE_HEAD_H - COL_HEAD_H - bodyBottom) / ROW_H))
+  const tableTop  = PAGE_H - MARGIN_Y - TOP_BLOCK_H
+  const bodyBottom = MARGIN_Y + 50           // leave room for totals row + footer
+  const rowSlots  = Math.max(1, Math.floor((tableTop - STEP_BAND_H - SUB_BAND_H - COL_HEAD_H - bodyBottom) / ROW_H))
 
-  // Pagination — the official 300 is one row per case; we mirror that.
   const total = opts.rows.length
   const pages: Array<Osha300Row[]> = []
-  if (total === 0) {
-    pages.push([])
-  } else {
-    for (let i = 0; i < total; i += rowSlots) pages.push(opts.rows.slice(i, i + rowSlots))
-  }
+  if (total === 0) pages.push([])
+  else for (let i = 0; i < total; i += rowSlots) pages.push(opts.rows.slice(i, i + rowSlots))
 
   for (let p = 0; p < pages.length; p++) {
     const page = pdf.addPage([PAGE_W, PAGE_H])
-    drawHeader(page, font, bold, oblique, opts, p, pages.length)
-    drawZoneHeaders(page, bold, colXs, colWs, tableTop)
-    drawColumnHeaders(page, font, bold, colXs, colWs, tableTop - ZONE_HEAD_H)
-    drawBody(page, font, bold, colXs, colWs, tableTop - ZONE_HEAD_H - COL_HEAD_H, pages[p]!, rowSlots)
+    drawTopBlock(page, font, bold, oblique, opts, p, pages.length)
+    drawStepBands(page, bold, oblique, colXs, colWs, tableTop)
+    const subBandTop = tableTop - STEP_BAND_H
+    drawSubBands(page, bold, oblique, colXs, colWs, subBandTop)
+    const colHeadTop = subBandTop - SUB_BAND_H
+    drawColumnHeaders(page, font, bold, oblique, colXs, colWs, colHeadTop)
+    const bodyTop = colHeadTop - COL_HEAD_H
+    drawRowGrid(page, oblique, colXs, colWs, bodyTop, rowSlots)
+    drawRowsContent(page, font, bold, colXs, colWs, bodyTop, pages[p]!, rowSlots)
+    drawPageTotals(page, font, bold, colXs, colWs, bodyTop - rowSlots * ROW_H, pages[p]!)
     drawFooter(page, font, oblique, p, pages.length)
   }
 
@@ -139,169 +145,390 @@ export async function renderOsha300Pdf(opts: RenderOpts): Promise<Uint8Array> {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// Top: title, Please Record, Reminders, Establishment strip
+// ──────────────────────────────────────────────────────────────────────────
 
-function drawHeader(
+function drawTopBlock(
   page: PDFPage, font: PDFFont, bold: PDFFont, oblique: PDFFont,
   opts: RenderOpts, pageIdx: number, pageCount: number,
 ) {
   const top = PAGE_H - MARGIN_Y
-  // Form title block — left aligned per the official form.
+
+  // Title — left side, navy on white.
   page.drawText('OSHA’s Form 300', {
-    x: MARGIN_X, y: top - 12, size: 14, font: bold, color: BLACK,
+    x: MARGIN_X, y: top - 14, size: 14, font: bold, color: NAVY,
   })
   page.drawText('(Rev. 01/2004)', {
-    x: MARGIN_X + 105, y: top - 11, size: 8, font: oblique, color: BLACK,
+    x: MARGIN_X + 110, y: top - 13, size: 8, font: oblique, color: NAVY,
   })
-  page.drawText('Log of Work-Related Injuries and Illnesses', {
-    x: MARGIN_X, y: top - 28, size: 13, font: bold, color: BLACK,
+  page.drawText('Log of Work-Related', {
+    x: MARGIN_X, y: top - 32, size: 18, font: bold, color: NAVY,
   })
-  page.drawText(
-    sanitizeForWinAnsi(
-      'You must record information about every work-related injury or illness that involves loss of consciousness, ' +
-      'restricted work activity or job transfer, days away from work, or medical treatment beyond first aid. You ' +
-      'must also record significant work-related injuries and illnesses that are diagnosed by a physician or licensed ' +
-      'health care professional. You must complete an Injury and Illness Incident Report (OSHA Form 301) or ' +
-      'equivalent form for each injury or illness recorded on this form. If you’re not sure whether a case is ' +
-      'recordable, call your local OSHA office for help.',
-    ),
-    { x: MARGIN_X, y: top - 42, size: 6.5, font, color: BLACK, maxWidth: PAGE_W * 0.55, lineHeight: 7.5 },
-  )
+  page.drawText('Injuries and Illnesses', {
+    x: MARGIN_X, y: top - 52, size: 18, font: bold, color: NAVY,
+  })
 
-  // Right side — agency + year + page block.
+  // Right side: agency block + OMB + establishment strip.
   const rightX = PAGE_W - MARGIN_X - 220
   page.drawText('U.S. Department of Labor', {
-    x: rightX, y: top - 12, size: 9, font: bold, color: BLACK,
+    x: rightX, y: top - 14, size: 9, font: bold, color: BLACK,
   })
   page.drawText('Occupational Safety and Health Administration', {
-    x: rightX, y: top - 22, size: 8, font, color: BLACK,
+    x: rightX, y: top - 24, size: 7.5, font, color: BLACK,
   })
   page.drawText('Form approved OMB no. 1218-0176', {
-    x: rightX, y: top - 31, size: 7, font: oblique, color: BLACK,
+    x: rightX, y: top - 36, size: 7, font: oblique, color: BLACK,
   })
 
-  // Year + Establishment + page count box, drawn as a small bordered block.
-  const yearBoxY = top - 56
-  page.drawText(`Year 20${String(opts.year).slice(-2)}`, {
-    x: rightX, y: yearBoxY + 4, size: 10, font: bold, color: BLACK,
+  // Establishment / city / state strip (right side, ruled fields).
+  const stripY = top - 62
+  drawLabelledRule(page, font, bold, 'Establishment name', opts.establishmentName, rightX, stripY, 220, 8)
+  drawLabelledRule(page, font, bold, 'City', opts.city ?? '', rightX, stripY - 18, 110, 8)
+  drawLabelledRule(page, font, bold, 'State', opts.state ?? '', rightX + 120, stripY - 18, 100, 8)
+  drawLabelledRule(page, font, bold, 'Year', `20${String(opts.year).slice(-2)}`, rightX, stripY - 36, 70, 8)
+  drawLabelledRule(page, font, bold, `Page ${pageIdx + 1} of ${pageCount}`, '', rightX + 90, stripY - 36, 130, 8)
+
+  // "Please Record" + "Reminders" blocks under the title.
+  const blockY = top - 74
+  page.drawText('Please Record:', {
+    x: MARGIN_X, y: blockY, size: 8, font: bold, color: BLACK,
   })
-  // Establishment name / city / state line — required header field on the official form.
-  const estLine = sanitizeForWinAnsi(
-    [
-      `Establishment name: ${opts.establishmentName}`,
-      opts.city ? `City: ${opts.city}` : null,
-      opts.state ? `State: ${opts.state}` : null,
-    ].filter(Boolean).join('   '),
-  )
-  page.drawText(estLine, {
-    x: MARGIN_X, y: top - HEADER_BAND_H + 4, size: 9, font: bold, color: BLACK,
+  const please = [
+    'Information about every work-related death and about every work-related injury or illness that involves loss of',
+    'consciousness, restricted work activity or job transfer, days away from work, or medical treatment beyond first aid.',
+    'Significant work-related injuries and illnesses that are diagnosed by a physician or licensed health care professional.',
+    'Work-related injuries and illnesses that meet any of the specific recording criteria listed in 29 CFR Part 1904.8',
+    'through 1904.12.',
+  ]
+  let py = blockY - 8
+  for (const line of please) {
+    page.drawText(sanitizeForWinAnsi('• ' + line), {
+      x: MARGIN_X, y: py, size: 6.5, font, color: BLACK,
+    })
+    py -= 7.5
+  }
+
+  const remX = MARGIN_X + 360
+  page.drawText('Reminders:', {
+    x: remX, y: blockY, size: 8, font: bold, color: BLACK,
   })
-  page.drawText(`Page ${pageIdx + 1} of ${pageCount}`, {
-    x: PAGE_W - MARGIN_X - 70, y: top - HEADER_BAND_H + 4, size: 9, font: bold, color: BLACK,
-  })
+  const rem = [
+    'Complete an Injury and Illness Incident Report (OSHA Form 301) or equivalent',
+    'form for each injury or illness recorded on this form. If you’re not sure whether a',
+    'case is recordable, call your local OSHA office for help.',
+    'Feel free to use two lines for a single case if you need to.',
+    'Complete the 5 steps for each case.',
+  ]
+  py = blockY - 8
+  for (const line of rem) {
+    page.drawText(sanitizeForWinAnsi('• ' + line), {
+      x: remX, y: py, size: 6.5, font, color: BLACK,
+    })
+    py -= 7.5
+  }
 }
 
-function drawZoneHeaders(
-  page: PDFPage, bold: PDFFont, colXs: number[], colWs: number[], topY: number,
+function drawLabelledRule(
+  page: PDFPage, font: PDFFont, bold: PDFFont,
+  label: string, value: string, x: number, y: number, w: number, fontSize: number,
 ) {
-  // The official form groups columns under three umbrella labels.
-  // We mirror those zones exactly so a reader familiar with the OSHA
-  // 300 instantly orients.
-  const zones: Array<{ start: number; end: number; label: string }> = [
-    { start: 0,  end: 2,  label: 'Identify the person' },
-    { start: 3,  end: 5,  label: 'Describe the case' },
-    { start: 6,  end: 9,  label: 'Classify the case — CHECK ONLY ONE box for each case based on the most serious outcome' },
-    { start: 10, end: 11, label: 'Enter the number of days the injured or ill worker was:' },
-    { start: 12, end: 17, label: 'Check the "injury" column or choose one type of illness:' },
-  ]
-  for (const z of zones) {
-    const zx  = colXs[z.start]!
-    const zxe = colXs[z.end]! + colWs[z.end]!
-    page.drawRectangle({
-      x: zx, y: topY - ZONE_HEAD_H, width: zxe - zx, height: ZONE_HEAD_H,
-      borderColor: BLACK, borderWidth: 0.6,
-    })
-    page.drawText(sanitizeForWinAnsi(z.label), {
-      x: zx + 4, y: topY - ZONE_HEAD_H + 4, size: 7, font: bold, color: BLACK,
-      maxWidth: zxe - zx - 8,
+  // Light-blue underline rule with label above.
+  page.drawText(sanitizeForWinAnsi(label), {
+    x, y: y + 2, size: 6.5, font, color: BLACK,
+  })
+  page.drawLine({
+    start: { x, y }, end: { x: x + w, y },
+    thickness: 0.6, color: RULE_BLUE,
+  })
+  if (value) {
+    page.drawText(sanitizeForWinAnsi(value), {
+      x: x + 2, y: y + 4, size: fontSize, font: bold, color: BLACK,
     })
   }
 }
 
-function drawColumnHeaders(
-  page: PDFPage, font: PDFFont, bold: PDFFont,
+// ──────────────────────────────────────────────────────────────────────────
+// Step bands — Step 1..5 across the column header strip
+// ──────────────────────────────────────────────────────────────────────────
+
+function drawStepBands(
+  page: PDFPage, bold: PDFFont, oblique: PDFFont,
   colXs: number[], colWs: number[], topY: number,
 ) {
+  // Find col-index range for each step.
+  const stepRanges: Record<number, { start: number; end: number }> = {}
   for (let i = 0; i < COLUMNS.length; i++) {
-    const x = colXs[i]!, w = colWs[i]!
+    const s = COLUMNS[i]!.step
+    if (!stepRanges[s]) stepRanges[s] = { start: i, end: i }
+    stepRanges[s]!.end = i
+  }
+  const titles: Record<number, string> = {
+    1: 'Step 1. Identify the person',
+    2: 'Step 2. Describe the case',
+    3: 'Step 3. Classify the case',
+    4: 'Step 4.',
+    5: 'Step 5.',
+  }
+  const subtitles: Record<number, string | null> = {
+    1: null,
+    2: null,
+    3: 'SELECT ONLY ONE circle based on the most serious outcome:',
+    4: 'Enter the number of days the injured or ill worker was:',
+    5: 'Select one column:',
+  }
+  for (const stepKey of Object.keys(stepRanges)) {
+    const step  = Number(stepKey)
+    const range = stepRanges[step]!
+    const x   = colXs[range.start]!
+    const xe  = colXs[range.end]! + colWs[range.end]!
     page.drawRectangle({
-      x, y: topY - COL_HEAD_H, width: w, height: COL_HEAD_H,
-      borderColor: BLACK, borderWidth: 0.5,
+      x, y: topY - STEP_BAND_H, width: xe - x, height: STEP_BAND_H,
+      color: NAVY,
     })
-    const c = COLUMNS[i]!
-    // Column letter — bold, centered top.
-    const labelW = c.label.length * 8 * 0.5
-    page.drawText(c.label, {
-      x: x + (w - labelW) / 2, y: topY - 10, size: 8, font: bold, color: BLACK,
+    page.drawText(sanitizeForWinAnsi(titles[step]!), {
+      x: x + 4, y: topY - 10, size: 8, font: bold, color: WHITE,
     })
-    if (c.sub) {
-      // Sub-label, smaller, centered or left depending on width.
-      const sub = sanitizeForWinAnsi(c.sub)
-      const cw = w > 60 ? sub : maybeTrunc(sub, w, 6)
-      page.drawText(cw, {
-        x: x + 2, y: topY - COL_HEAD_H + 4, size: 6, font, color: BLACK,
-        maxWidth: w - 4, lineHeight: 6.5,
+    if (subtitles[step]) {
+      // Subtitles render on a second line under the step title — small italic.
+      // Some bands are too narrow for the full subtitle (Step 4, 5); we
+      // truncate cosmetically.
+      const sub = sanitizeForWinAnsi(subtitles[step]!)
+      const maxW = xe - x - 8
+      const trunc = approxFitTrunc(sub, 6, maxW)
+      page.drawText(trunc, {
+        x: x + 4, y: topY - STEP_BAND_H - 8, size: 6, font: oblique, color: BLACK,
+        maxWidth: maxW,
       })
     }
   }
 }
 
-function drawBody(
-  page: PDFPage, font: PDFFont, bold: PDFFont,
+function drawSubBands(
+  page: PDFPage, bold: PDFFont, oblique: PDFFont,
   colXs: number[], colWs: number[], topY: number,
-  rows: ReadonlyArray<Osha300Row>, rowSlots: number,
 ) {
-  // Empty row grid first (all `rowSlots` rows so the form looks
-  // identical whether full or empty).
+  // "Remained at Work" sub-band spanning I + J in Step 3.
+  // Find indexes flagged remainedAtWork.
+  const rwStart = COLUMNS.findIndex(c => c.subBand === 'remainedAtWork')
+  if (rwStart >= 0) {
+    let rwEnd = rwStart
+    for (let i = rwStart + 1; i < COLUMNS.length; i++) {
+      if (COLUMNS[i]!.subBand === 'remainedAtWork') rwEnd = i
+      else break
+    }
+    const x  = colXs[rwStart]!
+    const xe = colXs[rwEnd]! + colWs[rwEnd]!
+    page.drawRectangle({
+      x, y: topY - SUB_BAND_H, width: xe - x, height: SUB_BAND_H,
+      color: SUB_NAVY,
+    })
+    const label = 'Remained at Work'
+    const approx = label.length * 7 * 0.5
+    page.drawText(label, {
+      x: x + (xe - x - approx) / 2, y: topY - 9, size: 7, font: bold, color: WHITE,
+    })
+  }
+
+  // "Illness" sub-band spanning columns 1-6 in Step 5.
+  const illStart = COLUMNS.findIndex(c => c.subBand === 'illness')
+  if (illStart >= 0) {
+    let illEnd = illStart
+    for (let i = illStart + 1; i < COLUMNS.length; i++) {
+      if (COLUMNS[i]!.subBand === 'illness') illEnd = i
+      else break
+    }
+    const x  = colXs[illStart]!
+    const xe = colXs[illEnd]! + colWs[illEnd]!
+    page.drawRectangle({
+      x, y: topY - SUB_BAND_H, width: xe - x, height: SUB_BAND_H,
+      color: SUB_NAVY,
+    })
+    const label = 'Illness'
+    const approx = label.length * 7 * 0.5
+    page.drawText(label, {
+      x: x + (xe - x - approx) / 2, y: topY - 9, size: 7, font: bold, color: WHITE,
+    })
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Column headers
+// ──────────────────────────────────────────────────────────────────────────
+
+function drawColumnHeaders(
+  page: PDFPage, font: PDFFont, bold: PDFFont, oblique: PDFFont,
+  colXs: number[], colWs: number[], topY: number,
+) {
+  for (let i = 0; i < COLUMNS.length; i++) {
+    const c = COLUMNS[i]!
+    const x = colXs[i]!, w = colWs[i]!
+    page.drawRectangle({
+      x, y: topY - COL_HEAD_H, width: w, height: COL_HEAD_H,
+      borderColor: BLACK, borderWidth: 0.4, color: WHITE,
+    })
+
+    if (c.vertical) {
+      // (1) Injury / (2) Skin disorder / etc — vertical, reads bottom-to-top.
+      const baseX = x + w / 2 + 3
+      const baseY = topY - COL_HEAD_H + 4
+      // Letter at the top of the vertical strip; label rotated.
+      page.drawText(c.letter, {
+        x: x + 1, y: topY - 8, size: 7, font: bold, color: BLACK,
+        maxWidth: w - 2,
+      })
+      page.drawText(sanitizeForWinAnsi(c.label), {
+        x: baseX, y: baseY, size: 7, font, color: BLACK,
+        rotate: degrees(90),
+      })
+      continue
+    }
+
+    // Horizontal columns (A..L).
+    page.drawText(c.letter, {
+      x: x + w / 2 - (c.letter.length * 8 * 0.5) / 2, y: topY - 11, size: 8, font: bold, color: BLACK,
+    })
+    const labelLines = wrap(sanitizeForWinAnsi(c.label), font, 6.5, w - 4)
+    let ly = topY - 22
+    for (const line of labelLines.slice(0, 4)) {
+      page.drawText(line, { x: x + 2, y: ly, size: 6.5, font, color: BLACK })
+      ly -= 7.5
+    }
+    if (c.example) {
+      const exLines = wrap(sanitizeForWinAnsi(`(${c.example})`), font, 6, w - 4)
+      for (const line of exLines.slice(0, 2)) {
+        page.drawText(line, { x: x + 2, y: ly, size: 6, font: oblique, color: GREY })
+        ly -= 7
+      }
+    }
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Row grid + content
+// ──────────────────────────────────────────────────────────────────────────
+
+function drawRowGrid(
+  page: PDFPage, oblique: PDFFont,
+  colXs: number[], colWs: number[], topY: number, rowSlots: number,
+) {
   for (let r = 0; r < rowSlots; r++) {
     const y = topY - (r + 1) * ROW_H
     for (let i = 0; i < COLUMNS.length; i++) {
       const x = colXs[i]!, w = colWs[i]!
       page.drawRectangle({
-        x, y, width: w, height: ROW_H, borderColor: BLACK, borderWidth: 0.4,
+        x, y, width: w, height: ROW_H,
+        borderColor: BLACK, borderWidth: 0.3, color: WHITE,
       })
+      // Two light-blue ruled lines per cell — text-input columns only.
+      const c = COLUMNS[i]!
+      if (c.step === 1 || c.step === 2) {
+        page.drawLine({
+          start: { x: x + 3, y: y + ROW_H - 14 }, end: { x: x + w - 3, y: y + ROW_H - 14 },
+          thickness: 0.5, color: RULE_BLUE,
+        })
+        page.drawLine({
+          start: { x: x + 3, y: y + 6 }, end: { x: x + w - 3, y: y + 6 },
+          thickness: 0.5, color: RULE_BLUE,
+        })
+      }
+      // Date column: "month / day" placeholder under the rule.
+      if (c.key === 'D') {
+        page.drawText('month / day', {
+          x: x + w / 2 - 22, y: y + 10, size: 5.5, font: oblique, color: GREY,
+        })
+      }
+      // K, L cells: "_days" placeholder rule + suffix.
+      if (c.key === 'K' || c.key === 'L') {
+        page.drawLine({
+          start: { x: x + 4, y: y + 10 }, end: { x: x + w - 16, y: y + 10 },
+          thickness: 0.5, color: RULE_BLUE,
+        })
+        page.drawText('days', {
+          x: x + w - 14, y: y + 8, size: 5.5, font: oblique, color: GREY,
+        })
+      }
     }
   }
+}
 
-  for (let r = 0; r < rows.length; r++) {
+function drawRowsContent(
+  page: PDFPage, font: PDFFont, bold: PDFFont,
+  colXs: number[], colWs: number[], topY: number,
+  rows: ReadonlyArray<Osha300Row>, rowSlots: number,
+) {
+  for (let r = 0; r < rows.length && r < rowSlots; r++) {
     const row = rows[r]!
     const yTop = topY - r * ROW_H
-    const yMid = yTop - ROW_H / 2 + 2
+    const yMid = yTop - ROW_H / 2 + 1
 
     const employeeDisplay = row.is_privacy_case ? 'Privacy Case' : (row.employee_name ?? '')
     const jobDisplay      = row.is_privacy_case ? '' : (row.job_title ?? '')
     const locDisplay      = row.is_privacy_case ? '' : (row.location_text ?? '')
 
-    drawCell(page, font, row.case_number,                          colXs[0]!,  colWs[0]!,  yMid, 8, 'center')
-    drawCell(page, font, employeeDisplay,                          colXs[1]!,  colWs[1]!,  yMid, 8)
-    drawCell(page, font, jobDisplay,                               colXs[2]!,  colWs[2]!,  yMid, 8)
-    drawCell(page, font, formatMonthDay(row.date_of_injury),       colXs[3]!,  colWs[3]!,  yMid, 8, 'center')
-    drawCell(page, font, locDisplay,                               colXs[4]!,  colWs[4]!,  yMid, 8)
-    drawCell(page, font, row.injury_description ?? '',             colXs[5]!,  colWs[5]!,  yMid, 8)
+    drawCell(page, font, row.case_number,                   colXs[0]!,  colWs[0]!,  yMid, 8, 'center')
+    drawCell(page, font, employeeDisplay,                   colXs[1]!,  colWs[1]!,  yMid, 8)
+    drawCell(page, font, jobDisplay,                        colXs[2]!,  colWs[2]!,  yMid, 8)
+    drawCell(page, font, formatMonthDay(row.date_of_injury), colXs[3]!,  colWs[3]!, yMid, 8, 'center')
+    drawCell(page, font, locDisplay,                        colXs[4]!,  colWs[4]!,  yMid, 8)
+    drawCell(page, font, row.injury_description ?? '',      colXs[5]!,  colWs[5]!,  yMid, 8)
 
-    // Classification (G/H/I/J) — exactly one X.
-    const cl = row.classification
-    if (cl === 'death')             drawCheck(page, bold, colXs[6]!,  colWs[6]!,  yMid)
-    if (cl === 'days_away')         drawCheck(page, bold, colXs[7]!,  colWs[7]!,  yMid)
-    if (cl === 'restricted')        drawCheck(page, bold, colXs[8]!,  colWs[8]!,  yMid)
-    if (cl === 'other_recordable')  drawCheck(page, bold, colXs[9]!,  colWs[9]!,  yMid)
+    // Classification — open circles in all four cells; filled in the chosen one.
+    drawClassificationCircle(page, bold, colXs[6]!,  colWs[6]!,  yMid, row.classification === 'death')
+    drawClassificationCircle(page, bold, colXs[7]!,  colWs[7]!,  yMid, row.classification === 'days_away')
+    drawClassificationCircle(page, bold, colXs[8]!,  colWs[8]!,  yMid, row.classification === 'restricted')
+    drawClassificationCircle(page, bold, colXs[9]!,  colWs[9]!,  yMid, row.classification === 'other_recordable')
 
     drawCell(page, font, row.days_away      ? String(row.days_away)      : '', colXs[10]!, colWs[10]!, yMid, 8, 'center')
     drawCell(page, font, row.days_restricted ? String(row.days_restricted) : '', colXs[11]!, colWs[11]!, yMid, 8, 'center')
 
-    // Injury / illness type (1-6) — one X per row.
+    // Illness type circles (1..6). Always render all six as open circles;
+    // the chosen one gets a filled mark.
     const typeIdx = TYPE_TO_COL_INDEX[row.injury_type]
-    if (typeIdx != null) drawCheck(page, bold, colXs[typeIdx]!, colWs[typeIdx]!, yMid)
+    for (let k = 12; k <= 17; k++) {
+      drawSmallCircle(page, bold, colXs[k]!, colWs[k]!, yMid, k === typeIdx)
+    }
   }
+
+  // Empty rows still need the open circles drawn so the form looks
+  // identical full or empty.
+  for (let r = rows.length; r < rowSlots; r++) {
+    const yTop = topY - r * ROW_H
+    const yMid = yTop - ROW_H / 2 + 1
+    drawClassificationCircle(page, bold, colXs[6]!, colWs[6]!, yMid, false)
+    drawClassificationCircle(page, bold, colXs[7]!, colWs[7]!, yMid, false)
+    drawClassificationCircle(page, bold, colXs[8]!, colWs[8]!, yMid, false)
+    drawClassificationCircle(page, bold, colXs[9]!, colWs[9]!, yMid, false)
+    for (let k = 12; k <= 17; k++) drawSmallCircle(page, bold, colXs[k]!, colWs[k]!, yMid, false)
+  }
+}
+
+function drawClassificationCircle(
+  page: PDFPage, bold: PDFFont, x: number, w: number, y: number, filled: boolean,
+) {
+  const cx = x + w / 2
+  const cy = y + 3
+  page.drawCircle({
+    x: cx, y: cy, size: 5,
+    borderColor: BLACK, borderWidth: 0.5,
+    color: filled ? NAVY : WHITE,
+  })
+  if (filled) {
+    page.drawText('X', {
+      x: cx - 2.3, y: cy - 2.8, size: 7, font: bold, color: WHITE,
+    })
+  }
+}
+
+function drawSmallCircle(
+  page: PDFPage, bold: PDFFont, x: number, w: number, y: number, filled: boolean,
+) {
+  const cx = x + w / 2
+  const cy = y + 3
+  page.drawCircle({
+    x: cx, y: cy, size: 3.5,
+    borderColor: BLACK, borderWidth: 0.5,
+    color: filled ? NAVY : WHITE,
+  })
 }
 
 function drawCell(
@@ -311,26 +538,74 @@ function drawCell(
 ) {
   const safe = sanitizeForWinAnsi(text)
   if (!safe) return
-  const display = maybeTrunc(safe, w, size)
-  const approx  = display.length * size * 0.5
+  const display = approxFitTrunc(safe, size, w - 6)
+  const approx = display.length * size * 0.5
   const tx = align === 'center' ? x + (w - approx) / 2 : x + 3
   page.drawText(display, { x: tx, y, size, font, color: BLACK })
 }
 
-function drawCheck(page: PDFPage, font: PDFFont, x: number, w: number, y: number) {
-  page.drawText('X', {
-    x: x + w / 2 - 3, y: y - 2, size: 11, font, color: BLACK,
+// ──────────────────────────────────────────────────────────────────────────
+// Page totals row
+// ──────────────────────────────────────────────────────────────────────────
+
+function drawPageTotals(
+  page: PDFPage, font: PDFFont, bold: PDFFont,
+  colXs: number[], colWs: number[], topY: number, rows: ReadonlyArray<Osha300Row>,
+) {
+  // Compute totals.
+  let g = 0, h = 0, i = 0, j = 0
+  let kSum = 0, lSum = 0
+  const typeCounts = [0, 0, 0, 0, 0, 0]
+  for (const r of rows) {
+    if (r.classification === 'death')             g++
+    if (r.classification === 'days_away')         h++
+    if (r.classification === 'restricted')        i++
+    if (r.classification === 'other_recordable')  j++
+    kSum += r.days_away      ?? 0
+    lSum += r.days_restricted ?? 0
+    const idx = TYPE_TO_COL_INDEX[r.injury_type]
+    if (idx != null) typeCounts[idx - 12]++
+  }
+  const TOT_H = 24
+  const yTop = topY - 4
+  // "Page totals ▶" label spanning A..F.
+  const labelW = colXs[6]! - colXs[0]!
+  page.drawText('Page totals  >', {
+    x: colXs[0]! + labelW - 80, y: yTop - 16, size: 9, font: bold, color: BLACK,
   })
+
+  const cells: Array<[number, number]> = [
+    [6,  g], [7,  h], [8,  i], [9,  j],
+    [10, kSum], [11, lSum],
+    [12, typeCounts[0]!], [13, typeCounts[1]!], [14, typeCounts[2]!],
+    [15, typeCounts[3]!], [16, typeCounts[4]!], [17, typeCounts[5]!],
+  ]
+  for (const [colIdx, val] of cells) {
+    const x = colXs[colIdx]!, w = colWs[colIdx]!
+    page.drawRectangle({
+      x, y: yTop - TOT_H, width: w, height: TOT_H,
+      borderColor: BLACK, borderWidth: 0.4, color: FAINT_BG,
+    })
+    const s = String(val)
+    const approx = s.length * 12 * 0.55
+    page.drawText(s, {
+      x: x + (w - approx) / 2, y: yTop - 16, size: 12, font: bold, color: BLACK,
+    })
+  }
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// Footer
+// ──────────────────────────────────────────────────────────────────────────
 
 function drawFooter(
   page: PDFPage, font: PDFFont, oblique: PDFFont,
   pageIdx: number, pageCount: number,
 ) {
   const burden =
-    'Public reporting burden for this collection of information is estimated to average 14 minutes per response, including time to ' +
-    'review the instruction, search and gather the data needed, and complete and review the collection of information. Persons are not ' +
-    'required to respond to the collection of information unless it displays a current valid OMB control number.'
+    'Public reporting burden for this collection of information is estimated to average 14 minutes per response, including ' +
+    'time to review the instructions, search and gather the data needed, and complete and review the collection of information. ' +
+    'Persons are not required to respond to the collection of information unless it displays a current valid OMB control number.'
   page.drawText(sanitizeForWinAnsi(burden), {
     x: MARGIN_X, y: 22, size: 5.5, font: oblique, color: GREY,
     maxWidth: PAGE_W - 2 * MARGIN_X - 200, lineHeight: 6.5,
@@ -340,13 +615,16 @@ function drawFooter(
   })
 }
 
-function maybeTrunc(s: string, w: number, size: number): string {
-  const maxChars = Math.max(1, Math.floor((w - 6) / (size * 0.5)))
+// ──────────────────────────────────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────────────────────────────────
+
+function approxFitTrunc(s: string, size: number, maxWidth: number): string {
+  const maxChars = Math.max(1, Math.floor(maxWidth / (size * 0.5)))
   return s.length > maxChars ? s.slice(0, maxChars - 1) + '…' : s
 }
 
 function formatMonthDay(iso: string): string {
-  // Official 300 prints "month/day" (year is in the form header).
   if (!iso) return ''
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
   if (!m) return iso

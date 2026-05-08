@@ -1,22 +1,21 @@
 // OSHA Form 300A — Summary of Work-Related Injuries and Illnesses.
 //
-// Layout-faithful replica of the official OSHA Form 300A, reproduced
-// from the public-domain government form. Single-page portrait Letter.
+// Visual replica of the official OSHA Form 300A (Rev. 01/2004),
+// reproduced from the public-domain U.S. government form
+// (17 USC § 105). Single-page portrait Letter.
 //
-// The official 300A has four bordered count blocks at the top:
-//   "Number of Cases":   G death | H days_away | I restricted | J other
-//   "Number of Days":    K total_days_away    | L total_days_restricted
-//   "Injury and Illness Types": 1..6 type counts
-// Below those: an "Establishment information" block (name, street,
-// city/state/zip, industry description, SIC, NAICS), an "Employment
-// information" block (annual avg #, total hours), then the
-// "Sign here / Knowingly falsifying..." certification block with
-// signed name, title, phone, date.
+// Two-column layout matching the official form:
+//   LEFT  — Number of Cases (G/H/I/J), Number of Days (K/L),
+//           Injury and Illness Types (1-6)
+//   RIGHT — Establishment Information, Employment Information,
+//           Sign here (cert + name/title/phone/date boxes)
 //
-// We mirror that geometry exactly. Computed reference rates
-// (TRIR/DART) are appended at the bottom under a clear "Reference
-// rates — not part of OSHA 300A" caption so an auditor can't mistake
-// them for required fields.
+// Each section header is a thin gray bar. Each numeric cell shows
+// the label at top-left, value centered, column letter at the
+// bottom. Field labels in the right-hand panel sit above light-blue
+// rule lines. Computed reference rates (TRIR/DART) are appended at
+// the bottom under a "Reference rates — not part of OSHA 300A"
+// caption so an auditor can't mistake them for required fields.
 
 import { PDFDocument, StandardFonts, type PDFPage, type PDFFont, rgb } from 'pdf-lib'
 import { sanitizeForWinAnsi, wrap } from '@/lib/pdfShared'
@@ -28,10 +27,14 @@ import {
 
 const PAGE_W = 612
 const PAGE_H = 792
-const MARGIN = 30
+const MARGIN = 24
 
-const BLACK = rgb(0, 0, 0)
-const GREY  = rgb(0.4, 0.4, 0.4)
+const NAVY      = rgb(0.13, 0.18, 0.34)
+const HEADER_BG = rgb(0.85, 0.87, 0.91)        // gray section bar
+const RULE_BLUE = rgb(0.74, 0.80, 0.89)
+const RULE_GREY = rgb(0.55, 0.58, 0.62)
+const BLACK     = rgb(0, 0, 0)
+const GREY      = rgb(0.42, 0.45, 0.50)
 
 interface RenderOpts {
   summary:                  Osha300ASummary
@@ -59,115 +62,133 @@ export async function renderOsha300APdf(opts: RenderOpts): Promise<Uint8Array> {
 
   let y = PAGE_H - MARGIN
 
-  // ── Header ────────────────────────────────────────────────────────
+  // ── Title block ───────────────────────────────────────────────────
   page.drawText('OSHA’s Form 300A', {
-    x: MARGIN, y: y - 14, size: 16, font: bold, color: BLACK,
+    x: MARGIN, y: y - 14, size: 14, font: bold, color: NAVY,
   })
   page.drawText('(Rev. 01/2004)', {
-    x: MARGIN + 130, y: y - 13, size: 8, font: oblique, color: BLACK,
+    x: MARGIN + 110, y: y - 13, size: 8, font: oblique, color: NAVY,
   })
-  page.drawText('Summary of Work-Related Injuries and Illnesses', {
-    x: MARGIN, y: y - 30, size: 13, font: bold, color: BLACK,
+  page.drawText('Summary of Work-Related', {
+    x: MARGIN, y: y - 32, size: 16, font: bold, color: NAVY,
   })
-  // Right side agency block.
+  page.drawText('Injuries and Illnesses', {
+    x: MARGIN, y: y - 50, size: 16, font: bold, color: NAVY,
+  })
+
+  // Right side — agency block + Year box.
   const rightX = PAGE_W - MARGIN - 220
+  page.drawText('Year', {
+    x: PAGE_W - MARGIN - 60, y: y - 12, size: 8, font, color: BLACK,
+  })
+  page.drawRectangle({
+    x: PAGE_W - MARGIN - 60, y: y - 30, width: 60, height: 16,
+    borderColor: BLACK, borderWidth: 0.6,
+  })
+  page.drawText(`20${String(opts.summary.year).slice(-2)}`, {
+    x: PAGE_W - MARGIN - 50, y: y - 26, size: 11, font: bold, color: BLACK,
+  })
   page.drawText('U.S. Department of Labor', {
-    x: rightX, y: y - 12, size: 9, font: bold, color: BLACK,
+    x: rightX, y: y - 14, size: 9, font: bold, color: BLACK,
   })
   page.drawText('Occupational Safety and Health Administration', {
-    x: rightX, y: y - 22, size: 8, font, color: BLACK,
+    x: rightX, y: y - 24, size: 7.5, font, color: BLACK,
   })
   page.drawText('Form approved OMB no. 1218-0176', {
-    x: rightX, y: y - 31, size: 7, font: oblique, color: BLACK,
+    x: rightX, y: y - 36, size: 7, font: oblique, color: BLACK,
   })
-  page.drawText(`Year 20${String(opts.summary.year).slice(-2)}`, {
-    x: rightX, y: y - 44, size: 12, font: bold, color: BLACK,
-  })
-  y -= 50
 
-  // Boilerplate block.
+  y -= 60
+
+  // ── Italic boilerplate paragraph beneath title ────────────────────
   const blurb =
     'All establishments covered by Part 1904 must complete this Summary page, even if no injuries or illnesses ' +
-    'occurred during the year. Remember to review the Log to verify that the entries are complete and accurate ' +
-    'before completing this summary. Using the Log, count the individual entries you made for each category. ' +
-    'Then write the totals below, making sure you’ve added the entries from every page of the Log. If you had ' +
-    'no cases, write "0." Employees, former employees, and their representatives have the right to review the ' +
-    'OSHA Form 300 in its entirety. They also have limited access to the OSHA Form 301 or its equivalent. See ' +
-    '29 CFR Part 1904.35, in OSHA’s recordkeeping rule, for further details on the access provisions for these forms.'
-  for (const line of wrap(sanitizeForWinAnsi(blurb), font, 7.5, PAGE_W - 2 * MARGIN)) {
-    page.drawText(line, { x: MARGIN, y: y - 8, size: 7.5, font, color: BLACK })
-    y -= 9
+    'occurred during the year. Remember to review the Log to verify that the entries are complete and accurate before ' +
+    'completing this summary. Using the Log, count the individual entries you made for each category. Then write the ' +
+    'totals below, making sure you’ve added the entries from every page of the Log. If you had no cases, write “0.” ' +
+    'Employees, former employees, and their representatives have the right to review the OSHA Form 300 in its ' +
+    'entirety. They also have limited access to the OSHA Form 301 or its equivalent. See 29 CFR Part 1904.35, in ' +
+    'OSHA’s recordkeeping rule, for further details on the access provisions for these forms.'
+  for (const line of wrap(sanitizeForWinAnsi(blurb), oblique, 7, PAGE_W - 2 * MARGIN)) {
+    page.drawText(line, { x: MARGIN, y: y - 8, size: 7, font: oblique, color: BLACK })
+    y -= 8.5
   }
-  y -= 8
+  y -= 6
 
-  // ── Number of Cases ───────────────────────────────────────────────
-  y = drawCountsBlock(
-    page, font, bold,
-    'Number of Cases',
-    [
-      { code: 'G',  caption: 'Total number of deaths',                        value: opts.summary.total_deaths },
-      { code: 'H',  caption: 'Total number of cases with days away from work', value: opts.summary.total_days_away },
-      { code: 'I',  caption: 'Total number of cases with job transfer or restriction', value: opts.summary.total_restricted },
-      { code: 'J',  caption: 'Total number of other recordable cases',         value: opts.summary.total_other_recordable },
-    ],
-    y,
+  // ── Two-column layout ─────────────────────────────────────────────
+  const gutter   = 8
+  const colW     = (PAGE_W - 2 * MARGIN - gutter) / 2
+  const leftX    = MARGIN
+  const rightCx  = MARGIN + colW + gutter
+  const colTop   = y
+
+  // ── LEFT column ───────────────────────────────────────────────────
+  let ly = colTop
+
+  ly = drawSectionBar(page, bold, 'Number of Cases', leftX, ly, colW)
+  ly = drawCountsRow(page, font, bold, leftX, ly, colW, [
+    { letter: 'G', label: 'Total number of deaths',                                value: opts.summary.total_deaths },
+    { letter: 'H', label: 'Total number of cases with days away from work',        value: opts.summary.total_days_away },
+    { letter: 'I', label: 'Total number of cases with job transfer or restriction', value: opts.summary.total_restricted },
+    { letter: 'J', label: 'Total number of other recordable cases',                value: opts.summary.total_other_recordable },
+  ])
+
+  ly -= 6
+  ly = drawSectionBar(page, bold, 'Number of Days', leftX, ly, colW)
+  ly = drawCountsRow(page, font, bold, leftX, ly, colW, [
+    { letter: 'K', label: 'Total number of days away from work',                   value: opts.summary.total_days_away_count },
+    { letter: 'L', label: 'Total number of days of job transfer or restriction',   value: opts.summary.total_days_restricted_count },
+  ])
+
+  ly -= 6
+  ly = drawSectionBar(page, bold, 'Injury and Illness Types', leftX, ly, colW)
+  ly = drawIllnessTypesBlock(page, font, bold, opts.summary, leftX, ly, colW)
+
+  // ── RIGHT column ──────────────────────────────────────────────────
+  let ry = colTop
+  const e = opts.establishment
+
+  ry = drawSectionBar(page, bold, 'Establishment Information', rightCx, ry, colW)
+  ry = drawLabelRule(page, font, bold, rightCx, ry, colW, 'Your establishment name', e.name)
+  ry = drawLabelRule(page, font, bold, rightCx, ry, colW, 'Street', e.street ?? '')
+  // City | State | Zip on a single row (3 fields).
+  ry = drawCityStateZip(page, font, bold, rightCx, ry, colW, e.city ?? '', e.state ?? '', e.zip ?? '')
+  ry = drawLabelRule(page, font, bold, rightCx, ry, colW, 'Industry description (e.g., Manufacture of motor truck trailers)', '')
+  ry = drawLabelRule(page, font, bold, rightCx, ry, colW, 'Standard Industrial Classification (SIC), if known (e.g., SIC 3715)', '')
+  ry = drawLabelRule(page, font, bold, rightCx, ry, colW, 'OR North American Industrial Classification (NAICS), if known (e.g., 336212)', e.naics_code ?? '')
+
+  ry -= 4
+  ry = drawSectionBar(page, bold, 'Employment Information', rightCx, ry, colW)
+  ry = drawLabelRule(page, font, bold, rightCx, ry, colW,
+    'Annual average number of employees', String(opts.summary.annual_avg_employees))
+  ry = drawLabelRule(page, font, bold, rightCx, ry, colW,
+    'Total hours worked by all employees last year', String(opts.summary.total_hours_worked))
+
+  ry -= 4
+  ry = drawSectionBar(page, bold, 'Sign here', rightCx, ry, colW)
+  ry = drawSignHere(page, font, bold, oblique, opts, rightCx, ry, colW)
+
+  // ── Reference rates strip (computed; non-OSHA) ────────────────────
+  const bottomY = Math.min(ly, ry) - 6
+  drawReferenceStrip(page, font, bold, oblique, opts.summary, leftX, bottomY, PAGE_W - 2 * MARGIN)
+
+  // ── Posting reminder + footer ─────────────────────────────────────
+  page.drawText(
+    'Post this Summary page from February 1 to April 30 of the year following the year covered by the form.',
+    { x: MARGIN, y: 38, size: 7, font: bold, color: BLACK },
   )
-
-  // ── Number of Days ────────────────────────────────────────────────
-  y -= 6
-  y = drawCountsBlock(
-    page, font, bold,
-    'Number of Days',
-    [
-      { code: 'K',  caption: 'Total number of days away from work',                    value: opts.summary.total_days_away_count },
-      { code: 'L',  caption: 'Total number of days of job transfer or restriction',    value: opts.summary.total_days_restricted_count },
-    ],
-    y,
-  )
-
-  // ── Injury and Illness Types ──────────────────────────────────────
-  y -= 6
-  y = drawCountsBlock(
-    page, font, bold,
-    'Injury and Illness Types',
-    [
-      { code: '1',  caption: 'Injuries',                value: opts.summary.by_injury_type.injury },
-      { code: '2',  caption: 'Skin Disorders',          value: opts.summary.by_injury_type.skin_disorder },
-      { code: '3',  caption: 'Respiratory Conditions',  value: opts.summary.by_injury_type.respiratory },
-      { code: '4',  caption: 'Poisonings',              value: opts.summary.by_injury_type.poisoning },
-      { code: '5',  caption: 'Hearing Loss',            value: opts.summary.by_injury_type.hearing_loss },
-      { code: '6',  caption: 'All Other Illnesses',     value: opts.summary.by_injury_type.other_illness },
-    ],
-    y,
-  )
-
-  // ── Establishment information ─────────────────────────────────────
-  y -= 8
-  y = drawEstablishmentBlock(page, font, bold, opts, y)
-
-  // ── Employment information ────────────────────────────────────────
-  y -= 6
-  y = drawEmploymentBlock(page, font, bold, opts.summary, y)
-
-  // ── Reference rates (computed; clearly labelled non-OSHA) ─────────
-  y -= 6
-  y = drawReferenceRates(page, font, bold, oblique, opts.summary, y)
-
-  // ── Sign here ─────────────────────────────────────────────────────
-  y -= 6
-  drawCertification(page, font, bold, oblique, opts, y)
-
-  // ── Footer ────────────────────────────────────────────────────────
   page.drawText(
     sanitizeForWinAnsi(
-      'Public reporting burden for this collection of information is estimated to average 50 minutes per response, including ' +
-      'time to review the instruction, search and gather the data needed, and complete and review the collection of information.',
+      'Public reporting burden for this collection of information is estimated to average 50 minutes per response, ' +
+      'including time to review the instructions, search and gather the data needed, and complete and review the ' +
+      'collection of information. Persons are not required to respond to the collection of information unless it ' +
+      'displays a current valid OMB control number.',
     ),
-    { x: MARGIN, y: 22, size: 5.5, font: oblique, color: GREY,
-      maxWidth: PAGE_W - 2 * MARGIN - 130, lineHeight: 6.5 },
+    { x: MARGIN, y: 18, size: 5.5, font: oblique, color: GREY,
+      maxWidth: PAGE_W - 2 * MARGIN - 100, lineHeight: 6.5 },
   )
-  page.drawText('Generated by SoteriaField · Post by April 30 of the following year', {
-    x: PAGE_W - MARGIN - 240, y: 14, size: 7, font, color: GREY,
+  page.drawText('Generated by SoteriaField', {
+    x: PAGE_W - MARGIN - 100, y: 12, size: 7, font, color: GREY,
   })
 
   return await pdf.save()
@@ -175,190 +196,236 @@ export async function renderOsha300APdf(opts: RenderOpts): Promise<Uint8Array> {
 
 // ──────────────────────────────────────────────────────────────────────────
 
-interface CountCell { code: string; caption: string; value: number }
-
-function drawCountsBlock(
-  page: PDFPage, font: PDFFont, bold: PDFFont,
-  title: string, cells: CountCell[], top: number,
+function drawSectionBar(
+  page: PDFPage, bold: PDFFont, title: string,
+  x: number, y: number, w: number,
 ): number {
-  // Title bar.
-  page.drawText(title, {
-    x: MARGIN, y: top - 10, size: 9, font: bold, color: BLACK,
+  const h = 14
+  page.drawRectangle({
+    x, y: y - h, width: w, height: h,
+    color: HEADER_BG, borderColor: BLACK, borderWidth: 0.4,
   })
-  const rowTop = top - 14
-  const usable = PAGE_W - 2 * MARGIN
-  const cellW = usable / cells.length
-  const cellH = 44
+  page.drawText(sanitizeForWinAnsi(title), {
+    x: x + 4, y: y - 10, size: 8.5, font: bold, color: BLACK,
+  })
+  return y - h
+}
 
+interface CountCell { letter: string; label: string; value: number }
+
+function drawCountsRow(
+  page: PDFPage, font: PDFFont, bold: PDFFont,
+  x: number, top: number, totalW: number, cells: CountCell[],
+): number {
+  const cellW = totalW / cells.length
+  const cellH = 76
   for (let i = 0; i < cells.length; i++) {
     const c = cells[i]!
-    const x = MARGIN + i * cellW
+    const cx = x + i * cellW
     page.drawRectangle({
-      x, y: rowTop - cellH, width: cellW, height: cellH,
-      borderColor: BLACK, borderWidth: 0.6,
+      x: cx, y: top - cellH, width: cellW, height: cellH,
+      borderColor: BLACK, borderWidth: 0.4,
     })
-    // Code (e.g. "G") — bold top-left.
-    page.drawText(c.code, {
-      x: x + 4, y: rowTop - 11, size: 8, font: bold, color: BLACK,
-    })
-    // Caption — wrapped under the code.
-    const captionLines = wrap(sanitizeForWinAnsi(c.caption), font, 6.5, cellW - 32)
-    let cy = rowTop - 11
-    for (const line of captionLines.slice(0, 3)) {
-      page.drawText(line, { x: x + 14, y: cy, size: 6.5, font, color: BLACK })
-      cy -= 7.5
+    // Label — top, wrapped.
+    const labelLines = wrap(sanitizeForWinAnsi(c.label), font, 6.5, cellW - 8)
+    let ly = top - 10
+    for (const line of labelLines.slice(0, 4)) {
+      page.drawText(line, { x: cx + 4, y: ly, size: 6.5, font, color: BLACK })
+      ly -= 7.5
     }
-    // Value box on the right of the cell.
-    const valBoxX = x + cellW - 30
-    const valBoxY = rowTop - cellH + 6
-    page.drawRectangle({
-      x: valBoxX, y: valBoxY, width: 24, height: 24,
-      borderColor: BLACK, borderWidth: 0.6,
-    })
+    // Value — centered horizontally, mid-cell.
     const v = String(c.value)
     const approx = v.length * 14 * 0.55
     page.drawText(v, {
-      x: valBoxX + (24 - approx) / 2, y: valBoxY + 7, size: 14, font: bold, color: BLACK,
+      x: cx + (cellW - approx) / 2, y: top - cellH + 24, size: 14, font: bold, color: BLACK,
+    })
+    // Rule line under the number.
+    page.drawLine({
+      start: { x: cx + cellW * 0.25, y: top - cellH + 22 },
+      end:   { x: cx + cellW * 0.75, y: top - cellH + 22 },
+      thickness: 0.5, color: BLACK,
+    })
+    // Letter — bottom, centered.
+    const letter = `(${c.letter})`
+    const lApprox = letter.length * 8 * 0.5
+    page.drawText(letter, {
+      x: cx + (cellW - lApprox) / 2, y: top - cellH + 6, size: 8, font: bold, color: BLACK,
     })
   }
-  return rowTop - cellH
+  return top - cellH
 }
 
-function drawEstablishmentBlock(
+function drawIllnessTypesBlock(
   page: PDFPage, font: PDFFont, bold: PDFFont,
-  opts: RenderOpts, top: number,
+  s: Osha300ASummary, x: number, top: number, totalW: number,
 ): number {
-  const e = opts.establishment
-  page.drawText('Establishment information', {
-    x: MARGIN, y: top - 10, size: 9, font: bold, color: BLACK,
+  // The official 300A renders a "Total number of..." caption + (M) letter
+  // and arranges six numbered illness-type rows. We use a 2-column
+  // 3-row grid to match the screenshot ordering.
+  const innerH = 76
+  page.drawRectangle({
+    x, y: top - innerH, width: totalW, height: innerH,
+    borderColor: BLACK, borderWidth: 0.4,
   })
-  // Bordered field stack.
-  const rowH = 16
-  const labels: Array<{ label: string; value: string }> = [
-    { label: 'Your establishment name',                    value: e.name },
-    { label: 'Street',                                     value: e.street ?? '' },
-    { label: 'City',                                       value: e.city ?? '' },
-    { label: 'State',                                      value: e.state ?? '' },
-    { label: 'ZIP',                                        value: e.zip ?? '' },
-    { label: 'Standard Industrial Classification (SIC), if known',     value: '' },
-    { label: 'North American Industrial Classification (NAICS), if known', value: e.naics_code ?? '' },
+  page.drawText('Total number of...', {
+    x: x + 6, y: top - 12, size: 7, font, color: BLACK,
+  })
+  page.drawText('(M)', {
+    x: x + totalW / 2 - 8, y: top - 12, size: 8, font: bold, color: BLACK,
+  })
+  const types = s.by_injury_type
+  const rows: Array<{ num: string; label: string; value: number }> = [
+    { num: '(1)', label: 'Injury',                value: types.injury },
+    { num: '(2)', label: 'Skin Disorder',         value: types.skin_disorder },
+    { num: '(3)', label: 'Respiratory Condition', value: types.respiratory },
+    { num: '(4)', label: 'Poisoning',             value: types.poisoning },
+    { num: '(5)', label: 'Hearing Loss',          value: types.hearing_loss },
+    { num: '(6)', label: 'All Other Illnesses',   value: types.other_illness },
   ]
-  let y = top - 14
-  for (const it of labels) {
-    page.drawRectangle({
-      x: MARGIN, y: y - rowH, width: PAGE_W - 2 * MARGIN, height: rowH,
-      borderColor: BLACK, borderWidth: 0.5,
+  // 2 columns × 3 rows.
+  const halfW = totalW / 2
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i]!
+    const colIdx = i < 3 ? 0 : 1
+    const rowIdx = i % 3
+    const rx = x + 6 + colIdx * halfW
+    const ry = top - 24 - rowIdx * 16
+    page.drawText(`${r.num}  ${r.label}`, {
+      x: rx, y: ry, size: 7, font, color: BLACK,
     })
-    page.drawText(sanitizeForWinAnsi(it.label), {
-      x: MARGIN + 4, y: y - 11, size: 7, font, color: BLACK,
+    // Underline + value at right.
+    const ruleStart = rx + 110
+    const ruleEnd   = rx + halfW - 14
+    page.drawLine({
+      start: { x: ruleStart, y: ry - 2 }, end: { x: ruleEnd, y: ry - 2 },
+      thickness: 0.5, color: BLACK,
     })
-    if (it.value) {
-      page.drawText(sanitizeForWinAnsi(it.value), {
-        x: MARGIN + 250, y: y - 11, size: 9, font: bold, color: BLACK,
+    const v = String(r.value)
+    const approx = v.length * 9 * 0.55
+    page.drawText(v, {
+      x: (ruleStart + ruleEnd) / 2 - approx / 2, y: ry, size: 9, font: bold, color: BLACK,
+    })
+  }
+  return top - innerH
+}
+
+function drawLabelRule(
+  page: PDFPage, font: PDFFont, bold: PDFFont,
+  x: number, top: number, w: number, label: string, value: string,
+): number {
+  const h = 22
+  page.drawText(sanitizeForWinAnsi(label), {
+    x: x + 2, y: top - 8, size: 6.5, font, color: BLACK,
+  })
+  page.drawLine({
+    start: { x: x + 2, y: top - h + 2 }, end: { x: x + w - 2, y: top - h + 2 },
+    thickness: 0.5, color: RULE_GREY,
+  })
+  if (value) {
+    page.drawText(sanitizeForWinAnsi(value), {
+      x: x + 4, y: top - h + 5, size: 9, font: bold, color: BLACK,
+    })
+  }
+  return top - h
+}
+
+function drawCityStateZip(
+  page: PDFPage, font: PDFFont, bold: PDFFont,
+  x: number, top: number, w: number,
+  city: string, state: string, zip: string,
+): number {
+  const h = 22
+  const widths = [w * 0.5, w * 0.2, w * 0.3]
+  const labels = ['City', 'State', 'Zip']
+  const values = [city, state, zip]
+  let cx = x
+  for (let i = 0; i < 3; i++) {
+    const cw = widths[i]!
+    page.drawText(labels[i]!, {
+      x: cx + 2, y: top - 8, size: 6.5, font, color: BLACK,
+    })
+    page.drawLine({
+      start: { x: cx + 2, y: top - h + 2 }, end: { x: cx + cw - 2, y: top - h + 2 },
+      thickness: 0.5, color: RULE_GREY,
+    })
+    if (values[i]) {
+      page.drawText(sanitizeForWinAnsi(values[i]!), {
+        x: cx + 4, y: top - h + 5, size: 9, font: bold, color: BLACK,
       })
     }
-    y -= rowH
+    cx += cw
   }
-  return y
+  return top - h
 }
 
-function drawEmploymentBlock(
-  page: PDFPage, font: PDFFont, bold: PDFFont,
-  s: Osha300ASummary, top: number,
-): number {
-  page.drawText('Employment information', {
-    x: MARGIN, y: top - 10, size: 9, font: bold, color: BLACK,
-  })
-  const items: Array<{ label: string; value: string }> = [
-    { label: 'Annual average number of employees',           value: String(s.annual_avg_employees) },
-    { label: 'Total hours worked by all employees last year', value: String(s.total_hours_worked) },
-  ]
-  let y = top - 14
-  for (const it of items) {
-    page.drawRectangle({
-      x: MARGIN, y: y - 18, width: PAGE_W - 2 * MARGIN, height: 18,
-      borderColor: BLACK, borderWidth: 0.5,
-    })
-    page.drawText(sanitizeForWinAnsi(it.label), {
-      x: MARGIN + 4, y: y - 12, size: 7.5, font, color: BLACK,
-    })
-    page.drawText(it.value, {
-      x: PAGE_W - MARGIN - 80, y: y - 13, size: 11, font: bold, color: BLACK,
-    })
-    y -= 18
-  }
-  return y
-}
-
-function drawReferenceRates(
+function drawSignHere(
   page: PDFPage, font: PDFFont, bold: PDFFont, oblique: PDFFont,
-  s: Osha300ASummary, top: number,
+  opts: RenderOpts, x: number, top: number, w: number,
 ): number {
+  page.drawText('Knowingly falsifying this document may result in a fine.', {
+    x: x + 2, y: top - 10, size: 7, font: oblique, color: BLACK,
+  })
+  const cert =
+    'I certify that I have examined this document and that to the best of my knowledge the entries are true, accurate, and complete.'
+  let yy = top - 20
+  for (const line of wrap(sanitizeForWinAnsi(cert), font, 7, w - 4)) {
+    page.drawText(line, { x: x + 2, y: yy, size: 7, font, color: BLACK })
+    yy -= 8
+  }
+  yy -= 4
+  // 2x2 grid: Company executive | Title  /  Phone | Date.
+  const halfW = w / 2
+  const fields: Array<{ label: string; value: string; col: 0 | 1; row: 0 | 1 }> = [
+    { label: 'Company executive', value: opts.establishment.certifying_executive_name ?? opts.certified_by_name ?? '', col: 0, row: 0 },
+    { label: 'Title',             value: opts.establishment.certifying_executive_title ?? '', col: 1, row: 0 },
+    { label: 'Phone',             value: '', col: 0, row: 1 },
+    { label: 'Date',              value: opts.certified_at ? new Date(opts.certified_at).toLocaleDateString() : '',  col: 1, row: 1 },
+  ]
+  const cellH = 22
+  for (const f of fields) {
+    const fx = x + f.col * halfW
+    const fy = yy - f.row * cellH
+    page.drawLine({
+      start: { x: fx + 2, y: fy - cellH + 4 }, end: { x: fx + halfW - 4, y: fy - cellH + 4 },
+      thickness: 0.5, color: RULE_GREY,
+    })
+    page.drawText(sanitizeForWinAnsi(f.label), {
+      x: fx + 2, y: fy - cellH + 12, size: 6.5, font, color: GREY,
+    })
+    if (f.value) {
+      page.drawText(sanitizeForWinAnsi(f.value), {
+        x: fx + 4, y: fy - cellH + 7, size: 9, font: bold, color: BLACK,
+      })
+    }
+  }
+  return yy - 2 * cellH
+}
+
+function drawReferenceStrip(
+  page: PDFPage, font: PDFFont, bold: PDFFont, oblique: PDFFont,
+  s: Osha300ASummary, x: number, top: number, w: number,
+) {
   page.drawText('Reference rates', {
-    x: MARGIN, y: top - 10, size: 8, font: bold, color: BLACK,
+    x, y: top - 10, size: 8, font: bold, color: BLACK,
   })
   page.drawText(' — computed by SoteriaField; not part of OSHA 300A.', {
-    x: MARGIN + 80, y: top - 10, size: 7, font: oblique, color: GREY,
+    x: x + 80, y: top - 10, size: 7, font: oblique, color: GREY,
   })
   const trir = trirFromSummary(s)
   const dart = dartFromSummary(s)
+  const half = w / 2
   const cells = [
     { label: 'TRIR (per 100 FTE)', value: trir == null ? '—' : trir.toFixed(2) },
     { label: 'DART (per 100 FTE)', value: dart == null ? '—' : dart.toFixed(2) },
   ]
-  const w = (PAGE_W - 2 * MARGIN) / 2
-  let y = top - 14
   for (let i = 0; i < cells.length; i++) {
     const c = cells[i]!
-    const x = MARGIN + i * w
+    const cx = x + i * half
     page.drawRectangle({
-      x, y: y - 18, width: w, height: 18, borderColor: BLACK, borderWidth: 0.5,
+      x: cx, y: top - 30, width: half, height: 16,
+      borderColor: BLACK, borderWidth: 0.4,
     })
-    page.drawText(c.label, { x: x + 4, y: y - 12, size: 7.5, font, color: BLACK })
-    page.drawText(c.value, { x: x + w - 60, y: y - 13, size: 11, font: bold, color: BLACK })
-  }
-  return y - 18
-}
-
-function drawCertification(
-  page: PDFPage, font: PDFFont, bold: PDFFont, oblique: PDFFont,
-  opts: RenderOpts, top: number,
-) {
-  page.drawText('Sign here', {
-    x: MARGIN, y: top - 10, size: 9, font: bold, color: BLACK,
-  })
-  page.drawText('Knowingly falsifying this document may result in a fine.', {
-    x: MARGIN + 56, y: top - 10, size: 8, font: oblique, color: BLACK,
-  })
-  const cert =
-    'I certify that I have examined this document and that to the best of my knowledge the entries are true, accurate, and complete.'
-  for (const line of wrap(sanitizeForWinAnsi(cert), font, 8, PAGE_W - 2 * MARGIN)) {
-    page.drawText(line, { x: MARGIN, y: top - 22, size: 8, font, color: BLACK })
-  }
-
-  // Four signature/title/phone/date boxes (matches the official form).
-  const bxTop = top - 30
-  const half = (PAGE_W - 2 * MARGIN) / 2
-  const fields: Array<{ x: number; y: number; w: number; h: number; label: string; value: string }> = [
-    { x: MARGIN,          y: bxTop - 26, w: half - 4, h: 26, label: 'Company executive name',
-      value: opts.establishment.certifying_executive_name ?? opts.certified_by_name ?? '' },
-    { x: MARGIN + half,   y: bxTop - 26, w: half - 4, h: 26, label: 'Title',
-      value: opts.establishment.certifying_executive_title ?? '' },
-    { x: MARGIN,          y: bxTop - 56, w: half - 4, h: 26, label: 'Phone',                 value: '' },
-    { x: MARGIN + half,   y: bxTop - 56, w: half - 4, h: 26, label: 'Date',
-      value: opts.certified_at ? new Date(opts.certified_at).toLocaleDateString() : '' },
-  ]
-  for (const f of fields) {
-    page.drawRectangle({
-      x: f.x, y: f.y, width: f.w, height: f.h, borderColor: BLACK, borderWidth: 0.5,
-    })
-    page.drawText(sanitizeForWinAnsi(f.label), {
-      x: f.x + 4, y: f.y + f.h - 9, size: 7, font, color: BLACK,
-    })
-    if (f.value) {
-      page.drawText(sanitizeForWinAnsi(f.value), {
-        x: f.x + 4, y: f.y + 8, size: 10, font: bold, color: BLACK,
-      })
-    }
+    page.drawText(c.label, { x: cx + 4, y: top - 25, size: 7.5, font, color: BLACK })
+    page.drawText(c.value, { x: cx + half - 50, y: top - 25, size: 10, font: bold, color: BLACK })
   }
 }
