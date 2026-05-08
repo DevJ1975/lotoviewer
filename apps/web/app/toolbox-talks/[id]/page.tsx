@@ -386,7 +386,12 @@ function formatDate(yyyymmdd: string): string {
 
 function formatRosterTime(iso: string): string {
   if (!iso) return ''
-  return new Date(iso).toLocaleString(undefined, {
+  const d = new Date(iso)
+  // `new Date('garbage').getTime()` is NaN — guard so the green-pill
+  // race condition (already_signed=true but no row matches userId)
+  // doesn't render literal "Invalid Date" to the worker.
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString(undefined, {
     month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
   })
 }

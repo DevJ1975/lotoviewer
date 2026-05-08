@@ -140,13 +140,18 @@ async function runCron(): Promise<NextResponse> {
   const admin = supabaseAdmin()
 
   try {
-    // 1. Pull every tenant. Module visibility is decided per row
-    //    (tenants.modules JSON) — the helper agrees with how the
-    //    drawer hides the link, so a tenant who turned the module
-    //    off won't get talks generated.
+    // 1. Pull every active tenant. The disabled_at filter matches
+    //    the posture of incident-trends-weekly/training-expiry —
+    //    soft-deleted tenants don't get talks generated, which
+    //    would otherwise burn Anthropic budget on accounts the
+    //    operator has already turned off. Module visibility is then
+    //    decided per row (tenants.modules JSON) — the helper agrees
+    //    with how the drawer hides the link, so a tenant who turned
+    //    the module off won't get talks generated.
     const { data: tenants, error: tErr } = await admin
       .from('tenants')
       .select('id, name, modules, settings')
+      .is('disabled_at', null)
     if (tErr) {
       Sentry.captureException(tErr, { tags: { route: '/api/cron/generate-toolbox-talks', stage: 'fetch-tenants' } })
       return NextResponse.json({ error: tErr.message }, { status: 500 })
@@ -285,18 +290,31 @@ async function generateForTenant(
     try {
       const fields = await generateTalkBody(client, topic, tenant.name)
 
+      // Defense-in-depth: the JSON-schema output_config should
+      // guarantee these shapes, but a future SDK regression or a
+      // partial response shouldn't crash the cron. Coerce defensively
+      // so a malformed AI return degrades to a sparse-but-valid row
+      // rather than throwing.
+      const safeTitle    = typeof fields.title === 'string' ? fields.title.trim().slice(0, 200) : ''
+      const safeBody     = typeof fields.body_markdown === 'string' ? fields.body_markdown.slice(0, BODY_MAX_CHARS) : ''
+      const safePoints   = Array.isArray(fields.key_points)
+        ? fields.key_points
+            .filter((p): p is string => typeof p === 'string')
+            .map(p => p.slice(0, KEY_POINT_MAX_LEN))
+            .slice(0, KEY_POINTS_MAX)
+        : []
+      const safeNotes    = typeof fields.delivery_notes === 'string' ? fields.delivery_notes.trim().slice(0, 1000) : ''
+
       const { error: insertErr } = await admin
         .from('toolbox_talks')
         .insert({
           tenant_id:      tenant.id,
           topic_id:       topic.id,
           talk_date:      date,
-          title:          fields.title.trim().slice(0, 200) || topic.title,
-          body_markdown:  fields.body_markdown.slice(0, BODY_MAX_CHARS),
-          key_points:     fields.key_points
-                            .map(p => p.slice(0, KEY_POINT_MAX_LEN))
-                            .slice(0, KEY_POINTS_MAX),
-          delivery_notes: fields.delivery_notes.trim().slice(0, 1000),
+          title:          safeTitle || topic.title,
+          body_markdown:  safeBody,
+          key_points:     safePoints,
+          delivery_notes: safeNotes,
           generated_by:   'cron',
           ai_model:       AI_MODEL,
         })

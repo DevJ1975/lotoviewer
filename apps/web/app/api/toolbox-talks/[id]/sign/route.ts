@@ -116,6 +116,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         employee_id:    employeeId,
         signature_data: sigData,
         signed_ip:      ip,
+        // Audit trail: always record who pressed Save, even when
+        // signer_user_id is NULL (coworker mode). For self-signs
+        // this is the same user as signer_user_id; the redundancy
+        // is intentional so a single column query answers "who
+        // touched this row" without branching on null.
+        inserted_by:    gate.userId,
       })
       .select('id, signer_user_id, signer_name, employee_id, signed_at')
       .single()
