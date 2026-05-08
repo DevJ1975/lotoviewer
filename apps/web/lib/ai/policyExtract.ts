@@ -80,7 +80,7 @@ export async function extractPolicyText(args: ExtractArgs): Promise<ExtractResul
   if (mime === 'application/pdf') {
     const client = await getAnthropic(tenantId)
     const base64 = Buffer.from(bytes).toString('base64')
-    const response = await client.messages.create({
+    const response = (await client.messages.create({
       model:      SONNET,
       max_tokens: 16000,
       system:     PDF_EXTRACT_SYSTEM,
@@ -97,7 +97,7 @@ export async function extractPolicyText(args: ExtractArgs): Promise<ExtractResul
           },
         ],
       }],
-    } as Parameters<Anthropic['messages']['create']>[0])
+    } as Parameters<Anthropic['messages']['create']>[0])) as Anthropic.Message
 
     const textBlock = response.content.find(b => b.type === 'text')
     const extracted = textBlock && textBlock.type === 'text' ? textBlock.text : ''

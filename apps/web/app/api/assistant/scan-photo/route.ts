@@ -105,7 +105,7 @@ export async function POST(req: Request) {
 
   let response: Anthropic.Message
   try {
-    response = await client.messages.create({
+    response = (await client.messages.create({
       model:      MODEL,
       max_tokens: 1500,
       system:     SYSTEM_PROMPT,
@@ -119,7 +119,7 @@ export async function POST(req: Request) {
           { type: 'text', text: 'Extract the nameplate fields per the system instructions. Reply with JSON only.' },
         ],
       }],
-    } as Parameters<Anthropic['messages']['create']>[0])
+    } as Parameters<Anthropic['messages']['create']>[0])) as Anthropic.Message
   } catch (err) {
     const mapped = aiErrorToResponse(err, 'assistant-scan-photo')
     Sentry.captureException(err, { tags: { ...mapped.tags, route: '/api/assistant/scan-photo' } })

@@ -170,13 +170,14 @@ export async function POST(req: Request) {
   // noisier prompt) and revisit when streaming + structured tool replay
   // land in PR2. The model still sees its own prior tool calls — the
   // metadata column carries the tool_use_id + name when needed.
-  const sdkMessages = prior.map(m => {
+  //
+  // Typed as MessageParam[] explicitly because the loop below pushes
+  // ContentBlockParam[] content (tool_use + tool_result blocks); without
+  // the annotation TS narrows the array element type to {content: string}
+  // from the initial map and rejects the later push.
+  const sdkMessages: Anthropic.MessageParam[] = prior.map((m): Anthropic.MessageParam => {
     if (m.role === 'tool') {
-      // Render as a system-style note the assistant can read.
-      return {
-        role: 'user' as const,
-        content: `[tool result] ${m.content}`,
-      }
+      return { role: 'user', content: `[tool result] ${m.content}` }
     }
     return { role: m.role, content: m.content }
   })
@@ -188,7 +189,7 @@ export async function POST(req: Request) {
   let totalOutputTokens = 0
   let totalCacheRead    = 0
   let lastResponse: Anthropic.Message | null = null
-  const assistantBlocks: Anthropic.ContentBlock[] = []
+  const assistantBlocks: Anthropic.TextBlock[] = []
   const toolHistory: Array<{ name: string; input: unknown; result: string }> = []
 
   for (let loop = 0; loop < MAX_TOOL_LOOPS; loop++) {

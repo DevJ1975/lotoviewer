@@ -14,8 +14,7 @@ const fetchMock = vi.fn()
 
 beforeEach(() => {
   fetchMock.mockReset()
-  // @ts-expect-error - global fetch override for tests
-  global.fetch = fetchMock
+  global.fetch = fetchMock as unknown as typeof fetch
   process.env.VOYAGE_API_KEY = 'voyage-test-key'
 })
 afterEach(() => {
