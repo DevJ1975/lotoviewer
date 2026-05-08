@@ -108,14 +108,14 @@ export async function POST(req: Request) {
         orphans.push(a.path); continue
       }
       rows.push({
-        tenant_id:    inc.tenant_id,
-        incident_id:  inc.id,
-        storage_path: a.path,
-        mime:         a.mime,
-        byte_size:    a.byte_size,
-        caption:      typeof a.caption === 'string' && a.caption.trim()
-                        ? a.caption.trim().slice(0, 500)
-                        : null,
+        tenant_id:       inc.tenant_id,
+        incident_id:     inc.id,
+        storage_path:    a.path,
+        mime_type:       a.mime,
+        file_size_bytes: a.byte_size,
+        caption:         typeof a.caption === 'string' && a.caption.trim()
+                           ? a.caption.trim().slice(0, 500)
+                           : null,
       })
     }
 
