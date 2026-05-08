@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, MessageSquare, Plus, Shield } from 'lucide-react'
+import { Loader2, MessageSquare, Plus, Shield, EyeOff } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
+import BoardSearch from '@/components/safetyBoards/BoardSearch'
 import { listBoards, createBoard, type SafetyBoardSummary } from '@/lib/safetyBoards/client'
 
 // /safety-boards — index of all boards in the active tenant. Admin
@@ -19,6 +20,7 @@ export default function SafetyBoardsIndex() {
   const [showForm, setShowForm] = useState(false)
   const [name, setName]   = useState('')
   const [desc, setDesc]   = useState('')
+  const [allowAnon, setAllowAnon] = useState(false)
   const [busy, setBusy]   = useState(false)
 
   const refresh = useCallback(async () => {
@@ -40,8 +42,12 @@ export default function SafetyBoardsIndex() {
     if (!tenant?.id || !name.trim()) return
     setBusy(true); setError(null)
     try {
-      await createBoard(tenant.id, { name: name.trim(), description: desc.trim() || undefined })
-      setName(''); setDesc(''); setShowForm(false)
+      await createBoard(tenant.id, {
+        name: name.trim(),
+        description: desc.trim() || undefined,
+        allow_anonymous: allowAnon,
+      })
+      setName(''); setDesc(''); setAllowAnon(false); setShowForm(false)
       await refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -104,6 +110,22 @@ export default function SafetyBoardsIndex() {
               placeholder="Optional"
             />
           </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={allowAnon}
+              onChange={e => setAllowAnon(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium text-slate-700 dark:text-slate-200 inline-flex items-center gap-1">
+                <EyeOff className="h-3.5 w-3.5" /> Allow anonymous posts
+              </span>
+              <span className="block text-xs text-slate-500 dark:text-slate-400">
+                Members can post hazard reports / questions without their name attached. Useful for safety reporting.
+              </span>
+            </span>
+          </label>
           <div className="flex justify-end">
             <button type="submit" disabled={busy || !name.trim()} className="rounded-lg bg-brand-navy text-white px-4 py-2 text-sm font-semibold hover:bg-brand-navy/90 disabled:opacity-50">
               {busy ? 'Creating…' : 'Create board'}
@@ -111,6 +133,8 @@ export default function SafetyBoardsIndex() {
           </div>
         </form>
       )}
+
+      <BoardSearch />
 
       {boards.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-8 text-center">

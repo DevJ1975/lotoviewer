@@ -43,7 +43,7 @@ export async function PATCH(req: Request, ctx: RouteContext) {
   const isPriv = gate.role === 'owner' || gate.role === 'admin' || gate.role === 'superadmin'
   if (!isPriv) return NextResponse.json({ error: 'Admin only' }, { status: 403 })
 
-  let body: { name?: string; description?: string | null }
+  let body: { name?: string; description?: string | null; allow_anonymous?: boolean }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
   const update: Record<string, unknown> = {}
@@ -57,6 +57,9 @@ export async function PATCH(req: Request, ctx: RouteContext) {
   if ('description' in body) {
     const d = (body.description ?? '').toString().trim()
     update.description = d || null
+  }
+  if (typeof body.allow_anonymous === 'boolean') {
+    update.allow_anonymous = body.allow_anonymous
   }
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })

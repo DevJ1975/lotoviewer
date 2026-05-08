@@ -14,6 +14,7 @@ import BoardAttachmentView from '@/components/safetyBoards/BoardAttachment'
 import AttachFiles, { type PendingAttachment } from '@/components/safetyBoards/AttachFiles'
 import AcknowledgementBanner from '@/components/safetyBoards/AcknowledgementBanner'
 import SpawnActionButton from '@/components/safetyBoards/SpawnActionButton'
+import SubscribeButton from '@/components/safetyBoards/SubscribeButton'
 import {
   getThread, listReplies, createReply, patchReply, deleteReply,
   patchThread, deleteThread,
@@ -61,6 +62,8 @@ export default function ThreadDetailPage() {
   const [draft, setDraft]       = useState('')
   const [posting, setPosting]   = useState(false)
   const [replyAttachments, setReplyAttachments] = useState<PendingAttachment[]>([])
+  const [replyAnonymous, setReplyAnonymous] = useState(false)
+  const [board, setBoard] = useState<{ allow_anonymous?: boolean } | null>(null)
 
   const [editingThread, setEditingThread] = useState(false)
   const [editTitle, setEditTitle]         = useState('')
@@ -78,6 +81,17 @@ export default function ThreadDetailPage() {
       ])
       setThread(t)
       setReplies(r)
+      // Best-effort fetch board for the allow_anonymous flag.
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+      if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`
+      try {
+        const boardRes = await fetch(`/api/safety-boards/${boardId}`, { headers })
+        if (boardRes.ok) {
+          const j = await boardRes.json()
+          if (j.board) setBoard(j.board as { allow_anonymous: boolean })
+        }
+      } catch { /* non-essential */ }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -109,10 +123,12 @@ export default function ThreadDetailPage() {
       const r = await createReply(tenant.id, boardId, threadId, {
         body: text,
         attachment_ids: replyAttachments.length > 0 ? replyAttachments.map(a => a.id) : undefined,
+        is_anonymous: !!board?.allow_anonymous && replyAnonymous,
       })
       setReplies(prev => [...prev, r])
       setDraft('')
       setReplyAttachments([])
+      setReplyAnonymous(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -205,9 +221,12 @@ export default function ThreadDetailPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-5">
-      <Link href={`/safety-boards/${boardId}`} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
-        <ArrowLeft className="h-4 w-4" /> Back to threads
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link href={`/safety-boards/${boardId}`} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+          <ArrowLeft className="h-4 w-4" /> Back to threads
+        </Link>
+        <SubscribeButton targetType="thread" targetId={thread.id} />
+      </div>
 
       {error && <p className="text-sm text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg px-3 py-2">{error}</p>}
 
@@ -252,7 +271,7 @@ export default function ThreadDetailPage() {
               </h1>
             )}
             <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              {thread.author_full_name || thread.author_email} · {formatTimestamp(thread.created_at)}
+              {thread.is_anonymous ? 'Anonymous' : (thread.author_full_name || thread.author_email)} · {formatTimestamp(thread.created_at)}
               {thread.edited_at && <> · <span className="italic">edited</span></>}
             </div>
           </div>
@@ -366,8 +385,10 @@ export default function ThreadDetailPage() {
               <li key={r.id} className="flex gap-2">
                 <Avatar src={r.author_avatar_url} name={r.author_full_name} email={r.author_email} size="sm" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-1.5">
-                    <span className="font-semibold text-slate-700 dark:text-slate-200">{r.author_full_name || r.author_email}</span>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-1.5" id={`reply-${r.id}`}>
+                    <span className="font-semibold text-slate-700 dark:text-slate-200">
+                      {r.is_anonymous ? 'Anonymous' : (r.author_full_name || r.author_email)}
+                    </span>
                     <span>· {formatTimestamp(r.created_at)}</span>
                     {r.edited_at && <span className="italic">(edited)</span>}
                     {isReplyAuthor && !editing && (
@@ -431,6 +452,16 @@ export default function ThreadDetailPage() {
             disabled={posting}
           />
           <AttachFiles pending={replyAttachments} onChange={setReplyAttachments} disabled={posting} />
+          {board?.allow_anonymous && (
+            <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={replyAnonymous}
+                onChange={e => setReplyAnonymous(e.target.checked)}
+              />
+              Reply anonymously
+            </label>
+          )}
           <div className="flex justify-end">
             <button
               type="button"

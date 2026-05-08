@@ -3,17 +3,21 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, Bell, Loader2, MessageSquare, Pin, Lock, Plus } from 'lucide-react'
+import { ArrowLeft, Bell, EyeOff, Loader2, MessageSquare, Pin, Lock, Plus } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { Avatar } from '@/components/ui/Avatar'
 import MentionInput, { type MentionMember } from '@/components/MentionInput'
 import EntityLinkPicker from '@/components/safetyBoards/EntityLinkPicker'
 import AttachFiles, { type PendingAttachment } from '@/components/safetyBoards/AttachFiles'
+import BoardSearch from '@/components/safetyBoards/BoardSearch'
+import BoardAccessEditor from '@/components/safetyBoards/BoardAccessEditor'
+import SubscribeButton from '@/components/safetyBoards/SubscribeButton'
 import {
   listThreads, createThread,
   THREAD_KINDS, KIND_LABEL, KIND_DESCRIPTIONS, ENTITY_LINK_LABEL,
   type SafetyThreadSummary, type ThreadKind, type EntityLinkType,
+  type SafetyBoardSummary,
 } from '@/lib/safetyBoards/client'
 
 // /safety-boards/[boardId] — thread list for a single board.
@@ -35,6 +39,7 @@ export default function BoardPage() {
   const isAdmin = role === 'admin' || role === 'owner'
 
   const [threads, setThreads] = useState<SafetyThreadSummary[]>([])
+  const [board, setBoard]     = useState<SafetyBoardSummary | null>(null)
   const [filterKind, setFilterKind] = useState<ThreadKind | 'all'>('all')
   const [members, setMembers] = useState<MentionMember[]>([])
   const [loading, setLoading] = useState(true)
@@ -45,14 +50,22 @@ export default function BoardPage() {
   const [kind, setKind]       = useState<ThreadKind>('discussion')
   const [link, setLink]       = useState<{ type: EntityLinkType; id: string; label: string } | null>(null)
   const [ackRequired, setAckRequired] = useState(false)
+  const [isAnonymous, setIsAnonymous] = useState(false)
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
   const [busy, setBusy]       = useState(false)
 
   const refresh = useCallback(async () => {
     if (!tenant?.id || !boardId) return
     try {
-      const list = await listThreads(tenant.id, boardId)
+      const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`
+      const [list, boardRes] = await Promise.all([
+        listThreads(tenant.id, boardId),
+        fetch(`/api/safety-boards/${boardId}`, { headers }).then(r => r.json()).catch(() => ({})),
+      ])
       setThreads(list)
+      if (boardRes?.board) setBoard(boardRes.board as SafetyBoardSummary)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -91,11 +104,13 @@ export default function BoardPage() {
         linked_entity_id:   link?.id   ?? null,
         acknowledgement_required: isAdmin && ackRequired,
         attachment_ids: attachments.length > 0 ? attachments.map(a => a.id) : undefined,
+        is_anonymous: !!board?.allow_anonymous && isAnonymous,
       })
       setTitle(''); setBody('')
       setKind('discussion')
       setLink(null)
       setAckRequired(false)
+      setIsAnonymous(false)
       setAttachments([])
       setShowForm(false)
       await refresh()
@@ -119,7 +134,16 @@ export default function BoardPage() {
       </Link>
 
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Threads</h1>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 truncate">{board?.name ?? 'Threads'}</h1>
+          {board?.description && (
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{board.description}</p>
+          )}
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <SubscribeButton targetType="board" targetId={boardId} />
+            {isAdmin && <BoardAccessEditor boardId={boardId} />}
+          </div>
+        </div>
         <button
           type="button"
           onClick={() => setShowForm(s => !s)}
@@ -128,6 +152,8 @@ export default function BoardPage() {
           <Plus className="h-4 w-4" /> {showForm ? 'Cancel' : 'New thread'}
         </button>
       </header>
+
+      <BoardSearch boardId={boardId} />
 
       {error && (
         <p className="text-sm text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg px-3 py-2">{error}</p>
@@ -209,6 +235,24 @@ export default function BoardPage() {
               </span>
             </label>
           )}
+          {board?.allow_anonymous && (
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={isAnonymous}
+                onChange={e => setIsAnonymous(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="font-medium text-slate-700 dark:text-slate-200 inline-flex items-center gap-1">
+                  <EyeOff className="h-3.5 w-3.5" /> Post anonymously
+                </span>
+                <span className="block text-xs text-slate-500 dark:text-slate-400">
+                  Your name will be hidden from other members. Tenant admins can still recover the author for moderation if needed.
+                </span>
+              </span>
+            </label>
+          )}
           <div className="flex justify-end">
             <button type="submit" disabled={busy || !title.trim() || !bodyText.trim()} className="rounded-lg bg-brand-navy text-white px-4 py-2 text-sm font-semibold hover:bg-brand-navy/90 disabled:opacity-50">
               {busy ? 'Posting…' : 'Post thread'}
@@ -274,11 +318,12 @@ export default function BoardPage() {
                       {t.pinned && <Pin className="h-3.5 w-3.5 text-amber-500" />}
                       {t.locked && <Lock className="h-3.5 w-3.5 text-slate-400" />}
                       {t.acknowledgement_required && <Bell className="h-3.5 w-3.5 text-amber-600" />}
+                      {t.is_anonymous && <EyeOff className="h-3.5 w-3.5 text-slate-400" />}
                       <h2 className="font-semibold text-slate-900 dark:text-slate-100 truncate">{t.title}</h2>
                     </div>
                     <p className="text-sm text-slate-600 dark:text-slate-300 line-clamp-2">{t.body}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-                      <span>{t.author_full_name || t.author_email}</span>
+                      <span>{t.is_anonymous ? 'Anonymous' : (t.author_full_name || t.author_email)}</span>
                       <span>· {formatRelative(t.created_at)}</span>
                       <span className="inline-flex items-center gap-1">
                         <MessageSquare className="h-3 w-3" />

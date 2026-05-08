@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ChevronDown, History, ImageIcon, LogOut, Shield, UserRound } from 'lucide-react'
+import { ChevronDown, History, ImageIcon, LogOut, Mail, Shield, UserRound } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import ThemeToggle from '@/components/ThemeToggle'
 import { Avatar } from '@/components/ui/Avatar'
@@ -90,6 +90,14 @@ export default function UserMenu() {
           >
             <ImageIcon className="h-4 w-4 text-slate-400 dark:text-slate-500" />
             Profile picture
+          </Link>
+          <Link
+            href="/settings/digest"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            <Mail className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+            Email digests
           </Link>
 
           {/* Theme picker — sits between profile and sign out so it's

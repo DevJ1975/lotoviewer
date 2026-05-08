@@ -68,7 +68,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Only tenant admin/owner can create boards.' }, { status: 403 })
   }
 
-  let body: { name?: string; slug?: string; description?: string }
+  let body: { name?: string; slug?: string; description?: string; allow_anonymous?: boolean }
   try { body = await req.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
@@ -86,11 +86,12 @@ export async function POST(req: Request) {
     const { data, error } = await admin
       .from('safety_boards')
       .insert({
-        tenant_id:   gate.tenantId,
+        tenant_id:       gate.tenantId,
         name,
         slug,
-        description: (body.description ?? '').trim() || null,
-        created_by:  gate.userId,
+        description:     (body.description ?? '').trim() || null,
+        allow_anonymous: body.allow_anonymous === true,
+        created_by:      gate.userId,
       })
       .select('*')
       .single()

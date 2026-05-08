@@ -93,13 +93,14 @@ export interface AckSummary {
 }
 
 export interface SafetyBoardSummary {
-  id:           string
-  name:         string
-  slug:         string
-  description:  string | null
-  archived_at:  string | null
-  created_at:   string
-  thread_count: number
+  id:               string
+  name:             string
+  slug:             string
+  description:      string | null
+  archived_at:      string | null
+  created_at:       string
+  thread_count:     number
+  allow_anonymous?: boolean
 }
 
 export interface SafetyReaction {
@@ -111,7 +112,7 @@ export interface SafetyReaction {
 export interface SafetyThreadSummary {
   id:                 string
   board_id:           string
-  author_user_id:     string
+  author_user_id:     string | null
   author_email:       string | null
   author_full_name:   string | null
   author_avatar_url:  string | null
@@ -129,12 +130,13 @@ export interface SafetyThreadSummary {
   linked_entity_type: EntityLinkType | null
   linked_entity_id:   string | null
   acknowledgement_required: boolean
+  is_anonymous:       boolean
 }
 
 export interface SafetyThreadDetail {
   id: string
   board_id: string
-  author_user_id: string
+  author_user_id: string | null
   author_email: string | null
   author_full_name: string | null
   author_avatar_url: string | null
@@ -154,12 +156,13 @@ export interface SafetyThreadDetail {
   acknowledgement_required: boolean
   attachments: ThreadAttachment[]
   spawned_actions: SpawnedAction[]
+  is_anonymous: boolean
 }
 
 export interface SafetyReply {
   id:                 string
   thread_id:          string
-  author_user_id:     string
+  author_user_id:     string | null
   author_email:       string | null
   author_full_name:   string | null
   author_avatar_url:  string | null
@@ -170,6 +173,7 @@ export interface SafetyReply {
   created_at:         string
   reactions:          SafetyReaction[]
   attachments:        ThreadAttachment[]
+  is_anonymous:       boolean
 }
 
 async function authHeader(): Promise<Record<string, string>> {
@@ -195,7 +199,7 @@ export async function listBoards(tenantId: string): Promise<SafetyBoardSummary[]
   return j.boards
 }
 
-export async function createBoard(tenantId: string, p: { name: string; slug?: string; description?: string }) {
+export async function createBoard(tenantId: string, p: { name: string; slug?: string; description?: string; allow_anonymous?: boolean }) {
   const res = await fetch('/api/safety-boards', {
     method: 'POST',
     headers: await jsonHeaders(tenantId),
@@ -222,6 +226,7 @@ export async function createThread(tenantId: string, boardId: string, p: {
   linked_entity_id?: string | null
   acknowledgement_required?: boolean
   attachment_ids?: string[]
+  is_anonymous?: boolean
 }) {
   const res = await fetch(`/api/safety-boards/${boardId}/threads`, {
     method: 'POST',
@@ -270,7 +275,7 @@ export async function listReplies(tenantId: string, boardId: string, threadId: s
 
 export async function createReply(
   tenantId: string, boardId: string, threadId: string,
-  p: { body: string; parent_reply_id?: string; attachment_ids?: string[] },
+  p: { body: string; parent_reply_id?: string; attachment_ids?: string[]; is_anonymous?: boolean },
 ): Promise<SafetyReply> {
   const res = await fetch(`/api/safety-boards/${boardId}/threads/${threadId}/replies`, {
     method: 'POST',
@@ -349,6 +354,147 @@ export async function searchEntities(
   })
   const j = await readJson<{ items: Array<{ id: string; label: string; sub: string }> }>(res)
   return j.items
+}
+
+// ─── Tier 2 fetchers ───────────────────────────────────────────────────────
+
+export interface SearchHit {
+  hit_in: 'thread' | 'reply'
+  thread_id: string
+  board_id: string
+  kind: ThreadKind
+  title: string
+  snippet: string
+  rank: number
+  last_reply_at: string
+  reply_id: string | null
+  is_anonymous: boolean
+  author_full_name: string | null
+  author_email: string | null
+}
+
+export async function searchBoards(
+  tenantId: string,
+  q: string,
+  filter?: { boardId?: string; kind?: ThreadKind },
+): Promise<SearchHit[]> {
+  if (!q.trim()) return []
+  const u = new URL('/api/safety-boards/search', window.location.origin)
+  u.searchParams.set('q', q.trim())
+  if (filter?.boardId) u.searchParams.set('board_id', filter.boardId)
+  if (filter?.kind)    u.searchParams.set('kind', filter.kind)
+  const res = await fetch(u.pathname + u.search, {
+    headers: { ...tenantHeader(tenantId), ...(await authHeader()) },
+  })
+  const j = await readJson<{ hits: SearchHit[] }>(res)
+  return j.hits
+}
+
+export async function setBoardAnonymous(tenantId: string, boardId: string, allow: boolean): Promise<void> {
+  const res = await fetch(`/api/safety-boards/${boardId}`, {
+    method: 'PATCH',
+    headers: await jsonHeaders(tenantId),
+    body: JSON.stringify({ allow_anonymous: allow }),
+  })
+  await readJson<unknown>(res)
+}
+
+export interface BoardAccessRow {
+  id: string
+  scope_type: 'role' | 'department'
+  scope_value: string
+  created_at: string
+}
+
+export async function listBoardAccess(tenantId: string, boardId: string): Promise<BoardAccessRow[]> {
+  const res = await fetch(`/api/safety-boards/${boardId}/access`, {
+    headers: { ...tenantHeader(tenantId), ...(await authHeader()) },
+  })
+  const j = await readJson<{ scopes: BoardAccessRow[] }>(res)
+  return j.scopes
+}
+
+export async function addBoardAccess(tenantId: string, boardId: string, scope: { scope_type: 'role' | 'department'; scope_value: string }): Promise<void> {
+  const res = await fetch(`/api/safety-boards/${boardId}/access`, {
+    method: 'POST',
+    headers: await jsonHeaders(tenantId),
+    body: JSON.stringify(scope),
+  })
+  await readJson<unknown>(res)
+}
+
+export async function removeBoardAccess(tenantId: string, boardId: string, rowId: string): Promise<void> {
+  const u = new URL(`/api/safety-boards/${boardId}/access`, window.location.origin)
+  u.searchParams.set('id', rowId)
+  const res = await fetch(u.pathname + u.search, {
+    method: 'DELETE',
+    headers: { ...tenantHeader(tenantId), ...(await authHeader()) },
+  })
+  await readJson<unknown>(res)
+}
+
+export type SubscriptionState = 'follow' | 'mute'
+
+export async function getSubscription(
+  tenantId: string, target_type: 'board' | 'thread', target_id: string,
+): Promise<SubscriptionState | null> {
+  const u = new URL('/api/safety-boards/subscriptions', window.location.origin)
+  u.searchParams.set('type', target_type)
+  u.searchParams.set('id', target_id)
+  const res = await fetch(u.pathname + u.search, {
+    headers: { ...tenantHeader(tenantId), ...(await authHeader()) },
+  })
+  const j = await readJson<{ subscription: { state: SubscriptionState } | null }>(res)
+  return j.subscription?.state ?? null
+}
+
+export async function setSubscription(
+  tenantId: string, target_type: 'board' | 'thread', target_id: string, state: SubscriptionState,
+): Promise<void> {
+  const res = await fetch('/api/safety-boards/subscriptions', {
+    method: 'PUT',
+    headers: await jsonHeaders(tenantId),
+    body: JSON.stringify({ target_type, target_id, state }),
+  })
+  await readJson<unknown>(res)
+}
+
+export async function clearSubscription(
+  tenantId: string, target_type: 'board' | 'thread', target_id: string,
+): Promise<void> {
+  const u = new URL('/api/safety-boards/subscriptions', window.location.origin)
+  u.searchParams.set('type', target_type)
+  u.searchParams.set('id', target_id)
+  const res = await fetch(u.pathname + u.search, {
+    method: 'DELETE',
+    headers: { ...tenantHeader(tenantId), ...(await authHeader()) },
+  })
+  await readJson<unknown>(res)
+}
+
+export type DigestCadence = 'off' | 'daily' | 'weekly'
+
+export interface DigestPreference {
+  tenant_id: string
+  cadence: DigestCadence
+  last_sent_at: string | null
+}
+
+export async function getDigestPreferences(): Promise<DigestPreference[]> {
+  const res = await fetch('/api/users/me/digest-preferences', {
+    headers: await authHeader(),
+  })
+  const j = await readJson<{ preferences: DigestPreference[] }>(res)
+  return j.preferences
+}
+
+export async function setDigestPreference(tenantId: string, cadence: DigestCadence): Promise<void> {
+  const res = await fetch('/api/users/me/digest-preferences', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', ...(await authHeader()) },
+    body: JSON.stringify({ tenant_id: tenantId, cadence }),
+  })
+  await readJson<unknown>(res)
 }
 
 export async function listThreadsByEntity(

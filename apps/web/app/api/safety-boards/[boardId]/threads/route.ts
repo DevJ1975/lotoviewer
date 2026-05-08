@@ -46,6 +46,7 @@ interface ThreadRow {
   linked_entity_type: LinkType | null
   linked_entity_id: string | null
   acknowledgement_required: boolean
+  is_anonymous: boolean
 }
 
 export async function GET(req: Request, ctx: RouteContext) {
@@ -103,11 +104,15 @@ export async function GET(req: Request, ctx: RouteContext) {
 
     return NextResponse.json({
       threads: threads.map(t => {
-        const a = authorById.get(t.author_user_id)
+        const a = !t.is_anonymous ? authorById.get(t.author_user_id) : null
         return {
           id: t.id,
           board_id: t.board_id,
-          author_user_id: t.author_user_id,
+          // The author_user_id stays populated in the row but the
+          // public response blanks it for anonymous threads. Admins
+          // who need recovery use a separate /admin route (not yet
+          // built).
+          author_user_id: t.is_anonymous ? null : t.author_user_id,
           author_email: a?.email ?? null,
           author_full_name: a?.full_name ?? null,
           author_avatar_url: a?.avatar_url ?? null,
@@ -125,6 +130,7 @@ export async function GET(req: Request, ctx: RouteContext) {
           linked_entity_type: t.linked_entity_type,
           linked_entity_id: t.linked_entity_id,
           acknowledgement_required: t.acknowledgement_required,
+          is_anonymous: t.is_anonymous,
         }
       }),
     })
@@ -150,6 +156,7 @@ export async function POST(req: Request, ctx: RouteContext) {
     linked_entity_id?: string | null
     acknowledgement_required?: boolean
     attachment_ids?: string[]
+    is_anonymous?: boolean
   }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
@@ -197,13 +204,16 @@ export async function POST(req: Request, ctx: RouteContext) {
     const admin = supabaseAdmin()
     const { data: board } = await admin
       .from('safety_boards')
-      .select('id, archived_at, name')
+      .select('id, archived_at, name, allow_anonymous')
       .eq('id', boardId)
       .eq('tenant_id', gate.tenantId)
       .maybeSingle()
-    const b = board as { id: string; archived_at: string | null; name: string } | null
+    const b = board as { id: string; archived_at: string | null; name: string; allow_anonymous: boolean } | null
     if (!b || b.archived_at) {
       return NextResponse.json({ error: 'Board not found or archived' }, { status: 404 })
+    }
+    if (body.is_anonymous && !b.allow_anonymous) {
+      return NextResponse.json({ error: 'This board does not allow anonymous posts.' }, { status: 403 })
     }
 
     const tokens = extractMentionTokens(text)
@@ -224,6 +234,7 @@ export async function POST(req: Request, ctx: RouteContext) {
         linked_entity_type:       linkType,
         linked_entity_id:         linkId,
         acknowledgement_required: body.acknowledgement_required === true,
+        is_anonymous:             body.is_anonymous === true,
       })
       .select('*')
       .single()

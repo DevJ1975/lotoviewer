@@ -63,8 +63,11 @@ export async function GET(req: Request, ctx: RouteContext) {
     const t = await loadThread(admin, threadId, boardId, gate.tenantId)
     if (!t || t.deleted_at) return NextResponse.json({ error: 'Thread not found' }, { status: 404 })
 
+    const isAnon = (t as ThreadRow & { is_anonymous?: boolean }).is_anonymous === true
     const [{ data: author }, { data: reactions }, { data: attachments }, { data: actionsFromThread }] = await Promise.all([
-      admin.from('profiles').select('id, email, full_name, avatar_url').eq('id', t.author_user_id).maybeSingle(),
+      isAnon
+        ? Promise.resolve({ data: null })
+        : admin.from('profiles').select('id, email, full_name, avatar_url').eq('id', t.author_user_id).maybeSingle(),
       admin.from('safety_board_reactions').select('user_id, emoji').eq('target_type', 'thread').eq('target_id', threadId).eq('tenant_id', gate.tenantId),
       admin.from('safety_board_attachments').select('id, storage_path, mime_type, size_bytes, width, height, filename').eq('target_type', 'thread').eq('target_id', threadId).eq('tenant_id', gate.tenantId),
       // CAPAs that were spawned from this thread (Tier 1 #3 — closes
@@ -83,6 +86,7 @@ export async function GET(req: Request, ctx: RouteContext) {
     return NextResponse.json({
       thread: {
         ...t,
+        author_user_id: isAnon ? null : t.author_user_id,
         author_email: a?.email ?? null,
         author_full_name: a?.full_name ?? null,
         author_avatar_url: a?.avatar_url ?? null,
