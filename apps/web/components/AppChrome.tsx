@@ -20,6 +20,7 @@ import AppDrawer from '@/components/AppDrawer'
 import TenantHeaderPill from '@/components/TenantHeaderPill'
 import SupportBot from '@/components/SupportBot'
 import ChatHeaderButton from '@/components/chat/ChatHeaderButton'
+import SoteriaLogo from '@/components/SoteriaLogo'
 import { useAuth } from '@/components/AuthProvider'
 import { requestPersistentStorage } from '@/lib/platform'
 import { getModuleVisualsForPath } from '@/lib/moduleVisuals'
@@ -75,13 +76,8 @@ export default function AppChrome({ children }: { children: ReactNode }) {
               <Menu className="h-5 w-5" />
             </button>
 
-            <Link href="/" className="flex items-center gap-2 shrink-0 min-w-0">
-              <div className="w-7 h-7 rounded-md flex items-center justify-center font-bold text-xs bg-brand-yellow text-brand-navy tracking-tight shrink-0">
-                SL
-              </div>
-              <span className="hidden xs:inline sm:inline text-white font-semibold text-[15px] tracking-tight truncate">
-                Soteria <span className="text-brand-yellow font-bold tracking-wider">FIELD</span>
-              </span>
+            <Link href="/" className="flex items-center shrink-0 min-w-0" aria-label="SoteriaField home">
+              <SoteriaLogo variant="color" width={160} priority className="h-9 w-auto" />
             </Link>
 
             <TenantHeaderPill />
