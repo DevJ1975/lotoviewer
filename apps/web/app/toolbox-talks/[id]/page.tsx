@@ -51,7 +51,7 @@ interface DetailResponse {
 export default function ToolboxTalkDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { tenant } = useTenant()
-  const { profile, email } = useAuth()
+  const { profile, email, userId } = useAuth()
 
   const [data,    setData]    = useState<DetailResponse | null>(null)
   const [error,   setError]   = useState<string | null>(null)
@@ -257,7 +257,7 @@ export default function ToolboxTalkDetailPage({ params }: { params: Promise<{ id
               <div className="mb-3 inline-flex items-center gap-2 rounded-md bg-emerald-50 dark:bg-emerald-950/30 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 You signed this talk on {formatRosterTime(
-                  data.signatures.find(s => s.signer_user_id)?.signed_at ?? ''
+                  data.signatures.find(s => s.signer_user_id === userId)?.signed_at ?? ''
                 )}.
               </div>
             )}

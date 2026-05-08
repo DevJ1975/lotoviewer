@@ -29,6 +29,10 @@ export const runtime = 'nodejs'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const SIGNATURE_MAX_BYTES = 200_000
 const SIGNATURE_PREFIX    = 'data:image/png;base64,'
+// Only standard base64 alphabet + padding. Rejects garbage payloads
+// that share the prefix but carry non-base64 characters (e.g. an
+// attacker injecting HTML or shell metacharacters into the column).
+const BASE64_RE           = /^[A-Za-z0-9+/]+={0,2}$/
 
 interface SignBody {
   signer_name?:    unknown
@@ -64,9 +68,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (sigData.length > SIGNATURE_MAX_BYTES) {
     return NextResponse.json({ error: `signature_data exceeds ${SIGNATURE_MAX_BYTES} bytes` }, { status: 413 })
   }
+  const sigPayload = sigData.slice(SIGNATURE_PREFIX.length)
+  if (sigPayload.length === 0 || !BASE64_RE.test(sigPayload)) {
+    return NextResponse.json({ error: 'signature_data payload is not valid base64' }, { status: 400 })
+  }
 
   const employeeId = typeof body.employee_id === 'string' ? body.employee_id.trim().slice(0, 60) || null : null
-  const isSelf     = body.is_self !== false  // default true
+  // Only an explicit `false` boolean opts out of self-sign — string
+  // "false" or other falsy values default to self-sign (the gated
+  // user is the source of truth either way; this just controls
+  // whether signer_user_id is recorded).
+  const isSelf     = body.is_self !== false
 
   try {
     // Verify the talk belongs to the active tenant (RLS is the real

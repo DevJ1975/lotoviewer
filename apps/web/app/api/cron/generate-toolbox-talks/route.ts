@@ -6,6 +6,7 @@ import { withCronLogging } from '@/lib/cronInstrumentation'
 import { getTenantApiKey } from '@/lib/ai/getTenantApiKey'
 import { SONNET } from '@/lib/ai/models'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
+import { sortTopicsForRotation, pickTopicsForDates } from '@/lib/toolboxRotation'
 
 // Weekly toolbox-talk generation cron.
 //
@@ -44,9 +45,16 @@ export const runtime = 'nodejs'
 // from getting half a week if their generation is slow.
 export const maxDuration = 300
 
-const MODULE_ID    = 'toolbox-talks'
-const DAYS_AHEAD   = 7
-const AI_MODEL     = SONNET
+const MODULE_ID         = 'toolbox-talks'
+const DAYS_AHEAD        = 7
+const AI_MODEL          = SONNET
+// Caps on AI output so a misbehaving model can't blow up a row. The
+// system prompt asks for 350-700 words (~5KB at typical density);
+// 20KB is generous headroom and still leaves the talk renderable
+// without scrolling forever.
+const BODY_MAX_CHARS    = 20_000
+const KEY_POINT_MAX_LEN = 200
+const KEY_POINTS_MAX    = 8
 const SYSTEM_PROMPT = `You are a senior workplace safety trainer authoring a daily "toolbox talk" — a 5-to-8 minute pre-shift safety briefing a foreman delivers to a crew at the start of the day.
 
 Goals:
@@ -209,14 +217,33 @@ async function generateForTenant(
     return { generated: 0, skipped: dates.length, failed: 0 }
   }
 
-  // Topic pool for this tenant's industry.
-  const { data: topics, error: topicsErr } = await admin
+  // Topic pool for this tenant's industry. If a tenant typo'd their
+  // settings.toolbox_industry to a value that matches no rows, fall
+  // back to 'general' rather than skipping the whole tenant — being
+  // wrong about WHICH topic to deliver is better than delivering NO
+  // topic.
+  const fetchTopics = (i: string) => admin
     .from('toolbox_topics')
     .select('id, title, summary, reference')
-    .eq('industry', industry)
+    .eq('industry', i)
     .eq('active', true)
+
+  let topics: TopicRow[] | null = null
+  let topicsErr: { message: string } | null = null
+  {
+    const r = await fetchTopics(industry)
+    topicsErr = r.error
+    topics    = (r.data as TopicRow[] | null)
+  }
+  if ((!topics || topics.length === 0) && industry !== 'general') {
+    Sentry.captureMessage(`Toolbox industry '${industry}' has no active topics — falling back to 'general'`,
+      { level: 'warning', tags: { tenant_id: tenant.id } })
+    const r = await fetchTopics('general')
+    topicsErr = r.error
+    topics    = (r.data as TopicRow[] | null)
+  }
   if (topicsErr || !topics || topics.length === 0) {
-    Sentry.captureException(topicsErr ?? new Error('No active topics for industry'),
+    Sentry.captureException(new Error(topicsErr?.message ?? 'No active topics available'),
       { tags: { route: '/api/cron/generate-toolbox-talks', stage: 'topics', tenant_id: tenant.id } })
     return { generated: 0, skipped: existingDates.size, failed: missingDates.length }
   }
@@ -237,14 +264,8 @@ async function generateForTenant(
     if (!lastUsed.has(id)) lastUsed.set(id, row.talk_date as string)
   }
 
-  const sorted = (topics as TopicRow[]).slice().sort((a, b) => {
-    const aDate = lastUsed.get(a.id) ?? ''
-    const bDate = lastUsed.get(b.id) ?? ''
-    if (aDate === bDate) return a.id.localeCompare(b.id)  // stable
-    if (aDate === '') return -1
-    if (bDate === '') return 1
-    return aDate.localeCompare(bDate)
-  })
+  const sorted = sortTopicsForRotation(topics, lastUsed)
+  const picks  = pickTopicsForDates(sorted, missingDates)
 
   // Per-tenant Anthropic key (or env fallback).
   const apiKey = await getTenantApiKey(tenant.id)
@@ -258,13 +279,9 @@ async function generateForTenant(
   let generated = 0
   let failed    = 0
 
-  // Walk the missing dates in order. Pick the next unused topic
-  // each time. If generation throws, log + move on — the cron will
-  // retry that date next run.
-  for (let i = 0; i < missingDates.length; i++) {
-    const date  = missingDates[i]
-    const topic = sorted[i % sorted.length]
-
+  // Walk the (date, topic) picks. If generation throws, log + move
+  // on — the cron will retry that date on its next run.
+  for (const { date, topic } of picks) {
     try {
       const fields = await generateTalkBody(client, topic, tenant.name)
 
@@ -275,8 +292,10 @@ async function generateForTenant(
           topic_id:       topic.id,
           talk_date:      date,
           title:          fields.title.trim().slice(0, 200) || topic.title,
-          body_markdown:  fields.body_markdown,
-          key_points:     fields.key_points.slice(0, 8),
+          body_markdown:  fields.body_markdown.slice(0, BODY_MAX_CHARS),
+          key_points:     fields.key_points
+                            .map(p => p.slice(0, KEY_POINT_MAX_LEN))
+                            .slice(0, KEY_POINTS_MAX),
           delivery_notes: fields.delivery_notes.trim().slice(0, 1000),
           generated_by:   'cron',
           ai_model:       AI_MODEL,
