@@ -120,6 +120,7 @@ describe('getFeaturesByCategory', () => {
       'hot-work-status',
       'jha',
       'toolbox-talks',
+      'safety-boards',
     ])
   })
 
@@ -160,6 +161,7 @@ describe('getModules', () => {
       'hot-work',
       'jha',
       'toolbox-talks',
+      'safety-boards',
     ])
   })
 

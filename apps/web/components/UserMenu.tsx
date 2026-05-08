@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ChevronDown, History, LogOut, Shield, UserRound } from 'lucide-react'
+import { ChevronDown, History, ImageIcon, LogOut, Shield, UserRound } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import ThemeToggle from '@/components/ThemeToggle'
+import { Avatar } from '@/components/ui/Avatar'
 
 export default function UserMenu() {
   const { email, profile, signOut } = useAuth()
@@ -30,18 +31,29 @@ export default function UserMenu() {
         onClick={() => setOpen(o => !o)}
         className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-white/10 dark:hover:bg-slate-900/10 transition-colors"
       >
-        <span className="w-7 h-7 rounded-full bg-brand-yellow text-brand-navy text-xs font-bold flex items-center justify-center">
-          {(profile?.full_name?.[0] ?? email[0]).toUpperCase()}
-        </span>
+        <Avatar
+          src={profile?.avatar_url}
+          name={profile?.full_name}
+          email={email}
+          size="sm"
+        />
         <span className="hidden sm:inline font-medium text-white max-w-[160px] truncate">{display}</span>
         <ChevronDown className="h-4 w-4 text-white/70" />
       </button>
 
       {open && (
         <div className="absolute right-0 mt-1 w-60 rounded-lg bg-white dark:bg-slate-900 ring-1 ring-slate-200 dark:ring-slate-700 shadow-lg z-50 py-1">
-          <div className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
-            <div className="font-medium text-slate-700 dark:text-slate-200 truncate">{display}</div>
-            <div className="truncate">{email}</div>
+          <div className="flex items-center gap-3 px-3 py-2 text-xs text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
+            <Avatar
+              src={profile?.avatar_url}
+              name={profile?.full_name}
+              email={email}
+              size="md"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="font-medium text-slate-700 dark:text-slate-200 truncate">{display}</div>
+              <div className="truncate">{email}</div>
+            </div>
           </div>
           {profile?.is_admin && (
             <>
@@ -70,6 +82,14 @@ export default function UserMenu() {
           >
             <UserRound className="h-4 w-4 text-slate-400 dark:text-slate-500" />
             Profile & Password
+          </Link>
+          <Link
+            href="/settings/profile"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            <ImageIcon className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+            Profile picture
           </Link>
 
           {/* Theme picker — sits between profile and sign out so it's

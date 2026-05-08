@@ -30,7 +30,7 @@ describe('ModulesGrid', () => {
       tenant: tenantWith({
         loto: false, 'confined-spaces': false, 'hot-work': false,
         'risk-assessment': false, 'jha': false, 'near-miss': false,
-        'incidents': false, 'toolbox-talks': false,
+        'incidents': false, 'toolbox-talks': false, 'safety-boards': false,
       }),
     })
     const { container } = render(<ModulesGrid />)
