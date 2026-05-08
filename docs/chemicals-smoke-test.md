@@ -1,10 +1,11 @@
-# Chemical Management module — smoke checklist (Phases A + B)
+# Chemical Management module — smoke checklist (Phases A + B + C)
 
-Use this after applying migration `082_chemicals_module.sql` and
-deploying the branch. Phase A ships the foundation (catalog, detail,
-manual SDS upload, search/filter); Phase B layers AI SDS parsing +
-the human review queue. Labeling (Phase C) and inventory items
-(Phase D) are not in scope yet.
+Use this after applying migrations `082_chemicals_module.sql` and
+`083_chemical_label_prints.sql` and deploying the branch. Phase A
+ships the foundation (catalog, detail, manual SDS upload, search/
+filter); Phase B layers AI SDS parsing + the human review queue;
+Phase C adds GHS-compliant label printing. Inventory items
+(Phase D) and drift monitoring (Phase E) are still out of scope.
 
 See `docs/chemical-management-system-plan.md` for the full roadmap.
 
@@ -174,9 +175,54 @@ override) configured for the deployment.
 - [ ] As tenant B, GET `/api/chemicals/review-queue` returns only
       tenant B's pending parses
 
-## Known follow-ups (not in Phase B)
+## 13 · Label printing (Phase C)
+
+Run after Sections 1–12 pass. Migration 083 must be applied so the
+audit log table exists.
+
+- [ ] On a chemical with full hazard metadata, scroll to the
+      "Print labels" panel above SDS revisions
+- [ ] Three template tiles render: Secondary container · Cabinet
+      placard · Inventory tag, with descriptions
+- [ ] Selecting "Cabinet placard" swaps the size dropdown to the
+      placard sizes (8.5 × 11, 11 × 17). Selecting "Inventory tag"
+      reveals the optional barcode input.
+- [ ] Click "Print label" with `secondary_container 4x6` → new tab
+      opens a PDF; PDF shows product name, signal-word pill, GHS
+      pictograms (red diamond + black symbol), hazard statements,
+      PPE strip, QR code linking to `/chemicals/{id}`, tenant +
+      print-date footer
+- [ ] Print `placard 8.5x11` → PDF shows NFPA 704 diamond with the
+      product's 1/3/0 ratings in the correct quadrants (blue=health
+      left, red=flammability top, yellow=instability right, white=
+      special bottom), pictogram strip, top hazards list, PPE strip,
+      QR + footer
+- [ ] Print `inventory_tag 2x1` with barcode "CHEM-0001" → PDF
+      shows product name, CAS, barcode text, and a square QR
+- [ ] On a chemical whose `product_name` contains `H₂SO₄` or
+      similar Unicode, the print succeeds (WinAnsi sanitiser)
+- [ ] Each print creates a `chemical_label_prints` row with
+      `template`, `size_key`, `field_snapshot` (full JSON of the
+      product fields), `filename`, `printed_by = auth.uid()`
+- [ ] Detail page "Print history" disclosure opens to a list of
+      past prints with timestamp, template, size, byte count
+- [ ] Trying to print on an archived chemical returns 409 inline
+- [ ] As tenant B, POSTing to tenant A's `/labels` URL → 404
+
+## 14 · GHS pictogram fidelity
+
+- [ ] Print all nine pictograms by adding a chemical with every
+      GHS code → each renders as a red diamond on point with a
+      recognizable black symbol (flame, skull, exclamation, etc.)
+- [ ] Pictograms scale correctly on each label size — no clipping,
+      no overlap with text
+- [ ] If a tenant later swaps in official UN artwork (per plan
+      §5.3), the swap is one file change in `lib/ghsPictograms.ts`
+
+## Known follow-ups (not in Phase C)
 
 - Bulk parse on import (queue many SDSs at once) → Phase B follow-up
+- Per-tenant pictogram override (upload official UN artwork) → Phase C+
 - Drift monitoring (nightly cron) → Phase E
 - Inventory containers + locations + scan → Phase D
 - Label printing + GHS pictogram SVGs → Phase C

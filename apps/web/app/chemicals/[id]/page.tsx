@@ -7,6 +7,7 @@ import { ArrowLeft, Download, ExternalLink, FileText, Loader2, Sparkles, Upload 
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { PictogramBadges, SignalWordBadge } from '../_components/PictogramBadges'
+import PrintLabelPanel from './_components/PrintLabelPanel'
 
 interface Product {
   id:                string
@@ -262,6 +263,8 @@ export default function ChemicalDetailPage() {
           )}
         </section>
       ) : null}
+
+      <PrintLabelPanel productId={product.id} />
 
       <section className="rounded-lg border border-slate-200 dark:border-slate-800 p-4">
         {revisions.some(r => r.parse_review_status === 'pending') && (
