@@ -46,6 +46,12 @@ export const MODEL_BY_SURFACE = {
   // reason across LOTO + confined-spaces + chemicals + incidents +
   // uploaded company policies. Sonnet for the chat itself.
   'assistant-chat':                   SONNET,
+  // Equipment-nameplate scan via Claude vision. Sonnet because OCR
+  // accuracy on weathered nameplates matters for the next step.
+  'assistant-scan-photo':             SONNET,
+  // Hazard report generation. Combines structured equipment + RAG +
+  // OSHA/DOT/EPA citations into a structured response — Sonnet.
+  'assistant-hazards':                SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

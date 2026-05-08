@@ -26,6 +26,8 @@ export type AiSurface =
   | 'classify-recordability'
   | 'parse-sds'
   | 'assistant-chat'
+  | 'assistant-scan-photo'
+  | 'assistant-hazards'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
@@ -48,6 +50,14 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   // Home-page assistant — conversational, expected to be the
   // highest-volume AI surface once it lands.
   'assistant-chat':                   { perHour: 60, perDay: 400 },
+  // Vision-on-nameplate scan. Field workers scan once per
+  // equipment-touch, but the model call is on the heavier side so
+  // we cap at modest rates per user.
+  'assistant-scan-photo':             { perHour: 30, perDay: 100 },
+  // Hazard report generation — heavy reasoning + RAG. Capped low
+  // because each call is expensive and the per-equipment result is
+  // cached server-side (24h) so honest usage stays well under.
+  'assistant-hazards':                { perHour: 30, perDay: 100 },
 }
 
 interface CheckArgs {

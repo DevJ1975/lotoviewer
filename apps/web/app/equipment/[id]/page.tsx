@@ -15,6 +15,8 @@ import { useToast } from '@/hooks/useToast'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 import { AnnotatedPhoto } from '@/components/AnnotatedPhoto'
 import { parseAnnotations, type Annotation } from '@/lib/photoAnnotations'
+import { Sheet } from '@/components/ui/sheet'
+import HazardReportView from '@/components/HazardReport'
 
 export default function EquipmentDetailPage() {
   return (
@@ -45,6 +47,7 @@ function EquipmentDetail() {
   const [stepsOpen, setStepsOpen]     = useState(false)
   const [spanishOpen, setSpanishOpen] = useState(false)
   const [pdfOpen, setPdfOpen]         = useState(false)
+  const [hazardsOpen, setHazardsOpen] = useState(false)
 
   const { toast, showToast, clearToast } = useToast()
   const { recordVisit } = useSession()
@@ -162,6 +165,9 @@ function EquipmentDetail() {
           </ToolbarButton>
           <ToolbarButton onClick={handleOpenPdf} primary>
             📄 Generate PDF
+          </ToolbarButton>
+          <ToolbarButton onClick={() => setHazardsOpen(true)}>
+            🛡️ Hazards (AI)
           </ToolbarButton>
 
           <div className="flex items-center gap-1 ml-1">
@@ -301,6 +307,18 @@ function EquipmentDetail() {
         onSaved={publicUrl => setEquipment(prev => prev ? { ...prev, placard_url: publicUrl } : prev)}
         onError={msg => showToast(msg, 'error')}
       />
+
+      <Sheet
+        open={hazardsOpen}
+        onClose={() => setHazardsOpen(false)}
+        title="AI hazard report"
+        subtitle={equipment.equipment_id}
+        widthClass="max-w-2xl"
+      >
+        <div className="p-4">
+          {hazardsOpen && <HazardReportView equipmentId={equipment.equipment_id} />}
+        </div>
+      </Sheet>
 
       {toast && <Toast {...toast} onClose={clearToast} />}
     </div>

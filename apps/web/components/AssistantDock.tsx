@@ -1,11 +1,14 @@
 'use client'
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { Bot, X, Send, Loader2, Wrench, Maximize2, ScanLine, BookOpen } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase, ACTIVE_TENANT_KEY } from '@/lib/supabase'
 import { Markdown } from '@/components/ui/markdown'
+import { Sheet } from '@/components/ui/sheet'
+import EquipmentScanner, { type ScanResult } from '@/components/EquipmentScanner'
+import HazardReportView from '@/components/HazardReport'
 
 // AssistantDock — global floating button + expandable chat panel for the
 // home-page assistant. Mounted once in app/layout.tsx behind the
@@ -77,6 +80,7 @@ function readActiveTenant(): string | null {
 
 export default function AssistantDock() {
   const pathname = usePathname()
+  const router = useRouter()
   const { profile, loading: authLoading } = useAuth()
   const [open, setOpen]               = useState(false)
   const [turns, setTurns]             = useState<Turn[]>([])
@@ -84,6 +88,8 @@ export default function AssistantDock() {
   const [sending, setSending]         = useState(false)
   const [error, setError]             = useState<string | null>(null)
   const [conversationId, setConvId]   = useState<string | null>(null)
+  const [scanOpen, setScanOpen]       = useState(false)
+  const [hazardEquipmentId, setHazardEquipmentId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -276,9 +282,9 @@ export default function AssistantDock() {
           <form onSubmit={onSubmit} className="border-t border-slate-100 dark:border-slate-800 p-2 flex items-end gap-2 bg-white dark:bg-slate-900">
             <button
               type="button"
-              title="Scan equipment (coming in PR3)"
-              disabled
-              className="p-2 rounded-md text-slate-400 dark:text-slate-500 cursor-not-allowed"
+              title="Scan equipment"
+              onClick={() => { setScanOpen(true); setHazardEquipmentId(null) }}
+              className="p-2 rounded-md text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
             >
               <ScanLine className="h-5 w-5" />
             </button>
@@ -306,6 +312,38 @@ export default function AssistantDock() {
           </form>
         </div>
       )}
+
+      {/* Scan sheet — opens from the ScanLine button. On result, switch
+          to the hazard report inline so the worker doesn't lose dock context. */}
+      <Sheet
+        open={scanOpen}
+        onClose={() => { setScanOpen(false); setHazardEquipmentId(null) }}
+        title={hazardEquipmentId ? 'Hazard report' : 'Scan equipment'}
+        subtitle={hazardEquipmentId ? hazardEquipmentId : 'QR primary, photo fallback'}
+        widthClass="max-w-md"
+      >
+        <div className="p-4">
+          {!hazardEquipmentId && (
+            <EquipmentScanner
+              onResult={(r: ScanResult) => {
+                if (r.candidates && r.candidates.length > 1) {
+                  // Re-route to /scan for disambiguation; the dock's footprint
+                  // is tight for picker UI.
+                  setScanOpen(false)
+                  router.push('/scan')
+                  return
+                }
+                const id = r.equipment_id || (r.candidates && r.candidates.length === 1 ? r.candidates[0].equipment_id : '')
+                if (id) setHazardEquipmentId(id)
+              }}
+              onCancel={() => setScanOpen(false)}
+            />
+          )}
+          {hazardEquipmentId && (
+            <HazardReportView equipmentId={hazardEquipmentId} />
+          )}
+        </div>
+      </Sheet>
     </>
   )
 }
