@@ -348,6 +348,131 @@ function hasAnyValue(obj: object | null | undefined): boolean {
   return false
 }
 
+// ─── Inventory items (Phase D) ───────────────────────────────────────────
+
+export const INVENTORY_STATUSES = [
+  'requested', 'in_stock', 'in_use', 'empty', 'quarantined', 'disposed',
+] as const
+export type InventoryStatus = typeof INVENTORY_STATUSES[number]
+
+export const INVENTORY_STATUS_LABEL: Record<InventoryStatus, string> = {
+  requested:   'Requested',
+  in_stock:    'In stock',
+  in_use:      'In use',
+  empty:       'Empty',
+  quarantined: 'Quarantined',
+  disposed:    'Disposed',
+}
+
+/** Statuses that count as "live" — visible by default in the catalog
+ * and on the chemical detail page. Disposed/empty containers are
+ * historical and only surface via filters. */
+export const ACTIVE_INVENTORY_STATUSES: readonly InventoryStatus[] =
+  ['requested', 'in_stock', 'in_use', 'quarantined'] as const
+
+export const INVENTORY_UNITS = [
+  'gal', 'L', 'mL', 'kg', 'g', 'lb', 'oz', 'ea', 'other',
+] as const
+export type InventoryUnit = typeof INVENTORY_UNITS[number]
+
+export const CONTAINER_TYPES = [
+  'drum', 'tote', 'pail', 'bottle', 'aerosol', 'cylinder',
+  'bag', 'box', 'jerrican', 'tank', 'other',
+] as const
+export type ContainerType = typeof CONTAINER_TYPES[number]
+
+export const LOCATION_KINDS = [
+  'site', 'building', 'room', 'cabinet', 'shelf', 'other',
+] as const
+export type LocationKind = typeof LOCATION_KINDS[number]
+
+export interface InventoryItemInput {
+  product_id:       string
+  location_id?:     string | null
+  department?:      string | null
+  /** When omitted, the API allocates one via chemical_next_barcode(). */
+  barcode?:         string | null
+  quantity:         number
+  unit:             InventoryUnit
+  container_type?:  ContainerType | null
+  received_date?:   string | null    // ISO yyyy-mm-dd
+  opened_date?:     string | null
+  expiration_date?: string | null
+  lot_number?:      string | null
+  manufacture_date?: string | null
+  status?:          InventoryStatus
+  assigned_to?:     string | null
+  purchase_order?:  string | null
+  cost_cents?:      number | null
+  notes?:           string | null
+}
+
+export interface InventoryInputErrors {
+  field:   keyof InventoryItemInput
+  message: string
+}
+
+export function validateInventoryInput(input: InventoryItemInput): InventoryInputErrors[] {
+  const errs: InventoryInputErrors[] = []
+  if (!input.product_id) errs.push({ field: 'product_id', message: 'Required' })
+  if (!Number.isFinite(input.quantity) || input.quantity < 0) {
+    errs.push({ field: 'quantity', message: 'Must be a non-negative number' })
+  }
+  if (!(INVENTORY_UNITS as readonly string[]).includes(input.unit)) {
+    errs.push({ field: 'unit', message: 'Unknown unit' })
+  }
+  if (input.container_type
+      && !(CONTAINER_TYPES as readonly string[]).includes(input.container_type)) {
+    errs.push({ field: 'container_type', message: 'Unknown container type' })
+  }
+  if (input.status
+      && !(INVENTORY_STATUSES as readonly string[]).includes(input.status)) {
+    errs.push({ field: 'status', message: 'Unknown status' })
+  }
+  for (const f of ['received_date', 'opened_date', 'expiration_date', 'manufacture_date'] as const) {
+    const v = input[f]
+    if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      errs.push({ field: f, message: 'Must be yyyy-mm-dd' })
+    }
+  }
+  if (input.cost_cents !== null && input.cost_cents !== undefined
+      && (!Number.isInteger(input.cost_cents) || input.cost_cents < 0)) {
+    errs.push({ field: 'cost_cents', message: 'Must be a non-negative integer (cents)' })
+  }
+  return errs
+}
+
+/**
+ * Days from today until an ISO date. Negative values mean already past.
+ * Returns null on missing or malformed dates.
+ */
+export function daysUntil(isoDate: string | null | undefined, today = new Date()): number | null {
+  if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return null
+  const target = Date.parse(isoDate + 'T00:00:00Z')
+  if (Number.isNaN(target)) return null
+  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+  return Math.round((target - todayUtc) / 86_400_000)
+}
+
+export type ExpiryTier = 'expired' | 'critical' | 'warning' | 'ok' | 'unknown'
+
+/**
+ * Bucket a container by its expiration date for dashboard rollups.
+ *  - expired   : already past
+ *  - critical  : ≤ 7 days
+ *  - warning   : ≤ 30 days
+ *  - ok        : > 30 days
+ *  - unknown   : no expiration date set
+ */
+export function expiryTier(isoDate: string | null | undefined, today = new Date()): ExpiryTier {
+  const d = daysUntil(isoDate, today)
+  if (d === null) return 'unknown'
+  if (d < 0)  return 'expired'
+  if (d <= 7) return 'critical'
+  if (d <= 30) return 'warning'
+  return 'ok'
+}
+
 // Storage path layout for the chemical-sds bucket. Tenant-scoped first
 // segment so storage_path_tenant() (migration 033) gates writes.
 export function chemicalSdsStoragePath(

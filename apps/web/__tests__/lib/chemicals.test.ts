@@ -5,6 +5,9 @@ import {
   chemicalSdsStoragePath,
   parseToProductFields,
   canAutoApplyParse,
+  validateInventoryInput,
+  daysUntil,
+  expiryTier,
   GHS_PICTOGRAMS,
   type ParsedSdsPayload,
 } from '@soteria/core/chemicals'
@@ -232,6 +235,98 @@ describe('canAutoApplyParse', () => {
         spill_cleanup: 'low',
       },
     }))).toBe(true)
+  })
+})
+
+describe('validateInventoryInput', () => {
+  it('requires product_id, finite quantity, and a known unit', () => {
+    const errs = validateInventoryInput({
+      product_id: '',
+      quantity:   -5,
+      unit:       'oz',
+    } as never)
+    expect(errs.find(e => e.field === 'product_id')).toBeTruthy()
+    expect(errs.find(e => e.field === 'quantity')).toBeTruthy()
+  })
+
+  it('flags unknown enum values', () => {
+    const errs = validateInventoryInput({
+      product_id: '00000000-0000-0000-0000-000000000001',
+      quantity:   1,
+      unit:       'parsec' as never,
+      container_type: 'space-pod' as never,
+      status:     'lost' as never,
+    })
+    expect(errs.map(e => e.field)).toEqual(
+      expect.arrayContaining(['unit', 'container_type', 'status']),
+    )
+  })
+
+  it('flags malformed dates and negative cents', () => {
+    const errs = validateInventoryInput({
+      product_id: '00000000-0000-0000-0000-000000000001',
+      quantity:   1,
+      unit:       'gal',
+      received_date: 'last tuesday' as never,
+      cost_cents:    -100,
+    })
+    expect(errs.map(e => e.field)).toEqual(
+      expect.arrayContaining(['received_date', 'cost_cents']),
+    )
+  })
+
+  it('accepts a fully-valid input', () => {
+    expect(validateInventoryInput({
+      product_id: '00000000-0000-0000-0000-000000000001',
+      quantity:   55,
+      unit:       'gal',
+      container_type: 'drum',
+      received_date:   '2026-04-01',
+      expiration_date: '2027-04-01',
+      status:          'in_stock',
+      cost_cents:      19900,
+    })).toEqual([])
+  })
+})
+
+describe('daysUntil', () => {
+  const today = new Date('2026-05-08T00:00:00Z')
+
+  it('returns positive days for future dates', () => {
+    expect(daysUntil('2026-05-09', today)).toBe(1)
+    expect(daysUntil('2026-06-07', today)).toBe(30)
+  })
+
+  it('returns 0 for today', () => {
+    expect(daysUntil('2026-05-08', today)).toBe(0)
+  })
+
+  it('returns negative days for past dates', () => {
+    expect(daysUntil('2026-05-07', today)).toBe(-1)
+    expect(daysUntil('2026-04-08', today)).toBe(-30)
+  })
+
+  it('returns null for missing or malformed dates', () => {
+    expect(daysUntil(null,         today)).toBeNull()
+    expect(daysUntil(undefined,    today)).toBeNull()
+    expect(daysUntil('not a date', today)).toBeNull()
+    expect(daysUntil('',           today)).toBeNull()
+  })
+})
+
+describe('expiryTier', () => {
+  const today = new Date('2026-05-08T00:00:00Z')
+
+  it.each([
+    ['2026-05-07', 'expired'],
+    ['2026-05-08', 'critical'],
+    ['2026-05-15', 'critical'],
+    ['2026-05-16', 'warning'],
+    ['2026-06-07', 'warning'],
+    ['2026-06-08', 'ok'],
+    [null,         'unknown'],
+  ] as const)('buckets %s as %s', (date, expected) => {
+    expect(expiryTier(date, today)).toBe(expected)
   })
 })
 

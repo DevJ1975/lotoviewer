@@ -1,11 +1,13 @@
-# Chemical Management module — smoke checklist (Phases A + B + C)
+# Chemical Management module — smoke checklist (Phases A + B + C + D)
 
-Use this after applying migrations `082_chemicals_module.sql` and
-`083_chemical_label_prints.sql` and deploying the branch. Phase A
-ships the foundation (catalog, detail, manual SDS upload, search/
-filter); Phase B layers AI SDS parsing + the human review queue;
-Phase C adds GHS-compliant label printing. Inventory items
-(Phase D) and drift monitoring (Phase E) are still out of scope.
+Use this after applying migrations `082_chemicals_module.sql`,
+`083_chemical_label_prints.sql`, and `084_chemical_inventory.sql`
+and deploying the branch. Phase A ships the foundation (catalog,
+detail, manual SDS upload, search/filter); Phase B layers AI SDS
+parsing + the human review queue; Phase C adds GHS-compliant label
+printing; Phase D adds inventory containers, locations, barcode
+scan, and the expiring-soon dashboard. Drift monitoring (Phase E)
+is still out of scope.
 
 See `docs/chemical-management-system-plan.md` for the full roadmap.
 
@@ -219,10 +221,108 @@ audit log table exists.
 - [ ] If a tenant later swaps in official UN artwork (per plan
       §5.3), the swap is one file change in `lib/ghsPictograms.ts`
 
-## Known follow-ups (not in Phase C)
+## 15 · Locations admin (Phase D)
+
+- [ ] `/chemicals/locations` is reachable from the chemicals drawer
+      entry "Storage Locations"
+- [ ] "Add location" with name "Building A", kind "building",
+      no parent → row appears under it
+- [ ] Add child "Wash Bay 2" under Building A (kind: room) → row
+      indents one level, `path` reads "Building A / Wash Bay 2"
+- [ ] Add "Cabinet 3" under Wash Bay 2 (kind: cabinet) → indents
+      two levels, full path renders
+- [ ] Archive a location with no inventory → row disappears from
+      list; row stays in DB with `archived_at` set
+- [ ] Archive a location that still has an active container →
+      409 with the active count, archive blocked
+
+## 16 · Inventory list + add container
+
+- [ ] `/chemicals/inventory` shows the four tiles (Containers /
+      Expired / ≤ 7 days / ≤ 30 days), all 0 initially
+- [ ] "Add container" → `/chemicals/inventory/new`
+- [ ] Pick chemical "Acetone", location "Cabinet 3", quantity 5,
+      unit "gal", container_type "drum", expires "today + 14 days",
+      blank barcode → save → redirected to container detail with an
+      auto-allocated barcode like `CHEM-{tenant#}-{year}-0001`
+- [ ] List page now shows 1 container; "≤ 30 days" tile reads 1
+- [ ] Submit with negative quantity → 400 inline
+- [ ] Submit with a duplicate barcode (manually entered) → 409
+      "Barcode is already in use"
+- [ ] Filter by status `disposed` → empty (none disposed yet)
+- [ ] "Expiring within 60 days" toggle → only the test container
+      is shown
+- [ ] Per-row expiry pill renders correct color (rose for ≤ 7d,
+      amber for ≤ 30d, emerald for > 30d, slate for "no expiry")
+
+## 17 · Container detail + move/dispose
+
+- [ ] Container detail shows the four cards (Quantity / Dates /
+      Location / Status) and a status-action toolbar
+- [ ] "Mark in use" flips status; chemical_inventory_items row has
+      `opened_date = current_date` (auto-stamped trigger)
+- [ ] "Move" with a different location → location card updates,
+      catalog header still shows the item
+- [ ] Try to dispose without filling the disposal method → inline
+      error, no PATCH sent
+- [ ] Dispose with method "Hazardous waste pickup" → confirm prompt
+      → status becomes "Disposed", `disposed_at` + `disposed_by` +
+      `disposed_method` populated; status toolbar disappears (final)
+- [ ] Disposed container no longer appears in the default
+      inventory list (status filter excludes it); shows when the
+      caller selects `disposed`
+
+## 18 · Barcode scan
+
+- [ ] `/chemicals/scan` is reachable from the catalog header,
+      inventory list header, and chemicals drawer
+- [ ] On a desktop browser without `BarcodeDetector`, the warning
+      banner appears and manual-entry remains usable
+- [ ] On a Chromium-based browser (Chrome/Edge), "Start camera" →
+      browser prompts for permission → live video preview appears
+      with the indigo guide rectangle
+- [ ] Holding a printed CHEM-… barcode in front of the camera
+      detects it, stops the camera, and routes to the matching
+      container detail page
+- [ ] Holding a chemical-detail QR code (from a label) routes
+      directly to `/chemicals/{id}` (URL pattern match short-circuit)
+- [ ] Manual entry of a known barcode → routes to container detail
+- [ ] Manual entry of an unknown code → 404 inline "No container
+      with that barcode."
+
+## 19 · Catalog + chemical-detail integration
+
+- [ ] Catalog header now shows three buttons: Scan · Inventory ·
+      Add chemical (plus the existing pending-review pill)
+- [ ] Catalog dashboard has a fourth tile "Expiring ≤ 60 days"
+      with click-through to `/chemicals/inventory?expiring=true`
+- [ ] Chemical detail page has a "Inventory containers" panel
+      above the print + SDS panels
+- [ ] The panel lists containers for that chemical with location,
+      quantity, status, and expiry pill
+- [ ] "Add container" link on the panel pre-selects the chemical
+      via `?product=<id>` query param
+- [ ] Empty state ("No active containers for this chemical.")
+      renders cleanly when the chemical has no inventory
+
+## 20 · Multi-tenant + permission isolation (Phase D)
+
+- [ ] As tenant B, GET tenant A's `/chemicals/inventory/{id}` → 404
+- [ ] As tenant B, POST tenant A's `/chemicals/inventory` (any
+      product_id from A) → 404 "Product not found"
+- [ ] Scan a tenant-A barcode while logged into tenant B → 404
+      "No container with that barcode."
+- [ ] Locations from tenant A do not appear in tenant B's
+      add-container location dropdown
+- [ ] Storage path on the chemical-sds bucket is unchanged — Phase
+      D does NOT add new storage objects, only DB rows
+
+## Known follow-ups (not in Phase D)
 
 - Bulk parse on import (queue many SDSs at once) → Phase B follow-up
 - Per-tenant pictogram override (upload official UN artwork) → Phase C+
+- Live label-printer integration (WebUSB to Brother/Zebra) → post-D
+- Compatibility checker (block storing acid + base in same cabinet) → Phase G
 - Drift monitoring (nightly cron) → Phase E
 - Inventory containers + locations + scan → Phase D
 - Label printing + GHS pictogram SVGs → Phase C

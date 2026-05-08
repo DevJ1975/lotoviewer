@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Loader2, Search, Filter, Sparkles } from 'lucide-react'
+import { Plus, Loader2, Search, Filter, Sparkles, ScanLine, Package } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { useDebounce } from '@/hooks/useDebounce'
@@ -34,6 +34,7 @@ export default function ChemicalsListPage() {
   const [search, setSearch] = useState('')
   const [pictogram, setPictogram] = useState<GhsPictogram | ''>('')
   const [pendingCount, setPendingCount] = useState<number>(0)
+  const [expiringCount, setExpiringCount] = useState<number>(0)
   const debouncedSearch = useDebounce(search, 250)
 
   const load = useCallback(async () => {
@@ -49,9 +50,10 @@ export default function ChemicalsListPage() {
     if (pictogram) params.set('pictogram', pictogram)
 
     try {
-      const [res, queueRes] = await Promise.all([
+      const [res, queueRes, expRes] = await Promise.all([
         fetch(`/api/chemicals/products?${params.toString()}`, { headers }),
         fetch('/api/chemicals/review-queue', { headers }),
+        fetch('/api/chemicals/inventory/expiring', { headers }),
       ])
       const body = await res.json()
       if (!res.ok) {
@@ -63,6 +65,10 @@ export default function ChemicalsListPage() {
       if (queueRes.ok) {
         const queueBody = await queueRes.json()
         setPendingCount(queueBody.total ?? 0)
+      }
+      if (expRes.ok) {
+        const expBody = await expRes.json()
+        setExpiringCount(expBody.total ?? 0)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -90,7 +96,7 @@ export default function ChemicalsListPage() {
             Tenant-wide chemical catalog with versioned Safety Data Sheets.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {pendingCount > 0 && (
             <Link
               href="/chemicals/review"
@@ -101,6 +107,18 @@ export default function ChemicalsListPage() {
             </Link>
           )}
           <Link
+            href="/chemicals/scan"
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            <ScanLine className="w-4 h-4" /> Scan
+          </Link>
+          <Link
+            href="/chemicals/inventory"
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            <Package className="w-4 h-4" /> Inventory
+          </Link>
+          <Link
             href="/chemicals/new"
             className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded bg-indigo-600 hover:bg-indigo-700 text-white font-medium"
           >
@@ -110,7 +128,7 @@ export default function ChemicalsListPage() {
         </div>
       </header>
 
-      <section className="grid grid-cols-3 gap-3">
+      <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="rounded-lg border border-indigo-200 dark:border-indigo-900 bg-indigo-50/50 dark:bg-indigo-950/20 p-4">
           <div className="text-xs text-indigo-700 dark:text-indigo-300 uppercase font-medium">Products</div>
           <div className="text-3xl font-bold text-indigo-900 dark:text-indigo-100 mt-1">{counts.total}</div>
@@ -123,6 +141,13 @@ export default function ChemicalsListPage() {
           <div className="text-xs text-amber-700 dark:text-amber-300 uppercase font-medium">Missing SDS</div>
           <div className="text-3xl font-bold text-amber-900 dark:text-amber-100 mt-1">{counts.missingSds}</div>
         </div>
+        <Link
+          href="/chemicals/inventory?expiring=true"
+          className="block rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50/50 dark:bg-rose-950/20 p-4 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+        >
+          <div className="text-xs text-rose-700 dark:text-rose-300 uppercase font-medium">Expiring ≤ 60 days</div>
+          <div className="text-3xl font-bold text-rose-900 dark:text-rose-100 mt-1">{expiringCount}</div>
+        </Link>
       </section>
 
       <div className="flex flex-wrap items-center gap-3">

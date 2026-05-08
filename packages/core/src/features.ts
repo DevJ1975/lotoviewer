@@ -424,6 +424,36 @@ export const FEATURES: FeatureDef[] = [
     enabled:     true,
     comingSoon:  false,
   },
+  {
+    id:          'chemicals-inventory',
+    name:        'Inventory',
+    description: 'Containers on shelves, expiring stock, scan in/out',
+    href:        '/chemicals/inventory',
+    category:    'safety',
+    parent:      'chemicals',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'chemicals-scan',
+    name:        'Scan Barcode',
+    description: 'Camera barcode lookup for chemical containers',
+    href:        '/chemicals/scan',
+    category:    'safety',
+    parent:      'chemicals',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'chemicals-locations',
+    name:        'Storage Locations',
+    description: 'Buildings, rooms, cabinets — where chemicals live',
+    href:        '/chemicals/locations',
+    category:    'safety',
+    parent:      'chemicals',
+    enabled:     true,
+    comingSoon:  false,
+  },
 
   // Legacy near-miss surface — kept enabled during the Phase 1 → Phase 6
   // transition so existing tenants don't lose their bookmarks. The new

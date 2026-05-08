@@ -8,6 +8,7 @@ import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { PictogramBadges, SignalWordBadge } from '../_components/PictogramBadges'
 import PrintLabelPanel from './_components/PrintLabelPanel'
+import ContainersPanel from './_components/ContainersPanel'
 
 interface Product {
   id:                string
@@ -263,6 +264,8 @@ export default function ChemicalDetailPage() {
           )}
         </section>
       ) : null}
+
+      <ContainersPanel productId={product.id} />
 
       <PrintLabelPanel productId={product.id} />
 
