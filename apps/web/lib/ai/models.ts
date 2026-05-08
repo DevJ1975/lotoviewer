@@ -42,6 +42,10 @@ export const MODEL_BY_SURFACE = {
   // is worth the extra cost — and every parse runs through a human
   // review queue before fields land on the product.
   'parse-sds':                        SONNET,
+  // Cross-module assistant on the home page. Tool-use heavy, must
+  // reason across LOTO + confined-spaces + chemicals + incidents +
+  // uploaded company policies. Sonnet for the chat itself.
+  'assistant-chat':                   SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

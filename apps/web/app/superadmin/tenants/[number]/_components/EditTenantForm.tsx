@@ -52,10 +52,29 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
   // raw JSON below. Saving merges the explicit fields back into
   // the JSON before PATCH so the server receives one settings
   // object.
-  const [settingsJson, setSettingsJson] = useState<string>(() =>
-    JSON.stringify(tenant.settings ?? {}, null, 2),
-  )
+  // The textarea shows every settings key EXCEPT anthropic_api_key —
+  // that one has its own dedicated input above. Stripping it keeps a
+  // single source of truth for the key and avoids the "edit it in both
+  // places, hope they agree" trap.
+  const [settingsJson, setSettingsJson] = useState<string>(() => {
+    const { anthropic_api_key: _drop, ...rest } = (tenant.settings ?? {}) as Record<string, unknown>
+    void _drop
+    return JSON.stringify(rest, null, 2)
+  })
   const [settingsError, setSettingsError] = useState<string | null>(null)
+
+  // Dedicated Anthropic API key input. Mirrors a single key inside
+  // tenants.settings.anthropic_api_key. Pulled out of the free-form
+  // JSON textarea above so an operator pasting a key from the
+  // Anthropic Console (a) doesn't have to wrap it in JSON syntax,
+  // and (b) gets fail-fast validation client-side instead of finding
+  // out the AI is silently 401-ing for that tenant.
+  const initialKey = (() => {
+    const v = (tenant.settings as Record<string, unknown> | null | undefined)?.['anthropic_api_key']
+    return typeof v === 'string' ? v : ''
+  })()
+  const [anthropicKey, setAnthropicKey] = useState<string>(initialKey)
+  const [keyError,     setKeyError]     = useState<string | null>(null)
 
   // Re-seed when the parent re-fetches the tenant (e.g. after logo
   // upload). Keep the user's in-flight checkbox edits if they've
@@ -64,8 +83,13 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
   // unless the underlying tenant identity changes.
   useEffect(() => {
     setModules(seedModulesFromTenant(tenant))
-    setSettingsJson(JSON.stringify(tenant.settings ?? {}, null, 2))
+    const { anthropic_api_key: _drop, ...rest } = (tenant.settings ?? {}) as Record<string, unknown>
+    void _drop
+    setSettingsJson(JSON.stringify(rest, null, 2))
     setSettingsError(null)
+    const v = (tenant.settings as Record<string, unknown> | null | undefined)?.['anthropic_api_key']
+    setAnthropicKey(typeof v === 'string' ? v : '')
+    setKeyError(null)
   }, [tenant.id])
 
   const [saving,      setSaving]      = useState(false)
@@ -88,7 +112,7 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
-    setSaving(true); setSaveError(null); setSaveSuccess(false); setSettingsError(null)
+    setSaving(true); setSaveError(null); setSaveSuccess(false); setSettingsError(null); setKeyError(null)
 
     // Validate the settings JSON before sending. A typo here
     // shouldn't lose the rest of the form's edits, so surface the
@@ -104,6 +128,31 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
       setSettingsError(e instanceof Error ? e.message : 'Invalid JSON')
       setSaving(false)
       return
+    }
+
+    // Anthropic key validation. Empty = remove override (env fallback);
+    // non-empty must look like a real key. Server enforces the same
+    // shape via lib/ai/getTenantApiKey.looksLikeAnthropicKey, but we
+    // reject obvious typos client-side to spare the round-trip.
+    const trimmedKey = anthropicKey.trim()
+    if (trimmedKey.length > 0) {
+      if (!trimmedKey.startsWith('sk-ant-')) {
+        setKeyError('Anthropic keys start with "sk-ant-". Paste the key from the Anthropic Console.')
+        setSaving(false)
+        return
+      }
+      if (trimmedKey.length < 30) {
+        setKeyError('That key looks truncated (under 30 characters). Real keys are ~100 characters.')
+        setSaving(false)
+        return
+      }
+      parsedSettings = { ...parsedSettings, anthropic_api_key: trimmedKey }
+    } else if ('anthropic_api_key' in parsedSettings) {
+      // Operator cleared the field — remove the override so the
+      // platform env key is used.
+      const { anthropic_api_key: _drop, ...rest } = parsedSettings
+      void _drop
+      parsedSettings = rest
     }
 
     const result = await superadminJson<{ tenant: Tenant }>(
@@ -199,11 +248,38 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
         </div>
       </Section>
 
+      <Section title="Anthropic API key (optional override)">
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+          Per-tenant override for the platform&apos;s default <code className="font-mono text-[11px]">ANTHROPIC_API_KEY</code>.
+          When set, this tenant&apos;s AI features bill to its own Anthropic account.
+          Leave blank to use the platform default. <strong>A malformed key here causes
+          AI features to fail fast with a 502 (no silent fallback).</strong>
+        </p>
+        <input
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="sk-ant-…"
+          value={anthropicKey}
+          onChange={e => { setAnthropicKey(e.target.value); setKeyError(null); setSaveSuccess(false) }}
+          className="w-full px-3 py-2 text-xs font-mono rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-navy"
+        />
+        {keyError && (
+          <p className="mt-2 text-xs text-rose-700 dark:text-rose-300">{keyError}</p>
+        )}
+        {!keyError && anthropicKey.trim().length > 0 && (
+          <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+            Stored under <code className="font-mono">settings.anthropic_api_key</code>. Clear the field and Save to remove the override.
+          </p>
+        )}
+      </Section>
+
       <Section title="Settings (advanced)">
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
           Free-form JSON. Common keys: <code className="font-mono text-[11px]">default_landing_path</code>,
           {' '}<code className="font-mono text-[11px]">risk_band_scheme</code>,
           {' '}<code className="font-mono text-[11px]">risk_acceptance_threshold</code>.
+          The <code className="font-mono text-[11px]">anthropic_api_key</code> is edited above and is hidden here on purpose.
           See <code className="font-mono text-[11px]">tenants.settings</code> in the schema.
         </p>
         <textarea

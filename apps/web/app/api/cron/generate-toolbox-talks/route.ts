@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
-import Anthropic from '@anthropic-ai/sdk'
+import type Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { withCronLogging } from '@/lib/cronInstrumentation'
-import { getTenantApiKey } from '@/lib/ai/getTenantApiKey'
+import { getAnthropic, AnthropicNotConfiguredError } from '@/lib/ai/client'
+import { MalformedTenantKeyError } from '@/lib/ai/getTenantApiKey'
 import { SONNET } from '@/lib/ai/models'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { sortTopicsForRotation, pickTopicsForDates } from '@/lib/toolboxRotation'
@@ -272,14 +273,24 @@ async function generateForTenant(
   const sorted = sortTopicsForRotation(topics, lastUsed)
   const picks  = pickTopicsForDates(sorted, missingDates)
 
-  // Per-tenant Anthropic key (or env fallback).
-  const apiKey = await getTenantApiKey(tenant.id)
-  if (!apiKey) {
-    Sentry.captureMessage('No Anthropic key configured for toolbox-talks generation',
-      { tags: { tenant_id: tenant.id } })
+  // Per-tenant Anthropic client. Skip the tenant on configuration
+  // errors — toolbox-talks isn't worth failing the whole cron over,
+  // and the next run will retry. We log so the operator notices.
+  let client: Anthropic
+  try {
+    client = await getAnthropic(tenant.id)
+  } catch (err) {
+    if (err instanceof MalformedTenantKeyError) {
+      Sentry.captureMessage('Skipping tenant in toolbox-talks: malformed Anthropic key',
+        { level: 'warning', tags: { tenant_id: tenant.id } })
+    } else if (err instanceof AnthropicNotConfiguredError) {
+      Sentry.captureMessage('Skipping tenant in toolbox-talks: no Anthropic key configured',
+        { level: 'warning', tags: { tenant_id: tenant.id } })
+    } else {
+      Sentry.captureException(err, { tags: { source: 'toolbox-talks', tenant_id: tenant.id } })
+    }
     return { generated: 0, skipped: existingDates.size, failed: missingDates.length }
   }
-  const client = new Anthropic({ apiKey })
 
   let generated = 0
   let failed    = 0

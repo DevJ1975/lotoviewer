@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
-import Anthropic from '@anthropic-ai/sdk'
+import type Anthropic from '@anthropic-ai/sdk'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { getTenantApiKey } from '@/lib/ai/getTenantApiKey'
+import { getAnthropic, aiErrorToResponse } from '@/lib/ai/client'
 import { checkAiRateLimit, logAiInvocation } from '@/lib/ai/rateLimit'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 
@@ -156,16 +156,14 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       careRow ? `Days counters: ${careRow.days_away_from_work} away · ${careRow.days_restricted} restricted · ${careRow.days_lost} lost` : null,
     ].filter(Boolean).join('\n')
 
-    // Short-circuit when no API key is configured — clearer 503
-    // than the SDK's opaque 401 from a missing key.
-    const apiKey = await getTenantApiKey(gate.tenantId)
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'AI is not configured for this deployment. Contact your administrator.' },
-        { status: 503 },
-      )
+    let client: Anthropic
+    try {
+      client = await getAnthropic(gate.tenantId)
+    } catch (err) {
+      const mapped = aiErrorToResponse(err, 'classify-recordability')
+      Sentry.captureException(err, { tags: { ...mapped.tags, route: '/api/incidents/classify/ai-suggest' } })
+      return NextResponse.json(mapped.body, { status: mapped.status })
     }
-    const client = new Anthropic({ apiKey })
     const response = await client.messages.create({
       model:      MODEL,
       max_tokens: 4096,
