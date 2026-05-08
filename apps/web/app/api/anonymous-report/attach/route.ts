@@ -84,7 +84,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Lookup failed' }, { status: 500 })
     }
     if (!incident) return NextResponse.json({ error: 'Unknown incident' }, { status: 404 })
-    const inc = incident as { id: string; tenant_id: string; is_anonymous: boolean; reported_at: string }
+    const inc = incident as unknown as { id: string; tenant_id: string; is_anonymous: boolean; reported_at: string }
 
     if (!inc.is_anonymous) {
       return NextResponse.json({ error: 'Cannot attach to authenticated incidents via this endpoint' }, { status: 403 })

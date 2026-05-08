@@ -115,12 +115,12 @@ export async function POST(req: Request) {
       Sentry.captureException(error, { tags: { route: 'qr-tokens/POST' } })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
-    const created = data as { id: string }
+    const created = data as unknown as { id: string }
     void writeQrTokenAudit(admin, {
       tenant_id:   gate.tenantId,
       token_id:    created.id,
       event_type:  'create',
-      after_row:   data as Record<string, unknown>,
+      after_row:   data as unknown as Record<string, unknown>,
       actor_id:    gate.userId,
       actor_email: gate.userEmail,
     })
@@ -193,8 +193,8 @@ export async function PATCH(req: Request) {
       tenant_id:   gate.tenantId,
       token_id:    id,
       event_type:  inferEventType(body),
-      before_row:  before as Record<string, unknown> | null,
-      after_row:   data as Record<string, unknown>,
+      before_row:  before as unknown as Record<string, unknown> | null,
+      after_row:   data as unknown as Record<string, unknown>,
       actor_id:    gate.userId,
       actor_email: gate.userEmail,
       context:     body.context ?? null,
@@ -241,7 +241,7 @@ export async function DELETE(req: Request) {
       tenant_id:   gate.tenantId,
       token_id:    id,
       event_type:  'delete',
-      before_row:  before as Record<string, unknown> | null,
+      before_row:  before as unknown as Record<string, unknown> | null,
       actor_id:    gate.userId,
       actor_email: gate.userEmail,
     })

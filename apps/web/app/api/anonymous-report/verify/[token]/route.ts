@@ -45,7 +45,7 @@ export async function GET(req: Request, ctx: RouteContext) {
       Sentry.captureException(error, { tags: { route: 'anonymous-report/verify' } })
       return NextResponse.json({ error: 'Verification failed' }, { status: 500 })
     }
-    if (!data || !(data as { enabled: boolean }).enabled) {
+    if (!data || !(data as unknown as { enabled: boolean }).enabled) {
       void recordAttempt(ipHash, 'verify_invalid', null)
       return NextResponse.json(
         { error: 'This link is invalid or no longer active.' },
@@ -67,7 +67,7 @@ export async function GET(req: Request, ctx: RouteContext) {
         retaliation_statement_override: string | null
       }> | null
     }
-    const r = data as Row
+    const r = data as unknown as Row
     const tenantBlock = r.tenant
     const tenant = (Array.isArray(tenantBlock) ? tenantBlock[0] : tenantBlock) ?? {
       name: null, default_report_locale: 'en', retaliation_statement_override: null,

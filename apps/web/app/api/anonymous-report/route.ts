@@ -121,11 +121,11 @@ export async function POST(req: Request) {
       void recordAttempt(ipHash, 'submit_error')
       return NextResponse.json({ error: 'Token check failed' }, { status: 500 })
     }
-    if (!tokenRow || !(tokenRow as { enabled: boolean }).enabled) {
+    if (!tokenRow || !(tokenRow as unknown as { enabled: boolean }).enabled) {
       void recordAttempt(ipHash, 'submit_invalid')
       return NextResponse.json({ error: 'Token is invalid or disabled' }, { status: 403 })
     }
-    const t = tokenRow as {
+    const t = tokenRow as unknown as {
       id: string; tenant_id: string; label: string; enabled: boolean
       rate_limit_per_hour: number | null; total_reports: number
       require_captcha: boolean
@@ -218,7 +218,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const incident = data as IncidentRow
+    const incident = data as unknown as IncidentRow
 
     // Bump the token's usage counter (best effort).
     await admin

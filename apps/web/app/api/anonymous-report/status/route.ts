@@ -75,7 +75,7 @@ export async function POST(req: Request) {
       void recordAttempt(ipHash, 'receipt_invalid')
       return NextResponse.json({ error: 'No report matches that code.' }, { status: 404 })
     }
-    const r = data as { id: string; status: string; reported_at: string; anon_public_status_note: string | null }
+    const r = data as unknown as { id: string; status: string; reported_at: string; anon_public_status_note: string | null }
     void recordAttempt(ipHash, 'receipt_ok')
     return NextResponse.json({
       status:        r.status,
