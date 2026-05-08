@@ -40,6 +40,10 @@
     {
       "path": "/api/cron/osha-300a-posting-prompt",
       "schedule": "0 14 15 1 *"
+    },
+    {
+      "path": "/api/cron/generate-toolbox-talks",
+      "schedule": "0 5 * * 0"
     }
   ]
 }

@@ -119,6 +119,7 @@ describe('getFeaturesByCategory', () => {
       'hot-work',
       'hot-work-status',
       'jha',
+      'toolbox-talks',
     ])
   })
 
@@ -158,6 +159,7 @@ describe('getModules', () => {
       'near-miss',
       'hot-work',
       'jha',
+      'toolbox-talks',
     ])
   })
 
