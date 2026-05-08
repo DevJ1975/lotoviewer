@@ -743,10 +743,41 @@ audit log table exists.
 - [ ] As tenant B, GET `/api/chemicals/maq` returns only tenant
       B's rules (no tenant A leakage)
 
-## Known follow-ups (not in Phase G slice 6)
+## 40 · HazCom training cross-link (Phase G slice 7)
 
-- HazCom training topic → 017_training_records.training_role enum +
-  per-chemical training cross-link → Phase G+
+- [ ] Migration 092 applied; loto_training_records.role check now
+      accepts 'hazcom' and 'chemical_specific'; chemical_training_requirements
+      table exists with tenant-scoped RLS and UNIQUE(tenant_id,
+      product_id, role)
+- [ ] On a chemical detail page, the new "Training requirements"
+      panel renders below the inventory containers + above the JHA
+      usage panel
+- [ ] Click "Add requirement" → role dropdown shows HazCom 2012,
+      Chemical-specific handler, Other → submit a HazCom row →
+      requirement chip appears
+- [ ] Re-adding the same role → idempotent (UNIQUE upsert) — no
+      duplicate row, notes update if supplied
+- [ ] Submitting a role outside CHEMICAL_TRAINING_ROLES (e.g.
+      'entrant') → 400 with the allowed list
+- [ ] Trash-can deletes the row; gone after refresh
+- [ ] Coverage check: type "Alice, Bob" in the worker box → API
+      cross-references loto_training_records, returns one row per
+      (worker × role) pair with status pill (covered / expired /
+      missing) and days-until-expiry
+- [ ] Worker name match is case-insensitive + whitespace-tolerant
+      (matches the existing §1910.146(g) gate behavior)
+- [ ] When the same worker has multiple records in the same role,
+      the latest `completed_at` wins
+- [ ] A future-dated cert (completed_at after today) shows as
+      missing — protects against forward-dated paperwork
+- [ ] Top-of-section banner: emerald when all workers covered,
+      rose when any gaps with "N gaps across M workers"
+- [ ] As tenant B, requirements list is empty for tenant A's
+      chemical (RLS scopes to tenant_id)
+- [ ] As tenant B, POSTing a requirement to tenant A's product → 404
+
+## Known follow-ups (not in Phase G slice 7)
+
 - Cross-tenant SDS catalog opt-in (massive cost win at parse time) → Phase G+
 - Per-state Tier II form mappings (T2S file format, etc.) → Phase F+
 - Bulk parse on import (queue many SDSs at once) → Phase B follow-up

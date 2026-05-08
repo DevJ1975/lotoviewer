@@ -302,6 +302,8 @@ export type TrainingRole =
   | 'hot_work_operator'
   | 'fire_watcher'
   | 'authorized_employee'   // LOTO §1910.147 — worker issued a locktag
+  | 'hazcom'                // HazCom 2012 baseline (29 CFR 1910.1200)
+  | 'chemical_specific'     // per-chemical handler training
   | 'other'
 
 export interface TrainingRecord {

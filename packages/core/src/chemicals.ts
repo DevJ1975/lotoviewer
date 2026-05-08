@@ -1037,6 +1037,148 @@ export function digestSubjectSummary(d: ChemicalsDigest): string | null {
   return parts.join(', ')
 }
 
+// ─── HazCom training requirements (Phase G slice 7) ────────────────────
+//
+// Per-chemical training the tenant deems required of any worker who
+// handles a container of that chemical. The product detail page lists
+// the requirements; the coverage check below decides whether a given
+// worker holds a current cert in each required role.
+
+/** Roles that may be referenced from chemical_training_requirements.
+ *  Mirrors loto_training_records role enum minus operational roles
+ *  that aren't chemical-relevant — `entrant`, `attendant`,
+ *  `entry_supervisor`, and `rescuer` are CS-specific; `hot_work_*` are
+ *  hot-work-specific; `authorized_employee` is LOTO-specific.
+ *  HazCom + chemical_specific are added in migration 092. We allow
+ *  `other` so a tenant can attach a free-form cert (e.g. DOT 49 CFR
+ *  Subpart H) without growing the enum. */
+export const CHEMICAL_TRAINING_ROLES = [
+  'hazcom', 'chemical_specific', 'other',
+] as const
+export type ChemicalTrainingRole = typeof CHEMICAL_TRAINING_ROLES[number]
+
+export interface ChemicalTrainingRequirement {
+  id:         string
+  product_id: string
+  role:       string  // free-form to tolerate future enum additions
+  notes:      string | null
+}
+
+export interface WorkerTrainingRecord {
+  worker_name: string
+  role:        string
+  completed_at: string             // YYYY-MM-DD
+  expires_at:  string | null       // null → no expiry
+}
+
+export type TrainingCoverageStatus = 'covered' | 'expired' | 'missing'
+
+export interface TrainingCoverageRow {
+  worker_name: string
+  role:        string
+  status:      TrainingCoverageStatus
+  expires_at:  string | null
+  /** Days until / since expiration, negative when already expired. Null
+   *  when status === 'covered' AND no expiry, or status === 'missing'. */
+  days_until_expiry: number | null
+}
+
+/**
+ * Walk the cross product of (worker × required role) and decide each
+ * cell's coverage. A role is `covered` when the worker has a record
+ * in that role, completed_at <= today, AND (expires_at is null OR
+ * expires_at >= today). `expired` when the record exists but the
+ * cert is past its expiry. `missing` when the worker has no record
+ * in the role at all.
+ *
+ * worker_name comparison is case-insensitive + whitespace-tolerant
+ * to match the §1910.146(g) gate's behavior in trainingRecords.ts.
+ */
+export function chemicalTrainingCoverage(
+  workers:      readonly string[],
+  requirements: readonly { role: string }[],
+  records:      readonly WorkerTrainingRecord[],
+  today: Date = new Date(),
+): TrainingCoverageRow[] {
+  const todayIso = today.toISOString().slice(0, 10)
+  const todayMs  = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+
+  const norm = (s: string) => s.trim().toLowerCase()
+
+  // Index records by (normalized worker, role) → most recent.
+  type Key = string
+  const recIdx = new Map<Key, WorkerTrainingRecord>()
+  for (const r of records) {
+    const key: Key = `${norm(r.worker_name)}|${r.role}`
+    const prev = recIdx.get(key)
+    // Keep the record with the latest completed_at (a worker may have
+    // re-certified; the latest record decides coverage).
+    if (!prev || r.completed_at > prev.completed_at) {
+      recIdx.set(key, r)
+    }
+  }
+
+  const out: TrainingCoverageRow[] = []
+  for (const w of workers) {
+    for (const req of requirements) {
+      const rec = recIdx.get(`${norm(w)}|${req.role}`)
+      if (!rec) {
+        out.push({
+          worker_name: w, role: req.role,
+          status: 'missing', expires_at: null, days_until_expiry: null,
+        })
+        continue
+      }
+      if (rec.completed_at > todayIso) {
+        // Future-dated cert — treat as missing for today.
+        out.push({
+          worker_name: w, role: req.role,
+          status: 'missing', expires_at: rec.expires_at,
+          days_until_expiry: null,
+        })
+        continue
+      }
+      if (!rec.expires_at) {
+        out.push({
+          worker_name: w, role: req.role,
+          status: 'covered', expires_at: null,
+          days_until_expiry: null,
+        })
+        continue
+      }
+      const expMs = Date.parse(rec.expires_at + 'T00:00:00Z')
+      const days  = Number.isFinite(expMs)
+        ? Math.round((expMs - todayMs) / 86_400_000) : 0
+      out.push({
+        worker_name: w, role: req.role,
+        status:    days < 0 ? 'expired' : 'covered',
+        expires_at: rec.expires_at,
+        days_until_expiry: days,
+      })
+    }
+  }
+
+  return out
+}
+
+/** Compact summary for dashboard tiles: how many gaps total, how many
+ *  workers are NOT fully covered. */
+export interface TrainingGapSummary {
+  total_gaps:        number    // missing + expired cells
+  affected_workers:  number    // unique workers with ≥1 gap
+}
+
+export function summarizeTrainingGaps(rows: readonly TrainingCoverageRow[]): TrainingGapSummary {
+  let total_gaps = 0
+  const affected = new Set<string>()
+  for (const r of rows) {
+    if (r.status === 'covered') continue
+    total_gaps += 1
+    affected.add(r.worker_name.trim().toLowerCase())
+  }
+  return { total_gaps, affected_workers: affected.size }
+}
+
 // Storage path layout for the chemical-sds bucket. Tenant-scoped first
 // segment so storage_path_tenant() (migration 033) gates writes.
 export function chemicalSdsStoragePath(

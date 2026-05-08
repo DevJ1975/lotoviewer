@@ -21,6 +21,9 @@ import {
   unionChemicalPpe,
   isDigestEmpty,
   digestSubjectSummary,
+  chemicalTrainingCoverage,
+  summarizeTrainingGaps,
+  CHEMICAL_TRAINING_ROLES,
   INVENTORY_STATUSES,
   GHS_PICTOGRAMS,
   type ParsedSdsPayload,
@@ -806,6 +809,91 @@ describe('digestSubjectSummary', () => {
       ],
     })
     expect(digestSubjectSummary(d)).toBe('1 approval, 1 drift event')
+  })
+})
+
+describe('chemicalTrainingCoverage', () => {
+  const today = new Date('2026-05-08T00:00:00Z')
+  const reqs = [{ role: 'hazcom' }, { role: 'chemical_specific' }]
+
+  it('returns covered when worker holds a current cert (no expiry)', () => {
+    const out = chemicalTrainingCoverage(['Alice'], reqs, [
+      { worker_name: 'Alice', role: 'hazcom',            completed_at: '2026-01-01', expires_at: null },
+      { worker_name: 'Alice', role: 'chemical_specific', completed_at: '2026-04-01', expires_at: null },
+    ], today)
+    expect(out.every(r => r.status === 'covered')).toBe(true)
+  })
+
+  it('returns expired when expires_at is in the past', () => {
+    const out = chemicalTrainingCoverage(['Alice'], reqs, [
+      { worker_name: 'Alice', role: 'hazcom',            completed_at: '2025-01-01', expires_at: '2026-04-01' },
+      { worker_name: 'Alice', role: 'chemical_specific', completed_at: '2025-01-01', expires_at: '2027-01-01' },
+    ], today)
+    expect(out.find(r => r.role === 'hazcom')?.status).toBe('expired')
+    expect(out.find(r => r.role === 'hazcom')?.days_until_expiry).toBe(-37)
+    expect(out.find(r => r.role === 'chemical_specific')?.status).toBe('covered')
+  })
+
+  it('returns missing when no record exists for the role', () => {
+    const out = chemicalTrainingCoverage(['Alice'], reqs, [
+      { worker_name: 'Alice', role: 'hazcom', completed_at: '2026-01-01', expires_at: null },
+    ], today)
+    expect(out.find(r => r.role === 'chemical_specific')?.status).toBe('missing')
+  })
+
+  it('matches worker names case-insensitively + whitespace-tolerant', () => {
+    const out = chemicalTrainingCoverage(['  ALICE  '], reqs, [
+      { worker_name: 'alice', role: 'hazcom',            completed_at: '2026-01-01', expires_at: null },
+      { worker_name: 'Alice', role: 'chemical_specific', completed_at: '2026-01-01', expires_at: null },
+    ], today)
+    expect(out.every(r => r.status === 'covered')).toBe(true)
+  })
+
+  it('picks the latest completed_at when a worker has multiple records in the same role', () => {
+    const out = chemicalTrainingCoverage(['Alice'], [{ role: 'hazcom' }], [
+      { worker_name: 'Alice', role: 'hazcom', completed_at: '2024-01-01', expires_at: '2025-01-01' }, // expired
+      { worker_name: 'Alice', role: 'hazcom', completed_at: '2026-01-01', expires_at: '2027-01-01' }, // current
+    ], today)
+    expect(out[0].status).toBe('covered')
+  })
+
+  it('treats a future-dated cert as missing', () => {
+    const out = chemicalTrainingCoverage(['Alice'], [{ role: 'hazcom' }], [
+      { worker_name: 'Alice', role: 'hazcom', completed_at: '2026-12-01', expires_at: '2027-12-01' },
+    ], today)
+    expect(out[0].status).toBe('missing')
+  })
+
+  it('fans out across the cross product of (worker × role)', () => {
+    const out = chemicalTrainingCoverage(['Alice', 'Bob'], reqs, [], today)
+    expect(out).toHaveLength(4)  // 2 workers × 2 roles, all missing
+    expect(out.every(r => r.status === 'missing')).toBe(true)
+  })
+})
+
+describe('summarizeTrainingGaps', () => {
+  it('counts gaps + unique affected workers', () => {
+    const summary = summarizeTrainingGaps([
+      { worker_name: 'Alice', role: 'hazcom', status: 'missing', expires_at: null, days_until_expiry: null },
+      { worker_name: 'Alice', role: 'chemical_specific', status: 'expired', expires_at: '2025-01-01', days_until_expiry: -100 },
+      { worker_name: 'Bob',   role: 'hazcom', status: 'missing', expires_at: null, days_until_expiry: null },
+      { worker_name: 'Carol', role: 'hazcom', status: 'covered', expires_at: null, days_until_expiry: null },
+    ])
+    expect(summary.total_gaps).toBe(3)
+    expect(summary.affected_workers).toBe(2)
+  })
+  it('returns zeros when everything is covered', () => {
+    expect(summarizeTrainingGaps([
+      { worker_name: 'Alice', role: 'hazcom', status: 'covered', expires_at: null, days_until_expiry: null },
+    ])).toEqual({ total_gaps: 0, affected_workers: 0 })
+  })
+})
+
+describe('CHEMICAL_TRAINING_ROLES', () => {
+  it('exposes hazcom + chemical_specific + other', () => {
+    expect([...CHEMICAL_TRAINING_ROLES]).toEqual([
+      'hazcom', 'chemical_specific', 'other',
+    ])
   })
 })
 

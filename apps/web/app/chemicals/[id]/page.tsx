@@ -10,6 +10,7 @@ import { PictogramBadges, SignalWordBadge } from '../_components/PictogramBadges
 import PrintLabelPanel from './_components/PrintLabelPanel'
 import ContainersPanel from './_components/ContainersPanel'
 import JhaUsagePanel from './_components/JhaUsagePanel'
+import TrainingRequirementsPanel from './_components/TrainingRequirementsPanel'
 
 interface Product {
   id:                string
@@ -303,6 +304,8 @@ export default function ChemicalDetailPage() {
       ) : null}
 
       <ContainersPanel productId={product.id} />
+
+      <TrainingRequirementsPanel productId={product.id} />
 
       <JhaUsagePanel productId={product.id} />
 
