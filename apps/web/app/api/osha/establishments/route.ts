@@ -24,6 +24,9 @@ const COLS = [
   'certifying_executive_name', 'certifying_executive_title',
   'is_partial_year',
   'ita_establishment_id',
+  'ita_auto_submit_enabled',
+  'ita_auto_submit_last_attempt_at',
+  'ita_auto_submit_last_error',
   'created_at', 'updated_at', 'created_by', 'updated_by',
 ].join(', ')
 
@@ -151,6 +154,8 @@ const PATCHABLE_FIELDS = [
   // below so we can normalise empty-string -> null (clear) and never
   // accept a value that is just whitespace.
   'ita_establishment_id',
+  // Per-establishment opt-in for the daily auto-submit cron.
+  'ita_auto_submit_enabled',
 ] as const
 
 export async function PATCH(req: Request) {

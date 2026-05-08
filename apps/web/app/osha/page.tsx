@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, AlertTriangle, FileText, Download, Settings, ShieldCheck, Send } from 'lucide-react'
+import { Loader2, AlertTriangle, FileText, Download, Settings, ShieldCheck, Send, Eye } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import OshaDeadlineBanner from '@/app/_components/OshaDeadlineBanner'
+import PreviewItaPayloadModal from '@/app/_components/PreviewItaPayloadModal'
 import {
   build300ASummary,
   trirFromSummary,
@@ -54,7 +55,8 @@ export default function OshaDashboardPage() {
   const [error,   setError]   = useState<string | null>(null)
   const [busy,    setBusy]    = useState(false)
 
-  const [signName, setSignName] = useState('')
+  const [signName,    setSignName]    = useState('')
+  const [showPreview, setShowPreview] = useState(false)
 
   const load = useCallback(async () => {
     if (!tenant?.id) return
@@ -349,6 +351,18 @@ export default function OshaDashboardPage() {
               <Download className="h-3.5 w-3.5" />
               Export ITA CSV
             </button>
+            {/* Dry-run preview — calls the submit-to-ita route with
+                dry_run:true and shows the JSON payload in a modal.
+                Useful before flipping the env-side endpoint live. */}
+            <button
+              type="button"
+              disabled={!estId}
+              onClick={() => setShowPreview(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              Preview ITA payload
+            </button>
             {/* Submit-to-OSHA-ITA. Disabled until certified + the
                 selected establishment has both ID + token configured.
                 If the env-side ITA endpoint is not yet configured the
@@ -454,6 +468,15 @@ export default function OshaDashboardPage() {
             )}
           </section>
         </>
+      )}
+
+      {showPreview && estId && (
+        <PreviewItaPayloadModal
+          year={year}
+          establishmentId={estId}
+          authedHeaders={authedHeaders}
+          onClose={() => setShowPreview(false)}
+        />
       )}
     </div>
   )

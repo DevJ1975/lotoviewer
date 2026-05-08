@@ -560,10 +560,6 @@ export function buildItaSubmissionPayload(
 //   'summary_and_cases' — 300A + 300 + 301 (>=100 in Appendix B
 //                     industries, post-CY2023)
 //   'not_required'  — outside the covered population
-//
-// Industry-list classification is not embedded here because the
-// Appendix A/B NAICS-prefix tables drift; the caller passes the
-// classification result. This helper just applies the size cutoff.
 export type ItaCoverage = 'summary_only' | 'summary_and_cases' | 'not_required'
 
 export function classifyItaCoverage(opts: {
@@ -575,4 +571,87 @@ export function classifyItaCoverage(opts: {
   if (n >= 250)                          return 'summary_only'
   if (opts.appendix === 'a' && n >= 20 && n <= 249) return 'summary_only'
   return 'not_required'
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// 29 CFR Part 1904 Subpart E NAICS Appendix lookup.
+//
+// IMPORTANT: this is a *seed list* of the well-known high-injury
+// NAICS codes from the regulatory appendices. The authoritative
+// tables live in the Code of Federal Regulations and are amended
+// from time to time (the most recent expansion was the 2023
+// rulemaking that added the Appendix B 100-employee tier for CY2023
+// reporting onward). Treat any code that isn't in these arrays as
+// "not classified" — `appendixForNaics` returns null and the
+// `classifyItaCoverage` size-only path applies.
+//
+// Operators rolling out the auto-submit feature should sanity-check
+// each tenant's NAICS code against the current CFR table at
+// www.osha.gov/recordkeeping (or the Federal Register) before
+// trusting an automated tier classification.
+//
+// Lookup is prefix-based: a 6-digit code that starts with a 4-digit
+// entry in the arrays matches that entry. We index by 4-digit
+// industry-group prefix because that's the granularity the OSHA
+// appendices use.
+
+/** Well-known 4-digit NAICS industry-group codes that fall under
+ *  Appendix A (300A required at 20-249 employees). Seed list only —
+ *  extend as the operator verifies against the current CFR table. */
+export const APPENDIX_A_NAICS_PREFIXES: readonly string[] = [
+  '1133',  // Logging
+  '2211',  // Electric Power Generation, Transmission and Distribution
+  '2361', '2362',  // Residential / Nonresidential Building Construction
+  '2371', '2372', '2373', '2379',  // Heavy and Civil Engineering Construction
+  '2381', '2382', '2383', '2389',  // Specialty Trade Contractors
+  '3111', '3112', '3113', '3114',  // Food Manufacturing
+  '3115', '3116', '3117', '3118', '3119',
+  '3121', '3122',                  // Beverage and Tobacco Product Manufacturing
+  '3211', '3212', '3219',          // Wood Product Manufacturing
+  '3221', '3222',                  // Paper Manufacturing
+  '3251', '3252', '3253', '3254', '3255', '3256', '3259',  // Chemical
+  '3261', '3262',                  // Plastics and Rubber Products
+  '3271', '3272', '3273', '3274', '3279',  // Nonmetallic Mineral Product
+  '3311', '3312', '3313', '3314', '3315',  // Primary Metal Manufacturing
+  '3321', '3322', '3323', '3324', '3325', '3326', '3327', '3328', '3329',
+  '3331', '3332', '3333', '3334', '3335', '3336', '3339',
+  '4231', '4232', '4233', '4234', '4235', '4236', '4237', '4238', '4239',
+  '4241', '4242', '4243', '4244', '4245', '4246', '4247', '4248', '4249',
+  '4811', '4812', '4831', '4832',  // Air / Water Transportation
+  '4841', '4842',                  // Truck Transportation
+  '4881', '4889',                  // Support Activities for Transportation
+  '4921', '4922', '4931',          // Couriers, Messengers, Warehousing
+  '5621',                          // Waste Collection
+  '6221',                          // General Medical and Surgical Hospitals
+  '6231', '6232', '6233', '6239',  // Nursing and Residential Care
+] as const
+
+/** Well-known 4-digit NAICS industry-group codes that fall under
+ *  Appendix B (300+301 case data required at 100+ employees,
+ *  effective for CY2023 reporting onward — submitted by Mar 2 2024). */
+export const APPENDIX_B_NAICS_PREFIXES: readonly string[] = [
+  '1133',  // Logging
+  '2122',  // Metal Ore Mining
+  '2123',  // Nonmetallic Mineral Mining and Quarrying
+  '3115',  // Dairy Product Manufacturing
+  '3116',  // Animal Slaughtering and Processing
+  '3271',  // Clay Product and Refractory Manufacturing
+  '3315',  // Foundries
+  '6221',  // General Medical and Surgical Hospitals
+  '6231', '6232', '6233', '6239',  // Nursing and Residential Care Facilities
+] as const
+
+/** Returns 'a' / 'b' / null for a NAICS code based on the seeded
+ *  prefix tables. Falls back to null for unknown codes — the size-
+ *  only classification path then applies. */
+export function appendixForNaics(naicsCode: string | null | undefined): 'a' | 'b' | null {
+  if (!naicsCode) return null
+  const code = naicsCode.replace(/\D/g, '')
+  if (code.length < 4) return null
+  const p4 = code.slice(0, 4)
+  // Appendix B wins when both apply, because it's the stricter rule
+  // (forces 300/301 case-row submission on top of 300A).
+  if (APPENDIX_B_NAICS_PREFIXES.includes(p4)) return 'b'
+  if (APPENDIX_A_NAICS_PREFIXES.includes(p4)) return 'a'
+  return null
 }
