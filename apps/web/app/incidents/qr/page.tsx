@@ -230,7 +230,13 @@ function TokenRow({
   useEffect(() => {
     if (typeof window === 'undefined') return
     const url = `${window.location.origin}/report/${token.token}`
-    QRCode.toString(url, { type: 'svg', margin: 1, width: 200 })
+    QRCode.toString(url, {
+      type: 'svg',
+      margin: 1,
+      width: 200,
+      errorCorrectionLevel: 'H',
+      color: { dark: '#1B3A6B', light: '#ffffff' },
+    })
       .then(setQrSvg)
       .catch(() => setQrSvg(null))
   }, [token.token])
@@ -247,8 +253,15 @@ function TokenRow({
   .label { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: #5b6675; font-weight: 700; }
   h1 { font-size: 36px; margin: 8px 0; }
   .location { font-size: 24px; color: #214488; margin: 0 0 24px 0; }
-  .qr { display: inline-block; padding: 16px; border: 4px solid #214488; border-radius: 16px; }
-  .qr svg { width: 360px; height: 360px; }
+  .qr { display: inline-block; padding: 16px; border: 4px solid #214488; border-radius: 16px; position: relative; }
+  .qr svg { width: 360px; height: 360px; display: block; }
+  .qr .logo {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 76px; height: 76px; border-radius: 50%;
+    background: #FFD900; box-shadow: 0 0 0 6px #ffffff;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .qr .logo img { width: 56px; height: 56px; display: block; }
   .url { font-family: ui-monospace, Menlo, monospace; font-size: 14px; margin-top: 16px; color: #5b6675; word-break: break-all; }
   .protect { margin-top: 32px; font-size: 12px; color: #5b6675; max-width: 480px; margin-left: auto; margin-right: auto; line-height: 1.55; }
   @media print { body { padding: 0; } }
@@ -256,7 +269,10 @@ function TokenRow({
   <p class="label">SoteriaField · Anonymous report</p>
   <h1>Scan to report a safety concern</h1>
   <p class="location">${escapeHtml(token.label)}</p>
-  <div class="qr">${qrSvg ?? ''}</div>
+  <div class="qr">
+    ${qrSvg ?? ''}
+    <div class="logo"><img src="${window.location.origin}/icon.svg" alt="" /></div>
+  </div>
   <p class="url">${escapeHtml(url)}</p>
   <p class="protect">
     Anonymous reports are protected from retaliation under OSHA 1904.35(b)(1)(iv).
@@ -272,7 +288,20 @@ function TokenRow({
       <div className="flex flex-wrap items-start gap-4">
         <div className="shrink-0">
           {qrSvg
-            ? <div dangerouslySetInnerHTML={{ __html: qrSvg }} className="w-24 h-24 [&>svg]:w-full [&>svg]:h-full [&>svg]:block" />
+            ? (
+              <div className="relative w-24 h-24">
+                <div
+                  dangerouslySetInnerHTML={{ __html: qrSvg }}
+                  className="w-full h-full [&>svg]:w-full [&>svg]:h-full [&>svg]:block"
+                />
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-yellow ring-2 ring-white">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/icon.svg" alt="" className="h-5 w-5" />
+                  </div>
+                </div>
+              </div>
+            )
             : <div className="w-24 h-24 bg-slate-100 dark:bg-slate-800 rounded" />}
         </div>
         <div className="flex-1 min-w-0">
