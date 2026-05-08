@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Loader2, MessageSquare, Plus, Shield, EyeOff } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import BoardSearch from '@/components/safetyBoards/BoardSearch'
+import TrendingWidget from '@/components/safetyBoards/TrendingWidget'
 import { listBoards, createBoard, type SafetyBoardSummary } from '@/lib/safetyBoards/client'
 
 // /safety-boards — index of all boards in the active tenant. Admin
@@ -133,6 +134,8 @@ export default function SafetyBoardsIndex() {
           </div>
         </form>
       )}
+
+      <TrendingWidget />
 
       <BoardSearch />
 

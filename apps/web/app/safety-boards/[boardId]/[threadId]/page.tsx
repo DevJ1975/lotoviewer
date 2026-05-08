@@ -15,31 +15,14 @@ import AttachFiles, { type PendingAttachment } from '@/components/safetyBoards/A
 import AcknowledgementBanner from '@/components/safetyBoards/AcknowledgementBanner'
 import SpawnActionButton from '@/components/safetyBoards/SpawnActionButton'
 import SubscribeButton from '@/components/safetyBoards/SubscribeButton'
+import RichBody from '@/components/safetyBoards/RichBody'
+import ExportPdfButton from '@/components/safetyBoards/ExportPdfButton'
 import {
   getThread, listReplies, createReply, patchReply, deleteReply,
   patchThread, deleteThread,
   KIND_LABEL, ENTITY_LINK_LABEL, entityHref,
   type SafetyThreadDetail, type SafetyReply, type SafetyReaction,
 } from '@/lib/safetyBoards/client'
-
-const MENTION_RE = /@([a-zA-Z0-9._-]{2,64})/g
-
-function renderBody(body: string): React.ReactNode {
-  const out: React.ReactNode[] = []
-  let last = 0
-  body.replace(MENTION_RE, (match, _h, offset: number) => {
-    if (offset > last) out.push(body.slice(last, offset))
-    out.push(
-      <span key={`m-${offset}`} className="inline-block rounded bg-brand-navy/10 dark:bg-brand-yellow/15 px-1 text-brand-navy dark:text-brand-yellow font-medium">
-        {match}
-      </span>,
-    )
-    last = offset + match.length
-    return match
-  })
-  if (last < body.length) out.push(body.slice(last))
-  return out
-}
 
 function formatTimestamp(iso: string): string {
   return new Date(iso).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
@@ -225,7 +208,10 @@ export default function ThreadDetailPage() {
         <Link href={`/safety-boards/${boardId}`} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
           <ArrowLeft className="h-4 w-4" /> Back to threads
         </Link>
-        <SubscribeButton targetType="thread" targetId={thread.id} />
+        <div className="inline-flex items-center gap-2">
+          <ExportPdfButton threadId={thread.id} threadTitle={thread.title} />
+          <SubscribeButton targetType="thread" targetId={thread.id} />
+        </div>
       </div>
 
       {error && <p className="text-sm text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg px-3 py-2">{error}</p>}
@@ -317,9 +303,7 @@ export default function ThreadDetailPage() {
             </div>
           </div>
         ) : (
-          <div className="text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap break-words">
-            {renderBody(thread.body)}
-          </div>
+          <RichBody body={thread.body} className="text-sm text-slate-800 dark:text-slate-200" />
         )}
 
         {thread.attachments.length > 0 && (
@@ -416,9 +400,7 @@ export default function ThreadDetailPage() {
                     </div>
                   ) : (
                     <>
-                      <p className="mt-0.5 text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap break-words">
-                        {renderBody(r.body)}
-                      </p>
+                      <RichBody body={r.body} className="mt-0.5 text-sm text-slate-800 dark:text-slate-200" />
                       {r.attachments.length > 0 && (
                         <div className="mt-1 flex flex-wrap gap-2">
                           {r.attachments.map(a => (

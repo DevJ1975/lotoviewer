@@ -13,11 +13,12 @@ import AttachFiles, { type PendingAttachment } from '@/components/safetyBoards/A
 import BoardSearch from '@/components/safetyBoards/BoardSearch'
 import BoardAccessEditor from '@/components/safetyBoards/BoardAccessEditor'
 import SubscribeButton from '@/components/safetyBoards/SubscribeButton'
+import TemplatePicker, { TemplateFields, isTemplateValid } from '@/components/safetyBoards/TemplatePicker'
 import {
   listThreads, createThread,
   THREAD_KINDS, KIND_LABEL, KIND_DESCRIPTIONS, ENTITY_LINK_LABEL,
   type SafetyThreadSummary, type ThreadKind, type EntityLinkType,
-  type SafetyBoardSummary,
+  type SafetyBoardSummary, type ThreadTemplate,
 } from '@/lib/safetyBoards/client'
 
 // /safety-boards/[boardId] — thread list for a single board.
@@ -52,7 +53,18 @@ export default function BoardPage() {
   const [ackRequired, setAckRequired] = useState(false)
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
+  const [activeTemplate, setActiveTemplate] = useState<ThreadTemplate | null>(null)
+  const [templateValues, setTemplateValues] = useState<Record<string, string | number | boolean>>({})
   const [busy, setBusy]       = useState(false)
+
+  function applyTemplate(t: ThreadTemplate | null) {
+    setActiveTemplate(t)
+    setTemplateValues({})
+    if (!t) return
+    setKind(t.kind)
+    if (t.default_title) setTitle(t.default_title)
+    if (t.default_body)  setBody(t.default_body)
+  }
 
   const refresh = useCallback(async () => {
     if (!tenant?.id || !boardId) return
@@ -96,10 +108,16 @@ export default function BoardPage() {
     if (!tenant?.id || !boardId || !title.trim() || !bodyText.trim()) return
     setBusy(true); setError(null)
     try {
+      // If a template is active, fold its structured fields into the
+      // thread metadata under template_id + values.
+      const metadata = activeTemplate
+        ? { template_id: activeTemplate.id, values: templateValues }
+        : {}
       await createThread(tenant.id, boardId, {
         title: title.trim(),
         body:  bodyText.trim(),
         kind,
+        metadata,
         linked_entity_type: link?.type ?? null,
         linked_entity_id:   link?.id   ?? null,
         acknowledgement_required: isAdmin && ackRequired,
@@ -112,6 +130,8 @@ export default function BoardPage() {
       setAckRequired(false)
       setIsAnonymous(false)
       setAttachments([])
+      setActiveTemplate(null)
+      setTemplateValues({})
       setShowForm(false)
       await refresh()
     } catch (e) {
@@ -161,6 +181,8 @@ export default function BoardPage() {
 
       {showForm && (
         <form onSubmit={submitNew} className="rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+          <TemplatePicker boardId={boardId} onApply={applyTemplate} />
+          <TemplateFields template={activeTemplate} value={templateValues} onChange={setTemplateValues} />
           <div>
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Type</span>
             <div className="mt-1 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
@@ -254,7 +276,11 @@ export default function BoardPage() {
             </label>
           )}
           <div className="flex justify-end">
-            <button type="submit" disabled={busy || !title.trim() || !bodyText.trim()} className="rounded-lg bg-brand-navy text-white px-4 py-2 text-sm font-semibold hover:bg-brand-navy/90 disabled:opacity-50">
+            <button
+              type="submit"
+              disabled={busy || !title.trim() || !bodyText.trim() || !isTemplateValid(activeTemplate, templateValues)}
+              className="rounded-lg bg-brand-navy text-white px-4 py-2 text-sm font-semibold hover:bg-brand-navy/90 disabled:opacity-50"
+            >
               {busy ? 'Posting…' : 'Post thread'}
             </button>
           </div>

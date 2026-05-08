@@ -497,6 +497,89 @@ export async function setDigestPreference(tenantId: string, cadence: DigestCaden
   await readJson<unknown>(res)
 }
 
+// ─── Tier 3 fetchers ───────────────────────────────────────────────────────
+
+export interface TemplateFieldDef {
+  key:       string
+  label?:    string
+  type:      'string' | 'enum' | 'number' | 'boolean'
+  options?:  string[]    // for enum
+  required?: boolean
+}
+
+export interface ThreadTemplate {
+  id:             string
+  name:           string
+  description:    string | null
+  kind:           ThreadKind
+  default_title:  string | null
+  default_body:   string | null
+  fields_schema:  TemplateFieldDef[]
+  sort_order:     number
+}
+
+export async function listTemplates(tenantId: string, boardId: string): Promise<ThreadTemplate[]> {
+  const res = await fetch(`/api/safety-boards/${boardId}/templates`, {
+    headers: { ...tenantHeader(tenantId), ...(await authHeader()) },
+  })
+  const j = await readJson<{ templates: ThreadTemplate[] }>(res)
+  return j.templates
+}
+
+export async function createTemplate(tenantId: string, boardId: string, p: {
+  name: string
+  description?: string
+  kind: ThreadKind
+  default_title?: string
+  default_body?: string
+  fields_schema?: TemplateFieldDef[]
+  sort_order?: number
+}): Promise<ThreadTemplate> {
+  const res = await fetch(`/api/safety-boards/${boardId}/templates`, {
+    method: 'POST',
+    headers: await jsonHeaders(tenantId),
+    body: JSON.stringify(p),
+  })
+  const j = await readJson<{ template: ThreadTemplate }>(res)
+  return j.template
+}
+
+export async function deleteTemplate(tenantId: string, boardId: string, templateId: string): Promise<void> {
+  const u = new URL(`/api/safety-boards/${boardId}/templates`, window.location.origin)
+  u.searchParams.set('id', templateId)
+  const res = await fetch(u.pathname + u.search, {
+    method: 'DELETE',
+    headers: { ...tenantHeader(tenantId), ...(await authHeader()) },
+  })
+  await readJson<unknown>(res)
+}
+
+export interface TrendingRow {
+  thread_id:           string
+  board_id:            string
+  kind:                ThreadKind
+  title:               string
+  pinned:              boolean
+  locked:              boolean
+  is_anonymous:        boolean
+  acknowledgement_required: boolean
+  last_reply_at:       string
+  created_at:          string
+  reply_count_7d:      number
+  reaction_count_7d:   number
+  score:               number
+}
+
+export async function fetchTrending(tenantId: string, limit = 10): Promise<TrendingRow[]> {
+  const u = new URL('/api/safety-boards/trending', window.location.origin)
+  u.searchParams.set('limit', String(limit))
+  const res = await fetch(u.pathname + u.search, {
+    headers: { ...tenantHeader(tenantId), ...(await authHeader()) },
+  })
+  const j = await readJson<{ trending: TrendingRow[] }>(res)
+  return j.trending
+}
+
 export async function listThreadsByEntity(
   tenantId: string, type: EntityLinkType, id: string,
 ): Promise<Array<{ id: string; board_id: string; kind: ThreadKind; title: string; pinned: boolean; locked: boolean; last_reply_at: string }>> {
