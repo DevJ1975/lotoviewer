@@ -64,8 +64,17 @@ const RESPONSE_SCHEMA = {
         { type: 'null' },
       ],
     },
-    confidence: { type: 'number', minimum: 0, maximum: 1 },
-    reasoning:  { type: 'string', minLength: 1 },
+    // Confidence in [0, 1]. We do NOT use the JSON-schema `minimum` /
+    // `maximum` keywords here because Anthropic's structured-output
+    // endpoint rejects them ("output_config.format.schema: For 'number'
+    // type, properties maximum, minimum are not supported"). The
+    // intent is conveyed via the description, and the route handler
+    // clamps to [0, 1] server-side after parsing (see line ~187).
+    confidence:   { type: 'number', description: 'Confidence in [0, 1]; the server clamps any out-of-range values.' },
+    // Same reason: `minLength` is not supported on the Anthropic
+    // structured-output schema. The handler treats empty reasoning as
+    // a soft failure (renders blank).
+    reasoning:    { type: 'string', description: 'One- to two-sentence justification. Required.' },
     missing_info: { type: 'array', items: { type: 'string' } },
   },
 }
