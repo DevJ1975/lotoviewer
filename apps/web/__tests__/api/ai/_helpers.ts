@@ -93,6 +93,26 @@ export const messagesCreateMock = vi.fn(async (_args: AnthropicCreateArgs) => {
   return next.value
 })
 
+// ── getTenantApiKey ──────────────────────────────────────────────────
+// The route handlers short-circuit with 503 if getTenantApiKey()
+// returns empty. Default the mock to a well-formed-looking key so
+// existing tests don't trip the new gate; tests for the
+// missing-key path use returnEmptyApiKey() below.
+export const getTenantApiKeyMock = vi.fn(async () => 'sk-ant-test-' + 'a'.repeat(40))
+
+vi.mock('@/lib/ai/getTenantApiKey', () => ({
+  getTenantApiKey: (tenantId: string | null) => getTenantApiKeyMock(tenantId),
+  // Re-export the shape validator with its real implementation so
+  // anything that imports it directly still gets the production
+  // behavior (currently nothing in tests does, but the module's
+  // public surface stays stable).
+  looksLikeAnthropicKey: (s: string) => s.startsWith('sk-ant-') && s.length >= 30,
+}))
+
+export function returnEmptyApiKey() {
+  getTenantApiKeyMock.mockResolvedValueOnce('')
+}
+
 vi.mock('@anthropic-ai/sdk', () => {
   class MockAnthropic {
     messages = { create: messagesCreateMock }
@@ -139,8 +159,12 @@ export function resetAiMocks() {
   checkAiRateLimitMock.mockReset()
   logAiInvocationMock.mockReset()
   messagesCreateMock.mockClear()
+  getTenantApiKeyMock.mockReset()
   anthropicQueue.length = 0
   // Default happy-path setup; individual tests can override.
   gateOk()
   rateLimitOk()
+  // Restore the default well-formed key — getTenantApiKeyMock.mockReset()
+  // wipes the value above, so reinstall it on every reset.
+  getTenantApiKeyMock.mockResolvedValue('sk-ant-test-' + 'a'.repeat(40))
 }
