@@ -30,6 +30,9 @@ interface Establishment {
   ita_establishment_id:        string | null
   /** API never returns the raw token. UI only sees a boolean. */
   has_ita_api_token:           boolean
+  ita_auto_submit_enabled:     boolean
+  ita_auto_submit_last_attempt_at: string | null
+  ita_auto_submit_last_error:  string | null
 }
 
 export default function EstablishmentsPage() {
@@ -212,13 +215,15 @@ function EstablishmentRow({
   const [itaId, setItaId] = useState<string>(e.ita_establishment_id ?? '')
   const [newToken, setNewToken] = useState<string>('')
   const [showTokenInput, setShowTokenInput] = useState(false)
+  const [autoSubmit, setAutoSubmit] = useState<boolean>(e.ita_auto_submit_enabled)
 
   async function saveItaCreds() {
     setBusy(true); setError(null)
     try {
       const headers = await authedHeaders()
       const patch: Record<string, unknown> = {
-        ita_establishment_id: itaId.trim() || null,
+        ita_establishment_id:    itaId.trim() || null,
+        ita_auto_submit_enabled: autoSubmit,
       }
       // Only send token field if user actually typed something — empty
       // string would clear an existing token, which the user has to opt
@@ -401,6 +406,30 @@ function EstablishmentRow({
             Save
           </button>
         </div>
+        {/* Auto-submit toggle. Disabled until creds present. */}
+        <label className="mt-3 flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={autoSubmit}
+            disabled={!e.has_ita_api_token || !itaId.trim()}
+            onChange={ev => setAutoSubmit(ev.target.checked)}
+            className="h-3.5 w-3.5 rounded border-slate-300 dark:border-slate-700"
+          />
+          <span className="text-[11px] text-slate-700 dark:text-slate-300">
+            Auto-submit certified 300A to OSHA ITA on the daily cron
+            <span className="text-slate-400 dark:text-slate-500"> · runs daily 16:00 UTC</span>
+          </span>
+        </label>
+        {e.ita_auto_submit_last_error && (
+          <p className="mt-1 text-[11px] text-rose-600">
+            Last auto-submit attempt failed: {e.ita_auto_submit_last_error}
+          </p>
+        )}
+        {e.ita_auto_submit_last_attempt_at && !e.ita_auto_submit_last_error && (
+          <p className="mt-1 text-[11px] text-emerald-600">
+            Last auto-submit attempt: {new Date(e.ita_auto_submit_last_attempt_at).toLocaleString()}
+          </p>
+        )}
         {e.has_ita_api_token && (
           <button
             type="button"

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   buildItaSubmissionPayload,
   classifyItaCoverage,
+  appendixForNaics,
   type Osha300ASummary,
 } from '../oshaForms'
 
@@ -110,5 +111,36 @@ describe('classifyItaCoverage', () => {
     expect(classifyItaCoverage({ annual_avg_employees: 19, appendix: 'a' })).toBe('not_required')
     expect(classifyItaCoverage({ annual_avg_employees: 99, appendix: 'b' })).toBe('not_required')
     expect(classifyItaCoverage({ annual_avg_employees: 100, appendix: null })).toBe('not_required')
+  })
+})
+
+describe('appendixForNaics', () => {
+  it('returns null when code is missing or too short', () => {
+    expect(appendixForNaics(null)).toBeNull()
+    expect(appendixForNaics(undefined)).toBeNull()
+    expect(appendixForNaics('')).toBeNull()
+    expect(appendixForNaics('123')).toBeNull()
+  })
+
+  it('matches a 6-digit code by 4-digit prefix', () => {
+    // Logging — appears on both Appendix A and B; B wins (stricter rule).
+    expect(appendixForNaics('113310')).toBe('b')
+    // 311615 (poultry processing) → 3116 → Appendix B (animal slaughter)
+    expect(appendixForNaics('311615')).toBe('b')
+    // 236118 (residential remodelers) → 2361 → Appendix A
+    expect(appendixForNaics('236118')).toBe('a')
+    // 622110 (general medical & surgical hospitals) → 6221 → on both, B wins
+    expect(appendixForNaics('622110')).toBe('b')
+  })
+
+  it('strips non-digits and tolerates whitespace', () => {
+    expect(appendixForNaics(' 236-118 ')).toBe('a')
+  })
+
+  it('returns null for codes outside the seeded tables (size-only path applies)', () => {
+    // 541330 (Engineering Services) — not in either appendix.
+    expect(appendixForNaics('541330')).toBeNull()
+    // 722511 (Full-Service Restaurants) — not in either appendix.
+    expect(appendixForNaics('722511')).toBeNull()
   })
 })
