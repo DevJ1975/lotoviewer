@@ -63,9 +63,16 @@ export async function GET(req: Request, ctx: RouteContext) {
     const t = await loadThread(admin, threadId, boardId, gate.tenantId)
     if (!t || t.deleted_at) return NextResponse.json({ error: 'Thread not found' }, { status: 404 })
 
-    const [{ data: author }, { data: reactions }] = await Promise.all([
-      admin.from('profiles').select('id, email, full_name, avatar_url').eq('id', t.author_user_id).maybeSingle(),
+    const isAnon = (t as ThreadRow & { is_anonymous?: boolean }).is_anonymous === true
+    const [{ data: author }, { data: reactions }, { data: attachments }, { data: actionsFromThread }] = await Promise.all([
+      isAnon
+        ? Promise.resolve({ data: null })
+        : admin.from('profiles').select('id, email, full_name, avatar_url').eq('id', t.author_user_id).maybeSingle(),
       admin.from('safety_board_reactions').select('user_id, emoji').eq('target_type', 'thread').eq('target_id', threadId).eq('tenant_id', gate.tenantId),
+      admin.from('safety_board_attachments').select('id, storage_path, mime_type, size_bytes, width, height, filename').eq('target_type', 'thread').eq('target_id', threadId).eq('tenant_id', gate.tenantId),
+      // CAPAs that were spawned from this thread (Tier 1 #3 — closes
+      // the discussion → action loop).
+      admin.from('incident_actions').select('id, description, status, due_at, owner_user_id, incident_id').eq('source_thread_id', threadId).eq('tenant_id', gate.tenantId),
     ])
     const a = author as { email: string | null; full_name: string | null; avatar_url: string | null } | null
     const byEmoji = new Map<string, string[]>()
@@ -79,10 +86,13 @@ export async function GET(req: Request, ctx: RouteContext) {
     return NextResponse.json({
       thread: {
         ...t,
+        author_user_id: isAnon ? null : t.author_user_id,
         author_email: a?.email ?? null,
         author_full_name: a?.full_name ?? null,
         author_avatar_url: a?.avatar_url ?? null,
         reactions: reactionList,
+        attachments: attachments ?? [],
+        spawned_actions: actionsFromThread ?? [],
       },
     })
   } catch (e) {
@@ -99,8 +109,21 @@ export async function PATCH(req: Request, ctx: RouteContext) {
   const gate = await requireTenantMember(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
-  let body: { title?: string; body?: string; pinned?: boolean; locked?: boolean }
+  let body: {
+    title?: string
+    body?: string
+    pinned?: boolean
+    locked?: boolean
+    kind?: string
+    metadata?: Record<string, unknown>
+    linked_entity_type?: string | null
+    linked_entity_id?: string | null
+    acknowledgement_required?: boolean
+  }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+
+  const KINDS = ['hazard_report','near_miss_reflection','lesson_learned','alert','question','discussion'] as const
+  const LINK_TYPES_LOCAL = ['incident','near_miss','equipment','hot_work_permit','confined_space','incident_action','jha','toolbox_talk'] as const
 
   try {
     const admin = supabaseAdmin()
@@ -110,12 +133,14 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     const isPriv = gate.role === 'owner' || gate.role === 'admin' || gate.role === 'superadmin'
     const isAuthor = t.author_user_id === gate.userId
     const wantsContentEdit = typeof body.title === 'string' || typeof body.body === 'string'
-    const wantsModerate    = 'pinned' in body || 'locked' in body
+                          || 'kind' in body || 'metadata' in body
+                          || 'linked_entity_type' in body || 'linked_entity_id' in body
+    const wantsModerate    = 'pinned' in body || 'locked' in body || 'acknowledgement_required' in body
     if (wantsContentEdit && !(isAuthor || isPriv)) {
       return NextResponse.json({ error: 'Only the author or a tenant admin can edit' }, { status: 403 })
     }
     if (wantsModerate && !isPriv) {
-      return NextResponse.json({ error: 'Pin/lock is admin-only' }, { status: 403 })
+      return NextResponse.json({ error: 'Pin / lock / acknowledgement-required is admin-only' }, { status: 403 })
     }
     if (t.locked && !isPriv) {
       return NextResponse.json({ error: 'Thread is locked' }, { status: 403 })
@@ -134,6 +159,33 @@ export async function PATCH(req: Request, ctx: RouteContext) {
       const tokens = extractMentionTokens(v)
       const resolved = await resolveMentions({ client: admin, tenantId: gate.tenantId, tokens })
       update.body_mentions = resolved.map(m => m.user_id).filter(uid => uid !== gate.userId)
+    }
+    if (typeof body.kind === 'string') {
+      if (!(KINDS as readonly string[]).includes(body.kind)) {
+        return NextResponse.json({ error: `kind must be one of ${KINDS.join(', ')}` }, { status: 400 })
+      }
+      update.kind = body.kind
+    }
+    if (body.metadata && typeof body.metadata === 'object') {
+      update.metadata = body.metadata
+    }
+    if ('linked_entity_type' in body || 'linked_entity_id' in body) {
+      const lt = body.linked_entity_type ?? null
+      const lid = body.linked_entity_id ?? null
+      if ((lt && !lid) || (!lt && lid)) {
+        return NextResponse.json({ error: 'linked_entity_type and linked_entity_id must be set together' }, { status: 400 })
+      }
+      if (lt && !(LINK_TYPES_LOCAL as readonly string[]).includes(lt)) {
+        return NextResponse.json({ error: `linked_entity_type must be one of ${LINK_TYPES_LOCAL.join(', ')}` }, { status: 400 })
+      }
+      if (lid && !UUID_RE.test(lid)) {
+        return NextResponse.json({ error: 'linked_entity_id must be a uuid' }, { status: 400 })
+      }
+      update.linked_entity_type = lt
+      update.linked_entity_id = lid
+    }
+    if (typeof body.acknowledgement_required === 'boolean') {
+      update.acknowledgement_required = body.acknowledgement_required
     }
     if (typeof body.pinned === 'boolean') update.pinned = body.pinned
     if (typeof body.locked === 'boolean') update.locked = body.locked

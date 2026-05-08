@@ -29,6 +29,7 @@ interface ReplyRow {
   edited_at: string | null
   deleted_at: string | null
   created_at: string
+  is_anonymous: boolean
 }
 
 export async function GET(req: Request, ctx: RouteContext) {
@@ -56,9 +57,11 @@ export async function GET(req: Request, ctx: RouteContext) {
 
     const ids       = replies.map(r => r.id)
     const authorIds = Array.from(new Set(replies.map(r => r.author_user_id)))
-    const [{ data: authors }, { data: reactions }] = await Promise.all([
+    const [{ data: authors }, { data: reactions }, { data: attachments }] = await Promise.all([
       admin.from('profiles').select('id, email, full_name, avatar_url').in('id', authorIds),
       admin.from('safety_board_reactions').select('target_id, user_id, emoji')
+        .eq('target_type', 'reply').in('target_id', ids).eq('tenant_id', gate.tenantId),
+      admin.from('safety_board_attachments').select('id, target_id, storage_path, mime_type, size_bytes, width, height, filename')
         .eq('target_type', 'reply').in('target_id', ids).eq('tenant_id', gate.tenantId),
     ])
     const authorById = new Map<string, { email: string | null; full_name: string | null; avatar_url: string | null }>()
@@ -73,10 +76,16 @@ export async function GET(req: Request, ctx: RouteContext) {
       byEmoji.set(r.emoji, arr)
       reactByReply.set(r.target_id, byEmoji)
     }
+    const attByReply = new Map<string, Array<{ id: string; storage_path: string; mime_type: string; size_bytes: number; width: number | null; height: number | null; filename: string | null }>>()
+    for (const att of (attachments ?? []) as Array<{ id: string; target_id: string; storage_path: string; mime_type: string; size_bytes: number; width: number | null; height: number | null; filename: string | null }>) {
+      const list = attByReply.get(att.target_id) ?? []
+      list.push({ id: att.id, storage_path: att.storage_path, mime_type: att.mime_type, size_bytes: att.size_bytes, width: att.width, height: att.height, filename: att.filename })
+      attByReply.set(att.target_id, list)
+    }
 
     return NextResponse.json({
       replies: replies.map(r => {
-        const a = authorById.get(r.author_user_id)
+        const a = !r.is_anonymous ? authorById.get(r.author_user_id) : null
         const byEmoji = reactByReply.get(r.id)
         const reactionList = byEmoji
           ? Array.from(byEmoji.entries()).map(([emoji, user_ids]) => ({ emoji, user_ids, count: user_ids.length }))
@@ -84,7 +93,7 @@ export async function GET(req: Request, ctx: RouteContext) {
         return {
           id: r.id,
           thread_id: r.thread_id,
-          author_user_id: r.author_user_id,
+          author_user_id: r.is_anonymous ? null : r.author_user_id,
           author_email: a?.email ?? null,
           author_full_name: a?.full_name ?? null,
           author_avatar_url: a?.avatar_url ?? null,
@@ -94,6 +103,8 @@ export async function GET(req: Request, ctx: RouteContext) {
           edited_at: r.edited_at,
           created_at: r.created_at,
           reactions: reactionList,
+          attachments: attByReply.get(r.id) ?? [],
+          is_anonymous: r.is_anonymous,
         }
       }),
     })
@@ -111,7 +122,7 @@ export async function POST(req: Request, ctx: RouteContext) {
   const gate = await requireTenantMember(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
-  let body: { body?: string; parent_reply_id?: string }
+  let body: { body?: string; parent_reply_id?: string; attachment_ids?: string[]; is_anonymous?: boolean }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
   const text = (body.body ?? '').trim()
   if (text.length < 1 || text.length > 20000) {
@@ -120,21 +131,35 @@ export async function POST(req: Request, ctx: RouteContext) {
   if (body.parent_reply_id && !UUID_RE.test(body.parent_reply_id)) {
     return NextResponse.json({ error: 'parent_reply_id must be a uuid' }, { status: 400 })
   }
+  const attachmentIds = (body.attachment_ids ?? []).filter(s => UUID_RE.test(s))
 
   try {
     const admin = supabaseAdmin()
     const { data: thread } = await admin
       .from('safety_board_threads')
-      .select('id, board_id, locked, deleted_at, author_user_id, title')
+      .select('id, board_id, locked, deleted_at, author_user_id, title, is_anonymous')
       .eq('id', threadId)
       .eq('board_id', boardId)
       .eq('tenant_id', gate.tenantId)
       .maybeSingle()
-    const t = thread as { id: string; board_id: string; locked: boolean; deleted_at: string | null; author_user_id: string; title: string } | null
+    const t = thread as { id: string; board_id: string; locked: boolean; deleted_at: string | null; author_user_id: string; title: string; is_anonymous: boolean } | null
     if (!t || t.deleted_at) return NextResponse.json({ error: 'Thread not found' }, { status: 404 })
     if (t.locked) {
       const isPriv = gate.role === 'owner' || gate.role === 'admin' || gate.role === 'superadmin'
       if (!isPriv) return NextResponse.json({ error: 'Thread is locked' }, { status: 403 })
+    }
+    // Verify the board allows anonymous if this reply is anonymous.
+    if (body.is_anonymous) {
+      const { data: board } = await admin
+        .from('safety_boards')
+        .select('allow_anonymous')
+        .eq('id', t.board_id)
+        .eq('tenant_id', gate.tenantId)
+        .maybeSingle()
+      const allow = (board as { allow_anonymous: boolean } | null)?.allow_anonymous === true
+      if (!allow) {
+        return NextResponse.json({ error: 'This board does not allow anonymous posts.' }, { status: 403 })
+      }
     }
 
     if (body.parent_reply_id) {
@@ -163,6 +188,7 @@ export async function POST(req: Request, ctx: RouteContext) {
         body:            text,
         body_mentions:   mentionedIds,
         parent_reply_id: body.parent_reply_id ?? null,
+        is_anonymous:    body.is_anonymous === true,
       })
       .select('*')
       .single()
@@ -171,6 +197,16 @@ export async function POST(req: Request, ctx: RouteContext) {
       return NextResponse.json({ error: insertErr.message }, { status: 500 })
     }
     const reply = (inserted as unknown) as ReplyRow
+
+    if (attachmentIds.length > 0) {
+      await admin
+        .from('safety_board_attachments')
+        .update({ target_type: 'reply', target_id: reply.id })
+        .in('id', attachmentIds)
+        .eq('tenant_id', gate.tenantId)
+        .eq('uploaded_by', gate.userId)
+        .is('target_id', null)
+    }
 
     if (mentionedIds.length > 0) {
       await admin.from('mentions').insert(mentionedIds.map(uid => ({
