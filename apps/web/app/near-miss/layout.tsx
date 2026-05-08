@@ -2,10 +2,10 @@ import type { ReactNode } from 'react'
 import ModuleGuard from '@/components/ModuleGuard'
 import ModuleHeaderAccent from '@/components/ModuleHeaderAccent'
 
-export default function ConfinedSpacesLayout({ children }: { children: ReactNode }) {
+export default function NearMissLayout({ children }: { children: ReactNode }) {
   return (
-    <ModuleGuard moduleId="confined-spaces">
-      <ModuleHeaderAccent moduleId="confined-spaces" />
+    <ModuleGuard moduleId="near-miss">
+      <ModuleHeaderAccent moduleId="near-miss" />
       {children}
     </ModuleGuard>
   )

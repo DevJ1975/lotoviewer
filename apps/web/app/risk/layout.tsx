@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import ModuleGuard from '@/components/ModuleGuard'
+import ModuleHeaderAccent from '@/components/ModuleHeaderAccent'
 
 // Module gate for /risk/* routes. Until the heat map ships in Slice 2,
 // the risk-assessment feature is comingSoon:true in the FEATURES
@@ -12,5 +13,10 @@ import ModuleGuard from '@/components/ModuleGuard'
 // RLS independently blocks any risk-table reads from a tenant that
 // doesn't have the data — this guard is the UX layer.
 export default function RiskLayout({ children }: { children: ReactNode }) {
-  return <ModuleGuard moduleId="risk-assessment">{children}</ModuleGuard>
+  return (
+    <ModuleGuard moduleId="risk-assessment">
+      <ModuleHeaderAccent moduleId="risk-assessment" />
+      {children}
+    </ModuleGuard>
+  )
 }
