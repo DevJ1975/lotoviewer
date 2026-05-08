@@ -20,8 +20,10 @@ import AppDrawer from '@/components/AppDrawer'
 import TenantHeaderPill from '@/components/TenantHeaderPill'
 import SupportBot from '@/components/SupportBot'
 import ChatHeaderButton from '@/components/chat/ChatHeaderButton'
+import SoteriaLogo from '@/components/SoteriaLogo'
 import { useAuth } from '@/components/AuthProvider'
 import { requestPersistentStorage } from '@/lib/platform'
+import { getModuleVisualsForPath } from '@/lib/moduleVisuals'
 
 const PUBLIC_PATHS = new Set(['/login', '/welcome'])
 
@@ -48,6 +50,12 @@ export default function AppChrome({ children }: { children: ReactNode }) {
     if (userId) requestPersistentStorage()
   }, [userId])
 
+  // Resolve the accent color for the active module (matches the
+  // longest-prefix module href). Falls back to slate on the dashboard
+  // and any non-module route. The strip sits below the chrome header
+  // and stays sticky alongside it as a persistent "you are here" cue.
+  const { classes: accentClasses } = getModuleVisualsForPath(pathname)
+
   if (hideChrome) return <><PwaRegister />{children}</>
 
   return (
@@ -68,13 +76,8 @@ export default function AppChrome({ children }: { children: ReactNode }) {
               <Menu className="h-5 w-5" />
             </button>
 
-            <Link href="/" className="flex items-center gap-2 shrink-0 min-w-0">
-              <div className="w-7 h-7 rounded-md flex items-center justify-center font-bold text-xs bg-brand-yellow text-brand-navy tracking-tight shrink-0">
-                SL
-              </div>
-              <span className="hidden xs:inline sm:inline text-white font-semibold text-[15px] tracking-tight truncate">
-                Soteria <span className="text-brand-yellow font-bold tracking-wider">FIELD</span>
-              </span>
+            <Link href="/" className="flex items-center shrink-0 min-w-0" aria-label="SoteriaField home">
+              <SoteriaLogo variant="color" width={160} priority className="h-9 w-auto" />
             </Link>
 
             <TenantHeaderPill />
@@ -96,6 +99,15 @@ export default function AppChrome({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
+
+      {/* Module accent strip — picks up the active module's color so the
+          user always knows which module they're in, even when scrolling
+          through long content. Sticks below the chrome header. */}
+      <div
+        className={`h-[3px] sticky z-30 transition-colors ${accentClasses.strip}`}
+        style={{ top: 'calc(3.5rem + env(safe-area-inset-top))' }}
+        aria-hidden="true"
+      />
 
       <AppDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
 

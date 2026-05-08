@@ -22,6 +22,16 @@
 
 export type FeatureCategory = 'safety' | 'reports' | 'admin'
 
+// Palette keys used by the drawer + chrome accent strip + per-module
+// header pill. Stored as a string union (not hex) so the web-only
+// resolver in apps/web/lib/moduleVisuals.ts can map each one to a
+// LITERAL Tailwind className — Tailwind 4's JIT scanner will only
+// pull in classes it can see verbatim in source. Adding a new color
+// here means adding the matching row in MODULE_COLOR_CLASSES.
+export type ModuleColor =
+  | 'red' | 'amber' | 'orange' | 'purple' | 'rose'
+  | 'teal' | 'sky' | 'indigo' | 'emerald' | 'slate'
+
 export interface FeatureDef {
   id:          string
   name:        string
@@ -51,6 +61,14 @@ export interface FeatureDef {
   // Allows href:null without tripping the "live features must be
   // routable" registry invariant.
   internal?:   boolean
+  // Lucide icon name (e.g. 'Lock', 'Flame'). Stored as a string so
+  // packages/core stays free of lucide-react (web vs. native split).
+  // Resolved to a component via apps/web/lib/moduleVisuals.ts. Set on
+  // top-level modules only — children inherit visually.
+  icon?:       string
+  // Palette key for drawer / chrome / per-module-header accents. Same
+  // posture as `icon` — set on top-level modules; children inherit.
+  color?:      ModuleColor
 }
 
 // ─── The catalog ───────────────────────────────────────────────────────────
@@ -72,6 +90,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'safety',
     enabled:     true,
     comingSoon:  false,
+    icon:        'Lock',
+    color:       'red',
   },
   {
     id:          'loto-status',
@@ -158,6 +178,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'safety',
     enabled:     true,
     comingSoon:  false,
+    icon:        'AlertTriangle',
+    color:       'amber',
   },
   {
     id:          'risk-heatmap',
@@ -214,6 +236,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'safety',
     enabled:     true,
     comingSoon:  false,
+    icon:        'DoorClosed',
+    color:       'purple',
   },
   {
     id:          'cs-status-board',
@@ -251,6 +275,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'safety',
     enabled:     true,
     comingSoon:  false,
+    icon:        'Siren',
+    color:       'rose',
   },
   {
     id:          'incidents-new',
@@ -315,6 +341,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'safety',
     enabled:     true,
     comingSoon:  false,
+    icon:        'AlertOctagon',
+    color:       'emerald',
   },
   {
     id:          'hot-work',
@@ -324,6 +352,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'safety',
     enabled:     true,
     comingSoon:  false,
+    icon:        'Flame',
+    color:       'orange',
   },
   {
     id:          'hot-work-status',
@@ -343,6 +373,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'safety',
     enabled:     true,
     comingSoon:  false,
+    icon:        'ClipboardList',
+    color:       'teal',
   },
 
   // ── Toolbox Talks module ───────────────────────────────────────────────
@@ -358,6 +390,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'safety',
     enabled:     true,
     comingSoon:  false,
+    icon:        'Megaphone',
+    color:       'sky',
   },
 
   // ── Reports / oversight ─────────────────────────────────────────────────
@@ -372,6 +406,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'reports',
     enabled:     true,
     comingSoon:  false,
+    icon:        'BarChart3',
+    color:       'slate',
   },
   {
     id:          'reports-insights',
@@ -381,6 +417,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'reports',
     enabled:     true,
     comingSoon:  false,
+    icon:        'Sparkles',
+    color:       'slate',
   },
   {
     id:          'reports-compliance-bundle',
@@ -390,6 +428,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'reports',
     enabled:     true,
     comingSoon:  false,
+    icon:        'FileArchive',
+    color:       'slate',
   },
   {
     id:          'reports-inspector',
@@ -399,6 +439,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'reports',
     enabled:     true,
     comingSoon:  false,
+    icon:        'ShieldCheck',
+    color:       'slate',
   },
   {
     id:          'admin-loto-devices',
@@ -408,6 +450,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'admin',
     enabled:     true,
     comingSoon:  false,
+    icon:        'Tag',
+    color:       'slate',
   },
   {
     id:          'admin-workers',
@@ -417,6 +461,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'admin',
     enabled:     true,
     comingSoon:  false,
+    icon:        'Users',
+    color:       'slate',
   },
 
   // ── Admin / configuration ───────────────────────────────────────────────
@@ -428,6 +474,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'admin',
     enabled:     true,
     comingSoon:  false,
+    icon:        'Settings',
+    color:       'slate',
   },
   {
     id:          'admin-webhooks',
@@ -437,6 +485,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'admin',
     enabled:     true,
     comingSoon:  false,
+    icon:        'Webhook',
+    color:       'slate',
   },
   {
     id:          'admin-training',
@@ -446,6 +496,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'admin',
     enabled:     true,
     comingSoon:  false,
+    icon:        'GraduationCap',
+    color:       'slate',
   },
   {
     id:          'admin-hygiene-log',
@@ -455,6 +507,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'admin',
     enabled:     true,
     comingSoon:  false,
+    icon:        'Brush',
+    color:       'slate',
   },
   {
     id:          'settings-notifications',
@@ -464,6 +518,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'admin',
     enabled:     true,
     comingSoon:  false,
+    icon:        'Bell',
+    color:       'slate',
   },
   {
     id:          'safety-boards',
@@ -473,6 +529,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'safety',
     enabled:     true,
     comingSoon:  false,
+    icon:        'MessageSquare',
+    color:       'indigo',
   },
   {
     id:          'support',
@@ -482,6 +540,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'admin',
     enabled:     true,
     comingSoon:  false,
+    icon:        'LifeBuoy',
+    color:       'slate',
   },
 ]
 
