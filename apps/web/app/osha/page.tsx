@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, AlertTriangle, FileText, Download, Settings, ShieldCheck } from 'lucide-react'
+import { Loader2, AlertTriangle, FileText, Download, Settings, ShieldCheck, Send } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import OshaDeadlineBanner from '@/app/_components/OshaDeadlineBanner'
@@ -29,12 +29,16 @@ interface EstablishmentRow {
   hours_employees_by_year:     Record<string, { employees?: number; hours?: number }> | null
   certifying_executive_name:   string | null
   certifying_executive_title:  string | null
+  ita_establishment_id:        string | null
+  has_ita_api_token:           boolean
 }
 
 interface CertRow {
-  certified_at: string | null
+  certified_at:        string | null
   certified_typed_name: string | null
-  totals_json: Osha300ASummary | null
+  totals_json:         Osha300ASummary | null
+  submitted_to_ita_at: string | null
+  ita_submission_id:   string | null
 }
 
 export default function OshaDashboardPage() {
@@ -171,6 +175,41 @@ export default function OshaDashboardPage() {
     })()
   }
 
+  async function submitToIta() {
+    if (!estId) { setError('Pick an establishment first'); return }
+    const est = establishments.find(e => e.id === estId)
+    if (!est?.ita_establishment_id || !est?.has_ita_api_token) {
+      setError('This establishment is missing its OSHA Establishment ID or API token. Set them on the Establishments page.')
+      return
+    }
+    if (!cert?.certified_at) { setError('Certify the 300A first.'); return }
+    if (!confirm(`Submit the ${year} 300A to OSHA ITA? This is sent to OSHA and cannot be retracted from the app.`)) return
+    setBusy(true); setError(null)
+    try {
+      const headers = await authedHeaders()
+      const res = await fetch('/api/osha/300a/submit-to-ita', {
+        method: 'POST', headers,
+        body: JSON.stringify({ year, establishment_id: estId }),
+      })
+      const body = await res.json()
+      if (!res.ok) {
+        // 501 = stub mode (env not configured) — show the would-have-been
+        // payload so the admin can verify shape pre-go-live.
+        if (res.status === 501) {
+          setError(body.error + (body.hint ? ` ${body.hint}` : ''))
+        } else {
+          throw new Error(body.error ?? `HTTP ${res.status}`)
+        }
+      } else {
+        await load()
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   function downloadIta() {
     if (!tenant?.id) return
     void (async () => {
@@ -270,6 +309,8 @@ export default function OshaDashboardPage() {
             year={year}
             certified={Boolean(cert?.certified_at)}
             certifiedAt={cert?.certified_at ?? null}
+            itaSubmittedAt={cert?.submitted_to_ita_at ?? null}
+            itaApplicable={Boolean(establishments.find(e => e.id === estId)?.ita_establishment_id)}
           />
 
           <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -307,6 +348,34 @@ export default function OshaDashboardPage() {
             >
               <Download className="h-3.5 w-3.5" />
               Export ITA CSV
+            </button>
+            {/* Submit-to-OSHA-ITA. Disabled until certified + the
+                selected establishment has both ID + token configured.
+                If the env-side ITA endpoint is not yet configured the
+                route returns 501 with a clear "stub mode" message. */}
+            <button
+              type="button"
+              disabled={
+                busy
+                || !cert?.certified_at
+                || Boolean(cert?.submitted_to_ita_at)
+                || !(establishments.find(e => e.id === estId)?.has_ita_api_token)
+                || !(establishments.find(e => e.id === estId)?.ita_establishment_id)
+              }
+              onClick={() => void submitToIta()}
+              title={
+                cert?.submitted_to_ita_at
+                  ? `Submitted ${new Date(cert.submitted_to_ita_at).toLocaleString()}`
+                  : !cert?.certified_at
+                    ? 'Certify the 300A first'
+                    : !(establishments.find(e => e.id === estId)?.has_ita_api_token)
+                      ? 'Set the ITA token in Settings → Establishments'
+                      : 'POST the certified 300A to OSHA ITA'
+              }
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 text-white px-3 py-1.5 text-xs font-semibold hover:bg-emerald-700 disabled:opacity-40"
+            >
+              <Send className="h-3.5 w-3.5" />
+              {cert?.submitted_to_ita_at ? 'Submitted to OSHA' : 'Submit to OSHA ITA'}
             </button>
           </section>
 

@@ -27,6 +27,9 @@ interface Establishment {
   certifying_executive_name:   string | null
   certifying_executive_title:  string | null
   is_partial_year:             boolean
+  ita_establishment_id:        string | null
+  /** API never returns the raw token. UI only sees a boolean. */
+  has_ita_api_token:           boolean
 }
 
 export default function EstablishmentsPage() {
@@ -205,6 +208,58 @@ function EstablishmentRow({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // ITA submission credential editing.
+  const [itaId, setItaId] = useState<string>(e.ita_establishment_id ?? '')
+  const [newToken, setNewToken] = useState<string>('')
+  const [showTokenInput, setShowTokenInput] = useState(false)
+
+  async function saveItaCreds() {
+    setBusy(true); setError(null)
+    try {
+      const headers = await authedHeaders()
+      const patch: Record<string, unknown> = {
+        ita_establishment_id: itaId.trim() || null,
+      }
+      // Only send token field if user actually typed something — empty
+      // string would clear an existing token, which the user has to opt
+      // into via the explicit "Clear" button.
+      if (newToken.trim()) patch.ita_api_token = newToken.trim()
+      const res = await fetch(`/api/osha/establishments?id=${e.id}`, {
+        method:  'PATCH',
+        headers,
+        body:    JSON.stringify(patch),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
+      setNewToken('')
+      setShowTokenInput(false)
+      await onChanged()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function clearToken() {
+    if (!confirm('Clear the ITA API token? Future submissions will fail until a new one is set.')) return
+    setBusy(true); setError(null)
+    try {
+      const headers = await authedHeaders()
+      const res = await fetch(`/api/osha/establishments?id=${e.id}`, {
+        method: 'PATCH', headers,
+        body: JSON.stringify({ ita_api_token: null }),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
+      await onChanged()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function saveYear() {
     setBusy(true); setError(null)
     try {
@@ -284,6 +339,79 @@ function EstablishmentRow({
           Save
         </button>
       </div>
+      {/* OSHA ITA electronic-submission credentials. The token is
+          never round-tripped to the UI — once configured we only show
+          a "Configured" badge. */}
+      <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            OSHA ITA submission credentials
+          </h4>
+          <span className={
+            'rounded-full px-2 py-0.5 text-[10px] font-semibold ' +
+            (e.has_ita_api_token
+              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400')
+          }>
+            {e.has_ita_api_token ? 'Token configured' : 'Token not set'}
+          </span>
+        </div>
+        <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+          Register this site at <a href="https://www.osha.gov/ita" target="_blank" rel="noopener noreferrer" className="text-brand-navy hover:underline">osha.gov/ita</a>{' '}
+          to get an Establishment ID + API token. Both are required for electronic submission of the 300A
+          (and 300/301 for large Appendix B establishments).
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-end">
+          <Field label="OSHA Establishment ID">
+            <input
+              type="text"
+              value={itaId}
+              onChange={ev => setItaId(ev.target.value)}
+              placeholder="e.g. 12345678"
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-2 py-1.5 text-xs"
+            />
+          </Field>
+          <Field label={e.has_ita_api_token ? 'API token (replace)' : 'API token'}>
+            {showTokenInput ? (
+              <input
+                type="password"
+                value={newToken}
+                onChange={ev => setNewToken(ev.target.value)}
+                placeholder="Paste token from ITA admin console"
+                autoComplete="off"
+                className="w-full rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-2 py-1.5 text-xs"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowTokenInput(true)}
+                className="w-full rounded-lg border border-dashed border-slate-300 dark:border-slate-700 px-2 py-1.5 text-xs text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"
+              >
+                {e.has_ita_api_token ? 'Replace token' : 'Paste token'}
+              </button>
+            )}
+          </Field>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void saveItaCreds()}
+            className="inline-flex items-center gap-1 rounded-lg bg-brand-navy text-white px-3 py-1.5 text-xs font-semibold hover:bg-brand-navy/90 disabled:opacity-50"
+          >
+            <Save className="h-3 w-3" />
+            Save
+          </button>
+        </div>
+        {e.has_ita_api_token && (
+          <button
+            type="button"
+            onClick={() => void clearToken()}
+            className="mt-2 text-[11px] text-rose-600 hover:underline"
+          >
+            Clear stored token
+          </button>
+        )}
+      </div>
+
       {error && <p className="mt-2 text-xs text-rose-600">{error}</p>}
     </li>
   )
