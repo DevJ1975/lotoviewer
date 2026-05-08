@@ -272,7 +272,7 @@ function TokenRow({
       <div className="flex flex-wrap items-start gap-4">
         <div className="shrink-0">
           {qrSvg
-            ? <div dangerouslySetInnerHTML={{ __html: qrSvg }} className="w-24 h-24" />
+            ? <div dangerouslySetInnerHTML={{ __html: qrSvg }} className="w-24 h-24 [&>svg]:w-full [&>svg]:h-full [&>svg]:block" />
             : <div className="w-24 h-24 bg-slate-100 dark:bg-slate-800 rounded" />}
         </div>
         <div className="flex-1 min-w-0">
