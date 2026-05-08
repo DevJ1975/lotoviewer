@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { usePathname } from 'next/navigation'
-import { LifeBuoy, X, Send, Loader2, MessageSquarePlus, AlertTriangle, ThumbsUp, ThumbsDown } from 'lucide-react'
+import { LifeBuoy, MessageCircle, X, Send, Loader2, MessageSquarePlus, AlertTriangle, ThumbsUp, ThumbsDown } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 
@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabase'
 // authenticated route except a small allowlist of bare/landing pages.
 //
 // Single-bubble UX:
-//   - Closed: a brand-navy circle bottom-right with the LifeBuoy icon.
+//   - Closed: a brand-yellow circle bottom-right with a chat-bubble icon.
 //   - Open: a chat panel anchored bottom-right (full-screen sheet on
 //     mobile, 360 × 560 card on desktop).
 //   - The "Talk to a human" button at the panel footer fires the
@@ -193,12 +193,12 @@ export default function SupportBot() {
         onClick={() => setOpen(o => !o)}
         aria-label={open ? 'Close support assistant' : 'Open support assistant'}
         aria-expanded={open}
-        className="fixed bottom-4 right-4 z-50 h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-brand-navy text-white shadow-lg shadow-brand-navy/30 flex items-center justify-center hover:bg-brand-navy/90 active:scale-95 transition-all"
+        className="fixed bottom-4 right-4 z-50 h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-brand-yellow text-brand-navy ring-2 ring-brand-navy shadow-lg shadow-brand-navy/30 flex items-center justify-center hover:brightness-95 active:scale-95 transition-all"
         style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
       >
         {open
-          ? <X        className="h-5 w-5 sm:h-6 sm:w-6" />
-          : <LifeBuoy className="h-5 w-5 sm:h-6 sm:w-6" />}
+          ? <X             className="h-5 w-5 sm:h-6 sm:w-6" />
+          : <MessageCircle className="h-5 w-5 sm:h-6 sm:w-6" />}
       </button>
 
       {/* The panel. Full-screen sheet on mobile, anchored card on desktop. */}
