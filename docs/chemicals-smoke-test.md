@@ -674,7 +674,41 @@ audit log table exists.
       is the subscriber's responsibility (filter on
       `data.tenant_id` in the payload)
 
-## Known follow-ups (not in Phase G slice 4)
+## 38 · Weekly digest email (Phase G slice 5)
+
+- [ ] `vercel.json` has `/api/cron/chemicals-weekly-digest` at
+      `0 7 * * 1` (Mondays 07:00 UTC)
+- [ ] Hitting the cron path without a Bearer CRON_SECRET → 401
+- [ ] With the secret + a tenant that has zero pending SDS,
+      zero approvals, zero drift events in the last 7 days, and
+      zero containers expiring in 30 days → response says
+      `tenants_skipped_empty: 1`, `emails_sent: 0`
+- [ ] Add a pending SDS row + run the cron → admins receive an
+      email with subject "Chemicals weekly: 1 SDS pending — Acme"
+- [ ] Email body lists the chemical name, manufacturer, parse date,
+      and a link to `/chemicals/review`
+- [ ] Pending approval row → email lists the barcode, requester
+      name (resolved via `profiles.full_name`), age in days,
+      bolded if ≥ 7d
+- [ ] Drift event row from the last 7 days → email lists
+      product, outcome chip color (newer=indigo, older=amber,
+      fetch_failed=red), checked_at date, optional notes
+- [ ] Expiring container within 30 days → email lists product,
+      barcode, location_path, days remaining (red ≤ 7, amber
+      ≤ 30, green > 30), expiration_date
+- [ ] Email sender writes a row to `email_log` with
+      `kind = 'chemicals-digest'`, `status = 'sent'`, `tenant_id`
+      set, `provider_id` populated from the Resend response
+- [ ] Without RESEND_API_KEY in env, email_log row is `status =
+      'skipped'` with `error_text = 'RESEND_API_KEY not set'`
+- [ ] `cron_runs` row written by withCronLogging with summary
+      JSON containing tenants_scanned, emails_sent, emails_failed,
+      tenants_skipped_empty
+- [ ] Archived chemicals are excluded from every section
+- [ ] Multi-tenant: tenant A's admins do NOT receive tenant B's
+      digest (membership lookup is tenant-scoped)
+
+## Known follow-ups (not in Phase G slice 5)
 
 - Per-storage-class MAQ admin UI + dashboard tile → Phase F+
 - HazCom training topic → 017_training_records.training_role enum +
@@ -684,13 +718,13 @@ audit log table exists.
 - Bulk parse on import (queue many SDSs at once) → Phase B follow-up
 - Per-tenant pictogram override (upload official UN artwork) → Phase C+
 - Live label-printer integration (WebUSB to Brother/Zebra) → post-D
-- Email digest summarizing the drift + approval queues nightly
-  (push covers real-time; email is the "I missed it" backstop) → Phase G+
 - JHA editor pre-fills `required_ppe` from derived chemical PPE
   on save → Phase G+ (today the gap is flagged but not auto-applied)
 - Sweep cron: when a chemical's PPE updates (drift apply), flag
   every linked JHA for re-review → Phase G+
 - Per-tenant webhook subscriptions (today the table is global) → Phase G+
+- Per-user notification preferences (mute the digest, mute push, etc.)
+  → Phase G+ (the email already references /settings/notifications)
 - Inventory containers + locations + scan → Phase D
 - Label printing + GHS pictogram SVGs → Phase C
 - HazCom training topic, Tier II export, OSHA 300 linkage → Phase F

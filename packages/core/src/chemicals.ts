@@ -968,6 +968,75 @@ export function unionChemicalPpe(
   return Array.from(seen.values()).sort((a, b) => a.localeCompare(b))
 }
 
+// ─── Weekly digest backstop (Phase G slice 5) ──────────────────────────
+//
+// Push notifications cover the real-time path for SDS revisions and
+// container approvals. The weekly digest is the "I missed it"
+// backstop for tenants without push enabled, and a roll-up review of
+// drift activity over the period for tenants that do.
+
+export interface DigestSdsRow {
+  product_id:      string
+  product_name:    string
+  manufacturer:    string | null
+  revision_date:   string | null   // baseline → latest formatted by caller
+  parsed_at:       string          // SDS document created_at
+}
+
+export interface DigestApprovalRow {
+  inventory_id:   string
+  product_name:   string
+  barcode:        string
+  requester_name: string | null
+  requested_at:   string | null
+  age_days:       number           // how long the request has been waiting
+}
+
+export interface DigestDriftRow {
+  product_id:    string
+  product_name:  string
+  outcome:       'newer' | 'older' | 'fetch_failed'
+  checked_at:    string
+  notes:         string | null
+}
+
+export interface DigestExpiringRow {
+  product_name:    string
+  barcode:         string
+  location_path:   string | null
+  expiration_date: string | null
+  days_remaining:  number
+}
+
+export interface ChemicalsDigest {
+  tenant_id:    string
+  tenant_name:  string
+  pending_sds:        DigestSdsRow[]        // parse_review_status='pending'
+  pending_approvals:  DigestApprovalRow[]   // status='requested'
+  drift_events:       DigestDriftRow[]      // last 7 days, non-unchanged
+  expiring_soon:      DigestExpiringRow[]   // ≤30 days
+}
+
+/** True when the digest has nothing actionable — caller skips the send. */
+export function isDigestEmpty(d: ChemicalsDigest): boolean {
+  return d.pending_sds.length === 0
+      && d.pending_approvals.length === 0
+      && d.drift_events.length === 0
+      && d.expiring_soon.length === 0
+}
+
+/** Subject-line summary, e.g. "Chemicals: 2 SDS pending, 3 expiring".
+ *  Empty input returns null so the caller can skip. */
+export function digestSubjectSummary(d: ChemicalsDigest): string | null {
+  if (isDigestEmpty(d)) return null
+  const parts: string[] = []
+  if (d.pending_sds.length)       parts.push(`${d.pending_sds.length} SDS pending`)
+  if (d.pending_approvals.length) parts.push(`${d.pending_approvals.length} approval${d.pending_approvals.length === 1 ? '' : 's'}`)
+  if (d.drift_events.length)      parts.push(`${d.drift_events.length} drift event${d.drift_events.length === 1 ? '' : 's'}`)
+  if (d.expiring_soon.length)     parts.push(`${d.expiring_soon.length} expiring`)
+  return parts.join(', ')
+}
+
 // Storage path layout for the chemical-sds bucket. Tenant-scoped first
 // segment so storage_path_tenant() (migration 033) gates writes.
 export function chemicalSdsStoragePath(

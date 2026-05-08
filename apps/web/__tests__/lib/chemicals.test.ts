@@ -19,6 +19,8 @@ import {
   normalizePpeKey,
   ppeGapAnalysis,
   unionChemicalPpe,
+  isDigestEmpty,
+  digestSubjectSummary,
   INVENTORY_STATUSES,
   GHS_PICTOGRAMS,
   type ParsedSdsPayload,
@@ -26,7 +28,20 @@ import {
   type RestrictionRule,
   type OverrideRule,
   type InventoryStatus,
+  type ChemicalsDigest,
 } from '@soteria/core/chemicals'
+
+function emptyDigest(over: Partial<ChemicalsDigest> = {}): ChemicalsDigest {
+  return {
+    tenant_id:         '11111111-1111-1111-1111-111111111111',
+    tenant_name:       'Acme',
+    pending_sds:       [],
+    pending_approvals: [],
+    drift_events:      [],
+    expiring_soon:     [],
+    ...over,
+  }
+}
 
 function basePayload(over: Partial<ParsedSdsPayload> = {}): ParsedSdsPayload {
   return {
@@ -721,6 +736,76 @@ describe('ppeGapAnalysis', () => {
     )
     expect(gap.missing).toEqual([])
     expect(gap.covered.length).toBe(1)
+  })
+})
+
+describe('isDigestEmpty', () => {
+  it('returns true when every list is empty', () => {
+    expect(isDigestEmpty(emptyDigest())).toBe(true)
+  })
+  it('returns false when ANY list has rows', () => {
+    expect(isDigestEmpty(emptyDigest({
+      pending_sds: [{
+        product_id: '1', product_name: 'A', manufacturer: null,
+        revision_date: null, parsed_at: '2026-05-01T00:00:00Z',
+      }],
+    }))).toBe(false)
+    expect(isDigestEmpty(emptyDigest({
+      pending_approvals: [{
+        inventory_id: '1', product_name: 'A', barcode: 'CHEM-1',
+        requester_name: null, requested_at: null, age_days: 1,
+      }],
+    }))).toBe(false)
+    expect(isDigestEmpty(emptyDigest({
+      drift_events: [{
+        product_id: '1', product_name: 'A', outcome: 'newer',
+        checked_at: '2026-05-01T00:00:00Z', notes: null,
+      }],
+    }))).toBe(false)
+    expect(isDigestEmpty(emptyDigest({
+      expiring_soon: [{
+        product_name: 'A', barcode: 'CHEM-1', location_path: null,
+        expiration_date: '2026-05-15', days_remaining: 14,
+      }],
+    }))).toBe(false)
+  })
+})
+
+describe('digestSubjectSummary', () => {
+  it('returns null on an empty digest', () => {
+    expect(digestSubjectSummary(emptyDigest())).toBeNull()
+  })
+  it('summarizes each present section', () => {
+    const d = emptyDigest({
+      pending_sds: [
+        { product_id: '1', product_name: 'A', manufacturer: null, revision_date: null, parsed_at: '2026-05-01T00:00:00Z' },
+        { product_id: '2', product_name: 'B', manufacturer: null, revision_date: null, parsed_at: '2026-05-01T00:00:00Z' },
+      ],
+      pending_approvals: [
+        { inventory_id: '1', product_name: 'X', barcode: 'CHEM-1', requester_name: null, requested_at: null, age_days: 5 },
+      ],
+      drift_events: [
+        { product_id: '1', product_name: 'A', outcome: 'newer', checked_at: '2026-05-01T00:00:00Z', notes: null },
+        { product_id: '2', product_name: 'B', outcome: 'fetch_failed', checked_at: '2026-05-02T00:00:00Z', notes: null },
+        { product_id: '3', product_name: 'C', outcome: 'older', checked_at: '2026-05-03T00:00:00Z', notes: null },
+      ],
+      expiring_soon: [
+        { product_name: 'X', barcode: 'CHEM-1', location_path: null, expiration_date: '2026-05-10', days_remaining: 9 },
+      ],
+    })
+    const out = digestSubjectSummary(d)
+    expect(out).toBe('2 SDS pending, 1 approval, 3 drift events, 1 expiring')
+  })
+  it('uses singular forms correctly', () => {
+    const d = emptyDigest({
+      pending_approvals: [
+        { inventory_id: '1', product_name: 'X', barcode: 'CHEM-1', requester_name: null, requested_at: null, age_days: 5 },
+      ],
+      drift_events: [
+        { product_id: '1', product_name: 'A', outcome: 'newer', checked_at: '2026-05-01T00:00:00Z', notes: null },
+      ],
+    })
+    expect(digestSubjectSummary(d)).toBe('1 approval, 1 drift event')
   })
 })
 
