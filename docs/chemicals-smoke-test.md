@@ -1,16 +1,18 @@
-# Chemical Management module — smoke checklist (Phases A–F)
+# Chemical Management module — smoke checklist (Phases A–G)
 
 Use this after applying migrations `082_chemicals_module.sql`,
 `083_chemical_label_prints.sql`, `084_chemical_inventory.sql`,
-`085_chemical_sds_drift.sql`, and `086_chemical_compliance.sql` and
-deploying the branch. Phase A ships the foundation (catalog, detail,
-manual SDS upload, search/filter); Phase B layers AI SDS parsing +
-the human review queue; Phase C adds GHS-compliant label printing;
-Phase D adds inventory containers, locations, barcode scan, and the
-expiring-soon dashboard; Phase E adds the SDS drift monitor (nightly
-cron + manual trigger + drift audit log); Phase F adds compliance
-rollups — Tier II export, OSHA 300 chemical-exposure linkage, and
-fire-code MAQ scaffolding.
+`085_chemical_sds_drift.sql`, `086_chemical_compliance.sql`, and
+`087_chemical_guardrails.sql` and deploying the branch. Phase A ships
+the foundation (catalog, detail, manual SDS upload, search/filter);
+Phase B layers AI SDS parsing + the human review queue; Phase C adds
+GHS-compliant label printing; Phase D adds inventory containers,
+locations, barcode scan, and the expiring-soon dashboard; Phase E
+adds the SDS drift monitor (nightly cron + manual trigger + drift
+audit log); Phase F adds compliance rollups — Tier II export,
+OSHA 300 chemical-exposure linkage, and fire-code MAQ scaffolding;
+Phase G adds guardrails — restricted/banned chemical list and
+storage-compatibility checker.
 
 See `docs/chemical-management-system-plan.md` for the full roadmap.
 
@@ -468,22 +470,95 @@ audit log table exists.
       in the view; flipping it back to 'in_stock' brings it back
 - [ ] An archived chemical's containers do not appear in the view
 
-## Known follow-ups (not in Phase F)
+## 29 · Restricted-chemical list (Phase G)
 
+- [ ] Migration 087 applied; `chemical_restricted_list` and
+      `chemical_incompatibility_overrides` exist with tenant-scoped
+      RLS, and `chemical_restricted_match()` RPC is callable
+- [ ] `/chemicals/restricted` is reachable from the chemicals drawer
+      entry "Restricted Chemicals"
+- [ ] Add a CAS rule: `cas_number=71-43-2`, severity `banned`,
+      reason "Carcinogen" → row appears with the rose BANNED pill
+- [ ] Add a name-pattern rule: `name_pattern=%benzene%`, severity
+      `restricted` → row appears with the amber RESTRICTED pill
+- [ ] Submitting a rule with both cas_number and name_pattern set
+      → 400 inline; submitting with neither → 400
+- [ ] Submitting a CAS that fails the regex (e.g. `bogus`) → 400 inline
+- [ ] Trash-can deletes the rule with confirm prompt; gone from
+      list after refresh
+
+## 30 · Restricted block on product create
+
+- [ ] After adding the banned CAS rule above, attempting to create
+      a chemical with CAS `71-43-2` → 409 "Chemical is on the banned
+      list", body includes `matched: [...]`, no row created
+- [ ] After adding the `%benzene%` restricted rule, attempting to
+      create a chemical named "Industrial Benzene Solvent" → 409
+      with `requires_override: true`; resubmitting with
+      `override_restricted=true` succeeds and `matched` is echoed
+      back so the UI can record the override decision
+- [ ] A `discouraged` rule never blocks; the response has
+      `matched` for client-side warning rendering
+- [ ] As tenant B, tenant A's restriction rules do not affect
+      tenant B's product create flow
+
+## 31 · Storage compatibility checker
+
+- [ ] Add chemical "Acetone" with pictograms `GHS02` (flammable),
+      and another chemical "Sodium Chlorate" with `GHS03` (oxidizer)
+- [ ] Add a container of Acetone to "Cabinet 3"
+- [ ] Open `/chemicals/inventory/new`, pick "Sodium Chlorate" and
+      Cabinet 3 → rose warning panel appears with the conflict:
+      "Flammable + oxidizer (GHS02 + GHS03) — NFPA 430. Must be
+      stored in separate cabinets / rooms." Save is blocked until
+      the "I understand" checkbox is ticked
+- [ ] Acknowledging + saving creates the container; the warning
+      stays a warning, not an automatic block
+- [ ] Picking a different location with no flammables → warning
+      disappears, save is enabled
+- [ ] Acid (storage_class containing 'acid') in the same location
+      as a base (storage_class containing 'base') → warning fires
+      via the storage-class rule
+- [ ] Inserting a row into `chemical_incompatibility_overrides`
+      with `compatible=true` for `pictogram|GHS02|GHS03` makes the
+      warning disappear for that pair (refresh to re-fetch overrides)
+- [ ] Inserting an override with `compatible=false` for a non-default
+      pair (e.g. `pictogram|GHS04|GHS08`) makes that pair start
+      warning across the tenant
+- [ ] As tenant B, tenant A's override does NOT leak; tenant B's
+      compatibility check uses tenant B's own override set
+
+## 32 · Compatibility-check API
+
+- [ ] `GET /api/chemicals/locations/{location_id}/compatibility-check?product={product_id}`
+      → JSON with `candidate`, `conflicts[]`, `total`
+- [ ] Co-locating multiple containers of the same product does NOT
+      report self-conflict (de-duped on product_id)
+- [ ] Disposed / empty containers in the location are excluded
+      (status filter applied)
+- [ ] Missing `product` query param → 400; bad UUID → 400
+- [ ] Tenant A's product against tenant B's location → 404 product
+      not found
+
+## Known follow-ups (not in Phase G slice 1)
+
+- Approval workflow on inventory (`requested → approved → received`
+  state machine, separate from `in_stock`) → Phase G+
+- Per-storage-class MAQ admin UI + dashboard tile → Phase F+
+- HazCom training topic → 017_training_records.training_role enum +
+  per-chemical training cross-link → Phase G+
+- PPE matrix per JHA step (chemicals used → required PPE auto-derived
+  from the product PPE field) → Phase G+
+- Webhooks for "chemical approved", "spill incident logged", "new
+  SDS revision detected" via 013_webhooks → Phase G+
+- Cross-tenant SDS catalog opt-in (massive cost win at parse time) → Phase G+
 - Per-state Tier II form mappings (T2S file format, etc.) → Phase F+
-- MAQ admin UI + dashboard tile that reads
-  `chemical_max_allowable_quantities` → Phase F+
 - Bulk parse on import (queue many SDSs at once) → Phase B follow-up
 - Per-tenant pictogram override (upload official UN artwork) → Phase C+
 - Live label-printer integration (WebUSB to Brother/Zebra) → post-D
-- Compatibility checker (block storing acid + base in same cabinet) → Phase G
 - Email/push notification when a new revision lands in the review
   queue → Phase E follow-up (the drift cron writes the row; piping
   it through 016_push_subscriptions + 057_email_log is straight-line work)
-- HazCom training topic → 017_training_records.training_role enum +
-  per-chemical training cross-link → Phase G
-- PPE matrix per JHA step (chemicals used → required PPE auto-derived
-  from the product PPE field) → Phase G
 - Inventory containers + locations + scan → Phase D
 - Label printing + GHS pictogram SVGs → Phase C
 - HazCom training topic, Tier II export, OSHA 300 linkage → Phase F

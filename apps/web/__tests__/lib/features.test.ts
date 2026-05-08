@@ -128,6 +128,7 @@ describe('getFeaturesByCategory', () => {
       'chemicals-locations',
       'chemicals-drift',
       'chemicals-tier-two',
+      'chemicals-restricted',
       'near-miss',
       'hot-work',
       'hot-work-status',

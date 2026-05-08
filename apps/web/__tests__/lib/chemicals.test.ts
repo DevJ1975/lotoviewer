@@ -10,9 +10,16 @@ import {
   tierTwoToCsv,
   daysUntil,
   expiryTier,
+  matchRestrictions,
+  isHardBanned,
+  isBlockedByRestrictions,
+  findIncompatibilities,
+  checkLocationCompatibility,
   GHS_PICTOGRAMS,
   type ParsedSdsPayload,
   type TierTwoRow,
+  type RestrictionRule,
+  type OverrideRule,
 } from '@soteria/core/chemicals'
 
 function basePayload(over: Partial<ParsedSdsPayload> = {}): ParsedSdsPayload {
@@ -448,6 +455,139 @@ describe('tierTwoToCsv', () => {
     const csv = tierTwoToCsv([])
     const lines = csv.split('\r\n').filter(l => l.length > 0)
     expect(lines.length).toBe(1)
+  })
+})
+
+describe('matchRestrictions', () => {
+  const rules: RestrictionRule[] = [
+    {
+      id: '1', cas_number: '71-43-2', name_pattern: null,
+      severity: 'banned', reason: 'Carcinogen', alternative: null, reference: null,
+    },
+    {
+      id: '2', cas_number: null, name_pattern: '%benzene%',
+      severity: 'restricted', reason: 'Restricted use', alternative: null, reference: null,
+    },
+    {
+      id: '3', cas_number: null, name_pattern: 'methanol',
+      severity: 'discouraged', reason: 'Use water-based alternative', alternative: 'water', reference: null,
+    },
+  ]
+
+  it('matches by exact CAS', () => {
+    const hit = matchRestrictions({ name: 'Benzene', cas_numbers: ['71-43-2'] }, rules)
+    expect(hit).toHaveLength(2)              // CAS rule + name pattern rule both fire
+    expect(hit.find(r => r.id === '1')).toBeTruthy()
+  })
+
+  it('matches by ilike-style name pattern with % wildcards', () => {
+    const hit = matchRestrictions(
+      { name: 'Industrial Benzene Solvent', cas_numbers: [] },
+      rules,
+    )
+    expect(hit).toHaveLength(1)
+    expect(hit[0].id).toBe('2')
+  })
+
+  it('exact-name pattern (no %) matches the whole name only', () => {
+    expect(matchRestrictions({ name: 'methanol',         cas_numbers: [] }, rules)).toHaveLength(1)
+    expect(matchRestrictions({ name: 'methanol blend',   cas_numbers: [] }, rules)).toHaveLength(0)
+  })
+
+  it('returns empty when nothing matches', () => {
+    expect(matchRestrictions(
+      { name: 'Water', cas_numbers: ['7732-18-5'] },
+      rules,
+    )).toEqual([])
+  })
+
+  it('classifies hits via isHardBanned + isBlockedByRestrictions', () => {
+    const banHit = matchRestrictions({ name: 'Benzene', cas_numbers: ['71-43-2'] }, rules)
+    expect(isHardBanned(banHit)).toBe(true)
+    expect(isBlockedByRestrictions(banHit)).toBe(true)
+
+    const discHit = matchRestrictions({ name: 'methanol', cas_numbers: [] }, rules)
+    expect(isHardBanned(discHit)).toBe(false)
+    expect(isBlockedByRestrictions(discHit)).toBe(false)
+
+    const restHit = matchRestrictions({ name: 'Industrial Benzene Solvent', cas_numbers: [] }, rules)
+    expect(isHardBanned(restHit)).toBe(false)
+    expect(isBlockedByRestrictions(restHit)).toBe(true)
+  })
+})
+
+describe('findIncompatibilities', () => {
+  const flammable    = { ghs_pictograms: ['GHS02'], storage_class: 'flammable_cabinet' }
+  const oxidizer     = { ghs_pictograms: ['GHS03'], storage_class: 'oxidizer_cabinet' }
+  const acid         = { ghs_pictograms: ['GHS05'], storage_class: 'corrosive_acid' }
+  const base         = { ghs_pictograms: ['GHS05'], storage_class: 'corrosive_base' }
+  const inert        = { ghs_pictograms: [],         storage_class: null }
+
+  it('flags GHS02 + GHS03 (flammable + oxidizer)', () => {
+    const f = findIncompatibilities(flammable, oxidizer)
+    expect(f.some(x => x.kind === 'pictogram' && x.a === 'GHS02' && x.b === 'GHS03')).toBe(true)
+    // The flammable_cabinet + oxidizer_cabinet pair also triggers — both block postures.
+    expect(f.every(x => x.posture === 'block')).toBe(true)
+  })
+
+  it('flags acid + base storage classes', () => {
+    const f = findIncompatibilities(acid, base)
+    expect(f.some(x => x.kind === 'storage_class' && x.a === 'acid' && x.b === 'base')).toBe(true)
+  })
+
+  it('returns empty between two inert products', () => {
+    expect(findIncompatibilities(inert, inert)).toEqual([])
+  })
+
+  it('honors a tenant override that ALLOWS a default-blocked pair', () => {
+    const overrides: OverrideRule[] = [{
+      key_a: 'GHS02', key_b: 'GHS03', key_kind: 'pictogram',
+      compatible: true, reason: 'Building B annex isolation',
+    }]
+    const f = findIncompatibilities(flammable, oxidizer, overrides)
+    const picto = f.find(x => x.kind === 'pictogram' && x.a === 'GHS02')
+    expect(picto?.posture).toBe('allow')
+    expect(picto?.override).toBe(true)
+  })
+
+  it('honors a tenant override that BLOCKS a non-default pair', () => {
+    const overrides: OverrideRule[] = [{
+      key_a: 'GHS04', key_b: 'GHS08', key_kind: 'pictogram',
+      compatible: false, reason: 'Site-specific rule',
+    }]
+    const f = findIncompatibilities(
+      { ghs_pictograms: ['GHS04'] },
+      { ghs_pictograms: ['GHS08'] },
+      overrides,
+    )
+    expect(f).toHaveLength(1)
+    expect(f[0].posture).toBe('block')
+    expect(f[0].override).toBe(true)
+  })
+})
+
+describe('checkLocationCompatibility', () => {
+  const flammable = { ghs_pictograms: ['GHS02'] }
+  const oxidizer  = { id: 'O1', name: 'Sodium chlorate', ghs_pictograms: ['GHS03'] }
+  const inert     = { id: 'I1', name: 'Distilled water', ghs_pictograms: [] }
+
+  it('returns one entry per conflicting co-located product', () => {
+    const conflicts = checkLocationCompatibility(flammable, [oxidizer, inert])
+    expect(conflicts).toHaveLength(1)
+    expect(conflicts[0].product_id).toBe('O1')
+    expect(conflicts[0].findings.length).toBeGreaterThan(0)
+  })
+
+  it('omits products that come back with only allow-posture findings', () => {
+    const overrides: OverrideRule[] = [{
+      key_a: 'GHS02', key_b: 'GHS03', key_kind: 'pictogram',
+      compatible: true, reason: 'isolated',
+    }]
+    expect(checkLocationCompatibility(flammable, [oxidizer], overrides)).toEqual([])
+  })
+
+  it('returns empty when nothing else is in the location', () => {
+    expect(checkLocationCompatibility(flammable, [])).toEqual([])
   })
 })
 

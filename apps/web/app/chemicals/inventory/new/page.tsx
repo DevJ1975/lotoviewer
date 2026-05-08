@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Loader2 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import {
@@ -39,6 +39,8 @@ export default function NewContainerPage() {
 
   const [productId,    setProductId]    = useState(initialProductId)
   const [locationId,   setLocationId]   = useState('')
+  const [conflicts,    setConflicts]    = useState<{ product_id: string; product_name: string; findings: { reason: string }[] }[]>([])
+  const [acknowledgedConflict, setAcknowledgedConflict] = useState(false)
   const [barcode,      setBarcode]      = useState('')
   const [quantity,     setQuantity]     = useState<string>('1')
   const [unit,         setUnit]         = useState<InventoryUnit>('ea')
@@ -55,6 +57,32 @@ export default function NewContainerPage() {
     if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
     return headers
   }, [tenant])
+
+  // Re-check compatibility whenever product OR location changes —
+  // we want a warning the moment the user picks both. Reset the
+  // explicit override on every change so the user has to re-ack.
+  useEffect(() => {
+    if (!tenant?.id || !productId || !locationId) {
+      setConflicts([])
+      setAcknowledgedConflict(false)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      const headers = await buildHeaders()
+      const url = `/api/chemicals/locations/${locationId}/compatibility-check?product=${productId}`
+      const res = await fetch(url, { headers })
+      if (cancelled) return
+      if (!res.ok) {
+        setConflicts([])
+        return
+      }
+      const body = await res.json()
+      setConflicts(body.conflicts ?? [])
+      setAcknowledgedConflict(false)
+    })()
+    return () => { cancelled = true }
+  }, [tenant, productId, locationId, buildHeaders])
 
   useEffect(() => {
     if (!tenant?.id) return
@@ -85,6 +113,10 @@ export default function NewContainerPage() {
     if (!tenant?.id) return
     if (!productId) {
       setError('Pick a chemical product')
+      return
+    }
+    if (conflicts.length > 0 && !acknowledgedConflict) {
+      setError('Storage incompatibility flagged — acknowledge below or pick a different location.')
       return
     }
     const qty = Number.parseFloat(quantity)
@@ -173,6 +205,34 @@ export default function NewContainerPage() {
             ))}
           </select>
         </Field>
+
+        {conflicts.length > 0 && (
+          <div className="rounded border border-rose-300 dark:border-rose-800 bg-rose-50/60 dark:bg-rose-950/30 px-3 py-2 space-y-2">
+            <div className="text-sm font-semibold text-rose-800 dark:text-rose-300 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" />
+              Storage incompatibility — {conflicts.length} conflict{conflicts.length === 1 ? '' : 's'}
+            </div>
+            <ul className="text-xs text-rose-800 dark:text-rose-300 space-y-1.5">
+              {conflicts.map(c => (
+                <li key={c.product_id}>
+                  <div className="font-medium">{c.product_name}</div>
+                  {c.findings.map((f, i) => (
+                    <div key={i} className="opacity-90">— {f.reason}</div>
+                  ))}
+                </li>
+              ))}
+            </ul>
+            <label className="inline-flex items-center gap-2 text-xs text-rose-800 dark:text-rose-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={acknowledgedConflict}
+                onChange={e => setAcknowledgedConflict(e.target.checked)}
+                className="rounded"
+              />
+              I understand the conflict and want to proceed anyway
+            </label>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Field label="Quantity *">

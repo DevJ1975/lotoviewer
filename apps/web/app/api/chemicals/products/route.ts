@@ -139,8 +139,38 @@ export async function POST(req: Request) {
     }, { status: 400 })
   }
 
+  // Restricted-list check (Phase G). 'banned' refuses outright;
+  // 'restricted' allows an explicit override flag in the body —
+  // the response surfaces all hits so the UI can show the warning.
+  const overrideRestricted = body.override_restricted === true
   try {
     const admin = supabaseAdmin()
+    const { data: hits, error: hitsErr } = await admin.rpc(
+      'chemical_restricted_match',
+      {
+        p_tenant: gate.tenantId,
+        p_name:   input.name,
+        p_cas:    input.cas_numbers ?? [],
+      },
+    )
+    if (hitsErr) return NextResponse.json({ error: hitsErr.message }, { status: 500 })
+    const hitRows = (hits ?? []) as Array<{ severity: 'banned' | 'restricted' | 'discouraged' }>
+    const banned     = hitRows.some(r => r.severity === 'banned')
+    const restricted = hitRows.some(r => r.severity === 'restricted')
+    if (banned) {
+      return NextResponse.json({
+        error:   'Chemical is on the banned list. Contact your safety lead.',
+        matched: hits,
+      }, { status: 409 })
+    }
+    if (restricted && !overrideRestricted) {
+      return NextResponse.json({
+        error:   'Chemical hits a restriction. Re-submit with override_restricted=true to acknowledge.',
+        matched: hits,
+        requires_override: true,
+      }, { status: 409 })
+    }
+
     const { data, error } = await admin
       .from('chemical_products')
       .insert({
@@ -152,7 +182,7 @@ export async function POST(req: Request) {
       .select('*')
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ product: data }, { status: 201 })
+    return NextResponse.json({ product: data, matched: hits ?? [] }, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }

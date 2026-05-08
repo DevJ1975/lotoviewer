@@ -615,6 +615,242 @@ export function tierTwoToCsv(rows: TierTwoRow[]): string {
   return lines.join('\r\n') + '\r\n'
 }
 
+// ─── Restricted list (Phase G) ──────────────────────────────────────────
+
+export const RESTRICTION_SEVERITIES = ['banned', 'restricted', 'discouraged'] as const
+export type RestrictionSeverity = typeof RESTRICTION_SEVERITIES[number]
+
+export interface RestrictionRule {
+  id:           string
+  cas_number:   string | null
+  name_pattern: string | null
+  severity:     RestrictionSeverity
+  reason:       string | null
+  alternative:  string | null
+  reference:    string | null
+}
+
+/**
+ * Find all rules a candidate product hits. Server-side calls usually
+ * use the chemical_restricted_match() RPC which does the same thing
+ * inside Postgres; this helper exists for client-side previews (the
+ * add-chemical form can flag a CAS the user just typed BEFORE submit).
+ */
+export function matchRestrictions(
+  product: { name: string; cas_numbers: readonly string[] },
+  rules:   readonly RestrictionRule[],
+): RestrictionRule[] {
+  const cas = new Set(product.cas_numbers)
+  const lowerName = product.name.toLowerCase()
+  return rules.filter(r => {
+    if (r.cas_number) return cas.has(r.cas_number)
+    if (r.name_pattern) {
+      // Convert SQL ilike pattern to a regex: % → .*, _ → .
+      const escaped = r.name_pattern
+        .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+        .replace(/%/g, '.*')
+        .replace(/_/g, '.')
+      try {
+        return new RegExp(`^${escaped}$`, 'i').test(lowerName)
+      } catch {
+        return false
+      }
+    }
+    return false
+  })
+}
+
+/** True if any matched rule has severity 'banned' or 'restricted'. */
+export function isBlockedByRestrictions(rules: readonly RestrictionRule[]): boolean {
+  return rules.some(r => r.severity === 'banned' || r.severity === 'restricted')
+}
+
+/** True if any matched rule is the absolute-no 'banned' tier. */
+export function isHardBanned(rules: readonly RestrictionRule[]): boolean {
+  return rules.some(r => r.severity === 'banned')
+}
+
+// ─── Compatibility checker (Phase G) ────────────────────────────────────
+//
+// Default rules are intentionally conservative — they trigger on
+// well-known industrial pairings that NFPA / EPA Chem-Compatibility
+// charts list as "must not store together". Tenants override via
+// chemical_incompatibility_overrides; the checker layers them on top.
+
+export interface IncompatibilityFinding {
+  /** Sorted pair so the rule UI can render symmetrically. */
+  a:        string
+  b:        string
+  /** 'pictogram' | 'storage_class' */
+  kind:     'pictogram' | 'storage_class'
+  reason:   string
+  /** 'block' (default rule says no) | 'allow' (override permits). */
+  posture:  'block' | 'allow'
+  /** True when the pair came from the tenant override table. */
+  override: boolean
+}
+
+interface DefaultRule {
+  a:      GhsPictogram | string
+  b:      GhsPictogram | string
+  kind:   'pictogram' | 'storage_class'
+  reason: string
+}
+
+const DEFAULT_INCOMPATIBILITY_RULES: DefaultRule[] = [
+  // GHS-pictogram pairings — the worst offenders.
+  {
+    a: 'GHS02', b: 'GHS03', kind: 'pictogram',
+    reason: 'Flammable + oxidizer (GHS02 + GHS03) — NFPA 430. Must be stored in separate cabinets / rooms.',
+  },
+  {
+    a: 'GHS01', b: 'GHS02', kind: 'pictogram',
+    reason: 'Explosive + flammable (GHS01 + GHS02) — store explosives in dedicated magazine away from ignition sources.',
+  },
+  {
+    a: 'GHS01', b: 'GHS03', kind: 'pictogram',
+    reason: 'Explosive + oxidizer (GHS01 + GHS03) — never co-store.',
+  },
+  {
+    a: 'GHS05', b: 'GHS06', kind: 'pictogram',
+    reason: 'Corrosive + acutely toxic (GHS05 + GHS06) — segregate to prevent toxic gas from a corrosion event.',
+  },
+  // Storage-class pairings (informal but widely used in EHS shops).
+  {
+    a: 'acid', b: 'base', kind: 'storage_class',
+    reason: 'Acids and bases react exothermically. Use separate corrosive cabinets segregated by class.',
+  },
+  {
+    a: 'acid', b: 'cyanide', kind: 'storage_class',
+    reason: 'Acids + cyanides liberate hydrogen cyanide gas. Never co-store.',
+  },
+  {
+    a: 'flammable_cabinet', b: 'oxidizer_cabinet', kind: 'storage_class',
+    reason: 'Flammable + oxidizer cabinets must not share an interior — pair fire risks compounded.',
+  },
+]
+
+function sortPair(a: string, b: string): [string, string] {
+  return a <= b ? [a, b] : [b, a]
+}
+
+/**
+ * Compute the set of incompatibility findings between two products
+ * sharing a location, applying tenant overrides on top of defaults.
+ *
+ * Overrides win: if a tenant has explicitly marked a pair compatible
+ * (e.g. "isolated annex"), the default block is suppressed — but a
+ * finding with posture='allow' is still returned so the UI can flag
+ * "this pair would normally block, you've allowed it because: …".
+ */
+export interface ProductForCompatibility {
+  ghs_pictograms?: readonly string[] | null
+  storage_class?:  string | null
+}
+
+export interface OverrideRule {
+  key_a:      string
+  key_b:      string
+  key_kind:   'pictogram' | 'storage_class'
+  compatible: boolean
+  reason:     string | null
+}
+
+export function findIncompatibilities(
+  a: ProductForCompatibility,
+  b: ProductForCompatibility,
+  overrides: readonly OverrideRule[] = [],
+): IncompatibilityFinding[] {
+  const findings: IncompatibilityFinding[] = []
+
+  const overrideMap = new Map<string, OverrideRule>()
+  for (const o of overrides) {
+    overrideMap.set(`${o.key_kind}|${o.key_a}|${o.key_b}`, o)
+  }
+
+  for (const rule of DEFAULT_INCOMPATIBILITY_RULES) {
+    const matchPair = (() => {
+      if (rule.kind === 'pictogram') {
+        const A = (a.ghs_pictograms ?? [])
+        const B = (b.ghs_pictograms ?? [])
+        return (A.includes(rule.a) && B.includes(rule.b))
+            || (A.includes(rule.b) && B.includes(rule.a))
+      }
+      const aClass = (a.storage_class ?? '').toLowerCase()
+      const bClass = (b.storage_class ?? '').toLowerCase()
+      return (aClass.includes(rule.a) && bClass.includes(rule.b))
+          || (aClass.includes(rule.b) && bClass.includes(rule.a))
+    })()
+    if (!matchPair) continue
+    const [keyA, keyB] = sortPair(rule.a, rule.b)
+    const override = overrideMap.get(`${rule.kind}|${keyA}|${keyB}`)
+    if (override) {
+      findings.push({
+        a: keyA, b: keyB, kind: rule.kind,
+        reason:   override.reason ?? rule.reason,
+        posture:  override.compatible ? 'allow' : 'block',
+        override: true,
+      })
+    } else {
+      findings.push({
+        a: keyA, b: keyB, kind: rule.kind,
+        reason: rule.reason, posture: 'block', override: false,
+      })
+    }
+  }
+
+  // Tenant-only rules: pairs the defaults don't cover but the tenant
+  // has marked incompatible.
+  for (const o of overrides) {
+    if (o.compatible) continue   // 'allow' overrides only relevant if a default existed
+    const isDefault = DEFAULT_INCOMPATIBILITY_RULES.some(d =>
+      d.kind === o.key_kind
+      && (sortPair(d.a, d.b)[0] === o.key_a && sortPair(d.a, d.b)[1] === o.key_b))
+    if (isDefault) continue       // already handled above
+
+    const matchPair = (() => {
+      if (o.key_kind === 'pictogram') {
+        const A = (a.ghs_pictograms ?? [])
+        const B = (b.ghs_pictograms ?? [])
+        return (A.includes(o.key_a) && B.includes(o.key_b))
+            || (A.includes(o.key_b) && B.includes(o.key_a))
+      }
+      const aClass = (a.storage_class ?? '').toLowerCase()
+      const bClass = (b.storage_class ?? '').toLowerCase()
+      return (aClass.includes(o.key_a) && bClass.includes(o.key_b))
+          || (aClass.includes(o.key_b) && bClass.includes(o.key_a))
+    })()
+    if (!matchPair) continue
+    findings.push({
+      a: o.key_a, b: o.key_b, kind: o.key_kind,
+      reason:   o.reason ?? 'Tenant-defined incompatibility',
+      posture:  'block',
+      override: true,
+    })
+  }
+
+  return findings
+}
+
+/** Convenience: any blocking findings between the candidate and ANY
+ * existing co-located product. Returns the first conflict per existing
+ * product; the UI groups by product. */
+export function checkLocationCompatibility(
+  candidate: ProductForCompatibility,
+  existing:  readonly ({ id: string; name: string } & ProductForCompatibility)[],
+  overrides: readonly OverrideRule[] = [],
+): { product_id: string; product_name: string; findings: IncompatibilityFinding[] }[] {
+  const out: { product_id: string; product_name: string; findings: IncompatibilityFinding[] }[] = []
+  for (const e of existing) {
+    const findings = findIncompatibilities(candidate, e, overrides)
+      .filter(f => f.posture === 'block')
+    if (findings.length > 0) {
+      out.push({ product_id: e.id, product_name: e.name, findings })
+    }
+  }
+  return out
+}
+
 // Storage path layout for the chemical-sds bucket. Tenant-scoped first
 // segment so storage_path_tenant() (migration 033) gates writes.
 export function chemicalSdsStoragePath(
