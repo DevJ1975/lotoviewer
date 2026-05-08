@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { PictogramBadges, SignalWordBadge } from '../_components/PictogramBadges'
 import PrintLabelPanel from './_components/PrintLabelPanel'
 import ContainersPanel from './_components/ContainersPanel'
+import JhaUsagePanel from './_components/JhaUsagePanel'
 
 interface Product {
   id:                string
@@ -302,6 +303,8 @@ export default function ChemicalDetailPage() {
       ) : null}
 
       <ContainersPanel productId={product.id} />
+
+      <JhaUsagePanel productId={product.id} />
 
       <PrintLabelPanel productId={product.id} />
 

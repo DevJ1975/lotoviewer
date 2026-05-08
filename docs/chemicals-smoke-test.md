@@ -600,13 +600,46 @@ audit log table exists.
       whether the new row writes status='in_stock' (default) or
       status='requested' (file-as-request)
 
-## Known follow-ups (not in Phase G slice 2)
+## 36 · JHA × chemical PPE matrix (Phase G slice 3)
+
+- [ ] Migration 089 applied; `jha_step_chemicals` table exists with
+      tenant-scoped RLS, plus `v_jha_step_required_ppe` and
+      `v_chemical_jha_usage` views (security_invoker)
+- [ ] On a JHA step, the new "Chemicals" panel renders below the
+      hazards list with empty state "No chemicals linked"
+- [ ] Click "Link chemical" → picker shows the tenant catalog →
+      pick "Acetone" with usage_notes "5% solution" → linked row
+      appears with the chemical name + DANGER pill + GHS02/GHS07
+      pictogram chips
+- [ ] "Derived PPE" pill row populates with the union of the
+      chemical's `ppe_required` (e.g. "Nitrile gloves",
+      "Safety glasses")
+- [ ] If any derived PPE item is NOT in the JHA's `required_ppe`,
+      that pill renders rose; matching items render emerald;
+      a rose warning bar lists "Missing from JHA PPE: …"
+- [ ] Linking a second chemical (Sodium Hydroxide, pictograms
+      GHS05) — derived PPE row dedupes case-insensitively
+      ("Nitrile gloves" + "nitrile gloves" → one chip)
+- [ ] Re-linking the same chemical → idempotent (UNIQUE
+      step_id+product_id), usage_notes updated to the new value
+- [ ] Linking an archived chemical → 409 "Cannot link an archived
+      chemical"
+- [ ] Linking a chemical that belongs to a different tenant → 404
+- [ ] Linking a step that doesn't belong to the JHA in the URL → 400
+- [ ] Unlink (X button) removes the row + collapses derived-PPE chips
+- [ ] On the chemical detail page, a new "Used in N JHAs" panel
+      appears below the inventory containers when at least one
+      JHA references the chemical; superseded JHAs are excluded
+- [ ] Each row links to `/jha/{id}` and shows the JHA's job_number,
+      title, status pill, and step count
+- [ ] As tenant B, the chemical detail's JHA-usage panel does NOT
+      show tenant A's JHAs
+
+## Known follow-ups (not in Phase G slice 3)
 
 - Per-storage-class MAQ admin UI + dashboard tile → Phase F+
 - HazCom training topic → 017_training_records.training_role enum +
   per-chemical training cross-link → Phase G+
-- PPE matrix per JHA step (chemicals used → required PPE auto-derived
-  from the product PPE field) → Phase G+
 - Webhooks for "chemical approved", "spill incident logged", "new
   SDS revision detected" via 013_webhooks → Phase G+
 - Cross-tenant SDS catalog opt-in (massive cost win at parse time) → Phase G+
@@ -616,6 +649,10 @@ audit log table exists.
 - Live label-printer integration (WebUSB to Brother/Zebra) → post-D
 - Email digest summarizing the drift + approval queues nightly
   (push covers real-time; email is the "I missed it" backstop) → Phase G+
+- JHA editor pre-fills `required_ppe` from derived chemical PPE
+  on save → Phase G+ (today the gap is flagged but not auto-applied)
+- Sweep cron: when a chemical's PPE updates (drift apply), flag
+  every linked JHA for re-review → Phase G+
 - Inventory containers + locations + scan → Phase D
 - Label printing + GHS pictogram SVGs → Phase C
 - HazCom training topic, Tier II export, OSHA 300 linkage → Phase F

@@ -20,6 +20,7 @@ import {
 } from '@soteria/core/jha'
 import { HIERARCHY_LABELS } from '@soteria/core/risk'
 import { SEVERITY_TW } from '@soteria/core/severityColors'
+import StepChemicalsPanel from './_components/StepChemicalsPanel'
 
 interface AuditEvent {
   id:           number
@@ -237,6 +238,15 @@ function StepsAndHazards({ bundle, canEdit, onChange }: { bundle: DetailBundle; 
                 />
               ))}
             </ul>
+          )}
+
+          {g.step && (
+            <StepChemicalsPanel
+              jhaId={bundle.jha.id}
+              stepId={g.step.id}
+              jhaListedPpe={bundle.jha.required_ppe ?? []}
+              canEdit={canEdit}
+            />
           )}
         </li>
       ))}

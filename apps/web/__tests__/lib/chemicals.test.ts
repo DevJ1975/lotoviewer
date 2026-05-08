@@ -16,6 +16,9 @@ import {
   findIncompatibilities,
   checkLocationCompatibility,
   isLegalStatusTransition,
+  normalizePpeKey,
+  ppeGapAnalysis,
+  unionChemicalPpe,
   INVENTORY_STATUSES,
   GHS_PICTOGRAMS,
   type ParsedSdsPayload,
@@ -637,6 +640,87 @@ describe('isLegalStatusTransition', () => {
     expect(isLegalStatusTransition('in_use',      'empty')).toBe(true)
     expect(isLegalStatusTransition('in_use',      'disposed')).toBe(true)
     expect(isLegalStatusTransition('quarantined', 'in_stock')).toBe(true)
+  })
+})
+
+describe('normalizePpeKey', () => {
+  it('lowercases + collapses whitespace + strips trailing punctuation', () => {
+    expect(normalizePpeKey('Nitrile gloves'))         .toBe('nitrile gloves')
+    expect(normalizePpeKey('  NITRILE   gloves  '))   .toBe('nitrile gloves')
+    expect(normalizePpeKey('Nitrile gloves.'))        .toBe('nitrile gloves')
+    expect(normalizePpeKey('Half-face respirator;'))  .toBe('half-face respirator')
+  })
+  it('returns null for blank / nullish input', () => {
+    expect(normalizePpeKey('')).toBeNull()
+    expect(normalizePpeKey('   ')).toBeNull()
+    expect(normalizePpeKey(null)).toBeNull()
+    expect(normalizePpeKey(undefined)).toBeNull()
+  })
+})
+
+describe('unionChemicalPpe', () => {
+  it('dedupes case-insensitively and preserves first-seen casing', () => {
+    const out = unionChemicalPpe([
+      { ppe_required: ['Nitrile gloves', 'Safety glasses'] },
+      { ppe_required: ['nitrile gloves', 'Lab coat'] },
+      { ppe_required: ['SAFETY GLASSES', 'Half-face respirator'] },
+    ])
+    expect(out).toEqual([
+      'Half-face respirator',
+      'Lab coat',
+      'Nitrile gloves',
+      'Safety glasses',
+    ])
+  })
+  it('handles null + missing arrays gracefully', () => {
+    expect(unionChemicalPpe([])).toEqual([])
+    expect(unionChemicalPpe([{ ppe_required: null }, {}])).toEqual([])
+  })
+})
+
+describe('ppeGapAnalysis', () => {
+  it('flags missing PPE the JHA does not list', () => {
+    const gap = ppeGapAnalysis(
+      ['Nitrile gloves', 'Safety glasses', 'Half-face respirator'],
+      ['Nitrile gloves', 'Safety glasses'],
+    )
+    expect(gap.missing).toEqual(['Half-face respirator'])
+    expect(gap.covered).toEqual(['Nitrile gloves', 'Safety glasses'])
+    expect(gap.unmatched).toEqual([])
+  })
+
+  it('flags unmatched JHA PPE the chemical does not require', () => {
+    const gap = ppeGapAnalysis(
+      ['Nitrile gloves'],
+      ['Nitrile gloves', 'Hearing protection', 'Hard hat'],
+    )
+    expect(gap.missing).toEqual([])
+    expect(gap.unmatched).toEqual(['Hard hat', 'Hearing protection'])
+    expect(gap.covered).toEqual(['Nitrile gloves'])
+  })
+
+  it('is case-insensitive when comparing', () => {
+    const gap = ppeGapAnalysis(
+      ['Nitrile gloves'],
+      ['NITRILE GLOVES'],
+    )
+    expect(gap.missing).toEqual([])
+    expect(gap.covered.length).toBe(1)
+  })
+
+  it('returns empty arrays when both sides are empty', () => {
+    expect(ppeGapAnalysis([], [])).toEqual({
+      missing: [], covered: [], unmatched: [],
+    })
+  })
+
+  it('treats trailing punctuation differences as the same item', () => {
+    const gap = ppeGapAnalysis(
+      ['Nitrile gloves.'],
+      ['Nitrile gloves'],
+    )
+    expect(gap.missing).toEqual([])
+    expect(gap.covered.length).toBe(1)
   })
 })
 

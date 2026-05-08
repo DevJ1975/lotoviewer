@@ -878,6 +878,96 @@ export function checkLocationCompatibility(
   return out
 }
 
+// ─── PPE derivation (Phase G slice 3) ──────────────────────────────────
+//
+// JHA steps tagged with chemicals derive their required PPE from the
+// union of every linked chemical's `ppe_required` field. The editor
+// uses ppeGapAnalysis to flag missing items the JHA's listed PPE
+// doesn't cover, AND to flag unrelated items the JHA lists that no
+// chemical actually calls for (those usually trace to a non-chemical
+// hazard like noise or fall-protection — fine, but worth a chip).
+
+/**
+ * Normalize a PPE string for comparison: lowercase, collapse
+ * whitespace, strip trailing punctuation. "Nitrile gloves",
+ * "  nitrile  gloves.", and "NITRILE GLOVES" all collapse to the
+ * same key. Returns null for blank input.
+ */
+export function normalizePpeKey(s: string | null | undefined): string | null {
+  if (!s) return null
+  const trimmed = s.toLowerCase().replace(/\s+/g, ' ').trim().replace(/[.,;:]+$/, '')
+  return trimmed || null
+}
+
+export interface PpeGap {
+  /** PPE the chemicals require but the JHA doesn't list. */
+  missing:    string[]
+  /** PPE the JHA lists that no linked chemical asks for. Could be
+   *  legitimate (non-chemical hazards) — surface as info, not error. */
+  unmatched:  string[]
+  /** PPE present on both — confirms coverage. */
+  covered:    string[]
+}
+
+/**
+ * Compare the union of chemical PPE against a JHA step's currently-
+ * listed PPE. Comparison is case-insensitive + whitespace-tolerant.
+ * Returns the original-case string from whichever side first declared
+ * it so the UI doesn't lowercase a label the author capitalized.
+ */
+export function ppeGapAnalysis(
+  chemicalsPpe: readonly string[],
+  listedPpe:    readonly string[],
+): PpeGap {
+  const chemMap = new Map<string, string>()
+  for (const p of chemicalsPpe) {
+    const k = normalizePpeKey(p)
+    if (k && !chemMap.has(k)) chemMap.set(k, p)
+  }
+  const listedMap = new Map<string, string>()
+  for (const p of listedPpe) {
+    const k = normalizePpeKey(p)
+    if (k && !listedMap.has(k)) listedMap.set(k, p)
+  }
+
+  const missing:   string[] = []
+  const unmatched: string[] = []
+  const covered:   string[] = []
+
+  for (const [k, original] of chemMap) {
+    if (listedMap.has(k)) covered.push(original)
+    else missing.push(original)
+  }
+  for (const [k, original] of listedMap) {
+    if (!chemMap.has(k)) unmatched.push(original)
+  }
+
+  return {
+    missing:   missing.sort((a, b) => a.localeCompare(b)),
+    unmatched: unmatched.sort((a, b) => a.localeCompare(b)),
+    covered:   covered.sort((a, b) => a.localeCompare(b)),
+  }
+}
+
+/**
+ * Union the `ppe_required` arrays from a list of products into a
+ * single deduped (case-insensitive) array, preserving original case
+ * of the first occurrence. Used by the JHA step panel to render the
+ * "derived PPE" pill row.
+ */
+export function unionChemicalPpe(
+  products: readonly { ppe_required?: readonly string[] | null }[],
+): string[] {
+  const seen = new Map<string, string>()
+  for (const p of products) {
+    for (const ppe of p.ppe_required ?? []) {
+      const k = normalizePpeKey(ppe)
+      if (k && !seen.has(k)) seen.set(k, ppe)
+    }
+  }
+  return Array.from(seen.values()).sort((a, b) => a.localeCompare(b))
+}
+
 // Storage path layout for the chemical-sds bucket. Tenant-scoped first
 // segment so storage_path_tenant() (migration 033) gates writes.
 export function chemicalSdsStoragePath(
