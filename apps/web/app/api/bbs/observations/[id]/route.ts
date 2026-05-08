@@ -29,14 +29,19 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     if (error) throw new Error(error.message)
     if (!observation) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+    // Defense-in-depth: also filter by tenant_id even though RLS would
+    // catch a cross-tenant observation_id. The explicit filter means a
+    // misconfigured policy can't silently leak.
     const [photosRes, actionsRes] = await Promise.all([
       gate.authedClient
         .from('bbs_observation_photos')
         .select('id, file_path, annotations, created_at, created_by')
+        .eq('tenant_id', gate.tenantId)
         .eq('observation_id', id),
       gate.authedClient
         .from('bbs_observation_actions')
         .select('id, action_type, body, meta, created_at, created_by')
+        .eq('tenant_id', gate.tenantId)
         .eq('observation_id', id)
         .order('created_at', { ascending: false })
         .limit(100),

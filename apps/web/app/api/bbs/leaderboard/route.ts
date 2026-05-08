@@ -9,9 +9,13 @@ export async function GET(req: Request) {
   const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get('limit') ?? '10', 10) || 10))
 
   try {
+    // The view is RLS-scoped via security_invoker, but adding the
+    // explicit tenant filter is defense-in-depth and makes the
+    // intent obvious to future readers.
     const { data, error } = await gate.authedClient
       .from('bbs_leaderboard')
       .select('user_id, full_name, avatar_url, observation_count, points_total, unsafe_act_count, unsafe_condition_count, safe_behavior_count, last_submitted_at')
+      .eq('tenant_id', gate.tenantId)
       .order('points_total', { ascending: false })
       .order('observation_count', { ascending: false })
       .limit(limit)

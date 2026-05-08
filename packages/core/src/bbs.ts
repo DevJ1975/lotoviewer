@@ -32,15 +32,18 @@ export const BBS_STATUS_LABEL: Record<BBSStatus, string> = {
 }
 
 // 3x3 risk matrix score: severity * likelihood, 1..3 each. Returns
-// 1..9, or null if either input is missing. Matches the Postgres
-// function `bbs_score_for()` in migration 081 — keep them in sync.
+// 1..9, or null if either input is missing or unrecognized. Matches
+// the Postgres function `bbs_score_for()` in migration 081 — keep
+// them in sync.
+const LEVEL_NUM: Record<string, number> = { low: 1, medium: 2, high: 3 }
 export function bbsScoreFor(
   severity:   BBSSeverity | null | undefined,
   likelihood: BBSLikelihood | null | undefined,
 ): number | null {
   if (!severity || !likelihood) return null
-  const sev  = severity   === 'low' ? 1 : severity   === 'medium' ? 2 : 3
-  const like = likelihood === 'low' ? 1 : likelihood === 'medium' ? 2 : 3
+  const sev  = LEVEL_NUM[severity]
+  const like = LEVEL_NUM[likelihood]
+  if (!sev || !like) return null
   return sev * like
 }
 
