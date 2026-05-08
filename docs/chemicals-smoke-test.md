@@ -776,7 +776,38 @@ audit log table exists.
       chemical (RLS scopes to tenant_id)
 - [ ] As tenant B, POSTing a requirement to tenant A's product → 404
 
-## Known follow-ups (not in Phase G slice 7)
+## 41 · Per-tenant webhook subscriptions (Phase G slice 8)
+
+- [ ] Migration 093 applied; `loto_webhook_subscriptions` has the
+      new nullable `tenant_id` column with the ON DELETE CASCADE FK
+      to `tenants(id)`, plus a partial index on `tenant_id IS NOT NULL`
+- [ ] Existing rows keep `tenant_id = NULL` after the migration
+      (backwards compatible — they remain global subscriptions)
+- [ ] On `/admin/webhooks` as a tenant owner / admin, "Add webhook"
+      → the new row gets `tenant_id = active_tenant_id()` baked in
+- [ ] List view shows only this tenant's subscriptions (RLS scope)
+      plus any subscriptions a superadmin created with NULL tenant
+- [ ] As a tenant member without admin role, GET to the list
+      returns 403 / empty (RLS blocks)
+- [ ] As tenant B, tenant A's subscriptions do NOT appear
+- [ ] Submitting "Add webhook" with no active tenant context →
+      inline error "No active tenant — sign in and pick a tenant"
+      (defends in depth before the RLS-on-insert rejects)
+- [ ] Add a chemical event (e.g. `chemical.product_created`) to a
+      tenant-scoped subscription
+- [ ] Inserting a `chemical_products` row in tenant A → only
+      tenant A's matching subscriptions fire (and any global ones)
+- [ ] Inserting in tenant B → only tenant B's matching subscriptions
+      fire — tenant A's webhook does NOT receive the event
+- [ ] A global (NULL tenant_id) subscription receives BOTH
+      tenant A's and tenant B's events
+- [ ] When the payload doesn't include a `tenant_id` field (e.g. a
+      legacy permit table where to_jsonb(NEW) somehow misses it),
+      only global subscriptions receive the event
+- [ ] HMAC `X-Soteria-Signature` header still computed when the
+      subscription has a `secret` set (now via `extensions.hmac`)
+
+## Known follow-ups (not in Phase G slice 8)
 
 - Cross-tenant SDS catalog opt-in (massive cost win at parse time) → Phase G+
 - Per-state Tier II form mappings (T2S file format, etc.) → Phase F+
@@ -787,7 +818,6 @@ audit log table exists.
   on save → Phase G+ (today the gap is flagged but not auto-applied)
 - Sweep cron: when a chemical's PPE updates (drift apply), flag
   every linked JHA for re-review → Phase G+
-- Per-tenant webhook subscriptions (today the table is global) → Phase G+
 - Per-user notification preferences (mute the digest, mute push, etc.)
   → Phase G+ (the email already references /settings/notifications)
 - Inventory containers + locations + scan → Phase D

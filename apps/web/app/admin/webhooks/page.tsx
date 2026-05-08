@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Webhook, Loader2, Trash2, Plus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useTenant } from '@/components/TenantProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import type { WebhookEvent, WebhookSubscription } from '@soteria/core/types'
 
@@ -29,6 +30,16 @@ const ALL_EVENTS: { id: WebhookEvent; label: string; hint: string }[] = [
   { id: 'hot_work.work_complete', label: 'Hot work — work complete',  hint: 'Supervisor marked work done; post-watch timer started' },
   { id: 'hot_work.canceled',      label: 'Hot work permit canceled',  hint: 'Hot-work permit closed (any reason)' },
   { id: 'hot_work.fire_observed', label: 'Hot work — FIRE OBSERVED',  hint: 'Emergency cancel — fire was observed during or after work' },
+  // Chemicals lifecycle (migration 090)
+  { id: 'chemical.product_created',     label: 'Chemical added',           hint: 'A chemical row was inserted into the catalog' },
+  { id: 'chemical.product_archived',    label: 'Chemical archived',        hint: 'Chemical removed from active use (rows retained)' },
+  { id: 'chemical.product_unarchived',  label: 'Chemical un-archived',     hint: 'Archived chemical reactivated' },
+  { id: 'chemical.container_requested', label: 'Container requested',      hint: 'Worker filed a chemical container request awaiting approval' },
+  { id: 'chemical.container_approved',  label: 'Container approved',       hint: 'Admin approved a requested container' },
+  { id: 'chemical.container_rejected',  label: 'Container rejected',       hint: 'Admin rejected a requested container' },
+  { id: 'chemical.container_disposed',  label: 'Container disposed',       hint: 'Container marked disposed (final state)' },
+  { id: 'chemical.exposure_logged',     label: 'Chemical exposure logged', hint: 'OSHA-style exposure event recorded against an incident' },
+  { id: 'chemical.sds_revision_pending', label: 'New SDS revision detected', hint: 'Drift cron found a newer SDS — review queue updated' },
 ]
 
 export default function WebhooksPage() {
@@ -197,6 +208,7 @@ function AddWebhookDialog({
   onClose: () => void
   onAdded: (row: WebhookSubscription) => void
 }) {
+  const { tenant } = useTenant()
   const [name, setName]     = useState('')
   const [url, setUrl]       = useState('')
   const [secret, setSecret] = useState('')
@@ -220,15 +232,25 @@ function AddWebhookDialog({
       setError('URL must start with http:// or https://')
       return
     }
+    if (!tenant?.id) {
+      setError('No active tenant — sign in and pick a tenant before adding a webhook.')
+      return
+    }
     setSubmitting(true)
+    // Migration 093 made tenant_id non-null for new tenant-scoped
+    // subscriptions. The RLS policy requires the caller to be an
+    // owner / admin of the tenant we're inserting under (or a
+    // superadmin) — RLS would reject otherwise, but we surface a
+    // clean error instead of waiting for the round-trip.
     const { data, error: err } = await supabase
       .from('loto_webhook_subscriptions')
       .insert({
-        name:   name.trim(),
-        url:    url.trim(),
-        secret: secret.trim() || null,
-        events: [...events],
-        active: true,
+        name:      name.trim(),
+        url:       url.trim(),
+        secret:    secret.trim() || null,
+        events:    [...events],
+        active:    true,
+        tenant_id: tenant.id,
       })
       .select('*')
       .single()
