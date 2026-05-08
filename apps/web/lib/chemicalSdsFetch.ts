@@ -173,6 +173,36 @@ export async function fetchSdsPdf(rawUrl: string): Promise<FetchResult> {
     if (!resp.ok) {
       return { outcome: 'http_error', httpStatus: resp.status, finalUrl: resp.url }
     }
+    // Redirect-aware SSRF check: even though the initial host passed
+    // the allowlist + private-IP guard, redirect:'follow' can land us
+    // somewhere else entirely. An allowlisted host with an open
+    // redirect could 302 us to attacker-controlled infrastructure or
+    // to an internal IP via a same-host redirect. Re-validate the
+    // FINAL URL before reading the body.
+    if (resp.url && resp.url !== url.toString()) {
+      let finalUrl: URL
+      try { finalUrl = new URL(resp.url) }
+      catch {
+        return { outcome: 'invalid_url', detail: `Redirect target unparseable: ${resp.url}` }
+      }
+      if (finalUrl.protocol !== 'https:') {
+        return { outcome: 'invalid_scheme', detail: `Redirected to ${finalUrl.protocol}` }
+      }
+      if (!isHostAllowed(finalUrl.hostname)) {
+        return {
+          outcome:    'allowlist_blocked',
+          finalUrl:   resp.url,
+          detail:     `Redirected to "${finalUrl.hostname}", which is not in the allowlist.`,
+        }
+      }
+      if (!(await resolvesPublicly(finalUrl.hostname))) {
+        return {
+          outcome:  'private_address_blocked',
+          finalUrl: resp.url,
+          detail:   `Redirected to "${finalUrl.hostname}", which resolves to a private/loopback address.`,
+        }
+      }
+    }
     const contentType = (resp.headers.get('content-type') ?? '').toLowerCase()
     if (!contentType.includes('application/pdf') && !contentType.startsWith('binary/octet-stream')) {
       return {
