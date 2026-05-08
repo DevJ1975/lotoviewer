@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Download, ExternalLink, FileText, Loader2, Upload } from 'lucide-react'
+import { ArrowLeft, Download, ExternalLink, FileText, Loader2, Sparkles, Upload } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { PictogramBadges, SignalWordBadge } from '../_components/PictogramBadges'
@@ -43,7 +43,9 @@ interface Revision {
   storage_path:   string
   file_bytes:     number | null
   source:         string
-  parse_review_status: string
+  parse_review_status: 'pending' | 'approved' | 'rejected'
+  parse_model:    string | null
+  parse_confidence: number | null
   superseded_at:  string | null
   created_at:     string
 }
@@ -59,6 +61,7 @@ export default function ChemicalDetailPage() {
   const [error,      setError]     = useState<string | null>(null)
   const [loading,    setLoading]   = useState(true)
   const [uploading,  setUploading] = useState(false)
+  const [parsingId,  setParsingId]  = useState<string | null>(null)
   const [revisionDate, setRevisionDate] = useState('')
 
   const buildHeaders = useCallback(async () => {
@@ -100,6 +103,27 @@ export default function ChemicalDetailPage() {
       return
     }
     window.open(body.url, '_blank', 'noopener,noreferrer')
+  }
+
+  async function parseSds(sdsId: string) {
+    if (!id) return
+    setParsingId(sdsId)
+    setError(null)
+    try {
+      const headers = await buildHeaders()
+      const res  = await fetch(`/api/chemicals/products/${id}/sds/${sdsId}/parse`, {
+        method:  'POST',
+        headers,
+      })
+      const body = await res.json()
+      if (!res.ok) {
+        setError(body.error ?? `HTTP ${res.status}`)
+        return
+      }
+      router.push('/chemicals/review')
+    } finally {
+      setParsingId(null)
+    }
   }
 
   async function uploadSds(file: File) {
@@ -240,6 +264,15 @@ export default function ChemicalDetailPage() {
       ) : null}
 
       <section className="rounded-lg border border-slate-200 dark:border-slate-800 p-4">
+        {revisions.some(r => r.parse_review_status === 'pending') && (
+          <Link
+            href="/chemicals/review"
+            className="block mb-3 rounded border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/20 px-3 py-2 text-sm text-indigo-800 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+          >
+            <Sparkles className="inline w-4 h-4 mr-1" />
+            An SDS parse is awaiting review — click to approve or reject the AI-proposed fields.
+          </Link>
+        )}
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <FileText className="w-4 h-4" /> Safety Data Sheets
@@ -309,9 +342,25 @@ export default function ChemicalDetailPage() {
                   {rev.superseded_at && !isActive && (
                     <span className="text-[11px] text-slate-500">superseded {new Date(rev.superseded_at).toISOString().slice(0, 10)}</span>
                   )}
+                  {rev.parse_review_status === 'pending' && (
+                    <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-semibold rounded bg-indigo-100 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300">
+                      AWAITING REVIEW
+                    </span>
+                  )}
+                  <button
+                    onClick={() => void parseSds(rev.id)}
+                    disabled={parsingId === rev.id}
+                    className="ml-auto inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline disabled:opacity-60 disabled:cursor-not-allowed"
+                    title="Send this SDS to Claude for structured extraction"
+                  >
+                    {parsingId === rev.id
+                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                      : <Sparkles className="w-3 h-3" />}
+                    {parsingId === rev.id ? 'Parsing…' : 'Parse with AI'}
+                  </button>
                   <button
                     onClick={() => void viewSds(rev.id)}
-                    className="ml-auto inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline"
+                    className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline"
                   >
                     <Download className="w-3 h-3" /> View
                   </button>

@@ -46,7 +46,7 @@ export async function GET(req: Request, ctx: Ctx) {
 
     const { data: revisions, error: sErr } = await gate.authedClient
       .from('chemical_sds_documents')
-      .select('id, revision_date, language, storage_path, file_bytes, source, parse_review_status, superseded_at, created_at, created_by')
+      .select('id, revision_date, language, storage_path, file_bytes, source, parse_review_status, parse_model, parse_confidence, superseded_at, created_at, created_by')
       .eq('product_id', id)
       .eq('tenant_id', gate.tenantId)
       .order('revision_date', { ascending: false, nullsFirst: false })

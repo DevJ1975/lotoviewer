@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Loader2, Search, Filter } from 'lucide-react'
+import { Plus, Loader2, Search, Filter, Sparkles } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { useDebounce } from '@/hooks/useDebounce'
@@ -33,6 +33,7 @@ export default function ChemicalsListPage() {
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [pictogram, setPictogram] = useState<GhsPictogram | ''>('')
+  const [pendingCount, setPendingCount] = useState<number>(0)
   const debouncedSearch = useDebounce(search, 250)
 
   const load = useCallback(async () => {
@@ -48,7 +49,10 @@ export default function ChemicalsListPage() {
     if (pictogram) params.set('pictogram', pictogram)
 
     try {
-      const res  = await fetch(`/api/chemicals/products?${params.toString()}`, { headers })
+      const [res, queueRes] = await Promise.all([
+        fetch(`/api/chemicals/products?${params.toString()}`, { headers }),
+        fetch('/api/chemicals/review-queue', { headers }),
+      ])
       const body = await res.json()
       if (!res.ok) {
         setError(body.error ?? `HTTP ${res.status}`)
@@ -56,6 +60,10 @@ export default function ChemicalsListPage() {
         return
       }
       setRows(body.products ?? [])
+      if (queueRes.ok) {
+        const queueBody = await queueRes.json()
+        setPendingCount(queueBody.total ?? 0)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       setRows([])
@@ -82,13 +90,24 @@ export default function ChemicalsListPage() {
             Tenant-wide chemical catalog with versioned Safety Data Sheets.
           </p>
         </div>
-        <Link
-          href="/chemicals/new"
-          className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded bg-indigo-600 hover:bg-indigo-700 text-white font-medium"
-        >
-          <Plus className="w-4 h-4" />
-          Add chemical
-        </Link>
+        <div className="flex items-center gap-2">
+          {pendingCount > 0 && (
+            <Link
+              href="/chemicals/review"
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded border border-indigo-300 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/30"
+            >
+              <Sparkles className="w-4 h-4" />
+              {pendingCount} pending review{pendingCount === 1 ? '' : 's'}
+            </Link>
+          )}
+          <Link
+            href="/chemicals/new"
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded bg-indigo-600 hover:bg-indigo-700 text-white font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            Add chemical
+          </Link>
+        </div>
       </header>
 
       <section className="grid grid-cols-3 gap-3">

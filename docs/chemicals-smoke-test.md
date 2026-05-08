@@ -1,10 +1,10 @@
-# Chemical Management module — smoke checklist (Phase A)
+# Chemical Management module — smoke checklist (Phases A + B)
 
 Use this after applying migration `082_chemicals_module.sql` and
-deploying the branch. Phase A ships the foundation: catalog list +
-detail, manual SDS PDF upload + storage, search/filter, and module
-registration. AI parsing (Phase B), labeling (Phase C), and inventory
-items (Phase D) are not in scope for this checklist.
+deploying the branch. Phase A ships the foundation (catalog, detail,
+manual SDS upload, search/filter); Phase B layers AI SDS parsing +
+the human review queue. Labeling (Phase C) and inventory items
+(Phase D) are not in scope yet.
 
 See `docs/chemical-management-system-plan.md` for the full roadmap.
 
@@ -117,9 +117,66 @@ See `docs/chemical-management-system-plan.md` for the full roadmap.
 - [ ] Vercel preview deploy completes, page renders correctly with
       the active dark/light theme
 
-## Known follow-ups (not in Phase A)
+## 9 · AI SDS parse (Phase B)
 
-- AI SDS parsing → Phase B
+Run after Sections 1–8 pass. Requires `ANTHROPIC_API_KEY` (or per-tenant
+override) configured for the deployment.
+
+- [ ] On a chemical with an active SDS, click "Parse with AI" on the
+      revision row → button shows spinner, then redirects to
+      `/chemicals/review`
+- [ ] `ai_invocations` table has a new row with `surface = 'parse-sds'`,
+      `status = 'success'`, non-null `input_tokens` / `output_tokens`,
+      `context = {sdsId}`
+- [ ] `chemical_sds_documents` row for that SDS has `parsed_payload`
+      populated, `parse_model = 'claude-sonnet-4-6'`,
+      `parse_review_status = 'pending'`, `parse_confidence` between 0 and 1
+- [ ] Catalog list now shows "1 pending review" pill in the header
+- [ ] Detail page shows the indigo "AWAITING REVIEW" banner
+
+## 10 · Review queue + apply
+
+- [ ] `/chemicals/review` is reachable from the catalog header pill
+      AND the chemicals drawer entry "SDS Review Queue"
+- [ ] Sidebar lists every pending parse, sorted newest first; each
+      row shows product name, manufacturer, and confidence chip
+- [ ] Selecting a row shows: header with model + overall confidence;
+      parser_notes banner when present; field grid with checkboxes
+- [ ] Fields where the proposed value matches current show
+      "(no change)" and the checkbox is disabled
+- [ ] Fields that differ are auto-checked by default; user can
+      uncheck individual rows
+- [ ] Each field row shows its per-section confidence (high / medium / low)
+- [ ] "Apply N fields" with selection → product row updates with
+      ONLY the selected fields, untouched fields preserve manual edits
+- [ ] After apply, the SDS row's `parse_review_status` flips to
+      `approved`; queue removes the row; user sees the next pending one
+- [ ] On a parse, click "Reject parse" → confirm prompt → row
+      disappears from queue, DB has `parse_review_status = 'rejected'`,
+      `parsed_payload = null`, product fields untouched
+- [ ] Re-uploading the same PDF (file_hash dedupe) does not re-trigger
+      a parse — the existing pending or approved row is returned
+
+## 11 · Rate limiting + cost guardrails
+
+- [ ] Hammer the parse endpoint past `parse-sds` per-hour cap
+      (currently 30) → 429 with `retry-after` header
+- [ ] Each rate-limited attempt creates an `ai_invocations` row with
+      `status = 'rate_limited'`
+- [ ] As a tenant without an Anthropic key configured, parsing
+      returns a friendly 503 "AI is not configured for this deployment"
+- [ ] An > 25 MB SDS PDF returns 413 instead of attempting the parse
+
+## 12 · Multi-tenant + permission isolation (Phase B)
+
+- [ ] As tenant B, POST to tenant A's `/parse` URL → 404 "SDS not found"
+- [ ] As tenant B, POST to tenant A's `/apply` URL → 404
+- [ ] As tenant B, GET `/api/chemicals/review-queue` returns only
+      tenant B's pending parses
+
+## Known follow-ups (not in Phase B)
+
+- Bulk parse on import (queue many SDSs at once) → Phase B follow-up
 - Drift monitoring (nightly cron) → Phase E
 - Inventory containers + locations + scan → Phase D
 - Label printing + GHS pictogram SVGs → Phase C

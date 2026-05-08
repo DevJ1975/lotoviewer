@@ -37,6 +37,11 @@ export const MODEL_BY_SURFACE = {
   // Recordability assist runs Haiku — small reasoning surface,
   // structured Q&A, human always reviews before save.
   'classify-recordability':           HAIKU,
+  // SDS parsing reads a multi-page PDF and emits a long structured
+  // JSON payload. Sonnet's accuracy on technical regulatory content
+  // is worth the extra cost — and every parse runs through a human
+  // review queue before fields land on the product.
+  'parse-sds':                        SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

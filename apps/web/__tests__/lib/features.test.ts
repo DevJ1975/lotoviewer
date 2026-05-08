@@ -122,6 +122,7 @@ describe('getFeaturesByCategory', () => {
       'bbs-scorecard',
       'chemicals',
       'chemicals-new',
+      'chemicals-review',
       'near-miss',
       'hot-work',
       'hot-work-status',
