@@ -63,7 +63,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
   return (
     <>
       <header
-        className="bg-brand-navy border-b border-white/10 sticky top-0 z-40"
+        className="bg-gradient-to-b from-brand-navy to-[#162F58] border-b border-white/5 shadow-[0_1px_0_0_rgba(255,255,255,0.04)] sticky top-0 z-40 backdrop-saturate-150"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
@@ -73,7 +73,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
               onClick={() => setDrawerOpen(true)}
               aria-label="Open navigation"
               aria-expanded={drawerOpen}
-              className="text-white/80 hover:text-white hover:bg-white/10 dark:hover:bg-slate-900/10 rounded-md h-10 w-10 flex items-center justify-center transition-colors shrink-0"
+              className="text-white/85 hover:text-white hover:bg-white/10 active:bg-white/15 rounded-lg h-10 w-10 flex items-center justify-center transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
             >
               <Menu className="h-5 w-5" />
             </button>
@@ -128,20 +128,23 @@ export default function AppChrome({ children }: { children: ReactNode }) {
       <AssistantDock />
 
       <footer
-        className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-3 text-xs text-slate-500 dark:text-slate-400"
-        style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
+        className="mt-12 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800/60 py-4 text-xs text-slate-500 dark:text-slate-400"
+        style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>Powered by Trainovate Technologies LLC · Copyright 2026</span>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <span className="tracking-tight">
+            Powered by <span className="font-medium text-slate-700 dark:text-slate-300">Trainovate Technologies</span>
+            <span className="text-slate-400 dark:text-slate-500"> · © 2026</span>
+          </span>
           <span className="flex items-center gap-3">
-            <span className="font-mono tabular-nums" title={`build ${process.env.NEXT_PUBLIC_BUILD_ITERATION ?? '0'}`}>
+            <span className="font-mono tabular-nums text-[11px] text-slate-400 dark:text-slate-500" title={`build ${process.env.NEXT_PUBLIC_BUILD_ITERATION ?? '0'}`}>
               v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'}
-              <span className="text-slate-400 dark:text-slate-500">.{process.env.NEXT_PUBLIC_BUILD_ITERATION ?? '0'}</span>
+              <span className="opacity-70">.{process.env.NEXT_PUBLIC_BUILD_ITERATION ?? '0'}</span>
             </span>
-            <span aria-hidden="true">·</span>
-            <Link href="/privacy" className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors">Privacy</Link>
-            <span aria-hidden="true">·</span>
-            <Link href="/terms"   className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors">Terms</Link>
+            <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
+            <Link href="/privacy" className="hover:text-slate-800 dark:hover:text-slate-200 transition-colors">Privacy</Link>
+            <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
+            <Link href="/terms"   className="hover:text-slate-800 dark:hover:text-slate-200 transition-colors">Terms</Link>
           </span>
         </div>
       </footer>
