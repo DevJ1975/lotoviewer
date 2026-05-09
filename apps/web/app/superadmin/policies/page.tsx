@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, type FormEvent } from 'react'
-import { Loader2, Upload, Trash2, FileText, AlertCircle, CheckCircle2, Globe, Building2 } from 'lucide-react'
+import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react'
+import { Loader2, Upload, Trash2, FileText, AlertCircle, CheckCircle2, Globe, Building2, X, FileUp } from 'lucide-react'
 import { superadminFetch, superadminJson } from '@/lib/superadminFetch'
 import { supabase } from '@/lib/supabase'
 
@@ -36,6 +36,48 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   epa:           'EPA (40 CFR)',
   rcra:          'RCRA / Hazardous Waste',
   company_policy:'Company Policy',
+}
+
+// Mirrors the server-side cap in lib/ai/policyExtract.ts. Validating
+// client-side too means we reject a 30 MB drop before it gets uploaded
+// to Supabase Storage and back-eaten by the server.
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+
+const ACCEPTED_MIMES = new Set([
+  'text/markdown',
+  'text/x-markdown',
+  'text/plain',
+  'application/pdf',
+])
+const ACCEPTED_EXTS = new Set(['md', 'markdown', 'txt', 'pdf'])
+
+// Some OSes drop files with an empty MIME type (Windows ZIPs the type
+// off, Linux clipboards do too). Fall back to the extension before
+// rejecting — the server re-validates against SUPPORTED_MIMES.
+export function isAcceptedFile(file: { name: string; type: string }): boolean {
+  if (file.type && ACCEPTED_MIMES.has(file.type)) return true
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  return ACCEPTED_EXTS.has(ext)
+}
+
+export function validateUpload(file: File): { ok: true } | { ok: false; reason: string } {
+  if (!isAcceptedFile(file)) {
+    return { ok: false, reason: `Unsupported file type. Use a Markdown, plain text, or PDF file (got ${file.type || file.name}).` }
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    const mb = (file.size / 1024 / 1024).toFixed(1)
+    return { ok: false, reason: `File is ${mb} MB — over the 25 MB cap. Split the document or upload as plain text.` }
+  }
+  if (file.size === 0) {
+    return { ok: false, reason: 'File is empty.' }
+  }
+  return { ok: true }
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
 
 // Pattern-match an upstream Anthropic / extraction error to a
@@ -78,6 +120,58 @@ export default function PoliciesPage() {
   const [uploading, setUploading]     = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadOk,    setUploadOk]    = useState<{ id: string; chunkCount: number; duplicate: boolean } | null>(null)
+  const [dragActive,  setDragActive]  = useState(false)
+  // dragDepth counts dragenter/dragleave events. The dropzone has child
+  // elements; without depth tracking, every dragleave on a child flickers
+  // the highlight off even though the cursor is still over the zone.
+  const dragDepthRef = useRef(0)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  function acceptFile(picked: File | null) {
+    setUploadOk(null)
+    if (!picked) { setFile(null); return }
+    const v = validateUpload(picked)
+    if (!v.ok) {
+      setUploadError(v.reason)
+      setFile(null)
+      return
+    }
+    setUploadError(null)
+    setFile(picked)
+  }
+
+  function onDrop(e: DragEvent<HTMLLabelElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    dragDepthRef.current = 0
+    setDragActive(false)
+    const dt = e.dataTransfer
+    if (!dt || dt.files.length === 0) return
+    if (dt.files.length > 1) {
+      setUploadError('Drop one file at a time.')
+      return
+    }
+    acceptFile(dt.files[0])
+  }
+
+  function onDragEnter(e: DragEvent<HTMLLabelElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    dragDepthRef.current += 1
+    setDragActive(true)
+  }
+  function onDragLeave(e: DragEvent<HTMLLabelElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+    if (dragDepthRef.current === 0) setDragActive(false)
+  }
+  function onDragOver(e: DragEvent<HTMLLabelElement>) {
+    // Required — without preventDefault here, the browser refuses the
+    // subsequent drop event entirely.
+    e.preventDefault()
+    e.stopPropagation()
+  }
 
   async function refresh() {
     setLoading(true); setLoadError(null)
@@ -184,15 +278,61 @@ export default function PoliciesPage() {
         </h2>
         <form onSubmit={onUpload} className="space-y-4">
           <div>
-            <label htmlFor="policy-file" className="block text-xs font-medium text-slate-700 dark:text-slate-200 mb-1">File</label>
-            <input
-              id="policy-file"
-              type="file"
-              accept=".md,.markdown,.txt,.pdf,text/markdown,text/plain,application/pdf"
-              onChange={e => setFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-slate-700 dark:text-slate-200"
-            />
-            <p className="mt-1 text-[11px] text-slate-500">Markdown, plain text, or PDF (≤25MB). PDF text is extracted via Claude.</p>
+            <span className="block text-xs font-medium text-slate-700 dark:text-slate-200 mb-1">File</span>
+            <label
+              htmlFor="policy-file"
+              onDragEnter={onDragEnter}
+              onDragLeave={onDragLeave}
+              onDragOver={onDragOver}
+              onDrop={onDrop}
+              className={[
+                'flex flex-col items-center justify-center gap-2 px-4 py-8 rounded-md border-2 border-dashed cursor-pointer transition-colors',
+                dragActive
+                  ? 'border-indigo-500 bg-indigo-50/60 dark:bg-indigo-900/20'
+                  : 'border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600 bg-slate-50/50 dark:bg-slate-800/30',
+              ].join(' ')}
+            >
+              {file ? (
+                <div className="flex items-center gap-3 w-full max-w-md">
+                  <FileText className="h-5 w-5 text-slate-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{file.name}</div>
+                    <div className="text-[11px] text-slate-500">{formatBytes(file.size)} · {file.type || 'unknown type'}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={e => {
+                      e.preventDefault()
+                      acceptFile(null)
+                      if (fileInputRef.current) fileInputRef.current.value = ''
+                    }}
+                    aria-label="Remove file"
+                    className="p-1 rounded text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <FileUp className={`h-6 w-6 ${dragActive ? 'text-indigo-500' : 'text-slate-400'}`} />
+                  <div className="text-center">
+                    <p className="text-sm text-slate-700 dark:text-slate-200">
+                      <span className="font-medium text-indigo-600 dark:text-indigo-400">Click to browse</span>
+                      {' '}or drag a file here
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-500">Markdown, plain text, or PDF (≤25MB). PDF text is extracted via Claude.</p>
+                  </div>
+                </>
+              )}
+              <input
+                ref={fileInputRef}
+                id="policy-file"
+                type="file"
+                accept=".md,.markdown,.txt,.pdf,text/markdown,text/plain,application/pdf"
+                onChange={e => acceptFile(e.target.files?.[0] ?? null)}
+                className="sr-only"
+              />
+            </label>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
