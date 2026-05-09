@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Download, ExternalLink, FileText, Loader2, RefreshCw, Sparkles, Upload } from 'lucide-react'
+import { ArrowLeft, Download, ExternalLink, FileText, Loader2, RefreshCw, Sparkles } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
+import Dropzone from '@/components/ui/Dropzone'
 import { PictogramBadges, SignalWordBadge } from '../_components/PictogramBadges'
 import PrintLabelPanel from './_components/PrintLabelPanel'
 import ContainersPanel from './_components/ContainersPanel'
@@ -357,35 +358,36 @@ export default function ChemicalDetailPage() {
           </div>
         )}
 
-        <label className="block mb-3">
+        <div className="block mb-3">
           <div className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
             Upload a new SDS revision (PDF, max 25 MB). Becomes the active SDS for this chemical.
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-col gap-2">
             <input
               type="date"
               value={revisionDate}
               onChange={e => setRevisionDate(e.target.value)}
-              className="px-2 py-1.5 text-sm rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+              className="self-start px-2 py-1.5 text-sm rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
               placeholder="Revision date"
               title="Revision date (optional)"
             />
-            <label className={`inline-flex items-center gap-2 px-3 py-2 text-sm rounded border cursor-pointer ${uploading ? 'opacity-60 pointer-events-none' : 'border-indigo-300 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/30'}`}>
-              {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              {uploading ? 'Uploading…' : 'Choose PDF'}
-              <input
-                type="file"
-                accept="application/pdf"
-                className="hidden"
-                onChange={e => {
-                  const f = e.target.files?.[0]
-                  if (f) void uploadSds(f)
-                  e.target.value = ''
-                }}
-              />
-            </label>
+            {/* Pass file=null so the dropzone never holds the selection —
+                we want the existing single-action UX where picking a file
+                kicks off the upload immediately. The dropzone provides
+                the drop target and validation; uploadSds owns the rest. */}
+            <Dropzone
+              file={null}
+              onFileSelected={f => { if (f) void uploadSds(f) }}
+              onValidationError={msg => setError(msg)}
+              inputId={`sds-revision-${product?.id ?? 'new'}`}
+              acceptedMimes={new Set(['application/pdf'])}
+              acceptedExts={new Set(['pdf'])}
+              acceptAttr="application/pdf,.pdf"
+              helpText={uploading ? 'Uploading…' : 'PDF only, ≤25MB. Drop a new revision or click to browse.'}
+              disabled={uploading}
+            />
           </div>
-        </label>
+        </div>
 
         {revisions.length === 0 ? (
           <div className="text-sm text-slate-500 italic">No SDS uploaded yet.</div>
