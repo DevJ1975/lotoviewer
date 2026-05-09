@@ -5,7 +5,11 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Tabs({ className, ...props }: TabsPrimitive.Root.Props) {
+// Tabs.Root, .Tab, and .Panel each carry a generic value type. We
+// type-erase to `unknown` here so the wrappers don't force every
+// caller to thread the parameter; callers that want strict typing
+// can import TabsPrimitive directly.
+function Tabs({ className, ...props }: TabsPrimitive.Root.Props<unknown>) {
   return (
     <TabsPrimitive.Root
       data-slot="tabs"
@@ -28,7 +32,7 @@ function TabsList({ className, ...props }: TabsPrimitive.List.Props) {
   )
 }
 
-function TabsTab({ className, ...props }: TabsPrimitive.Tab.Props) {
+function TabsTab({ className, ...props }: TabsPrimitive.Tab.Props<unknown>) {
   return (
     <TabsPrimitive.Tab
       data-slot="tabs-tab"
@@ -45,7 +49,7 @@ function TabsTab({ className, ...props }: TabsPrimitive.Tab.Props) {
   )
 }
 
-function TabsPanel({ className, ...props }: TabsPrimitive.Panel.Props) {
+function TabsPanel({ className, ...props }: TabsPrimitive.Panel.Props<unknown>) {
   return (
     <TabsPrimitive.Panel
       data-slot="tabs-panel"

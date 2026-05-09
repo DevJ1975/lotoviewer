@@ -6,11 +6,15 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Select({ ...props }: SelectPrimitive.Root.Props) {
+// SelectPrimitive.Root.Props takes a generic for the selected value's
+// type. We type-erase to `unknown` here so callers don't have to thread
+// a type parameter through the wrapper; if a caller wants strict
+// typing, they can import SelectPrimitive directly.
+function Select(props: SelectPrimitive.Root.Props<unknown>) {
   return <SelectPrimitive.Root data-slot="select" {...props} />
 }
 
-function SelectValue({ ...props }: SelectPrimitive.Value.Props) {
+function SelectValue(props: SelectPrimitive.Value.Props<unknown>) {
   return <SelectPrimitive.Value data-slot="select-value" {...props} />
 }
 
@@ -72,7 +76,7 @@ function SelectItem({
   className,
   children,
   ...props
-}: SelectPrimitive.Item.Props) {
+}: SelectPrimitive.Item.Props<unknown>) {
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
