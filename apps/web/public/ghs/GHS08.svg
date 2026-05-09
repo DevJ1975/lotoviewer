@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="GHS08 — Health hazard">
+  <title>GHS08 — Health hazard</title>
+  <path d="M32 3 L61 32 L32 61 L3 32 Z" fill="#fff" stroke="#e30613" stroke-width="3" stroke-linejoin="miter"/>
+  <!-- shoulders/torso silhouette -->
+  <circle cx="32" cy="20" r="5" fill="#000"/>
+  <path d="M20 30 C 22 28 26 26 32 26 C 38 26 42 28 44 30 L 44 50 C 44 52 42 54 40 54 L 24 54 C 22 54 20 52 20 50 Z" fill="#000"/>
+  <!-- starburst on chest, 8-point -->
+  <g transform="translate(32 40)" fill="#fff">
+    <polygon points="0,-9 2,-3 9,0 2,3 0,9 -2,3 -9,0 -2,-3"/>
+    <polygon points="-6,-6 -1,-1 6,-6 1,1 6,6 1,-1 -6,6 -1,1" opacity="0.7"/>
+  </g>
+</svg>
