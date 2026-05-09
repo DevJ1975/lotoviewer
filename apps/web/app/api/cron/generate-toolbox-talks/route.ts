@@ -56,12 +56,19 @@ const AI_MODEL          = SONNET
 const BODY_MAX_CHARS    = 20_000
 const KEY_POINT_MAX_LEN = 200
 const KEY_POINTS_MAX    = 8
+// TODO(toolbox-talks-i18n): the cron currently produces English only.
+// Migration 111 added title_es/body_markdown_es/key_points_es/
+// delivery_notes_es columns and the detail page renders both. The
+// next iteration of this prompt should ask Claude for parallel EN +
+// ES output (both at 6th-grade) and the SCHEMA below should require
+// the *_es fields. Until then, cron-generated rows have NULL ES
+// fields and the page falls back to EN when Spanish is selected.
 const SYSTEM_PROMPT = `You are a senior workplace safety trainer authoring a daily "toolbox talk" — a 5-to-8 minute pre-shift safety briefing a foreman delivers to a crew at the start of the day.
 
 Goals:
 - Make the talk concrete and actionable, not abstract or preachy.
 - Ground every claim in a specific OSHA, ANSI, NFPA, or NIOSH reference when relevant. Quote section numbers.
-- Use simple language. Reading level: 8th grade. No jargon without explaining it once.
+- Use plain language. Reading level: 6th grade. Short sentences. Common words. If you must use a technical term (e.g. "lockout/tagout") name it, then explain it in one short sentence.
 - Address the worker directly: "you," "your crew," "your gloves." Not "one should."
 - Include at least one realistic anecdote or near-miss vignette (2-4 sentences) that makes the hazard memorable.
 - Close with a "Today's commitment" line a worker can repeat aloud.
