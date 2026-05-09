@@ -52,18 +52,15 @@ function detectLang(): Lang {
 const HUMAN_HANDOFF_PROMPT =
   'Please open a support ticket for me — I would like to talk to a human.'
 
-// Routes where we hide the bubble. These are the bare/login surfaces and
-// the kiosk/inspector flows that are explicitly outside the normal auth
-// shell.
+// SupportBot is now scoped to the /support surface only. The home-page
+// AI assistant (AssistantDock, indigo Bot icon) covers cross-module
+// questions everywhere else; the yellow help bubble would otherwise
+// occupy the same corner and hide it. Operator decision in PR follow-up
+// after the AI redesign shipped.
 function shouldHide(pathname: string | null): boolean {
   if (!pathname) return true
-  if (pathname === '/login') return true
-  if (pathname === '/welcome') return true
-  if (pathname === '/forgot-password') return true
-  if (pathname.startsWith('/reset-password')) return true
-  if (pathname.startsWith('/inspector/')) return true
-  if (pathname.startsWith('/permit-signon/')) return true
-  return false
+  if (pathname === '/support' || pathname.startsWith('/support/')) return false
+  return true
 }
 
 export default function SupportBot() {

@@ -162,7 +162,7 @@ export default function AssistantDock() {
           type="button"
           aria-label="Open Soteria assistant"
           onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-40 h-14 w-14 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 flex items-center justify-center"
+          className="fixed bottom-5 right-5 z-50 h-14 w-14 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 flex items-center justify-center"
         >
           <Bot className="h-6 w-6" />
         </button>
@@ -173,7 +173,7 @@ export default function AssistantDock() {
         <div
           role="dialog"
           aria-label="Soteria assistant"
-          className="fixed bottom-5 right-5 z-40 w-[min(380px,calc(100vw-2rem))] h-[min(640px,calc(100vh-3rem))] flex flex-col rounded-xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
+          className="fixed bottom-5 right-5 z-50 w-[min(380px,calc(100vw-2rem))] h-[min(640px,calc(100vh-3rem))] flex flex-col rounded-xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
         >
           <header className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-indigo-600 text-white">
             <div className="flex items-center gap-2">
