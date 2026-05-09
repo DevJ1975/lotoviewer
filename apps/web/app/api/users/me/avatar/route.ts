@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { createClient } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { verifyPNG, verifyJPEG, verifyWebP } from '@/lib/security/magicBytes'
 
 // POST   /api/users/me/avatar  — multipart form, field "file"
 // DELETE /api/users/me/avatar  — clears avatar_url and storage object
@@ -88,6 +89,19 @@ export async function POST(req: Request) {
   const admin = supabaseAdmin()
   const path = `${auth.userId}.${ext}`
   const arrayBuffer = await file.arrayBuffer()
+
+  // Magic-byte verification — Content-Type is attacker-controlled,
+  // so verify the decoded payload matches the claimed format. PNG /
+  // JPEG / WebP all have well-known signatures.
+  const magicOk =
+    (file.type === 'image/png'  && verifyPNG(arrayBuffer))  ||
+    (file.type === 'image/jpeg' && verifyJPEG(arrayBuffer)) ||
+    (file.type === 'image/webp' && verifyWebP(arrayBuffer))
+  if (!magicOk) {
+    return NextResponse.json({
+      error: `File content does not match the declared type (${file.type}).`,
+    }, { status: 400 })
+  }
 
   // Cleanup BEFORE upload so a previous PNG doesn't linger when the new
   // upload writes a JPG to a different path. Keep `path` in case the user

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { chemicalSdsStoragePath } from '@soteria/core/chemicals'
+import { verifyPDF } from '@/lib/security/magicBytes'
+import { sanitizeError } from '@/lib/security/sanitizeError'
 
 // POST /api/chemicals/products/[id]/sds   (multipart, field "file")
 //
@@ -68,10 +70,17 @@ export async function POST(req: Request, ctx: Ctx) {
       .eq('id', productId)
       .eq('tenant_id', tenantId)
       .maybeSingle()
-    if (pErr)     return NextResponse.json({ error: pErr.message }, { status: 500 })
+    if (pErr)     return sanitizeError(pErr, 'chemicals/products/sds/POST')
     if (!product) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
 
     const buf = await file.arrayBuffer()
+    // Magic-byte verification — rejects content with a forged
+    // application/pdf Content-Type but bytes that are not a real
+    // PDF. Defense in depth: even if the parser downstream is
+    // tolerant of garbage, we don't store it.
+    if (!verifyPDF(buf)) {
+      return NextResponse.json({ error: 'File content is not a valid PDF' }, { status: 400 })
+    }
     const fileHash = await sha256Hex(buf)
 
     const { data: existing } = await admin

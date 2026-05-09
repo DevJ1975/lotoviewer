@@ -73,9 +73,18 @@ export async function getTenantApiKey(tenantId: string | null): Promise<string> 
     const settings = (data?.settings ?? {}) as Record<string, unknown>
     raw = settings[KEY_NAME]
   } catch (e) {
-    Sentry.captureException(e, {
-      tags: { source: 'getTenantApiKey', tenant_id: tenantId },
-    })
+    // Don't forward the raw exception to Sentry — Postgres errors
+    // can include row data, parameter values, or schema fragments.
+    // Capture only what an operator needs to triage: the tenant_id
+    // and the broad error class.
+    const className = e instanceof Error ? e.constructor.name : typeof e
+    Sentry.captureMessage(
+      'getTenantApiKey: admin lookup failed; falling back to env key',
+      {
+        level: 'warning',
+        tags:  { source: 'getTenantApiKey', tenant_id: tenantId, error_class: className },
+      },
+    )
     return envKey
   }
 

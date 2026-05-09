@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { sanitizeError } from '@/lib/security/sanitizeError'
 import {
   NEAR_MISS_HAZARD_CATEGORIES,
   NEAR_MISS_SEVERITY_BANDS,
@@ -145,10 +146,7 @@ export async function POST(req: Request) {
       .insert(insert)
       .select('*')
       .single()
-    if (error) {
-      Sentry.captureException(error, { tags: { route: 'near-miss/POST', stage: 'insert' } })
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
+    if (error) return sanitizeError(error, 'near-miss/POST')
     return NextResponse.json({ report: data }, { status: 201 })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

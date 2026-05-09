@@ -27,6 +27,25 @@ const ENUM_FIELDS: Record<string, readonly string[]> = {
   unit:           INVENTORY_UNITS,
 }
 
+// Fields that must be finite numbers when present. Anything else
+// (string, NaN, Infinity, object) is rejected with 400. Without this
+// guard, Supabase will accept a string and the column-level CHECK
+// is the only line of defence — better to fail clean at the gate.
+const NUMERIC_FIELDS = new Set(['quantity', 'cost_cents'])
+
+// Fields that must be ISO date strings (YYYY-MM-DD) when present.
+const DATE_FIELDS = new Set([
+  'received_date', 'opened_date', 'expiration_date', 'manufacture_date',
+])
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+// String fields with a hard length cap. Prevents a malicious or
+// accidental gigabyte payload from making it to the DB.
+const STRING_MAX_LEN: Record<string, number> = {
+  department: 200, lot_number: 100, purchase_order: 100,
+  notes: 5_000, disposed_method: 200, assigned_to: 200,
+}
+
 export async function GET(req: Request, ctx: Ctx) {
   const gate = await requireTenantMember(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
@@ -69,9 +88,31 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const update: Record<string, unknown> = { updated_by: gate.userId }
   for (const [k, v] of Object.entries(body)) {
     if (!PATCHABLE.has(k)) continue
-    if (k in ENUM_FIELDS && typeof v === 'string'
-        && !ENUM_FIELDS[k].includes(v)) {
-      return NextResponse.json({ error: `${k}: invalid value` }, { status: 400 })
+
+    // Allow `null` to clear an optional field; the type guards below
+    // only run on present, non-null values.
+    if (v !== null) {
+      if (k in ENUM_FIELDS) {
+        if (typeof v !== 'string' || !ENUM_FIELDS[k].includes(v)) {
+          return NextResponse.json({ error: `${k}: invalid value` }, { status: 400 })
+        }
+      }
+      if (NUMERIC_FIELDS.has(k)) {
+        if (typeof v !== 'number' || !Number.isFinite(v)) {
+          return NextResponse.json({ error: `${k}: must be a finite number` }, { status: 400 })
+        }
+      }
+      if (DATE_FIELDS.has(k)) {
+        if (typeof v !== 'string' || !ISO_DATE_RE.test(v)) {
+          return NextResponse.json({ error: `${k}: must be YYYY-MM-DD` }, { status: 400 })
+        }
+      }
+      const maxLen = STRING_MAX_LEN[k]
+      if (maxLen !== undefined) {
+        if (typeof v !== 'string' || v.length > maxLen) {
+          return NextResponse.json({ error: `${k}: must be a string ≤ ${maxLen} chars` }, { status: 400 })
+        }
+      }
     }
     update[k] = v
   }

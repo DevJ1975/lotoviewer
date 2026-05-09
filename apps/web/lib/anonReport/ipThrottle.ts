@@ -39,12 +39,27 @@ export function clientIp(req: Request): string {
        ?? '0.0.0.0'
 }
 
+const DEV_FALLBACK_SALT = 'dev-only-fallback-salt-do-not-use-in-prod'
+
 function dailySalt(): string {
   // Mix the deploy-wide secret with today's UTC date. Rotates at
-  // midnight UTC. Configure ANON_IP_SALT in Vercel; without it we
-  // fall back to a dev-only constant so local dev still works.
-  const base = process.env.ANON_IP_SALT ?? 'dev-only-fallback-salt-do-not-use-in-prod'
-  const day  = new Date().toISOString().slice(0, 10)
+  // midnight UTC. Configure ANON_IP_SALT in Vercel.
+  //
+  // Production fail-closed: if ANON_IP_SALT is unset (or accidentally
+  // left at the dev fallback) when NODE_ENV=production, the IP hash
+  // becomes pre-computable for any given IP and date. An attacker
+  // could build a rainbow table per day and evade the per-IP cap.
+  // Throwing here trips the route's catch and returns a 500 instead
+  // of silently degrading the rate limit.
+  const base = process.env.ANON_IP_SALT
+  if (!base || base === DEV_FALLBACK_SALT) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('ANON_IP_SALT must be set in production')
+    }
+    const day = new Date().toISOString().slice(0, 10)
+    return `${DEV_FALLBACK_SALT}::${day}`
+  }
+  const day = new Date().toISOString().slice(0, 10)
   return `${base}::${day}`
 }
 
