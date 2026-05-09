@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { syncManualToRagSafe, type ManualForSync } from '@/lib/ai/syncManualToRag'
 
 // PATCH  /api/superadmin/manuals/[moduleId]
 //   Edit body / title / summary / publish state. Calls the
@@ -68,7 +69,14 @@ export async function PATCH(req: Request, ctx: RouteContext) {
       const status = /not found/i.test(error.message) ? 404 : 500
       return NextResponse.json({ error: error.message }, { status })
     }
-    return NextResponse.json({ manual: data })
+
+    // RAG sync. update_manual returns the row shape we need; treat the
+    // sync as best-effort so a Voyage outage or ingestion error never
+    // blocks the manual save itself. The bulk sync endpoint is the
+    // operator's recovery path.
+    const ragOutcome = await syncManualToRagSafe(data as ManualForSync)
+
+    return NextResponse.json({ manual: data, rag: ragOutcome })
   } catch (e) {
     Sentry.captureException(e, { tags: { route: 'superadmin-manuals/[id]/PATCH' } })
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
@@ -101,6 +109,18 @@ export async function DELETE(req: Request, ctx: RouteContext) {
       const status = /not found/i.test(error.message) ? 404 : 500
       return NextResponse.json({ error: error.message }, { status })
     }
+
+    // Unpublish removes the manual from RAG. Best-effort.
+    await syncManualToRagSafe({
+      id:           '',           // not used on the unpublish path
+      module_id:    moduleId,
+      title:        '',
+      summary:      null,
+      body_md:      '',
+      published_at: null,         // forces the 'removed' branch
+      version:      0,
+    })
+
     return NextResponse.json({ ok: true })
   } catch (e) {
     Sentry.captureException(e, { tags: { route: 'superadmin-manuals/[id]/DELETE' } })
