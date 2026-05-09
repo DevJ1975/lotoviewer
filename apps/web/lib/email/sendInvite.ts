@@ -51,12 +51,12 @@ export async function sendInviteEmail(args: InviteEmailArgs): Promise<boolean> {
   }
 
   // From-address precedence:
-  //   INVITE_FROM_EMAIL  — preferred once Soteria's domain is verified
+  //   INVITE_FROM_EMAIL  — env override (e.g. per-environment)
   //   SUPPORT_FROM_EMAIL — fallback to the bug-report sender
-  //   onboarding@resend.dev — Resend's test sender (works without DNS)
+  //   invites@soteriafield.app — verified Resend domain (default)
   const from = process.env.INVITE_FROM_EMAIL
             ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <onboarding@resend.dev>'
+            ?? 'SoteriaField <invites@soteriafield.app>'
 
   const displayName = args.fullName || args.to.split('@')[0]!
   const isExisting = !args.tempPassword

@@ -44,7 +44,7 @@ export async function sendBoardDigest(args: BoardDigestArgs): Promise<boolean> {
   }
   const from = process.env.INVITE_FROM_EMAIL
             ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <onboarding@resend.dev>'
+            ?? 'SoteriaField <invites@soteriafield.app>'
 
   const name = args.recipientName?.trim() || args.to.split('@')[0]!
   const baseUrl = args.appUrl.replace(/\/$/, '')

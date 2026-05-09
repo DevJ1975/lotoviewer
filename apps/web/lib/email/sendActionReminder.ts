@@ -44,7 +44,7 @@ export async function sendActionReminderEmail(args: ActionReminderArgs): Promise
 
   const from = process.env.INVITE_FROM_EMAIL
             ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <onboarding@resend.dev>'
+            ?? 'SoteriaField <invites@soteriafield.app>'
 
   const link = `${args.appUrl.replace(/\/$/, '')}/incidents/${args.incidentId}/actions`
   const name = args.recipientName?.trim() || args.to.split('@')[0]!
