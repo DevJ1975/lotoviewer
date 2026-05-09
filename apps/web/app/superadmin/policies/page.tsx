@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Loader2, Upload, Trash2, FileText, AlertCircle, CheckCircle2, Globe, Building2 } from 'lucide-react'
 import { superadminFetch, superadminJson } from '@/lib/superadminFetch'
+import { supabase } from '@/lib/supabase'
 
 // /superadmin/policies
 //
@@ -79,20 +80,47 @@ export default function PoliciesPage() {
     }
     setUploading(true)
     try {
-      const fd = new FormData()
-      fd.set('file', file)
-      fd.set('title', title || file.name)
-      fd.set('source_type', sourceType)
-      if (tenantId.trim())       fd.set('tenant_id',      tenantId.trim())
-      if (jurisdiction.trim())   fd.set('jurisdiction',   jurisdiction.trim())
-      if (effectiveDate.trim())  fd.set('effective_date', effectiveDate.trim())
-      if (sourceUrl.trim())      fd.set('source_url',     sourceUrl.trim())
+      // Two-step upload to dodge Vercel's 4.5MB request body cap:
+      //   1. Upload the file directly to the policy-uploads Supabase
+      //      Storage bucket (private, superadmin-only RLS, 25MB cap).
+      //   2. POST a JSON body with the storage_path to the route. The
+      //      server downloads from storage as service-role and runs
+      //      the existing extract → chunk → embed pipeline.
+      // Storage bucket isn't size-limited at the Vercel ingress so
+      // 20MB OSHA / EPA / DOT regs go through fine.
+      const ext  = file.name.split('.').pop() ?? 'bin'
+      const path = `${crypto.randomUUID()}.${ext}`
+      const { error: upErr } = await supabase
+        .storage
+        .from('policy-uploads')
+        .upload(path, file, {
+          contentType:  file.type || 'application/octet-stream',
+          upsert:       false,
+        })
+      if (upErr) throw new Error(`Upload to storage failed: ${upErr.message}`)
 
-      const res = await superadminFetch('/api/superadmin/policies/upload', { method: 'POST', body: fd })
+      const res = await superadminFetch('/api/superadmin/policies/upload', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storage_path:   path,
+          title:          title || file.name,
+          source_type:    sourceType,
+          tenant_id:      tenantId.trim()      || null,
+          jurisdiction:   jurisdiction.trim()  || undefined,
+          effective_date: effectiveDate.trim() || undefined,
+          source_url:     sourceUrl.trim()     || undefined,
+          mime:           file.type            || undefined,
+        }),
+      })
       const j = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(j.error ?? `Upload failed (${res.status})`)
+      if (!res.ok) {
+        // Server didn't accept the staged file — clean up the orphan
+        // so it doesn't sit in the bucket forever.
+        void supabase.storage.from('policy-uploads').remove([path])
+        throw new Error(j.error ?? `Upload failed (${res.status})`)
+      }
       setUploadOk({ id: j.document_id, chunkCount: j.chunk_count, duplicate: !!j.duplicate })
-      // Reset only the file so operator can repeat with same metadata.
       setFile(null)
       const fileInput = document.getElementById('policy-file') as HTMLInputElement | null
       if (fileInput) fileInput.value = ''
