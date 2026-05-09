@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember, requireTenantAdmin } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { sanitizeError } from '@/lib/security/sanitizeError'
 
 // GET    /api/osha/establishments   List (any tenant member).
 // POST   /api/osha/establishments   Create (admin).
@@ -133,10 +134,7 @@ export async function POST(req: Request) {
       .insert(insert)
       .select(COLS)
       .single()
-    if (error) {
-      Sentry.captureException(error, { tags: { route: 'establishments/POST' } })
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
+    if (error) return sanitizeError(error, 'establishments/POST')
     return NextResponse.json({ establishment: data }, { status: 201 })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -230,10 +228,7 @@ export async function PATCH(req: Request) {
       .eq('tenant_id', gate.tenantId)
       .select(COLS)
       .single()
-    if (error) {
-      Sentry.captureException(error, { tags: { route: 'establishments/PATCH' } })
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
+    if (error) return sanitizeError(error, 'establishments/PATCH')
     return NextResponse.json({ establishment: data })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -263,10 +258,7 @@ export async function DELETE(req: Request) {
       .delete()
       .eq('id', id)
       .eq('tenant_id', gate.tenantId)
-    if (error) {
-      Sentry.captureException(error, { tags: { route: 'establishments/DELETE' } })
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
+    if (error) return sanitizeError(error, 'establishments/DELETE')
     return NextResponse.json({ ok: true })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

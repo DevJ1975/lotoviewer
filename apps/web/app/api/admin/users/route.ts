@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin, generateTempPassword } from '@/lib/supabaseAdmin'
+import { sanitizeError } from '@/lib/security/sanitizeError'
 import { createClient } from '@supabase/supabase-js'
 import { sendInviteEmail, computeLoginUrl } from '@/lib/email/sendInvite'
 
@@ -100,7 +101,7 @@ export async function GET(req: Request) {
     .from('profiles')
     .select('id, email, full_name, is_admin, must_change_password, created_at')
     .order('created_at', { ascending: false })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return sanitizeError(error, 'admin/users/GET')
   return NextResponse.json({ users: data ?? [] })
 }
 
@@ -115,6 +116,6 @@ export async function DELETE(req: Request) {
 
   const admin = supabaseAdmin()
   const { error } = await admin.auth.admin.deleteUser(id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  if (error) return sanitizeError(error, 'admin/users/DELETE')
   return NextResponse.json({ ok: true })
 }

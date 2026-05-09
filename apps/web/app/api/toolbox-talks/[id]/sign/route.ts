@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { verifyPngDataUrl } from '@/lib/security/magicBytes'
+import { sanitizeError } from '@/lib/security/sanitizeError'
 
 // POST /api/toolbox-talks/[id]/sign
 //
@@ -28,11 +30,8 @@ export const runtime = 'nodejs'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const SIGNATURE_MAX_BYTES = 200_000
-const SIGNATURE_PREFIX    = 'data:image/png;base64,'
-// Only standard base64 alphabet + padding. Rejects garbage payloads
-// that share the prefix but carry non-base64 characters (e.g. an
-// attacker injecting HTML or shell metacharacters into the column).
-const BASE64_RE           = /^[A-Za-z0-9+/]+={0,2}$/
+// Prefix + base64-alphabet + magic-byte verification all live in
+// `verifyPngDataUrl` (lib/security/magicBytes.ts).
 
 interface SignBody {
   signer_name?:    unknown
@@ -62,15 +61,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }
 
   const sigData = typeof body.signature_data === 'string' ? body.signature_data : ''
-  if (!sigData.startsWith(SIGNATURE_PREFIX)) {
-    return NextResponse.json({ error: 'signature_data must be a base64 PNG data URL' }, { status: 400 })
-  }
   if (sigData.length > SIGNATURE_MAX_BYTES) {
     return NextResponse.json({ error: `signature_data exceeds ${SIGNATURE_MAX_BYTES} bytes` }, { status: 413 })
   }
-  const sigPayload = sigData.slice(SIGNATURE_PREFIX.length)
-  if (sigPayload.length === 0 || !BASE64_RE.test(sigPayload)) {
-    return NextResponse.json({ error: 'signature_data payload is not valid base64' }, { status: 400 })
+  // verifyPngDataUrl checks: prefix, base64 alphabet, AND that the
+  // decoded payload starts with the PNG magic bytes
+  // (89 50 4E 47 0D 0A 1A 0A). Without the magic-byte check, an
+  // attacker could store arbitrary bytes (HTML, JS, garbage) under
+  // a `data:image/png;base64,…` prefix that passes the alphabet
+  // regex.
+  const pngErr = verifyPngDataUrl(sigData)
+  if (pngErr) {
+    return NextResponse.json({ error: 'signature_data must be a valid base64 PNG data URL' }, { status: 400 })
   }
 
   const employeeId = typeof body.employee_id === 'string' ? body.employee_id.trim().slice(0, 60) || null : null
