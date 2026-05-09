@@ -5,6 +5,7 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2, Mail } from 'lucide-react'
 import { readLastLogin, useAuth, type LastLoginHint } from '@/components/AuthProvider'
+import LoginBackground from '@/components/LoginBackground'
 import PasswordField from '@/components/PasswordField'
 import SoteriaLogo from '@/components/SoteriaLogo'
 import { Avatar } from '@/components/ui/Avatar'
@@ -64,16 +65,17 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#1B3A6B] px-4 py-10">
+    <div className="relative min-h-screen flex flex-col items-center justify-center bg-[#1B3A6B] px-4 py-10">
+      <LoginBackground />
       {/* Brand hero — colour-transparent variant on the navy backdrop
           so the cream "Soteria" + teal "Field" land at full contrast. */}
-      <div className="mb-8">
+      <div className="relative z-10 mb-8">
         <SoteriaLogo variant="color" width={380} priority />
       </div>
 
       <form
         onSubmit={onSubmit}
-        className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl shadow-lg ring-1 ring-slate-200 dark:ring-slate-700 p-6 space-y-5"
+        className="relative z-10 w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl shadow-lg ring-1 ring-slate-200 dark:ring-slate-700 p-6 space-y-5"
       >
         <div className="text-center">
           <p className="text-sm text-slate-500 dark:text-slate-400">Sign in to continue</p>

@@ -224,3 +224,19 @@
   }
 }
 .print-only { display: none; }
+
+/* Slow ambient drift for the login background photo. Pairs with
+   pointer-driven parallax in <LoginBackground/> so the image still
+   breathes when the cursor is idle. Disabled when the user has
+   prefers-reduced-motion set. */
+@keyframes login-bg-drift {
+  0%   { transform: scale(1.04) translate3d(0, 0, 0); }
+  50%  { transform: scale(1.06) translate3d(-1%, -0.8%, 0); }
+  100% { transform: scale(1.04) translate3d(0, 0, 0); }
+}
+.animate-login-bg-drift {
+  animation: login-bg-drift 24s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-login-bg-drift { animation: none; }
+}
