@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { CheckCircle2, Loader2, LogIn, LogOut, ShieldAlert, XCircle } from 'lucide-react'
+import { Loader2, LogIn, LogOut, ShieldAlert, XCircle } from 'lucide-react'
+
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { toast } from '@/components/ui/sonner'
 
 // Worker-facing self-service sign-on page. Reached by scanning the QR
 // printed on a permit. Auth is the token in the URL path — anyone
@@ -14,7 +18,9 @@ import { CheckCircle2, Loader2, LogIn, LogOut, ShieldAlert, XCircle } from 'luci
 //
 // No app login required. Designed for a worker holding a phone at a
 // confined-space entry point — single-tap-to-sign-in, single-tap-to-
-// sign-out, big targets, friendly errors.
+// sign-out, big targets, friendly errors. Reference shadcn conversion:
+// inline-toast / inline-error patterns moved to <Toaster/> via sonner;
+// hand-rolled buttons moved to <Button size="touch"> for gloved hands.
 
 interface RosterEntry {
   name:               string
@@ -56,11 +62,9 @@ const STATUS_BG: Record<LookupResponse['permit']['status'], string> = {
 export default function PermitSignonPage() {
   const params = useParams<{ token: string }>()
   const token  = params.token
-  const [data, setData]       = useState<LookupResponse | null>(null)
+  const [data, setData]     = useState<LookupResponse | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busyName, setBusyName]   = useState<string | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [actionToast, setActionToast] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     setLoadError(null)
@@ -94,8 +98,6 @@ export default function PermitSignonPage() {
 
   async function act(name: string, action: 'sign-in' | 'sign-out') {
     setBusyName(name)
-    setActionError(null)
-    setActionToast(null)
     try {
       const res = await fetch('/api/permit-signon', {
         method:  'POST',
@@ -104,13 +106,13 @@ export default function PermitSignonPage() {
       })
       const json = await res.json()
       if (!res.ok) {
-        setActionError(json.error ?? `${action} failed (${res.status})`)
+        toast.error(json.error ?? `${action} failed (${res.status})`)
       } else {
-        setActionToast(action === 'sign-in' ? `Signed in as ${name}.` : `Signed out ${name}.`)
+        toast.success(action === 'sign-in' ? `Signed in as ${name}` : `Signed out ${name}`)
         await refresh()
       }
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : `${action} failed`)
+      toast.error(err instanceof Error ? err.message : `${action} failed`)
     } finally {
       setBusyName(null)
     }
@@ -138,21 +140,31 @@ export default function PermitSignonPage() {
         <XCircle className="h-12 w-12 text-rose-500 mx-auto" />
         <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">Could not load permit</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">{loadError}</p>
-        <button
-          type="button"
-          onClick={refresh}
-          className="mt-2 px-4 py-2 rounded-lg bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 transition-colors"
-        >
+        <Button type="button" onClick={refresh} className="mt-2">
           Retry
-        </button>
+        </Button>
       </div>
     )
   }
 
   if (!data) {
+    // Skeleton loading — gives the layout a real shape while the lookup
+    // call resolves, instead of a centered spinner that pushes content
+    // around when it lands.
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-slate-400 dark:text-slate-500" />
+      <div className="max-w-md mx-auto px-4 py-6 space-y-5">
+        <header className="space-y-2">
+          <Skeleton className="h-5 w-24 rounded" />
+          <Skeleton className="h-7 w-3/4" />
+          <Skeleton className="h-3 w-1/3" />
+          <Skeleton className="h-4 w-2/3" />
+        </header>
+        <section className="space-y-2">
+          <Skeleton className="h-3 w-32" />
+          {[0, 1, 2].map(i => (
+            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+          ))}
+        </section>
       </div>
     )
   }
@@ -184,20 +196,6 @@ export default function PermitSignonPage() {
           <p className="font-semibold">Sign-in not available</p>
           <p>{data.signInBlockedReason}</p>
           <p className="mt-1 opacity-80">Sign-out is still available so anyone currently inside can be logged out.</p>
-        </div>
-      )}
-
-      {/* Action results */}
-      {actionToast && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-2 text-xs text-emerald-900 dark:text-emerald-100 flex items-start gap-2">
-          <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
-          <span>{actionToast}</span>
-        </div>
-      )}
-      {actionError && (
-        <div className="rounded-lg border border-rose-300 bg-rose-50 dark:bg-rose-950/40 px-3 py-2 text-xs text-rose-900 dark:text-rose-100 flex items-start gap-2">
-          <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
-          <span>{actionError}</span>
         </div>
       )}
 
@@ -243,24 +241,27 @@ export default function PermitSignonPage() {
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <button
+                  <Button
                     type="button"
+                    size="touch"
                     disabled={!canSignIn || busy}
                     onClick={() => act(r.name, 'sign-in')}
-                    className="flex-1 px-4 py-3 rounded-lg bg-emerald-600 text-white text-sm font-bold disabled:bg-slate-200 disabled:dark:bg-slate-800 disabled:text-slate-400 disabled:dark:text-slate-500 hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 min-h-[44px]"
+                    className="flex-1 bg-emerald-600 [a]:hover:bg-emerald-700 hover:bg-emerald-700 text-white"
                   >
-                    {busy && !inside ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
+                    {busy && !inside ? <Loader2 className="animate-spin" /> : <LogIn />}
                     Sign in
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
+                    size="touch"
+                    variant="secondary"
                     disabled={!canSignOut || busy}
                     onClick={() => act(r.name, 'sign-out')}
-                    className="flex-1 px-4 py-3 rounded-lg bg-slate-700 text-white text-sm font-bold disabled:bg-slate-200 disabled:dark:bg-slate-800 disabled:text-slate-400 disabled:dark:text-slate-500 hover:bg-slate-800 transition-colors flex items-center justify-center gap-2 min-h-[44px]"
+                    className="flex-1 bg-slate-700 hover:bg-slate-800 text-white"
                   >
-                    {busy && inside ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+                    {busy && inside ? <Loader2 className="animate-spin" /> : <LogOut />}
                     Sign out
-                  </button>
+                  </Button>
                 </div>
               </li>
             )
