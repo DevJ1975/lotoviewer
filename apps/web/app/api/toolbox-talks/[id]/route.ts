@@ -26,7 +26,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   try {
     const { data: talk, error: tErr } = await gate.authedClient
       .from('toolbox_talks')
-      .select('id, tenant_id, topic_id, talk_date, title, body_markdown, key_points, delivery_notes, generated_by, generated_at, ai_model')
+      .select('id, tenant_id, topic_id, talk_date, title, title_es, body_markdown, body_markdown_es, key_points, key_points_es, delivery_notes, delivery_notes_es, generated_by, generated_at, ai_model')
       .eq('id', id)
       .eq('tenant_id', gate.tenantId)
       .maybeSingle()
