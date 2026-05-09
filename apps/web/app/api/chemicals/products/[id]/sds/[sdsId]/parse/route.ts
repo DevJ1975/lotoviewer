@@ -42,8 +42,13 @@ EXTRACTION RULES
    15 Regulatory · 16 Other
 2. Copy values verbatim from the SDS where possible. Do NOT paraphrase
    H-codes or P-codes — the regulatory text matters.
-3. NEVER invent values. If a field is not in the SDS, return null
-   (or an empty array for list fields). Do NOT guess.
+3. NEVER invent values. If a field is not in the SDS:
+   - string fields  → return "" (empty string)
+   - number fields  → return null
+   - enum fields    → return null
+   - integer fields → return null
+   - list fields    → return [] (empty array)
+   Do NOT guess.
 4. CAS Registry Numbers must match \\d{2,7}-\\d{2}-\\d. Drop anything else.
 5. GHS pictograms: only return codes from GHS01..GHS09. The SDS may
    illustrate them; map the illustration to its code:
@@ -102,10 +107,10 @@ const PARSE_SCHEMA = {
   ],
   properties: {
     product_name:    { type: 'string' },
-    manufacturer:    { type: ['string', 'null'] },
-    product_code:    { type: ['string', 'null'] },
-    recommended_use: { type: ['string', 'null'] },
-    emergency_phone: { type: ['string', 'null'] },
+    manufacturer:    { type: 'string' },
+    product_code:    { type: 'string' },
+    recommended_use: { type: 'string' },
+    emergency_phone: { type: 'string' },
 
     cas_numbers: { type: 'array', items: { type: 'string' } },
     synonyms:    { type: 'array', items: { type: 'string' } },
@@ -116,7 +121,7 @@ const PARSE_SCHEMA = {
         { type: 'null' },
       ],
     },
-    appearance:         { type: ['string', 'null'] },
+    appearance:         { type: 'string' },
     flash_point_c:      { type: ['number', 'null'] },
     boiling_point_c:    { type: ['number', 'null'] },
     vapor_pressure_kpa: { type: ['number', 'null'] },
@@ -168,7 +173,7 @@ const PARSE_SCHEMA = {
         { type: 'null' },
       ],
     },
-    nfpa_special: { type: ['string', 'null'] },
+    nfpa_special: { type: 'string' },
 
     pel_twa_ppm:  { type: ['number', 'null'] },
     stel_ppm:     { type: ['number', 'null'] },
@@ -180,11 +185,11 @@ const PARSE_SCHEMA = {
       additionalProperties: false,
       required: ['inhalation', 'skin', 'eyes', 'ingestion', 'notes'],
       properties: {
-        inhalation: { type: ['string', 'null'] },
-        skin:       { type: ['string', 'null'] },
-        eyes:       { type: ['string', 'null'] },
-        ingestion:  { type: ['string', 'null'] },
-        notes:      { type: ['string', 'null'] },
+        inhalation: { type: 'string' },
+        skin:       { type: 'string' },
+        eyes:       { type: 'string' },
+        ingestion:  { type: 'string' },
+        notes:      { type: 'string' },
       },
     },
     firefighting: {
@@ -194,8 +199,8 @@ const PARSE_SCHEMA = {
       properties: {
         suitable_extinguishers:   { type: 'array', items: { type: 'string' } },
         unsuitable_extinguishers: { type: 'array', items: { type: 'string' } },
-        special_hazards:          { type: ['string', 'null'] },
-        protective_equipment:     { type: ['string', 'null'] },
+        special_hazards:          { type: 'string' },
+        protective_equipment:     { type: 'string' },
       },
     },
     spill_cleanup: {
@@ -203,22 +208,22 @@ const PARSE_SCHEMA = {
       additionalProperties: false,
       required: ['personal_precautions', 'environmental_precautions', 'containment_methods', 'cleanup_methods'],
       properties: {
-        personal_precautions:      { type: ['string', 'null'] },
-        environmental_precautions: { type: ['string', 'null'] },
-        containment_methods:       { type: ['string', 'null'] },
-        cleanup_methods:           { type: ['string', 'null'] },
+        personal_precautions:      { type: 'string' },
+        environmental_precautions: { type: 'string' },
+        containment_methods:       { type: 'string' },
+        cleanup_methods:           { type: 'string' },
       },
     },
 
-    storage_class:     { type: ['string', 'null'] },
+    storage_class:     { type: 'string' },
     incompatibilities: { type: 'array', items: { type: 'string' } },
 
-    dot_un_number:     { type: ['string', 'null'] },
-    dot_hazard_class:  { type: ['string', 'null'] },
-    dot_packing_group: { type: ['string', 'null'] },
+    dot_un_number:     { type: 'string' },
+    dot_hazard_class:  { type: 'string' },
+    dot_packing_group: { type: 'string' },
 
-    sds_revision_date: { type: ['string', 'null'] },
-    sds_language:      { type: ['string', 'null'] },
+    sds_revision_date: { type: 'string' },
+    sds_language:      { type: 'string' },
 
     confidence: {
       type: 'object',
@@ -239,9 +244,30 @@ const PARSE_SCHEMA = {
         transport:      { type: 'string', enum: ['high', 'medium', 'low'] },
       },
     },
-    parser_notes: { type: ['string', 'null'] },
+    parser_notes: { type: 'string' },
   },
 } as const
+
+// Anthropic's structured-output validator caps "Parameters with union types"
+// (anyOf or type-as-array including null) at 16 across the whole schema.
+// We keep null only where it's load-bearing — the nullable enum/integer
+// fields that can't represent "absent" with an empty string, plus the
+// numeric fields where 0 is a meaningful value. String fields drop the
+// null branch and the model emits "" when absent; we normalize those back
+// to null before persisting so downstream consumers (apply route, UI,
+// label generators) keep their existing null semantics.
+function nullifyEmptyStrings<T>(value: T): T {
+  if (value === '') return null as unknown as T
+  if (Array.isArray(value)) return value.map(nullifyEmptyStrings) as unknown as T
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = nullifyEmptyStrings(v)
+    }
+    return out as unknown as T
+  }
+  return value
+}
 
 export async function POST(req: NextRequest, ctx: Ctx) {
   const gate = await requireTenantMember(req)
@@ -344,7 +370,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
     let parsed: ParsedSdsPayload
     try {
-      parsed = JSON.parse(textBlock.text) as ParsedSdsPayload
+      parsed = nullifyEmptyStrings(JSON.parse(textBlock.text) as ParsedSdsPayload)
     } catch {
       await logAiInvocation({
         userId, tenantId, surface: 'parse-sds', model: MODEL, status: 'error',
