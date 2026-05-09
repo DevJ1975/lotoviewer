@@ -5,6 +5,8 @@ import {
   INVENTORY_STATUSES,
   CONTAINER_TYPES,
   INVENTORY_UNITS,
+  isLegalStatusTransition,
+  type InventoryStatus,
 } from '@soteria/core/chemicals'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -85,6 +87,36 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
   try {
     const admin = supabaseAdmin()
+
+    // Status-change guard. Two enforcement layers:
+    //   1. The data-model state machine (isLegalStatusTransition).
+    //   2. The approvals workflow: requested → in_stock | rejected
+    //      MUST go through the admin-gated /approve endpoint, never
+    //      this PATCH (which is requireTenantMember). Otherwise a
+    //      worker could self-approve their own request.
+    if (typeof update.status === 'string' && (INVENTORY_STATUSES as readonly string[]).includes(update.status)) {
+      const { data: existing, error: fetchErr } = await admin
+        .from('chemical_inventory_items')
+        .select('status')
+        .eq('id', id)
+        .eq('tenant_id', gate.tenantId)
+        .maybeSingle()
+      if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 })
+      if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      const current = existing.status as InventoryStatus
+      const next    = update.status as InventoryStatus
+      if (!isLegalStatusTransition(current, next)) {
+        return NextResponse.json({
+          error: `Illegal status transition: ${current} → ${next}`,
+        }, { status: 409 })
+      }
+      if (current === 'requested' && (next === 'in_stock' || next === 'rejected')) {
+        return NextResponse.json({
+          error: 'Approving or rejecting a requested container must go through /approve (admin-only).',
+        }, { status: 403 })
+      }
+    }
+
     const { data, error } = await admin
       .from('chemical_inventory_items')
       .update(update)
