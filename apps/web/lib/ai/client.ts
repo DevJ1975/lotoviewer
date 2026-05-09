@@ -97,11 +97,54 @@ export function aiErrorToResponse(err: unknown, surface: string): AiErrorRespons
       tags: { surface, kind: 'upstream-5xx' },
     }
   }
+  // 4xx (other than 429) is almost always a bad-input problem the
+  // operator can fix — wrong file format, oversized PDF, refused
+  // content. Surfacing the upstream message materially shortens
+  // the "why won't this upload?" loop, especially for superadmin
+  // tools where the caller IS the operator.
+  if (typeof status === 'number' && status >= 400 && status < 500) {
+    const upstream = extractUpstreamMessage(err)
+    return {
+      status: 502,
+      body: { error: upstream
+        ? `The AI service rejected the request: ${upstream}`
+        : 'The AI service rejected the request.' },
+      tags: { surface, kind: `upstream-${status}` },
+    }
+  }
+  // Catch-all. Include the underlying message when it's an Error so
+  // the operator has SOMETHING to act on instead of a dead-end UI.
+  const fallbackMessage = err instanceof Error ? err.message : null
   return {
     status: 502,
-    body: { error: 'The AI service returned an unexpected error.' },
+    body: { error: fallbackMessage
+      ? `The AI service returned an unexpected error: ${truncate(fallbackMessage, 240)}`
+      : 'The AI service returned an unexpected error.' },
     tags: { surface, kind: 'unknown' },
   }
+}
+
+// Pull the human-readable message out of an Anthropic SDK APIError.
+// The SDK shape: err.error = { type: 'error', error: { type, message } }.
+// Falls back to err.message when the inner shape isn't present.
+function extractUpstreamMessage(err: unknown): string | null {
+  if (typeof err !== 'object' || err === null) return null
+  const outer = (err as { error?: unknown }).error
+  if (outer && typeof outer === 'object') {
+    const inner = (outer as { error?: unknown }).error
+    if (inner && typeof inner === 'object') {
+      const msg = (inner as { message?: unknown }).message
+      if (typeof msg === 'string' && msg.length > 0) return truncate(msg, 240)
+    }
+    const directMsg = (outer as { message?: unknown }).message
+    if (typeof directMsg === 'string' && directMsg.length > 0) return truncate(directMsg, 240)
+  }
+  if (err instanceof Error && err.message) return truncate(err.message, 240)
+  return null
+}
+
+function truncate(s: string, max: number): string {
+  return s.length <= max ? s : s.slice(0, max - 1) + '…'
 }
 
 /**
