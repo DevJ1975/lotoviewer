@@ -59,7 +59,7 @@ export async function sendReviewLinkEmail(
   // From-address precedence — same fallback ladder as the invite helper.
   const from = process.env.INVITE_FROM_EMAIL
             ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <onboarding@resend.dev>'
+            ?? 'SoteriaField <invites@soteriafield.app>'
 
   // Subject + plain-text body come from the shared pure renderer so
   // the manual-send (mailto) path produces identical wording. HTML

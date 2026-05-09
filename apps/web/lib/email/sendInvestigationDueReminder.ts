@@ -50,7 +50,7 @@ export async function sendInvestigationDueReminder(args: InvestigationDueArgs): 
 
   const from = process.env.INVITE_FROM_EMAIL
             ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <onboarding@resend.dev>'
+            ?? 'SoteriaField <invites@soteriafield.app>'
 
   const text = renderText(args)
   const html = renderHtml(args)

@@ -40,7 +40,7 @@ export async function sendTrainingExpiryReminder(
   }
   const from = process.env.INVITE_FROM_EMAIL
             ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <onboarding@resend.dev>'
+            ?? 'SoteriaField <invites@soteriafield.app>'
 
   const expired = args.rows.filter(r => r.status === 'expired').length
   const expiring = args.rows.length - expired

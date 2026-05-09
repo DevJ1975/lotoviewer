@@ -33,7 +33,7 @@ export async function sendOshaPostingReminder(args: OshaPostingReminderArgs): Pr
 
   const from = process.env.INVITE_FROM_EMAIL
             ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <onboarding@resend.dev>'
+            ?? 'SoteriaField <invites@soteriafield.app>'
 
   const link = `${args.appUrl.replace(/\/$/, '')}/osha?year=${args.year}`
   const name = args.recipientName?.trim() || args.to.split('@')[0]!
