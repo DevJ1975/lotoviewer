@@ -134,6 +134,11 @@ export default function AppChrome({ children }: { children: ReactNode }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>Powered by Trainovate Technologies LLC · Copyright 2026</span>
           <span className="flex items-center gap-3">
+            <span className="font-mono tabular-nums" title={`build ${process.env.NEXT_PUBLIC_BUILD_ITERATION ?? '0'}`}>
+              v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'}
+              <span className="text-slate-400 dark:text-slate-500">.{process.env.NEXT_PUBLIC_BUILD_ITERATION ?? '0'}</span>
+            </span>
+            <span aria-hidden="true">·</span>
             <Link href="/privacy" className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors">Privacy</Link>
             <span aria-hidden="true">·</span>
             <Link href="/terms"   className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors">Terms</Link>
