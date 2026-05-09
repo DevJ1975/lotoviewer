@@ -10,10 +10,26 @@
 // Safety:
 //   - Links are rendered as <a> with rel="noreferrer" and target="_blank"
 //     for absolute URLs; in-app paths render as react-friendly anchors.
+//   - Link href schemes are restricted to http/https/mailto/tel + relative
+//     paths. Anything else (javascript:, data:, vbscript:, etc.) renders
+//     as plain text. React 19 also blocks javascript: URLs at runtime, but
+//     this is defense in depth — RAG-retrieved chunks or tenant-uploaded
+//     policies could contain malicious markdown links and we don't want
+//     to rely on the framework to catch them.
 //   - We do NOT render raw HTML. Anything that looks like a tag is escaped.
 //   - Code blocks/spans use <code> with whitespace-preserved styling.
 
 import { Fragment } from 'react'
+
+// Allowlisted schemes for markdown link hrefs. Anything else → plain text.
+function isSafeHref(href: string): boolean {
+  const trimmed = href.trim()
+  if (!trimmed) return false
+  // Relative paths (no scheme) are safe — they can't escape the origin.
+  if (trimmed.startsWith('/') || trimmed.startsWith('#') || trimmed.startsWith('?')) return true
+  // Scheme-prefixed: only allow http/https/mailto/tel.
+  return /^(https?|mailto|tel):/i.test(trimmed)
+}
 
 interface Props {
   text: string
@@ -73,7 +89,14 @@ function renderInline(s: string, keyPrefix: string): React.ReactNode[] {
           flush()
           const linkText = s.slice(i + 1, closeBracket)
           const href     = s.slice(closeBracket + 2, closeParen)
-          const isExternal = /^https?:\/\//i.test(href)
+          if (!isSafeHref(href)) {
+            // Render as plain text — both the [text] and the (url) parts —
+            // so the user can still see what the model produced.
+            parts.push(<span key={`${keyPrefix}-unsafe-${key++}`}>[{renderInline(linkText, `${keyPrefix}-ut${key}`)}]({href})</span>)
+            i = closeParen + 1
+            continue
+          }
+          const isExternal = /^https?:\/\//i.test(href.trim())
           parts.push(
             <a
               key={`${keyPrefix}-a-${key++}`}

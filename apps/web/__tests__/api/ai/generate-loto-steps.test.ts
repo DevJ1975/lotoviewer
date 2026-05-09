@@ -70,6 +70,45 @@ describe('POST /api/generate-loto-steps — input validation', () => {
     const res = await POST(jsonRequest({ ...VALID_BODY, description: '' }))
     expect(res.status).toBe(400)
   })
+
+  it('returns 400 when equipment_id exceeds 256 chars', async () => {
+    const res = await POST(jsonRequest({ ...VALID_BODY, equipment_id: 'A'.repeat(257) }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/too long/i)
+  })
+
+  it('returns 400 when description exceeds 4000 chars', async () => {
+    const res = await POST(jsonRequest({ ...VALID_BODY, description: 'x'.repeat(4001) }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/description.*too long/i)
+  })
+
+  it('returns 400 when notes exceeds 4000 chars', async () => {
+    const res = await POST(jsonRequest({ ...VALID_BODY, notes: 'n'.repeat(4001) }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/notes.*too long/i)
+  })
+
+  it('returns 400 when context exceeds 4000 chars', async () => {
+    const res = await POST(jsonRequest({ ...VALID_BODY, context: 'c'.repeat(4001) }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/context.*too long/i)
+  })
+
+  it('returns 400 when description is non-string', async () => {
+    const res = await POST(jsonRequest({ ...VALID_BODY, description: 12345 as unknown as string }))
+    expect(res.status).toBe(400)
+  })
+
+  it('accepts notes:null (treated as omitted)', async () => {
+    queueAnthropic(VALID_STEPS)
+    const res = await POST(jsonRequest({ ...VALID_BODY, notes: null }))
+    expect(res.status).toBe(200)
+  })
 })
 
 describe('POST /api/generate-loto-steps — Anthropic happy path', () => {

@@ -89,6 +89,15 @@ export async function POST(req: Request) {
   if (!equipmentId) {
     return NextResponse.json({ error: 'equipment_id is required.' }, { status: 400 })
   }
+  // Bound the input — equipment IDs are short alphanumeric+dash strings.
+  // A 256-char cap stops anyone from forcing an oversized RAG query
+  // string while leaving plenty of headroom for legitimate IDs.
+  if (equipmentId.length > 256) {
+    return NextResponse.json({ error: 'equipment_id is too long.' }, { status: 400 })
+  }
+  // Escape PostgREST ilike wildcards so a user-supplied "%" or "_"
+  // doesn't match the wrong row in the tenant's equipment list.
+  const equipmentIdLike = equipmentId.replace(/[\\%_]/g, m => '\\' + m)
 
   const limit = await checkAiRateLimit({
     userId:   gate.userId,
@@ -107,7 +116,7 @@ export async function POST(req: Request) {
     .from('loto_equipment')
     .select('id, equipment_id, description, department, internal_notes')
     .eq('tenant_id', gate.tenantId)
-    .ilike('equipment_id', equipmentId)
+    .ilike('equipment_id', equipmentIdLike)
     .maybeSingle()
   if (equipErr) {
     Sentry.captureException(equipErr, { tags: { route: '/api/assistant/hazards' } })

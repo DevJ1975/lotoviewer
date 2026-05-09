@@ -62,4 +62,13 @@ describe('POST /api/assistant/hazards — early exits', () => {
     const res = await POST(jsonRequest({ equipment_id: 'MIX-04' }))
     expect(res.status).toBe(429)
   })
+
+  it('returns 400 when equipment_id exceeds 256 chars', async () => {
+    const { POST } = await import('@/app/api/assistant/hazards/route')
+    const res = await POST(jsonRequest({ equipment_id: 'A'.repeat(257) }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/too long/i)
+  })
+
 })
