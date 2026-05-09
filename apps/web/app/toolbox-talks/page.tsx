@@ -1,20 +1,24 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, AlertTriangle, FileText, Users, Calendar, Sparkles } from 'lucide-react'
+import { Loader2, AlertTriangle, FileText, Users, Calendar, Sparkles, Archive, Search } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 
 // /toolbox-talks — landing page
 //
-// Three sections:
+// Sections rendered:
 //   1. Today's talk — the row whose talk_date = today, prominently
 //      featured because that's the talk the foreman delivers this
 //      morning.
 //   2. Upcoming — today + 6 days. Workers can preview the week.
-//   3. Past — last 30 days, with sign-in counts, so a supervisor
-//      can audit "did the Tuesday crew sign in?"
+//   3. Recent — most recent 30 talks (loaded with the default view).
+//   4. Archive — full historical library, lazy-loaded behind a "View
+//      archive" toggle. Includes a client-side search across title +
+//      date so a supervisor can find a specific talk for an audit
+//      response without scrolling. The archive request hits the API
+//      with `?archive=1` which widens the past limit from 30 to 365.
 //
 // There is no "Generate" button. Generation is the cron's job — the
 // abuse-prevention posture the operator asked for.
@@ -35,31 +39,69 @@ interface ListResponse {
   today_str: string
   upcoming:  TalkSummary[]
   past:      PastTalkSummary[]
+  archive?:  boolean
 }
 
 export default function ToolboxTalksListPage() {
   const { tenant } = useTenant()
-  const [data,  setData]  = useState<ListResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [data,           setData]           = useState<ListResponse | null>(null)
+  const [error,          setError]          = useState<string | null>(null)
+  const [archiveOpen,    setArchiveOpen]    = useState(false)
+  const [archiveLoading, setArchiveLoading] = useState(false)
+  const [archiveQuery,   setArchiveQuery]   = useState('')
+
+  const fetchTalks = useCallback(async (mode: 'default' | 'archive') => {
+    if (!tenant?.id) return null
+    const { data: { session } } = await supabase.auth.getSession()
+    const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+    if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
+
+    const path = mode === 'archive' ? '/api/toolbox-talks?archive=1' : '/api/toolbox-talks'
+    const res  = await fetch(path, { headers })
+    const body = await res.json()
+    if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
+    return body as ListResponse
+  }, [tenant])
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
     setError(null)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
-      if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
-
-      const res  = await fetch('/api/toolbox-talks', { headers })
-      const body = await res.json()
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
-      setData(body as ListResponse)
+      const body = await fetchTalks('default')
+      if (body) setData(body)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [tenant])
+  }, [fetchTalks])
+
+  const openArchive = useCallback(async () => {
+    if (archiveOpen) { setArchiveOpen(false); return }
+    setArchiveOpen(true)
+    // Only refetch if we don't already have the full archive (the
+    // default fetch caps at 30 — if the user has more than 30 past
+    // talks, we need the wider response).
+    if (!data?.archive) {
+      setArchiveLoading(true)
+      try {
+        const body = await fetchTalks('archive')
+        if (body) setData(body)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        setArchiveLoading(false)
+      }
+    }
+  }, [archiveOpen, data, fetchTalks])
 
   useEffect(() => { void load() }, [load])
+
+  const filteredArchive = useMemo(() => {
+    if (!data?.past) return [] as PastTalkSummary[]
+    const q = archiveQuery.trim().toLowerCase()
+    if (!q) return data.past
+    return data.past.filter(t =>
+      t.title.toLowerCase().includes(q) || t.talk_date.includes(q)
+    )
+  }, [data, archiveQuery])
 
   const todayTalk = data?.upcoming.find(t => t.talk_date === data.today_str) ?? null
   const upcoming  = data?.upcoming.filter(t => t.talk_date !== data.today_str) ?? []
@@ -151,11 +193,43 @@ export default function ToolboxTalksListPage() {
             </section>
           )}
 
-          {/* Past 30 days */}
+          {/* Past — recent 30 by default, full archive when toggled. */}
           <section>
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
-              Recent ({data.past.length})
-            </h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                {archiveOpen ? `Archive (${filteredArchive.length}${archiveQuery ? ` of ${data.past.length}` : ''})` : `Recent (${data.past.length})`}
+              </h2>
+              {data.past.length > 0 && (
+                <button
+                  onClick={() => void openArchive()}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-navy dark:text-blue-300 hover:underline"
+                >
+                  <Archive className="h-3.5 w-3.5" />
+                  {archiveOpen ? 'Hide archive' : 'View archive'}
+                </button>
+              )}
+            </div>
+
+            {archiveOpen && (
+              <div className="mb-3 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={archiveQuery}
+                  onChange={e => setArchiveQuery(e.target.value)}
+                  placeholder="Search title or date (e.g. 'PPE' or '2026-05')"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-navy"
+                />
+              </div>
+            )}
+
+            {archiveLoading && (
+              <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading full archive…
+              </div>
+            )}
+
             {data.past.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-6 text-center">
                 <FileText className="h-8 w-8 mx-auto text-slate-300 dark:text-slate-600" />
@@ -174,7 +248,7 @@ export default function ToolboxTalksListPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-950">
-                    {data.past.map(t => {
+                    {(archiveOpen ? filteredArchive : data.past.slice(0, 30)).map(t => {
                       const signCount = t.toolbox_talk_signatures?.[0]?.count ?? 0
                       return (
                         <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/60">
@@ -195,6 +269,13 @@ export default function ToolboxTalksListPage() {
                         </tr>
                       )
                     })}
+                    {archiveOpen && filteredArchive.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                          No talks match &ldquo;{archiveQuery}&rdquo;.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>

@@ -3,10 +3,16 @@ import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 
 // GET /api/toolbox-talks
+// GET /api/toolbox-talks?archive=1
 //
-// Lists the tenant's toolbox talks. Returns today's talk (if any),
-// the next 6 days of upcoming generated talks, and the most recent
-// 30 historical talks. The list page renders these sections inline.
+// Default mode lists the tenant's toolbox talks: today's talk (if
+// any), the next 6 days of upcoming generated talks, and the most
+// recent 30 historical talks.
+//
+// `?archive=1` widens the past list to up to 365 talks (one year of
+// history) for the on-page archive section. The list page renders
+// the archive lazily — it's hidden behind a "View archive" toggle
+// to keep the default response fast.
 //
 // Read-only. Generation is owned by /api/cron/generate-toolbox-talks
 // and there is intentionally no client-facing POST/PATCH on this
@@ -18,6 +24,9 @@ export const runtime = 'nodejs'
 export async function GET(req: Request) {
   const gate = await requireTenantMember(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
+  const url     = new URL(req.url)
+  const archive = url.searchParams.get('archive') === '1'
 
   try {
     const today = new Date()
@@ -34,17 +43,18 @@ export async function GET(req: Request) {
       .lte('talk_date', horizon)
       .order('talk_date', { ascending: true })
 
-    // Past = the 30 most recent talks before today, with their
-    // signature counts (so the list can show "12 signed" without an
-    // N+1 query). Supabase's nested-count syntax pulls the count in
-    // a single round-trip.
+    // Past — capped at 30 by default; 365 in archive mode. The cap
+    // is here to keep the default page response under ~30 KB; the
+    // archive opt-in sends one round-trip when the user actually
+    // wants the full library.
+    const pastLimit = archive ? 365 : 30
     const pastQuery = gate.authedClient
       .from('toolbox_talks')
       .select('id, talk_date, title, topic_id, generated_at, toolbox_talk_signatures(count)')
       .eq('tenant_id', gate.tenantId)
       .lt('talk_date', todayStr)
       .order('talk_date', { ascending: false })
-      .limit(30)
+      .limit(pastLimit)
 
     const [upcoming, past] = await Promise.all([upcomingQuery, pastQuery])
 
@@ -55,6 +65,7 @@ export async function GET(req: Request) {
       today_str: todayStr,
       upcoming:  upcoming.data ?? [],
       past:      past.data ?? [],
+      archive,
     })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
