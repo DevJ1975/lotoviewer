@@ -8,6 +8,7 @@ import { ThemeProvider, NO_FLASH_SCRIPT } from '@/components/ThemeProvider'
 import AuthGate from '@/components/AuthGate'
 import AppChrome from '@/components/AppChrome'
 import IosSplashLinks from '@/components/IosSplashLinks'
+import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
 const inter    = Inter({ variable: '--font-inter', subsets: ['latin'], display: 'swap' })
@@ -63,6 +64,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </TenantProvider>
           </AuthProvider>
         </ThemeProvider>
+        {/* Global toast surface — call `toast.success(...)` etc. from
+            anywhere via `import { toast } from '@/components/ui/sonner'`. */}
+        <Toaster />
       </body>
     </html>
   )
