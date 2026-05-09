@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="GHS09 — Environmental hazard">
+  <title>GHS09 — Environmental hazard</title>
+  <path d="M32 3 L61 32 L32 61 L3 32 Z" fill="#fff" stroke="#e30613" stroke-width="3" stroke-linejoin="miter"/>
+  <!-- horizon line -->
+  <line x1="8" y1="36" x2="56" y2="36" stroke="#000" stroke-width="1.5"/>
+  <!-- dead tree on left -->
+  <line x1="16" y1="36" x2="16" y2="18" stroke="#000" stroke-width="2.5"/>
+  <line x1="16" y1="22" x2="11" y2="17" stroke="#000" stroke-width="2"/>
+  <line x1="16" y1="26" x2="20" y2="20" stroke="#000" stroke-width="2"/>
+  <line x1="16" y1="30" x2="13" y2="26" stroke="#000" stroke-width="1.5"/>
+  <!-- dead fish belly-up on right -->
+  <path d="M28 46 Q 36 40 50 46 Q 36 52 28 46 Z" fill="#000"/>
+  <path d="M50 46 L56 42 L56 50 Z" fill="#000"/>
+  <line x1="32" y1="44" x2="34" y2="48" stroke="#fff" stroke-width="1.5"/>
+  <line x1="34" y1="44" x2="32" y2="48" stroke="#fff" stroke-width="1.5"/>
+</svg>

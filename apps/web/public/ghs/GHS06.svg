@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="GHS06 — Acute toxicity">
+  <title>GHS06 — Acute toxicity</title>
+  <path d="M32 3 L61 32 L32 61 L3 32 Z" fill="#fff" stroke="#e30613" stroke-width="3" stroke-linejoin="miter"/>
+  <!-- skull -->
+  <path d="M22 22 C 22 14 30 12 32 12 C 34 12 42 14 42 22 L 42 32 C 42 34 40 36 38 36 L 38 40 C 38 41 37 42 36 42 L 28 42 C 27 42 26 41 26 40 L 26 36 C 24 36 22 34 22 32 Z" fill="#fff" stroke="#000" stroke-width="2.5"/>
+  <circle cx="28" cy="26" r="2.5" fill="#000"/>
+  <circle cx="36" cy="26" r="2.5" fill="#000"/>
+  <path d="M30 32 L32 36 L34 32 Z" fill="#000"/>
+  <line x1="30" y1="38" x2="30" y2="40" stroke="#000" stroke-width="1.5"/>
+  <line x1="34" y1="38" x2="34" y2="40" stroke="#000" stroke-width="1.5"/>
+  <!-- crossed bones -->
+  <line x1="18" y1="44" x2="46" y2="54" stroke="#000" stroke-width="3" stroke-linecap="round"/>
+  <line x1="18" y1="54" x2="46" y2="44" stroke="#000" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="18" cy="44" r="2.5" fill="#000"/>
+  <circle cx="18" cy="54" r="2.5" fill="#000"/>
+  <circle cx="46" cy="44" r="2.5" fill="#000"/>
+  <circle cx="46" cy="54" r="2.5" fill="#000"/>
+</svg>

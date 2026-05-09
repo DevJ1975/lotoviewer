@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="GHS07 — Irritant / harmful">
+  <title>GHS07 — Irritant / harmful</title>
+  <path d="M32 3 L61 32 L32 61 L3 32 Z" fill="#fff" stroke="#e30613" stroke-width="3" stroke-linejoin="miter"/>
+  <path d="M28 14 L36 14 L34 40 L30 40 Z" fill="#000"/>
+  <circle cx="32" cy="48" r="4" fill="#000"/>
+</svg>

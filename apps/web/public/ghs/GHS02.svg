@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="GHS02 — Flammable">
+  <title>GHS02 — Flammable</title>
+  <path d="M32 3 L61 32 L32 61 L3 32 Z" fill="#fff" stroke="#e30613" stroke-width="3" stroke-linejoin="miter"/>
+  <path d="M16 50 L48 50" stroke="#000" stroke-width="2"/>
+  <path d="M30 14 C 32 22 28 26 26 30 C 23 36 28 38 30 36 C 28 42 32 46 38 42 C 46 36 44 28 38 24 C 36 28 36 22 30 14 Z" fill="#000"/>
+</svg>

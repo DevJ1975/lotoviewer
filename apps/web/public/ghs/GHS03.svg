@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="GHS03 — Oxidizing">
+  <title>GHS03 — Oxidizing</title>
+  <path d="M32 3 L61 32 L32 61 L3 32 Z" fill="#fff" stroke="#e30613" stroke-width="3" stroke-linejoin="miter"/>
+  <circle cx="32" cy="44" r="10" fill="none" stroke="#000" stroke-width="3"/>
+  <path d="M30 14 C 32 22 28 26 26 30 C 28 32 30 30 30 28 C 30 32 36 32 36 26 C 36 22 32 18 30 14 Z" fill="#000"/>
+</svg>
