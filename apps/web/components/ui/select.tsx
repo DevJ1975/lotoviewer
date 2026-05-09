@@ -14,7 +14,7 @@ function Select(props: SelectPrimitive.Root.Props<unknown>) {
   return <SelectPrimitive.Root data-slot="select" {...props} />
 }
 
-function SelectValue(props: SelectPrimitive.Value.Props<unknown>) {
+function SelectValue(props: SelectPrimitive.Value.Props) {
   return <SelectPrimitive.Value data-slot="select-value" {...props} />
 }
 
@@ -76,7 +76,7 @@ function SelectItem({
   className,
   children,
   ...props
-}: SelectPrimitive.Item.Props<unknown>) {
+}: SelectPrimitive.Item.Props) {
   return (
     <SelectPrimitive.Item
       data-slot="select-item"

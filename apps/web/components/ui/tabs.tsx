@@ -32,7 +32,7 @@ function TabsList({ className, ...props }: TabsPrimitive.List.Props) {
   )
 }
 
-function TabsTab({ className, ...props }: TabsPrimitive.Tab.Props<unknown>) {
+function TabsTab({ className, ...props }: TabsPrimitive.Tab.Props) {
   return (
     <TabsPrimitive.Tab
       data-slot="tabs-tab"
@@ -49,7 +49,7 @@ function TabsTab({ className, ...props }: TabsPrimitive.Tab.Props<unknown>) {
   )
 }
 
-function TabsPanel({ className, ...props }: TabsPrimitive.Panel.Props<unknown>) {
+function TabsPanel({ className, ...props }: TabsPrimitive.Panel.Props) {
   return (
     <TabsPrimitive.Panel
       data-slot="tabs-panel"
