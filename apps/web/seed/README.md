@@ -11,6 +11,8 @@ manifest in that route's source and ingests each entry as a
 | File | Source | Status |
 |---|---|---|
 | `29-cfr-1910-1200-hazcom-001-250.md` | OSHA HazCom 29 CFR 1910.1200 (federal), pages 1-250 of the 495-page regulatory packet | ✅ in manifest, `regulation` |
+| `federal-osha-29-cfr-1910-master.md` | OSHA 29 CFR Part 1910 (full part — 24 subparts, ~600 sections) generated from eCFR API | 🟡 in manifest; `.gitignore`-d so the file is generated locally via `scripts/ingest-osha-1910.mjs` |
+| `federal-osha-29-cfr-1910-source-map.md` | Build brief from the user; checked in for traceability | 📌 reference only — drives the generator script |
 
 Run after deploy:
 
@@ -42,6 +44,28 @@ fetched to build the actual regulation corpus. A follow-up should add
 Once the crawler runs and the manifest is updated, the existing
 `/api/superadmin/knowledge/seed-regulations` endpoint will ingest them
 the same way it ingests the federal HazCom file.
+
+## Generating Federal OSHA 1910 from eCFR
+
+The full Part 1910 corpus (~24 subparts, ~600 sections) is fetched
+live from eCFR rather than tracked in git. Re-run after each annual
+eCFR update.
+
+```bash
+# Fetch + write the master MD only (default date 2026-05-07):
+node scripts/ingest-osha-1910.mjs
+
+# Pin to a specific eCFR snapshot date:
+node scripts/ingest-osha-1910.mjs --date 2026-05-07
+
+# One shot: fetch, write, and POST to the seed-regulations endpoint.
+# Requires SOTERIA_BASE_URL + SOTERIA_SUPERADMIN_TOKEN env vars.
+SOTERIA_BASE_URL=https://soteriafield.app \
+SOTERIA_SUPERADMIN_TOKEN=<bearer> \
+  node scripts/ingest-osha-1910.mjs --ingest
+```
+
+Cost: roughly $2-3 in Voyage embedding credits per full re-ingest.
 
 ## Adding a new file
 
