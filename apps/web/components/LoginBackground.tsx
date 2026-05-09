@@ -6,9 +6,11 @@ import { useEffect, useRef, useState } from 'react'
 // Pool of background photos. Picked at random on every mount of the
 // login screen so each visit feels distinct. Files live in
 // /public/brand/login-bg/ — see that directory for the source jpegs.
+// (worker-2.jpg is intentionally omitted: the source export is 21 MB
+// and would dominate the page weight even after Next/Image resizing.
+// Re-add it here once a compressed version replaces the original.)
 const BACKGROUNDS = [
   '/brand/login-bg/worker-1.jpg',
-  '/brand/login-bg/worker-2.jpg',
   '/brand/login-bg/worker-3.jpg',
   '/brand/login-bg/worker-4.jpg',
   '/brand/login-bg/worker-5.jpg',
