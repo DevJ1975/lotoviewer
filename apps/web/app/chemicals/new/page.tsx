@@ -257,7 +257,7 @@ export default function NewChemicalPage() {
             <span className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Upload SDS PDF (optional, max 25 MB)</span>
             <Dropzone
               file={sdsFile}
-              onFileSelected={setSdsFile}
+              onFileSelected={f => { setError(null); setSdsFile(f) }}
               onValidationError={setError}
               inputId="sds-file-new"
               acceptedMimes={new Set(['application/pdf'])}

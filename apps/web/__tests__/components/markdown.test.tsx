@@ -74,6 +74,43 @@ describe('Markdown link sanitization', () => {
     const a = container.querySelector('a')
     expect(a?.getAttribute('href')).toBe('#energy-sources')
   })
+
+  it('rejects a tab-prefixed javascript: scheme', () => {
+    // Tabs and other whitespace also trigger the trim-then-test path.
+    const { container } = render(<Markdown text="Click [me](\tjavascript:alert(1))." />)
+    expect(container.querySelector('a')).toBeNull()
+  })
+
+  it('rejects a newline-prefixed javascript: scheme', () => {
+    const { container } = render(<Markdown text="Click [me](\njavascript:alert(1))." />)
+    expect(container.querySelector('a')).toBeNull()
+  })
+
+  it('rejects a "file:" scheme', () => {
+    const { container } = render(<Markdown text="Open [me](file:///etc/passwd)." />)
+    expect(container.querySelector('a')).toBeNull()
+  })
+
+  it('rejects a "blob:" scheme', () => {
+    const { container } = render(<Markdown text="Open [me](blob:https://example.com/abcd)." />)
+    expect(container.querySelector('a')).toBeNull()
+  })
+
+  it('rejects an "about:" scheme', () => {
+    const { container } = render(<Markdown text="Open [me](about:blank)." />)
+    expect(container.querySelector('a')).toBeNull()
+  })
+
+  it('rejects a scheme-only payload with no path', () => {
+    const { container } = render(<Markdown text="[x](javascript:)" />)
+    expect(container.querySelector('a')).toBeNull()
+  })
+
+  it('renders an http link with a query string preserving special chars', () => {
+    const { container } = render(<Markdown text="See [docs](https://example.com/path?a=1&b=2#frag)" />)
+    const a = container.querySelector('a')
+    expect(a?.getAttribute('href')).toBe('https://example.com/path?a=1&b=2#frag')
+  })
 })
 
 describe('Markdown core rendering', () => {

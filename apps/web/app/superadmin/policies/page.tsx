@@ -146,9 +146,10 @@ export default function PoliciesPage() {
         throw new Error(j.error ?? `Upload failed (${res.status})`)
       }
       setUploadOk({ id: j.document_id, chunkCount: j.chunk_count, duplicate: !!j.duplicate })
+      // Dropzone's input resets itself on every change, so clearing
+      // the file state alone is enough — picking the same file again
+      // a moment later still fires onChange.
       setFile(null)
-      const fileInput = document.getElementById('policy-file') as HTMLInputElement | null
-      if (fileInput) fileInput.value = ''
       void refresh()
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Upload failed')

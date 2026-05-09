@@ -225,7 +225,17 @@ export default function Dropzone(props: DropzoneProps) {
         type="file"
         accept={acceptAttr}
         disabled={disabled}
-        onChange={e => accept(e.target.files?.[0] ?? null)}
+        onChange={e => {
+          accept(e.target.files?.[0] ?? null)
+          // Reset so picking the SAME file again still fires a fresh
+          // change event. Critical for the immediate-upload pattern
+          // (file=null callers) where re-uploading a re-saved revision
+          // would otherwise be silently dropped by the browser's input
+          // dedup. The displayed selected-file UI reads from the `file`
+          // prop, not from the input element, so clearing here is safe
+          // for the state-holding callers too.
+          e.target.value = ''
+        }}
         className="sr-only"
       />
     </label>
