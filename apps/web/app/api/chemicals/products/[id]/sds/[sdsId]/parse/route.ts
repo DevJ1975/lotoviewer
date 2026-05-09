@@ -111,8 +111,10 @@ const PARSE_SCHEMA = {
     synonyms:    { type: 'array', items: { type: 'string' } },
 
     physical_state: {
-      type: ['string', 'null'],
-      enum: [...PHYSICAL_STATES, null],
+      anyOf: [
+        { type: 'string', enum: [...PHYSICAL_STATES] },
+        { type: 'null' },
+      ],
     },
     appearance:         { type: ['string', 'null'] },
     flash_point_c:      { type: ['number', 'null'] },
@@ -120,8 +122,10 @@ const PARSE_SCHEMA = {
     vapor_pressure_kpa: { type: ['number', 'null'] },
 
     ghs_signal_word: {
-      type: ['string', 'null'],
-      enum: [...GHS_SIGNAL_WORDS, null],
+      anyOf: [
+        { type: 'string', enum: [...GHS_SIGNAL_WORDS] },
+        { type: 'null' },
+      ],
     },
     ghs_pictograms: {
       type:  'array',
