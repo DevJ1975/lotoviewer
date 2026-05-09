@@ -5,11 +5,7 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-// Tabs.Root, .Tab, and .Panel each carry a generic value type. We
-// type-erase to `unknown` here so the wrappers don't force every
-// caller to thread the parameter; callers that want strict typing
-// can import TabsPrimitive directly.
-function Tabs({ className, ...props }: TabsPrimitive.Root.Props<unknown>) {
+function Tabs({ className, ...props }: TabsPrimitive.Root.Props) {
   return (
     <TabsPrimitive.Root
       data-slot="tabs"
