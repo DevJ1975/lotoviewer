@@ -262,9 +262,19 @@ function ModuleRow({
 
   return (
     <li>
-      <div className={`flex items-stretch rounded-lg ${
-        active ? 'bg-brand-navy/5 dark:bg-brand-navy/20' : 'hover:bg-slate-100 dark:hover:bg-slate-800'
-      } transition-colors`}>
+      <div className={`relative flex items-stretch rounded-lg overflow-hidden transition-colors ${
+        active
+          ? 'bg-brand-navy/8 dark:bg-brand-navy/25 ring-1 ring-brand-navy/15 dark:ring-brand-yellow/20'
+          : 'hover:bg-slate-100/80 dark:hover:bg-slate-800/60'
+      }`}>
+        {/* Left accent bar — only when active. Communicates "you are here"
+            without leaning on color alone (a11y nicety + visual lift). */}
+        {active && (
+          <span
+            aria-hidden="true"
+            className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-brand-navy dark:bg-brand-yellow"
+          />
+        )}
         {isClickable ? (
           <Link
             href={mod.href!}
@@ -336,10 +346,18 @@ function ChildRow({ child, active, onNavigate }: { child: FeatureDef; active: bo
       <Link
         href={child.href!}
         onClick={onNavigate}
-        className={`block px-3 py-2 rounded-lg transition-colors ${
-          active ? 'bg-brand-navy/5 dark:bg-brand-navy/20' : 'hover:bg-slate-100 dark:hover:bg-slate-800'
+        className={`relative block px-3 py-2 rounded-lg transition-colors ${
+          active
+            ? 'bg-brand-navy/8 dark:bg-brand-navy/25'
+            : 'hover:bg-slate-100/80 dark:hover:bg-slate-800/60'
         }`}
       >
+        {active && (
+          <span
+            aria-hidden="true"
+            className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-brand-navy dark:bg-brand-yellow"
+          />
+        )}
         {body}
       </Link>
     </li>
