@@ -150,10 +150,25 @@ const PARSE_SCHEMA = {
       },
     },
 
-    nfpa_health:       { type: ['integer', 'null'], minimum: 0, maximum: 4 },
-    nfpa_flammability: { type: ['integer', 'null'], minimum: 0, maximum: 4 },
-    nfpa_instability:  { type: ['integer', 'null'], minimum: 0, maximum: 4 },
-    nfpa_special:      { type: ['string', 'null'] },
+    nfpa_health: {
+      anyOf: [
+        { type: 'integer', enum: [0, 1, 2, 3, 4] },
+        { type: 'null' },
+      ],
+    },
+    nfpa_flammability: {
+      anyOf: [
+        { type: 'integer', enum: [0, 1, 2, 3, 4] },
+        { type: 'null' },
+      ],
+    },
+    nfpa_instability: {
+      anyOf: [
+        { type: 'integer', enum: [0, 1, 2, 3, 4] },
+        { type: 'null' },
+      ],
+    },
+    nfpa_special: { type: ['string', 'null'] },
 
     pel_twa_ppm:  { type: ['number', 'null'] },
     stel_ppm:     { type: ['number', 'null'] },
