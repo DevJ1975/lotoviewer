@@ -17,6 +17,7 @@ import StorageQuotaBanner from '@/components/StorageQuotaBanner'
 import { SuperadminImpersonationBanner } from '@/components/SuperadminImpersonationBanner'
 import { ReleaseNotesBanner } from '@/components/ReleaseNotesBanner'
 import AppDrawer from '@/components/AppDrawer'
+import CommandPalette from '@/components/CommandPalette'
 import TenantHeaderPill from '@/components/TenantHeaderPill'
 import SupportBot from '@/components/SupportBot'
 import AssistantDock from '@/components/AssistantDock'
@@ -113,6 +114,12 @@ export default function AppChrome({ children }: { children: ReactNode }) {
       />
 
       <AppDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+
+      {/* Global ⌘K / Ctrl+K command palette — listens for the chord
+          itself; we just mount it. Complements the per-resource
+          GlobalSearch above (equipment lookup) with cross-feature
+          navigation. */}
+      <CommandPalette />
 
       <PwaRegister />
       <OfflineBanner />

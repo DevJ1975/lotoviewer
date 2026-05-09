@@ -1,10 +1,38 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { zodResolver } from '@hookform/resolvers/zod'
+import type { ColumnDef } from '@tanstack/react-table'
 import Link from 'next/link'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useForm } from 'react-hook-form'
 import { ArrowLeft, Check, Copy, Loader2, Mail, MailCheck, Shield, Trash2, UserPlus } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { z } from 'zod'
+
 import { useAuth } from '@/components/AuthProvider'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { DataTable } from '@/components/ui/data-table'
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
+import { toast } from '@/components/ui/sonner'
+import { supabase } from '@/lib/supabase'
 
 interface AdminUserRow {
   id:                   string
@@ -14,6 +42,12 @@ interface AdminUserRow {
   must_change_password: boolean
   created_at:           string
 }
+
+const inviteSchema = z.object({
+  fullName: z.string().trim().max(120).optional(),
+  email:    z.string().trim().toLowerCase().email("Enter a valid email"),
+})
+type InviteValues = z.infer<typeof inviteSchema>
 
 async function authFetch(path: string, init?: RequestInit): Promise<Response> {
   const { data: { session } } = await supabase.auth.getSession()
@@ -28,18 +62,21 @@ export default function AdminUsersPage() {
   const [users, setUsers]   = useState<AdminUserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [removeTarget, setRemoveTarget] = useState<AdminUserRow | null>(null)
 
-  const [email, setEmail]       = useState('')
-  const [fullName, setFullName] = useState('')
-  const [busy, setBusy]         = useState(false)
-  const [inviteError, setInviteError] = useState<string | null>(null)
   const [justInvited, setJustInvited] = useState<{ email: string; fullName: string; tempPassword: string; emailSent: boolean } | null>(null)
   const [copied, setCopied] = useState(false)
+
+  const form = useForm<InviteValues>({
+    resolver: zodResolver(inviteSchema),
+    defaultValues: { fullName: '', email: '' },
+  })
 
   const fetchUsers = useCallback(async () => {
     const res = await authFetch('/api/admin/users')
     if (!res.ok) {
-      setLoadError((await res.json().catch(() => ({ error: res.statusText }))).error ?? 'Could not load users')
+      const body = await res.json().catch(() => ({ error: res.statusText }))
+      setLoadError(body.error ?? 'Could not load users')
       setLoading(false)
       return
     }
@@ -54,40 +91,40 @@ export default function AdminUsersPage() {
     fetchUsers()
   }, [authLoading, profile, fetchUsers])
 
-  async function onInvite(e: React.FormEvent) {
-    e.preventDefault()
-    if (busy) return
-    setBusy(true)
-    setInviteError(null)
-    try {
-      const res = await authFetch('/api/admin/users', {
-        method: 'POST',
-        body: JSON.stringify({ email: email.trim(), fullName: fullName.trim() }),
-      })
-      const body = await res.json()
-      if (!res.ok) { setInviteError(body.error ?? 'Could not create user'); return }
-      setJustInvited({
-        email:        body.email,
-        fullName:     body.fullName ?? '',
-        tempPassword: body.tempPassword,
-        emailSent:    body.emailSent === true,
-      })
-      setEmail('')
-      setFullName('')
-      fetchUsers()
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function onRemove(id: string, userEmail: string) {
-    if (!confirm(`Remove ${userEmail} from the system?`)) return
-    const res = await authFetch(`/api/admin/users?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+  async function onInvite(values: InviteValues) {
+    const res = await authFetch('/api/admin/users', {
+      method: 'POST',
+      body: JSON.stringify({ email: values.email, fullName: values.fullName ?? '' }),
+    })
+    const body = await res.json()
     if (!res.ok) {
-      const body = await res.json().catch(() => ({ error: res.statusText }))
-      alert(body.error ?? 'Could not remove user')
+      toast.error(body.error ?? 'Could not create user')
       return
     }
+    setJustInvited({
+      email:        body.email,
+      fullName:     body.fullName ?? '',
+      tempPassword: body.tempPassword,
+      emailSent:    body.emailSent === true,
+    })
+    if (body.emailSent === true) {
+      toast.success(`Invite emailed to ${body.email}`)
+    }
+    form.reset()
+    fetchUsers()
+  }
+
+  async function confirmRemove() {
+    if (!removeTarget) return
+    const target = removeTarget
+    setRemoveTarget(null)
+    const res = await authFetch(`/api/admin/users?id=${encodeURIComponent(target.id)}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }))
+      toast.error(body.error ?? 'Could not remove user')
+      return
+    }
+    toast.success(`Removed ${target.email}`)
     fetchUsers()
   }
 
@@ -112,6 +149,57 @@ If you have any trouble signing in, reply to this email.
 jamil@trainovations.com`
   }, [justInvited])
 
+  // DataTable columns. Memoised so TanStack Table doesn't see a new
+  // reference on every render and reset its internal state.
+  const columns = useMemo<ColumnDef<AdminUserRow>[]>(() => [
+    {
+      accessorKey: 'full_name',
+      header:      'Name',
+      cell: ({ row }) => {
+        const u = row.original
+        return (
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">
+              {u.full_name || u.email.split('@')[0]}
+            </span>
+            {u.is_admin && <Badge variant="secondary">Admin</Badge>}
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: 'email',
+      header:      'Email',
+      cell: ({ row }) => (
+        <span className="text-xs text-slate-500 dark:text-slate-400 truncate">{row.original.email}</span>
+      ),
+    },
+    {
+      id:          'status',
+      header:      'Status',
+      cell: ({ row }) =>
+        row.original.must_change_password ? (
+          <Badge variant="outline" className="text-amber-700 border-amber-300">Pending first login</Badge>
+        ) : (
+          <Badge variant="outline" className="text-emerald-700 border-emerald-300">Active</Badge>
+        ),
+    },
+    {
+      id:        'actions',
+      header:    () => <span className="sr-only">Actions</span>,
+      cell: ({ row }) => (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setRemoveTarget(row.original)}
+          aria-label={`Remove ${row.original.email}`}
+        >
+          <Trash2 />
+        </Button>
+      ),
+    },
+  ], [])
+
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
@@ -134,49 +222,54 @@ jamil@trainovations.com`
         </div>
       </header>
 
-      {/* Invite form */}
+      {/* Invite form — react-hook-form + zod */}
       <section className="bg-white dark:bg-slate-900 rounded-xl ring-1 ring-slate-200 dark:ring-slate-700 p-5">
         <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-3 flex items-center gap-2">
           <UserPlus className="h-4 w-4 text-slate-500 dark:text-slate-400" />
           Invite a user
         </h2>
-        <form onSubmit={onInvite} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
-          <label className="block">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Full name (optional)</span>
-            <input
-              type="text"
-              value={fullName}
-              onChange={e => setFullName(e.target.value)}
-              placeholder="Jane Doe"
-              className="w-full mt-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Email</span>
-            <div className="relative mt-1">
-              <Mail className="h-4 w-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="user@example.com"
-                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
-              />
-            </div>
-          </label>
-          <button
-            type="submit"
-            disabled={busy || !email}
-            className="h-[38px] px-5 rounded-lg bg-brand-navy text-white text-sm font-semibold disabled:opacity-40 hover:bg-brand-navy/90 transition-colors flex items-center justify-center gap-2"
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(onInvite)}
+            className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end"
           >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-            {busy ? 'Inviting…' : 'Invite'}
-          </button>
-        </form>
-        {inviteError && (
-          <p className="mt-3 text-sm font-medium text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg px-3 py-2">{inviteError}</p>
-        )}
+            <FormField
+              control={form.control}
+              name="fullName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs">Full name (optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Jane Doe" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs">Email</FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <Mail className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <Input type="email" placeholder="user@example.com" className="pl-9" {...field} />
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting ? <Loader2 className="animate-spin" /> : <UserPlus />}
+              {form.formState.isSubmitting ? 'Inviting…' : 'Invite'}
+            </Button>
+          </form>
+        </Form>
       </section>
 
       {/* Result panel for the most recent invite. Two shapes:
@@ -233,8 +326,10 @@ jamil@trainovations.com`
                 The password is shown once; save it if you lose the window.
               </p>
             </div>
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={async () => {
                 try {
                   await navigator.clipboard.writeText(emailTemplate)
@@ -242,11 +337,10 @@ jamil@trainovations.com`
                   setTimeout(() => setCopied(false), 1500)
                 } catch { /* ignore */ }
               }}
-              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 ring-1 ring-amber-300 text-amber-900 dark:text-amber-100 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
             >
-              <Copy className="h-3.5 w-3.5" />
+              <Copy />
               {copied ? 'Copied' : 'Copy'}
-            </button>
+            </Button>
           </div>
           <pre className="whitespace-pre-wrap text-xs font-mono text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 rounded-lg p-3 ring-1 ring-amber-200 max-h-80 overflow-auto">
 {emailTemplate}
@@ -254,44 +348,45 @@ jamil@trainovations.com`
         </section>
       )}
 
-      {/* User list */}
-      <section className="bg-white dark:bg-slate-900 rounded-xl ring-1 ring-slate-200 dark:ring-slate-700 overflow-hidden">
-        <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+      {/* User list — TanStack DataTable with sort + filter + paginate */}
+      <section>
+        <div className="mb-3 flex items-baseline justify-between">
           <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Users</h2>
           <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">{users.length}</span>
         </div>
         {loading ? (
-          <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-slate-400 dark:text-slate-500" /></div>
+          <div className="flex items-center justify-center py-10">
+            <Loader2 className="h-5 w-5 animate-spin text-slate-400 dark:text-slate-500" />
+          </div>
         ) : loadError ? (
           <p className="px-5 py-6 text-sm text-rose-700 dark:text-rose-300">{loadError}</p>
-        ) : users.length === 0 ? (
-          <p className="px-5 py-6 text-sm text-slate-500 dark:text-slate-400">No users yet.</p>
         ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {users.map(u => (
-              <li key={u.id} className="px-5 py-3 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">{u.full_name || u.email.split('@')[0]}</span>
-                    {u.is_admin && <span className="text-[10px] font-bold text-brand-navy dark:text-brand-yellow bg-brand-navy/10 dark:bg-brand-navy/30 rounded-full px-1.5 py-0.5 uppercase tracking-wider">Admin</span>}
-                    {u.must_change_password && <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 rounded-full px-1.5 py-0.5">pending first login</span>}
-                  </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{u.email}</div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onRemove(u.id, u.email)}
-                  title="Remove user"
-                  aria-label={`Remove ${u.email}`}
-                  className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-1.5 rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </li>
-            ))}
-          </ul>
+          <DataTable
+            columns={columns}
+            data={users}
+            searchColumn="email"
+            searchPlaceholder="Filter by email…"
+          />
         )}
       </section>
+
+      {/* Delete confirmation — replaces window.confirm */}
+      <AlertDialog open={removeTarget != null} onOpenChange={open => { if (!open) setRemoveTarget(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {removeTarget?.email}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the user from this tenant. Their audit history is retained.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRemove} className="bg-destructive text-white hover:bg-destructive/90">
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
