@@ -18,66 +18,75 @@ import { SONNET } from '@/lib/ai/models'
 
 // POST /api/superadmin/policies/upload
 //
-// Multipart/form-data:
-//   file:           the policy document (markdown, text, or PDF)
+// Body (application/json):
+//   storage_path:   path inside the policy-uploads Supabase Storage
+//                   bucket where the browser put the file. The route
+//                   downloads the bytes server-side and processes them.
+//                   We use storage staging because Vercel caps direct
+//                   request bodies at 4.5MB, which is smaller than the
+//                   25MB limit the route + bucket support.
 //   tenant_id:      (optional) UUID. NULL/missing → global document
-//                   visible to all tenants. A tenant id pins the doc
-//                   to that tenant.
+//                   visible to all tenants.
 //   source_type:    one of regulation/state_reg/dot/epa/rcra/company_policy.
-//                   For superadmin uploads of company docs, default is
-//                   'company_policy' (and tenant_id is required); for
-//                   regulatory uploads, the operator chooses.
-//   title:          short title (≤300 chars). Surfaced as the citation tag.
-//   jurisdiction:   (optional) e.g. "CA" for state_reg. Free text.
+//   title:          short title (≤300 chars).
+//   jurisdiction:   (optional) e.g. "CA" for state_reg.
 //   effective_date: (optional) ISO date.
-//   source_url:     (optional) canonical source link (eCFR, intranet).
+//   source_url:     (optional) canonical source link.
+//   mime:           (optional) MIME hint when the bucket-stored file
+//                   doesn't carry one (rare). Falls back to the storage
+//                   metadata's content_type otherwise.
 //
-// Pipeline: extract text → chunk → embed (Voyage) → insert document +
-// chunks. Idempotent on (tenant_id, sha256): a duplicate upload returns
-// the existing document instead of erroring.
+// Pipeline: download from storage → extract text → chunk → embed
+// (Voyage) → insert document + chunks → delete the staged storage
+// object. Idempotent on (tenant_id, sha256) — a duplicate upload
+// returns the existing document.
 
 const VALID_SOURCE_TYPES = new Set([
   'regulation', 'state_reg', 'dot', 'epa', 'rcra', 'company_policy',
 ])
 
-// Vercel App Router config: bump the body size limit + node runtime
-// so PDF uploads up to 25MB go through.
+const STAGING_BUCKET = 'policy-uploads'
+
 export const runtime     = 'nodejs'
 export const maxDuration = 300
+
+interface RequestBody {
+  storage_path?:   string
+  tenant_id?:      string | null
+  source_type?:    string
+  title?:          string
+  jurisdiction?:   string
+  effective_date?: string
+  source_url?:     string
+  mime?:           string
+}
 
 export async function POST(req: Request) {
   const gate = await requireSuperadmin(req.headers.get('authorization'))
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
-  let form: FormData
-  try { form = await req.formData() }
-  catch { return NextResponse.json({ error: 'Expected multipart/form-data body.' }, { status: 400 }) }
+  let body: RequestBody
+  try { body = await req.json() }
+  catch { return NextResponse.json({ error: 'Expected application/json body.' }, { status: 400 }) }
 
-  const file = form.get('file')
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: 'A "file" field is required.' }, { status: 400 })
-  }
-  if (file.size > MAX_BYTES) {
-    return NextResponse.json({ error: `File exceeds the ${MAX_BYTES / 1024 / 1024}MB cap.` }, { status: 413 })
-  }
-  const mime = (file.type || 'application/octet-stream') as ExtractMime
-  if (!SUPPORTED_MIMES.includes(mime)) {
+  const storagePath = (body.storage_path ?? '').trim()
+  if (!storagePath) {
     return NextResponse.json(
-      { error: `Unsupported MIME ${mime}. Supported: ${SUPPORTED_MIMES.join(', ')}.` },
-      { status: 415 },
+      { error: 'storage_path is required. Upload the file to the policy-uploads bucket first.' },
+      { status: 400 },
     )
   }
 
-  const sourceType = String(form.get('source_type') ?? 'company_policy')
+  const sourceType = String(body.source_type ?? 'company_policy')
   if (!VALID_SOURCE_TYPES.has(sourceType)) {
     return NextResponse.json({ error: `Invalid source_type: ${sourceType}.` }, { status: 400 })
   }
-  const title = String(form.get('title') ?? file.name).trim().slice(0, 300)
+
+  const title = (body.title ?? '').trim().slice(0, 300)
   if (!title) return NextResponse.json({ error: 'A title is required.' }, { status: 400 })
 
-  const rawTenantId = form.get('tenant_id')
-  const tenantId = typeof rawTenantId === 'string' && /^[0-9a-f-]{36}$/i.test(rawTenantId.trim())
-    ? rawTenantId.trim()
+  const tenantId = typeof body.tenant_id === 'string' && /^[0-9a-f-]{36}$/i.test(body.tenant_id.trim())
+    ? body.tenant_id.trim()
     : null
   if (sourceType === 'company_policy' && !tenantId) {
     return NextResponse.json(
@@ -86,19 +95,50 @@ export async function POST(req: Request) {
     )
   }
 
-  const jurisdiction   = formStr(form, 'jurisdiction')
-  const sourceUrl      = formStr(form, 'source_url')
-  const effectiveDate  = formStr(form, 'effective_date')
-
-  const bytes = new Uint8Array(await file.arrayBuffer())
-  const sha   = await sha256Hex(bytes)
+  const jurisdiction  = (body.jurisdiction  ?? '').trim()
+  const sourceUrl     = (body.source_url    ?? '').trim()
+  const effectiveDate = (body.effective_date ?? '').trim()
 
   const admin = supabaseAdmin()
 
-  // De-dupe: if the same tenant has already uploaded this exact file,
-  // return the existing record. Operators routinely paste the same
-  // master policy across tenants — we'd rather they not pay tokens
-  // for a redundant ingestion.
+  // Pull the bytes out of Supabase Storage. The bucket is private +
+  // RLS-locked; service-role bypasses RLS so we read directly. If the
+  // path doesn't resolve we 404 (rather than the SDK's generic error).
+  const { data: blob, error: dlErr } = await admin.storage.from(STAGING_BUCKET).download(storagePath)
+  if (dlErr || !blob) {
+    return NextResponse.json(
+      { error: `Could not load the staged upload: ${dlErr?.message ?? 'not found'}` },
+      { status: 404 },
+    )
+  }
+
+  const arrayBuf = await blob.arrayBuffer()
+  if (arrayBuf.byteLength > MAX_BYTES) {
+    // Clean up the stale upload so it doesn't sit in the bucket forever.
+    void admin.storage.from(STAGING_BUCKET).remove([storagePath])
+    return NextResponse.json(
+      { error: `File exceeds the ${MAX_BYTES / 1024 / 1024}MB cap.` },
+      { status: 413 },
+    )
+  }
+  const bytes = new Uint8Array(arrayBuf)
+
+  // MIME resolution priority: explicit body field → blob.type from
+  // Supabase Storage metadata → reject. The bucket's allowed_mime_types
+  // already enforces the allowlist at upload time, but we re-check here
+  // so a future config drift doesn't silently accept the wrong type.
+  const mime = (body.mime ?? blob.type ?? '').trim() as ExtractMime
+  if (!mime || !SUPPORTED_MIMES.includes(mime)) {
+    void admin.storage.from(STAGING_BUCKET).remove([storagePath])
+    return NextResponse.json(
+      { error: `Unsupported MIME ${mime || '(unknown)'}. Supported: ${SUPPORTED_MIMES.join(', ')}.` },
+      { status: 415 },
+    )
+  }
+
+  const sha = await sha256Hex(bytes)
+
+  // De-dupe: same tenant + same content → return existing.
   const dedupeQuery = admin
     .from('knowledge_documents')
     .select('id, chunk_count, title, tenant_id')
@@ -107,6 +147,7 @@ export async function POST(req: Request) {
   else          dedupeQuery.is('tenant_id', null)
   const { data: existing } = await dedupeQuery.maybeSingle()
   if (existing) {
+    void admin.storage.from(STAGING_BUCKET).remove([storagePath])
     return NextResponse.json({
       ok: true,
       document_id: existing.id,
@@ -125,17 +166,19 @@ export async function POST(req: Request) {
     extractUsage = extracted.usage
   } catch (err) {
     if (err instanceof UnsupportedMimeError) {
+      void admin.storage.from(STAGING_BUCKET).remove([storagePath])
       return NextResponse.json({ error: err.message }, { status: 415 })
     }
     const mapped = aiErrorToResponse(err, 'parse-sds')
     Sentry.captureException(err, { tags: { ...mapped.tags, route: '/api/superadmin/policies/upload' } })
+    void admin.storage.from(STAGING_BUCKET).remove([storagePath])
     return NextResponse.json(mapped.body, { status: mapped.status })
   }
   if (extractUsage) {
     await logAiInvocation({
       userId:           gate.userId,
       tenantId,
-      surface:          'parse-sds', // share the surface — no separate budget for policy ingest
+      surface:          'parse-sds',
       model:            SONNET,
       status:           'success',
       inputTokens:      extractUsage.inputTokens,
@@ -145,6 +188,7 @@ export async function POST(req: Request) {
     })
   }
   if (!text || text === 'SCAN_NOT_OCRED') {
+    void admin.storage.from(STAGING_BUCKET).remove([storagePath])
     return NextResponse.json(
       { error: text === 'SCAN_NOT_OCRED'
         ? 'This PDF appears to be a scanned image without OCR. Run it through OCR first, then re-upload.'
@@ -156,6 +200,7 @@ export async function POST(req: Request) {
   // Chunk + embed.
   const chunks = chunkText({ text })
   if (chunks.length === 0) {
+    void admin.storage.from(STAGING_BUCKET).remove([storagePath])
     return NextResponse.json({ error: 'Document text was too short to chunk.' }, { status: 422 })
   }
 
@@ -182,9 +227,6 @@ export async function POST(req: Request) {
     )
   }
 
-  // Insert the document, then the chunks. Both pass through the
-  // service-role client (RLS bypass) but the gate has already
-  // confirmed superadmin status.
   const { data: doc, error: docErr } = await admin
     .from('knowledge_documents')
     .insert({
@@ -209,10 +251,6 @@ export async function POST(req: Request) {
     document_id: doc.id,
     chunk_index: c.index,
     text:        c.text,
-    // pgvector accepts the literal string `'[1.2,3.4,...]'` and casts
-    // it to vector(1024) on insert. supabase-js sends the value as a
-    // string; PostgREST forwards it; Postgres parses it. Cleaner than
-    // an RPC just for this.
     embedding:   vectorLiteral(embeddings[i]),
     token_count: c.tokenEst,
     metadata: {
@@ -221,12 +259,10 @@ export async function POST(req: Request) {
     },
   }))
 
-  // Insert in batches of 200 to keep the request payload reasonable.
   for (let i = 0; i < rows.length; i += 200) {
     const slice = rows.slice(i, i + 200)
     const { error: chunkErr } = await admin.from('knowledge_chunks').insert(slice)
     if (chunkErr) {
-      // Roll back the document so we don't leave a half-ingested row.
       await admin.from('knowledge_documents').delete().eq('id', doc.id)
       Sentry.captureException(chunkErr, {
         tags: { source: 'policies-upload.insert-chunks', document_id: doc.id, batch: String(i) },
@@ -238,6 +274,11 @@ export async function POST(req: Request) {
     }
   }
 
+  // Ingestion succeeded — remove the staged file. Best-effort: we
+  // don't fail the response if cleanup hiccups; the file will sit in
+  // the bucket but the document is good.
+  void admin.storage.from(STAGING_BUCKET).remove([storagePath])
+
   return NextResponse.json({
     ok: true,
     document_id:   doc.id,
@@ -245,9 +286,4 @@ export async function POST(req: Request) {
     voyage_tokens: voyageTokens,
     duplicate:     false,
   })
-}
-
-function formStr(form: FormData, key: string): string {
-  const v = form.get(key)
-  return typeof v === 'string' ? v.trim() : ''
 }
