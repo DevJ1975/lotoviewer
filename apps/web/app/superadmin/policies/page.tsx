@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Loader2, Upload, Trash2, FileText, AlertCircle, CheckCircle2, Globe, Building2 } from 'lucide-react'
 import { superadminFetch, superadminJson } from '@/lib/superadminFetch'
 import { supabase } from '@/lib/supabase'
+import Dropzone from '@/components/ui/Dropzone'
 
 // /superadmin/policies
 //
@@ -36,6 +37,30 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   epa:           'EPA (40 CFR)',
   rcra:          'RCRA / Hazardous Waste',
   company_policy:'Company Policy',
+}
+
+// Pattern-match an upstream Anthropic / extraction error to a
+// concrete next step the operator can take. Keep these tight —
+// each hint must be actionable, not a paragraph of theory. Returns
+// null when nothing matches; the UI just shows the raw error.
+export function inferUploadHint(message: string): string | null {
+  const m = message.toLowerCase()
+  if (m.includes('page') && (m.includes('limit') || m.includes('exceed') || m.includes('too many'))) {
+    return 'Anthropic caps PDFs at 100 pages. Split this document into smaller sections (e.g. by chapter) and upload each separately.'
+  }
+  if (m.includes('scan') && m.includes('not_ocred')) {
+    return 'This PDF looks like scanned images without OCR. Run it through OCR (Acrobat → Recognize Text, or any OCR tool) and re-upload, or paste the text as a .md / .txt file.'
+  }
+  if (m.includes('encrypt') || m.includes('password')) {
+    return 'The PDF appears to be encrypted or password-protected. Save an unprotected copy and re-upload.'
+  }
+  if (m.includes('size') || m.includes('too large') || m.includes('25mb') || m.includes('exceeds')) {
+    return 'The file is over the 25 MB cap. Split the PDF, or upload the text directly as a .md / .txt file (those skip Claude and ingest in seconds).'
+  }
+  if (m.includes('invalid') && (m.includes('pdf') || m.includes('document'))) {
+    return 'The file did not parse as a valid PDF. Re-export from the source and try again, or upload as plain text.'
+  }
+  return null
 }
 
 export default function PoliciesPage() {
@@ -121,9 +146,10 @@ export default function PoliciesPage() {
         throw new Error(j.error ?? `Upload failed (${res.status})`)
       }
       setUploadOk({ id: j.document_id, chunkCount: j.chunk_count, duplicate: !!j.duplicate })
+      // Dropzone's input resets itself on every change, so clearing
+      // the file state alone is enough — picking the same file again
+      // a moment later still fires onChange.
       setFile(null)
-      const fileInput = document.getElementById('policy-file') as HTMLInputElement | null
-      if (fileInput) fileInput.value = ''
       void refresh()
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Upload failed')
@@ -160,15 +186,15 @@ export default function PoliciesPage() {
         </h2>
         <form onSubmit={onUpload} className="space-y-4">
           <div>
-            <label htmlFor="policy-file" className="block text-xs font-medium text-slate-700 dark:text-slate-200 mb-1">File</label>
-            <input
-              id="policy-file"
-              type="file"
-              accept=".md,.markdown,.txt,.pdf,text/markdown,text/plain,application/pdf"
-              onChange={e => setFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-slate-700 dark:text-slate-200"
+            <span className="block text-xs font-medium text-slate-700 dark:text-slate-200 mb-1">File</span>
+            <Dropzone
+              file={file}
+              onFileSelected={f => { setUploadOk(null); setUploadError(null); setFile(f) }}
+              onValidationError={r => { setUploadOk(null); setUploadError(r); setFile(null) }}
+              inputId="policy-file"
+              helpText="Markdown, plain text, or PDF (≤25MB). PDF text is extracted via Claude."
+              disabled={uploading}
             />
-            <p className="mt-1 text-[11px] text-slate-500">Markdown, plain text, or PDF (≤25MB). PDF text is extracted via Claude.</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -240,7 +266,17 @@ export default function PoliciesPage() {
           {uploadError && (
             <div className="p-3 rounded-md bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 flex items-start gap-2">
               <AlertCircle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
-              <p className="text-sm text-rose-800 dark:text-rose-200">{uploadError}</p>
+              <div className="space-y-1.5">
+                <p className="text-sm text-rose-800 dark:text-rose-200">{uploadError}</p>
+                {(() => {
+                  const hint = inferUploadHint(uploadError)
+                  return hint ? (
+                    <p className="text-xs text-rose-700/80 dark:text-rose-300/80">
+                      <span className="font-medium">Try:</span> {hint}
+                    </p>
+                  ) : null
+                })()}
+              </div>
             </div>
           )}
           {uploadOk && (

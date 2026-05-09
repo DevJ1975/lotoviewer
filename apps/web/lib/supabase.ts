@@ -42,7 +42,16 @@ function browserAuthStorage(): AuthStorageAdapter {
   }
 }
 
-function readActiveTenant(): string | null {
+/**
+ * Returns the active tenant id from sessionStorage, or null when
+ * unset / unavailable (SSR, missing storage, malformed value).
+ *
+ * Exported so client surfaces that need the active tenant header
+ * (the assistant chat, hazard report, equipment scanner, etc.)
+ * can pull it from one place instead of redefining the same
+ * sessionStorage read inline.
+ */
+export function readActiveTenant(): string | null {
   if (typeof window === 'undefined') return null
   try {
     return window.sessionStorage.getItem(ACTIVE_TENANT_KEY)

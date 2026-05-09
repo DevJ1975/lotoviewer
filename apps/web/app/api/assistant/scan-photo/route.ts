@@ -150,14 +150,18 @@ export async function POST(req: Request) {
   // tolerate case differences ("mix-04" vs "MIX-04"). Only return rows
   // visible to the gate's tenant.
   const candidates: Array<{ id: string; equipment_id: string; description: string | null; department: string | null }> = []
-  const equipmentId = (parsed.equipment_id ?? '').trim()
+  const equipmentId = (parsed.equipment_id ?? '').trim().slice(0, 256)
   if (equipmentId) {
+    // Escape ilike wildcards — Claude vision occasionally returns a
+    // partially-obscured ID with a literal '_' it inferred from the
+    // nameplate, and we don't want that to pattern-match other rows.
+    const equipmentIdLike = equipmentId.replace(/[\\%_]/g, m => '\\' + m)
     const admin = supabaseAdmin()
     const { data } = await admin
       .from('loto_equipment')
       .select('id, equipment_id, description, department')
       .eq('tenant_id', gate.tenantId)
-      .ilike('equipment_id', equipmentId)
+      .ilike('equipment_id', equipmentIdLike)
       .limit(5)
     for (const row of (data ?? [])) {
       candidates.push(row as typeof candidates[number])

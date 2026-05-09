@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
+import Dropzone from '@/components/ui/Dropzone'
 import {
   GHS_PICTOGRAMS,
   GHS_PICTOGRAM_LABEL,
@@ -252,20 +253,19 @@ export default function NewChemicalPage() {
             <Input label="Revision date" type="date" value={sdsRevisionDate} onChange={setSdsRevisionDate} />
             <Input label="Source URL" value={sdsSourceUrl} onChange={setSdsSourceUrl} placeholder="https://…" />
           </div>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Upload SDS PDF (optional, max 25 MB)</span>
-            <input
-              type="file"
-              accept="application/pdf"
-              onChange={e => setSdsFile(e.target.files?.[0] ?? null)}
-              className="mt-1 block w-full text-sm text-slate-700 dark:text-slate-300"
+          <div>
+            <span className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Upload SDS PDF (optional, max 25 MB)</span>
+            <Dropzone
+              file={sdsFile}
+              onFileSelected={f => { setError(null); setSdsFile(f) }}
+              onValidationError={setError}
+              inputId="sds-file-new"
+              acceptedMimes={new Set(['application/pdf'])}
+              acceptedExts={new Set(['pdf'])}
+              acceptAttr="application/pdf,.pdf"
+              helpText="PDF only, ≤25MB."
             />
-            {sdsFile && (
-              <div className="mt-1 text-xs text-slate-500">
-                {sdsFile.name} ({(sdsFile.size / 1024 / 1024).toFixed(2)} MB)
-              </div>
-            )}
-          </label>
+          </div>
         </fieldset>
 
         <fieldset>

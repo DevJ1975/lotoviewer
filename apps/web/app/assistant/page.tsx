@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Bot, Send, Loader2, Wrench, Plus, BookOpen } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
-import { supabase, ACTIVE_TENANT_KEY } from '@/lib/supabase'
+import { supabase, readActiveTenant } from '@/lib/supabase'
 import { Markdown } from '@/components/ui/markdown'
 
 // Full-page assistant view at /assistant. The floating dock in
@@ -42,12 +42,6 @@ function dedupeCitations(citations: Citation[]): Citation[] {
     if (!e || c.similarity > e.similarity) seen.set(c.document_id, c)
   }
   return [...seen.values()].sort((a, b) => b.similarity - a.similarity)
-}
-
-function readActiveTenant(): string | null {
-  if (typeof window === 'undefined') return null
-  try { return window.sessionStorage.getItem(ACTIVE_TENANT_KEY) }
-  catch { return null }
 }
 
 export default function AssistantPage() {

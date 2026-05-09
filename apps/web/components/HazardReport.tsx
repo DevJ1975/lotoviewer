@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Loader2, AlertTriangle, ShieldCheck, Zap, Wrench, FlaskConical, Flame, Gauge, Activity, ExternalLink } from 'lucide-react'
-import { supabase, ACTIVE_TENANT_KEY } from '@/lib/supabase'
+import { supabase, readActiveTenant } from '@/lib/supabase'
 
 // Renders the structured hazard report returned by /api/assistant/hazards.
 // Used in three places:
@@ -55,12 +55,6 @@ interface ApiResponse {
 interface Props {
   equipmentId: string
   onLoaded?:   (r: ApiResponse) => void
-}
-
-function readActiveTenant(): string | null {
-  if (typeof window === 'undefined') return null
-  try { return window.sessionStorage.getItem(ACTIVE_TENANT_KEY) }
-  catch { return null }
 }
 
 const SEVERITY_CLASS: Record<HazardItem['severity'], string> = {

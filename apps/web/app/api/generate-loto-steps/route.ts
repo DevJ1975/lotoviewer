@@ -123,6 +123,23 @@ export async function POST(req: NextRequest) {
     if (!body.equipment_id || !body.description) {
       return NextResponse.json({ error: 'equipment_id and description are required' }, { status: 400 })
     }
+    // Length caps so a runaway client (or a paste of an entire SDS) can't
+    // burn an entire daily quota worth of tokens on one call.
+    if (typeof body.equipment_id !== 'string' || body.equipment_id.length > 256) {
+      return NextResponse.json({ error: 'equipment_id is too long.' }, { status: 400 })
+    }
+    if (typeof body.description !== 'string' || body.description.length > 4000) {
+      return NextResponse.json({ error: 'description is too long (max 4,000 chars).' }, { status: 400 })
+    }
+    if (typeof body.department !== 'string' || body.department.length > 256) {
+      return NextResponse.json({ error: 'department is too long.' }, { status: 400 })
+    }
+    if (body.notes !== undefined && body.notes !== null && (typeof body.notes !== 'string' || body.notes.length > 4000)) {
+      return NextResponse.json({ error: 'notes is too long (max 4,000 chars).' }, { status: 400 })
+    }
+    if (body.context !== undefined && (typeof body.context !== 'string' || body.context.length > 4000)) {
+      return NextResponse.json({ error: 'context is too long (max 4,000 chars).' }, { status: 400 })
+    }
 
     const userContent: Anthropic.ContentBlockParam[] = []
 

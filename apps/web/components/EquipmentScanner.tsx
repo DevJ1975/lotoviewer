@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Camera, Loader2, ScanLine, AlertTriangle, KeyboardIcon } from 'lucide-react'
-import { supabase, ACTIVE_TENANT_KEY } from '@/lib/supabase'
+import { supabase, readActiveTenant } from '@/lib/supabase'
 
 // Camera-based equipment scanner. Two paths:
 //
@@ -41,12 +41,6 @@ export interface ScanResult {
 interface Props {
   onResult: (r: ScanResult) => void
   onCancel?: () => void
-}
-
-function readActiveTenant(): string | null {
-  if (typeof window === 'undefined') return null
-  try { return window.sessionStorage.getItem(ACTIVE_TENANT_KEY) }
-  catch { return null }
 }
 
 export default function EquipmentScanner({ onResult, onCancel }: Props) {

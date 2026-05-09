@@ -31,7 +31,7 @@ import {
 } from '@/lib/ai/embeddings'
 
 export type KnowledgeSource =
-  | 'regulation' | 'state_reg' | 'dot' | 'epa' | 'rcra' | 'company_policy'
+  | 'regulation' | 'state_reg' | 'dot' | 'epa' | 'rcra' | 'company_policy' | 'manual'
 
 export interface RetrievedChunk {
   chunk_id:        string
@@ -149,7 +149,9 @@ function buildCiteTag(c: RetrievedChunk): string {
   const section = (c.metadata && typeof c.metadata === 'object'
     ? (c.metadata as Record<string, unknown>)['section']
     : undefined) as string | undefined
-  if (c.source_type === 'company_policy') {
+  // Manuals carry their own "Soteria User Manual: <title>" prefix from
+  // syncManualToRag; just bracket the title as-is for the cite tag.
+  if (c.source_type === 'manual' || c.source_type === 'company_policy') {
     return `[${c.title}${section ? ` §${section}` : ''}]`
   }
   return `[${c.title}${section ? ` § ${section}` : ''}]`
