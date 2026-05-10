@@ -1,13 +1,14 @@
-// Edge middleware — Origin / Host cross-check on state-changing
-// requests.
+// Edge proxy — Origin / Host cross-check on state-changing
+// requests. (Next.js 16 renamed the `middleware` convention to
+// `proxy`; functionality is identical.)
 //
 // Rationale:
 //   The primary CSRF defence is SameSite=Lax cookies + bearer JWT
 //   (no cookies are read on /api/* — every gate uses the
-//   Authorization header). This middleware adds a second layer:
-//   if a browser submits a state-changing request with an Origin
-//   that doesn't match the Host, it's almost certainly a CSRF
-//   probe and we reject early with 403.
+//   Authorization header). This proxy adds a second layer: if a
+//   browser submits a state-changing request with an Origin that
+//   doesn't match the Host, it's almost certainly a CSRF probe and
+//   we reject early with 403.
 //
 // Scope:
 //   POST / PATCH / PUT / DELETE on /api/* paths. GET / HEAD /
@@ -25,7 +26,7 @@
 //                      IS the credential.
 //   - Requests with NO Origin header are allowed (covers curl, CI,
 //     mobile native clients). The Authorization-header gate still
-//     applies; this middleware is belt-and-suspenders only.
+//     applies; this proxy is belt-and-suspenders only.
 
 import { NextResponse, type NextRequest } from 'next/server'
 
@@ -40,7 +41,7 @@ const BYPASS_PREFIXES = [
   '/api/scan/',  // public QR-scan token routing
 ]
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
 
   // Only patrol /api/*; static + page routes are out of scope.
@@ -83,8 +84,8 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // Run on every /api/* path. The middleware itself early-returns
-  // for GET / HEAD / OPTIONS so the cost on hot read paths is one
+  // Run on every /api/* path. The proxy itself early-returns for
+  // GET / HEAD / OPTIONS so the cost on hot read paths is one
   // method check.
   matcher: ['/api/:path*'],
 }

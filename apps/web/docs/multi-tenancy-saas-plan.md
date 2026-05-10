@@ -488,7 +488,7 @@ These don't block the plan but want explicit answers before each touches code:
    read-only — keeps the data clean across multiple parallel demos.
 5. **Subdomain branding (revisit later).** Single domain ships first. If a
    client asks for `acme.lotoviewer.app` we add wildcard DNS + a
-   middleware.ts that maps host → tenant_id and forces the active tenant.
+   proxy.ts that maps host → tenant_id and forces the active tenant.
    Tracked but not in scope now.
 
 ## Effort
