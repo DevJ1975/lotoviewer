@@ -60,6 +60,60 @@ export function computeTargetDimensions(
 
 const QUALITY_STEPS = [0.85, 0.75, 0.65, 0.55, 0.45, 0.35, 0.25, 0.15, 0.05]
 
+interface CompressWorkerResult {
+  file?: File
+  error?: string
+}
+
+function canUseImageCompressionWorker(): boolean {
+  return typeof window !== 'undefined'
+    && typeof Worker !== 'undefined'
+    && typeof OffscreenCanvas !== 'undefined'
+    && typeof OffscreenCanvas.prototype.convertToBlob === 'function'
+    && typeof createImageBitmap === 'function'
+}
+
+function makeImageCompressionWorker(): Worker {
+  return new Worker(new URL('./imageCompression.worker.ts', import.meta.url), { type: 'module' })
+}
+
+export async function compressImageInWorker(file: File, maxBytes = 1_000_000): Promise<File> {
+  if (!canUseImageCompressionWorker()) return compressImage(file, maxBytes)
+
+  try {
+    return await new Promise<File>((resolve, reject) => {
+      const worker = makeImageCompressionWorker()
+      const timeout = window.setTimeout(() => {
+        worker.terminate()
+        reject(new Error('Image compression timed out'))
+      }, 30_000)
+
+      const cleanup = () => {
+        window.clearTimeout(timeout)
+        worker.terminate()
+      }
+
+      worker.onmessage = (event: MessageEvent<CompressWorkerResult>) => {
+        cleanup()
+        if (event.data.file) {
+          resolve(event.data.file)
+          return
+        }
+        reject(new Error(event.data.error ?? 'Image compression failed'))
+      }
+
+      worker.onerror = event => {
+        cleanup()
+        reject(new Error(event.message || 'Image compression worker failed'))
+      }
+
+      worker.postMessage({ file, maxBytes })
+    })
+  } catch {
+    return compressImage(file, maxBytes)
+  }
+}
+
 // Every upload is decoded through createImageBitmap with
 // imageOrientation: 'from-image' so EXIF orientation is baked into the
 // pixel data before the canvas re-encode. Without it, phone photos whose

@@ -9,6 +9,7 @@ import { Hero }                 from './Hero'
 import { CriticalAlertBanner }  from './CriticalAlertBanner'
 import { MeterAlertsBanner }    from './MeterAlertsBanner'
 import { PermitAlertsCard }     from './PermitAlertsCard'
+import { CommandCenterPanel }   from './CommandCenterPanel'
 import { QuickActions }         from './QuickActions'
 import { KpiRow }               from './KpiRow'
 import { ActivePermitsPanel }   from './ActivePermitsPanel'
@@ -103,6 +104,8 @@ export default function MultiModuleDashboard() {
       {metrics && metrics.expiredPermitCount > 0 && (
         <CriticalAlertBanner count={metrics.expiredPermitCount} />
       )}
+
+      <CommandCenterPanel metrics={metrics} error={metricsError} />
 
       {/* Bump-test reminders. Sits below the critical permit banner
           (expired permits are higher severity) but above other alerts.

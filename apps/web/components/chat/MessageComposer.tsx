@@ -5,7 +5,7 @@ import { Loader2, Paperclip, Send, X } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { uploadAttachment } from '@/lib/chat/client'
 import MentionInput, { type MentionMember } from '@/components/MentionInput'
-import { compressImage, isHeic, heicToJpeg } from '@/lib/imageUtils'
+import { compressImageInWorker, isHeic, heicToJpeg } from '@/lib/imageUtils'
 
 // Slack-style composer: text body + optional file attachments.
 // Attachments upload immediately so the user sees the chip; the post
@@ -55,7 +55,7 @@ export default function MessageComposer({ channelId, members, onSent, placeholde
         }
         if (prepared.type.startsWith('image/')) {
           // Resize big phone snaps so chat history doesn't bloat.
-          prepared = await compressImage(prepared, 5_000_000)
+          prepared = await compressImageInWorker(prepared, 5_000_000)
         }
         const a = await uploadAttachment(tenant.id, channelId, prepared)
         setPending(prev => [...prev, {
