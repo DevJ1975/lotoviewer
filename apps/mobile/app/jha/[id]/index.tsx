@@ -6,6 +6,7 @@ import { Text, View } from '@/components/Themed'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
+import { formatShortDate } from '@/lib/dateFormat'
 import {
   groupHazardsByStep,
   groupControlsByHazard,
@@ -124,7 +125,7 @@ export default function JhaDetailScreen() {
           <Meta label="Hazards"       value={String(hazards.length)} />
           <Meta label="Worst case"    value={worst ?? '—'} capitalize />
           <Meta label="Next review"   value={jha.next_review_date ?? '—'} />
-          <Meta label="Approved"      value={jha.approved_at ? fmt(jha.approved_at) : '—'} />
+          <Meta label="Approved"      value={jha.approved_at ? formatShortDate(jha.approved_at) : '—'} />
         </View>
 
         {jha.description && (
@@ -224,12 +225,6 @@ function Meta({ label, value, capitalize }: { label: string; value: string; capi
       <Text style={[styles.metaValue, capitalize && { textTransform: 'capitalize' }]}>{value}</Text>
     </View>
   )
-}
-
-function fmt(iso: string) {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleString(undefined, { month: 'short', day: 'numeric' })
 }
 
 const styles = StyleSheet.create({

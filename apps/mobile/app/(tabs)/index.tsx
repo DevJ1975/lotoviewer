@@ -35,6 +35,7 @@ export default function DashboardScreen() {
       const { count, error } = await supabase
         .from('loto_equipment')
         .select('*', { count: 'exact', head: true })
+        .eq('tenant_id', tenant!.id)
       if (cancelled) return
       if (error) {
         setCountError(error.message)

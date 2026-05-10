@@ -42,7 +42,7 @@ export default function EquipmentDetailScreen() {
         const [eq, stepsRes] = await Promise.all([
           loadEquipment(equipmentId!),
           supabase
-            .from('loto_steps')
+            .from('loto_energy_steps')
             .select('*')
             .eq('equipment_id', equipmentId!)
             .order('step_number', { ascending: true }),

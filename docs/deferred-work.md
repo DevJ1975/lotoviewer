@@ -200,6 +200,42 @@ Kept here so nothing leaks out of the plan.
   `POST /api/bbs/observations/[id]/photos` endpoint that records
   the path on insert.
 
+### D3.3 — Mobile LOTO checkout: no compensation for two-step write
+- **Status**: Surfaced in 2026-05-09 mobile devjr audit.
+- **Surface**: [apps/mobile/app/(tabs)/loto-devices.tsx:393-409](../apps/mobile/app/(tabs)/loto-devices.tsx#L393-L409). The
+  `submit()` handler does an INSERT into `loto_device_checkouts`
+  followed by an UPDATE on `loto_devices.status`. If the second
+  write fails (network drop, RLS denial, transient DB error), the
+  checkout row is orphaned. The unique partial index
+  `idx_device_checkouts_one_open` then blocks future check-outs
+  for that device until manual cleanup.
+- **Risk**: Low frequency, high friction when it happens —
+  shop-floor user is locked out of a device with no obvious recovery.
+- **Fix**: Move both writes into a Postgres function (RPC), so they
+  run as one transaction. Same shape as the placard-review token
+  consumption in migration 035. Mobile then calls
+  `supabase.rpc('checkout_loto_device', { ... })` instead of two
+  back-to-back operations. Same fix applies to the web's checkout
+  flow.
+- **Unblocks**: Removing "manual reset" instructions from the LOTO
+  Devices runbook.
+
+### D3.4 — Web `loto_steps` typo (parallel to mobile fix)
+- **Status**: Surfaced in 2026-05-09 mobile devjr audit (mobile side
+  fixed in same audit).
+- **Surface**: [apps/web/app/review/[token]/page.tsx:82](../apps/web/app/review/[token]/page.tsx#L82). Queries
+  `from('loto_steps')` — the canonical table name is
+  `loto_energy_steps`. Same typo this audit fixed in
+  `apps/mobile/app/equipment/[id].tsx`. Every other
+  `loto_energy_steps` reference across web + core uses the
+  correct name.
+- **Risk**: Public review portal cannot render the energy-steps
+  list for any equipment under review. Likely the entire review
+  page errors out or shows an empty steps section.
+- **Fix**: One-character change. Should be a separate PR scoped to
+  the web review portal so the diff isolates the public-facing
+  surface.
+
 ## Conventions
 
 - Add new entries with the next sequential ID (D3.3, D3.4, …).

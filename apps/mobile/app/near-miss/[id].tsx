@@ -5,6 +5,7 @@ import { ActivityIndicator, ScrollView, StyleSheet } from 'react-native'
 import { Text, View } from '@/components/Themed'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
+import { formatShortDateTime } from '@/lib/dateFormat'
 import {
   ageInDays,
   type NearMissRow,
@@ -73,8 +74,8 @@ export default function NearMissDetailScreen() {
         <Text style={styles.statusPill}>{STATUS_LABEL[report.status]}</Text>
 
         <View style={styles.metaGrid}>
-          <Meta label="Occurred"  value={fmt(report.occurred_at)} />
-          <Meta label="Reported"  value={fmt(report.reported_at)} />
+          <Meta label="Occurred"  value={formatShortDateTime(report.occurred_at)} />
+          <Meta label="Reported"  value={formatShortDateTime(report.reported_at)} />
           <Meta label="Age"       value={`${ageInDays(report)} d`} />
           <Meta label="Hazard"    value={report.hazard_category} capitalize />
           <Meta label="Location"  value={report.location ?? '—'} />
@@ -121,12 +122,6 @@ function Meta({ label, value, capitalize }: { label: string; value: string; capi
       <Text style={[styles.metaValue, capitalize && { textTransform: 'capitalize' }]}>{value}</Text>
     </View>
   )
-}
-
-function fmt(iso: string) {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
 const styles = StyleSheet.create({

@@ -5,6 +5,7 @@ import { ActivityIndicator, ScrollView, StyleSheet } from 'react-native'
 import { Text, View } from '@/components/Themed'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
+import { formatShortDate } from '@/lib/dateFormat'
 import {
   HIERARCHY_LABELS,
   type Band,
@@ -126,7 +127,7 @@ export default function RiskDetailScreen() {
           <Meta label="Location" value={risk.location ?? '—'} />
           <Meta label="Process"  value={risk.process ?? '—'} />
           <Meta label="Next review" value={risk.next_review_date ?? '—'} />
-          <Meta label="Last reviewed" value={risk.last_reviewed_at ? fmt(risk.last_reviewed_at) : '—'} />
+          <Meta label="Last reviewed" value={risk.last_reviewed_at ? formatShortDate(risk.last_reviewed_at) : '—'} />
         </View>
 
         <Section title="Description">
@@ -153,8 +154,8 @@ export default function RiskDetailScreen() {
                     <Text style={styles.controlName}>{c.custom_name ?? c.library_name ?? '—'}</Text>
                     <Text style={styles.controlMeta}>
                       {c.status}
-                      {c.implemented_at ? ` · implemented ${fmt(c.implemented_at)}` : ''}
-                      {c.verified_at ? ` · verified ${fmt(c.verified_at)}` : ''}
+                      {c.implemented_at ? ` · implemented ${formatShortDate(c.implemented_at)}` : ''}
+                      {c.verified_at ? ` · verified ${formatShortDate(c.verified_at)}` : ''}
                     </Text>
                   </View>
                 </View>
@@ -168,7 +169,7 @@ export default function RiskDetailScreen() {
           ) : (
             reviews.map(r => (
               <View key={r.id} style={styles.reviewRow}>
-                <Text style={styles.reviewDate}>{fmt(r.reviewed_at)}</Text>
+                <Text style={styles.reviewDate}>{formatShortDate(r.reviewed_at)}</Text>
                 <Text style={styles.reviewMeta}>
                   {r.trigger} · {r.outcome.replace('_', ' ')}
                 </Text>
@@ -221,12 +222,6 @@ function Meta({ label, value, capitalize }: { label: string; value: string; capi
       <Text style={[styles.metaValue, capitalize && { textTransform: 'capitalize' }]}>{value}</Text>
     </View>
   )
-}
-
-function fmt(iso: string) {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleString(undefined, { month: 'short', day: 'numeric' })
 }
 
 const styles = StyleSheet.create({

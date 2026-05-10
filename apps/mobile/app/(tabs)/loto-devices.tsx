@@ -66,44 +66,26 @@ export default function LotoDevicesScreen() {
     else                    setRefreshing(true)
     setError(null)
     try {
-      const [d, o, allWorkers] = await Promise.all([
+      const [d, o, allWorkers, profsRes, trainingsRes] = await Promise.all([
         loadAllDevices(),
         loadOpenCheckouts(),
         loadAllWorkers().catch(() => [] as LotoWorker[]),
+        supabase.from('profiles').select('id, email, full_name').order('full_name', { ascending: true }),
+        supabase.from('loto_training_records').select('*').eq('role', 'authorized_employee'),
       ])
       setDevices(d)
       setOpenCheckouts(o)
       setWorkers(allWorkers)
+      setProfiles((profsRes.data ?? []) as ProfileLite[])
 
-      // Resolve profile names for the held-by column.
-      const ownerIds = Array.from(new Set(o.map(r => r.checkout.owner_id).filter((x): x is string => !!x)))
-      if (ownerIds.length > 0) {
-        const { data: profs } = await supabase
-          .from('profiles').select('id, email, full_name').in('id', ownerIds)
-        setProfiles((profs ?? []) as ProfileLite[])
-      } else {
-        setProfiles([])
-      }
-
-      // Pull training records for the gate.
-      const { data: trainings } = await supabase
-        .from('loto_training_records').select('*').eq('role', 'authorized_employee')
       const map = new Map<string, TrainingRecord[]>()
-      for (const t of (trainings ?? []) as TrainingRecord[]) {
+      for (const t of (trainingsRes.data ?? []) as TrainingRecord[]) {
         const k = t.worker_name.trim().toLowerCase()
         const list = map.get(k) ?? []
         list.push(t)
         map.set(k, list)
       }
       setTrainingByName(map)
-
-      // ALSO resolve all profiles for the picker (not just owners).
-      const { data: allProfs } = await supabase
-        .from('profiles').select('id, email, full_name').order('full_name', { ascending: true })
-      // Merge with owner-name profiles so we don't lose any.
-      const merged = new Map<string, ProfileLite>()
-      for (const p of (allProfs ?? []) as ProfileLite[]) merged.set(p.id, p)
-      setProfiles(Array.from(merged.values()))
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
