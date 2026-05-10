@@ -569,6 +569,17 @@ export const FEATURES: FeatureDef[] = [
     icon:        'Megaphone',
     color:       'sky',
   },
+  {
+    id:          'strike',
+    name:        'STRIKE',
+    description: 'Microlearning and task-readiness for high-risk work',
+    href:        '/strike',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'GraduationCap',
+    color:       'emerald',
+  },
 
   // ── Reports / oversight ─────────────────────────────────────────────────
   // The scorecard is the cross-module trend view aimed at safety directors.

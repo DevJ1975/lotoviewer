@@ -45,6 +45,13 @@ describe('getModuleVisuals', () => {
     expect(v.Icon).toBeDefined()
   })
 
+  it('resolves STRIKE to its training visual identity', () => {
+    const v = getModuleVisuals('strike')
+    expect(v.color).toBe('emerald')
+    expect(v.classes).toBe(MODULE_COLOR_CLASSES.emerald)
+    expect(v.feature?.id).toBe('strike')
+  })
+
   it('falls back to slate for an unknown id', () => {
     const v = getModuleVisuals('does-not-exist')
     expect(v.color).toBe('slate')

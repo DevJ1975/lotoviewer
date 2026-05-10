@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   FileText,
   Flame,
+  GraduationCap,
   HardHat,
   LayoutDashboard,
   LifeBuoy,
@@ -46,6 +47,7 @@ const NAV: NavItem[] = [
   { group: 'Daily',   label: 'Dashboard',         href: '/',                    icon: LayoutDashboard },
   { group: 'Daily',   label: 'Equipment / LOTO',  href: '/loto',                icon: Lock,           hint: 'Lockout/tagout devices' },
   { group: 'Daily',   label: 'Toolbox talks',     href: '/toolbox-talks',       icon: ClipboardCheck },
+  { group: 'Daily',   label: 'STRIKE',            href: '/strike',              icon: GraduationCap, hint: 'Microlearning' },
   { group: 'Daily',   label: 'JHA',               href: '/jha',                 icon: ListChecks,     hint: 'Job hazard analysis' },
 
   { group: 'Safety',  label: 'Incidents',         href: '/incidents',           icon: AlertTriangle },
