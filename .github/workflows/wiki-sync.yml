@@ -1,0 +1,34 @@
+name: Wiki sync
+
+# Fails the PR check if a documented module changed without a matching
+# wiki update. The matching is driven by apps/web/app/wiki/_lib/manifest.json
+# and the script lives at scripts/check-wiki-sync.mjs.
+#
+# To bypass intentionally (refactor, test-only, dependency bump), include a
+# line in any commit body on the branch:
+#     wiki-sync-skip: <one-line reason>
+# or run with WIKI_SYNC_SKIP=1 in a re-run.
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need the full history so `git merge-base HEAD origin/main` resolves
+          # for branches that are more than a few commits behind main.
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run wiki-sync check
+        env:
+          WIKI_SYNC_BASE: origin/${{ github.base_ref }}
+        run: node scripts/check-wiki-sync.mjs
