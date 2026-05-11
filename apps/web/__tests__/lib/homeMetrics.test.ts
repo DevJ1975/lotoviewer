@@ -296,7 +296,32 @@ describe('summarizeMetricsFromRows', () => {
     expect(m.peopleInSpaces).toBe(0)
     expect(m.totalEquipment).toBe(0)
     expect(m.photoCompletionPct).toBe(0)
+    expect(m.commandCenterSafetyAlerts).toEqual([])
     expect(m.recentActivity).toEqual([])
+  })
+
+  it('passes unresolved command center safety alerts through unchanged', () => {
+    const alert = {
+      id:              'alert-1',
+      tenant_id:       'tenant-1',
+      incident_id:     'incident-1',
+      report_number:   'INC-2026-0001',
+      title:           'Near miss submitted',
+      summary:         'Loading dock: pallet slipped',
+      severity_tone:   'attention' as const,
+      priority:        30,
+      status:          'new' as const,
+      source:          'incident_submitted' as const,
+      created_at:      '2026-05-10T10:00:00.000Z',
+      acknowledged_at: null,
+      resolved_at:     null,
+    }
+
+    const m = summarizeMetricsFromRows({
+      permits: [], safetyAlerts: [alert], equipRows: [], audits: [], spaceDescById: new Map(), nowMs: NOW,
+    })
+
+    expect(m.commandCenterSafetyAlerts).toEqual([alert])
   })
 
   it('caps active permits to top 3 sorted by soonest expiry', () => {

@@ -9,6 +9,7 @@ import {
   type IncidentRow,
   type IncidentType,
 } from '@soteria/core/incident'
+import { buildIncidentSafetyAlertInsert } from '@soteria/core/incidentSafetyAlerts'
 import { clientIp, hashIp, isOverIpLimit, recordAttempt } from '@/lib/anonReport/ipThrottle'
 import { verifyTurnstile } from '@/lib/anonReport/turnstile'
 import { generateReceiptPin, hashReceipt, isValidPinFormat, normalizePin } from '@/lib/anonReport/receipt'
@@ -220,6 +221,12 @@ export async function POST(req: Request) {
 
     const incident = data as unknown as IncidentRow
 
+    try {
+      await createCommandCenterSafetyAlert(admin, incident)
+    } catch (err) {
+      Sentry.captureException(err, { tags: { route: 'anonymous-report', stage: 'command-center-alert' } })
+    }
+
     // Bump the token's usage counter (best effort).
     await admin
       .from('incident_anon_intake_tokens')
@@ -270,6 +277,17 @@ export async function POST(req: Request) {
     void recordAttempt(ipHash, 'submit_error')
     return NextResponse.json({ error: msg }, { status: 500 })
   }
+}
+
+async function createCommandCenterSafetyAlert(
+  admin: ReturnType<typeof supabaseAdmin>,
+  incident: IncidentRow,
+): Promise<void> {
+  const { error } = await admin
+    .from('command_center_safety_alerts')
+    .insert(buildIncidentSafetyAlertInsert(incident, null))
+
+  if (error) throw new Error(error.message)
 }
 
 // Browser ships {lat, lng}; the DB column accepts the Postgres
@@ -420,4 +438,3 @@ async function fanOutNotifications(
     await admin.from('incident_notifications').insert(logRows)
   }
 }
-

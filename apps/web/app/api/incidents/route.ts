@@ -17,6 +17,7 @@ import {
   type IncidentSeverityActual,
 } from '@soteria/core/incident'
 import { previewClassificationFromSeverity } from '@soteria/core/incidentClassification'
+import { buildIncidentSafetyAlertInsert } from '@soteria/core/incidentSafetyAlerts'
 import {
   buildDispatchPlan,
   type IncidentNotificationRule,
@@ -203,6 +204,12 @@ export async function POST(req: Request) {
 
     const incident = data as unknown as IncidentRow
 
+    try {
+      await createCommandCenterSafetyAlert(incident, gate.userId)
+    } catch (err) {
+      Sentry.captureException(err, { tags: { route: 'incidents/POST', stage: 'command-center-alert' } })
+    }
+
     // Best-effort notification fan-out. Failures are Sentry-logged
     // inside the helpers; we don't want a flaky email provider to
     // block the user-facing 201 response. We DO await here (rather
@@ -221,6 +228,17 @@ export async function POST(req: Request) {
     Sentry.captureException(e, { tags: { route: 'incidents/POST' } })
     return NextResponse.json({ error: msg }, { status: 500 })
   }
+}
+
+async function createCommandCenterSafetyAlert(
+  incident: IncidentRow,
+  createdBy: string | null,
+): Promise<void> {
+  const { error } = await supabaseAdmin()
+    .from('command_center_safety_alerts')
+    .insert(buildIncidentSafetyAlertInsert(incident, createdBy))
+
+  if (error) throw new Error(error.message)
 }
 
 // ─── Notification fan-out ─────────────────────────────────────────────────

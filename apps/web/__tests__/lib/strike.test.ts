@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   computeStrikeReadiness,
+  isStrikeAssignmentApplicable,
   isStrikeCompletionCurrent,
   normalizeStrikeSlug,
   scoreStrikeQuiz,
@@ -62,6 +63,56 @@ describe('computeStrikeReadiness', () => {
   })
 })
 
+describe('isStrikeAssignmentApplicable', () => {
+  it('allows tenant-wide assignments for every learner', () => {
+    expect(isStrikeAssignmentApplicable({
+      targetType: 'tenant',
+      targetId: null,
+      userId: 'user-1',
+      role: 'member',
+    })).toBe(true)
+  })
+
+  it('only allows user-targeted assignments for that user', () => {
+    expect(isStrikeAssignmentApplicable({
+      targetType: 'user',
+      targetId: 'user-1',
+      userId: 'user-1',
+      role: 'member',
+    })).toBe(true)
+    expect(isStrikeAssignmentApplicable({
+      targetType: 'user',
+      targetId: 'user-2',
+      userId: 'user-1',
+      role: 'member',
+    })).toBe(false)
+  })
+
+  it('only allows role-targeted assignments for that role', () => {
+    expect(isStrikeAssignmentApplicable({
+      targetType: 'role',
+      targetId: 'admin',
+      userId: 'user-1',
+      role: 'admin',
+    })).toBe(true)
+    expect(isStrikeAssignmentApplicable({
+      targetType: 'role',
+      targetId: 'admin',
+      userId: 'user-1',
+      role: 'member',
+    })).toBe(false)
+  })
+
+  it('does not infer site or department applicability without worker context', () => {
+    expect(isStrikeAssignmentApplicable({
+      targetType: 'site',
+      targetId: 'site-1',
+      userId: 'user-1',
+      role: 'member',
+    })).toBe(false)
+  })
+})
+
 describe('normalizeStrikeSlug', () => {
   it('normalizes a module title into a stable slug', () => {
     expect(normalizeStrikeSlug('LOTO Verification Refresher!')).toBe('loto-verification-refresher')
@@ -113,5 +164,19 @@ describe('scoreStrikeQuiz', () => {
       ],
       answersByQuestionId: { q1: true },
     })).toMatchObject({ scorePercent: 100, passed: true })
+  })
+
+  it('fails non-acknowledgement questions that have no configured correct answer', () => {
+    expect(scoreStrikeQuiz({
+      passingScore: 100,
+      questions: [
+        { questionId: 'q1', questionType: 'multiple_choice', correctAnswerIds: [], points: 1 },
+      ],
+      answersByQuestionId: {},
+    })).toMatchObject({
+      scorePercent: 0,
+      passed: false,
+      missedQuestionIds: ['q1'],
+    })
   })
 })

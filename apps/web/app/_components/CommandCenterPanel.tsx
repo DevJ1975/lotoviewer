@@ -18,6 +18,17 @@ export interface CommandCenterItem {
 export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterItem[] {
   const items: CommandCenterItem[] = []
 
+  for (const alert of metrics.commandCenterSafetyAlerts) {
+    items.push({
+      id:     `safety-alert-${alert.id}`,
+      tone:   alert.severity_tone,
+      label:  alert.title,
+      value:  alert.report_number,
+      detail: alert.summary,
+      href:   `/incidents/${alert.incident_id}`,
+    })
+  }
+
   if (metrics.expiredPermitCount > 0) {
     items.push({
       id:     'expired-confined-space-permits',

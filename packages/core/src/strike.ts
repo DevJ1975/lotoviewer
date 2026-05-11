@@ -40,6 +40,13 @@ export interface StrikeReadinessInput {
   validCompletionCount: number
 }
 
+export interface StrikeAssignmentApplicabilityInput {
+  targetType: StrikeAssignmentTargetType | string
+  targetId: string | null | undefined
+  userId: string | null | undefined
+  role: string | null | undefined
+}
+
 export interface StrikeReadinessResult {
   status: StrikeReadinessStatus
   percent: number
@@ -106,6 +113,17 @@ export function computeStrikeReadiness(input: StrikeReadinessInput): StrikeReadi
   return { status: 'blocked', percent, missingCount }
 }
 
+export function isStrikeAssignmentApplicable(input: StrikeAssignmentApplicabilityInput): boolean {
+  if (input.targetType === 'tenant') return input.targetId == null || input.targetId === ''
+  if (input.targetType === 'user') return !!input.userId && input.targetId === input.userId
+  if (input.targetType === 'role') return !!input.role && input.targetId === input.role
+
+  // Site and department targeting need worker profile context that is not
+  // part of the STRIKE shell yet. Keep them tenant-scoped at the API layer
+  // but do not infer learner applicability from this pure helper.
+  return false
+}
+
 export function scoreStrikeQuiz(input: StrikeQuizScoreInput): StrikeQuizScoreResult {
   const requiredQuestions = input.questions.filter(q => q.required !== false)
   const questions = requiredQuestions.length > 0 ? requiredQuestions : input.questions
@@ -120,7 +138,7 @@ export function scoreStrikeQuiz(input: StrikeQuizScoreInput): StrikeQuizScoreRes
 
     const correct = question.questionType === 'acknowledgement'
       ? actual.size > 0 || input.answersByQuestionId[question.questionId] === true
-      : setsEqual(expected, actual)
+      : expected.size > 0 && setsEqual(expected, actual)
 
     if (correct) earnedPoints += points
     else missedQuestionIds.push(question.questionId)

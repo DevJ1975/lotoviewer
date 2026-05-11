@@ -7,6 +7,7 @@ import type { HomeMetrics } from '@soteria/core/homeMetrics'
 
 function metrics(partial: Partial<HomeMetrics> = {}): HomeMetrics {
   return {
+    commandCenterSafetyAlerts: [],
     activePermits:        [],
     activePermitCount:    0,
     expiredPermitCount:   0,
@@ -46,6 +47,36 @@ describe('deriveCommandCenterItems', () => {
       'fire-watch-active',
     ])
     expect(items[0].tone).toBe('critical')
+  })
+
+  it('surfaces submitted incident safety alerts before derived program signals', () => {
+    const items = deriveCommandCenterItems(metrics({
+      commandCenterSafetyAlerts: [{
+        id:              'alert-1',
+        tenant_id:       'tenant-1',
+        incident_id:     'incident-1',
+        report_number:   'INC-2026-0001',
+        title:           'Injury / illness submitted',
+        summary:         'Packaging: employee received first aid',
+        severity_tone:   'warning',
+        priority:        60,
+        status:          'new',
+        source:          'incident_submitted',
+        created_at:      '2026-05-10T10:00:00.000Z',
+        acknowledged_at: null,
+        resolved_at:     null,
+      }],
+      expiredPermitCount: 1,
+    }))
+
+    expect(items[0]).toMatchObject({
+      id:     'safety-alert-alert-1',
+      tone:   'warning',
+      label:  'Injury / illness submitted',
+      value:  'INC-2026-0001',
+      href:   '/incidents/incident-1',
+    })
+    expect(items[1].id).toBe('expired-confined-space-permits')
   })
 
   it('surfaces low LOTO photo coverage only when equipment exists', () => {

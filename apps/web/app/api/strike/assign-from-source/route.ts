@@ -33,7 +33,11 @@ export async function POST(req: Request) {
   const role = typeof body.role === 'string' && body.role.trim() ? body.role.trim() : null
   if (!userId && !role) return NextResponse.json({ error: 'user_id or role is required' }, { status: 400 })
 
-  const dueAt = typeof body.due_at === 'string' && body.due_at ? body.due_at : null
+  const dueAtRaw = typeof body.due_at === 'string' && body.due_at.trim() ? body.due_at.trim() : null
+  const dueAt = dueAtRaw ? new Date(dueAtRaw) : null
+  if (dueAt && Number.isNaN(dueAt.getTime())) {
+    return NextResponse.json({ error: 'Invalid due_at' }, { status: 400 })
+  }
   const reason = typeof body.reason === 'string' && body.reason.trim()
     ? body.reason.trim()
     : `${sourceType.replace(/_/g, ' ')} retraining`
@@ -63,7 +67,7 @@ export async function POST(req: Request) {
       target_type: userId ? 'user' : 'role',
       target_id: userId ?? role,
       assigned_by: gate.userId,
-      due_at: dueAt,
+      due_at: dueAt ? dueAt.toISOString() : null,
       reason,
       status: 'active',
     }))

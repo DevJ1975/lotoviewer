@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient'
 import { hotWorkState } from './hotWorkPermitStatus'
+import type { CommandCenterSafetyAlert } from './incidentSafetyAlerts'
 
 // Aggregator for the home screen at /. Splits the work into a pure
 // summarizer + a thin DB orchestrator so the logic (audit-event prose,
@@ -105,6 +106,7 @@ export interface HotWorkAlertSummary {
 }
 
 export interface HomeMetrics {
+  commandCenterSafetyAlerts: CommandCenterSafetyAlert[]
   activePermits:        ActivePermitSummary[]   // top 3 by soonest expiry
   activePermitCount:    number
   expiredPermitCount:   number                  // signed, not canceled, past expires_at
@@ -376,7 +378,7 @@ export function findHotWorkInPostWatch(
 // Caller does the supabase reads and hands the rows in; tests skip the
 // DB entirely and just feed fixtures.
 export function summarizeMetricsFromRows({
-  permits, pending = [], hotWork = [], equipRows, audits, spaceDescById, nowMs,
+  permits, pending = [], hotWork = [], safetyAlerts = [], equipRows, audits, spaceDescById, nowMs,
 }: {
   permits:       PermitSummaryRow[]
   // Optional so callers / fixtures that don't care about the pending-stale
@@ -386,6 +388,7 @@ export function summarizeMetricsFromRows({
   // Optional for the same reason — fixtures that don't exercise hot-work
   // alerts can omit. Defaults to no alerts.
   hotWork?:      HotWorkPermitRow[]
+  safetyAlerts?: CommandCenterSafetyAlert[]
   equipRows:    EquipmentPhotoStatusRow[]
   audits:       AuditLogRow[]
   spaceDescById: Map<string, string>
@@ -431,6 +434,7 @@ export function summarizeMetricsFromRows({
   const hotWorkInPostWatch  = findHotWorkInPostWatch(hotWork, nowMs)
 
   return {
+    commandCenterSafetyAlerts: safetyAlerts,
     activePermits:        top3,
     activePermitCount:    active.length,
     expiredPermitCount:   expired.length,
@@ -455,7 +459,7 @@ export function summarizeMetricsFromRows({
 export async function fetchHomeMetrics(): Promise<HomeMetrics> {
   const nowMs = Date.now()
 
-  const [permitsRes, pendingRes, hotWorkRes, equipRes, auditRes] = await Promise.all([
+  const [permitsRes, pendingRes, hotWorkRes, safetyAlertsRes, equipRes, auditRes] = await Promise.all([
     supabase
       .from('loto_confined_space_permits')
       .select('id, serial, space_id, expires_at, canceled_at, entry_supervisor_signature_at, entrants, attendants')
@@ -481,6 +485,13 @@ export async function fetchHomeMetrics(): Promise<HomeMetrics> {
       .order('expires_at', { ascending: true })
       .limit(50),
     supabase
+      .from('command_center_safety_alerts')
+      .select('id, tenant_id, incident_id, report_number, title, summary, severity_tone, priority, status, source, created_at, acknowledged_at, resolved_at')
+      .in('status', ['new', 'acknowledged', 'in_review', 'escalated'])
+      .order('priority', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(4),
+    supabase
       .from('loto_equipment')
       .select('photo_status')
       .eq('decommissioned', false),
@@ -494,6 +505,7 @@ export async function fetchHomeMetrics(): Promise<HomeMetrics> {
   const permits   = (permitsRes.data ?? []) as PermitSummaryRow[]
   const pending   = (pendingRes.data ?? []) as PendingPermitRow[]
   const hotWork   = (hotWorkRes.data ?? []) as HotWorkPermitRow[]
+  const safetyAlerts = (safetyAlertsRes.data ?? []) as CommandCenterSafetyAlert[]
   const equipRows = (equipRes.data   ?? []) as EquipmentPhotoStatusRow[]
   const audits    = (auditRes.data   ?? []) as AuditLogRow[]
 
@@ -518,5 +530,5 @@ export async function fetchHomeMetrics(): Promise<HomeMetrics> {
     }
   }
 
-  return summarizeMetricsFromRows({ permits, pending, hotWork, equipRows, audits, spaceDescById, nowMs })
+  return summarizeMetricsFromRows({ permits, pending, hotWork, safetyAlerts, equipRows, audits, spaceDescById, nowMs })
 }

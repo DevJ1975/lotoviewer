@@ -8,9 +8,12 @@ import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import type { StrikeQuestionType } from '@soteria/core/strike'
+import { resolveStrikeVideoSource } from '@soteria/core/strikeMedia'
 
 interface ModuleRow {
   id: string
+  tenant_id: string | null
+  library_scope: 'global' | 'tenant'
   title: string
   description: string | null
   category: string | null
@@ -62,6 +65,7 @@ export default function StrikeModulePage() {
   const [questions, setQuestions] = useState<QuestionRow[]>([])
   const [answers, setAnswers] = useState<AnswerRow[]>([])
   const [signedVideoUrl, setSignedVideoUrl] = useState<string | null>(null)
+  const [videoNotice, setVideoNotice] = useState<string | null>(null)
   const [responses, setResponses] = useState<Record<string, string[] | string | boolean>>({})
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -71,19 +75,34 @@ export default function StrikeModulePage() {
   const assignmentId = searchParams.get('assignment') ?? null
 
   const load = useCallback(async () => {
-    if (!tenant?.id || !params.slug) return
+    if (!tenant?.id || !params.slug) {
+      setLoading(false)
+      setModule(null)
+      setVersion(null)
+      setQuestions([])
+      setAnswers([])
+      setSignedVideoUrl(null)
+      setVideoNotice(null)
+      return
+    }
     setLoading(true)
     setError(null)
     setResult(null)
+    setResponses({})
+    setSignedVideoUrl(null)
+    setVideoNotice(null)
 
     try {
-      const { data: moduleRow, error: moduleErr } = await supabase
+      const { data: moduleRows, error: moduleErr } = await supabase
         .from('strike_modules')
-        .select('id,title,description,category,slug')
+        .select('id,tenant_id,library_scope,title,description,category,slug')
         .eq('slug', params.slug)
         .eq('status', 'published')
-        .maybeSingle()
+        .limit(10)
       if (moduleErr) throw moduleErr
+      const moduleRow = ((moduleRows ?? []) as ModuleRow[]).find(row => row.tenant_id === tenant.id)
+        ?? ((moduleRows ?? []) as ModuleRow[]).find(row => row.library_scope === 'global')
+        ?? null
       if (!moduleRow) {
         setModule(null)
         setLoading(false)
@@ -131,11 +150,14 @@ export default function StrikeModulePage() {
         setAnswers([])
       }
 
-      if (nextVersion.video_path) {
+      const videoSource = resolveStrikeVideoSource(nextVersion.video_path)
+      if (videoSource.kind === 'storage') {
         const { data } = await supabase.storage
           .from('strike-media')
-          .createSignedUrl(nextVersion.video_path, 60 * 30)
+          .createSignedUrl(videoSource.path, 60 * 30)
         setSignedVideoUrl(data?.signedUrl ?? null)
+      } else if (videoSource.kind === 'unsupported') {
+        setVideoNotice(videoSource.reason)
       } else {
         setSignedVideoUrl(null)
       }
@@ -243,7 +265,7 @@ export default function StrikeModulePage() {
           <div className="flex aspect-video items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-400">
             <div className="text-center">
               <Video className="mx-auto h-8 w-8" />
-              <p className="mt-2 text-sm">No video file attached yet.</p>
+              <p className="mt-2 text-sm">{videoNotice ?? 'No video file attached yet.'}</p>
             </div>
           </div>
         )}

@@ -2,7 +2,12 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { scoreStrikeQuiz, type StrikeQuestionType } from '@soteria/core/strike'
+import {
+  isStrikeAssignmentApplicable,
+  scoreStrikeQuiz,
+  type StrikeAssignmentTargetType,
+  type StrikeQuestionType,
+} from '@soteria/core/strike'
 
 export const runtime = 'nodejs'
 
@@ -66,6 +71,35 @@ export async function POST(req: Request, ctx: RouteContext) {
     if (versionErr) throw new Error(versionErr.message)
     if (!version || version.status !== 'published') {
       return NextResponse.json({ error: 'Published version not found' }, { status: 404 })
+    }
+
+    if (assignmentId) {
+      const { data: assignment, error: assignmentErr } = await admin
+        .from('strike_assignments')
+        .select('id,tenant_id,module_id,module_version_id,target_type,target_id,status')
+        .eq('id', assignmentId)
+        .maybeSingle()
+      if (assignmentErr) throw new Error(assignmentErr.message)
+      if (
+        !assignment
+        || assignment.tenant_id !== gate.tenantId
+        || assignment.module_id !== moduleId
+        || assignment.status !== 'active'
+        || (assignment.module_version_id && assignment.module_version_id !== moduleVersionId)
+      ) {
+        return NextResponse.json({ error: 'Assignment does not match this module.' }, { status: 400 })
+      }
+
+      if (
+        !isStrikeAssignmentApplicable({
+          targetType: assignment.target_type as StrikeAssignmentTargetType,
+          targetId: assignment.target_id as string | null,
+          userId: gate.userId,
+          role: gate.role,
+        })
+      ) {
+        return NextResponse.json({ error: 'Assignment is not assigned to this user.' }, { status: 403 })
+      }
     }
 
     const { data: questions, error: questionErr } = await admin
