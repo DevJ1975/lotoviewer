@@ -28,55 +28,87 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   [HAIKU]:  { inputPerMTok: 1,  outputPerMTok: 5  },
 }
 
+// Anthropic prompt-cache rate multipliers relative to base input price.
+// - Cache reads bill at 10% of base.
+// - Cache creation (write) bills at 125% of base.
+// These are simplifications; Anthropic's tiered cache pricing has
+// nuances (5m vs 1h TTL, cache hit semantics on extended thinking).
+// Surfaced as a known-caveat in the dashboard footnote.
+const CACHE_READ_MULT  = 0.1
+const CACHE_WRITE_MULT = 1.25
+
 /**
  * Compute USD cost for a single invocation. Falls back to Sonnet
  * pricing for unknown model ids — surfaces a nonzero cost rather
  * than silently dropping spend on a model we forgot to register.
+ *
+ * Anthropic's response.usage breaks input into three buckets which
+ * are mutually exclusive: input_tokens (uncached), cache_read_input_tokens,
+ * cache_creation_input_tokens. This function bills each at its
+ * respective rate.
  */
 export function costForInvocation(
-  model:        string,
-  inputTokens:  number | null | undefined,
-  outputTokens: number | null | undefined,
+  model:             string,
+  inputTokens:       number | null | undefined,
+  outputTokens:      number | null | undefined,
+  cacheReadTokens?:  number | null,
+  cacheWriteTokens?: number | null,
 ): number {
   const p = MODEL_PRICING[model] ?? MODEL_PRICING[SONNET]
-  const inCost  = ((inputTokens  ?? 0) / 1_000_000) * p.inputPerMTok
-  const outCost = ((outputTokens ?? 0) / 1_000_000) * p.outputPerMTok
-  return inCost + outCost
+  const baseInput  = (inputTokens       ?? 0) / 1_000_000
+  const cacheRead  = (cacheReadTokens   ?? 0) / 1_000_000
+  const cacheWrite = (cacheWriteTokens  ?? 0) / 1_000_000
+  const out        = (outputTokens      ?? 0) / 1_000_000
+  return (
+    baseInput  * p.inputPerMTok
+    + cacheRead  * p.inputPerMTok * CACHE_READ_MULT
+    + cacheWrite * p.inputPerMTok * CACHE_WRITE_MULT
+    + out        * p.outputPerMTok
+  )
 }
 
 // ─── Row shape ────────────────────────────────────────────────────────
 // Mirrors the public.ai_invocations columns we read. tenant_name is
 // joined in by the route handler so the aggregator can surface it.
 export interface InvocationRow {
-  id:            number
-  user_id:       string
-  tenant_id:     string | null
-  tenant_name:   string | null
-  surface:       string
-  model:         string
-  status:        'success' | 'rate_limited' | 'error'
-  input_tokens:  number | null
-  output_tokens: number | null
-  occurred_at:   string  // ISO timestamp
+  id:                 number
+  user_id:            string
+  tenant_id:          string | null
+  tenant_name:        string | null
+  surface:            string
+  model:              string
+  status:             'success' | 'rate_limited' | 'error' | 'budget_blocked'
+  input_tokens:       number | null
+  output_tokens:      number | null
+  cache_read_tokens:  number | null
+  cache_write_tokens: number | null
+  occurred_at:        string  // ISO timestamp
 }
 
 // ─── Aggregation result ───────────────────────────────────────────────
 export interface UsageSummary {
   totals: {
-    invocations:   number
-    success:       number
-    errors:        number
-    rateLimited:   number
-    inputTokens:   number
-    outputTokens:  number
-    estCostUsd:    number
+    invocations:       number
+    success:           number
+    errors:            number
+    rateLimited:       number
+    budgetBlocked:     number
+    inputTokens:       number
+    outputTokens:      number
+    cacheReadTokens:   number
+    cacheWriteTokens:  number
+    estCostUsd:        number
   }
   bySurface: Array<{
-    surface:      string
-    invocations:  number
-    inputTokens:  number
-    outputTokens: number
-    estCostUsd:   number
+    surface:           string
+    invocations:       number
+    inputTokens:       number
+    outputTokens:      number
+    cacheReadTokens:   number
+    cacheWriteTokens:  number
+    estCostUsd:        number
+    /** Fraction of input tokens served from cache, 0..1. */
+    cacheHitRate:      number
   }>
   byTenant: Array<{
     tenantId:     string | null
@@ -87,7 +119,7 @@ export interface UsageSummary {
     estCostUsd:   number
   }>
   byStatus: Array<{
-    status:      'success' | 'rate_limited' | 'error'
+    status:      'success' | 'rate_limited' | 'error' | 'budget_blocked'
     invocations: number
   }>
   byModel: Array<{
@@ -109,20 +141,25 @@ export interface UsageSummary {
     occurredAt:  string
     surface:     string
     model:       string
-    status:      'rate_limited' | 'error'
+    status:      'rate_limited' | 'error' | 'budget_blocked'
     tenantName:  string | null
   }>
 }
 
 interface SurfaceAccum {
-  invocations:  number
-  inputTokens:  number
-  outputTokens: number
-  estCostUsd:   number
+  invocations:       number
+  inputTokens:       number
+  outputTokens:      number
+  cacheReadTokens:   number
+  cacheWriteTokens:  number
+  estCostUsd:        number
 }
 
 function emptySurfaceAccum(): SurfaceAccum {
-  return { invocations: 0, inputTokens: 0, outputTokens: 0, estCostUsd: 0 }
+  return {
+    invocations: 0, inputTokens: 0, outputTokens: 0,
+    cacheReadTokens: 0, cacheWriteTokens: 0, estCostUsd: 0,
+  }
 }
 
 /**
@@ -130,40 +167,50 @@ function emptySurfaceAccum(): SurfaceAccum {
  */
 export function aggregateUsage(rows: InvocationRow[]): UsageSummary {
   const totals = {
-    invocations:  0,
-    success:      0,
-    errors:       0,
-    rateLimited:  0,
-    inputTokens:  0,
-    outputTokens: 0,
-    estCostUsd:   0,
+    invocations:      0,
+    success:          0,
+    errors:           0,
+    rateLimited:      0,
+    budgetBlocked:    0,
+    inputTokens:      0,
+    outputTokens:     0,
+    cacheReadTokens:  0,
+    cacheWriteTokens: 0,
+    estCostUsd:       0,
   }
 
   const bySurfaceMap = new Map<string, SurfaceAccum>()
   const byTenantMap  = new Map<string, SurfaceAccum & { tenantName: string | null }>()
-  const byStatusMap  = new Map<'success' | 'rate_limited' | 'error', number>()
+  const byStatusMap  = new Map<'success' | 'rate_limited' | 'error' | 'budget_blocked', number>()
   const byModelMap   = new Map<string, SurfaceAccum>()
   const dailyMap     = new Map<string, SurfaceAccum>()
   const failures: UsageSummary['recentFailures'] = []
 
   for (const r of rows) {
-    const inTok  = r.input_tokens  ?? 0
-    const outTok = r.output_tokens ?? 0
-    const cost   = costForInvocation(r.model, inTok, outTok)
+    const inTok    = r.input_tokens       ?? 0
+    const outTok   = r.output_tokens      ?? 0
+    const cReadTok = r.cache_read_tokens  ?? 0
+    const cWritTok = r.cache_write_tokens ?? 0
+    const cost     = costForInvocation(r.model, inTok, outTok, cReadTok, cWritTok)
 
-    totals.invocations  += 1
-    totals.inputTokens  += inTok
-    totals.outputTokens += outTok
-    totals.estCostUsd   += cost
-    if (r.status === 'success')      totals.success     += 1
-    if (r.status === 'error')        totals.errors      += 1
-    if (r.status === 'rate_limited') totals.rateLimited += 1
+    totals.invocations      += 1
+    totals.inputTokens      += inTok
+    totals.outputTokens     += outTok
+    totals.cacheReadTokens  += cReadTok
+    totals.cacheWriteTokens += cWritTok
+    totals.estCostUsd       += cost
+    if (r.status === 'success')        totals.success       += 1
+    if (r.status === 'error')          totals.errors        += 1
+    if (r.status === 'rate_limited')   totals.rateLimited   += 1
+    if (r.status === 'budget_blocked') totals.budgetBlocked += 1
 
     const surfAcc = bySurfaceMap.get(r.surface) ?? emptySurfaceAccum()
-    surfAcc.invocations  += 1
-    surfAcc.inputTokens  += inTok
-    surfAcc.outputTokens += outTok
-    surfAcc.estCostUsd   += cost
+    surfAcc.invocations      += 1
+    surfAcc.inputTokens      += inTok
+    surfAcc.outputTokens     += outTok
+    surfAcc.cacheReadTokens  += cReadTok
+    surfAcc.cacheWriteTokens += cWritTok
+    surfAcc.estCostUsd       += cost
     bySurfaceMap.set(r.surface, surfAcc)
 
     const tenantKey = r.tenant_id ?? '__none__'
@@ -207,7 +254,14 @@ export function aggregateUsage(rows: InvocationRow[]): UsageSummary {
   return {
     totals,
     bySurface: Array.from(bySurfaceMap.entries())
-      .map(([surface, v]) => ({ surface, ...v }))
+      .map(([surface, v]) => {
+        // Hit rate is reads / (reads + uncached input). Cache writes
+        // count as cache misses for this denominator — they were billed
+        // at full+25% but didn't save anything on this call.
+        const cacheable = v.cacheReadTokens + v.inputTokens
+        const cacheHitRate = cacheable > 0 ? v.cacheReadTokens / cacheable : 0
+        return { surface, ...v, cacheHitRate }
+      })
       .sort((a, b) => b.estCostUsd - a.estCostUsd),
     byTenant: Array.from(byTenantMap.entries())
       .map(([tid, v]) => ({

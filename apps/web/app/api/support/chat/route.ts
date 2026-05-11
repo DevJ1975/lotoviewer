@@ -202,6 +202,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Message is too long (max 4,000 characters).' }, { status: 400 })
   }
 
+  // Tenant kill switch + daily budget cap. Tenantless callers
+  // (support-chat allows no active tenant) skip the check.
+  const budget = await checkTenantBudget({
+    userId:   reporter.id,
+    tenantId: reporter.tenantId,
+    surface:  'support-chat',
+  })
+  if (!budget.ok) {
+    return NextResponse.json(
+      { error: budget.message },
+      { status: 429, headers: budget.reason === 'budget_exceeded' ? { 'retry-after': String(budget.retryAfterSec) } : {} },
+    )
+  }
+
   const admin = supabaseAdmin()
 
   // Rate-limit before doing any expensive work. Counts user-role messages
@@ -331,7 +345,7 @@ export async function POST(req: Request) {
         // Cache the long system prompt so subsequent turns are cheap.
         cache_control: { type: 'ephemeral' },
       }],
-      tools:    [ESCALATION_TOOL],
+      tools:    allTools,
       messages: prior.map(m => ({ role: m.role, content: m.content })),
     })
   } catch (err) {
@@ -362,9 +376,73 @@ export async function POST(req: Request) {
     if (block.type === 'text') assistantTextParts.push(block.text)
   }
 
+  // Data-fetch tools run inline: execute up to 2 tool calls, feed the
+  // results back, and let the model produce a text reply that
+  // summarizes what it found. We cap iterations so a misbehaving model
+  // can't burn the budget hopping tools forever. Escalation tool is
+  // handled below as a single-iteration terminal flow.
+  let dataIterations = 0
+  let workingResponse = response
+  while (dataIterations < 2) {
+    const dataToolUse = workingResponse.content.find(
+      b => b.type === 'tool_use' && isDataFetchTool(b.name),
+    ) as Anthropic.ToolUseBlock | undefined
+    if (!dataToolUse) break
+    dataIterations += 1
+
+    const result = await executeTool(dataToolUse.name, dataToolUse.input, {
+      tenantId: reporter.tenantId,
+      userId:   reporter.id,
+      modules:  tenantModules ?? {},
+    })
+    const toolResultBody = result.ok
+      ? JSON.stringify(result.data)
+      : `Error: ${result.error ?? 'tool failed'}. Continue without this data.`
+
+    let next: Anthropic.Message
+    try {
+      next = await client.messages.create({
+        model:      MODEL,
+        max_tokens: MAX_TOKENS,
+        system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+        tools:    allTools,
+        messages: [
+          ...prior.map(m => ({ role: m.role, content: m.content })),
+          { role: 'assistant' as const, content: workingResponse.content },
+          {
+            role: 'user' as const,
+            content: [{
+              type:        'tool_result' as const,
+              tool_use_id: dataToolUse.id,
+              content:     toolResultBody,
+            }],
+          },
+        ],
+      })
+    } catch (err) {
+      Sentry.captureException(err, { tags: { route: '/api/support/chat', stage: 'data-tool-followup' } })
+      // Fall back to whatever text we have. Don't break the chat.
+      break
+    }
+
+    workingResponse = next
+    totalInputTokens  += next.usage?.input_tokens ?? 0
+    totalOutputTokens += next.usage?.output_tokens ?? 0
+    totalCacheRead    += next.usage?.cache_read_input_tokens ?? 0
+  }
+  // Replace text parts from the latest response (post tool loop). If
+  // no data tools ran, this is the original response and the parts
+  // are already populated above; this overwrite is idempotent.
+  if (workingResponse !== response) {
+    assistantTextParts = []
+    for (const block of workingResponse.content) {
+      if (block.type === 'text') assistantTextParts.push(block.text)
+    }
+  }
+
   // Tool use → escalation path. With a single iteration we let the model
   // produce one tool call, run it, then ask for a confirmation message.
-  const toolUse = response.content.find(b => b.type === 'tool_use') as Anthropic.ToolUseBlock | undefined
+  const toolUse = workingResponse.content.find(b => b.type === 'tool_use') as Anthropic.ToolUseBlock | undefined
   if (toolUse && toolUse.name === 'create_support_ticket') {
     const errs = validateCreateTicketInput(toolUse.input as Partial<CreateTicketInput>)
     let toolResultText: string
@@ -400,10 +478,10 @@ export async function POST(req: Request) {
           text: systemPrompt,
           cache_control: { type: 'ephemeral' },
         }],
-        tools:    [ESCALATION_TOOL],
+        tools:    allTools,
         messages: [
           ...prior.map(m => ({ role: m.role, content: m.content })),
-          { role: 'assistant' as const, content: response.content },
+          { role: 'assistant' as const, content: workingResponse.content },
           {
             role: 'user' as const,
             content: [{

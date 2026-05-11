@@ -41,7 +41,7 @@ export async function GET(req: Request) {
 
   const { data: invocations, error } = await admin
     .from('ai_invocations')
-    .select('id, user_id, tenant_id, surface, model, status, input_tokens, output_tokens, occurred_at')
+    .select('id, user_id, tenant_id, surface, model, status, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, occurred_at')
     .gte('occurred_at', since)
     .order('occurred_at', { ascending: false })
     .limit(MAX_ROWS)
@@ -68,16 +68,18 @@ export async function GET(req: Request) {
   }
 
   const enriched: InvocationRow[] = rows.map(r => ({
-    id:            r.id,
-    user_id:       r.user_id,
-    tenant_id:     r.tenant_id,
-    tenant_name:   r.tenant_id ? tenantNameById.get(r.tenant_id) ?? null : null,
-    surface:       r.surface,
-    model:         r.model,
-    status:        r.status as InvocationRow['status'],
-    input_tokens:  r.input_tokens,
-    output_tokens: r.output_tokens,
-    occurred_at:   r.occurred_at,
+    id:                 r.id,
+    user_id:            r.user_id,
+    tenant_id:          r.tenant_id,
+    tenant_name:        r.tenant_id ? tenantNameById.get(r.tenant_id) ?? null : null,
+    surface:            r.surface,
+    model:              r.model,
+    status:             r.status as InvocationRow['status'],
+    input_tokens:       r.input_tokens,
+    output_tokens:      r.output_tokens,
+    cache_read_tokens:  r.cache_read_tokens  ?? null,
+    cache_write_tokens: r.cache_write_tokens ?? null,
+    occurred_at:        r.occurred_at,
   }))
 
   const summary = aggregateUsage(enriched)
@@ -89,9 +91,9 @@ export async function GET(req: Request) {
     summary,
     caveat:
       'USD figures are estimates derived from list pricing per million tokens. ' +
-      'Actual Anthropic invoices may differ — cache reads, batch discounts, and ' +
-      'prompt caching are not modeled. Use this dashboard for trend / attribution, ' +
-      'not for billing.',
+      'Cache reads bill at 10% of base; cache writes at 125%. Batch discounts + ' +
+      'tiered cache pricing nuances are not modeled. Use this dashboard for trend / ' +
+      'attribution, not for billing.',
   }
 
   return NextResponse.json(payload)
