@@ -208,4 +208,48 @@ describe('TenantProvider', () => {
     expect(sessionStorage.getItem(ACTIVE_KEY)).toBe('T2')
     expect(reloadSpy).toHaveBeenCalledTimes(1)
   })
+
+  it('switchTenant rejects non-membership target for non-superadmin', async () => {
+    const reloadSpy = vi.fn()
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...window.location, reload: reloadSpy, href: '' },
+    })
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    useAuthMock.mockReturnValue({ userId: 'u1', profile: { is_superadmin: false }, loading: false })
+    mockMemberships([
+      { role: 'member', tenants: { id: 'T1', slug: 'snak-king', name: 'Snak King', tenant_number: '0001', status: 'active' } },
+    ])
+    renderProvider()
+    await waitFor(() => expect(captured!.loading).toBe(false))
+    expect(captured!.tenantId).toBe('T1')
+
+    // Programmatic attempt to switch to a tenant the user is NOT a member
+    // of must be a no-op: storage stays on T1 and the page does not reload.
+    act(() => { captured!.switchTenant('OTHER') })
+    expect(sessionStorage.getItem(ACTIVE_KEY)).toBe('T1')
+    expect(reloadSpy).not.toHaveBeenCalled()
+    expect(warnSpy).toHaveBeenCalled()
+    warnSpy.mockRestore()
+  })
+
+  it('switchTenant allows superadmin to target a non-membership tenant', async () => {
+    const reloadSpy = vi.fn()
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...window.location, reload: reloadSpy, href: '' },
+    })
+
+    useAuthMock.mockReturnValue({ userId: 'u1', profile: { is_superadmin: true }, loading: false })
+    mockMemberships([
+      { role: 'owner', tenants: { id: 'T1', slug: 'snak-king', name: 'Snak King', tenant_number: '0001', status: 'active' } },
+    ])
+    renderProvider()
+    await waitFor(() => expect(captured!.loading).toBe(false))
+
+    act(() => { captured!.switchTenant('OTHER') })
+    expect(sessionStorage.getItem(ACTIVE_KEY)).toBe('OTHER')
+    expect(reloadSpy).toHaveBeenCalledTimes(1)
+  })
 })

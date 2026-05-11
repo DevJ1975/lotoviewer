@@ -198,10 +198,15 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
   const switchTenant = useCallback((id: string) => {
     if (!userId) return
-    // Allow superadmin to switch to a tenant they're not a member of —
-    // header-scoped RLS in migration 032 grants the cross-tenant view.
-    // For non-superadmins this still falls through with a warning since
-    // RLS would reject their reads anyway.
+    // Superadmin may switch to any tenant — header-scoped RLS in
+    // migration 032 grants the cross-tenant view. Non-superadmins may
+    // only switch to a tenant they're a member of; reject anything else
+    // so a stray sessionStorage write or programmatic call can't pin
+    // them to a tenant outside their memberships.
+    if (!isSuperadmin && !available.some(t => t.id === id)) {
+      console.warn('[tenant] refusing to switch — non-superadmin not a member of', id)
+      return
+    }
     writeStoredTenantId(id)
     // B1: hard reload after writing the new active tenant. This drops
     // any in-flight requests carrying the old x-active-tenant header
@@ -214,7 +219,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     } else {
       setTenantId(id)
     }
-  }, [userId])
+  }, [userId, isSuperadmin, available])
 
   const refresh = useCallback(async () => {
     if (userId) await fetchAll(userId)

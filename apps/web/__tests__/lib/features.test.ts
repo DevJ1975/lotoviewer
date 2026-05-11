@@ -94,6 +94,7 @@ describe('getFeaturesByCategory', () => {
     const safety = getFeaturesByCategory('safety')
     const ids = safety.map(f => f.id)
     expect(ids).toEqual([
+      'my-safety-readiness',
       'loto',
       'loto-status',
       'loto-departments',
@@ -101,6 +102,11 @@ describe('getFeaturesByCategory', () => {
       'loto-import',
       'loto-decommission',
       'loto-review-portal',
+      'equipment-readiness',
+      'equipment-readiness-scan',
+      'equipment-readiness-defects',
+      'equipment-readiness-qr',
+      'equipment-readiness-config',
       'risk-assessment',
       'risk-heatmap',
       'risk-list',
@@ -170,7 +176,9 @@ describe('getModules', () => {
   it('returns only top-level features (no parent) for a category', () => {
     const ids = getModules('safety').map(m => m.id)
     expect(ids).toEqual([
+      'my-safety-readiness',
       'loto',
+      'equipment-readiness',
       'risk-assessment',
       'confined-spaces',
       'incidents',
@@ -191,6 +199,8 @@ describe('getModules', () => {
     // top-level rows — they'd duplicate every nav entry otherwise.
     expect(ids).not.toContain('loto-status')
     expect(ids).not.toContain('loto-departments')
+    expect(ids).not.toContain('equipment-readiness-scan')
+    expect(ids).not.toContain('equipment-readiness-defects')
     expect(ids).not.toContain('cs-status-board')
   })
 

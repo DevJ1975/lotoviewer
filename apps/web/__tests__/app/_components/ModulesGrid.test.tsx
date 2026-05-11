@@ -28,10 +28,12 @@ describe('ModulesGrid', () => {
   it('returns null when no modules are visible', () => {
     mockUseTenant.mockReturnValue({
       tenant: tenantWith({
+        'my-safety-readiness': false, 'equipment-readiness': false,
         loto: false, 'confined-spaces': false, 'hot-work': false,
         'risk-assessment': false, 'jha': false, 'near-miss': false,
         'incidents': false, 'toolbox-talks': false, 'safety-boards': false,
         'bbs': false, 'chemicals': false,
+        strike: false,
       }),
     })
     const { container } = render(<ModulesGrid />)

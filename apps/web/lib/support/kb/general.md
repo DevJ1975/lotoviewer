@@ -7,10 +7,45 @@ pages.
 
 ## What SoteriaField is
 
-A field-safety PWA used by production teams to manage Lockout/Tagout
-procedures, confined-space permits, hot-work permits, risk assessments, and
-related compliance documentation. It runs in the browser on iPad, iPhone,
-Android, laptops, and desktops, and works offline for most read tasks.
+A multi-tenant field-safety platform for industrial production and
+manufacturing teams. It replaces the binders, clipboards, and shared
+spreadsheets that normally sit between a frontline worker and a safe
+shift — and puts every procedure, permit, and citation one tap away
+from where the work actually happens.
+
+It is delivered as an installable PWA, so the same codebase runs in
+the browser on iPad, iPhone, Android, laptops, and desktops. Read
+pages cache for offline use; writes (photos, signatures, permit
+sign-ons) queue and retry when the network returns.
+
+The platform is organised into per-tenant modules that an admin can
+toggle on or off:
+
+- **LOTO** — Lockout/Tagout placards, energy-source documentation,
+  AI-assisted photo validation, signature stamping, and merged
+  department PDFs for audits (29 CFR 1910.147 / Cal/OSHA T8 §3314).
+- **Confined Spaces** — permit issuance, atmospheric readings, entrant
+  and attendant logs (29 CFR 1910.146 / T8 §5157).
+- **Hot Work** — permits, fire-watch sign-on, post-work monitoring
+  (NFPA 51B).
+- **Risk / JHA** — hazard identification, hierarchy-of-controls
+  scoring, periodic review cadence (ISO 45001 §6.1 / §8.1.2,
+  ANSI/ASSP Z490.1).
+- **Near-Miss & Incidents** — frontline reporting with photo capture
+  and routed follow-up (29 CFR Part 1904 recordkeeping).
+- **Chemicals** — SDS library, container labelling, GHS classification.
+- **Toolbox Talks & BBS** — scheduled safety briefings and
+  behaviour-based-safety observations with attendance + sign-on.
+- **Inspector & Permit Sign-on** — scan-to-sign workflows for
+  supervisors and contractors.
+- **AI Support Bot** — context-aware in-app assistant grounded in
+  the regulatory framework below and the tenant's own configuration.
+
+Multi-tenancy is enforced at the database layer: every domain table
+carries a `tenant_id` and is protected by header-scoped Postgres RLS,
+so a user (including a superadmin viewing another tenant) can never
+read or write outside their active site. Tenant logos, module
+toggles, and storage prefixes are all per-tenant.
 
 ## Regulatory frameworks the platform addresses
 

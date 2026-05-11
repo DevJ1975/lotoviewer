@@ -1,4 +1,4 @@
-// Sentry init for the Edge runtime (middleware, edge route handlers).
+// Sentry init for the Edge runtime (proxy, edge route handlers).
 // We don't currently use any edge routes, but Sentry's wizard wires
 // this up because adding one later would silently lose error reporting
 // without it.

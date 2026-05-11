@@ -42,6 +42,7 @@ export function gateRejects(status: number, message: string) {
 
 // ── rate limit + invocation logger ────────────────────────────────────
 export const checkAiRateLimitMock = vi.fn()
+export const checkTenantBudgetMock = vi.fn()
 export const logAiInvocationMock  = vi.fn()
 
 vi.mock('@/lib/ai/rateLimit', async () => {
@@ -51,8 +52,9 @@ vi.mock('@/lib/ai/rateLimit', async () => {
   const actual = await vi.importActual<typeof import('@/lib/ai/rateLimit')>('@/lib/ai/rateLimit')
   return {
     ...actual,
-    checkAiRateLimit: (a: unknown) => checkAiRateLimitMock(a),
-    logAiInvocation:  (a: unknown) => logAiInvocationMock(a),
+    checkAiRateLimit:    (a: unknown) => checkAiRateLimitMock(a),
+    checkTenantBudget:   (a: unknown) => checkTenantBudgetMock(a),
+    logAiInvocation:     (a: unknown) => logAiInvocationMock(a),
   }
 })
 
@@ -61,6 +63,15 @@ export function rateLimitOk() {
 }
 export function rateLimitBlocks(reason: 'hourly' | 'daily', retryAfterSec = 60) {
   checkAiRateLimitMock.mockResolvedValue({ ok: false, reason, retryAfterSec })
+}
+export function budgetOk() {
+  checkTenantBudgetMock.mockResolvedValue({ ok: true })
+}
+export function budgetBlocks(reason: 'disabled' | 'budget_exceeded', message = 'over budget') {
+  checkTenantBudgetMock.mockResolvedValue({
+    ok: false, reason, message,
+    spentCents: 0, capCents: 0, retryAfterSec: 60,
+  })
 }
 
 // ── Anthropic SDK ─────────────────────────────────────────────────────
@@ -159,6 +170,7 @@ vi.mock('@sentry/nextjs', () => ({
 export function resetAiMocks() {
   requireTenantMemberMock.mockReset()
   checkAiRateLimitMock.mockReset()
+  checkTenantBudgetMock.mockReset()
   logAiInvocationMock.mockReset()
   messagesCreateMock.mockClear()
   getTenantApiKeyMock.mockReset()
@@ -166,6 +178,7 @@ export function resetAiMocks() {
   // Default happy-path setup; individual tests can override.
   gateOk()
   rateLimitOk()
+  budgetOk()
   // Restore the default well-formed key — getTenantApiKeyMock.mockReset()
   // wipes the value above, so reinstall it on every reset.
   getTenantApiKeyMock.mockResolvedValue('sk-ant-test-' + 'a'.repeat(40))

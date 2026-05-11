@@ -16,6 +16,7 @@ import IdleLogout from '@/components/IdleLogout'
 import StorageQuotaBanner from '@/components/StorageQuotaBanner'
 import { SuperadminImpersonationBanner } from '@/components/SuperadminImpersonationBanner'
 import { ReleaseNotesBanner } from '@/components/ReleaseNotesBanner'
+import { VERSION_LINE } from '@/lib/version'
 import AppDrawer from '@/components/AppDrawer'
 import CommandPalette from '@/components/CommandPalette'
 import TenantHeaderPill from '@/components/TenantHeaderPill'
@@ -144,9 +145,8 @@ export default function AppChrome({ children }: { children: ReactNode }) {
             <span className="text-slate-400 dark:text-slate-500"> · © 2026</span>
           </span>
           <span className="flex items-center gap-3">
-            <span className="font-mono tabular-nums text-[11px] text-slate-400 dark:text-slate-500" title={`build ${process.env.NEXT_PUBLIC_BUILD_ITERATION ?? '0'}`}>
-              v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'}
-              <span className="opacity-70">.{process.env.NEXT_PUBLIC_BUILD_ITERATION ?? '0'}</span>
+            <span className="font-mono tabular-nums text-[11px] text-slate-400 dark:text-slate-500" title={VERSION_LINE}>
+              {VERSION_LINE}
             </span>
             <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
             <Link href="/privacy" className="hover:text-slate-800 dark:hover:text-slate-200 transition-colors">Privacy</Link>

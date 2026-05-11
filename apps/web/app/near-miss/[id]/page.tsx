@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, AlertTriangle, Loader2, ArrowUpRight } from 'lucide-react'
 import EscalateModal from '../_components/EscalateModal'
+import { AiInsightsCard } from '../_components/AiInsightsCard'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
@@ -158,6 +159,8 @@ export default function NearMissDetailPage({ params }: { params: Promise<{ id: s
               />
             </dl>
           </header>
+
+          <AiInsightsCard nearMissId={bundle.report.id} canEdit={canEdit} />
 
           <Section title="What happened">
             <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">

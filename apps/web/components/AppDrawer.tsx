@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronRight, X } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, X } from 'lucide-react'
 import {
   getModules,
   getChildren,
@@ -188,6 +188,14 @@ export default function AppDrawer({ open, onClose }: Props) {
         </nav>
 
         <footer className="border-t border-slate-100 dark:border-slate-800 shrink-0">
+          <Link
+            href="/wiki"
+            onClick={onClose}
+            className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border-b border-slate-100 dark:border-slate-800"
+          >
+            <BookOpen className="h-4 w-4" />
+            Help &amp; Wiki
+          </Link>
           {profile?.is_superadmin && (
             <Link
               href="/superadmin"
