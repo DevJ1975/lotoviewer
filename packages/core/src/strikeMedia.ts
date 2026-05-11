@@ -29,6 +29,7 @@ export function isValidStrikeStorageVideoPath(path: string): boolean {
   const root = segments[0]
   if (root !== 'global' && !TENANT_UUID_RE.test(root)) return false
 
-  const extension = segments.at(-1)?.split('.').at(-1)?.toLowerCase()
+  const filenameParts = segments[segments.length - 1]?.split('.') ?? []
+  const extension = filenameParts[filenameParts.length - 1]?.toLowerCase()
   return !!extension && SUPPORTED_STORAGE_EXTENSIONS.has(extension)
 }
