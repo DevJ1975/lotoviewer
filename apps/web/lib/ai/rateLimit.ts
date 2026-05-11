@@ -29,6 +29,9 @@ export type AiSurface =
   | 'assistant-chat'
   | 'assistant-scan-photo'
   | 'assistant-hazards'
+  | 'summarize-audit'
+  | 'classify-near-miss'
+  | 'superadmin-daily-report'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
@@ -59,6 +62,9 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   // because each call is expensive and the per-equipment result is
   // cached server-side (24h) so honest usage stays well under.
   'assistant-hazards':                { perHour: 30, perDay: 100 },
+  'summarize-audit':                  { perHour: 30, perDay: 100 },
+  'classify-near-miss':               { perHour: 30, perDay: 200 },
+  'superadmin-daily-report':          { perHour: 10, perDay: 30 },
 }
 
 interface CheckArgs {
@@ -138,13 +144,14 @@ interface LogArgs {
   tenantId:         string | null
   surface:          AiSurface
   model:            string
-  status:           'success' | 'rate_limited' | 'error'
+  status:           'success' | 'rate_limited' | 'error' | 'budget_blocked'
   inputTokens?:     number
   outputTokens?:    number
   /** Tokens served from the prompt cache. Logged separately from
    *  inputTokens so the dashboard can distinguish chargeable from
    *  cached input. Older callers omit this. */
   cacheReadTokens?: number
+  cacheWriteTokens?: number
   context?:         string
 }
 
@@ -165,6 +172,7 @@ export async function logAiInvocation(args: LogArgs): Promise<void> {
       input_tokens:      args.inputTokens     ?? null,
       output_tokens:     args.outputTokens    ?? null,
       cache_read_tokens: args.cacheReadTokens ?? null,
+      cache_write_tokens: args.cacheWriteTokens ?? null,
       context:           args.context         ?? null,
     })
   } catch (e) {

@@ -569,6 +569,7 @@ export function summarizeSupervisorRows(args: {
     const statuses = statusByUser.get(a.user_id) ?? []
     const openGapCount = statuses.filter(s => s === 'missing' || s === 'overdue').length
     const dueSoonCount = statuses.filter(s => s === 'due_soon').length
+    const status: ReadinessTone = openGapCount > 0 ? 'restricted' : dueSoonCount > 0 ? 'attention' : 'ready'
     const profile = profileById.get(a.user_id)
     const position = a.position_id ? positionById.get(a.position_id) : null
     return {
@@ -579,7 +580,7 @@ export function summarizeSupervisorRows(args: {
       shiftLabel:    a.shift_label,
       openGapCount,
       dueSoonCount,
-      status:        openGapCount > 0 ? 'restricted' : dueSoonCount > 0 ? 'attention' : 'ready',
+      status,
     }
   }).sort((a, b) =>
     statusRank(b.status) - statusRank(a.status)

@@ -14,7 +14,8 @@ import {
 } from '@/lib/support/types'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 import { getAnthropic, aiErrorToResponse } from '@/lib/ai/client'
-import { logAiInvocation } from '@/lib/ai/rateLimit'
+import { checkTenantBudget, logAiInvocation } from '@/lib/ai/rateLimit'
+import { executeTool, isDataFetchTool, visibleDataFetchTools } from '@/lib/support/tools'
 
 // Only the two roles Anthropic accepts in messages[]. Internally
 // ChatMessage allows system/tool for transcript rendering, but we never
@@ -334,6 +335,13 @@ export async function POST(req: Request) {
     Sentry.captureException(err, { tags: { ...mapped.tags, route: '/api/support/chat' } })
     return NextResponse.json(mapped.body, { status: mapped.status })
   }
+
+  // Module-aware tool list. Data-fetch tools are filtered to those whose
+  // backing module is enabled for this tenant; the model never sees a tool
+  // that would point to a feature the user cannot access.
+  const dataTools = visibleDataFetchTools(tenantModules ?? {})
+  const allTools = [ESCALATION_TOOL, ...dataTools]
+
   let response: Anthropic.Message
   try {
     response = await client.messages.create({

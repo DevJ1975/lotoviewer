@@ -52,6 +52,11 @@ export const MODEL_BY_SURFACE = {
   // Hazard report generation. Combines structured equipment + RAG +
   // OSHA/DOT/EPA citations into a structured response — Sonnet.
   'assistant-hazards':                SONNET,
+  // Admin/operator AI surfaces. These summarize operational evidence
+  // and produce narrative output that a human reviews before acting.
+  'summarize-audit':                  SONNET,
+  'classify-near-miss':               SONNET,
+  'superadmin-daily-report':          SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE
