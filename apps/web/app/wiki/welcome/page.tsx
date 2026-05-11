@@ -61,7 +61,7 @@ export default function WikiWelcomePage() {
           },
           {
             q: 'Can I skip this page?',
-            a: <>No. The middleware enforces it; clicking around won&apos;t
+            a: <>No. The proxy enforces it; clicking around won&apos;t
               get past it. Set the password and submit.</>,
           },
           {
