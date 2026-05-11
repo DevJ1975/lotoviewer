@@ -63,7 +63,7 @@ export function buildIncidentSafetyAlertInsert(
 ): CommandCenterSafetyAlertInsert {
   const tone = alertToneForIncident(incident)
   const typeLabel = INCIDENT_TYPE_LABEL[incident.incident_type]
-  const location = incident.location_text?.trim()
+  const location = incident.location_text?.trim() || null
   const summary = summarizeIncidentAlert(incident.description, location)
 
   return {
