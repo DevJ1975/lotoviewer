@@ -1,4 +1,4 @@
--- Migration 056: lock down LIST on the two public storage buckets.
+-- Migration 125: lock down LIST on the two public storage buckets.
 --
 -- Closes the WARN-level Supabase advisor lints:
 --   public_bucket_allows_listing on `loto-photos`

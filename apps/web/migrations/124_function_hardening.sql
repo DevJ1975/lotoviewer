@@ -1,4 +1,4 @@
--- Migration 055: function hardening — search_path + EXECUTE grants.
+-- Migration 124: function hardening — search_path + EXECUTE grants.
 --
 -- Closes the WARN-level Supabase advisor lints surfaced after migration
 -- 054 / data_hygiene_snak_king_2026_05_06:
