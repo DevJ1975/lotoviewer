@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { Slot } from "@radix-ui/react-slot"
 import { PanelLeft } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -170,25 +169,38 @@ function SidebarMenuButton({
   className,
   isActive,
   asChild = false,
+  children,
   ...props
 }: React.ComponentProps<"button"> & {
   isActive?: boolean
   asChild?: boolean
 }) {
-  const Comp = asChild ? Slot : "button"
+  const buttonClassName = cn(
+    "group/menu-button flex min-h-10 w-full min-w-0 items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm font-medium transition-colors",
+    "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+    "data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground data-[active=true]:shadow-xs",
+    className
+  )
+
+  if (asChild && React.isValidElement<{ className?: string }>(children)) {
+    return React.cloneElement(children, {
+      ...props,
+      "data-slot": "sidebar-menu-button",
+      "data-active": isActive ? "true" : "false",
+      className: cn(buttonClassName, children.props.className),
+    } as React.HTMLAttributes<HTMLElement>)
+  }
+
   return (
-    <Comp
+    <button
       data-slot="sidebar-menu-button"
       data-active={isActive ? "true" : "false"}
-      className={cn(
-        "group/menu-button flex min-h-10 w-full min-w-0 items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm font-medium transition-colors",
-        "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-        "data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground data-[active=true]:shadow-xs",
-        className
-      )}
+      className={buttonClassName}
       {...props}
-    />
+    >
+      {children}
+    </button>
   )
 }
 
@@ -210,25 +222,38 @@ function SidebarMenuSubButton({
   className,
   isActive,
   asChild = false,
+  children,
   ...props
 }: React.ComponentProps<"button"> & {
   isActive?: boolean
   asChild?: boolean
 }) {
-  const Comp = asChild ? Slot : "button"
+  const buttonClassName = cn(
+    "flex min-h-9 w-full min-w-0 items-center rounded-md px-2.5 py-2 text-left text-[13px] font-medium text-sidebar-foreground/80 transition-colors",
+    "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+    "data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground",
+    className
+  )
+
+  if (asChild && React.isValidElement<{ className?: string }>(children)) {
+    return React.cloneElement(children, {
+      ...props,
+      "data-slot": "sidebar-menu-sub-button",
+      "data-active": isActive ? "true" : "false",
+      className: cn(buttonClassName, children.props.className),
+    } as React.HTMLAttributes<HTMLElement>)
+  }
+
   return (
-    <Comp
+    <button
       data-slot="sidebar-menu-sub-button"
       data-active={isActive ? "true" : "false"}
-      className={cn(
-        "flex min-h-9 w-full min-w-0 items-center rounded-md px-2.5 py-2 text-left text-[13px] font-medium text-sidebar-foreground/80 transition-colors",
-        "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-        "data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground",
-        className
-      )}
+      className={buttonClassName}
       {...props}
-    />
+    >
+      {children}
+    </button>
   )
 }
 
