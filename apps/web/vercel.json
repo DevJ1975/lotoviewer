@@ -30,6 +30,10 @@
       "schedule": "0 13 * * *"
     },
     {
+      "path": "/api/cron/equipment-readiness-reminders",
+      "schedule": "15 13 * * *"
+    },
+    {
       "path": "/api/cron/incident-care-followup",
       "schedule": "30 13 * * *"
     },

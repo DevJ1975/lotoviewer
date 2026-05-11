@@ -76,6 +76,18 @@ export interface FeatureDef {
 // determines child order. New features get appended; reordering here
 // reorders the UI immediately.
 export const FEATURES: FeatureDef[] = [
+  {
+    id:          'my-safety-readiness',
+    name:        'My Safety Readiness',
+    description: 'Profile, training, equipment badges, shift, and leaderboard standing',
+    href:        '/my-safety-readiness',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'ShieldCheck',
+    color:       'emerald',
+  },
+
   // ── LOTO module + sub-pages ─────────────────────────────────────────────
   // The "LOTO" row navigates to /, the equipment dashboard. Status,
   // Departments, Print Queue, Import, and Decommission all operate on the
@@ -160,6 +172,59 @@ export const FEATURES: FeatureDef[] = [
     enabled:     true,
     comingSoon:  false,
     internal:    true,
+  },
+
+  // ── Equipment Readiness module ──────────────────────────────────────────
+  {
+    id:          'equipment-readiness',
+    name:        'Equipment Readiness',
+    description: 'PIT, lift, and mobile equipment pre-use checks',
+    href:        '/equipment-readiness',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'ClipboardCheck',
+    color:       'teal',
+  },
+  {
+    id:          'equipment-readiness-scan',
+    name:        'Scan & Inspect',
+    description: 'Launch pre-use checks from equipment QR codes',
+    href:        '/equipment-readiness/scan',
+    category:    'safety',
+    parent:      'equipment-readiness',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'equipment-readiness-defects',
+    name:        'Defects',
+    description: 'Open defects and out-of-service equipment',
+    href:        '/equipment-readiness/defects',
+    category:    'safety',
+    parent:      'equipment-readiness',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'equipment-readiness-qr',
+    name:        'QR Labels',
+    description: 'Print scan labels for pre-use inspections',
+    href:        '/equipment-readiness/qr',
+    category:    'safety',
+    parent:      'equipment-readiness',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'equipment-readiness-config',
+    name:        'Configuration',
+    description: 'Families, schedules, and STRIKE requirements',
+    href:        '/equipment-readiness/config',
+    category:    'safety',
+    parent:      'equipment-readiness',
+    enabled:     true,
+    comingSoon:  false,
   },
 
   // ── Risk Assessment module + sub-pages ─────────────────────────────────

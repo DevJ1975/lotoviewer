@@ -1,7 +1,13 @@
 export interface Equipment {
+  id?: string
+  tenant_id?: string
   equipment_id: string
   description: string
   department: string
+  equipment_family?: string
+  readiness_status?: string
+  last_pre_use_inspection_at?: string | null
+  last_pre_use_inspection_id?: string | null
   prefix: string | null
   photo_status: 'missing' | 'partial' | 'complete'
   has_equip_photo: boolean

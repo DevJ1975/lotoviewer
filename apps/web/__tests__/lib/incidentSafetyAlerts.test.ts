@@ -54,6 +54,7 @@ describe('incident safety alerts', () => {
     expect(alertToneForIncident(incident({ severity_potential: 'high' }))).toBe('warning')
     expect(alertToneForIncident(incident({ incident_type: 'environmental' }))).toBe('warning')
     expect(alertToneForIncident(incident({ severity_potential: 'extreme' }))).toBe('critical')
+    expect(alertToneForIncident(incident({ severity_actual: 'catastrophic' }))).toBe('critical')
   })
 
   it('builds a durable Command Center alert insert from an incident', () => {
@@ -76,5 +77,17 @@ describe('incident safety alerts', () => {
       source:        'incident_submitted',
       created_by:    'user-1',
     })
+  })
+
+  it('normalizes and bounds long alert summaries with location context', () => {
+    const row = buildIncidentSafetyAlertInsert(incident({
+      location_text: '  North loading dock near overhead door 12  ',
+      description:   `  ${'Repeated spill response communication gap '.repeat(8)}  `,
+    }), null)
+
+    expect(row.summary).toMatch(/^North loading dock near overhead door 12: Repeated/)
+    expect(row.summary).toHaveLength(160)
+    expect(row.summary.endsWith('...')).toBe(true)
+    expect(row.created_by).toBeNull()
   })
 })

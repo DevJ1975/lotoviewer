@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Camera, FileText, Plus } from 'lucide-react'
+import { Camera, FileText, Plus, ShieldCheck } from 'lucide-react'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { useTenant } from '@/components/TenantProvider'
 
@@ -19,6 +19,7 @@ interface ActionDef {
 }
 
 const ACTIONS: ActionDef[] = [
+  { moduleId: 'my-safety-readiness', href: '/my-safety-readiness', icon: <ShieldCheck className="h-6 w-6" />, label: 'My Readiness', sub: 'Training + badges' },
   { moduleId: 'confined-spaces', href: '/confined-spaces', icon: <FileText className="h-6 w-6" />, label: 'Issue Permit',   sub: 'Confined-space entry' },
   { moduleId: 'loto',            href: '/loto',            icon: <Plus className="h-6 w-6" />,     label: 'Add Equipment', sub: 'LOTO inventory' },
   { moduleId: 'loto',            href: '/loto',            icon: <Camera className="h-6 w-6" />,   label: 'Take Photo',    sub: 'Pick equipment first' },
@@ -29,7 +30,7 @@ export function QuickActions() {
   const visible = ACTIONS.filter(a => isModuleVisible(a.moduleId, tenant?.modules))
   if (visible.length === 0) return null
   return (
-    <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
       {visible.map((a, i) => (
         <QuickAction key={i} href={a.href} icon={a.icon} label={a.label} sub={a.sub} />
       ))}

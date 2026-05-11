@@ -35,6 +35,18 @@ const DELETE_ORDER: readonly string[] = [
   'loto_confined_space_entries',
   'loto_device_checkouts',
   'loto_meter_alerts',
+  'equipment_inspection_responses',
+  'equipment_evidence',
+  'equipment_repairs',
+  'equipment_defects',
+  'equipment_inspections',
+  'equipment_operator_authorizations',
+  'bbs_observation_photos',
+  'bbs_observation_actions',
+  'bbs_observations',
+  'position_training_requirements',
+  'position_equipment_requirements',
+  'worker_position_assignments',
   // Parents.
   'loto_equipment',
   'loto_confined_space_permits',
@@ -47,6 +59,8 @@ const DELETE_ORDER: readonly string[] = [
   'loto_webhook_subscriptions',
   'loto_push_subscriptions',
   'loto_hygiene_log',
+  'worker_positions',
+  'bbs_qr_locations',
   // Audit log goes last so the wipe itself is captured (the rows being
   // deleted include rows that recorded the deletes — the row counts in
   // the response are correct as of the start-of-request snapshot).
@@ -134,6 +148,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
       }, { status: 500 })
     }
     seedResult = typeof data === 'string' ? data : null
+
+    // Optional add-on seed introduced after the original WLS demo seed.
+    // Older databases without migration 119 should still reset cleanly.
+    const { data: readinessData, error: readinessErr } = await admin.rpc('seed_wls_worker_readiness_demo')
+    if (readinessErr) {
+      const code = (readinessErr as { code?: string }).code
+      if (code !== '42883' && code !== 'PGRST202') {
+        Sentry.captureException(readinessErr, { tags: { route: '/api/superadmin/tenants/[number]/reset-demo', stage: 'rpc-readiness-seed' } })
+        return NextResponse.json({
+          error: `Worker readiness re-seed failed: ${readinessErr.message}`,
+          wiped,
+        }, { status: 500 })
+      }
+    } else if (typeof readinessData === 'string') {
+      seedResult = seedResult ? `${seedResult}; ${readinessData}` : readinessData
+    }
   } else {
     seedSkipped = true
   }

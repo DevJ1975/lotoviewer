@@ -17,6 +17,7 @@ import { AnnotatedPhoto } from '@/components/AnnotatedPhoto'
 import { parseAnnotations, type Annotation } from '@/lib/photoAnnotations'
 import { Sheet } from '@/components/ui/sheet'
 import HazardReportView from '@/components/HazardReport'
+import EquipmentReadinessPanel from '@/components/equipment/EquipmentReadinessPanel'
 
 export default function EquipmentDetailPage() {
   return (
@@ -188,6 +189,8 @@ function EquipmentDetail() {
         onPhotoSuccess={msg => { showToast(msg, 'success'); handlePhotoUploaded() }}
         onPhotoError={msg => showToast(msg, 'error')}
       />
+
+      <EquipmentReadinessPanel equipment={equipment} />
 
       {/* Photo annotations — overlay arrows + labels onto the equipment
           photo to call out disconnects, valves, and isolation points.
