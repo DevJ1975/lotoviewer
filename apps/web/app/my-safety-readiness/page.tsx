@@ -26,6 +26,7 @@ import {
   Wrench,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
+import '@/lib/supabase'
 import {
   fetchMyReadiness,
   type EquipmentBadgeStatus,

@@ -212,13 +212,16 @@ export async function fetchMyReadiness(): Promise<MyReadiness | null> {
       .limit(100),
   ])
 
-  if (profileRes.error) throw new Error(profileRes.error.message)
-  if (assignmentRes.error) throw new Error(assignmentRes.error.message)
+  if (profileRes.error && !isRecoverableReadinessError(profileRes.error)) {
+    throw new Error(profileRes.error.message)
+  }
   if (leaderboardRes.error) {
     console.warn('[myReadiness] leaderboard fetch failed', leaderboardRes.error)
   }
 
-  const profileRow = profileRes.data as { id: string; email: string | null; full_name: string | null; avatar_url: string | null; is_admin?: boolean | null; is_superadmin?: boolean | null } | null
+  const profileRow = profileRes.error
+    ? null
+    : profileRes.data as { id: string; email: string | null; full_name: string | null; avatar_url: string | null; is_admin?: boolean | null; is_superadmin?: boolean | null } | null
   const profile: MyReadinessProfile = {
     userId,
     email:     profileRow?.email ?? authData.user.email ?? null,
@@ -232,27 +235,16 @@ export async function fetchMyReadiness(): Promise<MyReadiness | null> {
   const leaderboardRows = (leaderboardRes.data ?? []) as LeaderboardRow[]
   const leaderboard = summarizeLeaderboard(leaderboardRows, userId)
 
-  if (!assignment?.position_id) {
-    return {
-      profile,
-      assignment: emptyAssignment(),
-      overallStatus:  'attention',
-      readinessLabel: 'Profile setup needed',
-      nextBestAction: 'Assign a current position to unlock the training matrix.',
-      primaryAction:  choosePrimaryAction('attention', [], []),
-      training:       [],
-      equipmentBadges: [],
-      restrictions:   [],
-      renewalTimeline: [],
-      adminLinks:     buildAdminLinks(true),
-      supervisorTeam: [],
-      leaderboard,
-      matrixPlaceholder: {
-        requiredTrainingCount: 0,
-        currentTrainingCount:  0,
-        openGapCount:          0,
-      },
+  if (assignmentRes.error) {
+    if (isRecoverableReadinessError(assignmentRes.error)) {
+      console.warn('[myReadiness] readiness assignment fetch unavailable', assignmentRes.error)
+      return setupPendingReadiness(profile, leaderboard)
     }
+    throw new Error(assignmentRes.error.message)
+  }
+
+  if (!assignment?.position_id) {
+    return setupPendingReadiness(profile, leaderboard)
   }
 
   const [positionRes, supervisorRes, trainingReqRes, equipmentReqRes, trainingRes, authzRes] = await Promise.all([
@@ -293,7 +285,15 @@ export async function fetchMyReadiness(): Promise<MyReadiness | null> {
   ])
 
   for (const res of [positionRes, supervisorRes, trainingReqRes, equipmentReqRes, trainingRes, authzRes]) {
-    if (res.error) throw new Error(res.error.message)
+    if (!res.error) continue
+    if (isRecoverableReadinessError(res.error)) {
+      console.warn('[myReadiness] readiness detail fetch unavailable', res.error)
+      return setupPendingReadiness(profile, leaderboard, {
+        shiftLabel:       assignment.shift_label,
+        serviceStartDate: assignment.service_start_date,
+      })
+    }
+    throw new Error(res.error.message)
   }
 
   const position = positionRes.data as PositionRow | null
@@ -355,6 +355,43 @@ export async function fetchMyReadiness(): Promise<MyReadiness | null> {
   }
 }
 
+function setupPendingReadiness(
+  profile: MyReadinessProfile,
+  leaderboard: MyLeaderboardStatus,
+  assignmentOverrides: Partial<MyReadinessAssignment> = {},
+): MyReadiness {
+  const assignment: MyReadinessAssignment = {
+    ...emptyAssignment(),
+    ...assignmentOverrides,
+  }
+  if (assignment.serviceStartDate && !assignment.serviceLabel) {
+    assignment.serviceLabel = serviceLabel(assignment.serviceStartDate)
+  }
+  const hasAssignmentContext = !!assignment.positionTitle || !!assignment.shiftLabel || !!assignment.serviceStartDate
+  return {
+    profile,
+    assignment,
+    overallStatus:  'attention',
+    readinessLabel: hasAssignmentContext ? 'Readiness setup needed' : 'Profile setup needed',
+    nextBestAction: hasAssignmentContext
+      ? 'Training matrix data is still being configured for this position.'
+      : 'Assign a current position to unlock the training matrix.',
+    primaryAction:  choosePrimaryAction('attention', [], []),
+    training:       [],
+    equipmentBadges: [],
+    restrictions:   [],
+    renewalTimeline: [],
+    adminLinks:     buildAdminLinks(profile.isAdmin),
+    supervisorTeam: [],
+    leaderboard,
+    matrixPlaceholder: {
+      requiredTrainingCount: 0,
+      currentTrainingCount:  0,
+      openGapCount:          0,
+    },
+  }
+}
+
 function summarizeTraining(
   requirements: TrainingRequirementRow[],
   records: TrainingRecord[],
@@ -365,7 +402,7 @@ function summarizeTraining(
   return requirements.map(req => {
     const best = records
       .filter(r => r.role === req.role)
-      .sort((a, b) => b.completed_at.localeCompare(a.completed_at))[0]
+      .sort((a, b) => dateKey(b.completed_at).localeCompare(dateKey(a.completed_at)))[0]
     const status = statusFromExpiry(best?.expires_at ?? null, today, !!best)
     return {
       id:               req.id,
@@ -379,6 +416,18 @@ function summarizeTraining(
       evidenceLabel:    best ? 'Training record' : 'Record missing',
     }
   })
+}
+
+function dateKey(value: string | null | undefined): string {
+  return typeof value === 'string' ? value : ''
+}
+
+export function isRecoverableReadinessError(error: unknown): boolean {
+  const err = error as { code?: string; message?: string; details?: string; hint?: string } | null
+  const code = err?.code ?? ''
+  if (['42P01', '42703', 'PGRST202', 'PGRST204', 'PGRST205'].includes(code)) return true
+  const text = `${err?.message ?? ''} ${err?.details ?? ''} ${err?.hint ?? ''}`
+  return /schema cache|relation .* does not exist|column .* does not exist|could not find .* table|could not find .* column/i.test(text)
 }
 
 function summarizeEquipment(
