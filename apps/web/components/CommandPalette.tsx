@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
-import { LayoutDashboard, Shield } from 'lucide-react'
+import { KeyRound, LayoutDashboard, Shield, UserRoundCog } from 'lucide-react'
 
 import {
   CommandDialog,
@@ -57,6 +57,22 @@ export default function CommandPalette() {
         value: 'Dashboard home command center /',
         shortcut: '/',
         Icon: LayoutDashboard,
+      },
+      {
+        groupLabel: 'Pinned',
+        label: 'My Profile',
+        href: '/settings/profile',
+        value: 'My Profile member demographics readiness handle profile settings @member',
+        shortcut: '/settings/profile',
+        Icon: UserRoundCog,
+      },
+      {
+        groupLabel: 'Pinned',
+        label: 'Account & Password',
+        href: '/welcome',
+        value: 'Account Password login setup global profile name welcome',
+        shortcut: '/welcome',
+        Icon: KeyRound,
       },
       ...getNavigationCommandItems(tenant?.modules ?? null).map(item => {
         const { Icon } = getModuleVisuals(item.parent?.id ?? item.feature.id)

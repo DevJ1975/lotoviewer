@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { UserRoundCog } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { timeOfDayGreeting } from '@/components/Greeting'
 import { fetchHomeMetrics, type HomeMetrics } from '@soteria/core/homeMetrics'
@@ -98,6 +100,13 @@ export default function MultiModuleDashboard() {
           it's easy to find without crowding the greeting band. The
           toggle component handles its own light/dark coloring. */}
       <div className="flex items-center justify-end gap-2">
+        <Link
+          href="/settings/profile"
+          className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+        >
+          <UserRoundCog className="h-4 w-4 text-brand-navy dark:text-brand-yellow" />
+          My Profile
+        </Link>
         <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Theme</span>
         <ThemeToggle />
       </div>

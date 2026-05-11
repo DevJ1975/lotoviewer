@@ -22,9 +22,15 @@ import { Avatar } from '@/components/ui/Avatar'
 
 export interface MentionMember {
   user_id:    string
+  member_id?:  string | null
+  handle?:     string | null
   email:      string | null
   full_name:  string | null
   avatar_url?: string | null
+  position_title?: string | null
+  department?: string | null
+  shift_label?: string | null
+  readiness_status?: string | null
 }
 
 interface Props {
@@ -62,9 +68,15 @@ function localPart(email: string | null | undefined): string {
 
 function buildSuggestions(members: MentionMember[]): Suggestion[] {
   return members.map(m => {
-    const handle = slug(m.full_name) || localPart(m.email) || m.user_id.slice(0, 8)
+    const handle = m.handle || slug(m.full_name) || localPart(m.email) || m.user_id.slice(0, 8)
     const label  = m.full_name || m.email || m.user_id
-    const sub    = m.email && m.full_name ? m.email : ''
+    const subParts = [
+      m.position_title,
+      m.department,
+      m.shift_label,
+      m.email && m.full_name ? m.email : null,
+    ].filter(Boolean)
+    const sub = subParts.join(' · ')
     return { member: m, handle, label, sub }
   })
 }

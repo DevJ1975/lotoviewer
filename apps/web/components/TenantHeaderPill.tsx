@@ -6,6 +6,7 @@ import { ChevronDown, Check, Loader2 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
+import { isSelectableTenant } from '@/lib/tenantDisplay'
 import type { Tenant } from '@soteria/core/types'
 
 // Tenant indicator + switcher in the app header. Three modes:
@@ -62,7 +63,7 @@ export default function TenantHeaderPill() {
     }
   }, [open])
 
-  // Superadmin: load all tenants on first dropdown open. RLS lets
+  // Superadmin: load selectable tenants on first dropdown open. RLS lets
   // is_superadmin read every row in tenants. Re-fetched on window focus
   // so a tenant just created via /superadmin/tenants/new appears the
   // next time the dropdown opens.
@@ -74,7 +75,7 @@ export default function TenantHeaderPill() {
       .select('*')
       .order('tenant_number', { ascending: true })
       .then(({ data }) => {
-        setAllTenants((data ?? []) as Tenant[])
+        setAllTenants(((data ?? []) as Tenant[]).filter(isSelectableTenant))
         setLoadingAll(false)
       })
   }, [open, profile?.is_superadmin, allTenants, loadingAll])
@@ -95,8 +96,8 @@ export default function TenantHeaderPill() {
   const memberOfMany    = available.length > 1
   const interactive     = isSuperadmin || memberOfMany
 
-  // Compose the option list. Superadmin sees every tenant; others only
-  // their memberships. Mark the active one with a check.
+  // Compose the option list. Superadmin sees every selectable tenant;
+  // others only their selectable memberships. Mark the active one with a check.
   const options: Tenant[] = isSuperadmin
     ? (allTenants ?? available)
     : available

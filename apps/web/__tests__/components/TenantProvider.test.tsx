@@ -83,6 +83,24 @@ function mockMemberships(rows: Array<{ role: string; tenants: { id: string; slug
   })
 }
 
+function tenantRow(overrides: Partial<{ id: string; slug: string; name: string; tenant_number: string; status: string; disabled_at: string | null }> = {}) {
+  return {
+    id:            overrides.id            ?? 'T1',
+    slug:          overrides.slug          ?? 'snak-king',
+    name:          overrides.name          ?? 'Snak King',
+    tenant_number: overrides.tenant_number ?? '0001',
+    status:        overrides.status        ?? 'active',
+    disabled_at:   overrides.disabled_at   ?? null,
+    is_demo:       false,
+    modules:       {},
+    logo_url:      null,
+    custom_domain: null,
+    settings:      {},
+    created_at:    '',
+    updated_at:    '',
+  }
+}
+
 describe('TenantProvider', () => {
   beforeEach(() => {
     sessionStorage.clear()
@@ -159,16 +177,36 @@ describe('TenantProvider', () => {
     alertSpy.mockRestore()
   })
 
-  it('superadmin with stored=GHOST does NOT get signed out — keeps stored as active', async () => {
+  it('superadmin with stored external tenant keeps it when the row is selectable', async () => {
     sessionStorage.setItem(ACTIVE_KEY, 'GHOST')
     useAuthMock.mockReturnValue({ userId: 'u1', profile: { is_superadmin: true }, loading: false })
-    mockMemberships([
-      { role: 'owner', tenants: { id: 'T1', slug: 'snak-king', name: 'Snak King', tenant_number: '0001', status: 'active' } },
-    ])
+
+    const memberTenant = tenantRow({ id: 'T1', slug: 'snak-king', name: 'Snak King', tenant_number: '0001' })
+    const externalTenant = tenantRow({ id: 'GHOST', slug: 'acme', name: 'Acme', tenant_number: '0003' })
+    fromMock.mockImplementation((table: string) => {
+      if (table === 'tenant_memberships') {
+        return {
+          select: () => ({
+            eq: () => Promise.resolve({
+              data: [{ role: 'owner', tenants: memberTenant }],
+              error: null,
+            }),
+          }),
+        }
+      }
+      if (table === 'tenants') {
+        return {
+          select: () => ({
+            eq: () => ({ maybeSingle: () => Promise.resolve({ data: externalTenant }) }),
+          }),
+        }
+      }
+      return {} as never
+    })
+
     renderProvider()
     await waitFor(() => expect(captured!.loading).toBe(false))
-    // Stored value is preserved — the lazy externalTenant fetch will
-    // resolve the row. tenantId stays GHOST.
+    await waitFor(() => expect(captured!.tenant?.id).toBe('GHOST'))
     expect(captured!.tenantId).toBe('GHOST')
     expect(sessionStorage.getItem(ACTIVE_KEY)).toBe('GHOST')
   })
@@ -183,6 +221,57 @@ describe('TenantProvider', () => {
     await waitFor(() => expect(captured!.loading).toBe(false))
     expect(captured!.available).toHaveLength(1)
     expect(captured!.available[0]!.id).toBe('T1')
+  })
+
+  it('excludes tenants without a valid tenant number from `available`', async () => {
+    useAuthMock.mockReturnValue({ userId: 'u1', loading: false })
+    mockMemberships([
+      { role: 'owner',  tenants: tenantRow({ id: 'T1', slug: 'live', name: 'Live', tenant_number: '0001' }) },
+      { role: 'member', tenants: tenantRow({ id: 'T2', slug: 'equipment-smoke-1', name: 'Equipment Readiness Smoke', tenant_number: '' }) },
+    ])
+    renderProvider()
+    await waitFor(() => expect(captured!.loading).toBe(false))
+    expect(captured!.available).toHaveLength(1)
+    expect(captured!.available[0]!.id).toBe('T1')
+  })
+
+  it('superadmin stored invalid external tenant falls back to first selectable membership', async () => {
+    sessionStorage.setItem(ACTIVE_KEY, 'SMOKE')
+    useAuthMock.mockReturnValue({ userId: 'u1', profile: { is_superadmin: true }, loading: false })
+
+    const validTenant = tenantRow({ id: 'T1', slug: 'snak-king', name: 'Snak King', tenant_number: '0001' })
+    const invalidExternalTenant = tenantRow({
+      id:            'SMOKE',
+      slug:          'equipment-smoke-1',
+      name:          'Equipment Readiness Smoke',
+      tenant_number: '',
+    })
+
+    fromMock.mockImplementation((table: string) => {
+      if (table === 'tenant_memberships') {
+        return {
+          select: () => ({
+            eq: () => Promise.resolve({
+              data: [{ role: 'owner', tenants: validTenant }],
+              error: null,
+            }),
+          }),
+        }
+      }
+      if (table === 'tenants') {
+        return {
+          select: () => ({
+            eq: () => ({ maybeSingle: () => Promise.resolve({ data: invalidExternalTenant }) }),
+          }),
+        }
+      }
+      return {} as never
+    })
+
+    renderProvider()
+    await waitFor(() => expect(captured!.loading).toBe(false))
+    await waitFor(() => expect(captured!.tenantId).toBe('T1'))
+    expect(sessionStorage.getItem(ACTIVE_KEY)).toBe('T1')
   })
 
   it('switchTenant writes ACTIVE_TENANT_KEY and reloads (B1)', async () => {
