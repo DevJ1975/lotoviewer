@@ -1,23 +1,8 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
-import {
-  AlertTriangle,
-  ClipboardCheck,
-  FileText,
-  Flame,
-  GraduationCap,
-  HardHat,
-  LayoutDashboard,
-  LifeBuoy,
-  ListChecks,
-  Lock,
-  ShieldAlert,
-  ShieldCheck,
-  Users,
-  Wrench,
-} from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { LayoutDashboard, Shield } from 'lucide-react'
 
 import {
   CommandDialog,
@@ -28,51 +13,17 @@ import {
   CommandList,
   CommandShortcut,
 } from '@/components/ui/command'
-
-// ⌘K / Ctrl+K opens a global navigation palette over any page. Mounted
-// once in AppChrome so the chord works from anywhere. Currently a
-// static route list — first iteration of the broader cross-feature
-// search idea (cf. Tier 1 #3 in the shadcn UX roadmap). Easy to extend
-// with live equipment / permit / worker lookup later.
-
-interface NavItem {
-  label:    string
-  href:     string
-  hint?:    string
-  icon:     React.ComponentType<{ className?: string }>
-  group:    'Daily' | 'Safety' | 'Permits' | 'Admin' | 'Help'
-}
-
-const NAV: NavItem[] = [
-  { group: 'Daily',   label: 'Dashboard',         href: '/',                    icon: LayoutDashboard },
-  { group: 'Daily',   label: 'Equipment / LOTO',  href: '/loto',                icon: Lock,           hint: 'Lockout/tagout devices' },
-  { group: 'Daily',   label: 'Toolbox talks',     href: '/toolbox-talks',       icon: ClipboardCheck },
-  { group: 'Daily',   label: 'STRIKE',            href: '/strike',              icon: GraduationCap, hint: 'Microlearning' },
-  { group: 'Daily',   label: 'JHA',               href: '/jha',                 icon: ListChecks,     hint: 'Job hazard analysis' },
-
-  { group: 'Safety',  label: 'Incidents',         href: '/incidents',           icon: AlertTriangle },
-  { group: 'Safety',  label: 'Near miss',         href: '/near-miss',           icon: ShieldAlert },
-  { group: 'Safety',  label: 'BBS observations',  href: '/bbs',                 icon: ShieldCheck,    hint: 'Behavior-based safety' },
-  { group: 'Safety',  label: 'Risk',              href: '/risk',                icon: Flame },
-  { group: 'Safety',  label: 'Safety boards',     href: '/safety-boards',       icon: HardHat },
-
-  { group: 'Permits', label: 'Hot work permits',  href: '/hot-work',            icon: Flame },
-  { group: 'Permits', label: 'Confined spaces',   href: '/confined-spaces',     icon: HardHat },
-
-  { group: 'Admin',   label: 'Departments',       href: '/departments',         icon: Wrench },
-  { group: 'Admin',   label: 'Users',             href: '/admin/users',         icon: Users },
-  { group: 'Admin',   label: 'Audit log',         href: '/admin/audit',         icon: FileText },
-
-  { group: 'Help',    label: 'Manuals',           href: '/manuals',             icon: FileText },
-  { group: 'Help',    label: 'Support',           href: '/support',             icon: LifeBuoy },
-]
+import { useTenant } from '@/components/TenantProvider'
+import { useAuth } from '@/components/AuthProvider'
+import { getNavigationCommandItems } from '@/lib/navigationCatalog'
+import { getModuleVisuals } from '@/lib/moduleVisuals'
 
 export default function CommandPalette() {
   const router = useRouter()
+  const { tenant } = useTenant()
+  const { profile } = useAuth()
   const [open, setOpen] = useState(false)
 
-  // ⌘K (mac) / Ctrl+K (everywhere else) toggles the palette. Skip when
-  // a text input has focus so it doesn't fight the user's typing.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'k') return
@@ -84,15 +35,63 @@ export default function CommandPalette() {
       e.preventDefault()
       setOpen(prev => !prev)
     }
+
+    function onOpenRequest() {
+      setOpen(true)
+    }
+
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('soteria:open-command-palette', onOpenRequest)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('soteria:open-command-palette', onOpenRequest)
+    }
   }, [])
 
-  // Group rendering — one CommandGroup per heading.
-  const groups = NAV.reduce<Record<NavItem['group'], NavItem[]>>((acc, item) => {
-    (acc[item.group] ??= []).push(item)
-    return acc
-  }, {} as Record<NavItem['group'], NavItem[]>)
+  const grouped = useMemo(() => {
+    const rows = [
+      {
+        groupLabel: 'Pinned',
+        label: 'Dashboard',
+        href: '/',
+        value: 'Dashboard home command center /',
+        shortcut: '/',
+        Icon: LayoutDashboard,
+      },
+      ...getNavigationCommandItems(tenant?.modules ?? null).map(item => {
+        const { Icon } = getModuleVisuals(item.parent?.id ?? item.feature.id)
+        const label = item.parent ? `${item.parent.name} / ${item.feature.name}` : item.feature.name
+        return {
+          groupLabel: item.group.label,
+          label,
+          href: item.href,
+          value: [
+            label,
+            item.feature.id,
+            item.feature.description,
+            item.href,
+            item.parent?.name ?? '',
+            item.keywords.join(' '),
+          ].join(' '),
+          shortcut: item.href,
+          Icon,
+        }
+      }),
+      ...(profile?.is_superadmin ? [{
+        groupLabel: 'Administration',
+        label: 'Superadmin',
+        href: '/superadmin',
+        value: 'Superadmin tenant configuration impersonation modules',
+        shortcut: '/superadmin',
+        Icon: Shield,
+      }] : []),
+    ]
+
+    return rows.reduce<Record<string, typeof rows>>((acc, item) => {
+      ;(acc[item.groupLabel] ??= []).push(item)
+      return acc
+    }, {})
+  }, [profile?.is_superadmin, tenant?.modules])
 
   function go(href: string) {
     setOpen(false)
@@ -101,25 +100,22 @@ export default function CommandPalette() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Type a page or action…" />
-      <CommandList>
+      <CommandInput placeholder="Type a module, page, or action..." />
+      <CommandList className="max-h-[min(480px,70vh)]">
         <CommandEmpty>No matches.</CommandEmpty>
-        {(Object.keys(groups) as NavItem['group'][]).map(g => (
-          <CommandGroup key={g} heading={g}>
-            {groups[g].map(item => {
-              const Icon = item.icon
+        {Object.entries(grouped).map(([groupLabel, items]) => (
+          <CommandGroup key={groupLabel} heading={groupLabel}>
+            {items.map(item => {
+              const Icon = item.Icon
               return (
                 <CommandItem
-                  key={item.href}
-                  value={`${item.label} ${item.hint ?? ''} ${item.href}`}
+                  key={`${item.groupLabel}:${item.href}:${item.label}`}
+                  value={item.value}
                   onSelect={() => go(item.href)}
                 >
                   <Icon className="size-4" />
-                  <span>{item.label}</span>
-                  {item.hint && (
-                    <span className="ml-2 text-xs text-muted-foreground">{item.hint}</span>
-                  )}
-                  <CommandShortcut>{item.href}</CommandShortcut>
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  <CommandShortcut className="max-w-36 truncate tracking-normal">{item.shortcut}</CommandShortcut>
                 </CommandItem>
               )
             })}

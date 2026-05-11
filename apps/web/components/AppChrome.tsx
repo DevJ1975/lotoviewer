@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Menu } from 'lucide-react'
+import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import GlobalSearch from '@/components/GlobalSearch'
 import Greeting from '@/components/Greeting'
 import UserMenu from '@/components/UserMenu'
@@ -63,22 +64,16 @@ export default function AppChrome({ children }: { children: ReactNode }) {
   if (hideChrome) return <><PwaRegister />{children}</>
 
   return (
-    <>
+    <SidebarProvider open={drawerOpen} onOpenChange={setDrawerOpen}>
       <header
         className="bg-gradient-to-b from-brand-navy to-[#162F58] border-b border-white/5 shadow-[0_1px_0_0_rgba(255,255,255,0.04)] sticky top-0 z-40 backdrop-saturate-150"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14 gap-2 sm:gap-4">
-            <button
-              type="button"
-              onClick={() => setDrawerOpen(true)}
-              aria-label="Open navigation"
-              aria-expanded={drawerOpen}
-              className="text-white/85 hover:text-white hover:bg-white/10 active:bg-white/15 rounded-lg h-10 w-10 flex items-center justify-center transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-            >
+            <SidebarTrigger className="shrink-0 rounded-lg text-white/85 hover:bg-white/10 hover:text-white active:bg-white/15 focus-visible:ring-white/40">
               <Menu className="h-5 w-5" />
-            </button>
+            </SidebarTrigger>
 
             <Link href="/" className="flex items-center shrink-0 min-w-0" aria-label="SoteriaField home">
               <SoteriaLogo variant="color" width={160} priority className="h-9 w-auto" />
@@ -114,7 +109,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
         aria-hidden="true"
       />
 
-      <AppDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      <AppDrawer onClose={() => setDrawerOpen(false)} />
 
       {/* Global ⌘K / Ctrl+K command palette — listens for the chord
           itself; we just mount it. Complements the per-resource
@@ -155,6 +150,6 @@ export default function AppChrome({ children }: { children: ReactNode }) {
           </span>
         </div>
       </footer>
-    </>
+    </SidebarProvider>
   )
 }
