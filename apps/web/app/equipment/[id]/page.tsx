@@ -9,6 +9,7 @@ import PlacardView from '@/components/placard/PlacardView'
 import PlacardPdfPreview from '@/components/placard/PlacardPdfPreview'
 import PlacardDetailsSheet from '@/components/placard/PlacardDetailsSheet'
 import EditStepsSheet from '@/components/placard/EditStepsSheet'
+import EquipmentReadinessPanel from '@/components/equipment/EquipmentReadinessPanel'
 import SpanishTranslationSheet from '@/components/SpanishTranslationSheet'
 import { useSession } from '@/components/SessionProvider'
 import { useToast } from '@/hooks/useToast'
@@ -188,6 +189,8 @@ function EquipmentDetail() {
         onPhotoSuccess={msg => { showToast(msg, 'success'); handlePhotoUploaded() }}
         onPhotoError={msg => showToast(msg, 'error')}
       />
+
+      <EquipmentReadinessPanel equipment={equipment} />
 
       {/* Photo annotations — overlay arrows + labels onto the equipment
           photo to call out disconnects, valves, and isolation points.

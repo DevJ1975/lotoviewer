@@ -22,6 +22,7 @@ values
   ('jha',             'JHA',                 'Job Hazard Analysis library.',                        E'## Overview\n\nThis manual covers JHA. **Edit me.**'),
   ('toolbox-talks',   'Toolbox Talks',       'AI-generated daily talks + crew sign-in roster.',     E'## Overview\n\nThis manual covers Toolbox Talks. **Edit me.**'),
   ('strike',          'STRIKE',              'Microlearning + task-readiness for high-risk work.',  E'## Overview\n\nThis manual covers STRIKE: short videos, quizzes, assignments, and task-readiness checks. **Edit me.**'),
+  ('equipment-readiness', 'Equipment Readiness', 'PIT, lift, and mobile equipment pre-use inspections.', E'## Overview\n\nThis manual covers Equipment Readiness: pre-use inspections, QR labels, defects, repair evidence, and STRIKE gates. **Edit me.**'),
   ('safety-boards',   'Safety Boards',       'Internal threaded forums for safety discussion.',     E'## Overview\n\nThis manual covers Safety Boards. **Edit me.**'),
   ('bbs',             'Behavior-Based Safety','QR-driven unsafe act / condition / safe behavior observations.', E'## Overview\n\nThis manual covers Behavior-Based Safety (BBS). **Edit me.**'),
   ('chemicals',       'Chemical Management', 'Chemical inventory, GHS labeling, SDS storage + AI parsing + drift monitor.', E'## Overview\n\nThis manual covers the Chemical Management module. **Edit me.**'),

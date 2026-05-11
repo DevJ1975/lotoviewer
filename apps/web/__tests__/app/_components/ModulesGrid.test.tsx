@@ -30,7 +30,8 @@ describe('ModulesGrid', () => {
       tenant: tenantWith({
         loto: false, 'confined-spaces': false, 'hot-work': false,
         'risk-assessment': false, 'jha': false, 'near-miss': false,
-        'incidents': false, 'toolbox-talks': false, 'safety-boards': false,
+        'incidents': false, 'toolbox-talks': false, 'strike': false,
+        'equipment-readiness': false, 'safety-boards': false,
         'bbs': false, 'chemicals': false,
       }),
     })

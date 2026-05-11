@@ -137,6 +137,11 @@ describe('getFeaturesByCategory', () => {
       'jha',
       'toolbox-talks',
       'strike',
+      'equipment-readiness',
+      'equipment-readiness-scan',
+      'equipment-readiness-defects',
+      'equipment-readiness-qr',
+      'equipment-readiness-config',
       'safety-boards',
     ])
   })
@@ -181,6 +186,7 @@ describe('getModules', () => {
       'jha',
       'toolbox-talks',
       'strike',
+      'equipment-readiness',
       'safety-boards',
     ])
   })
@@ -228,6 +234,16 @@ describe('getChildren', () => {
   it('returns the children of hot-work module', () => {
     const ids = getChildren('hot-work').map(c => c.id)
     expect(ids).toEqual(['hot-work-status'])
+  })
+
+  it('returns the children of equipment-readiness module', () => {
+    const ids = getChildren('equipment-readiness').map(c => c.id)
+    expect(ids).toEqual([
+      'equipment-readiness-scan',
+      'equipment-readiness-defects',
+      'equipment-readiness-qr',
+      'equipment-readiness-config',
+    ])
   })
 
   it('returns an empty array for a leaf module (coming-soon entries have none)', () => {

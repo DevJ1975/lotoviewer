@@ -13,6 +13,7 @@ export const STRIKE_REQUIREMENT_SOURCE_TYPES = [
   'incident_action',
   'safety_board',
   'manual',
+  'equipment_readiness',
   'custom',
 ] as const
 export const STRIKE_READINESS_STATUSES = ['ready', 'partial', 'blocked', 'not_required'] as const

@@ -60,6 +60,10 @@
     {
       "path": "/api/cron/run-assistant-tasks",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/equipment-readiness-reminders",
+      "schedule": "15 13 * * *"
     }
   ]
 }

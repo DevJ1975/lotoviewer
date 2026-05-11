@@ -23,6 +23,14 @@ export interface CommandCenterSafetyAlert {
   resolved_at:     string | null
 }
 
+export interface CommandCenterSafetyAlertDetail extends CommandCenterSafetyAlert {
+  created_by:      string | null
+  acknowledged_by: string | null
+  resolved_by:     string | null
+  resolution_note: string | null
+  updated_at:      string
+}
+
 export interface CommandCenterSafetyAlertInsert {
   tenant_id:       string
   incident_id:     string
@@ -82,6 +90,6 @@ export function buildIncidentSafetyAlertInsert(
 
 function summarizeIncidentAlert(description: string, location: string | null): string {
   const clean = description.trim().replace(/\s+/g, ' ')
-  const clipped = clean.length > 140 ? `${clean.slice(0, 137).trimEnd()}...` : clean
-  return location ? `${location}: ${clipped}` : clipped
+  const withLocation = location ? `${location}: ${clean}` : clean
+  return withLocation.length > 160 ? `${withLocation.slice(0, 157).trimEnd()}...` : withLocation
 }
