@@ -112,6 +112,40 @@ describe('POST /api/superadmin/tenants/[number]/members (invite)', () => {
     }))
   })
 
+  it('existing auth user without a matching profile: attaches membership instead of failing createUser', async () => {
+    mockState.queue('tenants',  { data: { id: 'T1', tenant_number: '0001', name: 'Snak King' }, error: null })
+    mockState.queue('profiles', { data: null, error: null })             // no profile by normalized email
+    authAdminMock.createUser.mockResolvedValue({
+      data: { user: null },
+      error: { message: 'A user with this email address has already been registered' },
+    })
+    authAdminMock.listUsers.mockResolvedValue({
+      data: { users: [{ id: 'AUTH-ONLY', email: 'Jane@X.com', user_metadata: {} }] },
+      error: null,
+    })
+    mockState.queue('profiles', { data: null, error: null })             // no profile by auth id
+    mockState.queue('profiles', { data: null, error: null })             // repair profile insert
+    mockState.queue('tenant_memberships', { data: null, error: null })   // membership insert
+
+    const r = await inviteMember(jsonRequest('POST', { email: 'jane@x.com', role: 'member', full_name: 'Jane' }), ctxFor({ number: '0001' }))
+    expect(r.status).toBe(201)
+    const body = await r.json()
+    expect(body.user_id).toBe('AUTH-ONLY')
+    expect(body.alreadyExisted).toBe(true)
+    expect(body.tempPassword).toBeUndefined()
+
+    expect(authAdminMock.listUsers).toHaveBeenCalled()
+    expect(mockState.inserts.find(i => i.table === 'profiles')?.payload).toMatchObject({
+      id: 'AUTH-ONLY', email: 'jane@x.com', full_name: 'Jane', must_change_password: false,
+    })
+    expect(mockState.inserts.find(i => i.table === 'tenant_memberships')?.payload).toMatchObject({
+      user_id: 'AUTH-ONLY', tenant_id: 'T1', role: 'member',
+    })
+    expect(sendInviteEmailMock).toHaveBeenCalledWith(expect.objectContaining({
+      to: 'jane@x.com', tempPassword: '',
+    }))
+  })
+
   it('returns 409 when membership already exists (PG 23505 on insert)', async () => {
     mockState.queue('tenants',  { data: { id: 'T1', tenant_number: '0001', name: 'Snak King' }, error: null })
     mockState.queue('profiles', { data: { id: 'U1', email: 'jane@x.com' }, error: null })

@@ -7,12 +7,20 @@ import type { HomeMetrics } from '@soteria/core/homeMetrics'
 export type CommandCenterTone = 'critical' | 'warning' | 'attention' | 'ok'
 
 export interface CommandCenterItem {
-  id:       string
-  tone:     CommandCenterTone
-  label:    string
-  value:    string
-  detail:   string
-  href:     string
+  id:              string
+  tone:            CommandCenterTone
+  label:           string
+  value:           string
+  detail:          string
+  suggestedAction: string
+  href:            string
+}
+
+const TONE_RANK: Record<CommandCenterTone, number> = {
+  ok:        0,
+  attention: 1,
+  warning:   2,
+  critical:  3,
 }
 
 export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterItem[] {
@@ -25,6 +33,9 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
       label:  alert.title,
       value:  alert.report_number,
       detail: alert.summary,
+      suggestedAction: alert.status === 'new'
+        ? 'Acknowledge and assign the incident follow-up.'
+        : 'Review the open incident response before the next handoff.',
       href:   `/incidents/${alert.incident_id}`,
     })
   }
@@ -36,6 +47,7 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
       label:  'Expired permits',
       value:  String(metrics.expiredPermitCount),
       detail: 'Evacuate or cancel expired confined-space entries.',
+      suggestedAction: 'Confirm entrants are out, then cancel or close each permit.',
       href:   '/confined-spaces/status',
     })
   }
@@ -47,6 +59,7 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
       label:  'Hot work expiring',
       value:  String(metrics.hotWorkExpiringSoon.length),
       detail: 'Finish, extend, or cancel before authorization lapses.',
+      suggestedAction: 'Contact the permit authorizer before work continues.',
       href:   '/hot-work/status',
     })
   }
@@ -58,6 +71,7 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
       label:  'CS permits expiring',
       value:  String(metrics.expiringSoonPermits.length),
       detail: 'Less than 2 hours left on active entries.',
+      suggestedAction: 'Check entrant status and prepare renewal or cancellation.',
       href:   '/confined-spaces/status',
     })
   }
@@ -69,6 +83,7 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
       label:  'Stale permit drafts',
       value:  String(metrics.pendingStalePermits.length),
       detail: 'Open drafts should be signed or abandoned.',
+      suggestedAction: 'Have supervisors sign active drafts or abandon stale work.',
       href:   '/confined-spaces/status',
     })
   }
@@ -80,6 +95,7 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
       label:  'Fire watch active',
       value:  String(metrics.hotWorkInPostWatch.length),
       detail: 'Post-work watch is still in progress.',
+      suggestedAction: 'Keep watchers assigned until the watch timer is complete.',
       href:   '/hot-work/status',
     })
   }
@@ -91,6 +107,7 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
       label:  'LOTO photo coverage',
       value:  `${metrics.photoCompletionPct}%`,
       detail: 'Bring placard photo evidence above the 90% target.',
+      suggestedAction: 'Prioritize missing equipment and isolation-point photos.',
       href:   '/loto',
     })
   }
@@ -102,6 +119,7 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
       label:  'Active CS permits',
       value:  String(metrics.activePermitCount),
       detail: `${metrics.peopleInSpaces} entrant${metrics.peopleInSpaces === 1 ? '' : 's'} currently in spaces.`,
+      suggestedAction: 'Keep attendant coverage and atmospheric checks current.',
       href:   '/confined-spaces/status',
     })
   }
@@ -113,11 +131,18 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
       label:  'No urgent EHS items',
       value:  'OK',
       detail: 'No expired permits, stale drafts, or low photo coverage signals.',
+      suggestedAction: 'Review scorecard trends or continue routine field checks.',
       href:   '/?dashboard=1',
     })
   }
 
   return items
+}
+
+export function highestCommandCenterTone(items: CommandCenterItem[]): CommandCenterTone {
+  return items.reduce<CommandCenterTone>((highest, item) => (
+    TONE_RANK[item.tone] > TONE_RANK[highest] ? item.tone : highest
+  ), 'ok')
 }
 
 export function CommandCenterPanel({ metrics, error = null }: {
@@ -160,7 +185,12 @@ export function CommandCenterPanel({ metrics, error = null }: {
   }
 
   const items = deriveCommandCenterItems(metrics)
-  const highestTone = items[0]?.tone ?? 'ok'
+  const highestTone = highestCommandCenterTone(items)
+  const visibleItems = items.slice(0, 4)
+  const hiddenCount = Math.max(0, items.length - visibleItems.length)
+  const signalLabel = items.length === 1 && items[0]?.tone === 'ok'
+    ? 'No open signals'
+    : `${items.length} live signal${items.length === 1 ? '' : 's'}`
 
   return (
     <section className={`rounded-xl border p-4 ${sectionClass(highestTone)}`}>
@@ -174,6 +204,9 @@ export function CommandCenterPanel({ metrics, error = null }: {
           </h2>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+          <span className="rounded-full border border-slate-200 dark:border-slate-700 px-2 py-1 font-semibold text-slate-600 dark:text-slate-300">
+            {signalLabel}
+          </span>
           <Link href="/incidents/scorecard" className="font-semibold text-brand-navy dark:text-brand-yellow hover:underline">
             Scorecard
           </Link>
@@ -181,10 +214,16 @@ export function CommandCenterPanel({ metrics, error = null }: {
       </header>
 
       <div className="mt-4 grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-3">
-        {items.slice(0, 4).map(item => (
+        {visibleItems.map(item => (
           <CommandItemCard key={item.id} item={item} />
         ))}
       </div>
+
+      {hiddenCount > 0 && (
+        <p className="mt-3 text-xs font-medium text-slate-600 dark:text-slate-300">
+          Showing the first {visibleItems.length} signals. {hiddenCount} more {hiddenCount === 1 ? 'item needs' : 'items need'} review in the linked work queues.
+        </p>
+      )}
     </section>
   )
 }
@@ -194,7 +233,7 @@ function CommandItemCard({ item }: { item: CommandCenterItem }) {
   return (
     <Link
       href={item.href}
-      className={`group rounded-lg border p-3 min-h-24 flex flex-col justify-between transition-shadow hover:shadow-sm ${cardClass(item.tone)}`}
+      className={`group rounded-lg border p-3 min-h-36 flex flex-col justify-between transition-shadow hover:shadow-sm ${cardClass(item.tone)}`}
     >
       <div className="flex items-start justify-between gap-3">
         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
@@ -208,6 +247,12 @@ function CommandItemCard({ item }: { item: CommandCenterItem }) {
         </p>
         <p className="mt-1 text-xs leading-snug text-slate-600 dark:text-slate-300">
           {item.detail}
+        </p>
+        <p className="mt-3 border-t border-slate-200/70 dark:border-slate-800 pt-2 text-[11px] font-semibold leading-snug text-slate-700 dark:text-slate-200">
+          <span className="block text-[10px] uppercase tracking-widest text-slate-400 dark:text-slate-500">
+            Suggested next step
+          </span>
+          {item.suggestedAction}
         </p>
       </div>
     </Link>

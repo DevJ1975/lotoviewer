@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   deriveCommandCenterItems,
+  highestCommandCenterTone,
   type CommandCenterTone,
 } from '@/app/_components/CommandCenterPanel'
 import type { HomeMetrics } from '@soteria/core/homeMetrics'
@@ -31,6 +32,7 @@ describe('deriveCommandCenterItems', () => {
     expect(items[0]).toMatchObject({
       id:   'all-clear',
       tone: 'ok' satisfies CommandCenterTone,
+      suggestedAction: 'Review scorecard trends or continue routine field checks.',
     })
   })
 
@@ -47,6 +49,7 @@ describe('deriveCommandCenterItems', () => {
       'fire-watch-active',
     ])
     expect(items[0].tone).toBe('critical')
+    expect(items[0].suggestedAction).toBe('Confirm entrants are out, then cancel or close each permit.')
   })
 
   it('surfaces submitted incident safety alerts before derived program signals', () => {
@@ -74,6 +77,7 @@ describe('deriveCommandCenterItems', () => {
       tone:   'warning',
       label:  'Injury / illness submitted',
       value:  'INC-2026-0001',
+      suggestedAction: 'Acknowledge and assign the incident follow-up.',
       href:   '/incidents/incident-1',
     })
     expect(items[1].id).toBe('expired-confined-space-permits')
@@ -111,5 +115,31 @@ describe('deriveCommandCenterItems', () => {
         detail: '5 entrants currently in spaces.',
       }),
     ])
+  })
+})
+
+describe('highestCommandCenterTone', () => {
+  it('uses the most severe tone even when a lower-severity item appears first', () => {
+    const items = deriveCommandCenterItems(metrics({
+      commandCenterSafetyAlerts: [{
+        id:              'alert-1',
+        tenant_id:       'tenant-1',
+        incident_id:     'incident-1',
+        report_number:   'INC-2026-0001',
+        title:           'Injury / illness submitted',
+        summary:         'Packaging: employee received first aid',
+        severity_tone:   'warning',
+        priority:        60,
+        status:          'acknowledged',
+        source:          'incident_submitted',
+        created_at:      '2026-05-10T10:00:00.000Z',
+        acknowledged_at: '2026-05-10T10:05:00.000Z',
+        resolved_at:     null,
+      }],
+      expiredPermitCount: 1,
+    }))
+
+    expect(items.map(i => i.tone)).toEqual(['warning', 'critical'])
+    expect(highestCommandCenterTone(items)).toBe('critical')
   })
 })
