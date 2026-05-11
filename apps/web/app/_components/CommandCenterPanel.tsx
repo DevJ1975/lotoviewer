@@ -26,20 +26,6 @@ const TONE_RANK: Record<CommandCenterTone, number> = {
 export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterItem[] {
   const items: CommandCenterItem[] = []
 
-  for (const alert of metrics.commandCenterSafetyAlerts) {
-    items.push({
-      id:     `safety-alert-${alert.id}`,
-      tone:   alert.severity_tone,
-      label:  alert.title,
-      value:  alert.report_number,
-      detail: alert.summary,
-      suggestedAction: alert.status === 'new'
-        ? 'Acknowledge and assign the incident follow-up.'
-        : 'Review the open incident response before the next handoff.',
-      href:   `/incidents/${alert.incident_id}`,
-    })
-  }
-
   if (metrics.expiredPermitCount > 0) {
     items.push({
       id:     'expired-confined-space-permits',
@@ -128,15 +114,21 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
     items.push({
       id:     'all-clear',
       tone:   'ok',
-      label:  'No urgent EHS items',
+      label:  'Program queues stable',
       value:  'OK',
-      detail: 'No expired permits, stale drafts, or low photo coverage signals.',
+      detail: 'No permit, fire-watch, or photo-coverage queue signals.',
       suggestedAction: 'Review scorecard trends or continue routine field checks.',
       href:   '/?dashboard=1',
     })
   }
 
   return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const toneDelta = TONE_RANK[b.item.tone] - TONE_RANK[a.item.tone]
+      return toneDelta || a.index - b.index
+    })
+    .map(({ item }) => item)
 }
 
 export function highestCommandCenterTone(items: CommandCenterItem[]): CommandCenterTone {
@@ -189,7 +181,7 @@ export function CommandCenterPanel({ metrics, error = null }: {
   const visibleItems = items.slice(0, 4)
   const hiddenCount = Math.max(0, items.length - visibleItems.length)
   const signalLabel = items.length === 1 && items[0]?.tone === 'ok'
-    ? 'No open signals'
+    ? 'No queue signals'
     : `${items.length} live signal${items.length === 1 ? '' : 's'}`
 
   return (
@@ -200,7 +192,7 @@ export function CommandCenterPanel({ metrics, error = null }: {
             EHS Command Center
           </p>
           <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-            {highestTone === 'ok' ? 'Program pulse is clear' : 'Items needing attention'}
+            {highestTone === 'ok' ? 'Program queues stable' : 'Items needing attention'}
           </h2>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">

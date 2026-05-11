@@ -76,7 +76,7 @@ export async function GET(req: Request, ctx: RouteContext) {
     if (alertError) throw new Error(alertError.message)
     if (!alertData) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    const alert = alertData as unknown as CommandCenterSafetyAlertDetail
+    const alert = alertData as CommandCenterSafetyAlertDetail
 
     const [incidentRes, peopleRes, notificationsRes] = await Promise.all([
       gate.authedClient
@@ -106,7 +106,7 @@ export async function GET(req: Request, ctx: RouteContext) {
 
     return NextResponse.json({
       alert,
-      incident:      incidentRes.data as unknown as IncidentRow,
+      incident:      incidentRes.data as IncidentRow,
       people:        (peopleRes.data ?? []) as SafetyAlertPersonRow[],
       notifications: (notificationsRes.data ?? []) as SafetyAlertNotificationRow[],
     } satisfies SafetyAlertDetailResponse)

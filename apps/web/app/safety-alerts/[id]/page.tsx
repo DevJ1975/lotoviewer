@@ -13,7 +13,6 @@ import {
   Loader2,
   ShieldAlert,
   UserRound,
-  type LucideIcon,
 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
@@ -71,12 +70,6 @@ const TONE_LABEL: Record<CommandCenterAlertTone, string> = {
   attention: 'Attention',
 }
 
-const TONE_ICON: Record<CommandCenterAlertTone, LucideIcon> = {
-  critical:  ShieldAlert,
-  warning:   AlertTriangle,
-  attention: Clock,
-}
-
 export default function SafetyAlertDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { tenant } = useTenant()
@@ -124,7 +117,7 @@ export default function SafetyAlertDetailPage() {
   }
 
   const { alert, incident, people, notifications } = data
-  const Icon = TONE_ICON[alert.severity_tone]
+  const Icon = iconForTone(alert.severity_tone)
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-5">
@@ -302,6 +295,12 @@ function EmptyLine({ icon, text }: { icon: ReactNode; text: string }) {
       {text}
     </p>
   )
+}
+
+function iconForTone(tone: CommandCenterAlertTone) {
+  if (tone === 'critical') return ShieldAlert
+  if (tone === 'warning') return AlertTriangle
+  return Clock
 }
 
 function formatDateTime(iso: string): string {

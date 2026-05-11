@@ -32,6 +32,7 @@ describe('deriveCommandCenterItems', () => {
     expect(items[0]).toMatchObject({
       id:   'all-clear',
       tone: 'ok' satisfies CommandCenterTone,
+      label: 'Program queues stable',
       suggestedAction: 'Review scorecard trends or continue routine field checks.',
     })
   })
@@ -52,7 +53,22 @@ describe('deriveCommandCenterItems', () => {
     expect(items[0].suggestedAction).toBe('Confirm entrants are out, then cancel or close each permit.')
   })
 
-  it('surfaces submitted incident safety alerts before derived program signals', () => {
+  it('orders program signals by severity while preserving same-severity order', () => {
+    const items = deriveCommandCenterItems(metrics({
+      expiredPermitCount: 1,
+      expiringSoonPermits: [{ id: 'p1', serial: 'CSP-1', spaceId: 'CS-1', minutes: 30 }],
+      activePermitCount: 1,
+    }))
+
+    expect(items.map(i => i.id)).toEqual([
+      'expired-confined-space-permits',
+      'confined-space-expiring',
+      'active-confined-space-permits',
+    ])
+    expect(items[2].id).toBe('active-confined-space-permits')
+  })
+
+  it('keeps incident-backed safety alerts out of program signal cards', () => {
     const items = deriveCommandCenterItems(metrics({
       commandCenterSafetyAlerts: [{
         id:              'alert-1',
@@ -60,9 +76,9 @@ describe('deriveCommandCenterItems', () => {
         incident_id:     'incident-1',
         report_number:   'INC-2026-0001',
         title:           'Injury / illness submitted',
-        summary:         'Packaging: employee received first aid',
-        severity_tone:   'warning',
-        priority:        60,
+        summary:         'Packaging: employee received medical treatment',
+        severity_tone:   'critical',
+        priority:        90,
         status:          'new',
         source:          'incident_submitted',
         created_at:      '2026-05-10T10:00:00.000Z',
@@ -72,15 +88,9 @@ describe('deriveCommandCenterItems', () => {
       expiredPermitCount: 1,
     }))
 
-    expect(items[0]).toMatchObject({
-      id:     'safety-alert-alert-1',
-      tone:   'warning',
-      label:  'Injury / illness submitted',
-      value:  'INC-2026-0001',
-      suggestedAction: 'Acknowledge and assign the incident follow-up.',
-      href:   '/incidents/incident-1',
-    })
-    expect(items[1].id).toBe('expired-confined-space-permits')
+    expect(items.map(i => i.id)).toEqual([
+      'expired-confined-space-permits',
+    ])
   })
 
   it('surfaces low LOTO photo coverage only when equipment exists', () => {
@@ -139,7 +149,7 @@ describe('highestCommandCenterTone', () => {
       expiredPermitCount: 1,
     }))
 
-    expect(items.map(i => i.tone)).toEqual(['warning', 'critical'])
+    expect(items.map(i => i.tone)).toEqual(['critical'])
     expect(highestCommandCenterTone(items)).toBe('critical')
   })
 })

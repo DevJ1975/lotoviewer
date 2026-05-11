@@ -10,6 +10,7 @@ import { CriticalAlertBanner }  from './CriticalAlertBanner'
 import { MeterAlertsBanner }    from './MeterAlertsBanner'
 import { PermitAlertsCard }     from './PermitAlertsCard'
 import { CommandCenterPanel }   from './CommandCenterPanel'
+import { SafetyAlertTicker }    from './SafetyAlertTicker'
 import { QuickActions }         from './QuickActions'
 import { KpiRow }               from './KpiRow'
 import { ActivePermitsPanel }   from './ActivePermitsPanel'
@@ -103,6 +104,10 @@ export default function MultiModuleDashboard() {
 
       {metrics && metrics.expiredPermitCount > 0 && (
         <CriticalAlertBanner count={metrics.expiredPermitCount} />
+      )}
+
+      {metrics && (
+        <SafetyAlertTicker alerts={metrics.commandCenterSafetyAlerts} />
       )}
 
       <CommandCenterPanel metrics={metrics} error={metricsError} />
