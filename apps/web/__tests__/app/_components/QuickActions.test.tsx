@@ -36,7 +36,7 @@ describe('QuickActions', () => {
 
   it('returns null when every action is gated off', () => {
     mockUseTenant.mockReturnValue({
-      tenant: tenantWith({ loto: false, 'confined-spaces': false }),
+      tenant: tenantWith({ 'my-safety-readiness': false, loto: false, 'confined-spaces': false }),
     })
     const { container } = render(<QuickActions />)
     expect(container.firstChild).toBeNull()

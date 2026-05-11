@@ -23,28 +23,35 @@ function tenant(over: Partial<Tenant> = {}): Tenant {
   }
 }
 
+const ONLY_LOTO_MODULES = {
+  'my-safety-readiness': false,
+  'equipment-readiness': false,
+  'loto': true,
+  'confined-spaces': false,
+  'hot-work': false,
+  'risk-assessment': false,
+  'near-miss': false,
+  'incidents': false,
+  'jha': false,
+  'toolbox-talks': false,
+  'safety-boards': false,
+  'bbs': false,
+  'chemicals': false,
+  'strike': false,
+}
+
+const NO_SAFETY_MODULES = {
+  ...ONLY_LOTO_MODULES,
+  'loto': false,
+}
+
 describe('resolveLandingPath', () => {
   it('redirects single-module tenants to that module home', () => {
     // Snak King-shape tenant: only LOTO enabled; everything else
     // toggled off explicitly so the catalog defaults don't make
     // them multi-module.
     const t = tenant({
-      modules: {
-        'loto':            true,
-        'confined-spaces': false,
-        'hot-work':        false,
-        'risk-assessment': false,
-        'near-miss':       false,
-        'incidents':       false,
-        'jha':             false,
-
-        'toolbox-talks':   false,
-
-        'safety-boards':   false,
-        'bbs':             false,
-        'chemicals':       false,
-
-      },
+      modules: ONLY_LOTO_MODULES,
     })
     expect(resolveLandingPath(t)).toBe('/loto')
   })
@@ -77,7 +84,7 @@ describe('resolveLandingPath', () => {
     // Single-module tenant could auto-derive to /loto, but the
     // override should win — it's the explicit signal.
     const t = tenant({
-      modules:  { 'loto': true, 'confined-spaces': false, 'hot-work': false, 'risk-assessment': false, 'near-miss': false, 'incidents': false, 'jha': false, 'toolbox-talks': false, 'safety-boards': false, 'bbs': false, 'chemicals': false },
+      modules:  ONLY_LOTO_MODULES,
       settings: { default_landing_path: '/status' },
     })
     expect(resolveLandingPath(t)).toBe('/status')
@@ -85,7 +92,7 @@ describe('resolveLandingPath', () => {
 
   it('ignores a malformed override that does not start with /', () => {
     const t = tenant({
-      modules:  { 'loto': true, 'confined-spaces': false, 'hot-work': false, 'risk-assessment': false, 'near-miss': false, 'incidents': false, 'jha': false, 'toolbox-talks': false, 'safety-boards': false, 'bbs': false, 'chemicals': false },
+      modules:  ONLY_LOTO_MODULES,
       settings: { default_landing_path: 'https://evil.com/' },
     })
     expect(resolveLandingPath(t)).toBe('/loto')
@@ -93,7 +100,7 @@ describe('resolveLandingPath', () => {
 
   it('ignores an empty-string override', () => {
     const t = tenant({
-      modules:  { 'loto': true, 'confined-spaces': false, 'hot-work': false, 'risk-assessment': false, 'near-miss': false, 'incidents': false, 'jha': false, 'toolbox-talks': false, 'safety-boards': false, 'bbs': false, 'chemicals': false },
+      modules:  ONLY_LOTO_MODULES,
       settings: { default_landing_path: '   ' },
     })
     expect(resolveLandingPath(t)).toBe('/loto')
@@ -108,20 +115,7 @@ describe('resolveLandingPath', () => {
     // the user lands on the dashboard which renders with empty data.
     // (RLS + ModuleGuard handle the actual access concerns.)
     const t = tenant({
-      modules: {
-        'loto':            false,
-        'confined-spaces': false,
-        'hot-work':        false,
-        'risk-assessment': false,
-        'near-miss':       false,
-        'incidents':       false,
-        'jha':             false,
-
-        'toolbox-talks':   false,
-
-        'safety-boards':   false,
-
-      },
+      modules: NO_SAFETY_MODULES,
     })
     expect(resolveLandingPath(t)).toBeNull()
   })

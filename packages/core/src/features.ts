@@ -770,6 +770,8 @@ export const FEATURES: FeatureDef[] = [
     category:    'admin',
     enabled:     true,
     comingSoon:  false,
+    icon:        'BarChart3',
+    color:       'slate',
   },
   {
     id:          'settings-notifications',

@@ -90,7 +90,7 @@ function formatDate(iso: string): string {
   // regardless of the recipient's mail-client locale: "Sep 30, 2026".
   try {
     return new Date(iso).toLocaleDateString('en-US', {
-      month: 'short', day: 'numeric', year: 'numeric',
+      month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC',
     })
   } catch {
     return iso

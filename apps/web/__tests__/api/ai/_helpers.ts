@@ -178,6 +178,7 @@ export function resetAiMocks() {
   // Default happy-path setup; individual tests can override.
   gateOk()
   rateLimitOk()
+  budgetOk()
   // Restore the default well-formed key — getTenantApiKeyMock.mockReset()
   // wipes the value above, so reinstall it on every reset.
   getTenantApiKeyMock.mockResolvedValue('sk-ant-test-' + 'a'.repeat(40))
