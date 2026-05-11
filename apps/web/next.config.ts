@@ -38,6 +38,22 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
     NEXT_PUBLIC_BUILD_ITERATION: buildIteration(),
   },
+  // The /superadmin/migrations page lists migration .sql files via
+  // `fs.readdir(path.resolve(process.cwd(), …))` at request time.
+  // Turbopack's NFT can't statically bound the dynamic `process.cwd()`
+  // arg and emits a "whole project was traced" warning on every build,
+  // attributed to next.config.ts (the entry point of the trace). The
+  // page is force-dynamic, server-only, and gated behind superadmin,
+  // so the over-tracing is harmless. Scope the suppression to that
+  // specific issue title so unrelated config issues still surface.
+  turbopack: {
+    ignoreIssue: [
+      {
+        path: '**/next.config.ts',
+        title: /Encountered unexpected file in NFT list/,
+      },
+    ],
+  },
   images: {
     remotePatterns: [
       {
