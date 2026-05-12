@@ -25,7 +25,9 @@ export default function ReviewModal({ department, onSubmit, onClose, onApproved 
   const [done, setDone]         = useState(false)
   const [error, setError]       = useState<string | null>(null)
 
-  const sigRef = useRef<SignaturePadRef>(null)
+  const sigRef       = useRef<SignaturePadRef>(null)
+  const dialogRef    = useRef<HTMLDivElement>(null)
+  const lastFocusRef = useRef<HTMLElement | null>(null)
 
   // Close on Escape
   useEffect(() => {
@@ -33,6 +35,36 @@ export default function ReviewModal({ department, onSubmit, onClose, onApproved 
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  // On mount: remember whatever was focused before the modal opened so
+  // we can restore focus on close, then move focus to the first input.
+  // On unmount: restore. Screen readers and keyboard users expect this.
+  useEffect(() => {
+    lastFocusRef.current = document.activeElement as HTMLElement | null
+    const firstInput = dialogRef.current?.querySelector<HTMLInputElement>('input, textarea, button')
+    firstInput?.focus()
+    return () => { lastFocusRef.current?.focus?.() }
+  }, [])
+
+  // Trap Tab inside the dialog. The set of focusables is recomputed on
+  // each Tab press so it stays correct as the form's state changes
+  // (e.g. the success view replaces the form).
+  useEffect(() => {
+    function onTab(e: KeyboardEvent) {
+      if (e.key !== 'Tab' || !dialogRef.current) return
+      const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )
+      if (focusables.length === 0) return
+      const first = focusables[0]
+      const last  = focusables[focusables.length - 1]
+      const active = document.activeElement as HTMLElement | null
+      if (e.shiftKey && active === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus() }
+    }
+    document.addEventListener('keydown', onTab)
+    return () => document.removeEventListener('keydown', onTab)
+  }, [])
 
   const handleSubmit = useCallback(async () => {
     if (!name.trim() || sigEmpty) return
@@ -64,7 +96,13 @@ export default function ReviewModal({ department, onSubmit, onClose, onApproved 
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
       onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="review-modal-title"
+        className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+      >
         {done ? (
           <div className="flex flex-col items-center justify-center py-16 px-8 gap-4 text-center">
             <div className="w-14 h-14 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-2xl">✓</div>
@@ -76,7 +114,7 @@ export default function ReviewModal({ department, onSubmit, onClose, onApproved 
             {/* Header */}
             <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100 dark:border-slate-800">
               <div>
-                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Department Sign-Off</h2>
+                <h2 id="review-modal-title" className="text-base font-semibold text-slate-900 dark:text-slate-100">Department Sign-Off</h2>
                 <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{department}</p>
               </div>
               <button

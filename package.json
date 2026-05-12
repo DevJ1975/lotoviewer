@@ -15,7 +15,8 @@
     "check:deeplinks": "node scripts/check-deeplink-placeholders.mjs",
     "check:wiki": "node scripts/check-wiki-sync.mjs",
     "check:wiki:staged": "node scripts/check-wiki-sync.mjs --staged",
-    "wiki:touch": "node scripts/wiki-touch.mjs"
+    "wiki:touch": "node scripts/wiki-touch.mjs",
+    "bug-hunt": "node scripts/bug-hunt/run.mjs"
   },
   "dependencies": {
     "expo-router": "~6.0.23"

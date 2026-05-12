@@ -10,12 +10,24 @@ export async function stampSignature(
   const pdfBytes = await res.arrayBuffer()
   const pdfDoc   = await PDFDocument.load(pdfBytes)
 
-  const lastPage          = pdfDoc.getPages().at(-1)!
-  const { width, height } = lastPage.getSize()
-  const font              = await pdfDoc.embedFont(StandardFonts.Helvetica)
-  const boldFont          = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+  const lastPage = pdfDoc.getPages().at(-1)!
+  const { width } = lastPage.getSize()
+  const font     = await pdfDoc.embedFont(StandardFonts.Helvetica)
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
 
-  const sigBase64 = signatureDataUrl.split(',')[1]
+  // Validate the data URL up front so an empty / non-PNG signature
+  // surfaces a friendly error at the call site (toast) instead of an
+  // opaque atob() throw deep inside pdf-lib. ReviewModal already gates
+  // submit on the canvas being non-empty, but a defensive check costs
+  // nothing and protects future call sites that might not.
+  const PNG_PREFIX = 'data:image/png;base64,'
+  if (!signatureDataUrl.startsWith(PNG_PREFIX)) {
+    throw new Error('Signature is empty or malformed (expected a PNG data URL).')
+  }
+  const sigBase64 = signatureDataUrl.slice(PNG_PREFIX.length)
+  if (sigBase64.length === 0) {
+    throw new Error('Signature is empty or malformed (no base64 payload).')
+  }
   const sigBytes  = Uint8Array.from(atob(sigBase64), c => c.charCodeAt(0))
   const sigImage  = await pdfDoc.embedPng(sigBytes)
 
@@ -25,9 +37,6 @@ export async function stampSignature(
   const sigH      = sigImage.height * scale
   const blockH    = Math.max(sigH + 36, 72)
   const blockY    = 10
-
-  // Ensure there's room — shift content up if the page is full
-  void height
 
   lastPage.drawRectangle({
     x: 20, y: blockY,
@@ -98,7 +107,9 @@ export function downloadPdf(bytes: Uint8Array, filename: string) {
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
-  // 60s is plenty for any reasonable download dialog + transfer time.
-  // Browser will GC the blob eventually even if we don't revoke.
-  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  // Revoke on the next microtask: the browser has already started the
+  // download by the time click() returns, so the URL can be released
+  // immediately. The previous 60s setTimeout outlived component
+  // unmount and kept the blob alive past its useful life.
+  queueMicrotask(() => URL.revokeObjectURL(url))
 }
