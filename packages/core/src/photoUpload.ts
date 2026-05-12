@@ -80,6 +80,7 @@ export async function uploadPhotoForEquipment(
     .from('loto_equipment')
     .select('equip_photo_url, iso_photo_url, needs_equip_photo, needs_iso_photo')
     .eq('equipment_id', equipmentId)
+    .eq('tenant_id', tenantId)
     .single()
 
   if (selectError) throw new Error(selectError.message)
@@ -105,6 +106,7 @@ export async function uploadPhotoForEquipment(
       updated_at: new Date().toISOString(),
     })
     .eq('equipment_id', equipmentId)
+    .eq('tenant_id', tenantId)
 
   if (patchError) throw new Error(patchError.message)
 
@@ -114,6 +116,7 @@ export async function uploadPhotoForEquipment(
     .from('loto_equipment')
     .select('equip_photo_url, iso_photo_url, photo_status, needs_equip_photo, needs_iso_photo')
     .eq('equipment_id', equipmentId)
+    .eq('tenant_id', tenantId)
     .single()
   if (fresh) {
     const actualStatus = computePhotoStatusFromUrls(
@@ -127,6 +130,7 @@ export async function uploadPhotoForEquipment(
         .from('loto_equipment')
         .update({ photo_status: actualStatus, updated_at: new Date().toISOString() })
         .eq('equipment_id', equipmentId)
+        .eq('tenant_id', tenantId)
     }
   }
 
