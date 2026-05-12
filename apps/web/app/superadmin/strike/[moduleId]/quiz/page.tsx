@@ -1,13 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
   ArrowLeft, ArrowDown, ArrowUp, CheckCircle2, Circle, ClipboardCheck,
-  Loader2, Plus, Save, Trash2,
+  FileVideo, Loader2, Plus, Save, Trash2, Upload,
 } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
+import { supabase } from '@/lib/supabase'
 import { superadminJson } from '@/lib/superadminFetch'
 import type { StrikeQuestionType } from '@soteria/core/strike'
 import type {
@@ -289,6 +290,13 @@ export default function StrikeQuizEditorPage() {
           This module has no versions yet. Create one from STRIKE Studio before editing the quiz.
         </div>
       ) : (
+        <>
+        <VideoSection
+          moduleId={data.module.id}
+          version={currentVersion}
+          scopeRoot={data.module.library_scope === 'global' ? 'global' : data.module.tenant_id ?? ''}
+          onChanged={() => void load(true)}
+        />
         <section className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -331,8 +339,207 @@ export default function StrikeQuizEditorPage() {
             </ol>
           )}
         </section>
+        </>
       )}
     </div>
+  )
+}
+
+const VIDEO_MIME_TO_EXT: Record<string, string> = {
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+  'video/quicktime': 'mov',
+}
+const MAX_VIDEO_BYTES = 200 * 1024 * 1024
+
+function VideoSection({
+  moduleId, version, scopeRoot, onChanged,
+}: {
+  moduleId: string
+  version: QuizVersionRow
+  scopeRoot: string
+  onChanged: () => void
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const [signedUrl, setSignedUrl] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [progressLabel, setProgressLabel] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setSignedUrl(null)
+    if (!version.video_path) return
+    void (async () => {
+      const { data } = await supabase.storage
+        .from('strike-media')
+        .createSignedUrl(version.video_path!, 60 * 30)
+      if (!cancelled) setSignedUrl(data?.signedUrl ?? null)
+    })()
+    return () => { cancelled = true }
+  }, [version.video_path])
+
+  async function pickFile() {
+    inputRef.current?.click()
+  }
+
+  async function readDurationSeconds(file: File): Promise<number | null> {
+    return new Promise(resolve => {
+      const url = URL.createObjectURL(file)
+      const probe = document.createElement('video')
+      probe.preload = 'metadata'
+      const cleanup = () => {
+        URL.revokeObjectURL(url)
+        probe.removeAttribute('src')
+      }
+      probe.onloadedmetadata = () => {
+        const seconds = Number.isFinite(probe.duration) ? Math.max(1, Math.round(probe.duration)) : null
+        cleanup()
+        resolve(seconds)
+      }
+      probe.onerror = () => { cleanup(); resolve(null) }
+      probe.src = url
+    })
+  }
+
+  async function handleSelected(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setUploadError(null)
+
+    const ext = VIDEO_MIME_TO_EXT[file.type]
+    if (!ext) {
+      setUploadError(`Unsupported video type ${file.type || '(unknown)'}. Use MP4, WebM, or MOV.`)
+      return
+    }
+    if (file.size <= 0 || file.size > MAX_VIDEO_BYTES) {
+      setUploadError(`Video must be 1B - ${Math.round(MAX_VIDEO_BYTES / 1_000_000)}MB.`)
+      return
+    }
+    if (!scopeRoot) {
+      setUploadError('Cannot resolve storage scope for this version.')
+      return
+    }
+
+    setBusy(true)
+    setProgressLabel('Reading duration')
+    const durationSeconds = await readDurationSeconds(file)
+
+    const path = `${scopeRoot}/${moduleId}/${version.id}.${ext}`
+    setProgressLabel('Uploading')
+    const { error: uploadErr } = await supabase.storage
+      .from('strike-media')
+      .upload(path, file, {
+        contentType: file.type,
+        cacheControl: '604800',
+        upsert: true,
+      })
+    if (uploadErr) {
+      setBusy(false)
+      setProgressLabel(null)
+      setUploadError(`Upload failed: ${uploadErr.message}`)
+      return
+    }
+
+    setProgressLabel('Saving')
+    const result = await superadminJson(
+      `/api/superadmin/strike/${moduleId}/versions/${version.id}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({
+          video_path: path,
+          duration_seconds: durationSeconds,
+        }),
+      },
+    )
+    setBusy(false)
+    setProgressLabel(null)
+    if (!result.ok) {
+      setUploadError(result.error ?? 'Saved file but failed to update version row')
+      return
+    }
+    onChanged()
+  }
+
+  async function clearVideo() {
+    if (!version.video_path) return
+    if (!confirm('Detach this video from the version? The file in storage will be kept.')) return
+    setBusy(true)
+    const result = await superadminJson(
+      `/api/superadmin/strike/${moduleId}/versions/${version.id}`,
+      { method: 'PATCH', body: JSON.stringify({ video_path: null, duration_seconds: null }) },
+    )
+    setBusy(false)
+    if (!result.ok) {
+      setUploadError(result.error ?? 'Could not detach video')
+      return
+    }
+    onChanged()
+  }
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+            <FileVideo className="h-4 w-4 text-brand-navy dark:text-brand-yellow" />
+            Video for v{version.version_number}
+          </h2>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Stored in Supabase so it can play offline.
+            {version.duration_seconds ? ` Duration ${version.duration_seconds}s.` : ''}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            ref={inputRef}
+            type="file"
+            accept="video/mp4,video/webm,video/quicktime"
+            className="hidden"
+            onChange={handleSelected}
+          />
+          <button
+            type="button"
+            onClick={() => void pickFile()}
+            disabled={busy}
+            className="inline-flex items-center gap-1.5 rounded-md bg-brand-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-navy/90 disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            {version.video_path ? 'Replace video' : 'Upload video'}
+          </button>
+          {version.video_path && (
+            <button
+              type="button"
+              onClick={() => void clearVideo()}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              Detach
+            </button>
+          )}
+        </div>
+      </div>
+
+      {progressLabel && (
+        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{progressLabel}…</p>
+      )}
+      {uploadError && (
+        <p className="mt-3 rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+          {uploadError}
+        </p>
+      )}
+
+      <div className="mt-3">
+        {signedUrl ? (
+          <video controls preload="metadata" className="aspect-video w-full rounded-lg bg-black" src={signedUrl} />
+        ) : (
+          <div className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-slate-200 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+            No video attached yet.
+          </div>
+        )}
+      </div>
+    </section>
   )
 }
 

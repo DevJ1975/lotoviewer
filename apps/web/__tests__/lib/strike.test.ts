@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   computeStrikeReadiness,
+  evaluateStrikeWatchGate,
   isStrikeAssignmentApplicable,
   isStrikeCompletionCurrent,
   normalizeStrikeSlug,
   scoreStrikeQuiz,
+  STRIKE_WATCH_COMPLETION_THRESHOLD,
 } from '@soteria/core/strike'
 
 describe('isStrikeCompletionCurrent', () => {
@@ -178,5 +180,61 @@ describe('scoreStrikeQuiz', () => {
       passed: false,
       missedQuestionIds: ['q1'],
     })
+  })
+})
+
+describe('evaluateStrikeWatchGate', () => {
+  it('is met for versions with no video', () => {
+    expect(evaluateStrikeWatchGate({
+      hasVideo: false,
+      durationSeconds: 0,
+      watchedSeconds: 0,
+    })).toEqual({ requiredSeconds: 0, watchedSeconds: 0, met: true })
+  })
+
+  it('is met when the duration is unknown (legacy version without metadata)', () => {
+    expect(evaluateStrikeWatchGate({
+      hasVideo: true,
+      durationSeconds: null,
+      watchedSeconds: 0,
+    })).toMatchObject({ requiredSeconds: 0, met: true })
+  })
+
+  it('requires 95% of the duration when video and duration are present', () => {
+    const gate = evaluateStrikeWatchGate({
+      hasVideo: true,
+      durationSeconds: 100,
+      watchedSeconds: 0,
+    })
+    expect(gate.requiredSeconds).toBe(Math.ceil(100 * STRIKE_WATCH_COMPLETION_THRESHOLD))
+    expect(gate.met).toBe(false)
+  })
+
+  it('unlocks at the threshold', () => {
+    const duration = 60
+    const required = Math.ceil(duration * STRIKE_WATCH_COMPLETION_THRESHOLD)
+    expect(evaluateStrikeWatchGate({
+      hasVideo: true,
+      durationSeconds: duration,
+      watchedSeconds: required,
+    })).toMatchObject({ met: true })
+    expect(evaluateStrikeWatchGate({
+      hasVideo: true,
+      durationSeconds: duration,
+      watchedSeconds: required - 1,
+    })).toMatchObject({ met: false })
+  })
+
+  it('treats negative or non-finite watched values as zero', () => {
+    expect(evaluateStrikeWatchGate({
+      hasVideo: true,
+      durationSeconds: 30,
+      watchedSeconds: -10,
+    }).watchedSeconds).toBe(0)
+    expect(evaluateStrikeWatchGate({
+      hasVideo: true,
+      durationSeconds: 30,
+      watchedSeconds: Number.NaN,
+    }).watchedSeconds).toBe(0)
   })
 })
