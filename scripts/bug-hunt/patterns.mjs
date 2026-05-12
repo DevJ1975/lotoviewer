@@ -33,6 +33,16 @@ function readLines(path) {
   return readFileSync(path, 'utf8').split('\n')
 }
 
+// Strip `// ...` and `/* ... */` content from a single line so pattern
+// matches don't false-positive on a comment that happens to mention
+// the matched API. Block comments that span multiple lines aren't
+// stripped here — patterns that care can do so themselves.
+function stripLineComments(line) {
+  return line
+    .replace(/\/\*.*?\*\//g, '')
+    .replace(/\/\/.*$/, '')
+}
+
 // ─── Pattern 1: loto_equipment query missing tenant_id ─────────────────
 //
 // Origin: H1 in plan 2026-05-12. `equipment_id` is not globally unique
@@ -78,9 +88,19 @@ function scanUnvalidatedAtob(root) {
   for (const f of files) {
     const lines = readLines(f)
     for (let i = 0; i < lines.length; i++) {
-      if (!/\batob\(/.test(lines[i])) continue
-      const back = lines.slice(Math.max(0, i - 5), i).join('\n')
-      const guarded = /startsWith\(['"`]data:/.test(back) || /\.length\b/.test(back)
+      // Use a comment-stripped view for the match test so mentions of
+      // `atob()` in prose don't fire the scanner.
+      if (!/\batob\(/.test(stripLineComments(lines[i]))) continue
+      const back = lines
+        .slice(Math.max(0, i - 5), i)
+        .map(stripLineComments)
+        .join('\n')
+      // A guard is either an explicit data-URL prefix check
+      // (`startsWith('data:`) or any `.length` test that the
+      // pre-decode payload is non-empty.
+      const guarded = /startsWith\(['"`]data:/.test(back)
+                   || /PNG_PREFIX|JPEG_PREFIX|DATA_URL_PREFIX/.test(back)
+                   || /\.length\b/.test(back)
       if (guarded) continue
       hits.push({
         file:    relative(root, f),
@@ -101,16 +121,21 @@ function scanUnvalidatedAtob(root) {
 function scanDeferredRevokeObjectURL(root) {
   const files = listSourceFiles(root, ['.ts', '.tsx'])
   const hits = []
-  const re = /setTimeout\([^)]*URL\.revokeObjectURL/
+  // Find every revokeObjectURL call site; flag it when the same line
+  // or the prior line also contains `setTimeout(`. The earlier regex
+  // used `[^)]*` between the two, which fails the moment the
+  // setTimeout callback uses arrow-fn parens like `() => revoke(...)`.
   for (const f of files) {
     const lines = readLines(f)
     for (let i = 0; i < lines.length; i++) {
-      if (!re.test(lines[i])) continue
+      if (!/URL\.revokeObjectURL/.test(lines[i])) continue
+      const win = (lines[i - 1] ?? '') + '\n' + lines[i]
+      if (!/setTimeout\s*\(/.test(win)) continue
       hits.push({
         file:    relative(root, f),
         line:    i + 1,
         snippet: lines[i].trim(),
-        note:    'URL.revokeObjectURL deferred via setTimeout — keeps the blob alive after unmount. Revoke synchronously after click().',
+        note:    'URL.revokeObjectURL deferred via setTimeout — keeps the blob alive after unmount. Revoke synchronously after click() (or queueMicrotask).',
       })
     }
   }
