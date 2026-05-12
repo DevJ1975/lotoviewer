@@ -1,0 +1,139 @@
+name: Daily bug hunt
+
+# Runs the repo-wide bug hunt every day at 00:00 UTC and on demand.
+# Output: docs/bug-hunt-log/YYYY-MM-DD.md (uploaded as an artifact + a
+# GitHub issue when HIGH-severity findings are present).
+#
+# The job never fails on findings on its own — failing every day would
+# turn the workflow into noise. It fails only when one of the underlying
+# checks (lint / typecheck / tests) fails AND the failure is new since
+# the prior log.
+
+on:
+  schedule:
+    # 00:00 UTC daily — matches the existing `daily-health-report` cron
+    # convention (also UTC, per vercel.json).
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write     # commit the daily log back to the logs branch
+  issues:   write     # open/update the tracking issue on HIGH findings
+
+jobs:
+  hunt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # need history for `git rev-parse HEAD`
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run bug hunt
+        id: hunt
+        env:
+          BUG_HUNT_DATE: ${{ github.event.inputs.date || '' }}
+        run: |
+          node scripts/bug-hunt/run.mjs
+          date=$(date -u +%Y-%m-%d)
+          if [ -n "$BUG_HUNT_DATE" ]; then date="$BUG_HUNT_DATE"; fi
+          echo "date=$date" >> "$GITHUB_OUTPUT"
+          echo "log_path=docs/bug-hunt-log/${date}.md" >> "$GITHUB_OUTPUT"
+
+      - name: Upload log artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bug-hunt-${{ steps.hunt.outputs.date }}
+          path: ${{ steps.hunt.outputs.log_path }}
+          if-no-files-found: error
+
+      # Persist the log to the long-lived `bug-hunt-logs` branch so the
+      # history is queryable from git, not just from workflow runs (which
+      # GitHub eventually garbage-collects).
+      - name: Commit log to bug-hunt-logs branch
+        env:
+          LOG_PATH: ${{ steps.hunt.outputs.log_path }}
+          LOG_DATE: ${{ steps.hunt.outputs.date }}
+        run: |
+          set -euo pipefail
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          # Stash the freshly-written log so checkout doesn't overwrite it.
+          mkdir -p /tmp/bug-hunt
+          cp "$LOG_PATH" "/tmp/bug-hunt/${LOG_DATE}.md"
+
+          # Use a worktree so we don't disturb the workflow's checkout.
+          git fetch origin bug-hunt-logs:bug-hunt-logs 2>/dev/null || true
+          if git show-ref --verify --quiet refs/heads/bug-hunt-logs; then
+            git worktree add /tmp/logs-wt bug-hunt-logs
+          else
+            git worktree add --detach /tmp/logs-wt
+            (cd /tmp/logs-wt && git checkout --orphan bug-hunt-logs && git rm -rf . >/dev/null 2>&1 || true)
+          fi
+
+          mkdir -p /tmp/logs-wt/docs/bug-hunt-log
+          cp "/tmp/bug-hunt/${LOG_DATE}.md" "/tmp/logs-wt/docs/bug-hunt-log/${LOG_DATE}.md"
+
+          (cd /tmp/logs-wt
+           git add "docs/bug-hunt-log/${LOG_DATE}.md"
+           if git diff --cached --quiet; then
+             echo "[bug-hunt] no log changes to commit"
+           else
+             git commit -m "bug-hunt: log for ${LOG_DATE}"
+             git push origin HEAD:bug-hunt-logs
+           fi)
+
+      # Surface HIGH findings or check failures as a GitHub issue so the
+      # team sees them on the next workday without digging through
+      # artifacts. The issue is upserted by title so daily runs don't
+      # spam — the body is rewritten in place.
+      - name: Open/update tracking issue
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          LOG_PATH: ${{ steps.hunt.outputs.log_path }}
+          LOG_DATE: ${{ steps.hunt.outputs.date }}
+        with:
+          script: |
+            const fs = require('node:fs')
+            const path = process.env.LOG_PATH
+            const date = process.env.LOG_DATE
+            const body = fs.readFileSync(path, 'utf8')
+
+            // Skip the issue entirely when the log shows zero high hits
+            // and no failing checks — there's nothing for a human to do.
+            const highMatch  = body.match(/^\|\s*[a-z0-9-]+\s*\|\s*high\s*\|\s*(\d+)\s*\|/gm) || []
+            const highTotal  = highMatch.reduce((a, l) => a + Number(l.match(/(\d+)\s*\|$/)[1]), 0)
+            const anyFail    = /\|\s*✗ fail\s*\|/.test(body)
+            if (highTotal === 0 && !anyFail) {
+              core.info('No HIGH findings and no failing checks — skipping issue upsert.')
+              return
+            }
+
+            const title = `Daily bug hunt — ${date}`
+            const owner = context.repo.owner
+            const repo  = context.repo.repo
+
+            const existing = await github.rest.search.issuesAndPullRequests({
+              q: `repo:${owner}/${repo} in:title "${title}" is:issue`,
+            })
+            const issue = existing.data.items.find(i => i.title === title)
+            if (issue) {
+              await github.rest.issues.update({ owner, repo, issue_number: issue.number, body })
+              core.info(`Updated issue #${issue.number}`)
+            } else {
+              const created = await github.rest.issues.create({
+                owner, repo, title, body,
+                labels: ['bug-hunt', 'automated'],
+              })
+              core.info(`Created issue #${created.data.number}`)
+            }
