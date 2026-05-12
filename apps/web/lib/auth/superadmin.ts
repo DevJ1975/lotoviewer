@@ -38,11 +38,22 @@ export async function requireSuperadmin(authHeader: string | null): Promise<Supe
   }
 
   // Gate 1: env allowlist. Comma-separated list, case-insensitive compare.
-  const allowlist = (process.env.SUPERADMIN_EMAILS ?? '')
+  const rawAllowlist = process.env.SUPERADMIN_EMAILS ?? ''
+  const allowlist = rawAllowlist
     .split(',')
     .map(s => s.trim().toLowerCase())
     .filter(Boolean)
   if (!allowlist.includes(user.email.toLowerCase())) {
+    // Diagnostic-only: log the reject reason so a 403 in production
+    // tells us which gate is actually failing. We log the lengths +
+    // presence flags (not the env value itself) to avoid leaking
+    // secrets to log aggregators.
+    console.warn('[superadmin-gate] env-allowlist reject', {
+      email:              user.email,
+      allowlist_count:    allowlist.length,
+      env_var_set:        rawAllowlist.length > 0,
+      env_var_raw_length: rawAllowlist.length,
+    })
     return { ok: false, status: 403, message: 'Superadmin only' }
   }
 
@@ -54,6 +65,12 @@ export async function requireSuperadmin(authHeader: string | null): Promise<Supe
     .eq('id', user.id)
     .maybeSingle()
   if (!profile?.is_superadmin) {
+    console.warn('[superadmin-gate] db-flag reject', {
+      email:           user.email,
+      user_id:         user.id,
+      profile_found:   profile !== null,
+      is_superadmin:   profile?.is_superadmin ?? null,
+    })
     return { ok: false, status: 403, message: 'Superadmin only' }
   }
 
