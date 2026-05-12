@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin, generateTempPassword } from '@/lib/supabaseAdmin'
-import { sendInviteEmail, computeLoginUrl } from '@/lib/email/sendInvite'
+import { sendInviteEmail, computeLoginUrl, renderInviteText } from '@/lib/email/sendInvite'
 import { isValidTenantNumber } from '@/lib/validation/tenants'
 
 // POST /api/superadmin/tenants/[number]/members/[user_id]/resend-invite
@@ -96,13 +96,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     .maybeSingle()
 
   const loginUrl = computeLoginUrl(req)
-  const emailSent = await sendInviteEmail({
+  const inviteArgs = {
     to:           email,
     fullName:     profile?.full_name ?? '',
     tempPassword,
     loginUrl,
     tenantName:   tenant.name,
-  })
+  }
+  const emailSent = await sendInviteEmail(inviteArgs)
+  const { subject: copyPasteSubject, text: copyPasteMessage } = renderInviteText(inviteArgs)
 
-  return NextResponse.json({ ok: true, email, tempPassword, emailSent })
+  return NextResponse.json({
+    ok: true, email, tempPassword, emailSent,
+    copyPasteSubject, copyPasteMessage,
+  })
 }

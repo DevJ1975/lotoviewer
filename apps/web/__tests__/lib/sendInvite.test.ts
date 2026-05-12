@@ -17,7 +17,7 @@ vi.mock('resend', () => ({
 // since the module's side-effects (logging) aren't part of the contract.
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }))
 
-import { sendInviteEmail, computeLoginUrl } from '@/lib/email/sendInvite'
+import { sendInviteEmail, computeLoginUrl, renderInviteText } from '@/lib/email/sendInvite'
 
 const ORIG_ENV = process.env
 
@@ -123,6 +123,36 @@ describe('sendInviteEmail', () => {
     expect(call.text).toContain('You\'ve been added to WLS Demo')
     expect(call.text).toContain('Sign in with your existing account')
     expect(call.text).not.toContain('Password')
+  })
+})
+
+describe('renderInviteText', () => {
+  it('matches the body that sendInviteEmail sends (new-user template)', () => {
+    const { subject, text } = renderInviteText({
+      to:           'jane@example.com',
+      fullName:     'Jane',
+      tempPassword: 'X1y2-Z3a4',
+      loginUrl:     'https://soteriafield.app',
+      tenantName:   'Acme Refining',
+    })
+    expect(subject).toBe("You're invited to Acme Refining on SoteriaField")
+    expect(text).toContain('https://soteriafield.app/login')
+    expect(text).toContain('X1y2-Z3a4')
+    expect(text).toContain('jane@example.com')
+    expect(text).toContain('Acme Refining')
+  })
+
+  it('renders the existing-user template when tempPassword is empty', () => {
+    const { subject, text } = renderInviteText({
+      to:           'jane@example.com',
+      fullName:     'Jane',
+      tempPassword: '',
+      loginUrl:     'https://soteriafield.app',
+      tenantName:   'WLS Demo',
+    })
+    expect(subject).toBe("You've been added to WLS Demo on SoteriaField")
+    expect(text).toContain('Sign in with your existing account')
+    expect(text).not.toContain('Password')
   })
 })
 

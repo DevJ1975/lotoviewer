@@ -11,11 +11,13 @@ import { UndoToast } from './UndoToast'
 import { ROLE_OPTIONS, type MemberRow } from './types'
 
 interface InviteResult {
-  email:          string
-  role:           TenantRole
-  tempPassword?:  string
-  emailSent?:     boolean
-  alreadyExisted: boolean
+  email:             string
+  role:              TenantRole
+  tempPassword?:     string
+  emailSent?:        boolean
+  alreadyExisted:    boolean
+  copyPasteSubject?: string
+  copyPasteMessage?: string
 }
 
 interface Props {
@@ -167,7 +169,10 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
 
   async function resendInvite(userId: string, label: string) {
     setBusyUserId(userId); setRowError(null)
-    const result = await superadminJson<{ email: string; tempPassword: string; emailSent: boolean }>(
+    const result = await superadminJson<{
+      email: string; tempPassword: string; emailSent: boolean
+      copyPasteSubject?: string; copyPasteMessage?: string
+    }>(
       `/api/superadmin/tenants/${tenantNumber}/members/${userId}/resend-invite`,
       { method: 'POST' },
     )
@@ -177,11 +182,13 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
       // Surface the new temp password through the existing invite-result
       // panel so the superadmin can copy/paste if email failed.
       setInviteResult({
-        email:          result.body.email,
-        role:           members.find(m => m.user_id === userId)?.role ?? 'member',
-        tempPassword:   result.body.tempPassword,
-        emailSent:      result.body.emailSent,
-        alreadyExisted: false,
+        email:            result.body.email,
+        role:             members.find(m => m.user_id === userId)?.role ?? 'member',
+        tempPassword:     result.body.tempPassword,
+        emailSent:        result.body.emailSent,
+        alreadyExisted:   false,
+        copyPasteSubject: result.body.copyPasteSubject,
+        copyPasteMessage: result.body.copyPasteMessage,
       })
       void label  // for future toast wording
     }
@@ -198,6 +205,7 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
     const result = await superadminJson<{
       email: string; role: TenantRole; tempPassword?: string
       emailSent?: boolean; alreadyExisted: boolean
+      copyPasteSubject?: string; copyPasteMessage?: string
     }>(`/api/superadmin/tenants/${tenantNumber}/members`, {
       method: 'POST',
       body:   JSON.stringify({
@@ -210,11 +218,13 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
       setInviteError(result.error ?? 'Invite failed')
     } else {
       setInviteResult({
-        email:          result.body.email,
-        role:           result.body.role,
-        tempPassword:   result.body.tempPassword,
-        emailSent:      result.body.emailSent === true,
-        alreadyExisted: result.body.alreadyExisted,
+        email:            result.body.email,
+        role:             result.body.role,
+        tempPassword:     result.body.tempPassword,
+        emailSent:        result.body.emailSent === true,
+        alreadyExisted:   result.body.alreadyExisted,
+        copyPasteSubject: result.body.copyPasteSubject,
+        copyPasteMessage: result.body.copyPasteMessage,
       })
       setInviteEmail(''); setInviteName(''); setInviteRole('member')
       await reload()
@@ -282,10 +292,24 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
     })
   }
 
+  // Tracks which copy button was last clicked so we can flip its label
+  // to "Copied" for ~1.5s. Stored as a string id since there are several
+  // copy targets (password, subject line, message body).
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
+
+  async function copyText(key: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedKey(key)
+      window.setTimeout(() => setCopiedKey(prev => (prev === key ? null : prev)), 1500)
+    } catch {
+      /* clipboard blocked — user can still select-all */
+    }
+  }
+
   async function copyTempPassword() {
     if (!inviteResult?.tempPassword) return
-    try { await navigator.clipboard.writeText(inviteResult.tempPassword) }
-    catch { /* clipboard blocked — user can still select-all */ }
+    await copyText('pw', inviteResult.tempPassword)
   }
 
   return (
@@ -376,12 +400,52 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
                       onClick={copyTempPassword}
                       className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-200 dark:bg-emerald-900/40 text-emerald-900 dark:text-emerald-200 hover:bg-emerald-300 dark:hover:bg-emerald-900/60 transition-colors"
                     >
-                      <Copy className="h-3 w-3" /> Copy
+                      <Copy className="h-3 w-3" /> {copiedKey === 'pw' ? 'Copied' : 'Copy'}
                     </button>
                   </div>
                   <code className="block mt-1 p-2 bg-emerald-100 dark:bg-emerald-900/40 rounded font-mono text-sm select-all">
                     {inviteResult.tempPassword}
                   </code>
+                </div>
+              )}
+
+              {inviteResult.copyPasteMessage && (
+                <div className="mt-3 text-emerald-800 dark:text-emerald-200 text-xs space-y-2">
+                  <p className="font-semibold">
+                    Send this manually too — invites sometimes land in junk mail.
+                  </p>
+                  {inviteResult.copyPasteSubject && (
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="uppercase tracking-wider text-[10px] font-bold">Subject</span>
+                        <button
+                          type="button"
+                          onClick={() => copyText('subj', inviteResult.copyPasteSubject!)}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-200 dark:bg-emerald-900/40 text-emerald-900 dark:text-emerald-200 hover:bg-emerald-300 dark:hover:bg-emerald-900/60 transition-colors"
+                        >
+                          <Copy className="h-3 w-3" /> {copiedKey === 'subj' ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <code className="block p-2 bg-emerald-100 dark:bg-emerald-900/40 rounded font-mono text-xs select-all break-all">
+                        {inviteResult.copyPasteSubject}
+                      </code>
+                    </div>
+                  )}
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="uppercase tracking-wider text-[10px] font-bold">Message body</span>
+                      <button
+                        type="button"
+                        onClick={() => copyText('msg', inviteResult.copyPasteMessage!)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-200 dark:bg-emerald-900/40 text-emerald-900 dark:text-emerald-200 hover:bg-emerald-300 dark:hover:bg-emerald-900/60 transition-colors"
+                      >
+                        <Copy className="h-3 w-3" /> {copiedKey === 'msg' ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
+                    <pre className="p-2 bg-emerald-100 dark:bg-emerald-900/40 rounded font-mono text-xs whitespace-pre-wrap break-words select-all">
+{inviteResult.copyPasteMessage}
+                    </pre>
+                  </div>
                 </div>
               )}
             </div>
