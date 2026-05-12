@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { isValidStrikeStorageVideoPath } from '@soteria/core/strikeMedia'
+import {
+  isValidStrikeStorageThumbnailPath,
+  isValidStrikeStorageVideoPath,
+} from '@soteria/core/strikeMedia'
 
 // PATCH /api/superadmin/strike/[moduleId]/versions/[versionId]
 //   Update a version's video pointer, duration, or passing score. The
@@ -35,7 +38,7 @@ export async function PATCH(req: Request, ctx: RouteContext) {
   const admin = supabaseAdmin()
   const { data: version, error: lookupErr } = await admin
     .from('strike_module_versions')
-    .select('id, module_id, tenant_id, library_scope, video_path')
+    .select('id, module_id, tenant_id, library_scope, video_path, thumbnail_path')
     .eq('id', versionId)
     .eq('module_id', moduleId)
     .maybeSingle()
@@ -62,6 +65,25 @@ export async function PATCH(req: Request, ctx: RouteContext) {
         return NextResponse.json({ error: 'video_path scope does not match version scope' }, { status: 400 })
       }
       updates.video_path = value
+    }
+  }
+
+  if (body.thumbnail_path !== undefined) {
+    if (body.thumbnail_path === null || body.thumbnail_path === '') {
+      updates.thumbnail_path = null
+    } else if (typeof body.thumbnail_path !== 'string') {
+      return NextResponse.json({ error: 'thumbnail_path must be a string or null' }, { status: 400 })
+    } else {
+      const value = body.thumbnail_path.trim()
+      if (!isValidStrikeStorageThumbnailPath(value)) {
+        return NextResponse.json({ error: 'thumbnail_path must reference an image in the strike-media bucket' }, { status: 400 })
+      }
+      const root = value.split('/')[0]
+      const expected = version.library_scope === 'global' ? 'global' : version.tenant_id
+      if (root !== expected) {
+        return NextResponse.json({ error: 'thumbnail_path scope does not match version scope' }, { status: 400 })
+      }
+      updates.thumbnail_path = value
     }
   }
 
@@ -93,7 +115,7 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     .from('strike_module_versions')
     .update(updates)
     .eq('id', versionId)
-    .select('id, module_id, version_number, status, video_path, duration_seconds, passing_score')
+    .select('id, module_id, version_number, status, video_path, thumbnail_path, duration_seconds, passing_score')
     .single()
   if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 })
 

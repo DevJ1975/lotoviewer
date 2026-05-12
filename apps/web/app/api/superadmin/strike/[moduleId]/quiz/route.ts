@@ -20,6 +20,7 @@ export interface QuizVersionRow {
   passing_score: number
   duration_seconds: number | null
   video_path: string | null
+  thumbnail_path: string | null
 }
 
 export interface QuizQuestionRow {
@@ -75,7 +76,7 @@ export async function GET(req: Request, ctx: RouteContext) {
 
   const { data: versions, error: versionsErr } = await admin
     .from('strike_module_versions')
-    .select('id, version_number, status, passing_score, duration_seconds, video_path')
+    .select('id, version_number, status, passing_score, duration_seconds, video_path, thumbnail_path')
     .eq('module_id', moduleId)
     .order('version_number', { ascending: false })
   if (versionsErr) return NextResponse.json({ error: versionsErr.message }, { status: 500 })

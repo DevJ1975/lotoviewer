@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
   ArrowLeft, ArrowDown, ArrowUp, CheckCircle2, Circle, ClipboardCheck,
-  FileVideo, Loader2, Plus, Save, Trash2, Upload,
+  FileVideo, Image as ImageIcon, Loader2, Plus, Save, Trash2, Upload,
 } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
@@ -291,12 +291,20 @@ export default function StrikeQuizEditorPage() {
         </div>
       ) : (
         <>
-        <VideoSection
-          moduleId={data.module.id}
-          version={currentVersion}
-          scopeRoot={data.module.library_scope === 'global' ? 'global' : data.module.tenant_id ?? ''}
-          onChanged={() => void load(true)}
-        />
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <VideoSection
+            moduleId={data.module.id}
+            version={currentVersion}
+            scopeRoot={data.module.library_scope === 'global' ? 'global' : data.module.tenant_id ?? ''}
+            onChanged={() => void load(true)}
+          />
+          <ThumbnailSection
+            moduleId={data.module.id}
+            version={currentVersion}
+            scopeRoot={data.module.library_scope === 'global' ? 'global' : data.module.tenant_id ?? ''}
+            onChanged={() => void load(true)}
+          />
+        </div>
         <section className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -536,6 +544,167 @@ function VideoSection({
         ) : (
           <div className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-slate-200 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
             No video attached yet.
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+const THUMBNAIL_MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/avif': 'avif',
+}
+const MAX_THUMBNAIL_BYTES = 4 * 1024 * 1024
+const THUMBNAIL_RECOMMENDED = '1280 x 720 (16:9), under 4 MB'
+
+function ThumbnailSection({
+  moduleId, version, scopeRoot, onChanged,
+}: {
+  moduleId: string
+  version: QuizVersionRow
+  scopeRoot: string
+  onChanged: () => void
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const [signedUrl, setSignedUrl] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setSignedUrl(null)
+    if (!version.thumbnail_path) return
+    void (async () => {
+      const { data } = await supabase.storage
+        .from('strike-media')
+        .createSignedUrl(version.thumbnail_path!, 60 * 30)
+      if (!cancelled) setSignedUrl(data?.signedUrl ?? null)
+    })()
+    return () => { cancelled = true }
+  }, [version.thumbnail_path])
+
+  async function handleSelected(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setUploadError(null)
+    const ext = THUMBNAIL_MIME_TO_EXT[file.type]
+    if (!ext) {
+      setUploadError(`Unsupported image type ${file.type || '(unknown)'}. Use JPG, PNG, WebP, or AVIF.`)
+      return
+    }
+    if (file.size <= 0 || file.size > MAX_THUMBNAIL_BYTES) {
+      setUploadError(`Thumbnail must be 1B - ${Math.round(MAX_THUMBNAIL_BYTES / 1_000_000)}MB.`)
+      return
+    }
+    if (!scopeRoot) {
+      setUploadError('Cannot resolve storage scope for this version.')
+      return
+    }
+
+    setBusy(true)
+    const path = `${scopeRoot}/${moduleId}/${version.id}-thumb.${ext}`
+    const { error: uploadErr } = await supabase.storage
+      .from('strike-media')
+      .upload(path, file, {
+        contentType: file.type,
+        cacheControl: '604800',
+        upsert: true,
+      })
+    if (uploadErr) {
+      setBusy(false)
+      setUploadError(`Upload failed: ${uploadErr.message}`)
+      return
+    }
+    const result = await superadminJson(
+      `/api/superadmin/strike/${moduleId}/versions/${version.id}`,
+      { method: 'PATCH', body: JSON.stringify({ thumbnail_path: path }) },
+    )
+    setBusy(false)
+    if (!result.ok) {
+      setUploadError(result.error ?? 'Saved file but failed to update version row')
+      return
+    }
+    onChanged()
+  }
+
+  async function clearThumbnail() {
+    if (!version.thumbnail_path) return
+    if (!confirm('Remove this thumbnail? The image file in storage will be kept.')) return
+    setBusy(true)
+    const result = await superadminJson(
+      `/api/superadmin/strike/${moduleId}/versions/${version.id}`,
+      { method: 'PATCH', body: JSON.stringify({ thumbnail_path: null }) },
+    )
+    setBusy(false)
+    if (!result.ok) {
+      setUploadError(result.error ?? 'Could not remove thumbnail')
+      return
+    }
+    onChanged()
+  }
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+            <ImageIcon className="h-4 w-4 text-brand-navy dark:text-brand-yellow" />
+            Library thumbnail
+          </h2>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{THUMBNAIL_RECOMMENDED}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/avif"
+            className="hidden"
+            onChange={handleSelected}
+          />
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={busy}
+            className="inline-flex items-center gap-1.5 rounded-md bg-brand-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-navy/90 disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            {version.thumbnail_path ? 'Replace' : 'Upload'}
+          </button>
+          {version.thumbnail_path && (
+            <button
+              type="button"
+              onClick={() => void clearThumbnail()}
+              disabled={busy}
+              aria-label="Remove thumbnail"
+              className="rounded-md border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {uploadError && (
+        <p className="mt-3 rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+          {uploadError}
+        </p>
+      )}
+
+      <div className="mt-3">
+        {signedUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={signedUrl}
+            alt="Library thumbnail preview"
+            className="aspect-video w-full rounded-lg object-cover"
+          />
+        ) : (
+          <div className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-slate-200 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+            No thumbnail yet — the library will show a default tile.
           </div>
         )}
       </div>
