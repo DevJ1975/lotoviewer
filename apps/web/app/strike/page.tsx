@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentType, FormEvent, ReactNode } from 'react'
 import Link from 'next/link'
 import {
@@ -360,11 +360,7 @@ export default function StrikePage() {
         </div>
       )}
 
-      {modules === null && !error && (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-        </div>
-      )}
+      {modules === null && !error && <LibrarySkeleton />}
 
       {modules && modules.length === 0 && (
         <section className="rounded-lg border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
@@ -383,6 +379,7 @@ export default function StrikePage() {
               modules={modules}
               latestVersionByModule={latestVersionByModule}
               currentCompletionByModule={currentCompletionByModule}
+              assignments={visibleAssignments}
             />
             <ReadinessSection
               assignments={visibleAssignments}
@@ -410,15 +407,24 @@ export default function StrikePage() {
 
 type LibraryFilter = 'all' | 'todo' | 'completed'
 
+// Highlight completions whose expiry falls within this window so a
+// learner sees "renew soon" before it actually lapses. Kept loose because
+// most STRIKE modules don't carry expiry data yet — when they do, the
+// chip surfaces it automatically.
+const EXPIRY_WARNING_DAYS = 30
+
 function LibrarySection({
   modules,
   latestVersionByModule,
   currentCompletionByModule,
+  assignments,
 }: {
   modules: StrikeModuleRow[]
   latestVersionByModule: Map<string, StrikeVersionRow>
   currentCompletionByModule: Map<string, StrikeCompletionRow>
+  assignments: StrikeAssignmentRow[]
 }) {
+  const searchRef = useRef<HTMLInputElement | null>(null)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<string>('all')
   const [filter, setFilter] = useState<LibraryFilter>('all')
@@ -456,6 +462,52 @@ function LibrarySection({
     return Array.from(set).sort((a, b) => a.localeCompare(b))
   }, [modules])
 
+  // "Continue training" hero: incomplete assigned modules, soonest due
+  // first. Falls back to silence when there are no assignments rather
+  // than serving up filler — engagement comes from highlighting actual
+  // pending work, not decorative content.
+  const continueModules = useMemo(() => {
+    const moduleById = new Map(modules.map(m => [m.id, m] as const))
+    const dedupe = new Set<string>()
+    const entries: { module: StrikeModuleRow; assignment: StrikeAssignmentRow }[] = []
+    const sorted = assignments
+      .slice()
+      .sort((a, b) => (a.due_at ?? '9999').localeCompare(b.due_at ?? '9999'))
+    for (const assignment of sorted) {
+      if (currentCompletionByModule.has(assignment.module_id)) continue
+      if (dedupe.has(assignment.module_id)) continue
+      const row = moduleById.get(assignment.module_id)
+      if (!row) continue
+      dedupe.add(assignment.module_id)
+      entries.push({ module: row, assignment })
+      if (entries.length >= 6) break
+    }
+    return entries
+  }, [assignments, currentCompletionByModule, modules])
+
+  // Pressing "/" anywhere on the page focuses search — a YouTube/GitHub-
+  // style affordance for power users. Skips when the user is already
+  // typing in another field so we never hijack their input.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== '/') return
+      const target = event.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+      event.preventDefault()
+      searchRef.current?.focus()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  const clearFilters = useCallback(() => {
+    setQuery('')
+    setCategory('all')
+    setFilter('all')
+  }, [])
+
+  const hasActiveFilters = query.trim().length > 0 || category !== 'all' || filter !== 'all'
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
     return modules.filter(module => {
@@ -481,6 +533,14 @@ function LibrarySection({
 
   return (
     <section>
+      {continueModules.length > 0 && (
+        <ContinueTrainingStrip
+          entries={continueModules}
+          latestVersionByModule={latestVersionByModule}
+          thumbnails={thumbnails}
+        />
+      )}
+
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
           Training library
@@ -488,10 +548,11 @@ function LibrarySection({
         <div className="relative w-full sm:max-w-xs">
           <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
+            ref={searchRef}
             type="search"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search modules…"
+            placeholder="Search modules…  (press / to focus)"
             aria-label="Search modules"
             className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-3 text-sm shadow-sm focus:border-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-navy/20 dark:border-slate-700 dark:bg-slate-900"
           />
@@ -521,9 +582,30 @@ function LibrarySection({
         )}
       </div>
 
+      <p className="sr-only" aria-live="polite">
+        {filtered.length === modules.length
+          ? `${filtered.length} module${filtered.length === 1 ? '' : 's'}`
+          : `${filtered.length} of ${modules.length} module${modules.length === 1 ? '' : 's'} match filters`}
+      </p>
+
       {filtered.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-200 p-10 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-          No modules match the current filters.
+        <div className="rounded-xl border border-dashed border-slate-200 p-10 text-center dark:border-slate-700">
+          <Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+          <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            No modules match the current filters.
+          </p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Try a broader search or check a different category.
+          </p>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-brand-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-navy/90"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -538,6 +620,7 @@ function LibrarySection({
                 version={version}
                 completion={completion}
                 thumbUrl={thumbUrl}
+                onTagClick={tag => setQuery(tag)}
               />
             )
           })}
@@ -570,22 +653,38 @@ function FilterChip({
   )
 }
 
-function LibraryCard({
-  module,
-  version,
-  completion,
-  thumbUrl,
-}: {
+interface LibraryCardProps {
   module: StrikeModuleRow
   version: StrikeVersionRow | undefined
   completion: StrikeCompletionRow | undefined
   thumbUrl: string | null
-}) {
+  onTagClick?: (tag: string) => void
+}
+
+const LibraryCard = memo(function LibraryCard({
+  module,
+  version,
+  completion,
+  thumbUrl,
+  onTagClick,
+}: LibraryCardProps) {
   const launchPath = `/strike/${module.slug}`
   const durationMinutes = version?.duration_seconds ? Math.ceil(version.duration_seconds / 60) : null
   const displayMinutes = durationMinutes ?? module.estimated_minutes ?? null
   const isCompleted = !!completion
   const isUnpublished = !version
+
+  // Capture "now" once per mount so the days-until-expiry calculation is
+  // pure across re-renders. Staleness over a long session doesn't matter
+  // for a "renew in Nd" chip — the next route change refreshes it.
+  const [nowMs] = useState(() => Date.now())
+  const daysUntilExpiry = (() => {
+    if (!completion?.expires_at) return null
+    const ms = new Date(completion.expires_at).getTime() - nowMs
+    if (!Number.isFinite(ms)) return null
+    return Math.ceil(ms / (1000 * 60 * 60 * 24))
+  })()
+  const showExpiryWarning = daysUntilExpiry !== null && daysUntilExpiry <= EXPIRY_WARNING_DAYS
 
   return (
     <Link
@@ -611,18 +710,24 @@ function LibraryCard({
         <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white backdrop-blur-sm">
           {module.library_scope === 'global' ? 'Global' : 'Tenant'}
         </span>
-        {isCompleted && (
+        {isCompleted && !showExpiryWarning && (
           <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-emerald-500/95 px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm">
             <CheckCircle2 className="h-3 w-3" /> Complete
           </span>
         )}
-        {isUnpublished && (
+        {showExpiryWarning && (
+          <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-amber-500/95 px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm">
+            <AlertTriangle className="h-3 w-3" />
+            {daysUntilExpiry! <= 0 ? 'Expired' : `Renew in ${daysUntilExpiry}d`}
+          </span>
+        )}
+        {isUnpublished && !isCompleted && (
           <span className="absolute right-2 top-2 rounded-full bg-amber-500/95 px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm">
             Draft
           </span>
         )}
         <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-slate-800 shadow-sm">
-          <PlayCircle className="h-3 w-3" /> Launch
+          <PlayCircle className="h-3 w-3" /> {isCompleted ? 'Revisit' : 'Launch'}
         </span>
         {displayMinutes !== null && (
           <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm">
@@ -646,9 +751,20 @@ function LibraryCard({
             </span>
           )}
           {(module.tags ?? []).slice(0, 2).map(tag => (
-            <span key={tag} className="rounded-full border border-slate-200 px-2 py-0.5 dark:border-slate-700">
+            <button
+              key={tag}
+              type="button"
+              onClick={event => {
+                // The whole card is a <Link>; stop the navigation and
+                // hand the tag back so the parent can refine the search.
+                event.preventDefault()
+                event.stopPropagation()
+                onTagClick?.(tag)
+              }}
+              className="rounded-full border border-slate-200 px-2 py-0.5 transition hover:border-brand-navy/40 hover:text-brand-navy dark:border-slate-700 dark:hover:text-brand-yellow"
+            >
               #{tag}
-            </span>
+            </button>
           ))}
         </div>
 
@@ -659,6 +775,115 @@ function LibraryCard({
         )}
       </div>
     </Link>
+  )
+})
+
+function LibrarySkeleton() {
+  return (
+    <div className="space-y-4" aria-busy="true" aria-live="polite">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div
+            key={index}
+            className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950"
+          >
+            <div className="aspect-video w-full animate-pulse bg-slate-100 dark:bg-slate-900" />
+            <div className="space-y-2 p-4">
+              <div className="h-3 w-3/4 animate-pulse rounded bg-slate-100 dark:bg-slate-900" />
+              <div className="h-3 w-5/6 animate-pulse rounded bg-slate-100 dark:bg-slate-900" />
+              <div className="h-3 w-1/2 animate-pulse rounded bg-slate-100 dark:bg-slate-900" />
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="sr-only">Loading STRIKE modules…</p>
+    </div>
+  )
+}
+
+function ContinueTrainingStrip({
+  entries,
+  latestVersionByModule,
+  thumbnails,
+}: {
+  entries: { module: StrikeModuleRow; assignment: StrikeAssignmentRow }[]
+  latestVersionByModule: Map<string, StrikeVersionRow>
+  thumbnails: Map<string, string>
+}) {
+  // Stable timestamp per mount keeps the due-day calculation pure across
+  // re-renders. See LibraryCard for the same pattern.
+  const [nowMs] = useState(() => Date.now())
+  return (
+    <section
+      aria-labelledby="strike-continue-heading"
+      className="mb-6 rounded-2xl border border-brand-navy/10 bg-gradient-to-br from-brand-navy/5 via-white to-brand-navy/5 p-4 shadow-sm dark:border-brand-yellow/15 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900"
+    >
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <PlayCircle className="h-4 w-4 text-brand-navy dark:text-brand-yellow" />
+          <h2
+            id="strike-continue-heading"
+            className="text-sm font-semibold uppercase tracking-wide text-brand-navy dark:text-brand-yellow"
+          >
+            Continue training
+          </h2>
+        </div>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          {entries.length} assigned
+        </span>
+      </div>
+      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]">
+        {entries.map(({ module, assignment }) => {
+          const version = latestVersionByModule.get(module.id)
+          const thumbUrl = version?.thumbnail_path ? thumbnails.get(version.thumbnail_path) ?? null : null
+          const dueDays = assignment.due_at
+            ? Math.ceil((new Date(assignment.due_at).getTime() - nowMs) / (1000 * 60 * 60 * 24))
+            : null
+          const overdue = dueDays !== null && dueDays < 0
+          return (
+            <Link
+              key={assignment.id}
+              href={`/strike/${module.slug}?assignment=${assignment.id}`}
+              className="group relative w-56 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-brand-navy/40 hover:shadow-md dark:border-slate-800 dark:bg-slate-950"
+            >
+              <div className="relative aspect-video w-full overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-900 dark:to-slate-800">
+                {thumbUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={thumbUrl}
+                    alt=""
+                    loading="lazy"
+                    className="h-full w-full object-cover transition group-hover:scale-[1.02]"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-slate-400 dark:text-slate-600">
+                    <GraduationCap className="h-8 w-8" />
+                  </div>
+                )}
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/55 to-transparent" />
+                <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-slate-800 shadow-sm">
+                  <PlayCircle className="h-3 w-3" /> Resume
+                </span>
+                {dueDays !== null && (
+                  <span
+                    className={`absolute right-2 top-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm ${overdue ? 'bg-rose-500/95' : dueDays <= 7 ? 'bg-amber-500/95' : 'bg-black/55 backdrop-blur-sm'}`}
+                  >
+                    <Clock className="h-3 w-3" />
+                    {overdue ? `${Math.abs(dueDays)}d overdue` : `Due in ${dueDays}d`}
+                  </span>
+                )}
+              </div>
+              <div className="p-3">
+                <p className="line-clamp-2 text-xs font-semibold text-slate-900 dark:text-slate-100">{module.title}</p>
+                {assignment.reason && (
+                  <p className="mt-1 line-clamp-1 text-[11px] text-slate-500 dark:text-slate-400">{assignment.reason}</p>
+                )}
+              </div>
+            </Link>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 
