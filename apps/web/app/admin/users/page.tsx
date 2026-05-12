@@ -11,7 +11,6 @@ import { z } from 'zod'
 import { useAuth } from '@/components/AuthProvider'
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -63,6 +62,7 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [removeTarget, setRemoveTarget] = useState<AdminUserRow | null>(null)
+  const [removing, setRemoving] = useState(false)
 
   const [justInvited, setJustInvited] = useState<{ email: string; fullName: string; tempPassword: string; emailSent: boolean } | null>(null)
   const [copied, setCopied] = useState(false)
@@ -115,17 +115,24 @@ export default function AdminUsersPage() {
   }
 
   async function confirmRemove() {
-    if (!removeTarget) return
+    if (!removeTarget || removing) return
     const target = removeTarget
-    setRemoveTarget(null)
-    const res = await authFetch(`/api/admin/users?id=${encodeURIComponent(target.id)}`, { method: 'DELETE' })
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({ error: res.statusText }))
-      toast.error(body.error ?? 'Could not remove user')
-      return
+    setRemoving(true)
+    try {
+      const res = await authFetch(`/api/admin/users?id=${encodeURIComponent(target.id)}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: res.statusText }))
+        toast.error(body.error ?? 'Could not remove user')
+        return
+      }
+      toast.success(`Removed ${target.email}`)
+      setRemoveTarget(null)
+      fetchUsers()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not remove user')
+    } finally {
+      setRemoving(false)
     }
-    toast.success(`Removed ${target.email}`)
-    fetchUsers()
   }
 
   const emailTemplate = useMemo(() => {
@@ -370,8 +377,11 @@ jamil@trainovations.com`
         )}
       </section>
 
-      {/* Delete confirmation — replaces window.confirm */}
-      <AlertDialog open={removeTarget != null} onOpenChange={open => { if (!open) setRemoveTarget(null) }}>
+      {/* Delete confirmation — replaces window.confirm. The Remove button
+          is a plain Button (not AlertDialogAction, which auto-closes the
+          dialog on click) so we can keep the dialog open with a loading
+          state until the API call completes. */}
+      <AlertDialog open={removeTarget != null} onOpenChange={open => { if (!open && !removing) setRemoveTarget(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Remove {removeTarget?.email}?</AlertDialogTitle>
@@ -380,10 +390,16 @@ jamil@trainovations.com`
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmRemove} className="bg-destructive text-white hover:bg-destructive/90">
-              Remove
-            </AlertDialogAction>
+            <AlertDialogCancel disabled={removing}>Cancel</AlertDialogCancel>
+            <Button
+              type="button"
+              onClick={confirmRemove}
+              disabled={removing}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {removing ? <Loader2 className="animate-spin" /> : null}
+              {removing ? 'Removing…' : 'Remove'}
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

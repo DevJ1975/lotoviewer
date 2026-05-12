@@ -106,6 +106,18 @@ export async function GET(req: Request) {
 }
 
 // DELETE /api/admin/users?id=<uuid> — remove a user (auth + profile via cascade).
+//
+// auth.users is referenced by dozens of tables (created_by, updated_by,
+// reviewed_by, …). Most of those FKs were defined without ON DELETE CASCADE,
+// so a naive auth.admin.deleteUser fails for any user with activity history
+// and the GoTrue server returns a generic "Database error deleting user"
+// 500 that sanitizeError flattens to "internal" — to the operator that
+// looks like a crash. We do two things to keep the UX honest:
+//
+//   1. Null out the historical FKs we know are safe to drop (the inviter
+//      column on tenant_memberships is informational, not relational).
+//   2. If auth.admin.deleteUser still fails, map it to a 409 with a
+//      message that tells the admin what's actually going on.
 export async function DELETE(req: Request) {
   const gate = await requireAdmin(req.headers.get('authorization'))
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
@@ -115,7 +127,32 @@ export async function DELETE(req: Request) {
   if (id === gate.userId) return NextResponse.json({ error: 'Cannot remove your own account' }, { status: 400 })
 
   const admin = supabaseAdmin()
-  const { error } = await admin.auth.admin.deleteUser(id)
-  if (error) return sanitizeError(error, 'admin/users/DELETE')
+
+  try {
+    // Drop informational back-references that have no CASCADE so they
+    // don't block the auth.users delete below.
+    await admin
+      .from('tenant_memberships')
+      .update({ invited_by: null })
+      .eq('invited_by', id)
+
+    const { error } = await admin.auth.admin.deleteUser(id)
+    if (error) {
+      // GoTrue surfaces FK violations as "Database error deleting user".
+      // Treat that (and any 500 from auth admin) as a conflict the admin
+      // can act on, rather than an unexplained internal error.
+      const message = error.message ?? ''
+      const isDatabaseConflict = /database/i.test(message) || (error.status ?? 0) >= 500
+      if (isDatabaseConflict) {
+        return NextResponse.json(
+          { error: 'This user has activity history and cannot be hard-deleted. Contact support to scrub their records.' },
+          { status: 409 },
+        )
+      }
+      return NextResponse.json({ error: message || 'Could not remove user' }, { status: error.status ?? 500 })
+    }
+  } catch (e) {
+    return sanitizeError(e, 'admin/users/DELETE')
+  }
   return NextResponse.json({ ok: true })
 }

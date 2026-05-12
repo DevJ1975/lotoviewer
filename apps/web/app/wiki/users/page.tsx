@@ -1,10 +1,11 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-05'
+const CURRENT_VERSION = '1.0.1'
+const LAST_UPDATED    = '2026-05-12'
 
 const CHANGELOG: ChangelogEntry[] = [
+  { version: '1.0.1', date: '2026-05-12', changes: ['Remove dialog now stays open with a loading state; a blocked hard-delete returns a clear 409 instead of an opaque "internal" error.'] },
   { version: '1.0.0', date: '2026-05-05', changes: ['Initial users-and-roles wiki page.'] },
 ]
 
