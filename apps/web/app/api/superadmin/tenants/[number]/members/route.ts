@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin, generateTempPassword } from '@/lib/supabaseAdmin'
-import { sendInviteEmail, computeLoginUrl } from '@/lib/email/sendInvite'
+import { sendInviteEmail, computeLoginUrl, renderInviteText } from '@/lib/email/sendInvite'
 import { isValidRole, isValidTenantNumber, normalizeEmail } from '@/lib/validation/tenants'
 import type { TenantRole } from '@soteria/core/types'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
@@ -311,13 +311,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
   // can fall back to copy-pasting the password (new user) or telling
   // the existing user about the new tenant out-of-band.
   const loginUrl = computeLoginUrl(req)
-  const emailSent = await sendInviteEmail({
+  const inviteArgs = {
     to:           email,
     fullName,
     tempPassword: tempPassword ?? '',
     loginUrl,
     tenantName:   tenant.name,
-  })
+  }
+  const emailSent = await sendInviteEmail(inviteArgs)
+  // Always return the same text the email uses so the superadmin can
+  // copy/paste it into their own email as a junk-mail fallback.
+  const { subject: copyPasteSubject, text: copyPasteMessage } = renderInviteText(inviteArgs)
 
   return NextResponse.json({
     user_id: userId,
@@ -326,5 +330,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     tempPassword,
     emailSent,
     alreadyExisted,
+    copyPasteSubject,
+    copyPasteMessage,
   }, { status: 201 })
 }
