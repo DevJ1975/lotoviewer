@@ -113,6 +113,8 @@ const SignaturePad = forwardRef<SignaturePadRef, Props>(function SignaturePad({ 
       ref={canvasRef}
       width={600}
       height={160}
+      role="img"
+      aria-label="Signature pad — draw your signature with mouse or finger"
       className="w-full h-[180px] rounded-lg border-2 border-dashed border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-crosshair touch-none select-none"
     />
   )
