@@ -18,6 +18,7 @@ import { renderReviewLinkBody } from '@/lib/email/renderReviewLinkBody'
 // extra subscription.
 
 const MAX_REVIEWERS = 5
+const SESSION_REFRESH_WINDOW_MS = 2 * 60 * 1000
 
 interface ReviewLinkRow {
   id:                  string
@@ -68,10 +69,7 @@ export default function ClientReviewPanel({ department }: Props) {
   const refresh = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const headers: Record<string, string> = {}
-      if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
-      if (tenantId) headers['x-active-tenant'] = tenantId
+      const headers = await reviewAuthHeaders(tenantId)
       const url = `/api/admin/review-links?department=${encodeURIComponent(department)}`
       const res = await fetch(url, { headers })
       const body = await res.json()
@@ -102,14 +100,9 @@ export default function ClientReviewPanel({ department }: Props) {
   async function handleRevoke(id: string) {
     if (!confirm('Revoke this review link? The reviewer will no longer be able to open it.')) return
     try {
-      const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch(`/api/admin/review-links/${id}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          authorization: `Bearer ${session?.access_token ?? ''}`,
-          'x-active-tenant': tenantId ?? '',
-        },
+        headers: await reviewAuthHeaders(tenantId, { json: true }),
         body: JSON.stringify({ action: 'revoke' }),
       })
       if (!res.ok) throw new Error((await res.json()).error ?? `HTTP ${res.status}`)
@@ -364,14 +357,9 @@ function SendForReviewModal({
     if (busy || !valid) return
     setBusy(true); setError(null)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/api/admin/review-links', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          authorization: `Bearer ${session?.access_token ?? ''}`,
-          'x-active-tenant': tenantId ?? '',
-        },
+        headers: await reviewAuthHeaders(tenantId, { json: true }),
         body: JSON.stringify({
           department,
           reviewers: reviewers.map(r => ({ name: r.name.trim(), email: r.email.trim() })),
@@ -603,4 +591,42 @@ function escapeHtml(s: string): string {
 function rid(): string {
   // Stable enough for one modal session — no need for crypto.randomUUID.
   return Math.random().toString(36).slice(2, 10)
+}
+
+async function reviewAuthHeaders(
+  tenantId: string | null,
+  opts: { json?: boolean } = {},
+): Promise<Record<string, string>> {
+  if (!tenantId) {
+    throw new Error('Select an active tenant before sending review links.')
+  }
+
+  const token = await freshAccessToken()
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${token}`,
+    'x-active-tenant': tenantId,
+  }
+  if (opts.json) headers['Content-Type'] = 'application/json'
+  return headers
+}
+
+async function freshAccessToken(): Promise<string> {
+  const { data: { session: currentSession } } = await supabase.auth.getSession()
+  let session = currentSession
+
+  const expiresAtMs = session?.expires_at ? session.expires_at * 1000 : 0
+  const shouldRefresh = !session?.access_token || expiresAtMs <= Date.now() + SESSION_REFRESH_WINDOW_MS
+
+  if (shouldRefresh) {
+    const { data, error } = await supabase.auth.refreshSession()
+    if (error) {
+      throw new Error('Your Soteria session expired. Please refresh the page and sign in again.')
+    }
+    session = data.session
+  }
+
+  if (!session?.access_token) {
+    throw new Error('Your Soteria session expired. Please refresh the page and sign in again.')
+  }
+  return session.access_token
 }
