@@ -1,0 +1,39 @@
+name: Feature Request
+description: Propose a product improvement or workflow.
+title: "Feature: "
+labels: ["feature"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What operational or safety workflow does this improve?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired Outcome
+      description: Describe the user-visible result, not the implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      placeholder: |
+        - Given ...
+        - When ...
+        - Then ...
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Admin
+        - Mobile
+        - LOTO
+        - Incidents
+        - Chemicals
+        - Training
+        - Other

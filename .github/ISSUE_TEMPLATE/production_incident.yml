@@ -1,0 +1,34 @@
+name: Production Incident
+description: Track a live production issue, failed deploy, or rollback.
+title: "Incident: "
+labels: ["production", "incident"]
+body:
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Who is affected and what can they not do?
+    validations:
+      required: true
+  - type: input
+    id: started
+    attributes:
+      label: Started At
+      placeholder: "YYYY-MM-DD HH:MM timezone"
+  - type: textarea
+    id: links
+    attributes:
+      label: Links
+      description: Vercel deployment, Sentry event, GitHub commit, logs, or customer report.
+  - type: textarea
+    id: timeline
+    attributes:
+      label: Timeline
+      placeholder: |
+        - HH:MM Detected
+        - HH:MM Mitigation started
+        - HH:MM Resolved
+  - type: textarea
+    id: followups
+    attributes:
+      label: Follow-Ups

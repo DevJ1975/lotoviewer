@@ -12,9 +12,13 @@
     "start": "npm --workspace web run start",
     "lint": "npm --workspace web run lint",
     "test": "npm --workspace web run test",
+    "check:migrations": "node scripts/check-migration-numbers.mjs",
+    "check:manuals": "node scripts/check-manual-coverage.mjs",
     "check:deeplinks": "node scripts/check-deeplink-placeholders.mjs",
+    "check:repo": "npm run check:migrations && npm run check:manuals && ALLOW_DEEPLINK_PLACEHOLDERS=1 npm run check:deeplinks",
     "check:wiki": "node scripts/check-wiki-sync.mjs",
     "check:wiki:staged": "node scripts/check-wiki-sync.mjs --staged",
+    "doctor:git": "bash scripts/repo-doctor.sh",
     "wiki:touch": "node scripts/wiki-touch.mjs"
   },
   "dependencies": {
