@@ -1,10 +1,21 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.3.0'
+const CURRENT_VERSION = '1.4.0'
 const LAST_UPDATED    = '2026-05-13'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.4.0',
+    date:    '2026-05-13',
+    changes: [
+      'Public review link is now scoped to the entire tenant (one URL ' +
+      'covers every active placard across every department). Sign-off / ' +
+      'Approve-Reject are gone — the page is comments-only. Anyone with ' +
+      'the URL can leave anonymous per-placard comments; the admin panel ' +
+      'shows the comment stream alongside the URL.',
+    ],
+  },
   {
     version: '1.3.0',
     date:    '2026-05-13',

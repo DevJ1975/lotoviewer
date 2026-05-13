@@ -4,45 +4,45 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
 
-// Client-review-portal panel for /departments/[dept]. Surfaces the
-// single public review link for the department:
-//   - "+ Generate public link" if none exists yet (POST get-or-create).
-//   - URL + Copy + open-link buttons once one exists.
-//   - Signoff status (waiting / approved / needs changes) inline.
-//   - "Regenerate link" to cycle the URL (revokes the old one, mints a
-//     new one, snapshots the current equipment list).
-//
-// Anyone with the URL can leave per-placard notes and a single sign-off
-// — no account, no invite, no email send. See migration 138 for the
-// schema rationale.
+// Public review-link panel. Shows the tenant's single anonymous public
+// URL plus the recent per-placard comment stream. The same panel
+// renders on every /departments/[dept] page — the URL is tenant-wide,
+// so the per-department context is just framing.
 
 interface PublicLinkRow {
-  id:                 string
-  department:         string
-  token:              string
-  review_url:         string
-  expires_at:         string
-  first_viewed_at:    string | null
-  signed_off_at:      string | null
-  signoff_approved:   boolean | null
-  signoff_typed_name: string | null
-  signoff_notes:      string | null
-  revoked_at:         string | null
-  created_at:         string
-  is_public:          boolean | null
+  id:              string
+  tenant_id:       string
+  department:      string | null
+  token:           string
+  expires_at:      string
+  revoked_at:      string | null
+  first_viewed_at: string | null
+  created_at:      string
+  is_public:       boolean | null
+}
+
+interface CommentRow {
+  equipment_id: string
+  notes:        string
+  updated_at:   string
 }
 
 interface Props {
+  // Department is accepted for caller compatibility with the existing
+  // /departments/[dept]/page.tsx mount point, but the link itself is
+  // tenant-wide so this is not used to scope anything.
   department: string
 }
 
-export default function ClientReviewPanel({ department }: Props) {
+export default function ClientReviewPanel(_: Props) {
   const { tenantId } = useTenant()
-  const [link,    setLink]    = useState<PublicLinkRow | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [busy,    setBusy]    = useState(false)
-  const [error,   setError]   = useState<string | null>(null)
-  const [toast,   setToast]   = useState<string | null>(null)
+  const [link,    setLink]     = useState<PublicLinkRow | null>(null)
+  const [reviewUrl, setReviewUrl] = useState<string>('')
+  const [comments, setComments] = useState<CommentRow[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [busy,    setBusy]      = useState(false)
+  const [error,   setError]     = useState<string | null>(null)
+  const [toast,   setToast]     = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     setLoading(true); setError(null)
@@ -51,18 +51,39 @@ export default function ClientReviewPanel({ department }: Props) {
       const headers: Record<string, string> = {}
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
       if (tenantId) headers['x-active-tenant'] = tenantId
-      const url = `/api/admin/review-links?department=${encodeURIComponent(department)}`
-      const res = await fetch(url, { headers })
+      const res = await fetch('/api/admin/review-links', { headers })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
-      const rows = (body.links ?? []) as PublicLinkRow[]
-      setLink(rows[0] ?? null)
+      setLink(body.link ?? null)
+      setReviewUrl(typeof body.review_url === 'string' ? body.review_url : '')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
-  }, [department, tenantId])
+  }, [tenantId])
+
+  // Pull the recent comment stream once we know the link id. Authenticated
+  // admin reads go through RLS, which lets tenant owners/admins see
+  // every loto_placard_reviews row joined back to their tenant via
+  // review_link_id (see migration 035).
+  useEffect(() => {
+    if (!link) { setComments([]); return }
+    void supabase
+      .from('loto_placard_reviews')
+      .select('equipment_id, notes, updated_at')
+      .eq('review_link_id', link.id)
+      .order('updated_at', { ascending: false })
+      .limit(25)
+      .then(({ data, error: commentErr }) => {
+        if (commentErr) {
+          setError(commentErr.message)
+          return
+        }
+        const rows = (data ?? []) as CommentRow[]
+        setComments(rows.filter(r => r.notes && r.notes.trim().length > 0))
+      })
+  }, [link])
 
   useEffect(() => { void refresh() }, [refresh])
 
@@ -74,11 +95,11 @@ export default function ClientReviewPanel({ department }: Props) {
       const res = await fetch('/api/admin/review-links', {
         method: 'POST',
         headers: {
-          'Content-Type':   'application/json',
-          authorization:    `Bearer ${session?.access_token ?? ''}`,
+          'Content-Type':    'application/json',
+          authorization:     `Bearer ${session?.access_token ?? ''}`,
           'x-active-tenant': tenantId ?? '',
         },
-        body: JSON.stringify({ department }),
+        body: JSON.stringify({}),
       })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
@@ -91,56 +112,27 @@ export default function ClientReviewPanel({ department }: Props) {
     }
   }
 
-  async function regenerate(id: string) {
+  async function patch(id: string, action: 'revoke' | 'regenerate') {
     if (busy) return
-    if (!confirm(
-      'Regenerate the public link?\n\n' +
-      'The current URL will stop working immediately. Anyone you\'ve shared it with will need the new one.',
-    )) return
+    const prompt = action === 'revoke'
+      ? 'Retire the public review link? The URL will stop working. You can generate a new one anytime.'
+      : 'Regenerate the public link? The current URL will stop working immediately. Anyone you\'ve shared it with will need the new one.'
+    if (!confirm(prompt)) return
     setBusy(true); setError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch(`/api/admin/review-links/${id}`, {
         method: 'PATCH',
         headers: {
-          'Content-Type':   'application/json',
-          authorization:    `Bearer ${session?.access_token ?? ''}`,
+          'Content-Type':    'application/json',
+          authorization:     `Bearer ${session?.access_token ?? ''}`,
           'x-active-tenant': tenantId ?? '',
         },
-        body: JSON.stringify({ action: 'regenerate' }),
+        body: JSON.stringify({ action }),
       })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
-      setToast('New public link generated')
-      await refresh()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function revoke(id: string) {
-    if (busy) return
-    if (!confirm(
-      'Retire the public review link?\n\n' +
-      'The URL will stop working. You can generate a new one anytime.',
-    )) return
-    setBusy(true); setError(null)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch(`/api/admin/review-links/${id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type':   'application/json',
-          authorization:    `Bearer ${session?.access_token ?? ''}`,
-          'x-active-tenant': tenantId ?? '',
-        },
-        body: JSON.stringify({ action: 'revoke' }),
-      })
-      const body = await res.json()
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
-      setToast('Public link retired')
+      setToast(action === 'revoke' ? 'Public link retired' : 'New public link generated')
       await refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -154,8 +146,9 @@ export default function ClientReviewPanel({ department }: Props) {
       <div>
         <h2 className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Public review link</h2>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          A single shareable URL for this department. Anyone with the link can
-          leave per-placard notes and sign off — no account required.
+          One shareable URL for your whole tenant. Anyone with the link can
+          leave anonymous comments on any active placard — no account, no
+          sign-in. Same URL appears on every department page.
         </p>
       </div>
 
@@ -173,21 +166,21 @@ export default function ClientReviewPanel({ department }: Props) {
         </button>
       )}
 
-      {link && (
+      {link && reviewUrl && (
         <div className="space-y-3">
           <LinkBox
-            url={link.review_url}
+            url={reviewUrl}
             onCopy={() => {
-              void navigator.clipboard.writeText(link.review_url)
+              void navigator.clipboard.writeText(reviewUrl)
               setToast('Link copied to clipboard')
             }}
           />
 
-          <SignoffStatus link={link} />
+          <LinkActivity link={link} commentCount={comments.length} />
 
           <div className="flex flex-wrap gap-2 pt-1">
             <a
-              href={link.review_url}
+              href={reviewUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
@@ -196,7 +189,7 @@ export default function ClientReviewPanel({ department }: Props) {
             </a>
             <button
               type="button"
-              onClick={() => void regenerate(link.id)}
+              onClick={() => void patch(link.id, 'regenerate')}
               disabled={busy}
               className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40"
               title="Cycle the URL — any old shared copies will stop working"
@@ -205,7 +198,7 @@ export default function ClientReviewPanel({ department }: Props) {
             </button>
             <button
               type="button"
-              onClick={() => void revoke(link.id)}
+              onClick={() => void patch(link.id, 'revoke')}
               disabled={busy}
               className="text-xs font-semibold px-3 py-1.5 rounded-lg text-rose-700 hover:bg-rose-50 disabled:opacity-40"
               title="Retire the public link entirely"
@@ -213,6 +206,8 @@ export default function ClientReviewPanel({ department }: Props) {
               Retire
             </button>
           </div>
+
+          <CommentStream comments={comments} />
         </div>
       )}
 
@@ -250,37 +245,37 @@ function LinkBox({ url, onCopy }: { url: string; onCopy: () => void }) {
   )
 }
 
-function SignoffStatus({ link }: { link: PublicLinkRow }) {
-  if (link.signed_off_at) {
-    const approved = link.signoff_approved === true
-    const toneClass = approved
-      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-      : 'bg-amber-50 text-amber-800 border-amber-200'
-    return (
-      <div className={`text-xs rounded-lg border px-3 py-2 ${toneClass}`}>
-        <div className="font-semibold">
-          {approved ? 'Approved' : 'Needs changes'} · Anonymous
-        </div>
-        {link.signoff_notes && (
-          <div className="mt-1 whitespace-pre-wrap">{link.signoff_notes}</div>
-        )}
-        <div className="mt-1 text-[11px] opacity-70">
-          Signed {formatRelative(link.signed_off_at)}. Use Regenerate to open a new review pass.
-        </div>
-      </div>
-    )
-  }
-  if (link.first_viewed_at) {
-    return (
-      <p className="text-xs text-sky-700 bg-sky-50 px-3 py-2 rounded-lg">
-        Opened {formatRelative(link.first_viewed_at)}. Waiting for sign-off.
-      </p>
-    )
-  }
+function LinkActivity({ link, commentCount }: { link: PublicLinkRow; commentCount: number }) {
+  const opened = link.first_viewed_at ? `Opened ${formatRelative(link.first_viewed_at)}` : 'Not opened yet'
+  const commentLine = commentCount === 0
+    ? 'No comments yet'
+    : `${commentCount} comment${commentCount === 1 ? '' : 's'}`
   return (
     <p className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-800/40 dark:text-slate-400 px-3 py-2 rounded-lg">
-      Not opened yet.
+      {opened} · {commentLine}
     </p>
+  )
+}
+
+function CommentStream({ comments }: { comments: CommentRow[] }) {
+  if (comments.length === 0) return null
+  return (
+    <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-2">
+      <h3 className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+        Recent comments
+      </h3>
+      <ul className="space-y-2">
+        {comments.map((c, i) => (
+          <li key={`${c.equipment_id}-${i}`} className="text-xs">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="font-mono font-semibold text-slate-700 dark:text-slate-200">{c.equipment_id}</span>
+              <span className="text-[10px] text-slate-400">{formatRelative(c.updated_at)}</span>
+            </div>
+            <p className="mt-0.5 text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{c.notes}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 

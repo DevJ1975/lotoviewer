@@ -1,10 +1,21 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '2.1.0'
+const CURRENT_VERSION = '3.0.0'
 const LAST_UPDATED    = '2026-05-13'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '3.0.0',
+    date:    '2026-05-13',
+    changes: [
+      'Reworked to one URL per tenant, comments-only. The reviewer page ' +
+      'lists every active placard for the tenant grouped by department; ' +
+      'each placard has a freeform comment field that auto-saves. No ' +
+      'sign-off, no Approve / Needs-changes, no per-reviewer identity. ' +
+      'The same URL is shown on every /departments/[dept] admin panel.',
+    ],
+  },
   {
     version: '2.1.0',
     date:    '2026-05-13',

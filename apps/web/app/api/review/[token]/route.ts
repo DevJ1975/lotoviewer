@@ -71,12 +71,7 @@ interface PostBody {
   action?:        unknown
   // submit-note
   equipment_id?:  unknown
-  status?:        unknown
   notes?:         unknown
-  // signoff
-  typed_name?:    unknown
-  signature?:     unknown
-  approved?:      unknown
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
@@ -114,86 +109,29 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     return NextResponse.json({ ok: true })
   }
 
-  // After signoff, note + signoff JSON actions are blocked. Multipart
-  // photo uploads are blocked inside handlePhotoReplace for the same
-  // reason: the portal becomes read-only.
-  if (lookup.link.signed_off_at && (action === 'submit-note' || action === 'signoff')) {
-    return NextResponse.json({ error: 'This review has already been signed off.' }, { status: 409 })
-  }
-
   // ─── submit-note ────────────────────────────────────────────────────────
-  // Upsert one row per (review_link_id, equipment_id). Notes are
-  // overwritten on each save; the user's last word wins. Status must
-  // be 'approved' or 'needs_changes'.
+  // Upsert one row per (review_link_id, equipment_id). The new
+  // comments-only model treats `status` as a server-side constant —
+  // the schema check constraint still requires 'approved' or
+  // 'needs_changes', so we pin to 'approved' and rely on the notes
+  // field to carry the reviewer's actual feedback. The signoff
+  // RPC is no longer called from this route; anonymity + no-signoff
+  // is the entire feature.
   if (action === 'submit-note') {
     const equipmentId = typeof body.equipment_id === 'string' ? body.equipment_id.trim() : ''
-    const status      = typeof body.status === 'string' ? body.status : ''
     const notes       = typeof body.notes === 'string' ? body.notes : ''
     if (!equipmentId) {
       return NextResponse.json({ error: 'equipment_id required' }, { status: 400 })
     }
-    if (!['approved', 'needs_changes'].includes(status)) {
-      return NextResponse.json({ error: 'status must be approved or needs_changes' }, { status: 400 })
-    }
     const { error: upsertErr } = await admin.rpc('upsert_loto_placard_review', {
       p_review_link_id: lookup.link.id,
       p_equipment_id: equipmentId,
-      p_status: status,
+      p_status: 'approved',
       p_notes: notes,
     })
     if (upsertErr) {
       Sentry.captureException(upsertErr, { tags: { route: 'review/[token]', stage: 'submit-note' } })
       return rpcErrorResponse(upsertErr)
-    }
-    return NextResponse.json({ ok: true })
-  }
-
-  // ─── signoff ────────────────────────────────────────────────────────────
-  // Final write. Sets signed_off_at + the signature payload + IP / UA
-  // for audit. Capping at one signoff per link — if the reviewer has
-  // already signed, we 409 above.
-  //
-  // Anonymous-mode (the only mode after migration 138): typed_name and
-  // signature are optional from the client. The DB columns are NOT NULL
-  // for legacy reasons, so we substitute "Anonymous" + a 1×1 transparent
-  // PNG so the existing signoff RPC + downstream SignedOffScreen keep
-  // working without further migration. The audit trail (IP + UA + the
-  // optional overall notes the reviewer types) is what actually carries
-  // signal.
-  if (action === 'signoff') {
-    const ANONYMOUS_TYPED_NAME = 'Anonymous'
-    const ANONYMOUS_SIGNATURE  = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
-    const rawTypedName = typeof body.typed_name === 'string' ? body.typed_name.trim() : ''
-    const rawSignature = typeof body.signature  === 'string' ? body.signature : ''
-    const typedName = rawTypedName || ANONYMOUS_TYPED_NAME
-    const signature = rawSignature.startsWith('data:image/') ? rawSignature : ANONYMOUS_SIGNATURE
-    const approved  = body.approved === true ? true : body.approved === false ? false : null
-    const notes     = typeof body.notes === 'string' ? body.notes.trim() : ''
-    if (approved === null) {
-      return NextResponse.json({ error: 'approved (boolean) required' }, { status: 400 })
-    }
-
-    const ip =
-      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-      req.headers.get('x-real-ip') ||
-      null
-    const userAgent = req.headers.get('user-agent') ?? null
-
-    const { data: signed, error: signoffErr } = await admin.rpc('signoff_loto_review_link', {
-      p_review_link_id: lookup.link.id,
-      p_approved: approved,
-      p_typed_name: typedName,
-      p_signature: signature,
-      p_notes: notes,
-      p_ip: ip,
-      p_user_agent: userAgent,
-    })
-    if (signoffErr) {
-      Sentry.captureException(signoffErr, { tags: { route: 'review/[token]', stage: 'signoff' } })
-      return rpcErrorResponse(signoffErr)
-    }
-    if (!signed?.length) {
-      return NextResponse.json({ error: 'This review has already been signed off.' }, { status: 409 })
     }
     return NextResponse.json({ ok: true })
   }

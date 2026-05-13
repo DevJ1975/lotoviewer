@@ -5,28 +5,29 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 // /api/admin/review-links
 //
-// Public review-link model (migration 138). One shareable URL per
-// (tenant, department); anyone with the URL can leave per-placard notes
-// and sign off. Get-or-create semantics so calling POST twice is safe.
+// One anonymous public link per tenant (migration 138). Anyone with the
+// URL can leave per-placard comments on any of the tenant's active
+// equipment. No email, no department scoping, no sign-off.
 //
-//   GET ?department=Mechanical  — return the current active public link
-//                                 for that department (or null), plus
-//                                 the eventual signoff payload.
-//   POST { department }         — get-or-create the public link.
-//                                 Returns { link, review_url }.
+//   GET   — return the current active public link for the tenant
+//           (or null), plus its first_viewed timestamp.
+//   POST  — get-or-create the public link. Returns { link, review_url }.
 //
-// Tenant scoping mirrors the legacy per-reviewer route: caller's JWT
-// identifies the user; `x-active-tenant` identifies the tenant; the
-// user must be owner|admin for that tenant (or a superadmin per env
-// allowlist). All inserts use the service-role client.
+// Tenant scoping mirrors the legacy route: JWT identifies the user,
+// `x-active-tenant` identifies the tenant, the user must be owner|admin
+// (or a superadmin per env allowlist). Service-role client under the
+// hood.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// Far-future expiry sentinel so the public reviewer-portal lookup
-// (which still checks expires_at) doesn't reject the link. The column
-// stays NOT NULL by design; rather than drop the constraint, we burn
-// a value that won't matter for centuries.
+// Far-future sentinel so the public reviewer lookup (which still
+// checks expires_at for legacy rows) doesn't reject the tenant-wide
+// row. Keeping the column NOT NULL avoids touching the 035 schema for
+// the legacy rows we just revoked.
 const PUBLIC_EXPIRY_ISO = '2999-12-31T23:59:59Z'
+
+const PUBLIC_LINK_COLUMNS =
+  'id, tenant_id, department, token, expires_at, revoked_at, first_viewed_at, created_at, is_public'
 
 type Gate =
   | { ok: true;  userId: string; tenantId: string }
@@ -92,16 +93,16 @@ function publicAppUrl(req: Request): string {
   return 'https://soteriafield.app'
 }
 
-interface DepartmentEquipmentForReview {
-  equipment_id: string
-  description:  string | null
-  department:   string
-  photo_status: 'missing' | 'partial' | 'complete'
-  placard_url:  string | null
+async function findActiveTenantLink(tenantId: string) {
+  const admin = supabaseAdmin()
+  return admin
+    .from('loto_review_links')
+    .select(PUBLIC_LINK_COLUMNS)
+    .eq('tenant_id', tenantId)
+    .eq('is_public', true)
+    .is('revoked_at', null)
+    .maybeSingle()
 }
-
-const PUBLIC_LINK_COLUMNS =
-  'id, tenant_id, department, token, expires_at, revoked_at, first_viewed_at, signed_off_at, signoff_approved, signoff_typed_name, signoff_notes, created_at, is_public'
 
 // ─── GET ──────────────────────────────────────────────────────────────────
 
@@ -109,71 +110,39 @@ export async function GET(req: Request) {
   const gate = await requireTenantAdmin(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
-  const url        = new URL(req.url)
-  const department = url.searchParams.get('department')?.trim()
-
-  const admin = supabaseAdmin()
-  let query = admin
-    .from('loto_review_links')
-    .select(PUBLIC_LINK_COLUMNS)
-    .eq('tenant_id', gate.tenantId)
-    .eq('is_public', true)
-    .is('revoked_at', null)
-    .order('created_at', { ascending: false })
-  if (department) query = query.eq('department', department)
-
-  const { data, error } = await query
+  const { data, error } = await findActiveTenantLink(gate.tenantId)
   if (error) {
     Sentry.captureException(error, { tags: { route: 'review-links/GET' } })
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  const baseUrl = publicAppUrl(req)
-  const links = (data ?? []).map(row => ({
-    ...row,
-    review_url: `${baseUrl}/review/${row.token}`,
-  }))
+  if (!data) {
+    return NextResponse.json({ link: null })
+  }
 
-  return NextResponse.json({ links })
+  const baseUrl = publicAppUrl(req)
+  return NextResponse.json({
+    link:       data,
+    review_url: `${baseUrl}/review/${data.token}`,
+  })
 }
 
 // ─── POST ─────────────────────────────────────────────────────────────────
-
-interface PostBody {
-  department?: unknown
-}
 
 export async function POST(req: Request) {
   const gate = await requireTenantAdmin(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
-  let body: PostBody
-  try { body = await req.json() }
-  catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
-
-  const department = typeof body.department === 'string' ? body.department.trim() : ''
-  if (!department) {
-    return NextResponse.json({ error: 'department required' }, { status: 400 })
-  }
-
   const admin = supabaseAdmin()
+  const baseUrl = publicAppUrl(req)
 
-  // Reuse an existing active public link rather than creating a duplicate.
-  // The unique partial index from migration 138 also enforces this server-side.
-  const { data: existing, error: lookupErr } = await admin
-    .from('loto_review_links')
-    .select(PUBLIC_LINK_COLUMNS)
-    .eq('tenant_id', gate.tenantId)
-    .eq('department', department)
-    .eq('is_public', true)
-    .is('revoked_at', null)
-    .maybeSingle()
+  // Reuse an existing active row rather than creating a duplicate. The
+  // unique partial index from migration 138 also enforces this server-side.
+  const { data: existing, error: lookupErr } = await findActiveTenantLink(gate.tenantId)
   if (lookupErr) {
     Sentry.captureException(lookupErr, { tags: { route: 'review-links/POST', stage: 'lookup' } })
     return NextResponse.json({ error: lookupErr.message }, { status: 500 })
   }
-
-  const baseUrl = publicAppUrl(req)
   if (existing) {
     return NextResponse.json({
       link:       existing,
@@ -182,58 +151,23 @@ export async function POST(req: Request) {
     })
   }
 
-  // Snapshot the department equipment so the reviewer portal has a
-  // stable list. New equipment added after the link is generated won't
-  // appear until an admin regenerates the link (via PATCH).
-  const { data: departmentEquipment, error: equipmentErr } = await admin
-    .from('loto_equipment')
-    .select('equipment_id, description, department, photo_status, placard_url')
-    .eq('tenant_id', gate.tenantId)
-    .eq('department', department)
-    .eq('decommissioned', false)
-    .order('equipment_id', { ascending: true })
-  if (equipmentErr) {
-    Sentry.captureException(equipmentErr, { tags: { route: 'review-links/POST', stage: 'equipment' } })
-    return NextResponse.json({ error: equipmentErr.message }, { status: 500 })
-  }
-  const equipmentForReview = (departmentEquipment ?? []) as DepartmentEquipmentForReview[]
-  if (equipmentForReview.length === 0) {
-    return NextResponse.json({ error: 'No active equipment in this department to review' }, { status: 400 })
-  }
-
-  // Insert the public row. Token is populated by the BEFORE INSERT trigger
-  // from migration 035.
+  // No equipment snapshot for the public path — the reviewer page queries
+  // active equipment live so the URL stays current as the tenant adds or
+  // decommissions placards.
   const { data: row, error: insertErr } = await admin
     .from('loto_review_links')
     .insert({
-      tenant_id:    gate.tenantId,
-      department,
-      is_public:    true,
-      expires_at:   PUBLIC_EXPIRY_ISO,
-      created_by:   gate.userId,
+      tenant_id:  gate.tenantId,
+      department: null,
+      is_public:  true,
+      expires_at: PUBLIC_EXPIRY_ISO,
+      created_by: gate.userId,
     })
     .select(PUBLIC_LINK_COLUMNS)
     .single()
   if (insertErr || !row) {
     Sentry.captureException(insertErr, { tags: { route: 'review-links/POST', stage: 'insert' } })
     return NextResponse.json({ error: insertErr?.message ?? 'Insert failed' }, { status: 500 })
-  }
-
-  const snapshotPayloads = equipmentForReview.map((eq, index) => ({
-    review_link_id:        row.id,
-    tenant_id:             gate.tenantId,
-    equipment_id:          eq.equipment_id,
-    equipment_description: eq.description,
-    department:            department,
-    sort_order:            index,
-  }))
-  const { error: snapshotErr } = await admin
-    .from('loto_review_link_equipment')
-    .insert(snapshotPayloads)
-  if (snapshotErr) {
-    Sentry.captureException(snapshotErr, { tags: { route: 'review-links/POST', stage: 'snapshot' } })
-    await admin.from('loto_review_links').delete().eq('id', row.id)
-    return NextResponse.json({ error: snapshotErr.message }, { status: 500 })
   }
 
   return NextResponse.json({
