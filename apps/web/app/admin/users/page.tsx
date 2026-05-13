@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/sonner'
+import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 
 interface AdminUserRow {
@@ -39,6 +40,7 @@ interface AdminUserRow {
   email:                string
   full_name:            string | null
   is_admin:             boolean
+  role?:                string
   must_change_password: boolean
   created_at:           string
 }
@@ -49,16 +51,18 @@ const inviteSchema = z.object({
 })
 type InviteValues = z.infer<typeof inviteSchema>
 
-async function authFetch(path: string, init?: RequestInit): Promise<Response> {
+async function authFetch(path: string, tenantId: string, init?: RequestInit): Promise<Response> {
   const { data: { session } } = await supabase.auth.getSession()
   const headers = new Headers(init?.headers)
   if (session?.access_token) headers.set('Authorization', `Bearer ${session.access_token}`)
+  headers.set('x-active-tenant', tenantId)
   if (init?.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   return fetch(path, { ...init, headers })
 }
 
 export default function AdminUsersPage() {
   const { profile, loading: authLoading } = useAuth()
+  const { tenantId, role, loading: tenantLoading } = useTenant()
   const [users, setUsers]   = useState<AdminUserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -72,8 +76,15 @@ export default function AdminUsersPage() {
     defaultValues: { fullName: '', email: '' },
   })
 
+  const canManage = profile?.is_superadmin === true || role === 'owner' || role === 'admin'
+
   const fetchUsers = useCallback(async () => {
-    const res = await authFetch('/api/admin/users')
+    if (!tenantId) {
+      setLoadError('Select an active tenant before managing users.')
+      setLoading(false)
+      return
+    }
+    const res = await authFetch('/api/admin/users', tenantId)
     if (!res.ok) {
       const body = await res.json().catch(() => ({ error: res.statusText }))
       setLoadError(body.error ?? 'Could not load users')
@@ -83,16 +94,23 @@ export default function AdminUsersPage() {
     const data = await res.json() as { users: AdminUserRow[] }
     setUsers(data.users)
     setLoading(false)
-  }, [])
+  }, [tenantId])
 
   useEffect(() => {
-    if (authLoading) return
-    if (!profile?.is_admin) return
+    if (authLoading || tenantLoading) return
+    if (!canManage) {
+      setLoading(false)
+      return
+    }
     fetchUsers()
-  }, [authLoading, profile, fetchUsers])
+  }, [authLoading, tenantLoading, canManage, fetchUsers])
 
   async function onInvite(values: InviteValues) {
-    const res = await authFetch('/api/admin/users', {
+    if (!tenantId) {
+      toast.error('Select an active tenant before inviting users.')
+      return
+    }
+    const res = await authFetch('/api/admin/users', tenantId, {
       method: 'POST',
       body: JSON.stringify({ email: values.email, fullName: values.fullName ?? '' }),
     })
@@ -118,7 +136,11 @@ export default function AdminUsersPage() {
     if (!removeTarget) return
     const target = removeTarget
     setRemoveTarget(null)
-    const res = await authFetch(`/api/admin/users?id=${encodeURIComponent(target.id)}`, { method: 'DELETE' })
+    if (!tenantId) {
+      toast.error('Select an active tenant before removing users.')
+      return
+    }
+    const res = await authFetch(`/api/admin/users?id=${encodeURIComponent(target.id)}`, tenantId, { method: 'DELETE' })
     if (!res.ok) {
       const body = await res.json().catch(() => ({ error: res.statusText }))
       toast.error(body.error ?? 'Could not remove user')
@@ -200,10 +222,10 @@ jamil@trainovations.com`
     },
   ], [])
 
-  if (authLoading) {
+  if (authLoading || tenantLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 
