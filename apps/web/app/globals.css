@@ -16,6 +16,10 @@
 @theme {
   --color-brand-navy: #1B3A6B;
   --color-brand-yellow: #FFD900;
+  --color-ops-ink: #111827;
+  --color-ops-panel: #F8FAFC;
+  --color-ops-line: #CBD5E1;
+  --color-ops-surface: #FFFFFF;
 }
 
 @theme inline {
@@ -87,6 +91,15 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.75rem;
+  --ops-canvas: #eef3f8;
+  --ops-surface: #ffffff;
+  --ops-surface-raised: #fbfdff;
+  --ops-line: #cbd5e1;
+  --ops-line-strong: #94a3b8;
+  --ops-ink: #111827;
+  --ops-muted: #64748b;
+  --ops-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px rgba(15, 23, 42, 0.05);
+  --ops-shadow-hover: 0 8px 24px rgba(15, 23, 42, 0.09);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -121,6 +134,15 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
+  --ops-canvas: #07111f;
+  --ops-surface: #0f172a;
+  --ops-surface-raised: #111c31;
+  --ops-line: rgba(148, 163, 184, 0.24);
+  --ops-line-strong: rgba(203, 213, 225, 0.32);
+  --ops-ink: #f8fafc;
+  --ops-muted: #94a3b8;
+  --ops-shadow: 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 32px rgba(0, 0, 0, 0.26);
+  --ops-shadow-hover: 0 18px 44px rgba(0, 0, 0, 0.34);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
@@ -163,6 +185,9 @@
   }
   body {
     @apply bg-background text-foreground;
+    background:
+      linear-gradient(180deg, rgba(27, 58, 107, 0.055), transparent 18rem),
+      var(--ops-canvas);
   }
   html {
     @apply font-sans;
@@ -229,6 +254,137 @@
     background-image:
       url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='5' height='5'><path d='M0 5 L5 0 M-1 1 L1 -1 M4 6 L6 4' stroke='rgba(255,255,255,0.30)' stroke-width='1'/></svg>");
     background-size: 5px 5px;
+  }
+}
+
+@layer utilities {
+  .ops-shell {
+    background:
+      linear-gradient(180deg, rgba(27, 58, 107, 0.08), transparent 16rem),
+      var(--ops-canvas);
+  }
+
+  .ops-surface {
+    background: var(--ops-surface);
+    border: 1px solid var(--ops-line);
+    box-shadow: var(--ops-shadow);
+  }
+
+  .ops-surface-raised {
+    background: var(--ops-surface-raised);
+    border: 1px solid var(--ops-line);
+    box-shadow: var(--ops-shadow);
+  }
+
+  .ops-surface-interactive {
+    transition:
+      border-color 160ms ease,
+      box-shadow 160ms ease,
+      transform 160ms ease,
+      background-color 160ms ease;
+  }
+
+  .ops-surface-interactive:hover {
+    border-color: var(--ops-line-strong);
+    box-shadow: var(--ops-shadow-hover);
+    transform: translateY(-1px);
+  }
+
+  .ops-section-title {
+    color: var(--ops-ink);
+    letter-spacing: 0;
+  }
+
+  .ops-muted {
+    color: var(--ops-muted);
+  }
+
+  .ops-scanline {
+    background-image:
+      repeating-linear-gradient(
+        90deg,
+        rgba(15, 23, 42, 0.055) 0,
+        rgba(15, 23, 42, 0.055) 1px,
+        transparent 1px,
+        transparent 18px
+      );
+  }
+
+  .motion-reactive {
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease,
+      color 160ms ease,
+      box-shadow 160ms ease,
+      transform 160ms ease,
+      opacity 160ms ease;
+  }
+
+  .motion-press {
+    transition: transform 90ms ease, box-shadow 160ms ease;
+  }
+
+  .motion-press:active {
+    transform: translateY(1px) scale(0.99);
+  }
+
+  .animate-panel-in {
+    animation: panel-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .animate-meter-fill {
+    transform-origin: left center;
+    animation: meter-fill 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .animate-gauge-sweep {
+    transform-origin: center;
+    animation: gauge-sweep 650ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes meter-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes gauge-sweep {
+  from {
+    stroke-dashoffset: var(--gauge-empty, 240);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-surface-interactive,
+  .motion-reactive,
+  .motion-press {
+    transition: none;
+  }
+
+  .ops-surface-interactive:hover,
+  .motion-press:active {
+    transform: none;
+  }
+
+  .animate-panel-in,
+  .animate-meter-fill,
+  .animate-gauge-sweep {
+    animation: none;
   }
 }
 /* Browser-print rules. Most printable artifacts (placard PDF, permit

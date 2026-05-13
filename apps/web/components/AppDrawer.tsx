@@ -56,8 +56,8 @@ export default function AppDrawer({ onClose }: Props) {
   }
 
   return (
-    <Sidebar className="w-[22rem] max-w-[92vw]">
-      <SidebarHeader className="space-y-3">
+    <Sidebar className="w-[22rem] max-w-[92vw] border-r border-slate-200/80 bg-white/[0.98] dark:border-slate-800/80 dark:bg-slate-950/[0.98]">
+      <SidebarHeader className="space-y-3 border-b border-sidebar-border/80 pb-4">
         <div className="flex items-center justify-between gap-3">
           <Link
             href="/"
@@ -72,7 +72,7 @@ export default function AppDrawer({ onClose }: Props) {
             type="button"
             onClick={close}
             aria-label="Close navigation"
-            className="flex size-9 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/55 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            className="motion-press flex size-9 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/55 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           >
             <X className="size-4" />
           </button>
@@ -81,7 +81,7 @@ export default function AppDrawer({ onClose }: Props) {
         <button
           type="button"
           onClick={openSearch}
-          className="flex h-10 w-full items-center gap-2 rounded-md border border-sidebar-border bg-background/80 px-3 text-left text-sm text-muted-foreground shadow-xs transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          className="motion-press flex h-10 w-full items-center gap-2 rounded-md border border-sidebar-border bg-background/80 px-3 text-left text-sm text-muted-foreground shadow-xs transition-colors hover:border-sidebar-ring/40 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
         >
           <Search className="size-4 shrink-0" />
           <span className="min-w-0 flex-1 truncate">Search modules and pages</span>
@@ -91,13 +91,14 @@ export default function AppDrawer({ onClose }: Props) {
         </button>
       </SidebarHeader>
 
-      <SidebarContent>
-        {groups.map(group => (
+      <SidebarContent className="py-2">
+        {groups.map((group, index) => (
           <NavigationGroupSection
             key={group.id}
             group={group}
             pathname={pathname}
             onNavigate={close}
+            animationDelayMs={index * 35}
           />
         ))}
       </SidebarContent>
@@ -125,13 +126,15 @@ function NavigationGroupSection({
   group,
   pathname,
   onNavigate,
+  animationDelayMs,
 }: {
   group: NavigationGroup
   pathname: string | null
   onNavigate: () => void
+  animationDelayMs: number
 }) {
   return (
-    <SidebarGroup>
+    <SidebarGroup className="animate-panel-in" style={{ animationDelay: `${animationDelayMs}ms` }}>
       <SidebarGroupLabel title={group.description}>{group.label}</SidebarGroupLabel>
       <SidebarMenu>
         {group.items.map(item => (
@@ -192,13 +195,13 @@ function ModuleRow({
   return (
     <SidebarMenuItem>
       {isClickable ? (
-        <SidebarMenuButton asChild isActive={active}>
+        <SidebarMenuButton asChild isActive={active} className="motion-reactive">
           <Link href={mod.href!} onClick={onNavigate}>
             {content}
           </Link>
         </SidebarMenuButton>
       ) : (
-        <SidebarMenuButton type="button" disabled isActive={active} className="cursor-not-allowed opacity-70">
+        <SidebarMenuButton type="button" disabled isActive={active} className="motion-reactive cursor-not-allowed opacity-70">
           {content}
         </SidebarMenuButton>
       )}
