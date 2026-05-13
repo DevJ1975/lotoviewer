@@ -63,6 +63,12 @@ tablet before TestFlight or prod.
 - [ ] No raw HTML / scripts in the body — paste a known-injection
       string into one row's `body_markdown` via SQL and confirm it
       escapes.
+- [ ] Click "Print" — browser opens a generated PDF, not a screen
+      capture. Confirm the PDF has the SoteriaField header, talk
+      metadata, key points, script, supervisor cue card, and roster.
+- [ ] After at least one signature exists, print again and confirm
+      the roster row appears in the PDF with name, employee ID,
+      signed timestamp, and signature area.
 
 ## Sign-in flow — self
 
