@@ -58,9 +58,17 @@ export async function sendInviteEmail(args: InviteEmailArgs): Promise<boolean> {
             ?? process.env.SUPPORT_FROM_EMAIL
             ?? 'SoteriaField <invites@soteriafield.app>'
 
-  const { subject, text } = renderInviteText(args)
   const displayName = args.fullName || args.to.split('@')[0]!
   const isExisting = !args.tempPassword
+  const subject = isExisting
+    ? (args.tenantName
+        ? `You've been added to ${args.tenantName} on SoteriaField`
+        : "You've been added to a tenant on SoteriaField")
+    : (args.tenantName
+        ? `You're invited to ${args.tenantName} on SoteriaField`
+        : "You're invited to SoteriaField")
+
+  const text = renderText({ displayName, isExisting, ...args })
   const html = renderHtml({ displayName, isExisting, ...args })
 
   try {
@@ -89,24 +97,6 @@ export async function sendInviteEmail(args: InviteEmailArgs): Promise<boolean> {
     })
     return false
   }
-}
-
-// Public renderer: returns the same subject + plain-text body that the
-// email send uses. Callers (the invite + resend routes) include this in
-// their JSON response so the superadmin always gets a copy/paste-ready
-// message to send manually as a junk-mail fallback.
-export function renderInviteText(args: InviteEmailArgs): { subject: string; text: string } {
-  const displayName = args.fullName || args.to.split('@')[0]!
-  const isExisting = !args.tempPassword
-  const subject = isExisting
-    ? (args.tenantName
-        ? `You've been added to ${args.tenantName} on SoteriaField`
-        : "You've been added to a tenant on SoteriaField")
-    : (args.tenantName
-        ? `You're invited to ${args.tenantName} on SoteriaField`
-        : "You're invited to SoteriaField")
-  const text = renderText({ displayName, isExisting, ...args })
-  return { subject, text }
 }
 
 function renderText(a: InviteEmailArgs & { displayName: string; isExisting: boolean }): string {
