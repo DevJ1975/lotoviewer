@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { UserRoundCog } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
-import { timeOfDayGreeting } from '@/components/Greeting'
+import { dailyQuote, timeOfDayGreeting } from '@/components/Greeting'
 import { fetchHomeMetrics, type HomeMetrics } from '@soteria/core/homeMetrics'
 import ThemeToggle from '@/components/ThemeToggle'
 import { Hero }                 from './Hero'
@@ -62,6 +62,11 @@ export default function MultiModuleDashboard() {
   }, [])
 
   const greeting = useMemo(() => timeOfDayGreeting(now), [now])
+  const quoteDateKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`
+  const quote = useMemo(() => {
+    const [year, month, day] = quoteDateKey.split('-').map(Number)
+    return dailyQuote(new Date(year!, month!, day!)).text
+  }, [quoteDateKey])
   const dateLabel = useMemo(() =>
     now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }),
   [now])
@@ -99,7 +104,7 @@ export default function MultiModuleDashboard() {
 
   return (
     <div className="animate-panel-in mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">
-      <Hero greeting={greeting} firstName={firstName} dateLabel={dateLabel} timeLabel={timeLabel} />
+      <Hero greeting={greeting} firstName={firstName} dateLabel={dateLabel} timeLabel={timeLabel} quote={quote} />
 
       {/* Theme switch — right-aligned strip directly under the hero so
           it's easy to find without crowding the greeting band. The

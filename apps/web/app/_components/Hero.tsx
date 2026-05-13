@@ -8,8 +8,8 @@ import { WeatherCard } from './WeatherCard'
 // whole page; weather is self-contained inside WeatherCard.
 
 export function Hero({
-  greeting, firstName, dateLabel, timeLabel,
-}: { greeting: string; firstName: string; dateLabel: string; timeLabel: string }) {
+  greeting, firstName, dateLabel, timeLabel, quote,
+}: { greeting: string; firstName: string; dateLabel: string; timeLabel: string; quote: string }) {
   return (
     <section className="bg-gradient-to-br from-brand-navy to-[#1a3470] text-white rounded-2xl p-6 sm:p-8 shadow-md">
       <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-6 items-end">
@@ -22,6 +22,14 @@ export function Hero({
           </p>
           <p className="text-sm sm:text-base text-white/80 mt-2">{dateLabel}</p>
           <p className="text-3xl sm:text-4xl font-mono font-bold mt-1 tabular-nums">{timeLabel}</p>
+          <div className="mt-4 max-w-2xl border-l-2 border-brand-yellow/80 pl-3">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-brand-yellow/90">
+              Quote of the day
+            </p>
+            <p className="mt-1 text-sm leading-relaxed text-white/85">
+              {quote}
+            </p>
+          </div>
         </div>
         <WeatherCard />
       </div>
