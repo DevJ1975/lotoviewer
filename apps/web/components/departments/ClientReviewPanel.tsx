@@ -139,7 +139,7 @@ export default function ClientReviewPanel({ department }: Props) {
   }
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-6 space-y-4">
+    <div id="client-review" className="scroll-mt-24 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-6 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Client review portal</h2>

@@ -1,6 +1,7 @@
 'use client'
 
 import { memo, useCallback, useMemo, useState, type MouseEvent } from 'react'
+import Link from 'next/link'
 import type { Equipment } from '@soteria/core/types'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useUploadQueue } from '@/components/UploadQueueProvider'
@@ -138,14 +139,25 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
               {debounced.trim() && ` matching "${debounced}"`}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setSort(s => s === 'id' ? 'status' : 'id')}
-            className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors"
-            title="Toggle sort order"
-          >
-            Sort: {sort === 'id' ? 'ID ↑' : 'Status'}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setSort(s => s === 'id' ? 'status' : 'id')}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors"
+              title="Toggle sort order"
+            >
+              Sort: {sort === 'id' ? 'ID ↑' : 'Status'}
+            </button>
+            {selectedDept && (
+              <Link
+                href={`/departments/${encodeURIComponent(selectedDept)}#client-review`}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-brand-navy text-white hover:bg-brand-navy/90 transition-colors"
+                title="Send this department to a client reviewer for sign-off"
+              >
+                Send for review →
+              </Link>
+            )}
+          </div>
         </div>
 
         <input

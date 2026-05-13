@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Pencil } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { DepartmentStats, LotoReview } from '@soteria/core/types'
@@ -21,6 +22,7 @@ export default function DepartmentsPage() {
   const [loading, setLoading]             = useState(true)
   const [renamingDept, setRenamingDept]   = useState<string | null>(null)
   const { tenantId, loading: tenantLoading } = useTenant()
+  const router = useRouter()
 
   const fetchData = useCallback(async () => {
     if (!tenantId) {
@@ -130,6 +132,20 @@ export default function DepartmentsPage() {
                     ) : (
                       <span className="text-[11px] text-slate-300 font-medium">No review yet</span>
                     )}
+                  </div>
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={e => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        router.push(`/departments/${encodeURIComponent(s.department)}#client-review`)
+                      }}
+                      className="text-[11px] font-semibold text-brand-navy hover:underline"
+                      aria-label={`Send ${s.department} for client review`}
+                    >
+                      Send for review →
+                    </button>
                   </div>
                 </CardContent>
               </Card>

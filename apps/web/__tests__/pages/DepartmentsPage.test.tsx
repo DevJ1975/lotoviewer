@@ -16,6 +16,11 @@ vi.mock('next/link', () => ({
     <a href={href}>{children}</a>,
 }))
 
+const pushMock = vi.fn()
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: pushMock, replace: vi.fn(), back: vi.fn(), forward: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
+}))
+
 type Row = { department: string; photo_status: 'missing' | 'partial' | 'complete' }
 
 function makeChain(data: unknown[]) {
@@ -40,6 +45,7 @@ const mockRows: Row[] = [
 
 describe('DepartmentsPage', () => {
   beforeEach(() => {
+    pushMock.mockClear()
     vi.mocked(supabase.from).mockImplementation((table: string) => {
       if (table === 'loto_reviews') return makeChain([]) as unknown as ReturnType<typeof supabase.from>
       return makeChain(mockRows) as unknown as ReturnType<typeof supabase.from>
@@ -98,5 +104,16 @@ describe('DepartmentsPage', () => {
     )
     render(<DepartmentsPage />)
     await waitFor(() => screen.getByText(/0 departments/))
+  })
+
+  it('renders a "Send for review" button per card that deep-links to the review panel', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event')
+    render(<DepartmentsPage />)
+    await waitFor(() => screen.getByText('Electrical'))
+    const sendButtons = screen.getAllByRole('button', { name: /Send .* for client review/i })
+    expect(sendButtons.length).toBe(3)
+
+    await userEvent.setup().click(sendButtons[0]!)
+    expect(pushMock).toHaveBeenCalledWith(expect.stringMatching(/#client-review$/))
   })
 })
