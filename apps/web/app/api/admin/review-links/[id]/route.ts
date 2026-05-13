@@ -4,12 +4,17 @@ import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 // PATCH /api/admin/review-links/[id]
-//   Body: { action: 'revoke' }
+//   Body: { action: 'revoke' | 'regenerate' }
 //
-// The only currently-supported mutation is revocation. Future
-// actions (resend-email, edit-reviewer-email, etc.) plug in as
-// additional `action` values. Resend in particular is intentionally
-// left for v2 — it requires deciding whether to rotate the token.
+// 'revoke'     — marks the row revoked. The public link stops working;
+//                no new row is created. Use when you want to retire a
+//                department's review surface entirely.
+// 'regenerate' — revokes the existing row AND creates a fresh public
+//                row for the same department, cycling the token. Use
+//                when the link has been over-shared and you want a new
+//                URL that supersedes the old one, or when the previous
+//                link has been signed off and you want to open a new
+//                review pass.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -72,26 +77,89 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   try { body = await req.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
-  if (body.action !== 'revoke') {
+  if (body.action !== 'revoke' && body.action !== 'regenerate') {
     return NextResponse.json({ error: 'Unsupported action' }, { status: 400 })
   }
 
   const admin = supabaseAdmin()
-  const { data: row, error } = await admin
+
+  // Step 1: revoke the existing row. Both actions need this.
+  const { data: revoked, error: revokeErr } = await admin
     .from('loto_review_links')
     .update({ revoked_at: new Date().toISOString(), revoked_by: gate.userId })
     .eq('id', id)
     .eq('tenant_id', gate.tenantId)
     .is('revoked_at', null)
-    .select('id, revoked_at, revoked_by')
+    .select('id, tenant_id, department, is_public, revoked_at, revoked_by')
     .maybeSingle()
-  if (error) {
-    Sentry.captureException(error, { tags: { route: 'review-links/PATCH', stage: 'revoke' } })
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  if (revokeErr) {
+    Sentry.captureException(revokeErr, { tags: { route: 'review-links/PATCH', stage: 'revoke' } })
+    return NextResponse.json({ error: revokeErr.message }, { status: 500 })
   }
-  if (!row) {
+  if (!revoked) {
     return NextResponse.json({ error: 'Not found, already revoked, or wrong tenant' }, { status: 404 })
   }
 
-  return NextResponse.json({ link: row })
+  if (body.action === 'revoke') {
+    return NextResponse.json({ link: revoked })
+  }
+
+  // Step 2 (regenerate only): create a fresh public row for the same
+  // department, cycling the token. Snapshot the current equipment so
+  // the new reviewer surface reflects today's department state, not
+  // the stale snapshot from the original create.
+  if (!revoked.is_public) {
+    return NextResponse.json({ error: 'Regenerate only applies to public links' }, { status: 400 })
+  }
+
+  const { data: departmentEquipment, error: equipmentErr } = await admin
+    .from('loto_equipment')
+    .select('equipment_id, description, department')
+    .eq('tenant_id', gate.tenantId)
+    .eq('department', revoked.department)
+    .eq('decommissioned', false)
+    .order('equipment_id', { ascending: true })
+  if (equipmentErr) {
+    Sentry.captureException(equipmentErr, { tags: { route: 'review-links/PATCH', stage: 'regenerate-equipment' } })
+    return NextResponse.json({ error: equipmentErr.message }, { status: 500 })
+  }
+  const equipmentForReview = departmentEquipment ?? []
+  if (equipmentForReview.length === 0) {
+    return NextResponse.json({ error: 'No active equipment in this department to review' }, { status: 400 })
+  }
+
+  const { data: row, error: insertErr } = await admin
+    .from('loto_review_links')
+    .insert({
+      tenant_id:  gate.tenantId,
+      department: revoked.department,
+      is_public:  true,
+      expires_at: '2999-12-31T23:59:59Z',
+      created_by: gate.userId,
+    })
+    .select('id, tenant_id, department, token, expires_at, revoked_at, created_at, is_public')
+    .single()
+  if (insertErr || !row) {
+    Sentry.captureException(insertErr, { tags: { route: 'review-links/PATCH', stage: 'regenerate-insert' } })
+    return NextResponse.json({ error: insertErr?.message ?? 'Insert failed' }, { status: 500 })
+  }
+
+  const snapshotPayloads = equipmentForReview.map((eq, index) => ({
+    review_link_id:        row.id,
+    tenant_id:             gate.tenantId,
+    equipment_id:          eq.equipment_id,
+    equipment_description: eq.description,
+    department:            revoked.department,
+    sort_order:            index,
+  }))
+  const { error: snapshotErr } = await admin
+    .from('loto_review_link_equipment')
+    .insert(snapshotPayloads)
+  if (snapshotErr) {
+    Sentry.captureException(snapshotErr, { tags: { route: 'review-links/PATCH', stage: 'regenerate-snapshot' } })
+    await admin.from('loto_review_links').delete().eq('id', row.id)
+    return NextResponse.json({ error: snapshotErr.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ link: row, regenerated_from: revoked.id })
 }

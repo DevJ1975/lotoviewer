@@ -1,10 +1,21 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-05'
+const CURRENT_VERSION = '2.0.0'
+const LAST_UPDATED    = '2026-05-13'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.0.0',
+    date:    '2026-05-13',
+    changes: [
+      'Reworked from per-reviewer email invites to a single public link ' +
+      'per department. Anyone with the URL can type a name, leave per- ' +
+      'placard notes, and sign off — no account, no invite, no email. ' +
+      'Admins manage the link (generate / copy / regenerate / retire) ' +
+      'from the panel on /departments/[dept].',
+    ],
+  },
   { version: '1.0.0', date: '2026-05-05', changes: ['Initial review-portal wiki page.'] },
 ]
 
@@ -12,7 +23,7 @@ export default function WikiReviewPortalPage() {
   return (
     <WikiPage
       title="Client Review Portal"
-      subtitle="Tokenized link that lets a non-Soteria reviewer sign off LOTO placards without creating an account."
+      subtitle="A single public link per department lets anyone leave per-placard notes and sign off — no account."
       modulePath={null}
       audience="public-token"
       category="Public portals"

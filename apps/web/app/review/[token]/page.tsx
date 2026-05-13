@@ -24,8 +24,8 @@ interface ReviewLinkRow {
   id:                 string
   tenant_id:          string
   department:         string
-  reviewer_name:      string
-  reviewer_email:     string
+  reviewer_name:      string | null
+  reviewer_email:     string | null
   admin_message:      string | null
   expires_at:         string
   revoked_at:         string | null
@@ -34,6 +34,7 @@ interface ReviewLinkRow {
   signoff_typed_name: string | null
   signoff_notes:      string | null
   first_viewed_at:    string | null
+  is_public:          boolean | null
 }
 
 interface PlacardReviewRow {
@@ -58,7 +59,7 @@ export default async function ReviewPage({
 
   const { data: link, error } = await admin
     .from('loto_review_links')
-    .select('id, tenant_id, department, reviewer_name, reviewer_email, admin_message, expires_at, revoked_at, signed_off_at, signoff_approved, signoff_typed_name, signoff_notes, first_viewed_at')
+    .select('id, tenant_id, department, reviewer_name, reviewer_email, admin_message, expires_at, revoked_at, signed_off_at, signoff_approved, signoff_typed_name, signoff_notes, first_viewed_at, is_public')
     .eq('token', token)
     .maybeSingle<ReviewLinkRow>()
 
@@ -66,10 +67,13 @@ export default async function ReviewPage({
   if (!link) notFound()
 
   if (link.revoked_at) {
-    return <ErrorScreen title="Link revoked" body="This review link has been revoked by the sender. Reach out to them for a new one." />
+    return <ErrorScreen title="Link revoked" body="This review link has been retired. Reach out to the tenant admin for the current URL." />
   }
+  // Public links are pinned to a far-future sentinel expiry by design;
+  // the check still fires for any legacy per-reviewer rows that haven't
+  // been revoked, so we keep it.
   if (Date.parse(link.expires_at) < Date.now()) {
-    return <ErrorScreen title="Link expired" body={`This review link expired on ${formatDate(link.expires_at)}. Reach out to the sender for a fresh one.`} />
+    return <ErrorScreen title="Link expired" body={`This review link expired on ${formatDate(link.expires_at)}. Reach out to the tenant admin for a fresh one.`} />
   }
 
   const [{ data: snapshotRows }, { data: prevReviews }, { data: tenantRow }] = await Promise.all([
@@ -144,9 +148,9 @@ export default async function ReviewPage({
       reviewLinkId={link.id}
       tenantName={tenantName}
       department={link.department}
-      reviewerName={link.reviewer_name}
+      isPublic={link.is_public ?? false}
+      invitedReviewerName={link.reviewer_name}
       adminMessage={link.admin_message}
-      expiresAt={link.expires_at}
       isFirstView={!link.first_viewed_at}
       equipment={equipmentList}
       stepsByEquipment={Object.fromEntries(stepsByEquipment)}
@@ -194,7 +198,7 @@ function SignedOffScreen({
             Review submitted
           </div>
           <h1 className="text-2xl font-bold text-emerald-900">
-            Thanks, {link.signoff_typed_name ?? link.reviewer_name}.
+            Thanks, {link.signoff_typed_name ?? link.reviewer_name ?? 'reviewer'}.
           </h1>
           <p className="text-sm text-emerald-800 mt-1">
             Your review of <strong>{tenantName}</strong>'s <strong>{link.department}</strong> placards has been recorded.

@@ -152,9 +152,9 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
               <Link
                 href={`/departments/${encodeURIComponent(selectedDept)}#client-review`}
                 className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-brand-navy text-white hover:bg-brand-navy/90 transition-colors"
-                title="Send this department to a client reviewer for sign-off"
+                title="Get the public review link for this department"
               >
-                Send for review →
+                Public review link →
               </Link>
             )}
           </div>

@@ -142,9 +142,9 @@ export default function DepartmentsPage() {
                         router.push(`/departments/${encodeURIComponent(s.department)}#client-review`)
                       }}
                       className="text-[11px] font-semibold text-brand-navy hover:underline"
-                      aria-label={`Send ${s.department} for client review`}
+                      aria-label={`Open public review link for ${s.department}`}
                     >
-                      Send for review →
+                      Public review link →
                     </button>
                   </div>
                 </CardContent>

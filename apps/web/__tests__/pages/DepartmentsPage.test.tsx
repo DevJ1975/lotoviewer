@@ -106,11 +106,11 @@ describe('DepartmentsPage', () => {
     await waitFor(() => screen.getByText(/0 departments/))
   })
 
-  it('renders a "Send for review" button per card that deep-links to the review panel', async () => {
+  it('renders a "Public review link" button per card that deep-links to the review panel', async () => {
     const { default: userEvent } = await import('@testing-library/user-event')
     render(<DepartmentsPage />)
     await waitFor(() => screen.getByText('Electrical'))
-    const sendButtons = screen.getAllByRole('button', { name: /Send .* for client review/i })
+    const sendButtons = screen.getAllByRole('button', { name: /Open public review link for/i })
     expect(sendButtons.length).toBe(3)
 
     await userEvent.setup().click(sendButtons[0]!)
