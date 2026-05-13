@@ -26,27 +26,34 @@ export function PageHeader({ icon: Icon, title, description, back, actions, clas
   return (
     <header
       data-slot="page-header"
-      className={cn('flex items-start gap-3 pb-4 border-b border-slate-100 dark:border-slate-800', className)}
+      className={cn(
+        'ops-surface-raised animate-panel-in flex items-start gap-3 rounded-lg px-4 py-3',
+        className,
+      )}
     >
       {back && (
         <Link
           href={back}
           aria-label="Back"
-          className="mt-1 text-slate-400 dark:text-slate-500 hover:text-foreground transition-colors shrink-0"
+          className="motion-press mt-1 flex size-8 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:border-brand-navy/30 hover:bg-brand-navy/5 hover:text-brand-navy dark:border-slate-800 dark:text-slate-400 dark:hover:border-brand-yellow/30 dark:hover:bg-brand-yellow/10 dark:hover:text-brand-yellow"
         >
           <ArrowLeft className="h-5 w-5" />
         </Link>
       )}
       <div className="flex-1 min-w-0">
-        <h1 className="font-heading text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 leading-tight tracking-tight flex items-center gap-2">
-          {Icon && <Icon className="h-5 w-5 text-slate-500 dark:text-slate-400 shrink-0" />}
+        <h1 className="font-heading flex items-center gap-2 text-lg font-black leading-tight text-slate-950 sm:text-xl dark:text-slate-50">
+          {Icon && (
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-brand-navy dark:border-slate-800 dark:bg-slate-900 dark:text-brand-yellow">
+              <Icon className="h-4 w-4" />
+            </span>
+          )}
           <span className="truncate">{title}</span>
         </h1>
         {description && (
-          <p className="text-sm text-muted-foreground mt-1 truncate">{description}</p>
+          <p className="ops-muted mt-1 truncate text-sm">{description}</p>
         )}
       </div>
-      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </header>
   )
 }

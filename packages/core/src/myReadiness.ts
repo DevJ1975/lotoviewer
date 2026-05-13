@@ -119,10 +119,26 @@ interface AssignmentRow {
   id: string
   tenant_id: string
   user_id: string
+  member_id?: string | null
   position_id: string | null
   shift_label: string | null
   service_start_date: string | null
   supervisor_user_id: string | null
+}
+
+interface MemberRow {
+  id: string
+  tenant_id: string
+  profile_id: string | null
+  display_name: string
+  preferred_name: string | null
+  email: string | null
+  department: string | null
+  position_title: string | null
+  shift_label: string | null
+  supervisor_member_id: string | null
+  readiness_status: string
+  status: string
 }
 
 interface PositionRow {
@@ -192,17 +208,17 @@ export async function fetchMyReadiness(): Promise<MyReadiness | null> {
   if (authError || !authData.user) return null
 
   const userId = authData.user.id
-  const [profileRes, assignmentRes, leaderboardRes] = await Promise.all([
+  const [profileRes, memberRes, leaderboardRes] = await Promise.all([
     supabase
       .from('profiles')
       .select('id, email, full_name, avatar_url, is_admin, is_superadmin')
       .eq('id', userId)
       .maybeSingle(),
     supabase
-      .from('worker_position_assignments')
-      .select('id, tenant_id, user_id, position_id, shift_label, service_start_date, supervisor_user_id')
-      .eq('user_id', userId)
-      .eq('is_current', true)
+      .from('members')
+      .select('id, tenant_id, profile_id, display_name, preferred_name, email, department, position_title, shift_label, supervisor_member_id, readiness_status, status')
+      .eq('profile_id', userId)
+      .eq('status', 'active')
       .order('created_at', { ascending: false })
       .limit(1),
     supabase
@@ -218,6 +234,9 @@ export async function fetchMyReadiness(): Promise<MyReadiness | null> {
   if (leaderboardRes.error) {
     console.warn('[myReadiness] leaderboard fetch failed', leaderboardRes.error)
   }
+  if (memberRes.error && !isRecoverableReadinessError(memberRes.error)) {
+    throw new Error(memberRes.error.message)
+  }
 
   const profileRow = profileRes.error
     ? null
@@ -229,22 +248,27 @@ export async function fetchMyReadiness(): Promise<MyReadiness | null> {
     avatarUrl: profileRow?.avatar_url ?? null,
     isAdmin:   !!profileRow?.is_admin || !!profileRow?.is_superadmin,
   }
+  const member = memberRes.error ? null : (((memberRes.data ?? []) as MemberRow[])[0] ?? null)
+  if (member?.display_name && !profile.fullName) profile.fullName = member.display_name
+  if (member?.email && !profile.email) profile.email = member.email
 
-  const assignment = ((assignmentRes.data ?? []) as AssignmentRow[])[0] ?? null
   const workerName = profile.fullName || profile.email || ''
   const leaderboardRows = (leaderboardRes.data ?? []) as LeaderboardRow[]
   const leaderboard = summarizeLeaderboard(leaderboardRows, userId)
 
+  const assignmentRes = await fetchCurrentAssignment(userId, member?.id ?? null)
+
   if (assignmentRes.error) {
     if (isRecoverableReadinessError(assignmentRes.error)) {
       console.warn('[myReadiness] readiness assignment fetch unavailable', assignmentRes.error)
-      return setupPendingReadiness(profile, leaderboard)
+      return setupPendingReadiness(profile, leaderboard, assignmentFromMember(member))
     }
     throw new Error(assignmentRes.error.message)
   }
 
+  const assignment = ((assignmentRes.data ?? []) as AssignmentRow[])[0] ?? null
   if (!assignment?.position_id) {
-    return setupPendingReadiness(profile, leaderboard)
+    return setupPendingReadiness(profile, leaderboard, assignmentFromMember(member))
   }
 
   const [positionRes, supervisorRes, trainingReqRes, equipmentReqRes, trainingRes, authzRes] = await Promise.all([
@@ -281,7 +305,7 @@ export async function fetchMyReadiness(): Promise<MyReadiness | null> {
     supabase
       .from('equipment_operator_authorizations')
       .select('id, equipment_family, issued_at, evaluation_due_at, expires_at, status')
-      .eq('user_id', userId),
+      .or(member?.id ? `user_id.eq.${userId},member_id.eq.${member.id}` : `user_id.eq.${userId}`),
   ])
 
   for (const res of [positionRes, supervisorRes, trainingReqRes, equipmentReqRes, trainingRes, authzRes]) {
@@ -327,7 +351,7 @@ export async function fetchMyReadiness(): Promise<MyReadiness | null> {
     assignment: {
       positionTitle:    position?.title ?? null,
       department:       position?.department ?? null,
-      shiftLabel:       assignment.shift_label,
+      shiftLabel:       assignment.shift_label ?? member?.shift_label ?? null,
       serviceStartDate: assignment.service_start_date,
       serviceLabel:     serviceLabel(assignment.service_start_date),
       supervisorName:   supervisor?.full_name ?? supervisor?.email ?? null,
@@ -352,6 +376,39 @@ export async function fetchMyReadiness(): Promise<MyReadiness | null> {
       currentTrainingCount:  training.filter(t => t.status === 'current' || t.status === 'due_soon').length,
       openGapCount,
     },
+  }
+}
+
+async function fetchCurrentAssignment(userId: string, memberId: string | null) {
+  const base = supabase
+    .from('worker_position_assignments')
+    .select('id, tenant_id, user_id, member_id, position_id, shift_label, service_start_date, supervisor_user_id')
+    .eq('is_current', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  const res = memberId
+    ? await base.or(`user_id.eq.${userId},member_id.eq.${memberId}`)
+    : await base.eq('user_id', userId)
+
+  if (res.error && memberId && isRecoverableReadinessError(res.error)) {
+    return supabase
+      .from('worker_position_assignments')
+      .select('id, tenant_id, user_id, position_id, shift_label, service_start_date, supervisor_user_id')
+      .eq('user_id', userId)
+      .eq('is_current', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+  }
+  return res
+}
+
+function assignmentFromMember(member: MemberRow | null): Partial<MyReadinessAssignment> {
+  if (!member) return {}
+  return {
+    positionTitle: member.position_title,
+    department:   member.department,
+    shiftLabel:   member.shift_label,
   }
 }
 

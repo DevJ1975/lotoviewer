@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ChevronDown, History, ImageIcon, LogOut, Mail, Shield, UserRound } from 'lucide-react'
+import { ChevronDown, History, LogOut, Mail, Shield, UserRound, UserRoundCog } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import ThemeToggle from '@/components/ThemeToggle'
 import { Avatar } from '@/components/ui/Avatar'
@@ -58,12 +58,12 @@ export default function UserMenu() {
           {profile?.is_admin && (
             <>
               <Link
-                href="/admin/users"
+                href="/admin/members"
                 onClick={() => setOpen(false)}
                 className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
               >
                 <Shield className="h-4 w-4 text-slate-400 dark:text-slate-500" />
-                User Management
+                Member Management
               </Link>
               <Link
                 href="/admin/audit"
@@ -81,15 +81,15 @@ export default function UserMenu() {
             className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
           >
             <UserRound className="h-4 w-4 text-slate-400 dark:text-slate-500" />
-            Profile & Password
+            Account & Password
           </Link>
           <Link
             href="/settings/profile"
             onClick={() => setOpen(false)}
             className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
           >
-            <ImageIcon className="h-4 w-4 text-slate-400 dark:text-slate-500" />
-            Profile picture
+            <UserRoundCog className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+            My Profile
           </Link>
           <Link
             href="/settings/digest"

@@ -137,6 +137,14 @@ interface ParsedReviewer {
   email: string
 }
 
+interface DepartmentEquipmentForReview {
+  equipment_id:       string
+  description:        string | null
+  department:         string
+  photo_status:       'missing' | 'partial' | 'complete'
+  placard_url:        string | null
+}
+
 /**
  * Normalize the singular vs batch shape into a single
  * ParsedReviewer[] with light validation. Returns either the
@@ -224,18 +232,39 @@ export async function POST(req: Request) {
 
   const admin = supabaseAdmin()
 
-  // Look up the tenant's display name + the placard count for the email body.
-  // One read serves the whole batch — every reviewer gets the same numbers.
-  const [{ data: tenantRow }, { count: placardCountRaw }] = await Promise.all([
+  // Look up the tenant's display name + department equipment. A review
+  // invite means the whole department is ready for approval, so every
+  // active row must have complete required photos and a generated placard.
+  const [{ data: tenantRow }, { data: departmentEquipment, error: equipmentErr }] = await Promise.all([
     admin.from('tenants').select('name').eq('id', gate.tenantId).maybeSingle(),
     admin.from('loto_equipment')
-         .select('*', { count: 'exact', head: true })
+         .select('equipment_id, description, department, photo_status, placard_url')
          .eq('tenant_id', gate.tenantId)
          .eq('department', department)
-         .eq('decommissioned', false),
+         .eq('decommissioned', false)
+         .order('equipment_id', { ascending: true }),
   ])
+  if (equipmentErr) {
+    Sentry.captureException(equipmentErr, { tags: { route: 'review-links/POST', stage: 'equipment-readiness' } })
+    return NextResponse.json({ error: equipmentErr.message }, { status: 500 })
+  }
   const tenantName   = tenantRow?.name ?? 'your tenant'
-  const placardCount = placardCountRaw ?? 0
+  const equipmentForReview = (departmentEquipment ?? []) as DepartmentEquipmentForReview[]
+  if (equipmentForReview.length === 0) {
+    return NextResponse.json({ error: 'No active equipment in this department to review' }, { status: 400 })
+  }
+  const notReady = equipmentForReview.filter(eq => eq.photo_status !== 'complete' || !eq.placard_url)
+  if (notReady.length > 0) {
+    return NextResponse.json({
+      error: `Department is not ready for review. ${notReady.length} of ${equipmentForReview.length} equipment records still need complete photos and generated placards.`,
+      notReady: notReady.map(eq => ({
+        equipment_id: eq.equipment_id,
+        photo_status: eq.photo_status,
+        has_placard: Boolean(eq.placard_url),
+      })),
+    }, { status: 409 })
+  }
+  const placardCount = equipmentForReview.length
 
   // Build N insert payloads. Token gets populated by the BEFORE INSERT
   // trigger (migration 035) per row, so each reviewer ends up with a
@@ -263,6 +292,25 @@ export async function POST(req: Request) {
   if (insertErr || !rows?.length) {
     Sentry.captureException(insertErr, { tags: { route: 'review-links/POST', stage: 'insert' } })
     return NextResponse.json({ error: insertErr?.message ?? 'Insert failed' }, { status: 500 })
+  }
+
+  const snapshotPayloads = rows.flatMap(link =>
+    equipmentForReview.map((eq, index) => ({
+      review_link_id:        link.id,
+      tenant_id:             gate.tenantId,
+      equipment_id:          eq.equipment_id,
+      equipment_description: eq.description,
+      department:            department,
+      sort_order:            index,
+    })),
+  )
+  const { error: snapshotErr } = await admin
+    .from('loto_review_link_equipment')
+    .insert(snapshotPayloads)
+  if (snapshotErr) {
+    Sentry.captureException(snapshotErr, { tags: { route: 'review-links/POST', stage: 'snapshot' } })
+    await admin.from('loto_review_links').delete().in('id', rows.map(row => row.id))
+    return NextResponse.json({ error: snapshotErr.message }, { status: 500 })
   }
 
   const baseUrl = publicAppUrl(req)

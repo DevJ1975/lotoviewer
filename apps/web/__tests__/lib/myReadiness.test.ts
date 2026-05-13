@@ -60,6 +60,7 @@ function query(response: MockSupabaseResponse) {
   const chain = {
     select: () => chain,
     eq: () => chain,
+    or: () => chain,
     ilike: () => chain,
     in: () => chain,
     order: () => chain,

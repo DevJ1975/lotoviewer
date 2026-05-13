@@ -22,15 +22,15 @@ vi.mock('@/lib/supabase', () => ({
 
 import TenantHeaderPill from '@/components/TenantHeaderPill'
 
-function tenant(overrides: Partial<{ id: string; tenant_number: string; slug: string; name: string; is_demo: boolean; logo_url: string | null }> = {}) {
+function tenant(overrides: Partial<{ id: string; tenant_number: string; slug: string; name: string; status: string; disabled_at: string | null; is_demo: boolean; logo_url: string | null }> = {}) {
   return {
     id:            overrides.id            ?? 'T1',
     tenant_number: overrides.tenant_number ?? '0001',
     slug:          overrides.slug          ?? 'snak-king',
     name:          overrides.name          ?? 'Snak King',
-    status:        'active',
+    status:        overrides.status        ?? 'active',
     is_demo:       overrides.is_demo       ?? false,
-    disabled_at:   null,
+    disabled_at:   overrides.disabled_at   ?? null,
     modules:       {},
     logo_url:      overrides.logo_url      ?? null,
     custom_domain: null,
@@ -147,5 +147,34 @@ describe('TenantHeaderPill', () => {
       expect(screen.getByRole('menuitem', { name: /WLS Demo/ })).toBeInTheDocument()
       expect(screen.getByRole('menuitem', { name: /Acme Co/ })).toBeInTheDocument()
     })
+  })
+
+  it('superadmin: hides archived, disabled, and numberless smoke tenants from the dropdown', async () => {
+    const allTenants = [
+      tenant({ id: 'T1', name: 'Snak King', tenant_number: '0001', slug: 'snak-king' }),
+      tenant({ id: 'T2', name: 'Equipment Readiness Smoke', tenant_number: '', slug: 'equipment-smoke-1' }),
+      tenant({ id: 'T3', name: 'Archived Tenant', tenant_number: '0003', slug: 'archived', status: 'archived' }),
+      tenant({ id: 'T4', name: 'Disabled Tenant', tenant_number: '0004', slug: 'disabled', disabled_at: new Date().toISOString() }),
+    ]
+    fromMock.mockImplementation(() => ({
+      select: () => ({ order: () => Promise.resolve({ data: allTenants, error: null }) }),
+    }))
+    useTenantMock.mockReturnValue({
+      tenant:       tenant(),
+      available:    [{ ...tenant(), role: 'owner' }],
+      loading:      false,
+      switchTenant: vi.fn(),
+    })
+    useAuthMock.mockReturnValue({ profile: { is_superadmin: true } })
+
+    render(<TenantHeaderPill />)
+    fireEvent.click(screen.getByRole('button'))
+
+    await waitFor(() => {
+      expect(screen.getByRole('menuitem', { name: /Snak King/ })).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('menuitem', { name: /Equipment Readiness Smoke/ })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: /Archived Tenant/ })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: /Disabled Tenant/ })).toBeNull()
   })
 })

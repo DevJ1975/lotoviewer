@@ -43,11 +43,19 @@ export default function AppChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const { userId, loading } = useAuth()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
   const hideChrome = PUBLIC_PATHS.has(pathname) || (!loading && !userId)
 
   // Close the drawer on route change so navigating from inside the drawer
   // doesn't leave it sitting open over the new page.
   useEffect(() => { setDrawerOpen(false) }, [pathname])
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   // Ask the browser to keep our IndexedDB / Cache Storage alive under
   // storage pressure. Fire once per session after the user is authenticated.
@@ -66,12 +74,14 @@ export default function AppChrome({ children }: { children: ReactNode }) {
   return (
     <SidebarProvider open={drawerOpen} onOpenChange={setDrawerOpen}>
       <header
-        className="bg-gradient-to-b from-brand-navy to-[#162F58] border-b border-white/5 shadow-[0_1px_0_0_rgba(255,255,255,0.04)] sticky top-0 z-40 backdrop-saturate-150"
+        className={`sticky top-0 z-40 border-b border-white/10 bg-[#102542]/95 text-white backdrop-blur-xl backdrop-saturate-150 motion-reactive ${
+          scrolled ? 'shadow-[0_12px_28px_rgba(2,8,23,0.24)]' : 'shadow-[0_1px_0_rgba(255,255,255,0.06)]'
+        }`}
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14 gap-2 sm:gap-4">
-            <SidebarTrigger className="shrink-0 rounded-lg text-white/85 hover:bg-white/10 hover:text-white active:bg-white/15 focus-visible:ring-white/40">
+          <div className={`flex items-center justify-between gap-2 sm:gap-4 motion-reactive ${scrolled ? 'h-12' : 'h-14'}`}>
+            <SidebarTrigger className="motion-press shrink-0 rounded-md border border-white/10 bg-white/[0.06] text-white/85 hover:bg-white/[0.12] hover:text-white active:bg-white/15 focus-visible:ring-white/40">
               <Menu className="h-5 w-5" />
             </SidebarTrigger>
 
@@ -94,7 +104,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
           </div>
 
           {/* Mobile search row — shows below md */}
-          <div className="md:hidden pb-2">
+          <div className="md:hidden pb-2 animate-panel-in">
             <GlobalSearch />
           </div>
         </div>
@@ -104,8 +114,8 @@ export default function AppChrome({ children }: { children: ReactNode }) {
           user always knows which module they're in, even when scrolling
           through long content. Sticks below the chrome header. */}
       <div
-        className={`h-[3px] sticky z-30 transition-colors ${accentClasses.strip}`}
-        style={{ top: 'calc(3.5rem + env(safe-area-inset-top))' }}
+        className={`h-[3px] sticky z-30 motion-reactive ${accentClasses.strip}`}
+        style={{ top: `calc(${scrolled ? '3rem' : '3.5rem'} + env(safe-area-inset-top))` }}
         aria-hidden="true"
       />
 
@@ -122,7 +132,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
       <SuperadminImpersonationBanner />
       <ReleaseNotesBanner />
       <StorageQuotaBanner />
-      <main>{children}</main>
+      <main className="ops-shell min-h-[calc(100vh-12rem)]">{children}</main>
       <InstallPrompt />
       <UpdateBanner />
       <UnloadGuard />
@@ -131,7 +141,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
       <AssistantDock />
 
       <footer
-        className="mt-12 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800/60 py-4 text-xs text-slate-500 dark:text-slate-400"
+        className="mt-0 border-t border-slate-200/80 bg-white/90 py-4 text-xs text-slate-500 backdrop-blur dark:border-slate-800/70 dark:bg-slate-950/90 dark:text-slate-400"
         style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">

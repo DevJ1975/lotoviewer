@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { UserRoundCog } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { timeOfDayGreeting } from '@/components/Greeting'
 import { fetchHomeMetrics, type HomeMetrics } from '@soteria/core/homeMetrics'
@@ -91,13 +93,20 @@ export default function MultiModuleDashboard() {
   }, [loadMetrics])
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
+    <div className="animate-panel-in mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">
       <Hero greeting={greeting} firstName={firstName} dateLabel={dateLabel} timeLabel={timeLabel} />
 
       {/* Theme switch — right-aligned strip directly under the hero so
           it's easy to find without crowding the greeting band. The
           toggle component handles its own light/dark coloring. */}
       <div className="flex items-center justify-end gap-2">
+        <Link
+          href="/settings/profile"
+          className="motion-press inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:border-brand-navy/30 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-brand-yellow/30 dark:hover:bg-slate-800"
+        >
+          <UserRoundCog className="h-4 w-4 text-brand-navy dark:text-brand-yellow" />
+          My Profile
+        </Link>
         <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Theme</span>
         <ThemeToggle />
       </div>
