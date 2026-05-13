@@ -267,3 +267,101 @@ export function summarizeHazardousWasteDraft(draft: HazardousWasteFieldDraft): {
     readyForReview: checked === checks.length && flaggedCritical === 0,
   }
 }
+
+// ── Persisted row types ─────────────────────────────────────────────────────
+//
+// Mirror the schema in migration 139. Kept here (not in apps/web) so the
+// Expo app can share them once mobile sync lands.
+
+export interface HazardousWasteAreaRow {
+  id:                   string
+  tenant_id:            string
+  name:                 string
+  area_type:            HazardousWasteAreaType
+  location_notes:       string | null
+  weekly_cadence_days:  number
+  archived_at:          string | null
+  created_at:           string
+  updated_at:           string
+  created_by:           string | null
+  updated_by:           string | null
+}
+
+export type HazardousWasteFindingStatus = 'pass' | 'fail' | 'na'
+
+export interface HazardousWasteInspectionFinding {
+  check_id:          string
+  status:            HazardousWasteFindingStatus
+  note:              string | null
+  flagged_critical:  boolean
+}
+
+export interface HazardousWasteInspectionRow {
+  id:                  string
+  tenant_id:           string
+  area_id:             string
+  area_type:           HazardousWasteAreaType
+  inspected_by:        string | null
+  inspected_at:        string
+  container_label:     string | null
+  waste_description:   string | null
+  observations:        string | null
+  findings:            HazardousWasteInspectionFinding[]
+  total_checks:        number
+  passing_checks:      number
+  critical_failures:   number
+  status:              'draft' | 'submitted'
+  created_at:          string
+  updated_at:          string
+  created_by:          string | null
+  updated_by:          string | null
+}
+
+// Translate an in-progress field draft (the catalog-of-ids shape used by
+// the mobile screen) into the persisted findings array. Anything in
+// `flaggedIds` is a fail; anything in `checkedIds` not also flagged is a
+// pass; everything else is recorded as `na` so the row preserves the
+// full checklist surface area and the binder PDF can show "skipped" items.
+export function findingsFromDraft(draft: HazardousWasteFieldDraft): HazardousWasteInspectionFinding[] {
+  const checks = getChecksForArea(draft.areaType)
+  const flagged = new Set(draft.flaggedIds)
+  const checked = new Set(draft.checkedIds)
+  return checks.map(check => {
+    let status: HazardousWasteFindingStatus
+    if (flagged.has(check.id)) status = 'fail'
+    else if (checked.has(check.id)) status = 'pass'
+    else status = 'na'
+    return {
+      check_id:         check.id,
+      status,
+      note:             null,
+      flagged_critical: check.critical,
+    }
+  })
+}
+
+// Days since the most recent inspection of an area. Returns null when
+// the area has never been inspected so the caller can render an
+// explicit "never inspected" state instead of a misleading large number.
+export function daysSinceLastInspection(
+  lastInspectedAt: string | null,
+  now: Date = new Date(),
+): number | null {
+  if (!lastInspectedAt) return null
+  const last = new Date(lastInspectedAt).getTime()
+  if (!Number.isFinite(last)) return null
+  return Math.floor((now.getTime() - last) / 86_400_000)
+}
+
+// True when the area's last inspection is older than its cadence (or
+// it has never been inspected). Used by the dashboard to count "due"
+// areas without re-querying the inspections table.
+export function isAreaOverdue(
+  area: Pick<HazardousWasteAreaRow, 'weekly_cadence_days'>,
+  lastInspectedAt: string | null,
+  now: Date = new Date(),
+): boolean {
+  const days = daysSinceLastInspection(lastInspectedAt, now)
+  if (days === null) return true
+  return days >= area.weekly_cadence_days
+}
