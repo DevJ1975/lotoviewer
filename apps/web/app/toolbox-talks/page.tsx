@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Loader2, AlertTriangle, FileText, Users, Calendar, Sparkles, Archive, Search } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
@@ -44,6 +44,8 @@ interface ListResponse {
 
 export default function ToolboxTalksListPage() {
   const { tenant } = useTenant()
+  const tenantId = tenant?.id ?? null
+  const requestSeq = useRef(0)
   const [data,           setData]           = useState<ListResponse | null>(null)
   const [error,          setError]          = useState<string | null>(null)
   const [archiveOpen,    setArchiveOpen]    = useState(false)
@@ -51,9 +53,9 @@ export default function ToolboxTalksListPage() {
   const [archiveQuery,   setArchiveQuery]   = useState('')
 
   const fetchTalks = useCallback(async (mode: 'default' | 'archive') => {
-    if (!tenant?.id) return null
+    if (!tenantId) return null
     const { data: { session } } = await supabase.auth.getSession()
-    const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+    const headers: Record<string, string> = { 'x-active-tenant': tenantId }
     if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
 
     const path = mode === 'archive' ? '/api/toolbox-talks?archive=1' : '/api/toolbox-talks'
@@ -61,15 +63,16 @@ export default function ToolboxTalksListPage() {
     const body = await res.json()
     if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
     return body as ListResponse
-  }, [tenant])
+  }, [tenantId])
 
   const load = useCallback(async () => {
+    const seq = ++requestSeq.current
     setError(null)
     try {
       const body = await fetchTalks('default')
-      if (body) setData(body)
+      if (body && seq === requestSeq.current) setData(body)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      if (seq === requestSeq.current) setError(e instanceof Error ? e.message : String(e))
     }
   }, [fetchTalks])
 
@@ -81,18 +84,27 @@ export default function ToolboxTalksListPage() {
     // talks, we need the wider response).
     if (!data?.archive) {
       setArchiveLoading(true)
+      const seq = ++requestSeq.current
       try {
         const body = await fetchTalks('archive')
-        if (body) setData(body)
+        if (body && seq === requestSeq.current) setData(body)
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e))
+        if (seq === requestSeq.current) setError(e instanceof Error ? e.message : String(e))
       } finally {
-        setArchiveLoading(false)
+        if (seq === requestSeq.current) setArchiveLoading(false)
       }
     }
   }, [archiveOpen, data, fetchTalks])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    requestSeq.current += 1
+    setData(null)
+    setError(null)
+    setArchiveOpen(false)
+    setArchiveLoading(false)
+    setArchiveQuery('')
+    void load()
+  }, [tenantId, load])
 
   const filteredArchive = useMemo(() => {
     if (!data?.past) return [] as PastTalkSummary[]

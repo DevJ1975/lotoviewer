@@ -69,7 +69,9 @@ interface DetailResponse {
 export default function ToolboxTalkDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { tenant } = useTenant()
+  const tenantId = tenant?.id ?? null
   const { profile, email, userId } = useAuth()
+  const requestSeq = useRef(0)
 
   const [data,    setData]    = useState<DetailResponse | null>(null)
   const [error,   setError]   = useState<string | null>(null)
@@ -101,22 +103,30 @@ export default function ToolboxTalkDetailPage({ params }: { params: Promise<{ id
   }
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
+    const seq = ++requestSeq.current
     setError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+      const headers: Record<string, string> = { 'x-active-tenant': tenantId }
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
       const res  = await fetch(`/api/toolbox-talks/${id}`, { headers })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
-      setData(body as DetailResponse)
+      if (seq === requestSeq.current) setData(body as DetailResponse)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      if (seq === requestSeq.current) setError(e instanceof Error ? e.message : String(e))
     }
-  }, [tenant, id])
+  }, [tenantId, id])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    requestSeq.current += 1
+    setData(null)
+    setError(null)
+    setSignOpen(false)
+    setSubmitErr(null)
+    void load()
+  }, [tenantId, id, load])
 
   // Default the self-sign name to the auth profile's full_name on
   // open, so the worker doesn't have to retype what we already know.
@@ -141,7 +151,7 @@ export default function ToolboxTalkDetailPage({ params }: { params: Promise<{ id
   }
 
   async function submit() {
-    if (!tenant?.id) return
+    if (!tenantId || submitting) return
     setSubmitErr(null)
 
     const trimmed = signName.trim()
@@ -164,7 +174,7 @@ export default function ToolboxTalkDetailPage({ params }: { params: Promise<{ id
       const { data: { session } } = await supabase.auth.getSession()
       const headers: Record<string, string> = {
         'content-type':    'application/json',
-        'x-active-tenant': tenant.id,
+        'x-active-tenant': tenantId,
       }
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
 
@@ -192,12 +202,12 @@ export default function ToolboxTalkDetailPage({ params }: { params: Promise<{ id
   }
 
   async function openPrintPdf() {
-    if (!tenant?.id || !data) return
+    if (!tenantId || !data) return
     setPrintLoading(true)
     setError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+      const headers: Record<string, string> = { 'x-active-tenant': tenantId }
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
 
       const res = await fetch(`/api/toolbox-talks/${id}/print?lang=${lang}`, { headers })

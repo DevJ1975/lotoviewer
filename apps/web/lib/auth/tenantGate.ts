@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { isModuleVisible } from '@soteria/core/moduleVisibility'
 
 // Shared tenant auth gate for the /api/risk/* family. Same pattern
 // as the inline helpers in /api/admin/review-links — JWT identifies
@@ -21,6 +22,14 @@ export type TenantGate =
       /** Per-request authenticated supabase client (RLS scoped). */
       authedClient: SupabaseClient }
   | { ok: false; status: number; message: string }
+
+export type TenantModuleGate =
+  | (Extract<TenantGate, { ok: true }> & {
+      tenantName:     string | null
+      tenantModules:  Record<string, boolean> | null
+      tenantSettings: Record<string, unknown> | null
+    })
+  | Extract<TenantGate, { ok: false }>
 
 interface GateOptions {
   requireRole?: 'member' | 'admin'
@@ -112,4 +121,32 @@ export function requireTenantMember(req: Request) {
 
 export function requireTenantAdmin(req: Request) {
   return gate(req, { requireRole: 'admin' })
+}
+
+export async function requireTenantModuleMember(req: Request, moduleId: string): Promise<TenantModuleGate> {
+  const member = await requireTenantMember(req)
+  if (!member.ok) return member
+
+  const { data: tenant, error } = await supabaseAdmin()
+    .from('tenants')
+    .select('name, modules, settings, disabled_at')
+    .eq('id', member.tenantId)
+    .maybeSingle()
+
+  if (error) return { ok: false, status: 500, message: error.message }
+  if (!tenant || tenant.disabled_at) {
+    return { ok: false, status: 403, message: 'Module is not enabled for this tenant' }
+  }
+
+  const modules = (tenant.modules ?? null) as Record<string, boolean> | null
+  if (!isModuleVisible(moduleId, modules)) {
+    return { ok: false, status: 403, message: 'Module is not enabled for this tenant' }
+  }
+
+  return {
+    ...member,
+    tenantName:     typeof tenant.name === 'string' ? tenant.name : null,
+    tenantModules:  modules,
+    tenantSettings: (tenant.settings ?? null) as Record<string, unknown> | null,
+  }
 }

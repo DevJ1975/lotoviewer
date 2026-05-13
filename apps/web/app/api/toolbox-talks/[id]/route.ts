@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
-import { requireTenantMember } from '@/lib/auth/tenantGate'
+import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
+import { TOOLBOX_TALKS_MODULE_ID } from '@/lib/toolboxTalkPacks'
 
 // GET /api/toolbox-talks/[id]
 //
@@ -15,7 +16,7 @@ export const runtime = 'nodejs'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const gate = await requireTenantMember(req)
+  const gate = await requireTenantModuleMember(req, TOOLBOX_TALKS_MODULE_ID)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   const { id } = await ctx.params

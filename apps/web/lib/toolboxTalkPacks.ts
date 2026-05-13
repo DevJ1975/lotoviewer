@@ -1,3 +1,4 @@
+export const TOOLBOX_TALKS_MODULE_ID = 'toolbox-talks'
 export const TOOLBOX_TALK_DAYS_AHEAD = 14
 export const TOOLBOX_TALK_ARCHIVE_DAYS = 365
 
