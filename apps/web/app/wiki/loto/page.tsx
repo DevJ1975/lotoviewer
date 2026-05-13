@@ -1,10 +1,21 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.2.0'
+const CURRENT_VERSION = '1.3.0'
 const LAST_UPDATED    = '2026-05-13'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.3.0',
+    date:    '2026-05-13',
+    changes: [
+      'Public review link is now fully anonymous — no name, no signature. ' +
+      'Visitors land directly on the placard list, leave per-placard ' +
+      'notes, and submit an Approve / Needs-changes outcome with optional ' +
+      'overall comments. Migration 138 also retires every legacy per- ' +
+      'reviewer invite link so the new model is the only one in use.',
+    ],
+  },
   {
     version: '1.2.0',
     date:    '2026-05-13',

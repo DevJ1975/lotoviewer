@@ -53,6 +53,17 @@ create unique index if not exists idx_loto_review_links_one_public_per_dept
   on public.loto_review_links(tenant_id, department)
   where is_public and revoked_at is null;
 
+-- 5. Retire every legacy per-reviewer invite link. The new model is one
+--    anonymous public link per department; honouring outstanding invites
+--    would mean the reviewer's email + name lives on after the design
+--    pivot, which the product owner explicitly does not want. Anyone who
+--    had a working URL hits the "Link revoked" screen and asks the
+--    tenant admin to share the public URL instead.
+update public.loto_review_links
+   set revoked_at = coalesce(revoked_at, now())
+ where is_public is not true
+   and revoked_at is null;
+
 -- Reload PostgREST schema so the new column is visible.
 notify pgrst, 'reload schema';
 

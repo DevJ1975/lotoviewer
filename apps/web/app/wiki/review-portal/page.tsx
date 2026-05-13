@@ -1,10 +1,20 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '2.0.0'
+const CURRENT_VERSION = '2.1.0'
 const LAST_UPDATED    = '2026-05-13'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.1.0',
+    date:    '2026-05-13',
+    changes: [
+      'Anonymous mode: the public review link no longer asks for a name ' +
+      'or signature. Submissions are recorded as "Anonymous"; the timestamp ' +
+      'and any overall comments the reviewer types are what carry signal. ' +
+      'Legacy per-reviewer invite rows are revoked by migration 138.',
+    ],
+  },
   {
     version: '2.0.0',
     date:    '2026-05-13',

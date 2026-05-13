@@ -148,8 +148,6 @@ export default async function ReviewPage({
       reviewLinkId={link.id}
       tenantName={tenantName}
       department={link.department}
-      isPublic={link.is_public ?? false}
-      invitedReviewerName={link.reviewer_name}
       adminMessage={link.admin_message}
       isFirstView={!link.first_viewed_at}
       equipment={equipmentList}
@@ -198,10 +196,10 @@ function SignedOffScreen({
             Review submitted
           </div>
           <h1 className="text-2xl font-bold text-emerald-900">
-            Thanks, {link.signoff_typed_name ?? link.reviewer_name ?? 'reviewer'}.
+            Thanks for reviewing.
           </h1>
           <p className="text-sm text-emerald-800 mt-1">
-            Your review of <strong>{tenantName}</strong>'s <strong>{link.department}</strong> placards has been recorded.
+            The <strong>{link.department}</strong> placards for <strong>{tenantName}</strong> have been signed off.
           </p>
           <p className="text-xs text-emerald-700 mt-2">
             Outcome: <strong>{link.signoff_approved ? 'Approved' : 'Needs changes'}</strong>

@@ -2,7 +2,6 @@
 
 import { useEffect, useId, useRef, useState, type DragEvent } from 'react'
 import Image from 'next/image'
-import SignaturePad, { type SignaturePadRef } from '@/components/SignaturePad'
 import { compressImageInWorker, heicToJpeg, isHeic } from '@/lib/imageUtils'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 
@@ -30,45 +29,21 @@ interface InitialReview {
 }
 
 interface Props {
-  token:                string
-  reviewLinkId:         string
-  tenantName:           string
-  department:           string
-  isPublic:             boolean
-  // Non-null only for legacy per-reviewer links from migrations 035 / 134.
-  // For public links (the current model) this is always null and the
-  // reviewer types their name on the page.
-  invitedReviewerName:  string | null
-  adminMessage:         string | null
-  isFirstView:          boolean
-  equipment:            Equipment[]
-  stepsByEquipment:     Record<string, LotoEnergyStep[] | undefined>
-  initialReviews:       InitialReview[]
-}
-
-// Persist the reviewer's typed name in localStorage so a return visit
-// to the same link doesn't make them re-type. Scoped by token so two
-// people sharing a device with different links don't see each other's
-// names pre-filled. Read defensively — localStorage can throw in
-// private-browsing modes on iOS Safari.
-const PUBLIC_NAME_KEY = (token: string) => `soteria:review:${token}:name`
-function readSavedName(token: string): string {
-  if (typeof window === 'undefined') return ''
-  try { return window.localStorage.getItem(PUBLIC_NAME_KEY(token)) ?? '' }
-  catch { return '' }
-}
-function writeSavedName(token: string, name: string) {
-  if (typeof window === 'undefined') return
-  try { window.localStorage.setItem(PUBLIC_NAME_KEY(token), name) }
-  catch { /* private browsing — fine, the form still works */ }
+  token:            string
+  reviewLinkId:     string
+  tenantName:       string
+  department:       string
+  adminMessage:     string | null
+  isFirstView:      boolean
+  equipment:        Equipment[]
+  stepsByEquipment: Record<string, LotoEnergyStep[] | undefined>
+  initialReviews:   InitialReview[]
 }
 
 export default function ReviewClient({
   token,
   tenantName,
   department,
-  isPublic,
-  invitedReviewerName,
   adminMessage,
   isFirstView,
   equipment,
@@ -188,19 +163,6 @@ export default function ReviewClient({
 
   // ─── Signoff section ────────────────────────────────────────────────────
 
-  const sigRef = useRef<SignaturePadRef>(null)
-  const [sigEmpty, setSigEmpty] = useState(true)
-  // Default name resolution:
-  //   public link  → last name typed on this device for this token (localStorage)
-  //   legacy link  → the reviewer name baked into the invite
-  const [typedName, setTypedName] = useState(() => {
-    if (isPublic) return readSavedName(token)
-    return invitedReviewerName ?? ''
-  })
-  // Persist the name as the reviewer types so a tab reload doesn't lose it.
-  useEffect(() => {
-    if (isPublic && typedName.trim()) writeSavedName(token, typedName.trim())
-  }, [isPublic, token, typedName])
   const [overallApproved, setOverallApproved] = useState<'approved' | 'needs_changes' | ''>('')
   const [overallNotes, setOverallNotes] = useState('')
   const [signing, setSigning] = useState(false)
@@ -211,7 +173,7 @@ export default function ReviewClient({
     && equipmentRows.every(eq => Boolean(reviews[eq.equipment_id]?.status))
   const allPlacardsCurrent = equipmentRows.length > 0
     && equipmentRows.every(eq => eq.photo_status === 'complete' && Boolean(eq.placard_url))
-  const canSign = !!typedName.trim() && !sigEmpty && !!overallApproved && allPlacardsReviewed && allPlacardsCurrent && !signing
+  const canSign = !!overallApproved && allPlacardsReviewed && allPlacardsCurrent && !signing
 
   async function submitSignoff() {
     if (!canSign) return
@@ -228,16 +190,16 @@ export default function ReviewClient({
         return save(eq.equipment_id, review, { rethrow: true })
       }))
 
-      const signature = sigRef.current?.toDataURL() ?? ''
+      // Anonymous-mode submission: typed_name and signature are
+      // intentionally omitted; the API substitutes "Anonymous" + a
+      // 1×1 transparent PNG to satisfy the legacy NOT NULL columns.
       const res = await fetch(`/api/review/${token}`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          action:     'signoff',
-          typed_name: typedName.trim(),
-          signature,
-          approved:   overallApproved === 'approved',
-          notes:      overallNotes.trim(),
+          action:   'signoff',
+          approved: overallApproved === 'approved',
+          notes:    overallNotes.trim(),
         }),
       })
       if (!res.ok) {
@@ -259,32 +221,12 @@ export default function ReviewClient({
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold">
             Submitted
           </div>
-          <h1 className="text-xl font-bold text-emerald-900">Thanks, {typedName.trim()}.</h1>
+          <h1 className="text-xl font-bold text-emerald-900">Thanks.</h1>
           <p className="text-sm text-emerald-800">
-            Your review of {tenantName}'s {department} placards has been recorded.
+            Your review of {tenantName}&apos;s {department} placards has been recorded.
             You can close this tab.
           </p>
         </div>
-      </main>
-    )
-  }
-
-  // First-load gate for public links — collect a name before showing
-  // the placard list so every save / signoff already has an attribution.
-  // Legacy invite links skip this because they already carry a reviewer name.
-  if (isPublic && !typedName.trim()) {
-    return (
-      <main className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-        <NameEntryGate
-          tenantName={tenantName}
-          department={department}
-          onSubmit={name => {
-            const trimmed = name.trim()
-            if (!trimmed) return
-            writeSavedName(token, trimmed)
-            setTypedName(trimmed)
-          }}
-        />
       </main>
     )
   }
@@ -302,19 +244,6 @@ export default function ReviewClient({
           <p className="text-sm opacity-90 mt-2">
             {equipmentRows.length} {equipmentRows.length === 1 ? 'placard' : 'placards'} ready for your review.
           </p>
-          {isPublic && (
-            <p className="text-xs opacity-90 mt-1">
-              Signing as <strong>{typedName.trim()}</strong>.{' '}
-              <button
-                type="button"
-                onClick={() => {
-                  writeSavedName(token, '')
-                  setTypedName('')
-                }}
-                className="underline hover:no-underline"
-              >Change name</button>
-            </p>
-          )}
           <p className="mt-3 rounded-lg bg-white/10 px-3 py-2 text-xs font-medium text-white/95">
             If a photo is missing, outdated, or unclear, drag a replacement onto that photo tile before you submit.
           </p>
@@ -414,31 +343,11 @@ export default function ReviewClient({
         {/* ── Signoff ──────────────────────────────────────────────────── */}
         <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
           <h2 className="text-base font-bold text-slate-900">Sign off on this review</h2>
-
-          <label className="block">
-            <span className="text-xs font-semibold text-slate-600">Your full name</span>
-            <input
-              type="text"
-              value={typedName}
-              onChange={e => setTypedName(e.target.value)}
-              placeholder="Type your full name"
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
-            />
-          </label>
-
-          <div>
-            <span className="text-xs font-semibold text-slate-600">Signature</span>
-            <div className="mt-1 border border-slate-200 rounded-lg overflow-hidden bg-slate-50">
-              <SignaturePad ref={sigRef} onChange={(empty) => setSigEmpty(empty)} />
-            </div>
-            <button
-              type="button"
-              className="text-[11px] text-slate-500 hover:text-slate-800 mt-1"
-              onClick={() => { sigRef.current?.clear(); setSigEmpty(true) }}
-            >
-              Clear signature
-            </button>
-          </div>
+          <p className="text-xs text-slate-500">
+            Anyone with this link can sign off. The submission is recorded
+            anonymously; only the timestamp and your overall comments are
+            visible to the team.
+          </p>
 
           <fieldset>
             <legend className="text-xs font-semibold text-slate-600">Outcome</legend>
@@ -669,52 +578,6 @@ function StatusRadio({
         ⚑ Needs changes
       </label>
     </div>
-  )
-}
-
-function NameEntryGate({
-  tenantName, department, onSubmit,
-}: {
-  tenantName: string
-  department: string
-  onSubmit:   (name: string) => void
-}) {
-  const [name, setName] = useState('')
-  return (
-    <form
-      onSubmit={(e) => { e.preventDefault(); onSubmit(name) }}
-      className="bg-white border border-slate-200 rounded-xl p-6 max-w-md w-full space-y-4 shadow-sm"
-    >
-      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-navy text-white text-xs font-semibold">
-        SoteriaField · Placard review
-      </div>
-      <h1 className="text-xl font-bold text-slate-900">
-        {tenantName} · {department}
-      </h1>
-      <p className="text-sm text-slate-600">
-        Anyone with this link can review the placards. Please enter your name
-        so the team knows who left each comment and signed off.
-      </p>
-      <label className="block">
-        <span className="text-xs font-semibold text-slate-700">Your name</span>
-        <input
-          type="text"
-          autoComplete="name"
-          autoFocus
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Jane Doe"
-          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/30"
-        />
-      </label>
-      <button
-        type="submit"
-        disabled={!name.trim()}
-        className="w-full bg-brand-navy text-white font-semibold rounded-lg py-2 text-sm hover:bg-brand-navy/90 disabled:opacity-40"
-      >
-        Continue
-      </button>
-    </form>
   )
 }
 

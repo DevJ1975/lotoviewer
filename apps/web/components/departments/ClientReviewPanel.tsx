@@ -259,8 +259,7 @@ function SignoffStatus({ link }: { link: PublicLinkRow }) {
     return (
       <div className={`text-xs rounded-lg border px-3 py-2 ${toneClass}`}>
         <div className="font-semibold">
-          {approved ? 'Approved' : 'Needs changes'}
-          {link.signoff_typed_name ? ` · ${link.signoff_typed_name}` : ''}
+          {approved ? 'Approved' : 'Needs changes'} · Anonymous
         </div>
         {link.signoff_notes && (
           <div className="mt-1 whitespace-pre-wrap">{link.signoff_notes}</div>

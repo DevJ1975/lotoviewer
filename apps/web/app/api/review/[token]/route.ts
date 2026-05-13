@@ -152,17 +152,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   // Final write. Sets signed_off_at + the signature payload + IP / UA
   // for audit. Capping at one signoff per link — if the reviewer has
   // already signed, we 409 above.
+  //
+  // Anonymous-mode (the only mode after migration 138): typed_name and
+  // signature are optional from the client. The DB columns are NOT NULL
+  // for legacy reasons, so we substitute "Anonymous" + a 1×1 transparent
+  // PNG so the existing signoff RPC + downstream SignedOffScreen keep
+  // working without further migration. The audit trail (IP + UA + the
+  // optional overall notes the reviewer types) is what actually carries
+  // signal.
   if (action === 'signoff') {
-    const typedName = typeof body.typed_name === 'string' ? body.typed_name.trim() : ''
-    const signature = typeof body.signature === 'string' ? body.signature : ''
+    const ANONYMOUS_TYPED_NAME = 'Anonymous'
+    const ANONYMOUS_SIGNATURE  = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
+    const rawTypedName = typeof body.typed_name === 'string' ? body.typed_name.trim() : ''
+    const rawSignature = typeof body.signature  === 'string' ? body.signature : ''
+    const typedName = rawTypedName || ANONYMOUS_TYPED_NAME
+    const signature = rawSignature.startsWith('data:image/') ? rawSignature : ANONYMOUS_SIGNATURE
     const approved  = body.approved === true ? true : body.approved === false ? false : null
     const notes     = typeof body.notes === 'string' ? body.notes.trim() : ''
-    if (!typedName) {
-      return NextResponse.json({ error: 'typed_name required' }, { status: 400 })
-    }
-    if (!signature.startsWith('data:image/')) {
-      return NextResponse.json({ error: 'signature data URL required' }, { status: 400 })
-    }
     if (approved === null) {
       return NextResponse.json({ error: 'approved (boolean) required' }, { status: 400 })
     }
