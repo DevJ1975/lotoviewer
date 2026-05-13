@@ -570,6 +570,43 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
   },
 
+  // ── Hazardous Waste module ─────────────────────────────────────────────
+  // California-forward hazardous waste records, accumulation checks,
+  // manifest preparation, and inspection binders. The web slice starts
+  // as an operating hub and manual; the Expo field slice is intentionally
+  // offline-first so technicians can inspect containers away from signal.
+  {
+    id:          'hazardous-waste',
+    name:        'Hazardous Waste',
+    description: 'Waste determinations, accumulation checks, manifests, calendar reminders, and inspection binders',
+    href:        '/hazardous-waste',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'Recycle',
+    color:       'amber',
+  },
+  {
+    id:          'hazardous-waste-field',
+    name:        'Field Inspections',
+    description: 'Offline-ready accumulation-area and container checks',
+    href:        '/hazardous-waste',
+    category:    'safety',
+    parent:      'hazardous-waste',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'hazardous-waste-documents',
+    name:        'Documents & Reports',
+    description: 'Official-form preparation packets, PDF records, and submission calendar',
+    href:        '/hazardous-waste',
+    category:    'safety',
+    parent:      'hazardous-waste',
+    enabled:     true,
+    comingSoon:  false,
+  },
+
   // Legacy near-miss surface — kept enabled during the Phase 1 → Phase 6
   // transition so existing tenants don't lose their bookmarks. The new
   // unified `incidents` module (above) replaces it; remove this entry
