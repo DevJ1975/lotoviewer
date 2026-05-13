@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Flame, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useTenant } from '@/components/TenantProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import type {
   ConfinedSpacePermit,
@@ -46,6 +47,7 @@ function defaultExpiresAt(): string {
 
 export default function NewHotWorkPermitPage() {
   const { profile, loading: authLoading } = useAuth()
+  const { tenantId } = useTenant()
   const router = useRouter()
 
   // ── Core fields ────────────────────────────────────────────────────────
@@ -102,11 +104,17 @@ export default function NewHotWorkPermitPage() {
   const [equipmentList, setEquipmentList] = useState<Equipment[]>([])
   const [equipmentLoading, setEquipmentLoading] = useState(true)
   useEffect(() => {
+    if (!tenantId) {
+      setEquipmentList([])
+      setEquipmentLoading(false)
+      return
+    }
     let cancelled = false
     ;(async () => {
       const { data } = await supabase
         .from('loto_equipment')
         .select('equipment_id, description, department, decommissioned')
+        .eq('tenant_id', tenantId)
         .eq('decommissioned', false)
         .order('equipment_id', { ascending: true })
         .limit(500)
@@ -116,7 +124,7 @@ export default function NewHotWorkPermitPage() {
       }
     })()
     return () => { cancelled = true }
-  }, [])
+  }, [tenantId])
 
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>

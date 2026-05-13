@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { Sheet } from '@/components/ui/sheet'
 import type { Equipment } from '@soteria/core/types'
 import { isOffline, OFFLINE_WRITE_MESSAGE } from '@/lib/netGuard'
+import { useTenant } from '@/components/TenantProvider'
 
 type PlacardPatch = {
   description:    string
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export default function PlacardDetailsSheet({ open, onClose, equipment, onSaved, onToast }: Props) {
+  const { tenantId } = useTenant()
   const equipmentId   = equipment.equipment_id
   const description   = equipment.description
   const notes         = equipment.notes ?? ''
@@ -42,6 +44,10 @@ export default function PlacardDetailsSheet({ open, onClose, equipment, onSaved,
       onToast(OFFLINE_WRITE_MESSAGE, 'error')
       return
     }
+    if (!tenantId) {
+      onToast('No active tenant selected.', 'error')
+      return
+    }
     setSaving(true)
     const patch: PlacardPatch = {
       description:    draftDesc.trim() || description,
@@ -54,6 +60,7 @@ export default function PlacardDetailsSheet({ open, onClose, equipment, onSaved,
         ...patch,
         updated_at: new Date().toISOString(),
       })
+      .eq('tenant_id', tenantId)
       .eq('equipment_id', equipmentId)
 
     if (error) {

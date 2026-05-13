@@ -52,6 +52,7 @@ const METRICS_REFRESH_MS = 60 * 1000   // permits / equipment / activity: every 
 export default function MultiModuleDashboard() {
   const { profile, email } = useAuth()
   const { tenant, loading: tenantLoading } = useTenant()
+  const tenantId = tenant?.id ?? null
   const tenantModules = tenant?.modules ?? null
   const firstName = (profile?.full_name?.trim().split(/\s+/)[0]) || (email?.split('@')[0]) || 'there'
 
@@ -81,9 +82,10 @@ export default function MultiModuleDashboard() {
 
   const loadMetrics = useCallback(async () => {
     if (tenantLoading) return
+    if (!tenantId) return
     setRefreshing(true)
     try {
-      const m = await fetchHomeMetrics(tenantModules)
+      const m = await fetchHomeMetrics(tenantModules, tenantId)
       setMetrics(m)
       setMetricsError(null)
       setMetricsLoadedAt(Date.now())
@@ -93,7 +95,7 @@ export default function MultiModuleDashboard() {
     } finally {
       setRefreshing(false)
     }
-  }, [tenantLoading, tenantModules])
+  }, [tenantLoading, tenantModules, tenantId])
 
   useEffect(() => {
     if (tenantLoading) return

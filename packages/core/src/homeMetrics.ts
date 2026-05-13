@@ -525,6 +525,7 @@ function assertQueryOk<T>(label: string, result: QueryResult<T>): void {
 
 export async function fetchHomeMetrics(
   tenantModules?: Record<string, boolean> | null,
+  tenantId?: string | null,
 ): Promise<HomeMetrics> {
   const nowMs = Date.now()
   const nowIso = new Date(nowMs).toISOString()
@@ -582,26 +583,30 @@ export async function fetchHomeMetrics(
       .order('created_at', { ascending: false })
       .limit(4)
       : skippedRows<CommandCenterSafetyAlert>(),
-    modules.loto ? supabase
+    modules.loto && tenantId ? supabase
       .from('loto_equipment')
       .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
       .eq('decommissioned', false)
       : skippedCount(),
-    modules.loto ? supabase
+    modules.loto && tenantId ? supabase
       .from('loto_equipment')
       .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
       .eq('decommissioned', false)
       .eq('photo_status', 'complete')
       : skippedCount(),
-    modules.loto ? supabase
+    modules.loto && tenantId ? supabase
       .from('loto_equipment')
       .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
       .eq('decommissioned', false)
       .eq('photo_status', 'partial')
       : skippedCount(),
-    modules.loto ? supabase
+    modules.loto && tenantId ? supabase
       .from('loto_equipment')
       .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
       .eq('decommissioned', false)
       .eq('photo_status', 'missing')
       : skippedCount(),

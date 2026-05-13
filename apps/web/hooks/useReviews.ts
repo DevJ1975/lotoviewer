@@ -3,22 +3,29 @@
 import { useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { LotoReview } from '@soteria/core/types'
+import { useTenant } from '@/components/TenantProvider'
 
 export function useReviews(department: string) {
   const [reviews, setReviews]   = useState<LotoReview[]>([])
   const [loading, setLoading]   = useState(false)
+  const { tenantId } = useTenant()
 
   const fetchReviews = useCallback(async () => {
+    if (!tenantId) {
+      setReviews([])
+      return
+    }
     setLoading(true)
     const { data } = await supabase
       .from('loto_reviews')
       .select('*')
+      .eq('tenant_id', tenantId)
       .eq('department', department)
       .order('created_at', { ascending: false })
       .limit(10)
     if (data) setReviews(data as LotoReview[])
     setLoading(false)
-  }, [department])
+  }, [department, tenantId])
 
   const submitReview = useCallback(async (payload: {
     reviewer_name: string
@@ -26,15 +33,18 @@ export function useReviews(department: string) {
     notes: string | null
     approved: boolean
   }) => {
+    if (!tenantId) {
+      return { data: null, error: { message: 'No active tenant selected.' } }
+    }
     const { data, error } = await supabase
       .from('loto_reviews')
-      .insert({ department, ...payload, signed_at: new Date().toISOString() })
+      .insert({ tenant_id: tenantId, department, ...payload, signed_at: new Date().toISOString() })
       .select()
       .single()
 
     if (!error && data) setReviews(prev => [data as LotoReview, ...prev])
     return { data: data as LotoReview | null, error }
-  }, [department])
+  }, [department, tenantId])
 
   return { reviews, loading, fetchReviews, submitReview }
 }

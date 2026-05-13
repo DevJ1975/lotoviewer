@@ -5,11 +5,12 @@ import { renameDepartment } from '@/lib/departments'
 
 interface Props {
   currentName: string
+  tenantId:    string
   onClose:     () => void
   onRenamed:   (newName: string) => void
 }
 
-export default function RenameDepartmentModal({ currentName, onClose, onRenamed }: Props) {
+export default function RenameDepartmentModal({ currentName, tenantId, onClose, onRenamed }: Props) {
   const [name, setName]             = useState(currentName)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError]           = useState<string | null>(null)
@@ -24,14 +25,14 @@ export default function RenameDepartmentModal({ currentName, onClose, onRenamed 
     setSubmitting(true)
     setError(null)
     try {
-      await renameDepartment(currentName, trimmed)
+      await renameDepartment(currentName, trimmed, tenantId)
       onRenamed(trimmed)
       onClose()
     } catch (e) {
       setError((e as Error).message || 'Could not rename department.')
       setSubmitting(false)
     }
-  }, [canSubmit, currentName, trimmed, onRenamed, onClose])
+  }, [canSubmit, currentName, trimmed, tenantId, onRenamed, onClose])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {

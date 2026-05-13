@@ -170,6 +170,10 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
   }
 
   async function handleSave() {
+    if (!tenant?.id) {
+      onToast('No active tenant selected.', 'error')
+      return
+    }
     setSaving(true)
 
     // Partition: inserts are new rows with at least one non-empty field
@@ -204,6 +208,7 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
     let inserted: LotoEnergyStep[] = []
     if (inserts.length > 0) {
       const insertRows = inserts.map(d => ({
+        tenant_id:              tenant.id,
         equipment_id:           equipmentId,
         energy_type:            d.energy_type,
         step_number:            d.step_number,
@@ -229,7 +234,7 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
           tag_description:        d.tag_description.trim()        || null,
           isolation_procedure:    d.isolation_procedure.trim()    || null,
           method_of_verification: d.method_of_verification.trim() || null,
-        }).eq('id', d.dbId!),
+        }).eq('tenant_id', tenant.id).eq('id', d.dbId!),
       ))
       if (updateResults.some(r => r.error)) {
         onToast('Some step edits could not be saved. Please retry.', 'error')

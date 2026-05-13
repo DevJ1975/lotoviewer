@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useWakeLock } from '@/hooks/useWakeLock'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
+import { useTenant } from '@/components/TenantProvider'
 
 interface Props {
   open:      boolean
@@ -18,6 +19,7 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
   const [progress, setProgress]   = useState(0)
   const [phase, setPhase]         = useState<'idle' | 'fetching' | 'rendering' | 'done' | 'error'>('idle')
   const [errorMsg, setErrorMsg]   = useState<string | null>(null)
+  const { tenantId }              = useTenant()
   // Batch placard PDFs can take 30–60s for a full department. Hold the
   // screen awake so the tablet doesn't sleep mid-render.
   useWakeLock(open && busy)
@@ -68,6 +70,11 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
 
   async function handleGenerate() {
     if (!dept || deptEquipment.length === 0) return
+    if (!tenantId) {
+      setPhase('error')
+      setErrorMsg('No active tenant selected.')
+      return
+    }
     setBusy(true)
     setProgress(0)
     setPhase('fetching')
@@ -79,6 +86,7 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
       const { data: allSteps, error: stepsError } = await supabase
         .from('loto_energy_steps')
         .select('*')
+        .eq('tenant_id', tenantId)
         .in('equipment_id', equipmentIds)
         .order('energy_type', { ascending: true })
         .order('step_number', { ascending: true })

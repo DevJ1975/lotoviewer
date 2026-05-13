@@ -89,6 +89,7 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
         const { error: patchErr } = await supabase
           .from('loto_equipment')
           .update({ placard_url: publicUrl, updated_at: new Date().toISOString() })
+          .eq('tenant_id', tenantId)
           .eq('equipment_id', equipmentId)
         if (cancelled) return
         if (patchErr) { setUploadState('error'); onErrorRef.current?.('Placard saved but record update failed.'); return }

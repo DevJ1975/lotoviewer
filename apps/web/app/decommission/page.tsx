@@ -16,6 +16,7 @@ import { isOffline, OFFLINE_WRITE_MESSAGE } from '@/lib/netGuard'
 import { debug } from '@/lib/debug'
 import { CounterTile } from './_components/CounterTile'
 import { DecommRow }   from './_components/DecommRow'
+import { useTenant } from '@/components/TenantProvider'
 
 // Module-level marker so non-production builds can confirm the latest JS
 // actually loaded (stale Vercel edge cache, SW cache, or browser HTTP cache
@@ -39,10 +40,16 @@ export default function DecommissionPage() {
   const [search, setSearch]           = useState('')
   const debounced                     = useDebounce(search, 200)
   const { toast, showToast, clearToast } = useToast()
+  const { tenantId, loading: tenantLoading } = useTenant()
 
   const fetchData = useCallback(async () => {
+    if (!tenantId) {
+      setEquipment([])
+      setLoading(tenantLoading)
+      return
+    }
     try {
-      const rows = await loadAllEquipment()
+      const rows = await loadAllEquipment(tenantId)
       // Hard schema check: if the `decommissioned` column is missing from the
       // DB or PostgREST's schema cache, every row comes back without the
       // property and counters look fine (all "active") — but writes then
@@ -57,7 +64,7 @@ export default function DecommissionPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [tenantId, tenantLoading])
 
   useEffect(() => { fetchData() }, [fetchData])
   useVisibilityRefetch(fetchData)
@@ -104,6 +111,7 @@ export default function DecommissionPage() {
   // value (read from current state) for undo. Setter callback runs twice
   // under React Strict Mode, so we don't read state from inside it.
   const setDecommissionedRaw = useCallback(async (id: string, next: boolean): Promise<string | null> => {
+    if (!tenantId) return 'No active tenant selected.'
     setEquipment(prev => prev.map(eq =>
       eq.equipment_id === id ? { ...eq, decommissioned: next } : eq,
     ))
@@ -120,6 +128,7 @@ export default function DecommissionPage() {
     const { data, error } = await supabase
       .from('loto_equipment')
       .update({ decommissioned: next })
+      .eq('tenant_id', tenantId)
       .eq('equipment_id', id)
       .select('equipment_id, decommissioned')
     debug('[decommission] PATCH result', { id, next, data, error })
@@ -152,7 +161,7 @@ export default function DecommissionPage() {
       return `Server saved decommissioned=${stored} (expected ${next}). Run migration 002 or reload the Supabase schema cache.`
     }
     return null
-  }, [])
+  }, [tenantId])
 
   // Bulk apply — set the same `next` value for every selected id, with a
   // single optimistic patch and one round-trip per row. Reports the per-row
@@ -170,6 +179,11 @@ export default function DecommissionPage() {
 
   const bulkApply = useCallback(async (next: boolean) => {
     if (bulkBusy) return
+    if (!tenantId) {
+      haptic('error')
+      showToast('No active tenant selected.', 'error')
+      return
+    }
     // Snapshot the id set into a Set as well — every optimistic/rollback
     // branch reads from it via closure, and we must not let subsequent
     // `selected` mutations (user taps more rows while PATCH is in flight)
@@ -195,6 +209,7 @@ export default function DecommissionPage() {
     const { data, error } = await supabase
       .from('loto_equipment')
       .update({ decommissioned: next })
+      .eq('tenant_id', tenantId)
       .in('equipment_id', ids)
       .select('equipment_id, decommissioned')
 
@@ -250,6 +265,7 @@ export default function DecommissionPage() {
         const { data: undoData, error: undoErr } = await supabase
           .from('loto_equipment')
           .update({ decommissioned: !next })
+          .eq('tenant_id', tenantId)
           .in('equipment_id', ids)
           .select('equipment_id')
         if (undoErr || !undoData || undoData.length === 0) {
@@ -261,7 +277,7 @@ export default function DecommissionPage() {
         }
       } },
     )
-  }, [bulkBusy, effectiveSelected, showToast])
+  }, [bulkBusy, effectiveSelected, showToast, tenantId])
 
   const toggle = useCallback(async (id: string) => {
     debug('[decommission] toggle invoked', { id })

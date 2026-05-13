@@ -16,6 +16,7 @@ import {
   parseCsv, buildHeaderMap, processRows, decodeFile, toInsertRow,
   type ParsedRow,
 } from '@/lib/csvImport'
+import { useTenant } from '@/components/TenantProvider'
 
 type Step = 'upload' | 'preview' | 'result'
 
@@ -33,6 +34,7 @@ export default function ImportPage() {
   const [dragOver, setDragOver]             = useState(false)
   const [loadingFile, setLoadingFile]       = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const { tenantId } = useTenant()
 
   const counts = useMemo(() => ({
     new:      rows.filter(r => r.status === 'new').length,
@@ -41,6 +43,10 @@ export default function ImportPage() {
   }), [rows])
 
   const handleFile = useCallback(async (file: File) => {
+    if (!tenantId) {
+      setParseError('No active tenant selected.')
+      return
+    }
     setParseError(null)
     setFileName(file.name)
     setLoadingFile(true)
@@ -69,6 +75,7 @@ export default function ImportPage() {
       const { data, error } = await supabase
         .from('loto_equipment')
         .select('equipment_id')
+        .eq('tenant_id', tenantId)
 
       if (error) {
         setParseError(`Could not load existing equipment: ${error.message}`)
@@ -83,7 +90,7 @@ export default function ImportPage() {
     } finally {
       setLoadingFile(false)
     }
-  }, [])
+  }, [tenantId])
 
   const onFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -109,11 +116,17 @@ export default function ImportPage() {
   }
 
   const doImport = async () => {
+    if (!tenantId) {
+      setImportError('No active tenant selected.')
+      return
+    }
     setImporting(true)
     setImportError(null)
     setImportProgress(0)
 
-    const newRows = rows.filter(r => r.status === 'new').map(toInsertRow)
+    const newRows = rows
+      .filter(r => r.status === 'new')
+      .map(row => ({ ...toInsertRow(row), tenant_id: tenantId }))
     const total   = newRows.length
     let inserted  = 0
 

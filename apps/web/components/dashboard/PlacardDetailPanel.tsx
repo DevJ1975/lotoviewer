@@ -7,6 +7,7 @@ import PlacardView from '@/components/placard/PlacardView'
 import Toast from '@/components/Toast'
 import { useToast } from '@/hooks/useToast'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
+import { useTenant } from '@/components/TenantProvider'
 
 interface Props {
   equipment: Equipment | null
@@ -20,6 +21,7 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
   const [fullEquipment, setFullEquipment] = useState<Equipment | null>(null)
   const [loading, setLoading]             = useState(false)
   const { toast, showToast, clearToast }  = useToast()
+  const { tenantId }                      = useTenant()
 
   // Depend only on the equipment_id, NOT the whole equipment object.
   // `equipment` changes reference on every realtime tick (the parent's
@@ -33,7 +35,7 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
   // warning block correctly, so it's owned here not inherited.
   const equipmentId = equipment?.equipment_id
   useEffect(() => {
-    if (!equipmentId) {
+    if (!equipmentId || !tenantId) {
       setSteps([])
       setFullEquipment(null)
       return
@@ -44,11 +46,13 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
       supabase
         .from('loto_equipment')
         .select('*')
+        .eq('tenant_id', tenantId)
         .eq('equipment_id', equipmentId)
         .single(),
       supabase
         .from('loto_energy_steps')
         .select('*')
+        .eq('tenant_id', tenantId)
         .eq('equipment_id', equipmentId)
         .order('energy_type', { ascending: true })
         .order('step_number', { ascending: true }),
@@ -79,7 +83,7 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
       setLoading(false)
     })
     return () => { cancelled = true }
-  }, [equipmentId])
+  }, [equipmentId, tenantId])
 
   if (!equipment) {
     return (

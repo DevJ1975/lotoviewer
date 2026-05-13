@@ -13,26 +13,34 @@ import PlacardDetailPanel   from '@/components/dashboard/PlacardDetailPanel'
 import BatchPrintModal      from '@/components/BatchPrintModal'
 import { DashboardSkeleton } from '@/components/Skeleton'
 import { useSession } from '@/components/SessionProvider'
+import { useTenant } from '@/components/TenantProvider'
 
 // ── Perf: stale-while-revalidate cache ────────────────────────────────────
 // iPads reload the PWA often; this lets the dashboard paint instantly from
 // the last fresh snapshot while a background fetch reconciles any drift.
-const CACHE_KEY = 'loto:equip-list:v1'
+const CACHE_KEY_PREFIX = 'loto:equip-list:v2'
 
-function readCache(): Equipment[] | null {
+function cacheKeyForTenant(tenantId: string): string {
+  return `${CACHE_KEY_PREFIX}:${tenantId}`
+}
+
+function readCache(tenantId: string): Equipment[] | null {
   if (typeof window === 'undefined') return null
   try {
-    const raw = window.localStorage.getItem(CACHE_KEY)
+    const raw = window.localStorage.getItem(cacheKeyForTenant(tenantId))
     if (!raw) return null
     const parsed = JSON.parse(raw) as { savedAt?: number; rows?: Equipment[] }
-    return Array.isArray(parsed.rows) ? parsed.rows : null
+    return Array.isArray(parsed.rows)
+      ? parsed.rows.filter(row => row.tenant_id === tenantId)
+      : null
   } catch { return null }
 }
 
-function writeCache(rows: Equipment[]) {
+function writeCache(tenantId: string, rows: Equipment[]) {
   if (typeof window === 'undefined') return
   try {
-    window.localStorage.setItem(CACHE_KEY, JSON.stringify({ savedAt: Date.now(), rows }))
+    const tenantRows = rows.filter(row => row.tenant_id === tenantId)
+    window.localStorage.setItem(cacheKeyForTenant(tenantId), JSON.stringify({ savedAt: Date.now(), rows: tenantRows }))
   } catch { /* quota / private mode — non-fatal */ }
 }
 
@@ -67,8 +75,14 @@ function HomeDashboard() {
   const selectedDept  = searchParams.get('dept')
   const selectedEqId  = searchParams.get('eq')
   const { recordVisit } = useSession()
+  const { tenantId, loading: tenantLoading } = useTenant()
 
   const fetchData = useCallback(async () => {
+    if (!tenantId) {
+      setEquipment([])
+      setLoading(tenantLoading)
+      return
+    }
     // Rolled back from a narrow column list to `*` after a SELECT with an
     // explicit projection started returning "Could not load equipment" —
     // one of the columns we named likely isn't in the live schema. Logging
@@ -78,6 +92,7 @@ function HomeDashboard() {
     const { data, error } = await supabase
       .from('loto_equipment')
       .select('*')
+      .eq('tenant_id', tenantId)
       .order('equipment_id', { ascending: true })
     if (error) {
       console.error('[home] loto_equipment fetch failed', {
@@ -90,11 +105,11 @@ function HomeDashboard() {
     } else if (data) {
       const rows = data as Equipment[]
       setEquipment(rows)
-      writeCache(rows)
+      writeCache(tenantId, rows)
       setLoadError(false)
     }
     setLoading(false)
-  }, [])
+  }, [tenantId, tenantLoading])
 
   // Hydrate from localStorage synchronously on mount so the first paint
   // shows the last-known data instantly while the network request flies.
@@ -102,12 +117,13 @@ function HomeDashboard() {
   // hydration mismatches — server renders empty, client hydrates empty,
   // then we swap in the cache.
   useEffect(() => {
-    const cached = readCache()
+    if (!tenantId) return
+    const cached = readCache(tenantId)
     if (cached && cached.length > 0) {
       setEquipment(cached)
       setLoading(false)
     }
-  }, [])
+  }, [tenantId])
 
   // Debounce realtime events with requestAnimationFrame. A CSV import or
   // bulk update can fire dozens of postgres_changes events in a burst —
@@ -117,24 +133,32 @@ function HomeDashboard() {
   const rafHandle       = useRef<number | null>(null)
   const flushPending    = useCallback(() => {
     rafHandle.current = null
-    const pending = pendingPayloads.current
+    if (!tenantId) {
+      pendingPayloads.current = []
+      return
+    }
+    const pending = pendingPayloads.current.filter(payload => {
+      const row = payload.eventType === 'DELETE' ? payload.old : payload.new
+      return row?.tenant_id === tenantId
+    })
     pendingPayloads.current = []
     if (pending.length === 0) return
     setEquipment((prev: Equipment[]) => pending.reduce(reconcileEquipment, prev))
-  }, [])
+  }, [tenantId])
 
   useEffect(() => {
     fetchData()
+    if (!tenantId) return
 
     // Reconcile realtime events in-memory instead of refetching the whole
     // table on every change — matters once equipment count grows past a few
     // hundred rows. DELETE/INSERT payloads carry the full row; UPDATE carries
     // the new record.
     const channel = supabase
-      .channel('loto_equipment_changes')
+      .channel(`loto_equipment_changes:${tenantId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'loto_equipment' },
+        { event: '*', schema: 'public', table: 'loto_equipment', filter: `tenant_id=eq.${tenantId}` },
         (payload: RealtimePayload) => {
           pendingPayloads.current.push(payload)
           if (rafHandle.current == null) {
@@ -152,7 +176,7 @@ function HomeDashboard() {
       }
       pendingPayloads.current = []
     }
-  }, [fetchData, flushPending])
+  }, [fetchData, flushPending, tenantId])
 
   useVisibilityRefetch(fetchData)
 
