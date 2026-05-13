@@ -74,10 +74,11 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: 'Invalid supervisor member id.' }, { status: 400 })
   }
   if (typeof patch.display_name === 'string') {
-    patch.display_name = patch.display_name.trim()
-    if (!patch.display_name || patch.display_name.length > 160) {
+    const displayName = patch.display_name.trim()
+    if (!displayName || displayName.length > 160) {
       return NextResponse.json({ error: 'Display name must be 1-160 characters.' }, { status: 400 })
     }
+    patch.display_name = displayName
     patch.display_name_source ??= 'admin'
   }
 
