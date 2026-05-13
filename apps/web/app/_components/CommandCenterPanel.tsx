@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { AlertTriangle, CheckCircle2, Clock, ShieldAlert } from 'lucide-react'
 import type { HomeMetrics } from '@soteria/core/homeMetrics'
+import { InfographicMetricCard, type InfographicTone } from './InfographicMetricCard'
 
 export type CommandCenterTone = 'critical' | 'warning' | 'attention' | 'ok'
 
@@ -14,6 +15,7 @@ export interface CommandCenterItem {
   detail:          string
   suggestedAction: string
   href:            string
+  percent:         number
 }
 
 const TONE_RANK: Record<CommandCenterTone, number> = {
@@ -26,7 +28,22 @@ const TONE_RANK: Record<CommandCenterTone, number> = {
 export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterItem[] {
   const items: CommandCenterItem[] = []
 
-  if (metrics.expiredPermitCount > 0) {
+  if (metrics.commandCenterSafetyAlerts.length > 0) {
+    const firstAlert = metrics.commandCenterSafetyAlerts[0]
+    const tone = firstAlert?.severity_tone ?? 'attention'
+    items.push({
+      id:              'incident-safety-alerts',
+      tone,
+      label:           'Incident alerts',
+      value:           String(metrics.commandCenterSafetyAlerts.length),
+      detail:          firstAlert ? `${firstAlert.report_number}: ${firstAlert.title}` : 'Unresolved command-center safety alerts.',
+      suggestedAction: 'Triage the alert, assign ownership, and document the response.',
+      href:            firstAlert ? `/incidents/${firstAlert.incident_id}` : '/incidents',
+      percent:         tonePercent(tone),
+    })
+  }
+
+  if (metrics.modules.confinedSpaces && metrics.expiredPermitCount > 0) {
     items.push({
       id:     'expired-confined-space-permits',
       tone:   'critical',
@@ -35,10 +52,11 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
       detail: 'Evacuate or cancel expired confined-space entries.',
       suggestedAction: 'Confirm entrants are out, then cancel or close each permit.',
       href:   '/confined-spaces/status',
+      percent: 100,
     })
   }
 
-  if (metrics.hotWorkExpiringSoon.length > 0) {
+  if (metrics.modules.hotWork && metrics.hotWorkExpiringSoon.length > 0) {
     items.push({
       id:     'hot-work-expiring',
       tone:   'critical',
@@ -47,10 +65,11 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
       detail: 'Finish, extend, or cancel before authorization lapses.',
       suggestedAction: 'Contact the permit authorizer before work continues.',
       href:   '/hot-work/status',
+      percent: 100,
     })
   }
 
-  if (metrics.expiringSoonPermits.length > 0) {
+  if (metrics.modules.confinedSpaces && metrics.expiringSoonPermits.length > 0) {
     items.push({
       id:     'confined-space-expiring',
       tone:   'warning',
@@ -59,10 +78,11 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
       detail: 'Less than 2 hours left on active entries.',
       suggestedAction: 'Check entrant status and prepare renewal or cancellation.',
       href:   '/confined-spaces/status',
+      percent: 82,
     })
   }
 
-  if (metrics.pendingStalePermits.length > 0) {
+  if (metrics.modules.confinedSpaces && metrics.pendingStalePermits.length > 0) {
     items.push({
       id:     'stale-permit-drafts',
       tone:   'warning',
@@ -71,10 +91,11 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
       detail: 'Open drafts should be signed or abandoned.',
       suggestedAction: 'Have supervisors sign active drafts or abandon stale work.',
       href:   '/confined-spaces/status',
+      percent: 70,
     })
   }
 
-  if (metrics.hotWorkInPostWatch.length > 0) {
+  if (metrics.modules.hotWork && metrics.hotWorkInPostWatch.length > 0) {
     items.push({
       id:     'fire-watch-active',
       tone:   'attention',
@@ -83,10 +104,11 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
       detail: 'Post-work watch is still in progress.',
       suggestedAction: 'Keep watchers assigned until the watch timer is complete.',
       href:   '/hot-work/status',
+      percent: 55,
     })
   }
 
-  if (metrics.totalEquipment > 0 && metrics.photoCompletionPct < 90) {
+  if (metrics.modules.loto && metrics.totalEquipment > 0 && metrics.photoCompletionPct < 90) {
     items.push({
       id:     'loto-photo-coverage',
       tone:   metrics.photoCompletionPct < 70 ? 'warning' : 'attention',
@@ -95,10 +117,11 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
       detail: 'Bring placard photo evidence above the 90% target.',
       suggestedAction: 'Prioritize missing equipment and isolation-point photos.',
       href:   '/loto',
+      percent: metrics.photoCompletionPct,
     })
   }
 
-  if (metrics.activePermitCount > 0) {
+  if (metrics.modules.confinedSpaces && metrics.activePermitCount > 0) {
     items.push({
       id:     'active-confined-space-permits',
       tone:   'attention',
@@ -107,6 +130,7 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
       detail: `${metrics.peopleInSpaces} entrant${metrics.peopleInSpaces === 1 ? '' : 's'} currently in spaces.`,
       suggestedAction: 'Keep attendant coverage and atmospheric checks current.',
       href:   '/confined-spaces/status',
+      percent: Math.min(100, metrics.activePermitCount * 12.5),
     })
   }
 
@@ -119,6 +143,7 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
       detail: 'No permit, fire-watch, or photo-coverage queue signals.',
       suggestedAction: 'Review scorecard trends or continue routine field checks.',
       href:   '/?dashboard=1',
+      percent: 100,
     })
   }
 
@@ -129,6 +154,13 @@ export function deriveCommandCenterItems(metrics: HomeMetrics): CommandCenterIte
       return toneDelta || a.index - b.index
     })
     .map(({ item }) => item)
+}
+
+function tonePercent(tone: CommandCenterTone): number {
+  if (tone === 'critical') return 100
+  if (tone === 'warning') return 82
+  if (tone === 'attention') return 58
+  return 100
 }
 
 export function highestCommandCenterTone(items: CommandCenterItem[]): CommandCenterTone {
@@ -221,41 +253,32 @@ export function CommandCenterPanel({ metrics, error = null }: {
 }
 
 function CommandItemCard({ item }: { item: CommandCenterItem }) {
-  const Icon = iconForTone(item.tone)
   return (
-    <Link
+    <InfographicMetricCard
+      label={item.label}
+      value={item.value}
+      caption={item.detail}
+      detail={item.suggestedAction}
       href={item.href}
-      className={`group rounded-lg border p-3 min-h-36 flex flex-col justify-between transition-shadow hover:shadow-sm ${cardClass(item.tone)}`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-          {item.label}
-        </p>
-        <Icon className="h-4 w-4 shrink-0" />
-      </div>
-      <div>
-        <p className="mt-2 text-2xl font-black tabular-nums text-slate-900 dark:text-slate-100">
-          {item.value}
-        </p>
-        <p className="mt-1 text-xs leading-snug text-slate-600 dark:text-slate-300">
-          {item.detail}
-        </p>
-        <p className="mt-3 border-t border-slate-200/70 dark:border-slate-800 pt-2 text-[11px] font-semibold leading-snug text-slate-700 dark:text-slate-200">
-          <span className="block text-[10px] uppercase tracking-widest text-slate-400 dark:text-slate-500">
-            Suggested next step
-          </span>
-          {item.suggestedAction}
-        </p>
-      </div>
-    </Link>
+      tone={toneForMetricCard(item.tone)}
+      icon={iconForTone(item.tone)}
+      percent={item.percent}
+    />
   )
 }
 
 function iconForTone(tone: CommandCenterTone) {
-  if (tone === 'critical') return ShieldAlert
-  if (tone === 'warning') return AlertTriangle
-  if (tone === 'attention') return Clock
-  return CheckCircle2
+  if (tone === 'critical') return <ShieldAlert className="h-4 w-4" />
+  if (tone === 'warning') return <AlertTriangle className="h-4 w-4" />
+  if (tone === 'attention') return <Clock className="h-4 w-4" />
+  return <CheckCircle2 className="h-4 w-4" />
+}
+
+function toneForMetricCard(tone: CommandCenterTone): InfographicTone {
+  if (tone === 'critical') return 'critical'
+  if (tone === 'warning') return 'warning'
+  if (tone === 'attention') return 'attention'
+  return 'safe'
 }
 
 function sectionClass(tone: CommandCenterTone): string {
@@ -263,11 +286,4 @@ function sectionClass(tone: CommandCenterTone): string {
   if (tone === 'warning') return 'border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20'
   if (tone === 'attention') return 'border-sky-200 dark:border-sky-900 bg-sky-50/40 dark:bg-sky-950/20'
   return 'border-emerald-200 dark:border-emerald-900 bg-emerald-50/40 dark:bg-emerald-950/20'
-}
-
-function cardClass(tone: CommandCenterTone): string {
-  if (tone === 'critical') return 'border-rose-200 dark:border-rose-900 bg-white/80 dark:bg-slate-950/50 text-rose-700 dark:text-rose-300'
-  if (tone === 'warning') return 'border-amber-200 dark:border-amber-900 bg-white/80 dark:bg-slate-950/50 text-amber-700 dark:text-amber-300'
-  if (tone === 'attention') return 'border-sky-200 dark:border-sky-900 bg-white/80 dark:bg-slate-950/50 text-sky-700 dark:text-sky-300'
-  return 'border-emerald-200 dark:border-emerald-900 bg-white/80 dark:bg-slate-950/50 text-emerald-700 dark:text-emerald-300'
 }

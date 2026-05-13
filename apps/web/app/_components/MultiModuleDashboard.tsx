@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { UserRoundCog } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
+import { useTenant } from '@/components/TenantProvider'
 import { timeOfDayGreeting } from '@/components/Greeting'
 import { fetchHomeMetrics, type HomeMetrics } from '@soteria/core/homeMetrics'
 import ThemeToggle from '@/components/ThemeToggle'
@@ -50,6 +51,8 @@ const METRICS_REFRESH_MS = 60 * 1000   // permits / equipment / activity: every 
 
 export default function MultiModuleDashboard() {
   const { profile, email } = useAuth()
+  const { tenant, loading: tenantLoading } = useTenant()
+  const tenantModules = tenant?.modules ?? null
   const firstName = (profile?.full_name?.trim().split(/\s+/)[0]) || (email?.split('@')[0]) || 'there'
 
   const [now, setNow] = useState<Date>(() => new Date())
@@ -72,9 +75,10 @@ export default function MultiModuleDashboard() {
   const [refreshing, setRefreshing] = useState(false)
 
   const loadMetrics = useCallback(async () => {
+    if (tenantLoading) return
     setRefreshing(true)
     try {
-      const m = await fetchHomeMetrics()
+      const m = await fetchHomeMetrics(tenantModules)
       setMetrics(m)
       setMetricsError(null)
       setMetricsLoadedAt(Date.now())
@@ -84,13 +88,14 @@ export default function MultiModuleDashboard() {
     } finally {
       setRefreshing(false)
     }
-  }, [])
+  }, [tenantLoading, tenantModules])
 
   useEffect(() => {
+    if (tenantLoading) return
     loadMetrics()
     const id = setInterval(loadMetrics, METRICS_REFRESH_MS)
     return () => clearInterval(id)
-  }, [loadMetrics])
+  }, [tenantLoading, loadMetrics])
 
   return (
     <div className="animate-panel-in mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">

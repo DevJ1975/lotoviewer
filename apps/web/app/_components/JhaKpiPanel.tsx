@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, ArrowRight, ClipboardCheck, Clock, Loader2, ShieldAlert } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { ArrowRight, ClipboardCheck, Clock, Loader2, ShieldAlert } from 'lucide-react'
 import { fetchJhaMetrics, type JhaMetrics } from '@soteria/core/jhaMetrics'
 import { useTenant } from '@/components/TenantProvider'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { SEVERITY_TW } from '@soteria/core/severityColors'
+import { InfographicMetricCard, type InfographicTone } from './InfographicMetricCard'
 
 // JHA intelligence panel for the Control Center home dashboard.
 // Same gating + render pattern as RiskKpiPanel + NearMissKpiPanel.
@@ -157,29 +159,27 @@ interface TileProps {
   value:    number
   subtitle?: string
   tone?:    'neutral' | 'warn' | 'alert'
-  icon?:    React.ReactNode
+  icon?:    ReactNode
   href?:    string
 }
 
 function KpiTile({ label, value, subtitle, tone = 'neutral', icon, href }: TileProps) {
-  const toneClass =
-    tone === 'alert' ? 'border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-900/20' :
-    tone === 'warn'  ? 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20' :
-                       'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'
-  const valueClass =
-    tone === 'alert' ? 'text-rose-700 dark:text-rose-300' :
-    tone === 'warn'  ? 'text-amber-700 dark:text-amber-400' :
-                       'text-slate-900 dark:text-slate-100'
-
-  const inner = (
-    <div className={`rounded-xl border p-3 ${toneClass} transition-colors hover:shadow-sm`}>
-      <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-        {icon}
-        {label}
-      </div>
-      <div className={`text-2xl font-bold mt-1 ${valueClass}`}>{value}</div>
-      {subtitle && <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{subtitle}</div>}
-    </div>
+  return (
+    <InfographicMetricCard
+      label={label}
+      value={value}
+      caption={subtitle}
+      href={href}
+      tone={tileTone(tone)}
+      icon={icon}
+      percent={Math.min(100, value * 12.5)}
+      compact
+    />
   )
-  return href ? <Link href={href}>{inner}</Link> : inner
+}
+
+function tileTone(tone: TileProps['tone']): InfographicTone {
+  if (tone === 'alert') return 'critical'
+  if (tone === 'warn') return 'warning'
+  return 'neutral'
 }

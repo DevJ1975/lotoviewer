@@ -9,6 +9,7 @@ import {
 } from '@soteria/core/incidentScorecardMetrics'
 import { useTenant } from '@/components/TenantProvider'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
+import { InfographicMetricCard } from './InfographicMetricCard'
 
 // Incident-program intelligence panel for the home Control Center.
 // Same posture as NearMissKpiPanel: gated by isModuleVisible('incidents'),
@@ -102,28 +103,14 @@ function Inner({ metrics }: { metrics: IncidentScorecardMetrics }) {
   const dsr = m.daysSinceLastRecordable
   return (
     <>
-      {/* Champion strip: days since last recordable. */}
-      <div className={
-        'rounded-xl border p-3 flex items-center gap-3 ' +
-        (dsr < 0
-          ? 'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/50'
-          : dsr >= 90
-            ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30'
-            : dsr >= 30
-              ? 'border-amber-200 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/30'
-              : 'border-rose-200 bg-rose-50/60 dark:border-rose-900 dark:bg-rose-950/30')
-      }>
-        {dsr >= 30
-          ? <ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0" />
-          : <ShieldAlert className="h-5 w-5 text-rose-600 shrink-0" />}
-        <div className="flex-1">
-          <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Days since last recordable</p>
-          <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 leading-tight">
-            {dsr < 0 ? '—' : dsr}
-            {dsr >= 0 && <span className="ml-1 text-sm font-normal text-slate-500">{dsr === 1 ? 'day' : 'days'}</span>}
-          </p>
-        </div>
-      </div>
+      <InfographicMetricCard
+        label="Days since last recordable"
+        value={dsr < 0 ? '—' : dsr}
+        caption={dsr < 0 ? 'No recordable history yet' : dsr === 1 ? '1 day recordable-free' : `${dsr} days recordable-free`}
+        tone={dsr < 0 ? 'neutral' : dsr >= 90 ? 'safe' : dsr >= 30 ? 'warning' : 'critical'}
+        icon={dsr >= 30 ? <ShieldCheck className="h-4 w-4" /> : <ShieldAlert className="h-4 w-4" />}
+        percent={dsr < 0 ? 0 : Math.min(100, (dsr / 90) * 100)}
+      />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <KpiTile label="TRIR"          value={fmt(m.trir)}          help="per 100 FTE" />
@@ -175,15 +162,21 @@ function KpiTile({ label, value, help, highlight }: {
   label: string; value: string; help?: string; highlight?: boolean
 }) {
   return (
-    <div className={
-      'rounded-xl border p-2.5 ' +
-      (highlight
-        ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/20'
-        : 'border-slate-200 dark:border-slate-800')
-    }>
-      <p className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-0.5 text-lg font-bold text-slate-900 dark:text-slate-100 leading-tight">{value}</p>
-      {help && <p className="text-[10px] text-slate-400">{help}</p>}
-    </div>
+    <InfographicMetricCard
+      label={label}
+      value={value}
+      caption={help}
+      tone={highlight ? 'safe' : 'neutral'}
+      percent={percentFromValue(value)}
+      compact
+    />
   )
+}
+
+function percentFromValue(value: string): number {
+  if (value === '—') return 0
+  if (value.endsWith('%')) return Math.max(0, Math.min(100, Number(value.slice(0, -1))))
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return 0
+  return Math.max(0, Math.min(100, numeric * 10))
 }

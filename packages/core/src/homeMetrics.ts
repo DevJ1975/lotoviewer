@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient'
 import { hotWorkState } from './hotWorkPermitStatus'
 import type { CommandCenterSafetyAlert } from './incidentSafetyAlerts'
+import { isModuleVisible } from './moduleVisibility'
 
 // Aggregator for the home screen at /. Splits the work into a pure
 // summarizer + a thin DB orchestrator so the logic (audit-event prose,
@@ -81,6 +82,20 @@ export interface EquipmentPhotoStatusRow {
   photo_status: 'missing' | 'partial' | 'complete'
 }
 
+export interface EquipmentPhotoCounts {
+  total:    number
+  complete: number
+  partial:  number
+  missing:  number
+}
+
+export interface HomeMetricModules {
+  confinedSpaces: boolean
+  loto:           boolean
+  hotWork:        boolean
+  incidents:      boolean
+}
+
 // Lean shape for the hot-work alert feed. Mirrors PermitSummaryRow but
 // scoped to the fields hotWorkState() needs to derive lifecycle state.
 export interface HotWorkPermitRow {
@@ -106,12 +121,16 @@ export interface HotWorkAlertSummary {
 }
 
 export interface HomeMetrics {
+  modules: HomeMetricModules
   commandCenterSafetyAlerts: CommandCenterSafetyAlert[]
   activePermits:        ActivePermitSummary[]   // top 3 by soonest expiry
   activePermitCount:    number
   expiredPermitCount:   number                  // signed, not canceled, past expires_at
   peopleInSpaces:       number                  // sum of entrants across active permits
   totalEquipment:       number
+  photoCompleteCount:   number
+  photoPartialCount:    number
+  photoMissingCount:    number
   photoCompletionPct:   number                  // 0-100, integer rounded
   recentActivity:       ActivityEvent[]
   // Active permits with < EXPIRING_SOON_MIN remaining. Empty when none.
@@ -134,6 +153,17 @@ export interface HomeMetrics {
 export const EXPIRING_SOON_MIN          = 120  // < 2 hours remaining triggers the alert
 export const PENDING_STALE_MIN          = 120  // pending > 2 hours triggers the alert
 export const HOT_WORK_EXPIRING_SOON_MIN = 30   // hot work is shorter-lived; tighter threshold
+
+export function resolveHomeMetricModules(
+  tenantModules: Record<string, boolean> | null | undefined,
+): HomeMetricModules {
+  return {
+    confinedSpaces: isModuleVisible('confined-spaces', tenantModules ?? null),
+    loto:           isModuleVisible('loto', tenantModules ?? null),
+    hotWork:        isModuleVisible('hot-work', tenantModules ?? null),
+    incidents:      isModuleVisible('incidents', tenantModules ?? null),
+  }
+}
 
 // ── Pure helpers (testable without supabase) ──────────────────────────────
 
@@ -378,7 +408,16 @@ export function findHotWorkInPostWatch(
 // Caller does the supabase reads and hands the rows in; tests skip the
 // DB entirely and just feed fixtures.
 export function summarizeMetricsFromRows({
-  permits, pending = [], hotWork = [], safetyAlerts = [], equipRows, audits, spaceDescById, nowMs,
+  permits,
+  pending = [],
+  hotWork = [],
+  safetyAlerts = [],
+  equipRows = [],
+  equipmentCounts = null,
+  audits,
+  spaceDescById,
+  nowMs,
+  modules = resolveHomeMetricModules(null),
 }: {
   permits:       PermitSummaryRow[]
   // Optional so callers / fixtures that don't care about the pending-stale
@@ -389,10 +428,12 @@ export function summarizeMetricsFromRows({
   // alerts can omit. Defaults to no alerts.
   hotWork?:      HotWorkPermitRow[]
   safetyAlerts?: CommandCenterSafetyAlert[]
-  equipRows:    EquipmentPhotoStatusRow[]
+  equipRows?:   EquipmentPhotoStatusRow[]
+  equipmentCounts?: EquipmentPhotoCounts | null
   audits:       AuditLogRow[]
   spaceDescById: Map<string, string>
   nowMs:        number
+  modules?:     HomeMetricModules
 }): HomeMetrics {
   const { active, expired } = partitionPermits(permits, nowMs)
 
@@ -416,8 +457,10 @@ export function summarizeMetricsFromRows({
 
   // Compliance % — share of non-decommissioned equipment with photo_status
   // = 'complete'. Rounded to nearest integer for a clean home display.
-  const total = equipRows.length
-  const complete = equipRows.filter(r => r.photo_status === 'complete').length
+  const total = equipmentCounts?.total ?? equipRows.length
+  const complete = equipmentCounts?.complete ?? equipRows.filter(r => r.photo_status === 'complete').length
+  const partial = equipmentCounts?.partial ?? equipRows.filter(r => r.photo_status === 'partial').length
+  const missing = equipmentCounts?.missing ?? equipRows.filter(r => r.photo_status === 'missing').length
   const photoCompletionPct = total === 0 ? 0 : Math.round((complete / total) * 100)
 
   const recentActivity: ActivityEvent[] = audits.map(a => ({
@@ -434,12 +477,16 @@ export function summarizeMetricsFromRows({
   const hotWorkInPostWatch  = findHotWorkInPostWatch(hotWork, nowMs)
 
   return {
+    modules,
     commandCenterSafetyAlerts: safetyAlerts,
     activePermits:        top3,
     activePermitCount:    active.length,
     expiredPermitCount:   expired.length,
     peopleInSpaces,
     totalEquipment:       total,
+    photoCompleteCount:   complete,
+    photoPartialCount:    partial,
+    photoMissingCount:    missing,
     photoCompletionPct,
     recentActivity,
     expiringSoonPermits,
@@ -456,45 +503,108 @@ export function summarizeMetricsFromRows({
 // via a foreign-key join, but Supabase's join syntax is a bit awkward for
 // optional descriptions and the round-trip is sub-50ms in practice.
 
-export async function fetchHomeMetrics(): Promise<HomeMetrics> {
-  const nowMs = Date.now()
+type QueryResult<T> = {
+  data:  T[] | null
+  error: { message?: string } | null
+  count?: number | null
+}
 
-  const [permitsRes, pendingRes, hotWorkRes, safetyAlertsRes, equipRes, auditRes] = await Promise.all([
-    supabase
+function skippedRows<T>(): Promise<QueryResult<T>> {
+  return Promise.resolve({ data: [], error: null, count: 0 })
+}
+
+function skippedCount(): Promise<QueryResult<never>> {
+  return Promise.resolve({ data: [], error: null, count: 0 })
+}
+
+function assertQueryOk<T>(label: string, result: QueryResult<T>): void {
+  if (result.error) {
+    throw new Error(`${label}: ${result.error.message ?? 'query failed'}`)
+  }
+}
+
+export async function fetchHomeMetrics(
+  tenantModules?: Record<string, boolean> | null,
+): Promise<HomeMetrics> {
+  const nowMs = Date.now()
+  const nowIso = new Date(nowMs).toISOString()
+  const modules = resolveHomeMetricModules(tenantModules)
+
+  const [
+    permitsRes,
+    expiredPermitCountRes,
+    pendingRes,
+    hotWorkRes,
+    safetyAlertsRes,
+    totalEquipmentRes,
+    completeEquipmentRes,
+    partialEquipmentRes,
+    missingEquipmentRes,
+    auditRes,
+  ] = await Promise.all([
+    modules.confinedSpaces ? supabase
       .from('loto_confined_space_permits')
-      .select('id, serial, space_id, expires_at, canceled_at, entry_supervisor_signature_at, entrants, attendants')
+      .select('id, serial, space_id, expires_at, canceled_at, entry_supervisor_signature_at, entrants, attendants', { count: 'exact' })
       .is('canceled_at', null)
       .not('entry_supervisor_signature_at', 'is', null)
+      .gt('expires_at', nowIso)
       .order('expires_at', { ascending: true })
-      .limit(50),  // generous cap; we sort + filter further client-side
-    supabase
+      : skippedRows<PermitSummaryRow>(),
+    modules.confinedSpaces ? supabase
+      .from('loto_confined_space_permits')
+      .select('id', { count: 'exact', head: true })
+      .is('canceled_at', null)
+      .not('entry_supervisor_signature_at', 'is', null)
+      .lte('expires_at', nowIso)
+      : skippedCount(),
+    modules.confinedSpaces ? supabase
       .from('loto_confined_space_permits')
       .select('id, serial, space_id, started_at, canceled_at, entry_supervisor_signature_at')
       .is('canceled_at', null)
       .is('entry_supervisor_signature_at', null)
       .order('started_at', { ascending: true })
-      .limit(50),
+      : skippedRows<PendingPermitRow>(),
     // Hot-work permits — signed + non-canceled. The pure helpers filter
     // further on state (active vs post_work_watch) so we don't need to
     // shape the query around it.
-    supabase
+    modules.hotWork ? supabase
       .from('loto_hot_work_permits')
       .select('id, serial, work_location, pai_signature_at, expires_at, canceled_at, work_completed_at, post_watch_minutes')
       .is('canceled_at', null)
       .not('pai_signature_at', 'is', null)
       .order('expires_at', { ascending: true })
-      .limit(50),
-    supabase
+      : skippedRows<HotWorkPermitRow>(),
+    modules.incidents ? supabase
       .from('command_center_safety_alerts')
       .select('id, tenant_id, incident_id, report_number, title, summary, severity_tone, priority, status, source, created_at, acknowledged_at, resolved_at')
       .in('status', ['new', 'acknowledged', 'in_review', 'escalated'])
       .order('priority', { ascending: false })
       .order('created_at', { ascending: false })
-      .limit(4),
-    supabase
+      .limit(4)
+      : skippedRows<CommandCenterSafetyAlert>(),
+    modules.loto ? supabase
       .from('loto_equipment')
-      .select('photo_status')
-      .eq('decommissioned', false),
+      .select('id', { count: 'exact', head: true })
+      .eq('decommissioned', false)
+      : skippedCount(),
+    modules.loto ? supabase
+      .from('loto_equipment')
+      .select('id', { count: 'exact', head: true })
+      .eq('decommissioned', false)
+      .eq('photo_status', 'complete')
+      : skippedCount(),
+    modules.loto ? supabase
+      .from('loto_equipment')
+      .select('id', { count: 'exact', head: true })
+      .eq('decommissioned', false)
+      .eq('photo_status', 'partial')
+      : skippedCount(),
+    modules.loto ? supabase
+      .from('loto_equipment')
+      .select('id', { count: 'exact', head: true })
+      .eq('decommissioned', false)
+      .eq('photo_status', 'missing')
+      : skippedCount(),
     supabase
       .from('audit_log')
       .select('id, actor_email, table_name, operation, row_pk, old_row, new_row, created_at')
@@ -502,33 +612,68 @@ export async function fetchHomeMetrics(): Promise<HomeMetrics> {
       .limit(10),
   ])
 
+  assertQueryOk('active confined-space permits', permitsRes)
+  assertQueryOk('expired confined-space permits', expiredPermitCountRes)
+  assertQueryOk('pending confined-space permits', pendingRes)
+  assertQueryOk('hot-work permits', hotWorkRes)
+  assertQueryOk('command-center safety alerts', safetyAlertsRes)
+  assertQueryOk('equipment total count', totalEquipmentRes)
+  assertQueryOk('equipment complete photo count', completeEquipmentRes)
+  assertQueryOk('equipment partial photo count', partialEquipmentRes)
+  assertQueryOk('equipment missing photo count', missingEquipmentRes)
+  assertQueryOk('audit log', auditRes)
+
   const permits   = (permitsRes.data ?? []) as PermitSummaryRow[]
   const pending   = (pendingRes.data ?? []) as PendingPermitRow[]
   const hotWork   = (hotWorkRes.data ?? []) as HotWorkPermitRow[]
   const safetyAlerts = (safetyAlertsRes.data ?? []) as CommandCenterSafetyAlert[]
-  const equipRows = (equipRes.data   ?? []) as EquipmentPhotoStatusRow[]
   const audits    = (auditRes.data   ?? []) as AuditLogRow[]
+  const equipmentCounts: EquipmentPhotoCounts = {
+    total:    totalEquipmentRes.count ?? 0,
+    complete: completeEquipmentRes.count ?? 0,
+    partial:  partialEquipmentRes.count ?? 0,
+    missing:  missingEquipmentRes.count ?? 0,
+  }
 
   // Fetch space descriptions for the top-3 active permits' spaces. We need
   // active to know which space_ids matter; partition first, slice 3, then
   // fetch. Done as a second roundtrip rather than inlined into the first
   // query so the active-permit shape stays the same as the audit/equip
   // calls (no joins, easier to mock).
-  const top3SpaceIds = partitionPermits(permits, nowMs).active
+  const top3SpaceIds = [...permits]
     .sort((a, b) => new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime())
     .slice(0, 3)
     .map(p => p.space_id)
 
   const spaceDescById = new Map<string, string>()
   if (top3SpaceIds.length > 0) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('loto_confined_spaces')
       .select('space_id, description')
       .in('space_id', top3SpaceIds)
+    if (error) {
+      throw new Error(`confined-space descriptions: ${error.message}`)
+    }
     for (const s of (data ?? []) as { space_id: string; description: string }[]) {
       spaceDescById.set(s.space_id, s.description)
     }
   }
 
-  return summarizeMetricsFromRows({ permits, pending, hotWork, safetyAlerts, equipRows, audits, spaceDescById, nowMs })
+  const metrics = summarizeMetricsFromRows({
+    permits,
+    pending,
+    hotWork,
+    safetyAlerts,
+    equipmentCounts,
+    audits,
+    spaceDescById,
+    nowMs,
+    modules,
+  })
+
+  return {
+    ...metrics,
+    activePermitCount:  permitsRes.count ?? metrics.activePermitCount,
+    expiredPermitCount: expiredPermitCountRes.count ?? metrics.expiredPermitCount,
+  }
 }

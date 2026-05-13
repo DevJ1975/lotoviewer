@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowRight, Eye, Loader2, Trophy } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { ArrowRight, CheckCircle2, ClipboardList, Eye, Loader2, Medal, Trophy } from 'lucide-react'
 import { fetchBBSMetrics, type BBSMetrics } from '@soteria/core/bbsMetrics'
 import { useTenant } from '@/components/TenantProvider'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { Avatar } from '@/components/ui/Avatar'
+import { InfographicMetricCard, type InfographicTone } from './InfographicMetricCard'
 
 // BBS intelligence panel for the home dashboard. Same gating pattern
 // as NearMissKpiPanel — tenant module toggle hides the entire panel.
@@ -88,10 +90,10 @@ function Inner({ metrics }: { metrics: BBSMetrics }) {
   return (
     <>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <KpiTile label="EHS score" value={metrics.ehsScore} subtitle="of 100" tone="primary" href="/bbs/scorecard" />
-        <KpiTile label="Submissions (30d)" value={metrics.newLast30Days} subtitle="participation" href="/bbs" />
-        <KpiTile label="Close-out" value={`${closeOutPct}%`} subtitle="unsafe closed" href="/bbs" />
-        <KpiTile label="Total all-time" value={metrics.totalAll} href="/bbs" />
+        <KpiTile label="EHS score" value={metrics.ehsScore} subtitle="of 100" tone="primary" href="/bbs/scorecard" percent={metrics.ehsScore} icon={<Medal className="h-3.5 w-3.5" />} />
+        <KpiTile label="Submissions (30d)" value={metrics.newLast30Days} subtitle="participation" href="/bbs" percent={Math.min(100, metrics.newLast30Days * 10)} icon={<ClipboardList className="h-3.5 w-3.5" />} />
+        <KpiTile label="Close-out" value={`${closeOutPct}%`} subtitle="unsafe closed" href="/bbs" percent={closeOutPct} icon={<CheckCircle2 className="h-3.5 w-3.5" />} />
+        <KpiTile label="Total all-time" value={metrics.totalAll} href="/bbs" percent={Math.min(100, metrics.totalAll * 2)} icon={<Eye className="h-3.5 w-3.5" />} />
       </div>
 
       {metrics.leaderboard.length > 0 && (
@@ -128,22 +130,26 @@ interface TileProps {
   subtitle?: string
   tone?:    'neutral' | 'primary'
   href?:    string
+  percent?:  number
+  icon?:     ReactNode
 }
 
-function KpiTile({ label, value, subtitle, tone = 'neutral', href }: TileProps) {
-  const toneClass =
-    tone === 'primary' ? 'border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/20'
-                       : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'
-  const valueClass =
-    tone === 'primary' ? 'text-teal-700 dark:text-teal-300'
-                       : 'text-slate-900 dark:text-slate-100'
-
-  const inner = (
-    <div className={`rounded-xl border p-3 ${toneClass} transition-colors hover:shadow-sm`}>
-      <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">{label}</div>
-      <div className={`text-2xl font-bold mt-1 ${valueClass}`}>{value}</div>
-      {subtitle && <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{subtitle}</div>}
-    </div>
+function KpiTile({ label, value, subtitle, tone = 'neutral', href, percent, icon }: TileProps) {
+  return (
+    <InfographicMetricCard
+      label={label}
+      value={value}
+      caption={subtitle}
+      href={href}
+      tone={tileTone(tone)}
+      icon={icon}
+      percent={percent}
+      compact
+    />
   )
-  return href ? <Link href={href}>{inner}</Link> : inner
+}
+
+function tileTone(tone: TileProps['tone']): InfographicTone {
+  if (tone === 'primary') return 'primary'
+  return 'neutral'
 }

@@ -34,9 +34,7 @@ export function resolveLandingPath(tenant: Tenant | null): string | null {
   const overrideRaw = settings.default_landing_path
   if (typeof overrideRaw === 'string') {
     const trimmed = overrideRaw.trim()
-    // Require absolute paths so a malformed value can't trick us into
-    // navigating off-site or to a nonsense URL.
-    if (trimmed.startsWith('/')) return trimmed
+    if (isAllowedLandingOverride(trimmed, tenant.modules ?? null)) return trimmed
   }
 
   // ─── Layer 2: single visible safety module ────────────────────────
@@ -63,4 +61,20 @@ export function resolveLandingPath(tenant: Tenant | null): string | null {
 
   // ─── Layer 3: multi-module → render dashboard ─────────────────────
   return null
+}
+
+function isAllowedLandingOverride(
+  path: string,
+  modules: Record<string, boolean> | null,
+): boolean {
+  if (!path.startsWith('/') || path.startsWith('//')) return false
+
+  const pathname = path.split(/[?#]/)[0] || '/'
+  if (pathname === '/' && path.includes('dashboard=1')) return true
+
+  return FEATURES.some(feature => {
+    if (feature.href !== pathname) return false
+    if (!feature.enabled || feature.comingSoon) return false
+    return isModuleVisible(feature.id, modules)
+  })
 }

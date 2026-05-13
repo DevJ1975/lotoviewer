@@ -1,7 +1,9 @@
 'use client'
 
-import Link from 'next/link'
+import { Camera, HardHat, UsersRound, Workflow } from 'lucide-react'
+import type { ReactNode } from 'react'
 import type { HomeMetrics } from '@soteria/core/homeMetrics'
+import { InfographicMetricCard, type InfographicTone } from './InfographicMetricCard'
 
 // 4-tile KPI strip plus a freshness/refresh row underneath. The wrapper
 // owns the error-banner-with-retry path; each Kpi is a dumb display tile.
@@ -31,38 +33,87 @@ export function KpiRow({
       </div>
     )
   }
-  const loading = metrics === null
+  const cards = buildKpiCards(metrics)
+
   return (
     <section className="space-y-2">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Kpi
-          label="Permits Active"
-          value={loading ? '—' : metrics.activePermitCount}
-          href="/confined-spaces/status"
-          tone={loading ? 'neutral' : metrics.activePermitCount > 0 ? 'safe' : 'neutral'}
-        />
-        <Kpi
-          label="People In Spaces"
-          value={loading ? '—' : metrics.peopleInSpaces}
-          href="/confined-spaces/status"
-          tone="neutral"
-        />
-        <Kpi
-          label="LOTO Equipment"
-          value={loading ? '—' : metrics.totalEquipment}
-          href="/loto"
-          tone="neutral"
-        />
-        <Kpi
-          label="Photo Coverage"
-          value={loading ? '—' : `${metrics.photoCompletionPct}%`}
-          href="/loto"
-          tone={loading ? 'neutral' : metrics.photoCompletionPct >= 90 ? 'safe' : metrics.photoCompletionPct >= 70 ? 'warning' : 'critical'}
-        />
-      </div>
+      {cards.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          {cards.map(card => (
+            <InfographicMetricCard key={card.label} {...card} />
+          ))}
+        </div>
+      )}
       <FreshnessIndicator loadedAt={loadedAt} refreshing={refreshing} now={now} onRefresh={onRefresh} />
     </section>
   )
+}
+
+function buildKpiCards(metrics: HomeMetrics | null): Array<{
+  label:    string
+  value:    string | number
+  caption:  string
+  detail?:  string
+  href:     string
+  tone:     InfographicTone
+  icon:     ReactNode
+  percent:  number
+}> {
+  if (!metrics) {
+    return [
+      { label: 'Permits active', value: '—', caption: 'Loading confined-space status', href: '/confined-spaces/status', tone: 'neutral', icon: <HardHat className="h-4 w-4" />, percent: 0 },
+      { label: 'People in spaces', value: '—', caption: 'Loading entrant headcount', href: '/confined-spaces/status', tone: 'neutral', icon: <UsersRound className="h-4 w-4" />, percent: 0 },
+      { label: 'LOTO equipment', value: '—', caption: 'Loading equipment register', href: '/loto', tone: 'neutral', icon: <Workflow className="h-4 w-4" />, percent: 0 },
+      { label: 'Photo coverage', value: '—', caption: 'Loading placard evidence', href: '/loto', tone: 'neutral', icon: <Camera className="h-4 w-4" />, percent: 0 },
+    ]
+  }
+
+  const cards: ReturnType<typeof buildKpiCards> = []
+  if (metrics.modules.confinedSpaces) {
+    cards.push({
+      label:   'Permits active',
+      value:   metrics.activePermitCount,
+      caption: metrics.activePermitCount > 0 ? 'Authorized entries in progress' : 'No active entries',
+      detail:  metrics.expiredPermitCount > 0 ? `${metrics.expiredPermitCount} expired permit${metrics.expiredPermitCount === 1 ? '' : 's'} need closure` : 'Expiry queue clear',
+      href:    '/confined-spaces/status',
+      tone:    metrics.expiredPermitCount > 0 ? 'critical' : metrics.activePermitCount > 0 ? 'attention' : 'safe',
+      icon:    <HardHat className="h-4 w-4" />,
+      percent: Math.min(100, metrics.activePermitCount * 12.5),
+    })
+    cards.push({
+      label:   'People in spaces',
+      value:   metrics.peopleInSpaces,
+      caption: metrics.peopleInSpaces > 0 ? 'Entrants currently covered by permits' : 'No entrants signed in',
+      href:    '/confined-spaces/status',
+      tone:    metrics.peopleInSpaces > 0 ? 'attention' : 'safe',
+      icon:    <UsersRound className="h-4 w-4" />,
+      percent: Math.min(100, metrics.peopleInSpaces * 4),
+    })
+  }
+
+  if (metrics.modules.loto) {
+    cards.push({
+      label:   'LOTO equipment',
+      value:   metrics.totalEquipment,
+      caption: `${metrics.photoCompleteCount} complete · ${metrics.photoPartialCount + metrics.photoMissingCount} need photos`,
+      href:    '/loto',
+      tone:    'neutral',
+      icon:    <Workflow className="h-4 w-4" />,
+      percent: metrics.totalEquipment > 0 ? 100 : 0,
+    })
+    cards.push({
+      label:   'Photo coverage',
+      value:   `${metrics.photoCompletionPct}%`,
+      caption: 'Placard photo evidence completeness',
+      detail:  `${metrics.photoMissingCount} missing · ${metrics.photoPartialCount} partial`,
+      href:    '/loto',
+      tone:    metrics.photoCompletionPct >= 90 ? 'safe' : metrics.photoCompletionPct >= 70 ? 'warning' : 'critical',
+      icon:    <Camera className="h-4 w-4" />,
+      percent: metrics.photoCompletionPct,
+    })
+  }
+
+  return cards
 }
 
 // "Updated 23s ago · ↻" line so a supervisor knows the metrics aren't stuck.
@@ -101,30 +152,4 @@ function formatAgo(ms: number): string {
   if (ms < 60_000)       return `${Math.floor(ms / 1000)}s ago`
   if (ms < 3_600_000)    return `${Math.floor(ms / 60_000)}m ago`
   return `${Math.floor(ms / 3_600_000)}h ago`
-}
-
-function Kpi({ label, value, href, tone }: {
-  label: string
-  value: string | number
-  href:  string
-  tone:  'safe' | 'warning' | 'critical' | 'neutral'
-}) {
-  const cls =
-    tone === 'critical' ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200'
-  : tone === 'warning'  ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200'
-  : tone === 'safe'     ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200'
-  :                       'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'
-
-  const valueCls =
-    tone === 'critical' ? 'text-rose-700 dark:text-rose-300'
-  : tone === 'warning'  ? 'text-amber-700 dark:text-amber-300'
-  : tone === 'safe'     ? 'text-emerald-700 dark:text-emerald-300'
-  :                       'text-slate-900 dark:text-slate-100'
-
-  return (
-    <Link href={href} className={`block rounded-xl border ${cls} p-4 hover:shadow-sm transition-shadow`}>
-      <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">{label}</p>
-      <p className={`text-3xl font-black tabular-nums mt-1 ${valueCls}`}>{value}</p>
-    </Link>
-  )
 }
