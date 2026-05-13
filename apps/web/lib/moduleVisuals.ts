@@ -6,6 +6,7 @@ import {
   BookOpen,
   Box,
   Brush,
+  CalendarDays,
   ClipboardList,
   DoorClosed,
   Eye,
@@ -150,10 +151,10 @@ export const MODULE_COLOR_CLASSES: Record<ModuleColor, ColorClasses> = {
 const FALLBACK_COLOR: ModuleColor = 'slate'
 
 const MODULE_ICONS: Record<string, LucideIcon> = {
-  AlertOctagon, AlertTriangle, BarChart3, Bell, BookOpen, Brush, ClipboardList,
-  DoorClosed, Eye, FileArchive, FlaskConical, Flame, GraduationCap, LifeBuoy,
-  Lock, Megaphone, MessageSquare, Settings, ShieldCheck, Siren, Sparkles,
-  Tag, Users, Webhook, Recycle,
+  AlertOctagon, AlertTriangle, BarChart3, Bell, BookOpen, Brush, CalendarDays,
+  ClipboardList, DoorClosed, Eye, FileArchive, FlaskConical, Flame,
+  GraduationCap, LifeBuoy, Lock, Megaphone, MessageSquare, Settings,
+  ShieldCheck, Siren, Sparkles, Tag, Users, Webhook, Recycle,
 }
 
 const FALLBACK_ICON: LucideIcon = Box

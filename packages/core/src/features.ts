@@ -821,6 +821,33 @@ export const FEATURES: FeatureDef[] = [
     icon:        'Bell',
     color:       'slate',
   },
+  // ── Compliance Calendar + Legal Registry ────────────────────────────────
+  // AI-assisted citation summarization and obligation suggestion live
+  // on the registry detail page. The hub (/compliance) is a
+  // chronological calendar view; the registry (/compliance/registry)
+  // is the citation catalog.
+  {
+    id:          'compliance',
+    name:        'Compliance',
+    description: 'AI-driven compliance calendar + legal registry',
+    href:        '/compliance',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'CalendarDays',
+    color:       'purple',
+  },
+  {
+    id:          'compliance-registry',
+    name:        'Legal registry',
+    description: 'Laws, regulations, and standards applicable to this tenant',
+    href:        '/compliance/registry',
+    category:    'safety',
+    parent:      'compliance',
+    enabled:     true,
+    comingSoon:  false,
+  },
+
   {
     id:          'safety-boards',
     name:        'Safety boards',

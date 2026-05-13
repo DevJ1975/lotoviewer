@@ -34,6 +34,7 @@ describe('ModulesGrid', () => {
         'incidents': false, 'toolbox-talks': false, 'safety-boards': false,
         'bbs': false, 'chemicals': false,
         strike: false,
+        'hazardous-waste': false, compliance: false,
       }),
     })
     const { container } = render(<ModulesGrid />)
