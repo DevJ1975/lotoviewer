@@ -8,11 +8,17 @@ import { MalformedTenantKeyError } from '@/lib/ai/getTenantApiKey'
 import { SONNET } from '@/lib/ai/models'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { sortTopicsForRotation, pickTopicsForDates } from '@/lib/toolboxRotation'
+import {
+  TOOLBOX_TALK_DAYS_AHEAD,
+  normalizeToolboxTalkIndustry,
+  toolboxTalkIndustryPrompt,
+  type ToolboxTalkIndustry,
+} from '@/lib/toolboxTalkPacks'
 
 // Weekly toolbox-talk generation cron.
 //
 // For every tenant with the `toolbox-talks` module enabled, this job
-// makes sure the next 7 calendar days (today + the following 6) each
+// makes sure the next 14 calendar days (today + the following 13) each
 // have one generated talk. For any missing day it:
 //   1. Picks an unused topic from the tenant's industry pool
 //      (toolbox_topics rows). "Unused" = least-recently-delivered
@@ -41,13 +47,13 @@ import { sortTopicsForRotation, pickTopicsForDates } from '@/lib/toolboxRotation
 // before the Monday morning shift.
 
 export const runtime = 'nodejs'
-// Anthropic generation × N tenants × up to 7 days each can take a
+// Anthropic generation × N tenants × up to 14 days each can take a
 // while. Bumping max duration above the default 10s keeps a tenant
 // from getting half a week if their generation is slow.
 export const maxDuration = 300
 
 const MODULE_ID         = 'toolbox-talks'
-const DAYS_AHEAD        = 7
+const DAYS_AHEAD        = TOOLBOX_TALK_DAYS_AHEAD
 const AI_MODEL          = SONNET
 // Caps on AI output so a misbehaving model can't blow up a row. The
 // system prompt asks for 350-700 words (~5KB at typical density);
@@ -171,7 +177,7 @@ async function runCron(): Promise<NextResponse> {
       return NextResponse.json({ tenants_scanned: 0, talks_generated: 0, message: 'No tenants have the toolbox-talks module enabled.' })
     }
 
-    // 2. Build the date list once — today + 6.
+    // 2. Build the date list once — today + 13.
     const today = new Date()
     today.setUTCHours(0, 0, 0, 0)
     const dates: string[] = []
@@ -209,15 +215,13 @@ async function generateForTenant(
 ): Promise<{ generated: number; skipped: number; failed: number }> {
   const admin = supabaseAdmin()
 
-  // Industry preference per tenant. Default to 'general' — the only
-  // pool seeded today. When more industries land, set
-  // tenants.settings.toolbox_industry on the tenant row to switch.
-  const industry =
-    typeof tenant.settings?.toolbox_industry === 'string'
-      ? (tenant.settings.toolbox_industry as string)
-      : 'general'
+  // Industry preference per tenant. Superadmin writes this via the
+  // tenant setup/edit form; unknown legacy values fall back to the
+  // general-industry pack rather than burning cron time on an empty
+  // topic pool.
+  const industry = normalizeToolboxTalkIndustry(tenant.settings?.toolbox_industry)
 
-  // Find which of the 7 dates already have a talk so we skip them.
+  // Find which of the 14 dates already have a talk so we skip them.
   const { data: existing } = await admin
     .from('toolbox_talks')
     .select('talk_date')
@@ -230,12 +234,11 @@ async function generateForTenant(
     return { generated: 0, skipped: dates.length, failed: 0 }
   }
 
-  // Topic pool for this tenant's industry. If a tenant typo'd their
-  // settings.toolbox_industry to a value that matches no rows, fall
-  // back to 'general' rather than skipping the whole tenant — being
-  // wrong about WHICH topic to deliver is better than delivering NO
-  // topic.
-  const fetchTopics = (i: string) => admin
+  // Topic pool for this tenant's industry. If a pack is incomplete in
+  // a target environment, fall back to 'general' rather than skipping
+  // the whole tenant — being wrong about WHICH topic to deliver is
+  // better than delivering NO topic.
+  const fetchTopics = (i: ToolboxTalkIndustry) => admin
     .from('toolbox_topics')
     .select('id, title, summary, reference')
     .eq('industry', i)
@@ -306,7 +309,7 @@ async function generateForTenant(
   // on — the cron will retry that date on its next run.
   for (const { date, topic } of picks) {
     try {
-      const fields = await generateTalkBody(client, topic, tenant.name)
+      const fields = await generateTalkBody(client, topic, tenant.name, industry)
 
       // Defense-in-depth: the JSON-schema output_config should
       // guarantee these shapes, but a future SDK regression or a
@@ -363,6 +366,7 @@ async function generateTalkBody(
   client: Anthropic,
   topic: TopicRow,
   tenantName: string,
+  industry: ToolboxTalkIndustry,
 ): Promise<GeneratedFields> {
   const userPrompt = [
     `Write today's toolbox talk for the crew at ${tenantName}.`,
@@ -375,7 +379,7 @@ async function generateTalkBody(
   const response = await client.messages.create({
     model:      AI_MODEL,
     max_tokens: 4000,
-    system:     SYSTEM_PROMPT,
+    system:     `${SYSTEM_PROMPT}\n\n${toolboxTalkIndustryPrompt(industry)}`,
     messages:   [{ role: 'user', content: userPrompt }],
     output_config: {
       format: { type: 'json_schema', schema: SCHEMA },

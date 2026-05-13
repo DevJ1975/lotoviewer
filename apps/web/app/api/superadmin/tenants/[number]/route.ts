@@ -4,6 +4,7 @@ import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getModules } from '@soteria/core/features'
 import { isValidStatus, isValidTenantNumber, normalizeName } from '@/lib/validation/tenants'
+import { isToolboxTalkIndustry } from '@/lib/toolboxTalkPacks'
 import type { TenantStatus } from '@soteria/core/types'
 
 // PATCH /api/superadmin/tenants/[number]
@@ -88,6 +89,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ number: strin
   if ('settings' in body) {
     if (!body.settings || typeof body.settings !== 'object' || Array.isArray(body.settings)) {
       return NextResponse.json({ error: 'settings must be an object' }, { status: 400 })
+    }
+    const settings = body.settings as Record<string, unknown>
+    if ('toolbox_industry' in settings && !isToolboxTalkIndustry(settings.toolbox_industry)) {
+      return NextResponse.json({ error: 'toolbox_industry must be "general" or "construction"' }, { status: 400 })
     }
     patch.settings = body.settings
   }

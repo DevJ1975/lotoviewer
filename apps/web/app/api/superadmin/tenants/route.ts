@@ -4,6 +4,7 @@ import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getModules } from '@soteria/core/features'
 import { isValidSlug, normalizeName } from '@/lib/validation/tenants'
+import { isToolboxTalkIndustry } from '@/lib/toolboxTalkPacks'
 
 // POST /api/superadmin/tenants
 //
@@ -16,7 +17,8 @@ import { isValidSlug, normalizeName } from '@/lib/validation/tenants'
 //   { name:    string,                 // required, 1–200 chars after trim
 //     slug:    string,                 // required, ^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$
 //     is_demo: boolean,                // optional, default false
-//     modules: Record<string, boolean> // optional; missing keys default to false }
+//     modules:  Record<string, boolean>, // optional; missing keys default to false
+//     settings: Record<string, unknown>  // optional; currently exposes toolbox_industry }
 //
 // Response:
 //   201 → { tenant: Tenant }
@@ -39,7 +41,7 @@ export async function POST(req: Request) {
   const gate = await requireSuperadmin(req.headers.get('authorization'))
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
-  let body: { name?: unknown; slug?: unknown; is_demo?: unknown; modules?: unknown }
+  let body: { name?: unknown; slug?: unknown; is_demo?: unknown; modules?: unknown; settings?: unknown }
   try { body = await req.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
@@ -67,6 +69,17 @@ export async function POST(req: Request) {
     modules[key] = modulesIn[key] === true
   }
 
+  const settingsIn = (body.settings && typeof body.settings === 'object' && !Array.isArray(body.settings))
+    ? body.settings as Record<string, unknown>
+    : {}
+  const settings: Record<string, unknown> = {}
+  if ('toolbox_industry' in settingsIn) {
+    if (!isToolboxTalkIndustry(settingsIn.toolbox_industry)) {
+      return NextResponse.json({ error: 'toolbox_industry must be "general" or "construction"' }, { status: 400 })
+    }
+    settings.toolbox_industry = settingsIn.toolbox_industry
+  }
+
   const admin = supabaseAdmin()
 
   // Allocate the next tenant_number via the SQL helper so allocation is
@@ -89,7 +102,7 @@ export async function POST(req: Request) {
       status: isDemo ? 'trial' : 'active',
       is_demo: isDemo,
       modules,
-      settings: {},
+      settings,
     })
     .select('*')
     .single()

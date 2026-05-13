@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase'
 //   1. Today's talk — the row whose talk_date = today, prominently
 //      featured because that's the talk the foreman delivers this
 //      morning.
-//   2. Upcoming — today + 6 days. Workers can preview the week.
+//   2. Upcoming — today + 13 days. Workers can preview two weeks.
 //   3. Recent — most recent 30 talks (loaded with the default view).
 //   4. Archive — full historical library, lazy-loaded behind a "View
 //      archive" toggle. Includes a client-side search across title +
@@ -168,7 +168,7 @@ export default function ToolboxTalksListPage() {
             )}
           </section>
 
-          {/* Upcoming this week */}
+          {/* Upcoming two-week schedule */}
           {upcoming.length > 0 && (
             <section>
               <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
