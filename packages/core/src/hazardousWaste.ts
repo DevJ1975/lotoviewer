@@ -367,6 +367,182 @@ export function containerAgeStatus(
   return { ageDays, limitDays: limit, daysUntilLimit, status }
 }
 
+// ── Persisted records (migration 140) ────────────────────────────────────
+// Row shapes for the tables introduced in migration 140. The hazardous-
+// waste module now stores actual generator data per tenant — streams
+// (process master records) and containers (physical instances). These
+// types mirror the DB columns exactly so server routes and client
+// components share one source of truth.
+
+export const HAZARDOUS_WASTE_STREAM_STATUSES = ['draft', 'active', 'archived'] as const
+export type HazardousWasteStreamStatus = typeof HAZARDOUS_WASTE_STREAM_STATUSES[number]
+
+export const HAZARDOUS_WASTE_PHYSICAL_STATES = ['solid', 'liquid', 'gas', 'sludge', 'mixed'] as const
+export type HazardousWastePhysicalState = typeof HAZARDOUS_WASTE_PHYSICAL_STATES[number]
+
+export const HAZARDOUS_WASTE_CONTAINER_STATUSES = ['open', 'closed', 'in_shipment', 'disposed'] as const
+export type HazardousWasteContainerStatus = typeof HAZARDOUS_WASTE_CONTAINER_STATUSES[number]
+
+export const HAZARDOUS_WASTE_VOLUME_UNITS = [
+  'gallons', 'liters', 'quarts', 'pounds', 'kilograms', 'grams',
+] as const
+export type HazardousWasteVolumeUnit = typeof HAZARDOUS_WASTE_VOLUME_UNITS[number]
+
+export interface HazardousWasteStreamRow {
+  id:                   string
+  tenant_id:            string
+  name:                 string
+  generating_process:   string | null
+  description:          string | null
+  physical_state:       HazardousWastePhysicalState | null
+  hazards:              string[]
+  waste_codes:          string[]
+  generator_category:   RcraGeneratorCategory
+  long_haul:            boolean
+  determination_basis:  string | null
+  status:               HazardousWasteStreamStatus
+  owner_user_id:        string | null
+  review_due_date:      string | null
+  notes:                string | null
+  created_at:           string
+  created_by:           string | null
+  updated_at:           string
+  updated_by:           string | null
+  archived_at:          string | null
+}
+
+export interface HazardousWasteContainerRow {
+  id:                       string
+  tenant_id:                string
+  stream_id:                string
+  label:                    string
+  area_type:                HazardousWasteAreaType
+  area_location:            string | null
+  accumulation_started_at:  string | null
+  volume_quantity:          number | null
+  volume_unit:              HazardousWasteVolumeUnit | null
+  status:                   HazardousWasteContainerStatus
+  notes:                    string | null
+  created_at:               string
+  created_by:               string | null
+  updated_at:               string
+  updated_by:               string | null
+  archived_at:              string | null
+}
+
+export interface HazardousWasteStreamInput {
+  name:                 string
+  generating_process:   string | null
+  description:          string | null
+  physical_state:       HazardousWastePhysicalState | null
+  hazards:              string[]
+  waste_codes:          string[]
+  generator_category:   RcraGeneratorCategory
+  long_haul:            boolean
+  determination_basis:  string | null
+  status:               HazardousWasteStreamStatus
+  owner_user_id:        string | null
+  review_due_date:      string | null
+  notes:                string | null
+}
+
+export interface HazardousWasteContainerInput {
+  stream_id:                string
+  label:                    string
+  area_type:                HazardousWasteAreaType
+  area_location:            string | null
+  accumulation_started_at:  string | null
+  volume_quantity:          number | null
+  volume_unit:              HazardousWasteVolumeUnit | null
+  status:                   HazardousWasteContainerStatus
+  notes:                    string | null
+}
+
+export interface FieldError { field: string; message: string }
+
+/**
+ * Validate a HazardousWasteStreamInput. Returns an empty array when the
+ * input is acceptable. Validation is intentionally minimal — it enforces
+ * what the DB check constraints enforce, plus name/notes length caps the
+ * UI should also enforce. Trim before calling.
+ */
+export function validateHazardousWasteStreamInput(input: HazardousWasteStreamInput): FieldError[] {
+  const errors: FieldError[] = []
+  const name = input.name.trim()
+  if (name.length < 1) errors.push({ field: 'name', message: 'Name is required' })
+  if (name.length > 200) errors.push({ field: 'name', message: 'Name must be 200 characters or fewer' })
+  if (input.description && input.description.length > 4000) {
+    errors.push({ field: 'description', message: 'Description must be 4000 characters or fewer' })
+  }
+  if (input.generating_process && input.generating_process.length > 500) {
+    errors.push({ field: 'generating_process', message: 'Generating process must be 500 characters or fewer' })
+  }
+  if (!HAZARDOUS_WASTE_STREAM_STATUSES.includes(input.status)) {
+    errors.push({ field: 'status', message: 'Invalid status' })
+  }
+  if (input.physical_state && !HAZARDOUS_WASTE_PHYSICAL_STATES.includes(input.physical_state)) {
+    errors.push({ field: 'physical_state', message: 'Invalid physical state' })
+  }
+  if (!(['lqg', 'sqg', 'vsqg'] as RcraGeneratorCategory[]).includes(input.generator_category)) {
+    errors.push({ field: 'generator_category', message: 'Invalid generator category' })
+  }
+  return errors
+}
+
+/**
+ * Validate a HazardousWasteContainerInput.
+ */
+export function validateHazardousWasteContainerInput(input: HazardousWasteContainerInput): FieldError[] {
+  const errors: FieldError[] = []
+  const label = input.label.trim()
+  if (label.length < 1) errors.push({ field: 'label', message: 'Label is required' })
+  if (label.length > 120) errors.push({ field: 'label', message: 'Label must be 120 characters or fewer' })
+  if (!input.stream_id) errors.push({ field: 'stream_id', message: 'Stream is required' })
+  const validAreas: HazardousWasteAreaType[] = [
+    'satellite_accumulation', 'central_accumulation',
+    'universal_waste', 'used_oil', 'inspection_only',
+  ]
+  if (!validAreas.includes(input.area_type)) {
+    errors.push({ field: 'area_type', message: 'Invalid area type' })
+  }
+  if (!HAZARDOUS_WASTE_CONTAINER_STATUSES.includes(input.status)) {
+    errors.push({ field: 'status', message: 'Invalid status' })
+  }
+  if (input.volume_unit && !HAZARDOUS_WASTE_VOLUME_UNITS.includes(input.volume_unit)) {
+    errors.push({ field: 'volume_unit', message: 'Invalid volume unit' })
+  }
+  if (input.volume_quantity != null && (Number.isNaN(input.volume_quantity) || input.volume_quantity < 0)) {
+    errors.push({ field: 'volume_quantity', message: 'Volume quantity must be a non-negative number' })
+  }
+  if (input.accumulation_started_at) {
+    const d = new Date(input.accumulation_started_at)
+    if (Number.isNaN(d.getTime())) {
+      errors.push({ field: 'accumulation_started_at', message: 'Invalid date' })
+    }
+  }
+  return errors
+}
+
+/**
+ * Compute the age status of a persisted container row using its stream's
+ * generator_category + long_haul. Wrapper around containerAgeStatus that
+ * removes the join boilerplate at every call site.
+ */
+export function ageStatusForContainer(
+  container: Pick<HazardousWasteContainerRow, 'accumulation_started_at' | 'status'>,
+  stream: Pick<HazardousWasteStreamRow, 'generator_category' | 'long_haul'>,
+  now: Date | string,
+): ContainerAgeResult {
+  // Disposed and in-shipment containers no longer accumulate.
+  if (container.status === 'disposed' || container.status === 'in_shipment') {
+    return { ageDays: null, limitDays: null, daysUntilLimit: null, status: 'unknown' }
+  }
+  return containerAgeStatus(container.accumulation_started_at, now, {
+    category: stream.generator_category,
+    longHaul: stream.long_haul,
+  })
+}
+
 /**
  * Compute the next due date for the federal Biennial Hazardous Waste
  * Report. Per 40 CFR 262.41, the report is filed by March 1 of every

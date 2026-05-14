@@ -73,6 +73,27 @@ export default function HazardousWastePage() {
         </div>
       </section>
 
+      <section className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Link
+          href="/hazardous-waste/streams"
+          className="rounded-lg border border-slate-200 dark:border-slate-800 p-4 hover:border-slate-400 dark:hover:border-slate-600 transition-colors"
+        >
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Waste streams →</h2>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Master records for each type of waste generated. Approve determinations and review codes.
+          </p>
+        </Link>
+        <Link
+          href="/hazardous-waste/containers"
+          className="rounded-lg border border-slate-200 dark:border-slate-800 p-4 hover:border-slate-400 dark:hover:border-slate-600 transition-colors"
+        >
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Containers →</h2>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Physical containers with accumulation aging (LQG / SQG / VSQG). Open over-limit drums first.
+          </p>
+        </Link>
+      </section>
+
       <section className="rounded-lg border border-slate-200 dark:border-slate-800 p-5">
         <div className="flex items-start gap-3">
           <span className="rounded-md bg-emerald-100 p-2 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
