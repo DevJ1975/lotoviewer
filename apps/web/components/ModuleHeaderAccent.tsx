@@ -28,7 +28,7 @@ export default function ModuleHeaderAccent({ moduleId }: Props) {
     <div className={`relative border-l-4 ${classes.border}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center gap-3">
         <span
-          className={`shrink-0 w-7 h-7 rounded-md flex items-center justify-center ${classes.tile}`}
+          className={`module-icon-tile shrink-0 w-7 h-7 rounded-md flex items-center justify-center ${classes.tile}`}
           aria-hidden="true"
         >
           <Icon className="h-4 w-4" />

@@ -477,6 +477,18 @@
     border-color: rgba(29, 78, 216, 0.25);
   }
 
+  /* Module-icon treatment. Lucide icons ship as thin (stroke-width
+     1.5/2) line marks — fine for utility icons, but they read as
+     generic "React-template" iconography when used as module
+     identity at tile size. Pumping the stroke up to ~2.25 inside a
+     module tile, and dropping a translucent fill behind closed
+     paths, brings them in line with the custom safety pictograms
+     in `components/icons/safety/`. Apply by adding the
+     `module-icon-tile` class to the wrapper element. */
+  .module-icon-tile svg {
+    stroke-width: 2.25;
+  }
+
   /* Corner bracket frame — adds a subtle HUD-style corner accent
      to console panels (hero, command center). Pure CSS, no asset. */
   .corner-brackets {
