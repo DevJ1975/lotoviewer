@@ -20,6 +20,24 @@
   --color-ops-panel: #F8FAFC;
   --color-ops-line: #CBD5E1;
   --color-ops-surface: #FFFFFF;
+
+  /* Industrial palette. Steel + concrete neutrals with OSHA-coded
+     semantic colors. Used by the placard/tag surface utilities and
+     in module components that want to lean into the field-safety
+     visual language instead of generic SaaS neutrals. */
+  --color-steel-deep:   #0E1A2E;
+  --color-steel:        #1B2A44;
+  --color-steel-line:   #2A3B57;
+  --color-concrete-50:  #EEF1F4;
+  --color-concrete-100: #DDE3EA;
+  --color-concrete-200: #BFC8D2;
+  --color-concrete-300: #97A4B3;
+  --color-hazard-yellow:  #F5C400;
+  --color-hazard-amber:   #F59E0B;
+  --color-caution-orange: #EA580C;
+  --color-danger-red:     #C8102E;
+  --color-cleared-green:  #15803D;
+  --color-info-blue:      #1D4ED8;
 }
 
 @theme inline {
@@ -185,12 +203,70 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Concrete-tinted canvas with a faint grid — gives the app a
+       deliberate industrial substrate instead of the flat slate-50
+       that ships with every B2B React template. The grid lines are
+       barely visible (3% opacity) so they read as texture, not noise. */
     background:
-      linear-gradient(180deg, rgba(27, 58, 107, 0.055), transparent 18rem),
+      linear-gradient(180deg, rgba(14, 26, 46, 0.06), transparent 22rem),
+      repeating-linear-gradient(0deg,
+        rgba(15, 23, 42, 0.025) 0 1px,
+        transparent 1px 32px),
+      repeating-linear-gradient(90deg,
+        rgba(15, 23, 42, 0.025) 0 1px,
+        transparent 1px 32px),
+      var(--ops-canvas);
+  }
+  .dark body {
+    background:
+      linear-gradient(180deg, rgba(245, 196, 0, 0.045), transparent 22rem),
+      repeating-linear-gradient(0deg,
+        rgba(148, 163, 184, 0.05) 0 1px,
+        transparent 1px 32px),
+      repeating-linear-gradient(90deg,
+        rgba(148, 163, 184, 0.05) 0 1px,
+        transparent 1px 32px),
       var(--ops-canvas);
   }
   html {
     @apply font-sans;
+  }
+
+  /* ── Industrial type ramp ─────────────────────────────────────
+     Uppercase, tracked-out labels read like real safety signage
+     and field placards — and they signal "this is an ops tool,
+     not a marketing site." Pair with the Inter variable font's
+     wider weights for a stencil-adjacent feel without shipping
+     a second webfont. */
+  .placard-label {
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: 0.6875rem;        /* 11px */
+    line-height: 1;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+  }
+  .placard-label-lg {
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: 0.8125rem;        /* 13px */
+    line-height: 1;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+  }
+  .stencil-title {
+    font-family: var(--font-sans);
+    font-weight: 900;
+    letter-spacing: -0.01em;
+    line-height: 1.05;
+    font-feature-settings: "ss02" on;
+  }
+  .placard-numeric {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
   }
 
   /* Dark-mode form-control defaults.
@@ -262,6 +338,166 @@
     background:
       linear-gradient(180deg, rgba(27, 58, 107, 0.08), transparent 16rem),
       var(--ops-canvas);
+  }
+
+  /* ── Hazard stripes ────────────────────────────────────────────
+     Diagonal yellow-and-black stripes are the universal safety
+     vocabulary (machine guards, lockout barriers, caution tape).
+     Use the thin variant as a 4-6px top/bottom border on chrome
+     headers, banners, and module headers; the bold variant for
+     callouts and high-attention banners. */
+  .hazard-stripe {
+    background-image: repeating-linear-gradient(
+      135deg,
+      #F5C400 0 14px,
+      #0E1A2E 14px 28px
+    );
+  }
+  .hazard-stripe-thin {
+    background-image: repeating-linear-gradient(
+      135deg,
+      #F5C400 0 8px,
+      #0E1A2E 8px 16px
+    );
+  }
+  .danger-stripe-thin {
+    background-image: repeating-linear-gradient(
+      135deg,
+      #C8102E 0 8px,
+      #1A1A1A 8px 16px
+    );
+  }
+
+  /* Steel scanline — subtle horizontal banding for hero/console
+     surfaces. Layer over a solid steel-deep background. */
+  .steel-scanlines {
+    background-image:
+      linear-gradient(180deg, rgba(255,255,255,0.04), transparent 60%),
+      repeating-linear-gradient(
+        0deg,
+        rgba(255,255,255,0.025) 0 1px,
+        transparent 1px 4px
+      );
+  }
+
+  /* ── Placard surface ────────────────────────────────────────────
+     Equipment-placard styled card: white surface, slightly heavier
+     bottom border (mimics a metal-mounted tag's shadow), and a
+     yellow accent strip available via the `placard-accent` modifier.
+     Sharper corners than shadcn defaults so it reads as utilitarian. */
+  .placard-surface {
+    background: var(--ops-surface);
+    border: 1px solid var(--ops-line);
+    border-bottom-width: 2px;
+    border-bottom-color: var(--ops-line-strong);
+    border-radius: 6px;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.7) inset,
+      0 1px 2px rgba(15, 23, 42, 0.06),
+      0 8px 20px -12px rgba(15, 23, 42, 0.18);
+  }
+  .placard-surface-interactive {
+    transition:
+      border-color 160ms ease,
+      box-shadow 160ms ease,
+      transform 160ms ease;
+  }
+  .placard-surface-interactive:hover {
+    border-color: var(--color-brand-navy);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.7) inset,
+      0 2px 4px rgba(15, 23, 42, 0.08),
+      0 14px 28px -14px rgba(27, 58, 107, 0.32);
+    transform: translateY(-2px);
+  }
+  .placard-corner-mark {
+    position: relative;
+  }
+  /* Subtle bolt-head / rivet marker in two corners — adds physical
+     placard feeling without an asset. Suppressed under reduced
+     transparency / forced-colors so it doesn't fight a11y modes. */
+  .placard-corner-mark::before,
+  .placard-corner-mark::after {
+    content: "";
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--ops-line-strong);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+    opacity: 0.55;
+    pointer-events: none;
+  }
+  .placard-corner-mark::before { top: 6px; left: 6px; }
+  .placard-corner-mark::after  { top: 6px; right: 6px; }
+
+  /* ── Safety tags ────────────────────────────────────────────────
+     Real LOTO tags taper at the top where the cable threads through.
+     We can't easily clip-path a card cheaply, but a flat colored band
+     with bold uppercase copy + tabular numbers reads unambiguously
+     as a safety tag. */
+  .safety-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 3px;
+    font-weight: 800;
+    font-size: 0.6875rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    line-height: 1;
+    border: 1px solid transparent;
+    font-variant-numeric: tabular-nums;
+  }
+  .safety-tag-danger {
+    background: var(--color-danger-red);
+    color: #fff;
+    border-color: rgba(0,0,0,0.18);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.18) inset;
+  }
+  .safety-tag-locked {
+    background: var(--color-hazard-yellow);
+    color: #0E1A2E;
+    border-color: rgba(14,26,46,0.35);
+  }
+  .safety-tag-cleared {
+    background: var(--color-cleared-green);
+    color: #fff;
+    border-color: rgba(0,0,0,0.18);
+  }
+  .safety-tag-caution {
+    background: var(--color-caution-orange);
+    color: #fff;
+    border-color: rgba(0,0,0,0.18);
+  }
+  .safety-tag-info {
+    background: #E0E7FF;
+    color: var(--color-info-blue);
+    border-color: rgba(29, 78, 216, 0.25);
+  }
+
+  /* Corner bracket frame — adds a subtle HUD-style corner accent
+     to console panels (hero, command center). Pure CSS, no asset. */
+  .corner-brackets {
+    position: relative;
+  }
+  .corner-brackets::before,
+  .corner-brackets::after {
+    content: "";
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--color-hazard-yellow);
+    pointer-events: none;
+  }
+  .corner-brackets::before {
+    top: 10px; left: 10px;
+    border-right: none; border-bottom: none;
+  }
+  .corner-brackets::after {
+    bottom: 10px; right: 10px;
+    border-left: none; border-top: none;
   }
 
   .ops-surface {
