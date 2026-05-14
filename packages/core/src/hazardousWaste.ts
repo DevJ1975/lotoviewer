@@ -260,10 +260,318 @@ export function summarizeHazardousWasteDraft(draft: HazardousWasteFieldDraft): {
   const checks = getChecksForArea(draft.areaType)
   const checked = checks.filter(check => draft.checkedIds.includes(check.id)).length
   const flaggedCritical = checks.filter(check => check.critical && draft.flaggedIds.includes(check.id)).length
+  // readyForReview is meaningful only when checks actually apply to the area.
+  // An area type with no checks (or a future config where every check is
+  // filtered out) must NOT report ready-for-review vacuously — that would
+  // mislead a supervisor reading the draft list.
   return {
     total: checks.length,
     checked,
     flaggedCritical,
-    readyForReview: checked === checks.length && flaggedCritical === 0,
+    readyForReview: checks.length > 0 && checked === checks.length && flaggedCritical === 0,
   }
+}
+
+// ── Accumulation & calendar helpers ───────────────────────────────────────
+// Pure date utilities. Inputs are accepted as Date or ISO string; outputs
+// are deterministic given the same inputs (no `new Date()` inside the
+// helpers themselves — callers pass `now` explicitly). All math is done
+// in UTC to avoid DST traps; consumers should format for display in the
+// site's local zone.
+
+/**
+ * RCRA generator categories used for accumulation-time limits.
+ * `lqg` = Large Quantity Generator (90-day baseline).
+ * `sqg` = Small Quantity Generator (180-day baseline; 270 days if the
+ *         designated TSDF is &gt; 200 miles from the site).
+ * `vsqg` = Very Small Quantity Generator (no federal time limit; consult
+ *          state rules).
+ */
+export type RcraGeneratorCategory = 'lqg' | 'sqg' | 'vsqg'
+
+export type ContainerAgeStatus = 'unknown' | 'ok' | 'approaching' | 'over_limit'
+
+export interface ContainerAgeOptions {
+  /** Generator category that determines the baseline limit. */
+  category: RcraGeneratorCategory
+  /** SQG only: set true when the TSDF is &gt; 200 miles, extending to 270 days. */
+  longHaul?: boolean
+  /** Day count before the limit that flips status to `approaching`. Default 14. */
+  warnDaysBeforeLimit?: number
+}
+
+export interface ContainerAgeResult {
+  /** Whole days between startedAt and now (UTC, floored). null when unknown. */
+  ageDays: number | null
+  /** Federally applicable limit, in days. null for VSQG (no federal limit). */
+  limitDays: number | null
+  /** Days remaining until the limit. Negative when over. null when unknown. */
+  daysUntilLimit: number | null
+  status: ContainerAgeStatus
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+function toDate(value: Date | string | null | undefined): Date | null {
+  if (value == null) return null
+  const d = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function baselineLimitDays(opts: ContainerAgeOptions): number | null {
+  if (opts.category === 'lqg') return 90
+  if (opts.category === 'sqg') return opts.longHaul ? 270 : 180
+  return null // vsqg: no federal limit
+}
+
+/**
+ * Compute the age status of a central-accumulation container.
+ *
+ * Edge cases handled:
+ * - `startedAt` null/invalid → ageDays:null, status:'unknown'
+ * - `startedAt` in the future (data-entry error) → ageDays:0, status:'unknown'
+ * - `category === 'vsqg'` → limit:null, status:'unknown' (federal does not gate)
+ * - DST/TZ → math is in UTC ms; status flips on day boundaries, not hours
+ */
+export function containerAgeStatus(
+  startedAt: Date | string | null | undefined,
+  now: Date | string,
+  opts: ContainerAgeOptions,
+): ContainerAgeResult {
+  const start = toDate(startedAt)
+  const nowDate = toDate(now)
+  const limit = baselineLimitDays(opts)
+
+  if (!start || !nowDate) {
+    return { ageDays: null, limitDays: limit, daysUntilLimit: null, status: 'unknown' }
+  }
+
+  const diffMs = nowDate.getTime() - start.getTime()
+  if (diffMs < 0) {
+    // Future start date — almost always a data-entry mistake. Surface as
+    // unknown so the UI prompts the user to correct it.
+    return { ageDays: 0, limitDays: limit, daysUntilLimit: null, status: 'unknown' }
+  }
+
+  const ageDays = Math.floor(diffMs / MS_PER_DAY)
+  if (limit == null) {
+    return { ageDays, limitDays: null, daysUntilLimit: null, status: 'unknown' }
+  }
+
+  const daysUntilLimit = limit - ageDays
+  const warnWindow = Math.max(0, opts.warnDaysBeforeLimit ?? 14)
+  let status: ContainerAgeStatus
+  if (ageDays > limit) status = 'over_limit'
+  else if (daysUntilLimit <= warnWindow) status = 'approaching'
+  else status = 'ok'
+  return { ageDays, limitDays: limit, daysUntilLimit, status }
+}
+
+// ── Persisted records (migration 140) ────────────────────────────────────
+// Row shapes for the tables introduced in migration 140. The hazardous-
+// waste module now stores actual generator data per tenant — streams
+// (process master records) and containers (physical instances). These
+// types mirror the DB columns exactly so server routes and client
+// components share one source of truth.
+
+export const HAZARDOUS_WASTE_STREAM_STATUSES = ['draft', 'active', 'archived'] as const
+export type HazardousWasteStreamStatus = typeof HAZARDOUS_WASTE_STREAM_STATUSES[number]
+
+export const HAZARDOUS_WASTE_PHYSICAL_STATES = ['solid', 'liquid', 'gas', 'sludge', 'mixed'] as const
+export type HazardousWastePhysicalState = typeof HAZARDOUS_WASTE_PHYSICAL_STATES[number]
+
+export const HAZARDOUS_WASTE_CONTAINER_STATUSES = ['open', 'closed', 'in_shipment', 'disposed'] as const
+export type HazardousWasteContainerStatus = typeof HAZARDOUS_WASTE_CONTAINER_STATUSES[number]
+
+export const HAZARDOUS_WASTE_VOLUME_UNITS = [
+  'gallons', 'liters', 'quarts', 'pounds', 'kilograms', 'grams',
+] as const
+export type HazardousWasteVolumeUnit = typeof HAZARDOUS_WASTE_VOLUME_UNITS[number]
+
+export interface HazardousWasteStreamRow {
+  id:                   string
+  tenant_id:            string
+  name:                 string
+  generating_process:   string | null
+  description:          string | null
+  physical_state:       HazardousWastePhysicalState | null
+  hazards:              string[]
+  waste_codes:          string[]
+  generator_category:   RcraGeneratorCategory
+  long_haul:            boolean
+  determination_basis:  string | null
+  status:               HazardousWasteStreamStatus
+  owner_user_id:        string | null
+  review_due_date:      string | null
+  notes:                string | null
+  created_at:           string
+  created_by:           string | null
+  updated_at:           string
+  updated_by:           string | null
+  archived_at:          string | null
+}
+
+export interface HazardousWasteContainerRow {
+  id:                       string
+  tenant_id:                string
+  stream_id:                string
+  label:                    string
+  area_type:                HazardousWasteAreaType
+  area_location:            string | null
+  accumulation_started_at:  string | null
+  volume_quantity:          number | null
+  volume_unit:              HazardousWasteVolumeUnit | null
+  status:                   HazardousWasteContainerStatus
+  notes:                    string | null
+  created_at:               string
+  created_by:               string | null
+  updated_at:               string
+  updated_by:               string | null
+  archived_at:              string | null
+}
+
+export interface HazardousWasteStreamInput {
+  name:                 string
+  generating_process:   string | null
+  description:          string | null
+  physical_state:       HazardousWastePhysicalState | null
+  hazards:              string[]
+  waste_codes:          string[]
+  generator_category:   RcraGeneratorCategory
+  long_haul:            boolean
+  determination_basis:  string | null
+  status:               HazardousWasteStreamStatus
+  owner_user_id:        string | null
+  review_due_date:      string | null
+  notes:                string | null
+}
+
+export interface HazardousWasteContainerInput {
+  stream_id:                string
+  label:                    string
+  area_type:                HazardousWasteAreaType
+  area_location:            string | null
+  accumulation_started_at:  string | null
+  volume_quantity:          number | null
+  volume_unit:              HazardousWasteVolumeUnit | null
+  status:                   HazardousWasteContainerStatus
+  notes:                    string | null
+}
+
+export interface FieldError { field: string; message: string }
+
+/**
+ * Validate a HazardousWasteStreamInput. Returns an empty array when the
+ * input is acceptable. Validation is intentionally minimal — it enforces
+ * what the DB check constraints enforce, plus name/notes length caps the
+ * UI should also enforce. Trim before calling.
+ */
+export function validateHazardousWasteStreamInput(input: HazardousWasteStreamInput): FieldError[] {
+  const errors: FieldError[] = []
+  const name = input.name.trim()
+  if (name.length < 1) errors.push({ field: 'name', message: 'Name is required' })
+  if (name.length > 200) errors.push({ field: 'name', message: 'Name must be 200 characters or fewer' })
+  if (input.description && input.description.length > 4000) {
+    errors.push({ field: 'description', message: 'Description must be 4000 characters or fewer' })
+  }
+  if (input.generating_process && input.generating_process.length > 500) {
+    errors.push({ field: 'generating_process', message: 'Generating process must be 500 characters or fewer' })
+  }
+  if (!HAZARDOUS_WASTE_STREAM_STATUSES.includes(input.status)) {
+    errors.push({ field: 'status', message: 'Invalid status' })
+  }
+  if (input.physical_state && !HAZARDOUS_WASTE_PHYSICAL_STATES.includes(input.physical_state)) {
+    errors.push({ field: 'physical_state', message: 'Invalid physical state' })
+  }
+  if (!(['lqg', 'sqg', 'vsqg'] as RcraGeneratorCategory[]).includes(input.generator_category)) {
+    errors.push({ field: 'generator_category', message: 'Invalid generator category' })
+  }
+  return errors
+}
+
+/**
+ * Validate a HazardousWasteContainerInput.
+ */
+export function validateHazardousWasteContainerInput(input: HazardousWasteContainerInput): FieldError[] {
+  const errors: FieldError[] = []
+  const label = input.label.trim()
+  if (label.length < 1) errors.push({ field: 'label', message: 'Label is required' })
+  if (label.length > 120) errors.push({ field: 'label', message: 'Label must be 120 characters or fewer' })
+  if (!input.stream_id) errors.push({ field: 'stream_id', message: 'Stream is required' })
+  const validAreas: HazardousWasteAreaType[] = [
+    'satellite_accumulation', 'central_accumulation',
+    'universal_waste', 'used_oil', 'inspection_only',
+  ]
+  if (!validAreas.includes(input.area_type)) {
+    errors.push({ field: 'area_type', message: 'Invalid area type' })
+  }
+  if (!HAZARDOUS_WASTE_CONTAINER_STATUSES.includes(input.status)) {
+    errors.push({ field: 'status', message: 'Invalid status' })
+  }
+  if (input.volume_unit && !HAZARDOUS_WASTE_VOLUME_UNITS.includes(input.volume_unit)) {
+    errors.push({ field: 'volume_unit', message: 'Invalid volume unit' })
+  }
+  if (input.volume_quantity != null && (Number.isNaN(input.volume_quantity) || input.volume_quantity < 0)) {
+    errors.push({ field: 'volume_quantity', message: 'Volume quantity must be a non-negative number' })
+  }
+  if (input.accumulation_started_at) {
+    const d = new Date(input.accumulation_started_at)
+    if (Number.isNaN(d.getTime())) {
+      errors.push({ field: 'accumulation_started_at', message: 'Invalid date' })
+    }
+  }
+  return errors
+}
+
+/**
+ * Compute the age status of a persisted container row using its stream's
+ * generator_category + long_haul. Wrapper around containerAgeStatus that
+ * removes the join boilerplate at every call site.
+ */
+export function ageStatusForContainer(
+  container: Pick<HazardousWasteContainerRow, 'accumulation_started_at' | 'status'>,
+  stream: Pick<HazardousWasteStreamRow, 'generator_category' | 'long_haul'>,
+  now: Date | string,
+): ContainerAgeResult {
+  // Disposed and in-shipment containers no longer accumulate.
+  if (container.status === 'disposed' || container.status === 'in_shipment') {
+    return { ageDays: null, limitDays: null, daysUntilLimit: null, status: 'unknown' }
+  }
+  return containerAgeStatus(container.accumulation_started_at, now, {
+    category: stream.generator_category,
+    longHaul: stream.long_haul,
+  })
+}
+
+/**
+ * Compute the next due date for the federal Biennial Hazardous Waste
+ * Report. Per 40 CFR 262.41, the report is filed by March 1 of every
+ * even-numbered year for waste activity in the preceding odd-numbered
+ * year (e.g. 2027 activity reported by 2028-03-01).
+ *
+ * Returns a UTC Date set to midnight on March 1 of the next even year
+ * &gt;= `now`. If `now` is already past March 1 of an even year, the
+ * function rolls forward to the next even-year cycle (two years later).
+ *
+ * Examples:
+ *   now=2026-01-15 → 2026-03-01 (covers report year 2025)
+ *   now=2026-03-01 → 2026-03-01 (today is the deadline)
+ *   now=2026-03-02 → 2028-03-01 (next cycle)
+ *   now=2027-08-01 → 2028-03-01 (mid-odd-year — next even March 1)
+ */
+export function nextBiennialDueDate(now: Date | string): Date {
+  const n = toDate(now)
+  if (!n) throw new Error('nextBiennialDueDate: invalid `now`')
+
+  const year = n.getUTCFullYear()
+  const month = n.getUTCMonth() // 0-indexed; March = 2
+  const day = n.getUTCDate()
+
+  // Find candidate even year: round current year up to the next even year.
+  let candidate = year + (year % 2 === 0 ? 0 : 1)
+  // If we're already past March 1 of an even year, jump to the next even cycle.
+  if (candidate === year && (month > 2 || (month === 2 && day > 1))) {
+    candidate += 2
+  }
+  return new Date(Date.UTC(candidate, 2, 1, 0, 0, 0, 0))
 }
