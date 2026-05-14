@@ -32,6 +32,8 @@ export type AiSurface =
   | 'summarize-audit'
   | 'classify-near-miss'
   | 'superadmin-daily-report'
+  | 'summarize-legal-citation'
+  | 'suggest-compliance-obligations'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
@@ -65,6 +67,12 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   'summarize-audit':                  { perHour: 30, perDay: 100 },
   'classify-near-miss':               { perHour: 30, perDay: 200 },
   'superadmin-daily-report':          { perHour: 10, perDay: 30 },
+  // Compliance Calendar — both surfaces are admin-authoring tools
+  // (write-rare, review-heavy). Modest caps prevent runaway loops
+  // while still letting an onboarding admin seed a registry in one
+  // sitting.
+  'summarize-legal-citation':         { perHour: 20, perDay: 100 },
+  'suggest-compliance-obligations':   { perHour: 20, perDay: 100 },
 }
 
 interface CheckArgs {

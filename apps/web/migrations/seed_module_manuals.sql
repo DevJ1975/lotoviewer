@@ -28,6 +28,7 @@ values
   ('bbs',             'Behavior-Based Safety','QR-driven unsafe act / condition / safe behavior observations.', E'## Overview\n\nThis manual covers Behavior-Based Safety (BBS). **Edit me.**'),
   ('chemicals',       'Chemical Management', 'Chemical inventory, GHS labeling, SDS storage + AI parsing + drift monitor.', E'## Overview\n\nThis manual covers the Chemical Management module. **Edit me.**'),
   ('hazardous-waste', 'Hazardous Waste',     'Waste determinations, accumulation checks, manifests, calendar reminders, and inspection binders.', E'## Overview\n\nThis manual covers the Hazardous Waste module. **Edit me.**'),
+  ('compliance',      'Compliance',          'AI-driven compliance calendar + legal registry — track citations and the obligations they generate.', E'## Overview\n\nThis manual covers the Compliance Calendar + Legal Registry. **Edit me.**'),
   ('reports-scorecard',         'EHS Scorecard',      'Leading + lagging indicators rolled up tenant-wide.',    E'## Overview\n\nThis manual covers the EHS Scorecard. **Edit me.**'),
   ('reports-insights',          'Insights',           'Auto-surfaced trends across the safety modules.',        E'## Overview\n\nThis manual covers the Insights module. **Edit me.**'),
   ('reports-compliance-bundle', 'Compliance bundle',  'One-click PDF pack of OSHA forms + records.',            E'## Overview\n\nThis manual covers the Compliance bundle export. **Edit me.**'),

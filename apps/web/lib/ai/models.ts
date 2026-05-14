@@ -57,6 +57,16 @@ export const MODEL_BY_SURFACE = {
   'summarize-audit':                  SONNET,
   'classify-near-miss':               SONNET,
   'superadmin-daily-report':          SONNET,
+  // Compliance Calendar / Legal Registry. Two text-only surfaces:
+  //   - summarize-legal-citation:  Given a citation + jurisdiction,
+  //     produce a structured summary + applicability questions. The
+  //     output is shown to the admin and saved only when they
+  //     confirm — never auto-published.
+  //   - suggest-compliance-obligations: Given a registry entry, propose
+  //     calendar items (inspection cadence, training cycle, drill,
+  //     reporting deadline). Admin picks which to materialize.
+  'summarize-legal-citation':         SONNET,
+  'suggest-compliance-obligations':   SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

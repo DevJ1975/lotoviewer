@@ -80,6 +80,7 @@ const MODULE_GROUPS: Record<string, NavigationGroupId> = {
   'hot-work': 'permits-controls',
   'confined-spaces': 'permits-controls',
   chemicals: 'permits-controls',
+  compliance: 'permits-controls',
 
   'reports-scorecard': 'reporting',
   'reports-insights': 'reporting',
@@ -113,6 +114,7 @@ const KEYWORDS: Record<string, string[]> = {
   'hot-work': ['permit', 'fire watch', 'spark'],
   'confined-spaces': ['permit', 'entry', 'atmosphere'],
   jha: ['job hazard analysis', 'task', 'hazard'],
+  compliance: ['compliance', 'calendar', 'legal', 'registry', 'osha', 'epa', 'iso', 'citation', 'obligation'],
   strike: ['training', 'microlearning', 'lesson'],
   'toolbox-talks': ['talks', 'briefing', 'training'],
   'safety-boards': ['boards', 'announcements', 'discussions'],
