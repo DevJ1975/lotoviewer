@@ -223,7 +223,7 @@ describe('LOTO review-link business rules', () => {
     ])
   })
 
-  it('rejects review-link creation when any equipment is not ready', async () => {
+  it('creates a review link even when equipment photos or placards are incomplete', async () => {
     queue('profiles', { data: { is_superadmin: true }, error: null })
     queue('tenants', { data: { name: 'Acme Foods' }, error: null })
     queue('loto_equipment', {
@@ -232,17 +232,41 @@ describe('LOTO review-link business rules', () => {
       ],
       error: null,
     })
+    queue('loto_review_links', {
+      data: [{
+        id: LINK_ID,
+        token: VALID_TOKEN,
+        expires_at: '2026-06-01T00:00:00.000Z',
+        department: 'Packaging',
+        reviewer_name: 'Client Reviewer',
+        reviewer_email: 'client@example.com',
+        admin_message: null,
+        email_channel: 'manual',
+        created_at: '2026-05-13T00:00:00.000Z',
+      }],
+      error: null,
+    })
+    queue('loto_review_link_equipment', { data: null, error: null })
 
     const response = await createReviewLinks(jsonRequest({
       department: 'Packaging',
       reviewers: [{ name: 'Client Reviewer', email: 'client@example.com' }],
       skip_email: true,
     }))
-    const body = await response.json()
 
-    expect(response.status).toBe(409)
-    expect(body.notReady).toEqual([{ equipment_id: 'EQ-001', photo_status: 'partial', has_placard: false }])
-    expect(captured.inserts.some(call => call.table === 'loto_review_links')).toBe(false)
+    expect(response.status).toBe(201)
+    expect(captured.inserts.some(call => call.table === 'loto_review_links')).toBe(true)
+    const snapshotInsert = captured.inserts.find(call => call.table === 'loto_review_link_equipment')
+    expect(snapshotInsert?.payload).toEqual([
+      {
+        review_link_id: LINK_ID,
+        tenant_id: TENANT_ID,
+        equipment_id: 'EQ-001',
+        equipment_description: 'Mixer',
+        department: 'Packaging',
+        sort_order: 0,
+      },
+    ])
   })
 
   it('saves public placard notes through the serialized review RPC', async () => {

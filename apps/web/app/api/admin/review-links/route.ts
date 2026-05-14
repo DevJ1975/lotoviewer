@@ -141,8 +141,6 @@ interface DepartmentEquipmentForReview {
   equipment_id:       string
   description:        string | null
   department:         string
-  photo_status:       'missing' | 'partial' | 'complete'
-  placard_url:        string | null
 }
 
 /**
@@ -232,37 +230,28 @@ export async function POST(req: Request) {
 
   const admin = supabaseAdmin()
 
-  // Look up the tenant's display name + department equipment. A review
-  // invite means the whole department is ready for approval, so every
-  // active row must have complete required photos and a generated placard.
+  // Look up the tenant's display name + department equipment. Reviewers
+  // see whatever state the department is in today — incomplete photos
+  // and missing placards included — so we don't gate the send on
+  // readiness. The only hard requirement is that the department has at
+  // least one active equipment row to review.
   const [{ data: tenantRow }, { data: departmentEquipment, error: equipmentErr }] = await Promise.all([
     admin.from('tenants').select('name').eq('id', gate.tenantId).maybeSingle(),
     admin.from('loto_equipment')
-         .select('equipment_id, description, department, photo_status, placard_url')
+         .select('equipment_id, description, department')
          .eq('tenant_id', gate.tenantId)
          .eq('department', department)
          .eq('decommissioned', false)
          .order('equipment_id', { ascending: true }),
   ])
   if (equipmentErr) {
-    Sentry.captureException(equipmentErr, { tags: { route: 'review-links/POST', stage: 'equipment-readiness' } })
+    Sentry.captureException(equipmentErr, { tags: { route: 'review-links/POST', stage: 'equipment-lookup' } })
     return NextResponse.json({ error: equipmentErr.message }, { status: 500 })
   }
   const tenantName   = tenantRow?.name ?? 'your tenant'
   const equipmentForReview = (departmentEquipment ?? []) as DepartmentEquipmentForReview[]
   if (equipmentForReview.length === 0) {
     return NextResponse.json({ error: 'No active equipment in this department to review' }, { status: 400 })
-  }
-  const notReady = equipmentForReview.filter(eq => eq.photo_status !== 'complete' || !eq.placard_url)
-  if (notReady.length > 0) {
-    return NextResponse.json({
-      error: `Department is not ready for review. ${notReady.length} of ${equipmentForReview.length} equipment records still need complete photos and generated placards.`,
-      notReady: notReady.map(eq => ({
-        equipment_id: eq.equipment_id,
-        photo_status: eq.photo_status,
-        has_placard: Boolean(eq.placard_url),
-      })),
-    }, { status: 409 })
   }
   const placardCount = equipmentForReview.length
 
