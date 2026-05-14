@@ -489,6 +489,106 @@
     stroke-width: 2.25;
   }
 
+  /* ── Ops table treatment ────────────────────────────────────────
+     Dense data table for operational lists (equipment, permits,
+     audit log). Tight row heights, monospaced ID columns, sticky
+     header with a subtle hazard underline. Apply by wrapping the
+     <table> in `.ops-table`. Pairs with `.ops-table-id` on serial /
+     equipment-ID cells and `.ops-table-numeric` on count columns. */
+  .ops-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;          /* 13px — denser than the 14px shadcn default */
+  }
+  .ops-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--ops-surface);
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    font-weight: 800;
+    font-size: 0.6875rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ops-muted);
+    border-bottom: 2px solid var(--ops-line-strong);
+    white-space: nowrap;
+  }
+  /* Faint hazard-yellow underline echoes the placard rail vocabulary
+     without shouting at the user mid-scroll. */
+  .ops-table thead th::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -2px;
+    height: 2px;
+    background: linear-gradient(
+      90deg,
+      transparent 0,
+      var(--color-hazard-yellow, #F5C400) 10%,
+      var(--color-hazard-yellow, #F5C400) 90%,
+      transparent 100%
+    );
+    opacity: 0.18;
+    pointer-events: none;
+  }
+  .ops-table tbody td {
+    padding: 0.4375rem 0.75rem;     /* 7px vertical — denser than shadcn's 8px */
+    border-bottom: 1px solid var(--ops-line);
+    vertical-align: middle;
+    color: var(--ops-ink);
+  }
+  .ops-table tbody tr:hover td {
+    background: rgba(245, 196, 0, 0.06);   /* faint hazard-yellow row hover */
+  }
+  .ops-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .ops-table-id {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+    font-weight: 600;
+  }
+  .ops-table-numeric {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  /* Dense list row — for vertical-list panels (active permits,
+     recent activity) that aren't quite tables. Halves the default
+     shadcn spacing so the eye can scan more rows. */
+  .ops-list-row {
+    padding: 0.5rem 0.5rem;
+    border-bottom: 1px solid var(--ops-line);
+    transition: background-color 120ms ease;
+  }
+  .ops-list-row:last-child {
+    border-bottom: none;
+  }
+  .ops-list-row:hover {
+    background: rgba(245, 196, 0, 0.05);
+  }
+
+  /* Section heading for placard panels — a compact, tracked-out
+     uppercase title with an accent rail and right-aligned counter
+     slot. Use via the wrapper pattern, not as a single class. */
+  .placard-section-title {
+    color: var(--ops-ink);
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: 0.8125rem;
+    letter-spacing: 0.14em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+  .dark .placard-section-title {
+    color: rgb(241 245 249);
+  }
+
   /* Corner bracket frame — adds a subtle HUD-style corner accent
      to console panels (hero, command center). Pure CSS, no asset. */
   .corner-brackets {
