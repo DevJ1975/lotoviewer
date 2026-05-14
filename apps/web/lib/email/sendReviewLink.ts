@@ -56,10 +56,19 @@ export async function sendReviewLinkEmail(
     return { sent: false, providerId: null }
   }
 
-  // From-address precedence — same fallback ladder as the invite helper.
-  const from = process.env.INVITE_FROM_EMAIL
-            ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <invites@soteriafield.app>'
+  // Require an explicit From address. The previous fallback to a
+  // hardcoded soteriafield.app sender would silently send from an
+  // unverified domain in non-default deploys, which is the #1 cause
+  // of review invites landing in spam.
+  const from = process.env.INVITE_FROM_EMAIL ?? process.env.SUPPORT_FROM_EMAIL
+  if (!from) {
+    console.warn('[review-link-email] INVITE_FROM_EMAIL / SUPPORT_FROM_EMAIL not set — skipping send')
+    await logEmailSend({
+      kind: 'review-link', to: args.to,
+      status: 'skipped', errorText: 'INVITE_FROM_EMAIL / SUPPORT_FROM_EMAIL not set',
+    })
+    return { sent: false, providerId: null }
+  }
 
   // Subject + plain-text body come from the shared pure renderer so
   // the manual-send (mailto) path produces identical wording. HTML
@@ -75,6 +84,7 @@ export async function sendReviewLinkEmail(
     adminMessage:  args.adminMessage,
   })
   const html = renderHtml(args)
+  const unsubscribeUrl = buildUnsubscribeUrl(args.reviewUrl)
 
   try {
     const resend = new Resend(apiKey)
@@ -85,6 +95,13 @@ export async function sendReviewLinkEmail(
       text,
       html,
       replyTo:   args.replyTo,
+      // One-click unsubscribe per RFC 8058. Gmail/Yahoo require a
+      // working unsubscribe on bulk-ish mail; without it deliverability
+      // drops and messages route to spam.
+      headers: {
+        'List-Unsubscribe':      `<${unsubscribeUrl}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      },
     })
     if (error) {
       Sentry.captureException(error, { tags: { module: 'sendReviewLinkEmail', stage: 'resend' } })
@@ -109,6 +126,16 @@ export async function sendReviewLinkEmail(
     })
     return { sent: false, providerId: null }
   }
+}
+
+// Derive the one-click unsubscribe URL from the reviewUrl. reviewUrl
+// already encodes both the public origin and the per-link token, so
+// reusing it keeps the unsubscribe endpoint and the review portal on
+// the same host without threading another env var.
+function buildUnsubscribeUrl(reviewUrl: string): string {
+  const u = new URL(reviewUrl)
+  const token = u.pathname.split('/').pop() ?? ''
+  return `${u.origin}/api/review-link-unsubscribe/${token}`
 }
 
 function formatDate(iso: string): string {

@@ -50,13 +50,19 @@ export async function sendInviteEmail(args: InviteEmailArgs): Promise<boolean> {
     return false
   }
 
-  // From-address precedence:
-  //   INVITE_FROM_EMAIL  — env override (e.g. per-environment)
-  //   SUPPORT_FROM_EMAIL — fallback to the bug-report sender
-  //   invites@soteriafield.app — verified Resend domain (default)
-  const from = process.env.INVITE_FROM_EMAIL
-            ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <invites@soteriafield.app>'
+  // Require an explicit From address. The previous fallback to a
+  // hardcoded soteriafield.app sender would silently send from an
+  // unverified domain in non-default deploys, which kills inbox
+  // placement.
+  const from = process.env.INVITE_FROM_EMAIL ?? process.env.SUPPORT_FROM_EMAIL
+  if (!from) {
+    console.warn('[invite-email] INVITE_FROM_EMAIL / SUPPORT_FROM_EMAIL not set — skipping send')
+    await logEmailSend({
+      kind: 'invite', to: args.to,
+      status: 'skipped', errorText: 'INVITE_FROM_EMAIL / SUPPORT_FROM_EMAIL not set',
+    })
+    return false
+  }
 
   const displayName = args.fullName || args.to.split('@')[0]!
   const isExisting = !args.tempPassword
