@@ -18,6 +18,7 @@ import { parseAnnotations, type Annotation } from '@/lib/photoAnnotations'
 import { Sheet } from '@/components/ui/sheet'
 import HazardReportView from '@/components/HazardReport'
 import EquipmentReadinessPanel from '@/components/equipment/EquipmentReadinessPanel'
+import OpenWorkOrderCallout from '@/components/equipment/OpenWorkOrderCallout'
 import { useTenant } from '@/components/TenantProvider'
 
 export default function EquipmentDetailPage() {
@@ -213,6 +214,8 @@ function EquipmentDetail() {
           </div>
         </div>
       </div>
+
+      <OpenWorkOrderCallout tenantId={tenantId} equipmentId={equipmentId} />
 
       {/* Placard */}
       <PlacardView
