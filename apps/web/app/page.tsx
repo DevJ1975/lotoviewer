@@ -2,9 +2,9 @@
 
 import { Suspense, useEffect } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { resolveLandingPath } from '@/lib/landing'
+import OpsSpinner from '@/components/OpsSpinner'
 import MultiModuleDashboard from './_components/MultiModuleDashboard'
 
 // Home dispatcher. Visited as `/` after every sign-in.
@@ -60,9 +60,5 @@ function HomeDispatcher() {
 }
 
 function FullPageSpinner() {
-  return (
-    <div className="min-h-[60vh] flex items-center justify-center">
-      <Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" />
-    </div>
-  )
+  return <OpsSpinner size="lg" fullPage label="Routing" />
 }

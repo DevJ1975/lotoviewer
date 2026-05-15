@@ -74,11 +74,15 @@ export default function AppChrome({ children }: { children: ReactNode }) {
   return (
     <SidebarProvider open={drawerOpen} onOpenChange={setDrawerOpen}>
       <header
-        className={`sticky top-0 z-40 border-b border-white/10 bg-[#102542]/95 text-white backdrop-blur-xl backdrop-saturate-150 motion-reactive ${
-          scrolled ? 'shadow-[0_12px_28px_rgba(2,8,23,0.24)]' : 'shadow-[0_1px_0_rgba(255,255,255,0.06)]'
+        className={`sticky top-0 z-40 border-b border-[#0a1322]/80 bg-[#0E1A2E] text-white steel-scanlines motion-reactive ${
+          scrolled ? 'shadow-[0_12px_28px_rgba(2,8,23,0.34)]' : 'shadow-[0_1px_0_rgba(255,255,255,0.04)]'
         }`}
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
+        {/* Hazard stripe — universal safety vocabulary. Sits above the
+            nav so the very first pixels of the app read "industrial
+            ops tool" rather than "generic SaaS dashboard." */}
+        <div className="h-1.5 hazard-stripe-thin" aria-hidden="true" />
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className={`flex items-center justify-between gap-2 sm:gap-4 motion-reactive ${scrolled ? 'h-12' : 'h-14'}`}>
             <SidebarTrigger className="motion-press shrink-0 rounded-md border border-white/10 bg-white/[0.06] text-white/85 hover:bg-white/[0.12] hover:text-white active:bg-white/15 focus-visible:ring-white/40">
@@ -112,10 +116,12 @@ export default function AppChrome({ children }: { children: ReactNode }) {
 
       {/* Module accent strip — picks up the active module's color so the
           user always knows which module they're in, even when scrolling
-          through long content. Sticks below the chrome header. */}
+          through long content. Sticks below the chrome header. The
+          +0.375rem accounts for the hazard stripe sitting above the
+          main header row. */}
       <div
         className={`h-[3px] sticky z-30 motion-reactive ${accentClasses.strip}`}
-        style={{ top: `calc(${scrolled ? '3rem' : '3.5rem'} + env(safe-area-inset-top))` }}
+        style={{ top: `calc(${scrolled ? '3.375rem' : '3.875rem'} + env(safe-area-inset-top))` }}
         aria-hidden="true"
       />
 
@@ -141,22 +147,25 @@ export default function AppChrome({ children }: { children: ReactNode }) {
       <AssistantDock />
 
       <footer
-        className="mt-0 border-t border-slate-200/80 bg-white/90 py-4 text-xs text-slate-500 backdrop-blur dark:border-slate-800/70 dark:bg-slate-950/90 dark:text-slate-400"
+        className="mt-0 border-t-2 border-slate-300/80 bg-white/90 py-4 text-xs text-slate-500 backdrop-blur dark:border-slate-800/70 dark:bg-slate-950/90 dark:text-slate-400"
         style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
       >
+        {/* Hazard-stripe cap mirrors the one at the top of the header,
+            framing the entire shell like a piece of safety equipment. */}
+        <div className="-mt-4 mb-4 h-1 hazard-stripe-thin opacity-80" aria-hidden="true" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <span className="tracking-tight">
-            Powered by <span className="font-medium text-slate-700 dark:text-slate-300">Trainovate Technologies</span>
+          <span className="placard-label text-slate-500 dark:text-slate-500">
+            Powered by <span className="text-slate-700 dark:text-slate-300">Trainovate Technologies</span>
             <span className="text-slate-400 dark:text-slate-500"> · © 2026</span>
           </span>
           <span className="flex items-center gap-3">
-            <span className="font-mono tabular-nums text-[11px] text-slate-400 dark:text-slate-500" title={VERSION_LINE}>
+            <span className="placard-numeric text-[11px] text-slate-400 dark:text-slate-500" title={VERSION_LINE}>
               {VERSION_LINE}
             </span>
             <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
-            <Link href="/privacy" className="hover:text-slate-800 dark:hover:text-slate-200 transition-colors">Privacy</Link>
+            <Link href="/privacy" className="placard-label hover:text-slate-800 dark:hover:text-slate-200 transition-colors">Privacy</Link>
             <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
-            <Link href="/terms"   className="hover:text-slate-800 dark:hover:text-slate-200 transition-colors">Terms</Link>
+            <Link href="/terms"   className="placard-label hover:text-slate-800 dark:hover:text-slate-200 transition-colors">Terms</Link>
           </span>
         </div>
       </footer>

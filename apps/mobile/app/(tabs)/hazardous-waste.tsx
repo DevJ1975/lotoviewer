@@ -1,5 +1,5 @@
-import * as SecureStore from 'expo-secure-store'
-import { useEffect, useMemo, useState } from 'react'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   Pressable,
@@ -29,8 +29,20 @@ const AREA_TYPES: HazardousWasteAreaType[] = [
   'inspection_only',
 ]
 
-function storageKey(tenantId: string | null | undefined): string {
-  return `soteria.hazardousWaste.fieldDraft.v1.${tenantId ?? 'no-tenant'}`
+// Free-text length caps. Hard limits at the input layer so a long paste
+// can't blow past AsyncStorage's per-key practical ceiling and so the
+// observation field can't accidentally grow into a multi-MB blob.
+const MAX_LOCATION_CHARS    = 120
+const MAX_CONTAINER_CHARS   = 80
+const MAX_WASTE_DESC_CHARS  = 200
+const MAX_OBSERVATION_CHARS = 2000
+
+// AsyncStorage replaces expo-secure-store for this screen: SecureStore on
+// iOS is a Keychain item (~2 KB per value), too small for a draft with
+// observation text. AsyncStorage is the right primitive for non-secret,
+// per-tenant JSON blobs.
+function storageKey(tenantId: string): string {
+  return `soteria.hazardousWaste.fieldDraft.v1.${tenantId}`
 }
 
 export default function HazardousWasteFieldScreen() {
@@ -39,13 +51,30 @@ export default function HazardousWasteFieldScreen() {
   const [loaded, setLoaded] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  // Tracks whether the user has typed/touched anything since the last
+  // load or save. Lets us warn before a tenant switch wipes the draft.
+  const [dirty, setDirty] = useState(false)
+  const prevTenantId = useRef<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
     async function loadDraft() {
       setLoaded(false)
       setSaveError(null)
-      const raw = await SecureStore.getItemAsync(storageKey(tenant?.id)).catch(() => null)
+
+      // No active tenant → nothing to load. We refuse to share a draft
+      // across "unauthenticated" sessions because two different users on
+      // the same device would collide on a single key.
+      if (!tenant?.id) {
+        setDraft(createEmptyHazardousWasteFieldDraft())
+        setSavedAt(null)
+        setDirty(false)
+        setLoaded(true)
+        prevTenantId.current = null
+        return
+      }
+
+      const raw = await AsyncStorage.getItem(storageKey(tenant.id)).catch(() => null)
       if (cancelled) return
       if (raw) {
         try {
@@ -60,10 +89,31 @@ export default function HazardousWasteFieldScreen() {
         setDraft(createEmptyHazardousWasteFieldDraft())
         setSavedAt(null)
       }
+      setDirty(false)
       setLoaded(true)
+      prevTenantId.current = tenant.id
     }
+
+    // If a switch is happening while the previous tenant's draft is
+    // dirty, warn the operator before we overwrite local state with
+    // the new tenant's draft. The current draft stays in memory while
+    // we wait for the choice — no auto-save, no silent loss.
+    const isSwitch = prevTenantId.current !== null && tenant?.id !== prevTenantId.current
+    if (isSwitch && dirty) {
+      Alert.alert(
+        'Switch tenant?',
+        'You have unsaved changes on this device. Switching tenants will hide them until you switch back. Save first or continue without saving.',
+        [
+          { text: 'Continue without saving', style: 'destructive', onPress: () => { void loadDraft() } },
+          { text: 'Stay on previous tenant', style: 'cancel' },
+        ],
+      )
+      return () => { cancelled = true }
+    }
+
     void loadDraft()
     return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant?.id])
 
   const checks = useMemo(() => getChecksForArea(draft.areaType), [draft.areaType])
@@ -71,6 +121,7 @@ export default function HazardousWasteFieldScreen() {
 
   function updateDraft(patch: Partial<HazardousWasteFieldDraft>) {
     setDraft(current => ({ ...current, ...patch, updatedAt: new Date().toISOString() }))
+    setDirty(true)
     setSaveError(null)
   }
 
@@ -102,12 +153,20 @@ export default function HazardousWasteFieldScreen() {
   }
 
   async function saveDraft() {
+    if (!tenant?.id) {
+      // Refuse to persist without a tenant. The previous code wrote
+      // to a shared "no-tenant" bucket where two unauthenticated users
+      // on the same device would collide.
+      setSaveError('Sign in and confirm the active tenant before saving the draft.')
+      return
+    }
     const next = { ...draft, updatedAt: new Date().toISOString() }
     try {
-      await SecureStore.setItemAsync(storageKey(tenant?.id), JSON.stringify(next))
+      await AsyncStorage.setItem(storageKey(tenant.id), JSON.stringify(next))
       setDraft(next)
       setSavedAt(next.updatedAt)
       setSaveError(null)
+      setDirty(false)
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Unable to save field draft on this device.')
     }
@@ -124,7 +183,10 @@ export default function HazardousWasteFieldScreen() {
           setDraft(next)
           setSavedAt(null)
           setSaveError(null)
-          void SecureStore.deleteItemAsync(storageKey(tenant?.id))
+          setDirty(false)
+          if (tenant?.id) {
+            void AsyncStorage.removeItem(storageKey(tenant.id))
+          }
         },
       },
     ])
@@ -180,6 +242,7 @@ export default function HazardousWasteFieldScreen() {
           onChangeText={locationName => updateDraft({ locationName })}
           placeholder="Location or accumulation area"
           placeholderTextColor="#64748b"
+          maxLength={MAX_LOCATION_CHARS}
         />
         <TextInput
           style={styles.input}
@@ -187,6 +250,7 @@ export default function HazardousWasteFieldScreen() {
           onChangeText={containerLabel => updateDraft({ containerLabel })}
           placeholder="Container label or ID"
           placeholderTextColor="#64748b"
+          maxLength={MAX_CONTAINER_CHARS}
         />
         <TextInput
           style={styles.input}
@@ -194,6 +258,7 @@ export default function HazardousWasteFieldScreen() {
           onChangeText={wasteDescription => updateDraft({ wasteDescription })}
           placeholder="Waste description"
           placeholderTextColor="#64748b"
+          maxLength={MAX_WASTE_DESC_CHARS}
         />
         <TextInput
           style={[styles.input, styles.textArea]}
@@ -202,6 +267,7 @@ export default function HazardousWasteFieldScreen() {
           onChangeText={observations => updateDraft({ observations })}
           placeholder="Observations, corrective actions, or follow-up needed"
           placeholderTextColor="#64748b"
+          maxLength={MAX_OBSERVATION_CHARS}
         />
       </View>
 
@@ -211,7 +277,14 @@ export default function HazardousWasteFieldScreen() {
           const checked = draft.checkedIds.includes(check.id)
           const flagged = draft.flaggedIds.includes(check.id)
           return (
-            <View key={check.id} style={[styles.checkRow, flagged && styles.checkRowFlagged]}>
+            <View
+              key={check.id}
+              style={[
+                styles.checkRow,
+                check.critical && styles.checkRowCritical,
+                flagged && styles.checkRowFlagged,
+              ]}
+            >
               <Pressable onPress={() => toggleChecked(check.id)} style={styles.checkMain}>
                 {({ pressed }) => (
                   <>
@@ -304,6 +377,7 @@ const styles = StyleSheet.create({
   input:              { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#0f172a', backgroundColor: '#fff' },
   textArea:           { minHeight: 88, textAlignVertical: 'top' },
   checkRow:           { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12, padding: 10, gap: 10, backgroundColor: '#fff' },
+  checkRowCritical:   { borderLeftWidth: 4, borderLeftColor: '#b45309' },
   checkRowFlagged:    { borderColor: '#f97316', backgroundColor: '#fff7ed' },
   checkMain:          { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   checkbox:           { width: 28, height: 28, borderRadius: 8, borderWidth: 1, borderColor: '#94a3b8', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
