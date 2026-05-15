@@ -48,6 +48,13 @@ export interface LotoEnergyStep {
   tag_description_es: string | null
   isolation_procedure_es: string | null
   method_of_verification_es: string | null
+  // §1910.147(c)(4)(ii) phase tagging (migration 140). The placard
+  // groups by step_type in OSHA's required order; the validator in
+  // lotoProcedureValidation.ts refuses to clear a procedure without
+  // a verify_zero_energy step.
+  step_type: 'shutdown' | 'isolate' | 'release_stored_energy' | 'lockout' | 'verify_zero_energy'
+  sequence_order: number
+  tryout_required: boolean
 }
 
 export interface LotoReview {

@@ -4,6 +4,10 @@ import { useState } from 'react'
 import { Languages } from 'lucide-react'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 import { ENERGY_CODES, energyCodeFor } from '@soteria/core/energyCodes'
+import {
+  LOTO_STEP_TYPE_LABELS,
+  groupStepsByPhase,
+} from '@soteria/core/lotoProcedureValidation'
 import { PLACARD_TEXT } from '@/lib/placardText'
 import { parseAnnotations } from '@/lib/photoAnnotations'
 import PlacardPhotoSlot from './PlacardPhotoSlot'
@@ -172,24 +176,37 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
                 </td>
               </tr>
             ) : (
-              steps.map((step, i) => (
-                <tr key={step.id} className={i % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-900/40'}>
-                  <td className="px-3 py-2 align-top border-t border-slate-200 dark:border-slate-700">
-                    <div className="flex items-start gap-2">
-                      <EnergyBadge code={step.energy_type} />
-                      <div className="text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-snug min-w-0">
-                        {(lang === 'es' && step.tag_description_es) ? step.tag_description_es : (step.tag_description || <span className="text-slate-300 italic">—</span>)}
+              // Group by §147(c)(4)(ii) phase so the auditor reads the
+              // procedure in OSHA's documentation order — shutdown,
+              // isolate, release stored energy, lockout, verify zero.
+              groupStepsByPhase(steps).flatMap((group, gi) => [
+                <tr key={`phase-${group.phase}`} className="bg-[#214487]/95 text-white">
+                  <td colSpan={3} className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider">
+                    {LOTO_STEP_TYPE_LABELS[group.phase]}
+                  </td>
+                </tr>,
+                ...group.steps.map((step, i) => (
+                  <tr key={step.id} className={(gi + i) % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-900/40'}>
+                    <td className="px-3 py-2 align-top border-t border-slate-200 dark:border-slate-700">
+                      <div className="flex items-start gap-2">
+                        <EnergyBadge code={step.energy_type} />
+                        <div className="text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-snug min-w-0">
+                          {(lang === 'es' && step.tag_description_es) ? step.tag_description_es : (step.tag_description || <span className="text-slate-300 italic">—</span>)}
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 align-top border-t border-slate-200 dark:border-slate-700 text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-snug">
-                    {(lang === 'es' && step.isolation_procedure_es) ? step.isolation_procedure_es : (step.isolation_procedure || <span className="text-slate-300 italic">—</span>)}
-                  </td>
-                  <td className="px-3 py-2 align-top border-t border-slate-200 dark:border-slate-700 text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-snug">
-                    {(lang === 'es' && step.method_of_verification_es) ? step.method_of_verification_es : (step.method_of_verification || <span className="text-slate-300 italic">—</span>)}
-                  </td>
-                </tr>
-              ))
+                    </td>
+                    <td className="px-3 py-2 align-top border-t border-slate-200 dark:border-slate-700 text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-snug">
+                      {(lang === 'es' && step.isolation_procedure_es) ? step.isolation_procedure_es : (step.isolation_procedure || <span className="text-slate-300 italic">—</span>)}
+                    </td>
+                    <td className="px-3 py-2 align-top border-t border-slate-200 dark:border-slate-700 text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-snug">
+                      {step.tryout_required && (
+                        <span className="inline-block mr-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 text-[9px] font-bold uppercase tracking-wide">Tryout</span>
+                      )}
+                      {(lang === 'es' && step.method_of_verification_es) ? step.method_of_verification_es : (step.method_of_verification || <span className="text-slate-300 italic">—</span>)}
+                    </td>
+                  </tr>
+                )),
+              ])
             )}
           </tbody>
         </table>
