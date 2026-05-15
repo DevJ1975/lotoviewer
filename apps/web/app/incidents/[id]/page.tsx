@@ -10,6 +10,7 @@ import RepeatIncidentBanner from '@/app/_components/RepeatIncidentBanner'
 import EpaRqBanner from '@/app/_components/EpaRqBanner'
 import ChemicalExposuresPanel from './_components/ChemicalExposuresPanel'
 import CapaPanel from './_components/CapaPanel'
+import EscalationPredictionPanel from './_components/EscalationPredictionPanel'
 import {
   INCIDENT_TYPE_LABEL,
   SEVERITY_ACTUAL_LABEL,
@@ -320,6 +321,11 @@ export default function IncidentDetailPage() {
       </section>
 
       <ChemicalExposuresPanel incidentId={incident.id} />
+
+      <EscalationPredictionPanel
+        incidentId={incident.id}
+        currentSeverity={incident.severity_actual}
+      />
 
       <CapaPanel incidentId={incident.id} />
 
