@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import {
   canAddMember,
   canClosePermit,
-  type LotoGroupPermit,
   type LotoGroupPermitMember,
 } from '@soteria/core/lotoGroupPermit'
 
