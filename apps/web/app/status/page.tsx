@@ -7,6 +7,7 @@ import { loadAllEquipment } from '@/lib/queries/equipment'
 import StatsCards from '@/components/StatsCards'
 import ProgressRing from '@/components/ProgressRing'
 import DepartmentChart from '@/components/DepartmentChart'
+import PeriodicInspectionWidget from '@/components/loto/PeriodicInspectionWidget'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { buildDeptStats } from '@/lib/utils'
 import { useVisibilityRefetch } from '@/hooks/useVisibilityRefetch'
@@ -97,6 +98,8 @@ export default function StatusPage() {
           Live
         </span>
       </div>
+
+      <PeriodicInspectionWidget />
 
       <StatsCards total={total} complete={complete} partial={partial} missing={missing} />
 

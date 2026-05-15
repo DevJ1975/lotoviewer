@@ -11,6 +11,7 @@ import DashboardSidebar     from '@/components/dashboard/DashboardSidebar'
 import EquipmentListPanel   from '@/components/dashboard/EquipmentListPanel'
 import PlacardDetailPanel   from '@/components/dashboard/PlacardDetailPanel'
 import BatchPrintModal      from '@/components/BatchPrintModal'
+import PeriodicInspectionWidget from '@/components/loto/PeriodicInspectionWidget'
 import { DashboardSkeleton } from '@/components/Skeleton'
 import { useSession } from '@/components/SessionProvider'
 import { useTenant } from '@/components/TenantProvider'
@@ -283,25 +284,31 @@ function HomeDashboard() {
   if (loading) return <DashboardSkeleton />
 
   return (
-    <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-6rem)]">
-      <DashboardSidebar
-        equipment={equipment}
-        selectedDept={selectedDept}
-        selectedEqId={selectedEqId}
-        onSelectDept={handleSelectDept}
-        onSelectEquip={handleSelectEquip}
-        onBatchPrint={openBatch}
-        decommissioned={decommissioned}
-        onEquipmentAdded={handleEquipmentAdded}
-      />
-      <EquipmentListPanel
-        equipment={equipment}
-        selectedDept={selectedDept}
-        selectedEqId={selectedEqId}
-        onSelectEquip={handleSelectEquip}
-        decommissioned={decommissioned}
-      />
-      <PlacardDetailPanel equipment={selectedEquipment} onPhotoSaved={handlePhotoSaved} />
+    <div className="flex flex-col lg:h-[calc(100vh-6rem)]">
+      {/* §147(c)(6) gap banner — silent when there's nothing to flag. */}
+      <div className="px-4 pt-3">
+        <PeriodicInspectionWidget />
+      </div>
+      <div className="flex flex-col lg:flex-row flex-1 min-h-0">
+        <DashboardSidebar
+          equipment={equipment}
+          selectedDept={selectedDept}
+          selectedEqId={selectedEqId}
+          onSelectDept={handleSelectDept}
+          onSelectEquip={handleSelectEquip}
+          onBatchPrint={openBatch}
+          decommissioned={decommissioned}
+          onEquipmentAdded={handleEquipmentAdded}
+        />
+        <EquipmentListPanel
+          equipment={equipment}
+          selectedDept={selectedDept}
+          selectedEqId={selectedEqId}
+          onSelectEquip={handleSelectEquip}
+          decommissioned={decommissioned}
+        />
+        <PlacardDetailPanel equipment={selectedEquipment} onPhotoSaved={handlePhotoSaved} />
+      </div>
 
       <BatchPrintModal
         open={batchOpen}
