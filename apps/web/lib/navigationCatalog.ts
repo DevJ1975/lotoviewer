@@ -111,7 +111,7 @@ const KEYWORDS: Record<string, string[]> = {
   incidents: ['incident', 'investigation', 'osha', 'corrective action'],
   bbs: ['behavior', 'observation', 'coaching'],
   chemicals: ['chemical', 'sds', 'inventory', 'tier ii', 'restricted'],
-  'hazardous-waste': ['waste', 'manifest', 'rcra', 'cers', 'cupa', 'dtsc', 'accumulation', 'biennial'],
+  'hazardous-waste': ['waste', 'manifest', 'rcra', 'epa', 'cers', 'cupa', 'dtsc', 'accumulation', 'biennial', 'tier ii'],
   'hot-work': ['permit', 'fire watch', 'spark'],
   'confined-spaces': ['permit', 'entry', 'atmosphere'],
   jha: ['job hazard analysis', 'task', 'hazard'],
