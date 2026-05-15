@@ -19,7 +19,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import {
@@ -184,7 +183,7 @@ jamil@trainovations.com`
             <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">
               {u.full_name || u.email.split('@')[0]}
             </span>
-            {u.is_admin && <Badge variant="secondary">Admin</Badge>}
+            {u.is_admin && <span className="safety-tag safety-tag-info">Admin</span>}
           </div>
         )
       },
@@ -201,9 +200,9 @@ jamil@trainovations.com`
       header:      'Status',
       cell: ({ row }) =>
         row.original.must_change_password ? (
-          <Badge variant="outline" className="text-amber-700 border-amber-300">Pending first login</Badge>
+          <span className="safety-tag safety-tag-caution">Pending First Login</span>
         ) : (
-          <Badge variant="outline" className="text-emerald-700 border-emerald-300">Active</Badge>
+          <span className="safety-tag safety-tag-cleared">Active</span>
         ),
     },
     {

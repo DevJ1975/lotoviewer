@@ -2,9 +2,9 @@
 
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, type ReactNode } from 'react'
-import { Loader2 } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
+import OpsSpinner from '@/components/OpsSpinner'
 
 // Routes that should render WITHOUT requiring an authenticated session.
 //
@@ -73,7 +73,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   if (loading || (userId && pathname.startsWith('/admin') && tenantLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" />
+        <OpsSpinner size="lg" label="Authorizing" />
       </div>
     )
   }

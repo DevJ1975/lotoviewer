@@ -12,6 +12,7 @@ import EquipmentListPanel   from '@/components/dashboard/EquipmentListPanel'
 import PlacardDetailPanel   from '@/components/dashboard/PlacardDetailPanel'
 import BatchPrintModal      from '@/components/BatchPrintModal'
 import PeriodicInspectionWidget from '@/components/loto/PeriodicInspectionWidget'
+import OpsSpinner           from '@/components/OpsSpinner'
 import { DashboardSkeleton } from '@/components/Skeleton'
 import { useSession } from '@/components/SessionProvider'
 import { useTenant } from '@/components/TenantProvider'
@@ -49,7 +50,7 @@ export default function HomePage() {
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center h-[calc(100vh-6rem)]">
-        <div className="w-10 h-10 border-4 border-brand-navy border-t-transparent rounded-full animate-spin" />
+        <OpsSpinner size="lg" label="Loading register" />
       </div>
     }>
       <HomeDashboard />

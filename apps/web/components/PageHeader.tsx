@@ -27,10 +27,16 @@ export function PageHeader({ icon: Icon, title, description, back, actions, clas
     <header
       data-slot="page-header"
       className={cn(
-        'ops-surface-raised animate-panel-in flex items-start gap-3 rounded-lg px-4 py-3',
+        'placard-surface animate-panel-in relative flex items-start gap-3 px-4 py-3 pl-5',
         className,
       )}
     >
+      {/* Brand-yellow left edge accent — ties every page header to
+          the same identity rail used on module cards and the hero. */}
+      <span
+        aria-hidden="true"
+        className="absolute left-0 top-2 bottom-2 w-1 rounded-r-sm bg-brand-yellow"
+      />
       {back && (
         <Link
           href={back}
@@ -41,7 +47,7 @@ export function PageHeader({ icon: Icon, title, description, back, actions, clas
         </Link>
       )}
       <div className="flex-1 min-w-0">
-        <h1 className="font-heading flex items-center gap-2 text-lg font-black leading-tight text-slate-950 sm:text-xl dark:text-slate-50">
+        <h1 className="stencil-title flex items-center gap-2 text-lg leading-tight text-slate-950 sm:text-xl dark:text-slate-50">
           {Icon && (
             <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-brand-navy dark:border-slate-800 dark:bg-slate-900 dark:text-brand-yellow">
               <Icon className="h-4 w-4" />

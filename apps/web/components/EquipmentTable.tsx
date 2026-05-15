@@ -128,18 +128,20 @@ export default function EquipmentTable({ equipment }: Props) {
         </div>
       </div>
 
-      <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-        {filtered.length} {filtered.length === 1 ? 'item' : 'items'}
-        {totalPages > 1 && ` · page ${page} of ${totalPages}`}
+      <p className="placard-label placard-numeric text-slate-500 dark:text-slate-400">
+        {filtered.length.toString().padStart(3, '0')} {filtered.length === 1 ? 'ITEM' : 'ITEMS'}
+        {totalPages > 1 && ` · PAGE ${page} / ${totalPages}`}
       </p>
 
-      {/* Table */}
-      <div className="rounded-xl border border-slate-100 dark:border-slate-800 overflow-x-auto bg-white dark:bg-slate-900 shadow-sm">
-        <Table>
+      {/* Dense ops table — borrows .ops-table styling from globals.css:
+          sticky header, tabular-mono ID column, faint hazard underline
+          on the header row, tighter (7px) cell padding. */}
+      <div className="placard-surface overflow-x-auto">
+        <Table className="ops-table">
           <TableHeader>
-            <TableRow className="bg-slate-50/80 dark:bg-slate-900/40/80">
+            <TableRow>
               <TableHead
-                className="cursor-pointer select-none whitespace-nowrap"
+                className="cursor-pointer select-none"
                 onClick={() => toggleSort('equipment_id')}
               >
                 Equipment ID{sortIcon('equipment_id')}
@@ -163,7 +165,7 @@ export default function EquipmentTable({ equipment }: Props) {
           <TableBody>
             {pagedRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-gray-400">
+                <TableCell colSpan={5} className="text-center py-8 text-slate-400 dark:text-slate-500">
                   No equipment found.
                 </TableCell>
               </TableRow>
@@ -172,16 +174,16 @@ export default function EquipmentTable({ equipment }: Props) {
                 const from = `/departments/${encodeURIComponent(eq.department)}`
                 const href = `/equipment/${encodeURIComponent(eq.equipment_id)}?from=${encodeURIComponent(from)}`
                 return (
-                  <TableRow key={eq.equipment_id} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
-                    <TableCell className="font-mono text-sm font-medium">
-                      <Link href={href} className="text-brand-navy hover:underline">
+                  <TableRow key={eq.equipment_id}>
+                    <TableCell className="ops-table-id">
+                      <Link href={href} className="text-brand-navy hover:underline dark:text-brand-yellow">
                         {eq.equipment_id}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-sm">{eq.description}</TableCell>
+                    <TableCell>{eq.description}</TableCell>
                     <TableCell><StatusBadge status={eq.photo_status} /></TableCell>
                     <TableCell>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
                         {[eq.has_equip_photo && 'Equipment', eq.has_iso_photo && 'ISO']
                           .filter(Boolean)
                           .join(', ') || '—'}
@@ -193,12 +195,12 @@ export default function EquipmentTable({ equipment }: Props) {
                           href={eq.placard_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
+                          className="text-brand-navy hover:underline dark:text-brand-yellow text-sm"
                         >
                           View PDF
                         </a>
                       ) : (
-                        <span className="text-gray-300 text-sm">—</span>
+                        <span className="text-slate-300 dark:text-slate-700 text-sm">—</span>
                       )}
                     </TableCell>
                   </TableRow>

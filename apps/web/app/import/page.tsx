@@ -7,7 +7,6 @@ import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import {
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
 } from '@/components/ui/table'
@@ -294,9 +293,9 @@ function PreviewStep({
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className="bg-emerald-500 text-white border-transparent">{counts.new} new</Badge>
-            <Badge variant="secondary">{counts.existing} existing (skipped)</Badge>
-            <Badge variant="destructive">{counts.invalid} invalid</Badge>
+            <span className="safety-tag safety-tag-cleared">{counts.new} new</span>
+            <span className="safety-tag safety-tag-info">{counts.existing} existing</span>
+            <span className="safety-tag safety-tag-danger">{counts.invalid} invalid</span>
           </div>
 
           {importing && (
@@ -345,9 +344,9 @@ function PreviewStep({
                     )}
                   >
                     <TableCell>
-                      {r.status === 'new'      && <Badge className="bg-emerald-500 text-white border-transparent">New</Badge>}
-                      {r.status === 'existing' && <Badge variant="secondary">Existing</Badge>}
-                      {r.status === 'invalid'  && <Badge variant="destructive">Invalid</Badge>}
+                      {r.status === 'new'      && <span className="safety-tag safety-tag-cleared">New</span>}
+                      {r.status === 'existing' && <span className="safety-tag safety-tag-info">Existing</span>}
+                      {r.status === 'invalid'  && <span className="safety-tag safety-tag-danger">Invalid</span>}
                     </TableCell>
                     <TableCell className="font-mono text-xs">{r.equipmentId || '—'}</TableCell>
                     <TableCell className="whitespace-normal">
