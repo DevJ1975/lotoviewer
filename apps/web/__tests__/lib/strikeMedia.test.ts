@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isValidStrikeStorageThumbnailPath,
   isValidStrikeStorageVideoPath,
   resolveStrikeVideoSource,
 } from '@soteria/core/strikeMedia'
@@ -41,5 +42,29 @@ describe('isValidStrikeStorageVideoPath', () => {
   it('requires global or tenant UUID path roots', () => {
     expect(isValidStrikeStorageVideoPath('global/path/file.mp4')).toBe(true)
     expect(isValidStrikeStorageVideoPath('tenant/path/file.mp4')).toBe(false)
+  })
+})
+
+describe('isValidStrikeStorageThumbnailPath', () => {
+  it('accepts standard still-image extensions under global or tenant roots', () => {
+    expect(isValidStrikeStorageThumbnailPath('global/loto/thumb.jpg')).toBe(true)
+    expect(isValidStrikeStorageThumbnailPath('global/loto/thumb.jpeg')).toBe(true)
+    expect(isValidStrikeStorageThumbnailPath('global/loto/thumb.png')).toBe(true)
+    expect(isValidStrikeStorageThumbnailPath('global/loto/thumb.webp')).toBe(true)
+    expect(isValidStrikeStorageThumbnailPath('global/loto/thumb.avif')).toBe(true)
+    expect(isValidStrikeStorageThumbnailPath(
+      '11111111-1111-4111-8111-111111111111/strike/thumb.webp',
+    )).toBe(true)
+  })
+
+  it('rejects video and animated formats', () => {
+    expect(isValidStrikeStorageThumbnailPath('global/loto/thumb.mp4')).toBe(false)
+    expect(isValidStrikeStorageThumbnailPath('global/loto/thumb.gif')).toBe(false)
+  })
+
+  it('rejects unsafe roots and traversal segments', () => {
+    expect(isValidStrikeStorageThumbnailPath('public/loto/thumb.png')).toBe(false)
+    expect(isValidStrikeStorageThumbnailPath('global/../secret.png')).toBe(false)
+    expect(isValidStrikeStorageThumbnailPath('/global/thumb.png')).toBe(false)
   })
 })

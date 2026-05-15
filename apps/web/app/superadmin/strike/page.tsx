@@ -4,8 +4,8 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  AlertCircle, ArrowLeft, BookOpenCheck, Clock, FileVideo, Loader2, Plus,
-  RefreshCw, Sparkles,
+  AlertCircle, ArrowLeft, BookOpenCheck, ClipboardCheck, Clock, FileVideo,
+  Loader2, Plus, RefreshCw, Sparkles,
 } from 'lucide-react'
 import { superadminJson } from '@/lib/superadminFetch'
 import type {
@@ -343,6 +343,13 @@ export default function StrikeStudioPage() {
                       <div className="text-right text-xs text-slate-500 dark:text-slate-400 shrink-0">
                         <div>{module.versions_count} version{module.versions_count === 1 ? '' : 's'}</div>
                         <div className="mt-1">{module.latest_version ? `v${module.latest_version.version_number}` : 'No version'}</div>
+                        <Link
+                          href={`/superadmin/strike/${module.id}/quiz`}
+                          className="mt-2 inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-[11px] font-semibold text-brand-navy hover:bg-slate-50 dark:text-brand-yellow dark:hover:bg-slate-800"
+                        >
+                          <ClipboardCheck className="h-3 w-3" />
+                          Edit quiz
+                        </Link>
                       </div>
                     </div>
                   </li>

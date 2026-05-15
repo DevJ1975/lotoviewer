@@ -11,7 +11,6 @@ import { z } from 'zod'
 import { useAuth } from '@/components/AuthProvider'
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -391,7 +390,13 @@ jamil@trainovations.com`
         )}
       </section>
 
-      {/* Delete confirmation — replaces window.confirm */}
+      {/* Delete confirmation — replaces window.confirm.
+          The action button is a plain <Button>, NOT an AlertDialogAction
+          (which is Base UI's Close primitive). Base UI's AlertDialog
+          forces modal + disablePointerDismissal, and when an onClick
+          handler ALSO drives close via setRemoveTarget(null), the two
+          paths race and the backdrop sticks — the page appears frozen.
+          Driving close through controlled state alone is reliable. */}
       <AlertDialog open={removeTarget != null} onOpenChange={open => { if (!open) setRemoveTarget(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -402,9 +407,13 @@ jamil@trainovations.com`
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmRemove} className="bg-destructive text-white hover:bg-destructive/90">
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={confirmRemove}
+            >
               Remove
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

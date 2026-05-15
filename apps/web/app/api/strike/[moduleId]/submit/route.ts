@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
+  evaluateStrikeWatchGate,
   isStrikeAssignmentApplicable,
   scoreStrikeQuiz,
   type StrikeAssignmentTargetType,
@@ -17,7 +18,12 @@ interface SubmitBody {
   module_version_id?: unknown
   assignment_id?: unknown
   answers?: unknown
+  watched_seconds?: unknown
 }
+
+// The watch threshold itself lives in @soteria/core/strike so the client
+// and server agree. We use evaluateStrikeWatchGate() to compute the gate
+// — see strike.test.ts for boundary coverage.
 
 interface RouteContext {
   params: Promise<{ moduleId: string }>
@@ -41,6 +47,8 @@ export async function POST(req: Request, ctx: RouteContext) {
     ? body.assignment_id
     : null
   const answersByQuestionId = isAnswerMap(body.answers) ? body.answers : {}
+  const rawWatched = typeof body.watched_seconds === 'number' ? body.watched_seconds : Number(body.watched_seconds)
+  const watchedSeconds = Number.isFinite(rawWatched) && rawWatched >= 0 ? Math.floor(rawWatched) : 0
 
   try {
     const admin = supabaseAdmin()
@@ -64,7 +72,7 @@ export async function POST(req: Request, ctx: RouteContext) {
 
     const { data: version, error: versionErr } = await admin
       .from('strike_module_versions')
-      .select('id,module_id,tenant_id,library_scope,status,passing_score')
+      .select('id,module_id,tenant_id,library_scope,status,passing_score,video_path,duration_seconds')
       .eq('id', moduleVersionId)
       .eq('module_id', moduleId)
       .maybeSingle()
@@ -72,6 +80,15 @@ export async function POST(req: Request, ctx: RouteContext) {
     if (!version || version.status !== 'published') {
       return NextResponse.json({ error: 'Published version not found' }, { status: 404 })
     }
+
+    // We still accept the attempt below threshold but refuse to mark it
+    // passed even if the quiz score itself is perfect — the learner sees a
+    // "watch the video to complete" hint and the attempt row records why.
+    const watchGate = evaluateStrikeWatchGate({
+      hasVideo: typeof version.video_path === 'string' && version.video_path.trim().length > 0,
+      durationSeconds: typeof version.duration_seconds === 'number' ? version.duration_seconds : null,
+      watchedSeconds,
+    })
 
     if (assignmentId) {
       const { data: assignment, error: assignmentErr } = await admin
@@ -139,6 +156,7 @@ export async function POST(req: Request, ctx: RouteContext) {
       })),
     })
 
+    const completionEligible = score.passed && watchGate.met
     const now = new Date().toISOString()
     const { data: attempt, error: attemptErr } = await admin
       .from('strike_attempts')
@@ -150,18 +168,21 @@ export async function POST(req: Request, ctx: RouteContext) {
         user_id: gate.userId,
         submitted_at: now,
         score_percent: score.scorePercent,
-        passed: score.passed,
+        passed: completionEligible,
         answers: answersByQuestionId,
         client_context: {
           mode: 'learner_player',
           missed_question_ids: score.missedQuestionIds,
+          watched_seconds: watchedSeconds,
+          watch_required_seconds: watchGate.requiredSeconds,
+          watch_met: watchGate.met,
         },
       })
       .select('id')
       .single()
     if (attemptErr) throw new Error(attemptErr.message)
 
-    if (score.passed) {
+    if (completionEligible) {
       const { error: completionErr } = await admin
         .from('strike_completions')
         .insert({
@@ -184,7 +205,14 @@ export async function POST(req: Request, ctx: RouteContext) {
       if (completionErr) throw new Error(completionErr.message)
     }
 
-    return NextResponse.json({ attempt_id: attempt.id, ...score }, { status: 201 })
+    return NextResponse.json({
+      attempt_id: attempt.id,
+      ...score,
+      passed: completionEligible,
+      watch_met: watchGate.met,
+      watch_required_seconds: watchGate.requiredSeconds,
+      watched_seconds: watchedSeconds,
+    }, { status: 201 })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     Sentry.captureException(e, { tags: { route: 'strike/submit' } })

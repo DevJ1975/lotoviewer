@@ -1,14 +1,28 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { AlertTriangle, ArrowLeft, CheckCircle2, Loader2, PlayCircle, Send, Video } from 'lucide-react'
+import {
+  AlertTriangle, ArrowLeft, CheckCircle2, CloudDownload, Loader2, Lock,
+  PlayCircle, Send, Trash2, Video, WifiOff,
+} from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
-import type { StrikeQuestionType } from '@soteria/core/strike'
+import { evaluateStrikeWatchGate, type StrikeQuestionType } from '@soteria/core/strike'
 import { resolveStrikeVideoSource } from '@soteria/core/strikeMedia'
+import {
+  deleteStrikeVideo,
+  downloadStrikeVideo,
+  isStrikeVideoOffline,
+  touchOfflineUsage,
+} from '@/lib/offline/strikeOffline'
+import {
+  enqueueStrikeAttempt,
+  flushStrikeQueue,
+  listQueuedAttempts,
+} from '@/lib/offline/strikeQueue'
 
 interface ModuleRow {
   id: string
@@ -52,7 +66,13 @@ interface SubmitResult {
   scorePercent: number
   passed: boolean
   missedQuestionIds: string[]
+  watch_met?: boolean
+  watch_required_seconds?: number
+  watched_seconds?: number
 }
+
+// Threshold itself lives in @soteria/core/strike — see
+// evaluateStrikeWatchGate so client and server cannot drift.
 
 export default function StrikeModulePage() {
   const params = useParams<{ slug: string }>()
@@ -71,6 +91,17 @@ export default function StrikeModulePage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<SubmitResult | null>(null)
+  const [watchedSeconds, setWatchedSeconds] = useState(0)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  // Bucketed set of seen integer seconds. Robust to seeks: scrubbing
+  // forward does not falsely credit unwatched ranges, and rewinding does
+  // not double-count. Memory is tiny — at most one entry per video second.
+  const seenSecondsRef = useRef<Set<number>>(new Set())
+  const [videoOffline, setVideoOffline] = useState(false)
+  const [downloadBusy, setDownloadBusy] = useState(false)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
+  const [queuedCount, setQueuedCount] = useState(0)
+  const [online, setOnline] = useState(true)
 
   const assignmentId = searchParams.get('assignment') ?? null
 
@@ -91,6 +122,8 @@ export default function StrikeModulePage() {
     setResponses({})
     setSignedVideoUrl(null)
     setVideoNotice(null)
+    setWatchedSeconds(0)
+    seenSecondsRef.current = new Set()
 
     try {
       const { data: moduleRows, error: moduleErr } = await supabase
@@ -170,6 +203,57 @@ export default function StrikeModulePage() {
 
   useEffect(() => { void load() }, [load])
 
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return
+    setOnline(navigator.onLine)
+    const onOnline = () => setOnline(true)
+    const onOffline = () => setOnline(false)
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+    return () => {
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('offline', onOffline)
+    }
+  }, [])
+
+  const refreshQueueCount = useCallback(async () => {
+    const items = await listQueuedAttempts()
+    setQueuedCount(items.length)
+  }, [])
+
+  useEffect(() => { void refreshQueueCount() }, [refreshQueueCount])
+
+  // Drain queued attempts whenever the browser regains connectivity. The
+  // tenant id baked into each item is the one captured at queue time, so
+  // a learner switching tenants does not accidentally re-route attempts.
+  useEffect(() => {
+    if (!online) return
+    let cancelled = false
+    void (async () => {
+      const result = await flushStrikeQueue({
+        getAccessToken: async () => {
+          const { data } = await supabase.auth.getSession()
+          return data.session?.access_token ?? null
+        },
+      })
+      if (cancelled) return
+      if (result.flushed > 0 || result.failed > 0) void refreshQueueCount()
+    })()
+    return () => { cancelled = true }
+  }, [online, refreshQueueCount])
+
+  const videoPath = version?.video_path ?? null
+
+  useEffect(() => {
+    if (!videoPath) { setVideoOffline(false); return }
+    let cancelled = false
+    void (async () => {
+      const present = await isStrikeVideoOffline(videoPath)
+      if (!cancelled) setVideoOffline(present)
+    })()
+    return () => { cancelled = true }
+  }, [videoPath])
+
   const answersByQuestion = useMemo(() => {
     const map = new Map<string, AnswerRow[]>()
     for (const answer of answers) {
@@ -180,11 +264,102 @@ export default function StrikeModulePage() {
     return map
   }, [answers])
 
+  const watchGate = useMemo(() => evaluateStrikeWatchGate({
+    hasVideo: Boolean(signedVideoUrl),
+    durationSeconds: version?.duration_seconds ?? null,
+    watchedSeconds,
+  }), [signedVideoUrl, version?.duration_seconds, watchedSeconds])
+
+  const watchUnlocked = watchGate.met
+  const watchRequiredSeconds = watchGate.requiredSeconds
+  const watchProgressPercent = watchRequiredSeconds === 0
+    ? 100
+    : Math.min(100, Math.round((watchedSeconds / watchRequiredSeconds) * 100))
+
+  function handleTimeUpdate(event: React.SyntheticEvent<HTMLVideoElement>) {
+    const node = event.currentTarget
+    const second = Math.floor(node.currentTime)
+    if (!Number.isFinite(second) || second < 0) return
+    if (seenSecondsRef.current.has(second)) return
+    seenSecondsRef.current.add(second)
+    setWatchedSeconds(seenSecondsRef.current.size)
+  }
+
+  function handlePlay() {
+    // Bumps lastUsedAt so the LRU cap doesn't evict a video the learner
+    // is actively using. Fire-and-forget; the metadata is best-effort.
+    if (videoPath) void touchOfflineUsage(videoPath)
+  }
+
+  async function handleDownloadForOffline() {
+    if (!module || !version || !version.video_path) return
+    setDownloadBusy(true)
+    setDownloadError(null)
+    try {
+      const { data, error: signedErr } = await supabase.storage
+        .from('strike-media')
+        .createSignedUrl(version.video_path, 60 * 60)
+      if (signedErr || !data?.signedUrl) {
+        throw new Error(signedErr?.message ?? 'Could not sign URL for download')
+      }
+      const result = await downloadStrikeVideo({
+        path: version.video_path,
+        signedUrl: data.signedUrl,
+        moduleId: module.id,
+        versionId: version.id,
+        title: module.title,
+      })
+      if (!result.ok) throw new Error(result.error ?? 'Download failed')
+      setVideoOffline(true)
+    } catch (e) {
+      setDownloadError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDownloadBusy(false)
+    }
+  }
+
+  async function handleRemoveOffline() {
+    if (!version?.video_path) return
+    setDownloadBusy(true)
+    try {
+      await deleteStrikeVideo(version.video_path)
+      setVideoOffline(false)
+    } finally {
+      setDownloadBusy(false)
+    }
+  }
+
   async function submit() {
     if (!module || !version || !userId) return
     setSubmitting(true)
     setError(null)
     setResult(null)
+
+    const body = {
+      module_version_id: version.id,
+      assignment_id: assignmentId,
+      answers: responses,
+      watched_seconds: watchedSeconds,
+    }
+
+    // Offline path: enqueue the attempt for the next online flush. We do
+    // not optimistically score — passing requires the server's correctness
+    // check — but we acknowledge the submission so the learner moves on.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      try {
+        await enqueueStrikeAttempt({ moduleId: module.id, tenantId: tenant?.id ?? '', body })
+        await refreshQueueCount()
+        setSubmitting(false)
+        setResult({ scorePercent: 0, passed: false, missedQuestionIds: [] })
+        setError('Queued — will submit when you are back online.')
+        return
+      } catch (e) {
+        setSubmitting(false)
+        setError(`Could not queue submission: ${e instanceof Error ? e.message : String(e)}`)
+        return
+      }
+    }
+
     const { data: sessionData } = await supabase.auth.getSession()
     const token = sessionData.session?.access_token
     if (!token) {
@@ -192,26 +367,37 @@ export default function StrikeModulePage() {
       setError('Sign in again to submit this module.')
       return
     }
-    const res = await fetch(`/api/strike/${module.id}/submit`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${token}`,
-        'content-type': 'application/json',
-        'x-active-tenant': tenant?.id ?? '',
-      },
-      body: JSON.stringify({
-        module_version_id: version.id,
-        assignment_id: assignmentId,
-        answers: responses,
-      }),
-    })
-    const payload = await res.json()
-    setSubmitting(false)
-    if (!res.ok) {
-      setError(payload.error ?? 'Submission failed')
-      return
+    try {
+      const res = await fetch(`/api/strike/${module.id}/submit`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+          'x-active-tenant': tenant?.id ?? '',
+        },
+        body: JSON.stringify(body),
+      })
+      const payload = await res.json()
+      setSubmitting(false)
+      if (!res.ok) {
+        setError(payload.error ?? 'Submission failed')
+        return
+      }
+      setResult(payload as SubmitResult)
+    } catch (e) {
+      // Network died mid-flight (captive portal, flaky signal). Queue
+      // the attempt so the user does not lose their work.
+      try {
+        await enqueueStrikeAttempt({ moduleId: module.id, tenantId: tenant?.id ?? '', body })
+        await refreshQueueCount()
+        setResult({ scorePercent: 0, passed: false, missedQuestionIds: [] })
+        setError('Network error — queued for retry.')
+      } catch (qErr) {
+        setError(`Network error: ${e instanceof Error ? e.message : String(e)} (${qErr instanceof Error ? qErr.message : String(qErr)})`)
+      } finally {
+        setSubmitting(false)
+      }
     }
-    setResult(payload as SubmitResult)
   }
 
   if (loading) {
@@ -249,6 +435,21 @@ export default function StrikeModulePage() {
             </span>
           )}
         </div>
+        {(!online || queuedCount > 0) && (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+            {!online && (
+              <span className="inline-flex items-center gap-1 font-semibold">
+                <WifiOff className="h-3.5 w-3.5" /> Offline
+              </span>
+            )}
+            {queuedCount > 0 && (
+              <span>{queuedCount} attempt{queuedCount === 1 ? '' : 's'} queued for sync.</span>
+            )}
+            <Link href="/strike/offline" className="ml-auto underline">
+              Manage offline content
+            </Link>
+          </div>
+        )}
       </header>
 
       {error && (
@@ -260,13 +461,53 @@ export default function StrikeModulePage() {
 
       <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
         {signedVideoUrl ? (
-          <video controls className="aspect-video w-full rounded-lg bg-black" src={signedVideoUrl} />
+          <video
+            ref={videoRef}
+            controls
+            preload="metadata"
+            className="aspect-video w-full rounded-lg bg-black"
+            src={signedVideoUrl}
+            onTimeUpdate={handleTimeUpdate}
+            onPlay={handlePlay}
+          />
         ) : (
           <div className="flex aspect-video items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-400">
             <div className="text-center">
               <Video className="mx-auto h-8 w-8" />
               <p className="mt-2 text-sm">{videoNotice ?? 'No video file attached yet.'}</p>
             </div>
+          </div>
+        )}
+        {version?.video_path && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {videoOffline ? (
+              <>
+                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200">
+                  <CloudDownload className="h-3.5 w-3.5" /> Available offline
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void handleRemoveOffline()}
+                  disabled={downloadBusy}
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  <Trash2 className="h-3 w-3" /> Remove
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleDownloadForOffline()}
+                disabled={downloadBusy || !online}
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                {downloadBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CloudDownload className="h-3.5 w-3.5" />}
+                Download for offline
+              </button>
+            )}
+            {downloadError && (
+              <span className="text-xs text-rose-700 dark:text-rose-300">{downloadError}</span>
+            )}
           </div>
         )}
         {version?.transcript && (
@@ -282,43 +523,70 @@ export default function StrikeModulePage() {
           <PlayCircle className="h-4 w-4" />
           Knowledge check
         </h2>
-        {questions.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">No quiz questions are attached. Submitting records an acknowledgement.</p>
-        ) : (
-          <div className="mt-4 space-y-4">
-            {questions.map((question, index) => (
-              <Question
-                key={question.id}
-                index={index}
-                question={question}
-                answers={answersByQuestion.get(question.id) ?? []}
-                value={responses[question.id]}
-                onChange={value => setResponses(prev => ({ ...prev, [question.id]: value }))}
+
+        {!watchUnlocked && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+            <div className="flex items-center gap-2 text-sm font-semibold text-amber-900 dark:text-amber-100">
+              <Lock className="h-4 w-4" />
+              Watch the video to unlock the quiz
+            </div>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-amber-100 dark:bg-amber-950">
+              <div
+                className="h-full rounded-full bg-amber-500 transition-[width]"
+                style={{ width: `${watchProgressPercent}%` }}
+                aria-label={`Watched ${watchProgressPercent}% of the required video`}
               />
-            ))}
+            </div>
+            <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">
+              {watchedSeconds}s of {watchRequiredSeconds}s watched
+            </p>
           </div>
         )}
 
-        {questions.length === 0 && (
-          <label className="mt-4 flex items-start gap-2 text-sm text-slate-700 dark:text-slate-200">
-            <input
-              type="checkbox"
-              checked={responses.acknowledgement === true}
-              onChange={e => setResponses({ acknowledgement: e.target.checked })}
-              className="mt-1"
-            />
-            I reviewed the instruction and understand the task expectations.
-          </label>
-        )}
+        <fieldset disabled={!watchUnlocked} className="contents">
+          {questions.length === 0 ? (
+            <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">No quiz questions are attached. Submitting records an acknowledgement.</p>
+          ) : (
+            <div className={`mt-4 space-y-4 ${watchUnlocked ? '' : 'pointer-events-none opacity-50'}`}>
+              {questions.map((question, index) => (
+                <Question
+                  key={question.id}
+                  index={index}
+                  question={question}
+                  answers={answersByQuestion.get(question.id) ?? []}
+                  value={responses[question.id]}
+                  onChange={value => setResponses(prev => ({ ...prev, [question.id]: value }))}
+                />
+              ))}
+            </div>
+          )}
+
+          {questions.length === 0 && (
+            <label className={`mt-4 flex items-start gap-2 text-sm text-slate-700 dark:text-slate-200 ${watchUnlocked ? '' : 'opacity-50'}`}>
+              <input
+                type="checkbox"
+                checked={responses.acknowledgement === true}
+                onChange={e => setResponses({ acknowledgement: e.target.checked })}
+                className="mt-1"
+              />
+              I reviewed the instruction and understand the task expectations.
+            </label>
+          )}
+        </fieldset>
 
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={submit}
-            disabled={submitting || !version || (questions.length === 0 && responses.acknowledgement !== true)}
+            disabled={
+              submitting
+              || !version
+              || !watchUnlocked
+              || (questions.length === 0 && responses.acknowledgement !== true)
+            }
             className="inline-flex items-center gap-2 rounded-lg bg-brand-navy px-4 py-2 text-sm font-semibold text-white hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : !watchUnlocked ? <Lock className="h-4 w-4" /> : <Send className="h-4 w-4" />}
             Submit
           </button>
           {result && (

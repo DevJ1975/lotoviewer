@@ -19,11 +19,20 @@
 // newly created rows never appeared in the UI until the cache was
 // cleared. API calls are short and JWT-bound — let the network handle
 // them.
-const CACHE_VERSION = 'v7'
+// v8 (2026-05-12) — added an opt-in STRIKE video cache and a Range-
+// request handler so a downloaded training video plays offline AND
+// supports seeking on iOS Safari. Bump forces the activate handler
+// to retire pre-v8 caches.
+const CACHE_VERSION = 'v8'
 const STATIC_CACHE  = `loto-static-${CACHE_VERSION}`
 const HTML_CACHE    = `loto-html-${CACHE_VERSION}`
 const IMAGE_CACHE   = `loto-images-${CACHE_VERSION}`
-const KNOWN_CACHES  = [STATIC_CACHE, HTML_CACHE, IMAGE_CACHE]
+// Video cache is intentionally NOT version-bumped on every SW change.
+// We pin its name so existing downloads survive deploys; learners who
+// pre-downloaded modules before a flight should not lose them just
+// because we shipped an unrelated CSS tweak.
+const VIDEO_CACHE   = 'loto-strike-video-v1'
+const KNOWN_CACHES  = [STATIC_CACHE, HTML_CACHE, IMAGE_CACHE, VIDEO_CACHE]
 
 // Critical app-shell routes warmed at install time so a worker can launch
 // the app cold-offline and reach the screens they use most. Hashed JS
@@ -89,9 +98,19 @@ self.addEventListener('fetch', event => {
     return
   }
 
-  // Strategy: stale-while-revalidate for Supabase Storage images (placard
-  // photos, signed PDFs). Lets workers see photos offline; updates silently.
+  // Strategy: serve STRIKE training videos from the dedicated offline
+  // cache when we've explicitly downloaded them. Honour Range requests so
+  // <video> seeking and iOS Safari's segment-by-segment playback work
+  // even when the device is offline. The cache key is the raw storage
+  // path (e.g. "global/loto/refresh.mp4"); learners and Studio agree on
+  // this key via lib/offline/strikeOffline.ts.
   if (url.hostname.endsWith('.supabase.co') && url.pathname.startsWith('/storage/')) {
+    if (looksLikeStrikeVideo(url)) {
+      event.respondWith(serveStrikeVideo(request, url))
+      return
+    }
+    // Fall back to the existing SWR for non-video Supabase Storage assets
+    // (placard photos, signed PDFs).
     event.respondWith(staleWhileRevalidate(request, IMAGE_CACHE))
     return
   }
@@ -159,11 +178,172 @@ async function staleWhileRevalidate(request, cacheName) {
   return cached ?? fetchPromise
 }
 
-// Listen for in-page messages so the InstallPrompt component can ask the SW
-// to skip waiting on demand (used after the user clicks "Update available").
+// Listen for in-page messages. The InstallPrompt component asks the SW to
+// skip waiting after an "Update available" toast; the STRIKE offline
+// manager (lib/offline/strikeOffline.ts) drives downloads, deletes, and
+// usage queries through this channel because the SW is the only context
+// with direct access to Cache Storage from inside the page tree.
 self.addEventListener('message', event => {
-  if (event.data === 'SKIP_WAITING') self.skipWaiting()
+  const data = event.data
+  if (data === 'SKIP_WAITING') { self.skipWaiting(); return }
+  if (!data || typeof data !== 'object' || typeof data.type !== 'string') return
+
+  const port = event.ports && event.ports[0]
+  const reply = payload => { if (port) port.postMessage(payload) }
+
+  switch (data.type) {
+    case 'STRIKE_DOWNLOAD_VIDEO':
+      // Download fetches the entire file once, stores it whole. We do not
+      // stream-chunk into the cache because Cache Storage stores complete
+      // Responses; partial bodies cannot be progressively appended.
+      event.waitUntil(handleStrikeDownload(data.path, data.signedUrl).then(reply, err =>
+        reply({ ok: false, error: err instanceof Error ? err.message : String(err) }),
+      ))
+      return
+    case 'STRIKE_DELETE_VIDEO':
+      event.waitUntil(handleStrikeDelete(data.path).then(reply, err =>
+        reply({ ok: false, error: err instanceof Error ? err.message : String(err) }),
+      ))
+      return
+    case 'STRIKE_LIST_VIDEOS':
+      event.waitUntil(handleStrikeList().then(reply, err =>
+        reply({ ok: false, error: err instanceof Error ? err.message : String(err) }),
+      ))
+      return
+    case 'STRIKE_HAS_VIDEO':
+      event.waitUntil(handleStrikeHas(data.path).then(reply, err =>
+        reply({ ok: false, error: err instanceof Error ? err.message : String(err) }),
+      ))
+      return
+    default:
+      // Unknown message — ignore silently. Senders use MessageChannels for
+      // replies they care about, so a missing reply is a fine signal.
+      return
+  }
 })
+
+// ── STRIKE offline video cache ─────────────────────────────────────────
+//
+// We cache the raw bytes of each downloaded video at a normalized URL
+// derived from the storage path. Signed Supabase URLs are NOT used as
+// cache keys because they include short-lived tokens that change every
+// time the player refreshes — we'd never hit the cache. The page-side
+// helper (strikeOffline.ts) and this worker both rely on the same
+// strikeCacheKey() construction.
+
+function looksLikeStrikeVideo(url) {
+  // Supabase Storage paths look like /storage/v1/object/{public|sign}/<bucket>/<path>.
+  // The STRIKE bucket is private, so signed URLs are the realistic case.
+  const segs = url.pathname.split('/').filter(Boolean)
+  // ['storage','v1','object','sign','strike-media', ...rest]
+  return segs[0] === 'storage' && segs[4] === 'strike-media'
+}
+
+function strikePathFromUrl(url) {
+  const segs = url.pathname.split('/').filter(Boolean)
+  // Drop the leading ['storage','v1','object','sign|public','strike-media'] prefix.
+  if (segs.length < 6 || segs[4] !== 'strike-media') return null
+  return segs.slice(5).join('/')
+}
+
+function strikeCacheKey(path) {
+  // Plain HTTPS-style URL inside our own origin namespace. Using a fake
+  // host means signed-URL token churn does not affect lookups, and using
+  // a Request object lets us round-trip with cache.match() cleanly.
+  return new Request(`https://strike-offline/${path}`, { method: 'GET' })
+}
+
+async function serveStrikeVideo(request, url) {
+  const path = strikePathFromUrl(url)
+  if (!path) return fetch(request)
+  const cache = await caches.open(VIDEO_CACHE)
+  const cached = await cache.match(strikeCacheKey(path))
+  if (!cached) {
+    // Not pre-downloaded — let the network handle it. We intentionally do
+    // not auto-cache here; videos are large and the learner should opt in
+    // via the "Download for offline" button.
+    try { return await fetch(request) }
+    catch { return new Response('', { status: 504, statusText: 'Offline' }) }
+  }
+
+  const range = request.headers.get('range')
+  if (!range) return new Response(await cached.clone().blob(), {
+    status: 200,
+    headers: cached.headers,
+  })
+
+  // Build a 206 Partial Content response from the cached body so iOS
+  // Safari can seek. Range syntax is `bytes=start-end` or `bytes=start-`.
+  const blob = await cached.clone().blob()
+  const total = blob.size
+  const match = /bytes=(\d+)-(\d+)?/.exec(range)
+  if (!match) return new Response(blob, { status: 200, headers: cached.headers })
+  const start = Number(match[1])
+  const end = match[2] ? Math.min(total - 1, Number(match[2])) : total - 1
+  if (Number.isNaN(start) || start >= total || end < start) {
+    return new Response('', {
+      status: 416,
+      headers: { 'Content-Range': `bytes */${total}` },
+    })
+  }
+  const slice = blob.slice(start, end + 1)
+  const headers = new Headers(cached.headers)
+  headers.set('Content-Range', `bytes ${start}-${end}/${total}`)
+  headers.set('Content-Length', String(slice.size))
+  headers.set('Accept-Ranges', 'bytes')
+  return new Response(slice, { status: 206, statusText: 'Partial Content', headers })
+}
+
+async function handleStrikeDownload(path, signedUrl) {
+  if (typeof path !== 'string' || !path || typeof signedUrl !== 'string' || !signedUrl) {
+    return { ok: false, error: 'path and signedUrl are required' }
+  }
+  const res = await fetch(signedUrl)
+  if (!res.ok) return { ok: false, error: `Fetch failed: ${res.status}` }
+  // Preserve content-type and a far-future cache header so the cached
+  // response is self-describing if anything ever reads it directly.
+  const blob = await res.blob()
+  const headers = new Headers()
+  const ct = res.headers.get('content-type'); if (ct) headers.set('Content-Type', ct)
+  headers.set('Content-Length', String(blob.size))
+  headers.set('Accept-Ranges', 'bytes')
+  headers.set('Cache-Control', 'private, max-age=31536000, immutable')
+  const stored = new Response(blob, { status: 200, headers })
+  const cache = await caches.open(VIDEO_CACHE)
+  await cache.put(strikeCacheKey(path), stored)
+  return { ok: true, path, size: blob.size }
+}
+
+async function handleStrikeDelete(path) {
+  if (typeof path !== 'string' || !path) return { ok: false, error: 'path is required' }
+  const cache = await caches.open(VIDEO_CACHE)
+  const removed = await cache.delete(strikeCacheKey(path))
+  return { ok: true, removed }
+}
+
+async function handleStrikeList() {
+  const cache = await caches.open(VIDEO_CACHE)
+  const requests = await cache.keys()
+  const entries = []
+  let total = 0
+  for (const req of requests) {
+    const u = new URL(req.url)
+    if (u.host !== 'strike-offline') continue
+    const path = u.pathname.replace(/^\//, '')
+    const res = await cache.match(req)
+    const size = res ? Number(res.headers.get('Content-Length') ?? 0) : 0
+    entries.push({ path, size })
+    total += size
+  }
+  return { ok: true, entries, total }
+}
+
+async function handleStrikeHas(path) {
+  if (typeof path !== 'string' || !path) return { ok: false, error: 'path is required' }
+  const cache = await caches.open(VIDEO_CACHE)
+  const hit = await cache.match(strikeCacheKey(path))
+  return { ok: true, present: !!hit }
+}
 
 // ── Web Push (migration 016) ──────────────────────────────────────────────
 //

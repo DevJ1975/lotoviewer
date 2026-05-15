@@ -159,6 +159,44 @@ export function scoreStrikeQuiz(input: StrikeQuizScoreInput): StrikeQuizScoreRes
   }
 }
 
+// Learners must cover this fraction of the video before the server records
+// a completion. Used by both /api/strike/[moduleId]/submit (server gate)
+// and the learner page (UX gate). Single source of truth so the two
+// cannot drift.
+export const STRIKE_WATCH_COMPLETION_THRESHOLD = 0.95
+
+export interface StrikeWatchGateInput {
+  hasVideo: boolean
+  durationSeconds: number | null | undefined
+  watchedSeconds: number | null | undefined
+}
+
+export interface StrikeWatchGateResult {
+  requiredSeconds: number
+  watchedSeconds: number
+  met: boolean
+}
+
+// Returns the gate decision for a learner attempt. Versions without a
+// video, or with a missing/zero duration, are exempt — the gate is only
+// meaningful when there is actually something measurable to watch.
+export function evaluateStrikeWatchGate(input: StrikeWatchGateInput): StrikeWatchGateResult {
+  const duration = typeof input.durationSeconds === 'number' && Number.isFinite(input.durationSeconds)
+    ? input.durationSeconds
+    : 0
+  const watched = typeof input.watchedSeconds === 'number' && Number.isFinite(input.watchedSeconds) && input.watchedSeconds > 0
+    ? Math.floor(input.watchedSeconds)
+    : 0
+  const required = input.hasVideo && duration > 0
+    ? Math.ceil(duration * STRIKE_WATCH_COMPLETION_THRESHOLD)
+    : 0
+  return {
+    requiredSeconds: required,
+    watchedSeconds: watched,
+    met: required === 0 || watched >= required,
+  }
+}
+
 export function normalizeStrikeSlug(title: string): string {
   const slug = title
     .trim()
