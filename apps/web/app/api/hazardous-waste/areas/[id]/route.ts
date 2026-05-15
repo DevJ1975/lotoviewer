@@ -8,7 +8,7 @@ import type { HazardousWasteAreaType } from '@soteria/core/hazardousWaste'
 //   PATCH  — rename, retype, retune cadence, or archive (set
 //            archived_at = now()). Tenant admin/owner only.
 //   DELETE — hard delete an area. Cascades to its inspections via the
-//            FK in migration 139. Tenant admin/owner only.
+//            FK in migration 142. Tenant admin/owner only.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 

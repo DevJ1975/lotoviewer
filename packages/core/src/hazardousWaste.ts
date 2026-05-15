@@ -274,7 +274,7 @@ export function summarizeHazardousWasteDraft(draft: HazardousWasteFieldDraft): {
 
 // ── Persisted row types ─────────────────────────────────────────────────────
 //
-// Mirror the schema in migration 139. Kept here (not in apps/web) so the
+// Mirror the schema in migration 142. Kept here (not in apps/web) so the
 // Expo app can share them once mobile sync lands.
 
 export interface HazardousWasteAreaRow {
