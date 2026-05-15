@@ -61,6 +61,7 @@ export {
   computeEhsScore,
   fetchBBSMetrics,
 } from './bbsMetrics'
+export * from './bbsMetricsV2'
 export * from './chemicals'
 // Incident module reuses some helper names from nearMiss
 // (compareForTriage, isActive, ageInDays, validateCreateInput) since
