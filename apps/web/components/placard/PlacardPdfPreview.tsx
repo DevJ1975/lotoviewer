@@ -24,6 +24,9 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
   const [pdfUrl, setPdfUrl]       = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
   const [uploadState, setUploadState] = useState<UploadState>('idle')
+  // When PDF generation throws we keep the underlying message so the
+  // viewer can show *why* instead of a useless "Could not generate".
+  const [generateError, setGenerateError] = useState<string | null>(null)
   // Bilingual mode = single-page side-by-side EN/ES instead of two
   // sequential per-language pages. Toggling regenerates + re-uploads.
   const [bilingual, setBilingual] = useState(false)
@@ -57,6 +60,7 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
     setUploadState('idle')
     setPdfBytes(null)
     setPdfUrl(null)
+    setGenerateError(null)
 
     ;(async () => {
       try {
@@ -96,11 +100,18 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
 
         setUploadState('saved')
         onSavedRef.current?.(publicUrl)
-      } catch {
+      } catch (err) {
+        // pdf-lib's WinAnsi encoder throws on stray Unicode in equipment
+        // fields, and the storage upload throws on auth/network blips —
+        // both used to flatten into "Could not generate placard." with
+        // no path to a fix. Keep the raw message so the operator can act.
+        const message = err instanceof Error ? err.message : String(err)
+        console.error('[placard] generation failed:', err)
         if (!cancelled) {
           setGenerating(false)
           setUploadState('error')
-          onErrorRef.current?.('Could not generate placard.')
+          setGenerateError(message || 'Unknown error')
+          onErrorRef.current?.(`Could not generate placard: ${message}`)
         }
       }
     })()
@@ -209,8 +220,22 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
             className="w-full h-full border-0 bg-white dark:bg-slate-900"
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-white text-sm">
-            Could not generate placard.
+          <div className="absolute inset-0 flex items-center justify-center p-6">
+            <div className="max-w-md w-full rounded-xl bg-white dark:bg-slate-900 p-5 ring-1 ring-rose-200 dark:ring-rose-900/60 text-sm">
+              <p className="font-semibold text-rose-700 dark:text-rose-300">Could not generate placard</p>
+              {generateError ? (
+                <pre className="mt-2 whitespace-pre-wrap break-words text-xs font-mono text-slate-700 dark:text-slate-300">
+                  {generateError}
+                </pre>
+              ) : (
+                <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                  Check the browser console for details and try again.
+                </p>
+              )}
+              <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                Common cause: equipment fields contain characters outside the basic Latin set (e.g. ₂, ™, smart quotes) — edit those fields and retry.
+              </p>
+            </div>
           </div>
         )}
       </div>
