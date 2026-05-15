@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { getModules } from '@soteria/core/features'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { useTenant } from '@/components/TenantProvider'
+import { getModuleVisuals } from '@/lib/moduleVisuals'
 
 // Module navigation grid — deemphasized at the bottom of the dashboard
 // because the drawer is the primary navigation surface. Filters out
@@ -19,18 +20,52 @@ export function ModulesGrid() {
   if (modules.length === 0) return null
   return (
     <section className="space-y-3">
-      <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Your modules</h2>
+      <div className="flex items-center gap-3">
+        <h2 className="placard-label-lg text-slate-800 dark:text-slate-100">Your modules</h2>
+        <span aria-hidden="true" className="h-px flex-1 bg-gradient-to-r from-slate-300 to-transparent dark:from-slate-700" />
+        <span className="placard-label text-slate-400 dark:text-slate-500 placard-numeric">
+          {modules.length.toString().padStart(2, '0')} ACTIVE
+        </span>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {modules.map(m => (
-          <Link
-            key={m.id}
-            href={m.href!}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 hover:border-brand-navy hover:shadow-sm transition-all group"
-          >
-            <p className="text-base font-bold text-slate-900 dark:text-slate-100 group-hover:text-brand-navy transition-colors">{m.name}</p>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">{m.description}</p>
-          </Link>
-        ))}
+        {modules.map((m, idx) => {
+          const { Icon, classes } = getModuleVisuals(m.id)
+          return (
+            <Link
+              key={m.id}
+              href={m.href!}
+              className="placard-surface placard-surface-interactive placard-corner-mark group relative overflow-hidden bg-white dark:bg-slate-900 p-4 pt-5"
+            >
+              {/* Hazard-yellow header rail on every module card — the
+                  single most consistent visual hook across the grid. */}
+              <span
+                aria-hidden="true"
+                className="absolute left-0 right-0 top-0 h-[3px] bg-brand-yellow group-hover:bg-brand-navy transition-colors"
+              />
+              <div className="flex items-start gap-3">
+                <span
+                  aria-hidden="true"
+                  className={`module-icon-tile flex size-10 shrink-0 items-center justify-center rounded-md ${classes.tile}`}
+                >
+                  <Icon className="size-6" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="stencil-title text-base text-slate-950 dark:text-slate-50 group-hover:text-brand-navy dark:group-hover:text-brand-yellow transition-colors truncate">
+                      {m.name}
+                    </p>
+                    <span className="placard-numeric text-[10px] text-slate-400 dark:text-slate-500 shrink-0">
+                      M-{(idx + 1).toString().padStart(2, '0')}
+                    </span>
+                  </div>
+                  <p className="text-[12px] text-slate-500 dark:text-slate-400 mt-1.5 leading-snug">
+                    {m.description}
+                  </p>
+                </div>
+              </div>
+            </Link>
+          )
+        })}
       </div>
     </section>
   )

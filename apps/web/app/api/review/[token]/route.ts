@@ -312,9 +312,6 @@ function rpcErrorResponse(error: { message?: string }) {
   if (lower.includes('all placards must be reviewed')) {
     return NextResponse.json({ error: 'Review every placard before submitting signoff.' }, { status: 400 })
   }
-  if (lower.includes('complete photos and generated placards')) {
-    return NextResponse.json({ error: 'All placards must be current before signoff. Regenerate any placards changed by photo replacement, then reopen this link.' }, { status: 409 })
-  }
   if (lower.includes('no equipment')) {
     return NextResponse.json({ error: 'This review batch has no equipment.' }, { status: 400 })
   }

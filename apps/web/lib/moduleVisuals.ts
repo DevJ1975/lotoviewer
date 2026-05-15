@@ -1,3 +1,4 @@
+import type { ComponentType, SVGProps } from 'react'
 import {
   AlertOctagon,
   AlertTriangle,
@@ -7,27 +8,34 @@ import {
   Box,
   Brush,
   ClipboardList,
-  DoorClosed,
   Eye,
   FileArchive,
-  FlaskConical,
-  Flame,
   GraduationCap,
   LifeBuoy,
-  Lock,
   Megaphone,
   MessageSquare,
   Recycle,
   Settings,
-  ShieldCheck,
   Siren,
   Sparkles,
   Tag,
   Users,
   Webhook,
-  type LucideIcon,
 } from 'lucide-react'
+import {
+  BiohazardIcon,
+  FlameTriangleIcon,
+  HardHatIcon,
+  HazardDiamondIcon,
+  ManholeIcon,
+  PadlockIcon,
+} from '@/components/icons/safety'
 import { FEATURES, getFeature, type FeatureDef, type ModuleColor } from '@soteria/core/features'
+
+// Structural type that matches both Lucide icons and our custom safety
+// pictogram components. Both accept `className` and an SVG prop bag, so
+// any `<Icon className="..." />` call site works against this.
+export type ModuleIconComponent = ComponentType<{ className?: string } & SVGProps<SVGSVGElement>>
 
 // Web-only resolver that turns the string-typed `icon` and `color`
 // fields on FEATURES into actual Lucide components and Tailwind
@@ -149,17 +157,35 @@ export const MODULE_COLOR_CLASSES: Record<ModuleColor, ColorClasses> = {
 
 const FALLBACK_COLOR: ModuleColor = 'slate'
 
-const MODULE_ICONS: Record<string, LucideIcon> = {
-  AlertOctagon, AlertTriangle, BarChart3, Bell, BookOpen, Brush, ClipboardList,
-  DoorClosed, Eye, FileArchive, FlaskConical, Flame, GraduationCap, LifeBuoy,
-  Lock, Megaphone, MessageSquare, Settings, ShieldCheck, Siren, Sparkles,
-  Tag, Users, Webhook, Recycle,
+// Module icon registry. Six signature safety modules render with hand-
+// drawn duotone pictograms (`components/icons/safety`) so they read as
+// real industrial signage; everything else stays on Lucide for now and
+// inherits a chunkier visual via the `.module-icon-treatment` class
+// applied at the tile call sites.
+//
+// Feature names below (the keys) match the string `icon:` values in
+// `packages/core/src/features.ts`. Add a new icon here once the
+// feature declares its name there.
+const MODULE_ICONS: Record<string, ModuleIconComponent> = {
+  // ── Custom duotone safety pictograms ───────────────────────────────
+  Lock:          PadlockIcon,         // LOTO
+  Flame:         FlameTriangleIcon,   // Hot work
+  FlaskConical:  BiohazardIcon,       // Chemicals / hazmat
+  DoorClosed:    ManholeIcon,         // Confined spaces
+  ShieldCheck:   HazardDiamondIcon,   // Risk / equipment readiness
+  Users:         HardHatIcon,         // Workers / PPE
+
+  // ── Lucide fallbacks for non-signature modules ─────────────────────
+  AlertOctagon, AlertTriangle, BarChart3, Bell, BookOpen, Brush,
+  ClipboardList, Eye, FileArchive, GraduationCap, LifeBuoy,
+  Megaphone, MessageSquare, Settings, Siren, Sparkles,
+  Tag, Webhook, Recycle,
 }
 
-const FALLBACK_ICON: LucideIcon = Box
+const FALLBACK_ICON: ModuleIconComponent = Box
 
 export interface ModuleVisuals {
-  Icon:    LucideIcon
+  Icon:    ModuleIconComponent
   classes: ColorClasses
   color:   ModuleColor
   /** The resolved feature, or null if the id wasn't found. The drawer

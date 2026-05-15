@@ -1,8 +1,9 @@
-// Tiny shimmer block used to fill space while real data loads. Tailwind's
-// animate-pulse is enough — keeps the bundle clean. Pass any className for
-// sizing, rounding, or color overrides.
+// Tiny shimmer block used to fill space while real data loads.
+// Square corners + concrete-tinted base match the placard / ops-table
+// vocabulary in globals.css instead of the generic shadcn-pill look.
+// Pass any className for sizing, rounding, or color overrides.
 export function Skeleton({ className = '' }: { className?: string }) {
-  return <div aria-hidden="true" className={`animate-pulse bg-slate-200 dark:bg-slate-700 rounded ${className}`} />
+  return <div aria-hidden="true" className={`animate-pulse bg-slate-200/80 dark:bg-slate-700/70 rounded-sm ${className}`} />
 }
 
 // Composed skeleton matching an equipment list row: status dot, two stacked

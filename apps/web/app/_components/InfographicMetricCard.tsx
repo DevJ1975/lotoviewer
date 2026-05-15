@@ -88,22 +88,31 @@ export function InfographicMetricCard({
     <div
       aria-label={ariaLabel}
       className={[
-        'motion-reactive motion-press group h-full rounded-xl border shadow-sm hover:-translate-y-0.5 hover:shadow-md',
+        'placard-surface placard-surface-interactive motion-press group relative h-full overflow-hidden border',
         compact ? 'p-2.5' : 'p-3.5',
         cls.card,
       ].join(' ')}
     >
+      {/* Tone rail at the top of the tile — picks up the tone color so
+          a CRITICAL card flags itself in the user's peripheral vision
+          before they read the number. Hidden on neutral. */}
+      {tone !== 'neutral' && (
+        <span
+          aria-hidden="true"
+          className={`absolute left-0 right-0 top-0 h-[3px] ${cls.meter}`}
+        />
+      )}
       <div className="flex items-start gap-3">
         <RadialGlyph tone={tone} percent={boundedPercent} icon={icon} compact={compact} />
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+          <p className="placard-label text-slate-500 dark:text-slate-400">
             {label}
           </p>
-          <p className={`${compact ? 'text-xl' : 'text-2xl'} mt-0.5 font-black leading-none tabular-nums ${cls.text}`}>
+          <p className={`placard-numeric ${compact ? 'text-2xl' : 'text-3xl'} mt-1 font-black leading-none ${cls.text}`}>
             {value}
           </p>
           {caption && (
-            <p className="mt-1 text-[11px] leading-snug text-slate-600 dark:text-slate-300">
+            <p className="mt-1.5 text-[11px] leading-snug text-slate-600 dark:text-slate-300">
               {caption}
             </p>
           )}
@@ -112,12 +121,15 @@ export function InfographicMetricCard({
 
       {boundedPercent != null && (
         <div className="mt-3">
-          <div className={`h-1.5 overflow-hidden rounded-full ${cls.meterBg}`}>
+          <div className={`relative h-1.5 overflow-hidden rounded-sm ${cls.meterBg}`}>
             <div
-              className={`animate-meter-fill h-full rounded-full ${cls.meter}`}
+              className={`animate-meter-fill h-full ${cls.meter}`}
               style={{ width: `${boundedPercent}%` }}
             />
           </div>
+          <p className="placard-numeric mt-1 text-[10px] text-slate-400 dark:text-slate-500 text-right">
+            {Math.round(boundedPercent).toString().padStart(3, '0')}%
+          </p>
         </div>
       )}
 

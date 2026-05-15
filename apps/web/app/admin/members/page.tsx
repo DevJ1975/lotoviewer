@@ -15,7 +15,6 @@ import {
   Users,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/components/AuthProvider'
@@ -160,8 +159,8 @@ export default function AdminMembersPage() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="truncate text-sm font-black text-slate-950 dark:text-slate-50">{m.display_name}</p>
-                      <Badge variant="outline">@{m.handle}</Badge>
-                      <Badge variant="secondary">#{m.member_code}</Badge>
+                      <span className="placard-numeric text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-sm px-1.5 py-0.5">@{m.handle}</span>
+                      <span className="placard-numeric text-[11px] font-bold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900 rounded-sm px-1.5 py-0.5">#{m.member_code}</span>
                     </div>
                     <p className="truncate text-xs text-slate-500">{m.email || m.phone || 'No login/contact on file'}</p>
                   </div>
@@ -171,11 +170,11 @@ export default function AdminMembersPage() {
                   <p className="text-xs text-slate-500">{[m.department, m.shift_label, m.site_label].filter(Boolean).join(' · ') || 'Assignment not set'}</p>
                 </div>
                 <div className="text-sm">
-                  <Badge className={readinessClass(m.readiness_status)}>{m.readiness_status.replaceAll('_', ' ')}</Badge>
+                  <span className={`safety-tag ${readinessTagClass(m.readiness_status)}`}>{m.readiness_status.replaceAll('_', ' ')}</span>
                   <p className="mt-1 text-xs text-slate-500">{m.supervisor_name ? `Supervisor: ${m.supervisor_name}` : 'No supervisor assigned'}</p>
                 </div>
                 <div className="flex items-center justify-between gap-3 lg:justify-end">
-                  <Badge variant={m.status === 'active' ? 'outline' : 'secondary'}>{m.status}</Badge>
+                  <span className={`safety-tag ${m.status === 'active' ? 'safety-tag-cleared' : 'safety-tag-caution'}`}>{m.status}</span>
                   <BriefcaseBusiness className="h-4 w-4 text-slate-400" />
                 </div>
               </li>
@@ -197,10 +196,14 @@ function Metric({ icon, label, value, tone = 'normal' }: { icon: ReactNode; labe
   )
 }
 
-function readinessClass(status: string): string {
-  if (status === 'ready') return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200'
-  if (status === 'restricted') return 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200'
-  return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200'
+// Readiness state → safety-tag tone. Mirrors the OSHA-coded vocabulary
+// used by the rest of the app: cleared (ready to work), danger (work
+// restricted), caution (everything in between — pending paperwork,
+// expired training, awaiting medical clearance, etc).
+function readinessTagClass(status: string): string {
+  if (status === 'ready')      return 'safety-tag-cleared'
+  if (status === 'restricted') return 'safety-tag-danger'
+  return 'safety-tag-caution'
 }
 
 function csvCell(value: string): string {
