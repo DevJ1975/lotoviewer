@@ -188,6 +188,20 @@ function EquipmentDetail() {
           <ToolbarButton onClick={() => setHazardsOpen(true)}>
             🛡️ Hazards (AI)
           </ToolbarButton>
+          <Link
+            href={`/equipment/${encodeURIComponent(equipmentId)}/walkdown`}
+            className="inline-flex items-center gap-1 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 px-2 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            title="§147(c)(6) walkdown checklist"
+          >
+            🚶 Walkdown
+          </Link>
+          <Link
+            href={`/equipment/${encodeURIComponent(equipmentId)}/periodic-inspection`}
+            className="inline-flex items-center gap-1 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 px-2 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            title="§147(c)(6) periodic inspection"
+          >
+            ✅ Inspection
+          </Link>
 
           <div className="flex items-center gap-1 ml-1">
             <ArrowButton onClick={() => prevId && navTo(prevId)} disabled={!prevId} title={prevId ? `Previous: ${prevId}` : 'No previous'}>
