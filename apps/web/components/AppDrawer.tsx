@@ -171,7 +171,7 @@ function ModuleRow({
       <span
         aria-hidden="true"
         className={cn(
-          'flex size-7 shrink-0 items-center justify-center rounded-md',
+          'module-icon-tile flex size-7 shrink-0 items-center justify-center rounded-md',
           classes.tile,
           active && classes.ring,
         )}

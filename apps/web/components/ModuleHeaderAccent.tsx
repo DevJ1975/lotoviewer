@@ -19,17 +19,26 @@ export default function ModuleHeaderAccent({ moduleId }: Props) {
   const feature = getFeature(moduleId)
   if (!feature) return null
 
+  // Short, stable placard ID derived from the module slug. Reads like
+  // a real piece of safety equipment ("MOD · LOTO") rather than a CMS
+  // breadcrumb. First 4 chars uppercased keeps everything fixed-width.
+  const placardId = moduleId.slice(0, 4).toUpperCase()
+
   return (
-    <div className={`border-l-4 ${classes.border}`}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center gap-2.5">
+    <div className={`relative border-l-4 ${classes.border}`}>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center gap-3">
         <span
-          className={`shrink-0 w-7 h-7 rounded-md flex items-center justify-center ${classes.tile}`}
+          className={`module-icon-tile shrink-0 w-7 h-7 rounded-md flex items-center justify-center ${classes.tile}`}
           aria-hidden="true"
         >
           <Icon className="h-4 w-4" />
         </span>
-        <span className={`text-[11px] font-bold uppercase tracking-wider ${classes.text}`}>
+        <span className={`placard-label-lg ${classes.text}`}>
           {feature.name}
+        </span>
+        <span aria-hidden="true" className="h-px flex-1 max-w-[8rem] bg-gradient-to-r from-slate-300 to-transparent dark:from-slate-700" />
+        <span className="placard-numeric text-[10px] text-slate-400 dark:text-slate-500">
+          MOD · {placardId}
         </span>
       </div>
     </div>

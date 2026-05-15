@@ -38,6 +38,7 @@ const DEFAULT_MODULES: Record<string, boolean> = {
   'confined-spaces':          true,
   'hot-work':                 true,
   chemicals:                  true,
+  'hazardous-waste':          true,
   'toolbox-talks':            true,
   'reports-scorecard':        true,
   'reports-compliance-bundle':true,
