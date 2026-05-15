@@ -35,7 +35,15 @@ begin;
 -- in production. Keeping the long form alive for storage and the
 -- short form alive for analytics is the minimum-risk path.
 
-create or replace view public.risk_controls_hierarchy as
+-- security_invoker is REQUIRED so the view inherits RLS from
+-- risk_controls. Without it, PostgreSQL runs the view with the
+-- owner's privileges and the tenant-scope policy is bypassed —
+-- one tenant's controls would leak to every authenticated caller.
+-- See the matching pattern in migration 142's
+-- loto_worker_retraining_status.
+create or replace view public.risk_controls_hierarchy
+with (security_invoker = true)
+as
 select
   rc.id,
   rc.tenant_id,
