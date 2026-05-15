@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import { uploadPhotoForEquipment, type UploadType } from '@soteria/core/photoUpload'
 import { useTenant } from '@/components/TenantProvider'
+import { emitPhotoUploaded } from '@/lib/xapi/emit'
 
 export type { UploadType }
 export type UploadStatus = 'idle' | 'uploading' | 'success' | 'error'
@@ -41,6 +42,7 @@ export function usePhotoUpload(equipmentId: string, type: UploadType) {
       })
       setUrl(publicUrl)
       setStatus('success')
+      emitPhotoUploaded({ equipmentId, slot: type, byteSize: file.size })
       return publicUrl
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Upload failed'
