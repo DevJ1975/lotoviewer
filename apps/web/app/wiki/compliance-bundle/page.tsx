@@ -1,10 +1,19 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-05'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-05-15'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.0',
+    date:    '2026-05-15',
+    changes: [
+      'Cover sheet now lists the SHA-256 hash of every sealed review-' +
+      'portal placard PDF (loto_signed_pdf_artifacts), giving the bundle ' +
+      'a verifiable chain-of-custody alongside the per-permit hashes.',
+    ],
+  },
   { version: '1.0.0', date: '2026-05-05', changes: ['Initial compliance-bundle wiki page.'] },
 ]
 
