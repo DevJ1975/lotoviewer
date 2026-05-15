@@ -368,6 +368,8 @@ export function isAreaOverdue(
   const days = daysSinceLastInspection(lastInspectedAt, now)
   if (days === null) return true
   return days >= area.weekly_cadence_days
+}
+
 // ── Accumulation & calendar helpers ───────────────────────────────────────
 // Pure date utilities. Inputs are accepted as Date or ISO string; outputs
 // are deterministic given the same inputs (no `new Date()` inside the
