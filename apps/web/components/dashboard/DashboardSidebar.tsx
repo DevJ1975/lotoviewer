@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import Link from 'next/link'
-import { Printer, BookOpen, ClipboardCheck } from 'lucide-react'
+import { Printer, BookOpen, ClipboardCheck, Users } from 'lucide-react'
 import type { Equipment } from '@soteria/core/types'
 import { computePhotoStatusFromEquipment } from '@soteria/core/photoStatus'
 import { useSession } from '@/components/SessionProvider'
@@ -101,6 +101,14 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
           className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
         >
           <ClipboardCheck className="h-3.5 w-3.5" />
+        </Link>
+        <Link
+          href="/loto/group-permits"
+          title="Group LOTO permits (§147(f)(3))"
+          aria-label="Group LOTO permits"
+          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
+        >
+          <Users className="h-3.5 w-3.5" />
         </Link>
       </div>
 
