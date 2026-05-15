@@ -138,7 +138,7 @@ create or replace function public.sync_loto_equipment_periodic_due()
   returns trigger
   language plpgsql
   security definer
-  set search_path = public
+  set search_path = pg_catalog, public, extensions
 as $$
 declare
   v_max_due timestamptz;

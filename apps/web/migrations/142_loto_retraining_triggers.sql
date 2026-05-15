@@ -108,7 +108,7 @@ create or replace function public.create_retraining_from_inspection()
   returns trigger
   language plpgsql
   security definer
-  set search_path = public
+  set search_path = pg_catalog, public, extensions
 as $$
 declare
   v_worker record;
@@ -159,7 +159,7 @@ create or replace function public.create_retraining_from_step_change()
   returns trigger
   language plpgsql
   security definer
-  set search_path = public
+  set search_path = pg_catalog, public, extensions
 as $$
 declare
   v_worker record;
