@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import Link from 'next/link'
-import { Printer, BookOpen, ClipboardCheck, Users, Building2, ClipboardList } from 'lucide-react'
+import { Printer, BookOpen, ClipboardCheck, Users, Building2, ClipboardList, FileCheck2, Archive, BookText } from 'lucide-react'
 import type { Equipment } from '@soteria/core/types'
 import { computePhotoStatusFromEquipment } from '@soteria/core/photoStatus'
 import { useSession } from '@/components/SessionProvider'
@@ -125,6 +125,30 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
           className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
         >
           <ClipboardList className="h-3.5 w-3.5" />
+        </Link>
+        <Link
+          href="/admin/signed-artifacts"
+          title="Sealed PDF audit artifacts"
+          aria-label="Sealed PDF audit artifacts"
+          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
+        >
+          <FileCheck2 className="h-3.5 w-3.5" />
+        </Link>
+        <Link
+          href="/admin/retention"
+          title="Data retention policy and legal holds"
+          aria-label="Retention and legal holds"
+          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
+        >
+          <Archive className="h-3.5 w-3.5" />
+        </Link>
+        <Link
+          href="/admin/iso45001"
+          title="ISO 45001 clause evidence map"
+          aria-label="ISO 45001 clause evidence map"
+          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
+        >
+          <BookText className="h-3.5 w-3.5" />
         </Link>
       </div>
 

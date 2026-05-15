@@ -67,6 +67,16 @@ interface HotWorkEntry {
   permit:  HotWorkPermit
 }
 
+// Signed placard artifact row — surfaced on the cover sheet alongside
+// the per-permit hashes for end-to-end chain-of-custody of every
+// document an OSHA auditor sees.
+export interface SignedPlacardArtifactEntry {
+  equipment_id:       string
+  signer_typed_name:  string
+  signed_at:          string                                              // ISO timestamp
+  sha256_hex:         string                                              // 64-char lowercase hex
+}
+
 export interface GenerateBundleArgs {
   // Period the bundle covers — inclusive on both ends. Used for the
   // cover sheet copy and the bundle-id hash. Pass ISO date strings
@@ -75,6 +85,11 @@ export interface GenerateBundleArgs {
   endDate:          string
   csPermits:        CSEntry[]
   hotWorkPermits:   HotWorkEntry[]
+  // Already-hashed sealed placard signoffs in the same window. The
+  // caller (compliance-bundle page) loads these directly from
+  // loto_signed_pdf_artifacts; we don't re-hash here because the
+  // canonical hash was computed at sign-off time, not now.
+  signedArtifacts?: SignedPlacardArtifactEntry[]
   // Org name shown on the cover. Falls back to a generic label if not
   // configured. Pulled from loto_org_config when the caller has it.
   orgName?:         string
@@ -261,6 +276,38 @@ function drawCover(
     })
     ctx.y -= 10
   })
+
+  // Sealed LOTO placard signoffs — same chain-of-custody scheme as the
+  // permits above, but the hash is computed at sign-off time and stored
+  // in loto_signed_pdf_artifacts. The cover sheet surfaces it so an
+  // auditor sees one unified verification list.
+  const artifacts = args.signedArtifacts ?? []
+  if (artifacts.length > 0) {
+    if (ctx.y - 60 < MARGIN + 24) {
+      ctx.page = ctx.doc.addPage([PAGE_W, PAGE_H])
+      ctx.pageNo += 1
+      ctx.drawFooter(ctx)
+      ctx.y = PAGE_H - MARGIN
+    }
+    drawSectionBar(ctx, `Sealed placard signoffs (${artifacts.length})`)
+    artifacts.forEach((a, i) => {
+      if (ctx.y - 12 < MARGIN + 24) {
+        ctx.page = ctx.doc.addPage([PAGE_W, PAGE_H])
+        ctx.pageNo += 1
+        ctx.drawFooter(ctx)
+        ctx.y = PAGE_H - MARGIN
+      }
+      const date = a.signed_at.slice(0, 10)
+      const line = `${String(i + 1).padStart(3, ' ')}  ${a.equipment_id}  ${date}  ${a.signer_typed_name}`
+      ctx.page.drawText(sanitizeForWinAnsi(line), {
+        x: MARGIN, y: ctx.y - 9, size: 7, font: ctx.bold, color: NAVY,
+      })
+      ctx.page.drawText(sanitizeForWinAnsi(a.sha256_hex), {
+        x: MARGIN, y: ctx.y - 18, size: 6.5, font: ctx.font, color: MUTED,
+      })
+      ctx.y -= 22
+    })
+  }
 }
 
 // Compute a deterministic bundle ID — the SHA-256 of the manifest's
