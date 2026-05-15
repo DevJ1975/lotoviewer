@@ -9,13 +9,45 @@
       "href":     "/loto",
       "wikiPage": "apps/web/app/wiki/loto/page.tsx",
       "sources":  [
-        "apps/web/app/loto/**",
-        "apps/web/app/equipment/**",
+        "apps/web/app/loto/page.tsx",
+        "apps/web/app/loto/manual/**",
+        "apps/web/app/equipment/[id]/page.tsx",
         "apps/web/app/departments/**",
         "apps/web/app/print/**",
         "apps/web/app/import/**",
         "apps/web/app/decommission/**",
-        "apps/web/app/status/**"
+        "apps/web/app/status/page.tsx"
+      ]
+    },
+    {
+      "slug":     "loto-compliance",
+      "module":   "LOTO Compliance",
+      "tagline":  "29 CFR 1910.147 — periodic inspections, group permits, contractors, competency, retraining.",
+      "category": "safety",
+      "href":     "/admin/periodic-inspections",
+      "wikiPage": "apps/web/app/wiki/loto-compliance/page.tsx",
+      "sources":  [
+        "apps/web/app/admin/periodic-inspections/**",
+        "apps/web/app/admin/contractors/**",
+        "apps/web/app/admin/competency-exams/**",
+        "apps/web/app/loto/group-permits/**",
+        "apps/web/app/loto/compliance-manual/**",
+        "apps/web/app/equipment/[id]/periodic-inspection/**",
+        "apps/web/app/equipment/[id]/walkdown/**",
+        "apps/web/migrations/140_loto_energy_step_types.sql",
+        "apps/web/migrations/141_loto_periodic_inspections.sql",
+        "apps/web/migrations/142_loto_retraining_triggers.sql",
+        "apps/web/migrations/143_loto_group_permits.sql",
+        "apps/web/migrations/144_loto_contractor_companies.sql",
+        "apps/web/migrations/145_loto_competency_exams.sql",
+        "apps/web/migrations/146_loto_walkdown_checklists.sql",
+        "packages/core/src/lotoProcedureValidation.ts",
+        "packages/core/src/lotoPeriodicInspection.ts",
+        "packages/core/src/lotoRetraining.ts",
+        "packages/core/src/lotoGroupPermit.ts",
+        "packages/core/src/contractorCompliance.ts",
+        "packages/core/src/lotoCompetencyExam.ts",
+        "packages/core/src/lotoWalkdownChecklist.ts"
       ]
     },
     {

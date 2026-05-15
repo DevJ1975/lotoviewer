@@ -1,10 +1,23 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-05'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-05-15'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.0',
+    date:    '2026-05-15',
+    changes: [
+      'Energy steps now carry a §147(c)(4)(ii) phase tag (shutdown / ' +
+      'isolate / release stored energy / lockout / verify zero energy). ' +
+      'The placard refuses to publish when a required phase is missing.',
+      'See the new LOTO Compliance wiki (/wiki/loto-compliance) and ' +
+      'manual (/loto/compliance-manual) for the full §147 surface — ' +
+      'periodic inspections, walkdown checklists, competency exams, ' +
+      'group permits, contractor companies, retraining triggers.',
+    ],
+  },
   {
     version: '1.0.0',
     date:    '2026-05-05',
