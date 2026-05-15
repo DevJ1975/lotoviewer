@@ -20,6 +20,38 @@
       ]
     },
     {
+      "slug":     "integrity-compliance",
+      "module":   "Integrity & Compliance",
+      "tagline":  "Chain-of-custody PDF hashes, retention + legal holds, CAPA verification, hierarchy of controls, ISO 45001 evidence, AI severity prediction.",
+      "category": "admin",
+      "href":     "/admin/iso45001",
+      "wikiPage": "apps/web/app/wiki/integrity-compliance/page.tsx",
+      "sources":  [
+        "apps/web/app/admin/signed-artifacts/**",
+        "apps/web/app/admin/retention/**",
+        "apps/web/app/admin/iso45001/**",
+        "apps/web/app/admin/integrity-manual/**",
+        "apps/web/app/api/incidents/[id]/capas/**",
+        "apps/web/app/api/incidents/[id]/predict-escalation/**",
+        "apps/web/app/incidents/[id]/_components/CapaPanel.tsx",
+        "apps/web/app/incidents/[id]/_components/EscalationPredictionPanel.tsx",
+        "apps/web/lib/sealedArtifact.ts",
+        "apps/web/lib/pdfIso45001Evidence.ts",
+        "apps/web/migrations/150_loto_signed_pdf_artifacts.sql",
+        "apps/web/migrations/151_tenant_retention_and_legal_holds.sql",
+        "apps/web/migrations/152_incident_capas.sql",
+        "apps/web/migrations/153_risk_controls_hierarchy.sql",
+        "apps/web/migrations/154_iso45001_clause_evidence.sql",
+        "apps/web/migrations/155_incident_predictions.sql",
+        "packages/core/src/signedArtifactHash.ts",
+        "packages/core/src/retentionPolicy.ts",
+        "packages/core/src/incidentCapa.ts",
+        "packages/core/src/hazardControls.ts",
+        "packages/core/src/iso45001.ts",
+        "packages/core/src/incidentEscalation.ts"
+      ]
+    },
+    {
       "slug":     "loto-compliance",
       "module":   "LOTO Compliance",
       "tagline":  "29 CFR 1910.147 — periodic inspections, group permits, contractors, competency, retraining.",
