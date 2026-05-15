@@ -3,13 +3,15 @@ import type { DepartmentStats, LotoReview } from '@soteria/core/types'
 
 // Renames every equipment row in oldName to newName via a single bulk PATCH.
 // No-ops if the new name is empty or unchanged. Throws on Supabase error.
-export async function renameDepartment(oldName: string, newName: string): Promise<void> {
+export async function renameDepartment(oldName: string, newName: string, tenantId: string): Promise<void> {
   const trimmed = newName.trim()
   if (!trimmed || trimmed === oldName) return
+  if (!tenantId) throw new Error('No active tenant selected.')
 
   const { error } = await supabase
     .from('loto_equipment')
     .update({ department: trimmed })
+    .eq('tenant_id', tenantId)
     .eq('department', oldName)
 
   if (error) throw new Error(error.message)

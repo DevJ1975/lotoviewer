@@ -110,11 +110,6 @@ describe('POST /api/superadmin/tenants/[number]/members (invite)', () => {
       tenantName:   'Snak King',
       tempPassword: 'TempPass123!',
     }))
-    // Copy/paste fields piggyback the same invite-text renderer so the
-    // superadmin can manually re-send the message if it lands in junk.
-    expect(body.copyPasteSubject).toBe("You're invited to Snak King on SoteriaField")
-    expect(body.copyPasteMessage).toContain('jane@x.com')
-    expect(body.copyPasteMessage).toContain('TempPass123!')
   })
 
   it('existing auth user without a matching profile: attaches membership instead of failing createUser', async () => {

@@ -98,6 +98,22 @@ describe('resolveLandingPath', () => {
     expect(resolveLandingPath(t)).toBe('/loto')
   })
 
+  it('ignores protocol-relative override paths', () => {
+    const t = tenant({
+      modules:  ONLY_LOTO_MODULES,
+      settings: { default_landing_path: '//evil.com/login' },
+    })
+    expect(resolveLandingPath(t)).toBe('/loto')
+  })
+
+  it('ignores override paths for disabled modules', () => {
+    const t = tenant({
+      modules:  ONLY_LOTO_MODULES,
+      settings: { default_landing_path: '/confined-spaces/status' },
+    })
+    expect(resolveLandingPath(t)).toBe('/loto')
+  })
+
   it('ignores an empty-string override', () => {
     const t = tenant({
       modules:  ONLY_LOTO_MODULES,

@@ -6,6 +6,10 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react'
 import { superadminJson } from '@/lib/superadminFetch'
 import { getModules, type FeatureCategory, type FeatureDef } from '@soteria/core/features'
+import {
+  TOOLBOX_TALK_INDUSTRY_OPTIONS,
+  type ToolboxTalkIndustry,
+} from '@/lib/toolboxTalkPacks'
 
 // Create a new tenant. Submits to /api/superadmin/tenants which uses
 // requireSuperadmin() for both the env-allowlist check and the DB-flag
@@ -34,6 +38,8 @@ const DEFAULT_MODULES: Record<string, boolean> = {
   'confined-spaces':          true,
   'hot-work':                 true,
   chemicals:                  true,
+  'hazardous-waste':          true,
+  'toolbox-talks':            true,
   'reports-scorecard':        true,
   'reports-compliance-bundle':true,
   'reports-inspector':        true,
@@ -65,6 +71,7 @@ export default function NewTenantPage() {
   const [slug,    setSlug]    = useState('')
   const [slugTouched, setSlugTouched] = useState(false)
   const [isDemo,  setIsDemo]  = useState(false)
+  const [toolboxIndustry, setToolboxIndustry] = useState<ToolboxTalkIndustry>('general')
   const [modules, setModules] = useState<Record<string, boolean>>(() => ({ ...DEFAULT_MODULES }))
   const [submitting, setSubmitting] = useState(false)
   const [error,      setError]      = useState<string | null>(null)
@@ -104,7 +111,13 @@ export default function NewTenantPage() {
       '/api/superadmin/tenants',
       {
         method: 'POST',
-        body:   JSON.stringify({ name: trimmedName, slug, is_demo: isDemo, modules }),
+        body:   JSON.stringify({
+          name: trimmedName,
+          slug,
+          is_demo: isDemo,
+          modules,
+          settings: { toolbox_industry: toolboxIndustry },
+        }),
       },
     )
     if (!result.ok || !result.body) {
@@ -215,6 +228,36 @@ export default function NewTenantPage() {
                   ))}
                 </div>
               </div>
+            ))}
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">
+            Toolbox talk package
+          </legend>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+            Selects the AI topic pack and writing guidance used by the scheduled toolbox-talk generator.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {TOOLBOX_TALK_INDUSTRY_OPTIONS.map(option => (
+              <label
+                key={option.value}
+                className="flex items-start gap-2 p-3 rounded-md border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 cursor-pointer transition-colors"
+              >
+                <input
+                  type="radio"
+                  name="toolbox_industry"
+                  value={option.value}
+                  checked={toolboxIndustry === option.value}
+                  onChange={() => setToolboxIndustry(option.value)}
+                  className="mt-0.5 h-4 w-4 border-slate-300 dark:border-slate-700 text-brand-navy focus:ring-brand-navy"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-slate-800 dark:text-slate-200">{option.label}</span>
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-400 leading-snug">{option.description}</span>
+                </span>
+              </label>
             ))}
           </div>
         </fieldset>

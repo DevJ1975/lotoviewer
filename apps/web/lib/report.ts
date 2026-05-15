@@ -20,7 +20,7 @@ export interface ReportInput {
   equipment:      Equipment[]
   decommissioned: ReadonlySet<string>
   reviews:        LotoReview[]
-  facility?:      string  // default "Snak King"
+  facility?:      string
 }
 
 // ------------------------------ colors & layout ------------------------------
@@ -354,7 +354,7 @@ export async function generateStatusReport(input: ReportInput): Promise<Uint8Arr
   const fonts: Fonts = { regular, bold }
 
   const { equipment, decommissioned, reviews } = input
-  const facility    = input.facility ?? 'Snak King'
+  const facility    = input.facility ?? 'Facility'
   const generatedAt = new Date()
 
   const active     = equipment.filter(eq => !decommissioned.has(eq.equipment_id))

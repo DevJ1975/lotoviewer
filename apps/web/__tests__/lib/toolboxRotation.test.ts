@@ -147,4 +147,11 @@ describe('pickTopicsForDates', () => {
     const picks = pickTopicsForDates(sorted, dates)
     expect(picks.map(p => p.date)).toEqual(['2026-05-07', '2026-05-04', '2026-05-09'])
   })
+
+  it('assigns a unique topic to every day in the two-week window when enough topics exist', () => {
+    const topics = Array.from({ length: 14 }, (_, i) => ({ id: `topic-${i + 1}` }))
+    const dates = Array.from({ length: 14 }, (_, i) => `2026-05-${String(i + 1).padStart(2, '0')}`)
+    const picks = pickTopicsForDates(topics, dates)
+    expect(picks.map(p => p.topic.id)).toEqual(topics.map(t => t.id))
+  })
 })

@@ -126,12 +126,6 @@ export const sendInviteEmailMock = vi.fn().mockResolvedValue(true)
 vi.mock('@/lib/email/sendInvite', () => ({
   sendInviteEmail: sendInviteEmailMock,
   computeLoginUrl: () => 'https://soteriafield.app',
-  renderInviteText: (args: { to: string; tenantName?: string; tempPassword: string }) => ({
-    subject: args.tempPassword
-      ? `You're invited to ${args.tenantName ?? 'SoteriaField'} on SoteriaField`
-      : `You've been added to ${args.tenantName ?? 'SoteriaField'} on SoteriaField`,
-    text: `Mock invite body for ${args.to} (tenant=${args.tenantName ?? '-'}, tempPassword=${args.tempPassword || '(none)'})`,
-  }),
 }))
 
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }))

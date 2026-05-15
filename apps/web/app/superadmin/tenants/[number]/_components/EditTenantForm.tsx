@@ -5,6 +5,11 @@ import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { superadminJson } from '@/lib/superadminFetch'
 import { getModules, type FeatureCategory, type FeatureDef } from '@soteria/core/features'
 import type { Tenant, TenantStatus } from '@soteria/core/types'
+import {
+  TOOLBOX_TALK_INDUSTRY_OPTIONS,
+  normalizeToolboxTalkIndustry,
+  type ToolboxTalkIndustry,
+} from '@/lib/toolboxTalkPacks'
 import { Section } from './Section'
 
 const CATEGORY_LABELS: Record<FeatureCategory, string> = {
@@ -47,21 +52,26 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
   const [status,  setStatus]  = useState<TenantStatus>(tenant.status)
   const [isDemo,  setIsDemo]  = useState(tenant.is_demo)
   const [modules, setModules] = useState<Record<string, boolean>>(() => seedModulesFromTenant(tenant))
-  // tenants.settings is a free-form jsonb. We expose three known
+  // tenants.settings is a free-form jsonb. We expose known
   // keys with explicit form fields; everything else is editable as
   // raw JSON below. Saving merges the explicit fields back into
   // the JSON before PATCH so the server receives one settings
   // object.
-  // The textarea shows every settings key EXCEPT anthropic_api_key —
-  // that one has its own dedicated input above. Stripping it keeps a
-  // single source of truth for the key and avoids the "edit it in both
-  // places, hope they agree" trap.
+  // The textarea shows every settings key EXCEPT dedicated controls
+  // like anthropic_api_key and toolbox_industry. Stripping them keeps
+  // one source of truth for each setting and avoids the "edit it in
+  // both places, hope they agree" trap.
   const [settingsJson, setSettingsJson] = useState<string>(() => {
-    const { anthropic_api_key: _drop, ...rest } = (tenant.settings ?? {}) as Record<string, unknown>
-    void _drop
+    const { anthropic_api_key: _dropKey, toolbox_industry: _dropIndustry, ...rest } = (tenant.settings ?? {}) as Record<string, unknown>
+    void _dropKey
+    void _dropIndustry
     return JSON.stringify(rest, null, 2)
   })
   const [settingsError, setSettingsError] = useState<string | null>(null)
+
+  const [toolboxIndustry, setToolboxIndustry] = useState<ToolboxTalkIndustry>(() =>
+    normalizeToolboxTalkIndustry((tenant.settings as Record<string, unknown> | null | undefined)?.toolbox_industry),
+  )
 
   // Dedicated Anthropic API key input. Mirrors a single key inside
   // tenants.settings.anthropic_api_key. Pulled out of the free-form
@@ -79,18 +89,20 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
   // Re-seed when the parent re-fetches the tenant (e.g. after logo
   // upload). Keep the user's in-flight checkbox edits if they've
   // touched the form — otherwise the re-fetch would clobber them.
-  // We use an effect with a tenant.id dep; checkboxes don't refresh
-  // unless the underlying tenant identity changes.
+  // The parent owns the canonical tenant object; when it refreshes, the
+  // form should mirror the server copy again.
   useEffect(() => {
     setModules(seedModulesFromTenant(tenant))
-    const { anthropic_api_key: _drop, ...rest } = (tenant.settings ?? {}) as Record<string, unknown>
-    void _drop
+    const { anthropic_api_key: _dropKey, toolbox_industry: _dropIndustry, ...rest } = (tenant.settings ?? {}) as Record<string, unknown>
+    void _dropKey
+    void _dropIndustry
     setSettingsJson(JSON.stringify(rest, null, 2))
     setSettingsError(null)
+    setToolboxIndustry(normalizeToolboxTalkIndustry((tenant.settings as Record<string, unknown> | null | undefined)?.toolbox_industry))
     const v = (tenant.settings as Record<string, unknown> | null | undefined)?.['anthropic_api_key']
     setAnthropicKey(typeof v === 'string' ? v : '')
     setKeyError(null)
-  }, [tenant.id])
+  }, [tenant])
 
   const [saving,      setSaving]      = useState(false)
   const [saveError,   setSaveError]   = useState<string | null>(null)
@@ -129,6 +141,8 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
       setSaving(false)
       return
     }
+
+    parsedSettings = { ...parsedSettings, toolbox_industry: toolboxIndustry }
 
     // Anthropic key validation. Empty = remove override (env fallback);
     // non-empty must look like a real key. Server enforces the same
@@ -274,12 +288,40 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
         )}
       </Section>
 
+      <Section title="Toolbox talk package">
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+          Selects the AI topic pack and writing guidance used by the scheduled toolbox-talk generator.
+          Stored under <code className="font-mono text-[11px]">settings.toolbox_industry</code>.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {TOOLBOX_TALK_INDUSTRY_OPTIONS.map(option => (
+            <label
+              key={option.value}
+              className="flex items-start gap-2 p-3 rounded-md border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 cursor-pointer transition-colors"
+            >
+              <input
+                type="radio"
+                name="toolbox_industry"
+                value={option.value}
+                checked={toolboxIndustry === option.value}
+                onChange={() => { setToolboxIndustry(option.value); setSaveSuccess(false) }}
+                className="mt-0.5 h-4 w-4 border-slate-300 dark:border-slate-700 text-brand-navy focus:ring-brand-navy"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium text-slate-800 dark:text-slate-200">{option.label}</span>
+                <span className="block text-[11px] text-slate-500 dark:text-slate-400 leading-snug">{option.description}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </Section>
+
       <Section title="Settings (advanced)">
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
           Free-form JSON. Common keys: <code className="font-mono text-[11px]">default_landing_path</code>,
           {' '}<code className="font-mono text-[11px]">risk_band_scheme</code>,
           {' '}<code className="font-mono text-[11px]">risk_acceptance_threshold</code>.
-          The <code className="font-mono text-[11px]">anthropic_api_key</code> is edited above and is hidden here on purpose.
+          The <code className="font-mono text-[11px]">anthropic_api_key</code> and <code className="font-mono text-[11px]">toolbox_industry</code> keys are edited above and hidden here on purpose.
           See <code className="font-mono text-[11px]">tenants.settings</code> in the schema.
         </p>
         <textarea

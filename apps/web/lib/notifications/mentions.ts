@@ -16,6 +16,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 export interface MentionCandidate {
   user_id:    string
+  member_id?:  string | null
   handle:     string             // canonical lowercase token used in @-text
   full_name:  string | null
   email:      string | null
@@ -71,6 +72,71 @@ export async function resolveMentions({
 }: ResolveOpts): Promise<MentionCandidate[]> {
   if (tokens.length === 0) return []
 
+  try {
+    const fromMembers = await resolveMemberMentions({ client, tenantId, tokens })
+    if (fromMembers.length > 0) return fromMembers
+  } catch (error) {
+    if (!isMissingMembersSchema(error)) throw error
+  }
+
+  return resolveLegacyMentions({ client, tenantId, tokens })
+}
+
+function isMissingMembersSchema(error: unknown): boolean {
+  const err = error as { code?: string; message?: string; details?: string; hint?: string } | null
+  const code = err?.code ?? ''
+  if (['42P01', '42703', 'PGRST202', 'PGRST204', 'PGRST205'].includes(code)) return true
+  const text = `${err?.message ?? ''} ${err?.details ?? ''} ${err?.hint ?? ''}`
+  return /members|v_member_roster|schema cache|relation .* does not exist|column .* does not exist/i.test(text)
+}
+
+async function resolveMemberMentions({
+  client, tenantId, tokens,
+}: ResolveOpts): Promise<MentionCandidate[]> {
+  const { data, error } = await client
+    .from('v_member_roster')
+    .select('member_id, profile_id, handle, display_name, email, avatar_url, status')
+    .eq('tenant_id', tenantId)
+    .eq('status', 'active')
+  if (error) throw error
+
+  const byHandle = new Map<string, MentionCandidate[]>()
+  for (const row of (data ?? []) as Array<{
+    member_id: string
+    profile_id: string | null
+    handle: string
+    display_name: string | null
+    email: string | null
+    avatar_url: string | null
+  }>) {
+    if (!row.profile_id) continue
+    const handles = new Set<string>()
+    if (row.handle) handles.add(row.handle.toLowerCase())
+    const slug = slugifyHandle(row.display_name)
+    if (slug) handles.add(slug)
+    const local = emailLocalPart(row.email)
+    if (local) handles.add(local)
+    for (const h of handles) {
+      const list = byHandle.get(h) ?? []
+      list.push({
+        user_id:    row.profile_id,
+        member_id:  row.member_id,
+        handle:     h,
+        full_name:  row.display_name,
+        email:      row.email,
+        avatar_url: row.avatar_url,
+      })
+      byHandle.set(h, list)
+    }
+  }
+
+  return uniqueResolved(tokens, byHandle)
+}
+
+export async function resolveLegacyRoster(
+  client: SupabaseClient,
+  tenantId: string,
+): Promise<MentionCandidate[]> {
   type Row = {
     user_id: string
     profiles:
@@ -84,29 +150,45 @@ export async function resolveMentions({
     .eq('tenant_id', tenantId)
   if (error || !data) return []
 
-  // Pre-compute candidate handles per row.
-  const byHandle = new Map<string, MentionCandidate[]>()
-  for (const row of data as Row[]) {
+  return (data as Row[]).flatMap(row => {
     const p = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
-    if (!p) continue
+    if (!p) return []
+    const handle = slugifyHandle(p.full_name) || emailLocalPart(p.email) || row.user_id.slice(0, 8)
+    return [{
+      user_id:    row.user_id,
+      member_id:  null,
+      handle,
+      full_name:  p.full_name,
+      email:      p.email,
+      avatar_url: p.avatar_url,
+    }]
+  })
+}
+
+async function resolveLegacyMentions({
+  client, tenantId, tokens,
+}: ResolveOpts): Promise<MentionCandidate[]> {
+  const roster = await resolveLegacyRoster(client, tenantId)
+
+  const byHandle = new Map<string, MentionCandidate[]>()
+  for (const candidate of roster) {
     const handles = new Set<string>()
-    const slug = slugifyHandle(p.full_name)
+    const slug = slugifyHandle(candidate.full_name)
     if (slug) handles.add(slug)
-    const local = emailLocalPart(p.email)
+    const local = emailLocalPart(candidate.email)
     if (local) handles.add(local)
+    if (candidate.handle) handles.add(candidate.handle)
     for (const h of handles) {
       const list = byHandle.get(h) ?? []
-      list.push({
-        user_id:    row.user_id,
-        handle:     h,
-        full_name:  p.full_name,
-        email:      p.email,
-        avatar_url: p.avatar_url,
-      })
+      list.push({ ...candidate, handle: h })
       byHandle.set(h, list)
     }
   }
 
+  return uniqueResolved(tokens, byHandle)
+}
+
+function uniqueResolved(tokens: string[], byHandle: Map<string, MentionCandidate[]>): MentionCandidate[] {
   const out: MentionCandidate[] = []
   const seenUserIds = new Set<string>()
   for (const tok of tokens) {

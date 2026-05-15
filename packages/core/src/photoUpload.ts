@@ -79,6 +79,7 @@ export async function uploadPhotoForEquipment(
   const { data: current, error: selectError } = await supabase
     .from('loto_equipment')
     .select('equip_photo_url, iso_photo_url, needs_equip_photo, needs_iso_photo')
+    .eq('tenant_id', tenantId)
     .eq('equipment_id', equipmentId)
     .single()
 
@@ -104,6 +105,7 @@ export async function uploadPhotoForEquipment(
       photo_status: newStatus,
       updated_at: new Date().toISOString(),
     })
+    .eq('tenant_id', tenantId)
     .eq('equipment_id', equipmentId)
 
   if (patchError) throw new Error(patchError.message)
@@ -113,6 +115,7 @@ export async function uploadPhotoForEquipment(
   const { data: fresh } = await supabase
     .from('loto_equipment')
     .select('equip_photo_url, iso_photo_url, photo_status, needs_equip_photo, needs_iso_photo')
+    .eq('tenant_id', tenantId)
     .eq('equipment_id', equipmentId)
     .single()
   if (fresh) {
@@ -126,6 +129,7 @@ export async function uploadPhotoForEquipment(
       await supabase
         .from('loto_equipment')
         .update({ photo_status: actualStatus, updated_at: new Date().toISOString() })
+        .eq('tenant_id', tenantId)
         .eq('equipment_id', equipmentId)
     }
   }

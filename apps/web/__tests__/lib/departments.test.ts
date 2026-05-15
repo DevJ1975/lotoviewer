@@ -16,7 +16,7 @@ vi.mock('@/lib/supabase', () => ({
 function makeUpdateChain(error: { message: string } | null) {
   const chain: Record<string, unknown> = {}
   chain.update = vi.fn().mockReturnValue(chain)
-  chain.eq     = vi.fn().mockResolvedValue({ error })
+  chain.eq     = vi.fn((column: string) => column === 'department' ? Promise.resolve({ error }) : chain)
   return chain
 }
 
@@ -29,20 +29,21 @@ describe('renameDepartment', () => {
     const chain = makeUpdateChain(null)
     vi.mocked(supabase.from).mockReturnValue(chain as unknown as ReturnType<typeof supabase.from>)
 
-    await renameDepartment('Electrical', '  Electric  ')
+    await renameDepartment('Electrical', '  Electric  ', 'tenant-1')
 
     expect(supabase.from).toHaveBeenCalledWith('loto_equipment')
     expect(chain.update).toHaveBeenCalledWith({ department: 'Electric' })
+    expect(chain.eq).toHaveBeenCalledWith('tenant_id', 'tenant-1')
     expect(chain.eq).toHaveBeenCalledWith('department', 'Electrical')
   })
 
   it('no-ops when the new name is empty', async () => {
-    await renameDepartment('Electrical', '   ')
+    await renameDepartment('Electrical', '   ', 'tenant-1')
     expect(supabase.from).not.toHaveBeenCalled()
   })
 
   it('no-ops when the new name matches the old name after trimming', async () => {
-    await renameDepartment('Electrical', '  Electrical  ')
+    await renameDepartment('Electrical', '  Electrical  ', 'tenant-1')
     expect(supabase.from).not.toHaveBeenCalled()
   })
 
@@ -50,7 +51,7 @@ describe('renameDepartment', () => {
     const chain = makeUpdateChain({ message: 'permission denied' })
     vi.mocked(supabase.from).mockReturnValue(chain as unknown as ReturnType<typeof supabase.from>)
 
-    await expect(renameDepartment('A', 'B')).rejects.toThrow('permission denied')
+    await expect(renameDepartment('A', 'B', 'tenant-1')).rejects.toThrow('permission denied')
   })
 })
 

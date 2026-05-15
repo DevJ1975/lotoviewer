@@ -8,12 +8,21 @@ import type { HomeMetrics } from '@soteria/core/homeMetrics'
 
 function metrics(partial: Partial<HomeMetrics> = {}): HomeMetrics {
   return {
+    modules: {
+      confinedSpaces: true,
+      loto:           true,
+      hotWork:        true,
+      incidents:      true,
+    },
     commandCenterSafetyAlerts: [],
     activePermits:        [],
     activePermitCount:    0,
     expiredPermitCount:   0,
     peopleInSpaces:       0,
     totalEquipment:       0,
+    photoCompleteCount:   0,
+    photoPartialCount:    0,
+    photoMissingCount:    0,
     photoCompletionPct:   0,
     recentActivity:       [],
     expiringSoonPermits:  [],
@@ -68,7 +77,7 @@ describe('deriveCommandCenterItems', () => {
     expect(items[2].id).toBe('active-confined-space-permits')
   })
 
-  it('keeps incident-backed safety alerts out of program signal cards', () => {
+  it('surfaces incident-backed safety alerts as command-center signals', () => {
     const items = deriveCommandCenterItems(metrics({
       commandCenterSafetyAlerts: [{
         id:              'alert-1',
@@ -89,8 +98,14 @@ describe('deriveCommandCenterItems', () => {
     }))
 
     expect(items.map(i => i.id)).toEqual([
+      'incident-safety-alerts',
       'expired-confined-space-permits',
     ])
+    expect(items[0]).toMatchObject({
+      tone:  'critical',
+      value: '1',
+      href:  '/incidents/incident-1',
+    })
   })
 
   it('surfaces low LOTO photo coverage only when equipment exists', () => {
@@ -149,7 +164,7 @@ describe('highestCommandCenterTone', () => {
       expiredPermitCount: 1,
     }))
 
-    expect(items.map(i => i.tone)).toEqual(['critical'])
+    expect(items.map(i => i.tone)).toEqual(['critical', 'warning'])
     expect(highestCommandCenterTone(items)).toBe('critical')
   })
 })

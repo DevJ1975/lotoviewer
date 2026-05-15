@@ -1,18 +1,20 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
-import { requireTenantMember } from '@/lib/auth/tenantGate'
+import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
+import { dateWindow, localDateString, tenantTimeZone } from '@/lib/toolboxDates'
+import { TOOLBOX_TALK_ARCHIVE_DAYS, TOOLBOX_TALK_DAYS_AHEAD, TOOLBOX_TALKS_MODULE_ID } from '@/lib/toolboxTalkPacks'
 
 // GET /api/toolbox-talks
 // GET /api/toolbox-talks?archive=1
 //
 // Default mode lists the tenant's toolbox talks: today's talk (if
-// any), the next 6 days of upcoming generated talks, and the most
+// any), the next 13 days of upcoming generated talks, and the most
 // recent 30 historical talks.
 //
-// `?archive=1` widens the past list to up to 365 talks (one year of
-// history) for the on-page archive section. The list page renders
-// the archive lazily — it's hidden behind a "View archive" toggle
-// to keep the default response fast.
+// `?archive=1` widens the past list to up to one year of history for
+// the on-page archive section. The list page renders the archive
+// lazily — it's hidden behind a "View archive" toggle to keep the
+// default response fast.
 //
 // Read-only. Generation is owned by /api/cron/generate-toolbox-talks
 // and there is intentionally no client-facing POST/PATCH on this
@@ -22,19 +24,18 @@ import { requireTenantMember } from '@/lib/auth/tenantGate'
 export const runtime = 'nodejs'
 
 export async function GET(req: Request) {
-  const gate = await requireTenantMember(req)
+  const gate = await requireTenantModuleMember(req, TOOLBOX_TALKS_MODULE_ID)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   const url     = new URL(req.url)
   const archive = url.searchParams.get('archive') === '1'
 
   try {
-    const today = new Date()
-    today.setUTCHours(0, 0, 0, 0)
-    const todayStr = today.toISOString().slice(0, 10)
-    const horizon  = new Date(today.getTime() + 6 * 86_400_000).toISOString().slice(0, 10)
+    const timeZone = tenantTimeZone(gate.tenantSettings)
+    const todayStr = localDateString(new Date(), timeZone)
+    const horizon  = dateWindow(todayStr, TOOLBOX_TALK_DAYS_AHEAD).at(-1) ?? todayStr
 
-    // Upcoming = today and the next 6 days (the cron's window).
+    // Upcoming = today and the next 13 days (the cron's window).
     const upcomingQuery = gate.authedClient
       .from('toolbox_talks')
       .select('id, talk_date, title, topic_id, generated_at')
@@ -47,7 +48,7 @@ export async function GET(req: Request) {
     // is here to keep the default page response under ~30 KB; the
     // archive opt-in sends one round-trip when the user actually
     // wants the full library.
-    const pastLimit = archive ? 365 : 30
+    const pastLimit = archive ? TOOLBOX_TALK_ARCHIVE_DAYS : 30
     const pastQuery = gate.authedClient
       .from('toolbox_talks')
       .select('id, talk_date, title, topic_id, generated_at, toolbox_talk_signatures(count)')
@@ -63,6 +64,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       today_str: todayStr,
+      time_zone: timeZone,
       upcoming:  upcoming.data ?? [],
       past:      past.data ?? [],
       archive,

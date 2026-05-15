@@ -1,8 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { UserRoundCog } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
-import { timeOfDayGreeting } from '@/components/Greeting'
+import { useTenant } from '@/components/TenantProvider'
+import { dailyQuote, timeOfDayGreeting } from '@/components/Greeting'
 import { fetchHomeMetrics, type HomeMetrics } from '@soteria/core/homeMetrics'
 import ThemeToggle from '@/components/ThemeToggle'
 import { Hero }                 from './Hero'
@@ -48,6 +51,9 @@ const METRICS_REFRESH_MS = 60 * 1000   // permits / equipment / activity: every 
 
 export default function MultiModuleDashboard() {
   const { profile, email } = useAuth()
+  const { tenant, loading: tenantLoading } = useTenant()
+  const tenantId = tenant?.id ?? null
+  const tenantModules = tenant?.modules ?? null
   const firstName = (profile?.full_name?.trim().split(/\s+/)[0]) || (email?.split('@')[0]) || 'there'
 
   const [now, setNow] = useState<Date>(() => new Date())
@@ -57,6 +63,11 @@ export default function MultiModuleDashboard() {
   }, [])
 
   const greeting = useMemo(() => timeOfDayGreeting(now), [now])
+  const quoteDateKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`
+  const quote = useMemo(() => {
+    const [year, month, day] = quoteDateKey.split('-').map(Number)
+    return dailyQuote(new Date(year!, month!, day!)).text
+  }, [quoteDateKey])
   const dateLabel = useMemo(() =>
     now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }),
   [now])
@@ -70,9 +81,11 @@ export default function MultiModuleDashboard() {
   const [refreshing, setRefreshing] = useState(false)
 
   const loadMetrics = useCallback(async () => {
+    if (tenantLoading) return
+    if (!tenantId) return
     setRefreshing(true)
     try {
-      const m = await fetchHomeMetrics()
+      const m = await fetchHomeMetrics(tenantModules, tenantId)
       setMetrics(m)
       setMetricsError(null)
       setMetricsLoadedAt(Date.now())
@@ -82,22 +95,30 @@ export default function MultiModuleDashboard() {
     } finally {
       setRefreshing(false)
     }
-  }, [])
+  }, [tenantLoading, tenantModules, tenantId])
 
   useEffect(() => {
+    if (tenantLoading) return
     loadMetrics()
     const id = setInterval(loadMetrics, METRICS_REFRESH_MS)
     return () => clearInterval(id)
-  }, [loadMetrics])
+  }, [tenantLoading, loadMetrics])
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
-      <Hero greeting={greeting} firstName={firstName} dateLabel={dateLabel} timeLabel={timeLabel} />
+    <div className="animate-panel-in mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">
+      <Hero greeting={greeting} firstName={firstName} dateLabel={dateLabel} timeLabel={timeLabel} quote={quote} />
 
       {/* Theme switch — right-aligned strip directly under the hero so
           it's easy to find without crowding the greeting band. The
           toggle component handles its own light/dark coloring. */}
       <div className="flex items-center justify-end gap-2">
+        <Link
+          href="/settings/profile"
+          className="motion-press inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:border-brand-navy/30 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-brand-yellow/30 dark:hover:bg-slate-800"
+        >
+          <UserRoundCog className="h-4 w-4 text-brand-navy dark:text-brand-yellow" />
+          My Profile
+        </Link>
         <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Theme</span>
         <ThemeToggle />
       </div>

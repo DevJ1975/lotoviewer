@@ -36,16 +36,22 @@ export default function DepartmentDetailPage() {
   const { reviews, fetchReviews, submitReview } = useReviews(dept)
 
   useEffect(() => {
+    if (!tenantId) {
+      setEquipment([])
+      setLoading(false)
+      return
+    }
     supabase
       .from('loto_equipment')
       .select('*')
+      .eq('tenant_id', tenantId)
       .eq('department', dept)
       .then(({ data }) => {
         if (data) setEquipment(data as Equipment[])
         setLoading(false)
       })
     fetchReviews()
-  }, [dept, fetchReviews])
+  }, [dept, fetchReviews, tenantId])
 
   async function handleApproved(signatureDataUrl: string, reviewerName: string, signedAt: string) {
     if (!tenantId) {
@@ -71,6 +77,7 @@ export default function DepartmentDetailPage() {
           const { data: { publicUrl } } = supabase.storage.from('loto-photos').getPublicUrl(storagePath)
           const { error: patchErr } = await supabase.from('loto_equipment')
             .update({ signed_placard_url: publicUrl })
+            .eq('tenant_id', tenantId)
             .eq('equipment_id', eq.equipment_id)
           if (patchErr) failed++
           else signed++
@@ -82,7 +89,11 @@ export default function DepartmentDetailPage() {
       if (!mountedRef.current) return
 
       // Refresh equipment list to pick up signed_placard_url
-      const { data: fresh } = await supabase.from('loto_equipment').select('*').eq('department', dept)
+      const { data: fresh } = await supabase
+        .from('loto_equipment')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .eq('department', dept)
       if (fresh && mountedRef.current) setEquipment(fresh as Equipment[])
 
       // Download merged signed PDF for the reviewer

@@ -7,6 +7,10 @@ vi.mock('@/lib/supabase', () => ({
   supabase: { from: vi.fn() },
 }))
 
+vi.mock('@/components/TenantProvider', () => ({
+  useTenant: () => ({ tenantId: 'tenant-1', loading: false }),
+}))
+
 vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) =>
     <a href={href}>{children}</a>,
@@ -45,6 +49,7 @@ describe('DepartmentsPage', () => {
   it('shows loading spinner while fetching', () => {
     const hangingChain: Record<string, unknown> = { then: () => new Promise(() => {}) }
     hangingChain.select = vi.fn().mockReturnValue(hangingChain)
+    hangingChain.eq     = vi.fn().mockReturnValue(hangingChain)
     hangingChain.order  = vi.fn().mockReturnValue(hangingChain)
     hangingChain.limit  = vi.fn().mockReturnValue(hangingChain)
     vi.mocked(supabase.from).mockReturnValue(hangingChain as unknown as ReturnType<typeof supabase.from>)

@@ -7,6 +7,7 @@ import PlacardView from '@/components/placard/PlacardView'
 import Toast from '@/components/Toast'
 import { useToast } from '@/hooks/useToast'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
+import { useTenant } from '@/components/TenantProvider'
 
 interface Props {
   equipment: Equipment | null
@@ -20,6 +21,7 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
   const [fullEquipment, setFullEquipment] = useState<Equipment | null>(null)
   const [loading, setLoading]             = useState(false)
   const { toast, showToast, clearToast }  = useToast()
+  const { tenantId }                      = useTenant()
 
   // Depend only on the equipment_id, NOT the whole equipment object.
   // `equipment` changes reference on every realtime tick (the parent's
@@ -33,7 +35,7 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
   // warning block correctly, so it's owned here not inherited.
   const equipmentId = equipment?.equipment_id
   useEffect(() => {
-    if (!equipmentId) {
+    if (!equipmentId || !tenantId) {
       setSteps([])
       setFullEquipment(null)
       return
@@ -44,11 +46,13 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
       supabase
         .from('loto_equipment')
         .select('*')
+        .eq('tenant_id', tenantId)
         .eq('equipment_id', equipmentId)
         .single(),
       supabase
         .from('loto_energy_steps')
         .select('*')
+        .eq('tenant_id', tenantId)
         .eq('equipment_id', equipmentId)
         .order('energy_type', { ascending: true })
         .order('step_number', { ascending: true }),
@@ -79,15 +83,17 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
       setLoading(false)
     })
     return () => { cancelled = true }
-  }, [equipmentId])
+  }, [equipmentId, tenantId])
 
   if (!equipment) {
     return (
       <aside className="shrink-0 w-full lg:w-[520px] bg-slate-100 dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex items-center justify-center">
-        <div className="text-center px-6">
-          <div className="w-14 h-14 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-2xl mx-auto mb-3">📋</div>
-          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Select an equipment item</p>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Its placard will appear here.</p>
+        <div className="text-center px-6 max-w-xs">
+          <span className="placard-label-lg text-slate-500 dark:text-slate-500">Standby</span>
+          <p className="stencil-title text-base text-slate-700 dark:text-slate-300 mt-2">No item selected</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+            Pick an equipment row from the register and its placard will load on this panel.
+          </p>
         </div>
       </aside>
     )
@@ -103,14 +109,20 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
 
   return (
     <aside className="shrink-0 w-full lg:w-[520px] bg-slate-100 dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex flex-col">
-      <div className="px-4 py-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 shrink-0">
+      {/* Header reads like a real placard banner — hazard-yellow rail
+          on the left, stencil ID, monospaced placard ID echoes the
+          register's row treatment. */}
+      <div className="relative px-4 py-3 pl-5 bg-white dark:bg-slate-900 border-b-2 border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 shrink-0">
+        <span aria-hidden="true" className="absolute left-0 top-2 bottom-2 w-1 rounded-r-sm bg-brand-yellow" />
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Placard Preview</p>
-          <h2 className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{equipment.equipment_id}</h2>
+          <p className="placard-label text-slate-500 dark:text-slate-500">Placard Preview</p>
+          <h2 className="placard-numeric text-base font-black text-slate-950 dark:text-slate-50 truncate mt-0.5">
+            {equipment.equipment_id}
+          </h2>
         </div>
         <Link
           href={href}
-          className="text-xs font-semibold bg-brand-navy text-white px-3 py-1.5 rounded-lg hover:bg-brand-navy/90 transition-colors whitespace-nowrap"
+          className="placard-label rounded-sm bg-brand-navy text-white px-3 py-1.5 hover:bg-brand-navy/90 transition-colors whitespace-nowrap"
         >
           Open ›
         </Link>

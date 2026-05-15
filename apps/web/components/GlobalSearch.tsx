@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useDebounce } from '@/hooks/useDebounce'
 import StatusBadge from './StatusBadge'
 import type { Equipment } from '@soteria/core/types'
+import { useTenant } from '@/components/TenantProvider'
 
 type SearchResult = Pick<Equipment, 'equipment_id' | 'description' | 'department' | 'photo_status'>
 
@@ -18,6 +19,7 @@ export default function GlobalSearch() {
   const router                = useRouter()
   const containerRef          = useRef<HTMLDivElement>(null)
   const inputRef              = useRef<HTMLInputElement>(null)
+  const { tenantId }          = useTenant()
 
   const reqToken = useRef(0)
 
@@ -26,7 +28,7 @@ export default function GlobalSearch() {
     // ILIKE wildcards (% _ \). Safer than escaping and preserves most useful input.
     const sanitized = debouncedQuery.replace(/[%_\\,()]/g, ' ').trim()
 
-    if (sanitized.length < 2) {
+    if (!tenantId || sanitized.length < 2) {
       setResults([])
       setOpen(false)
       return
@@ -37,6 +39,7 @@ export default function GlobalSearch() {
     supabase
       .from('loto_equipment')
       .select('equipment_id, description, department, photo_status')
+      .eq('tenant_id', tenantId)
       .or(
         `equipment_id.ilike.%${sanitized}%,` +
         `description.ilike.%${sanitized}%,` +
@@ -50,7 +53,7 @@ export default function GlobalSearch() {
         setOpen(true)
         setLoading(false)
       })
-  }, [debouncedQuery])
+  }, [debouncedQuery, tenantId])
 
   // Close on outside click
   useEffect(() => {

@@ -11,15 +11,22 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { buildDeptStats } from '@/lib/utils'
 import { useVisibilityRefetch } from '@/hooks/useVisibilityRefetch'
 import { StatusSkeleton } from '@/components/Skeleton'
+import { useTenant } from '@/components/TenantProvider'
 
 export default function StatusPage() {
   const [equipment, setEquipment]     = useState<Equipment[]>([])
   const [loading, setLoading]         = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const { tenantId, loading: tenantLoading } = useTenant()
 
   const fetchData = useCallback(async () => {
+    if (!tenantId) {
+      setEquipment([])
+      setLoading(tenantLoading)
+      return
+    }
     try {
-      const data = await loadAllEquipment()
+      const data = await loadAllEquipment(tenantId)
       setEquipment(data)
       setLastUpdated(new Date())
     } catch (err) {
@@ -27,14 +34,15 @@ export default function StatusPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [tenantId, tenantLoading])
 
   useEffect(() => {
     fetchData()
+    if (!tenantId) return
 
     const channel = supabase
-      .channel('loto_equipment_status')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'loto_equipment' }, fetchData)
+      .channel(`loto_equipment_status:${tenantId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'loto_equipment', filter: `tenant_id=eq.${tenantId}` }, fetchData)
       .subscribe()
 
     const interval = setInterval(fetchData, 30_000)
@@ -43,7 +51,7 @@ export default function StatusPage() {
       supabase.removeChannel(channel)
       clearInterval(interval)
     }
-  }, [fetchData])
+  }, [fetchData, tenantId])
 
   // The 30 s poll + realtime channel keep this view fresh on an open tab,
   // but both are missed while the tab is suspended (iPad backgrounded for

@@ -43,11 +43,19 @@ export default function AppChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const { userId, loading } = useAuth()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
   const hideChrome = PUBLIC_PATHS.has(pathname) || (!loading && !userId)
 
   // Close the drawer on route change so navigating from inside the drawer
   // doesn't leave it sitting open over the new page.
   useEffect(() => { setDrawerOpen(false) }, [pathname])
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   // Ask the browser to keep our IndexedDB / Cache Storage alive under
   // storage pressure. Fire once per session after the user is authenticated.
@@ -66,12 +74,18 @@ export default function AppChrome({ children }: { children: ReactNode }) {
   return (
     <SidebarProvider open={drawerOpen} onOpenChange={setDrawerOpen}>
       <header
-        className="bg-gradient-to-b from-brand-navy to-[#162F58] border-b border-white/5 shadow-[0_1px_0_0_rgba(255,255,255,0.04)] sticky top-0 z-40 backdrop-saturate-150"
+        className={`sticky top-0 z-40 border-b border-[#0a1322]/80 bg-[#0E1A2E] text-white steel-scanlines motion-reactive ${
+          scrolled ? 'shadow-[0_12px_28px_rgba(2,8,23,0.34)]' : 'shadow-[0_1px_0_rgba(255,255,255,0.04)]'
+        }`}
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
+        {/* Hazard stripe — universal safety vocabulary. Sits above the
+            nav so the very first pixels of the app read "industrial
+            ops tool" rather than "generic SaaS dashboard." */}
+        <div className="h-1.5 hazard-stripe-thin" aria-hidden="true" />
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14 gap-2 sm:gap-4">
-            <SidebarTrigger className="shrink-0 rounded-lg text-white/85 hover:bg-white/10 hover:text-white active:bg-white/15 focus-visible:ring-white/40">
+          <div className={`flex items-center justify-between gap-2 sm:gap-4 motion-reactive ${scrolled ? 'h-12' : 'h-14'}`}>
+            <SidebarTrigger className="motion-press shrink-0 rounded-md border border-white/10 bg-white/[0.06] text-white/85 hover:bg-white/[0.12] hover:text-white active:bg-white/15 focus-visible:ring-white/40">
               <Menu className="h-5 w-5" />
             </SidebarTrigger>
 
@@ -94,7 +108,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
           </div>
 
           {/* Mobile search row — shows below md */}
-          <div className="md:hidden pb-2">
+          <div className="md:hidden pb-2 animate-panel-in">
             <GlobalSearch />
           </div>
         </div>
@@ -102,10 +116,12 @@ export default function AppChrome({ children }: { children: ReactNode }) {
 
       {/* Module accent strip — picks up the active module's color so the
           user always knows which module they're in, even when scrolling
-          through long content. Sticks below the chrome header. */}
+          through long content. Sticks below the chrome header. The
+          +0.375rem accounts for the hazard stripe sitting above the
+          main header row. */}
       <div
-        className={`h-[3px] sticky z-30 transition-colors ${accentClasses.strip}`}
-        style={{ top: 'calc(3.5rem + env(safe-area-inset-top))' }}
+        className={`h-[3px] sticky z-30 motion-reactive ${accentClasses.strip}`}
+        style={{ top: `calc(${scrolled ? '3.375rem' : '3.875rem'} + env(safe-area-inset-top))` }}
         aria-hidden="true"
       />
 
@@ -122,7 +138,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
       <SuperadminImpersonationBanner />
       <ReleaseNotesBanner />
       <StorageQuotaBanner />
-      <main>{children}</main>
+      <main className="ops-shell min-h-[calc(100vh-12rem)]">{children}</main>
       <InstallPrompt />
       <UpdateBanner />
       <UnloadGuard />
@@ -131,22 +147,25 @@ export default function AppChrome({ children }: { children: ReactNode }) {
       <AssistantDock />
 
       <footer
-        className="mt-12 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800/60 py-4 text-xs text-slate-500 dark:text-slate-400"
+        className="mt-0 border-t-2 border-slate-300/80 bg-white/90 py-4 text-xs text-slate-500 backdrop-blur dark:border-slate-800/70 dark:bg-slate-950/90 dark:text-slate-400"
         style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
       >
+        {/* Hazard-stripe cap mirrors the one at the top of the header,
+            framing the entire shell like a piece of safety equipment. */}
+        <div className="-mt-4 mb-4 h-1 hazard-stripe-thin opacity-80" aria-hidden="true" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <span className="tracking-tight">
-            Powered by <span className="font-medium text-slate-700 dark:text-slate-300">Trainovate Technologies</span>
+          <span className="placard-label text-slate-500 dark:text-slate-500">
+            Powered by <span className="text-slate-700 dark:text-slate-300">Trainovate Technologies</span>
             <span className="text-slate-400 dark:text-slate-500"> · © 2026</span>
           </span>
           <span className="flex items-center gap-3">
-            <span className="font-mono tabular-nums text-[11px] text-slate-400 dark:text-slate-500" title={VERSION_LINE}>
+            <span className="placard-numeric text-[11px] text-slate-400 dark:text-slate-500" title={VERSION_LINE}>
               {VERSION_LINE}
             </span>
             <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
-            <Link href="/privacy" className="hover:text-slate-800 dark:hover:text-slate-200 transition-colors">Privacy</Link>
+            <Link href="/privacy" className="placard-label hover:text-slate-800 dark:hover:text-slate-200 transition-colors">Privacy</Link>
             <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
-            <Link href="/terms"   className="hover:text-slate-800 dark:hover:text-slate-200 transition-colors">Terms</Link>
+            <Link href="/terms"   className="placard-label hover:text-slate-800 dark:hover:text-slate-200 transition-colors">Terms</Link>
           </span>
         </div>
       </footer>

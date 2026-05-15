@@ -6,6 +6,7 @@ import { loadPrintableEquipment } from '@/lib/queries/equipment'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import StatusBadge from '@/components/StatusBadge'
+import { useTenant } from '@/components/TenantProvider'
 
 const PAGE_SIZE = 25
 
@@ -17,13 +18,19 @@ export default function PrintQueuePage() {
   const [page, setPage]           = useState(1)
   const [groupByDept, setGroupByDept] = useState(false)
   const [merging, setMerging]     = useState<string | null>(null)
+  const { tenantId, loading: tenantLoading } = useTenant()
 
   useEffect(() => {
-    loadPrintableEquipment()
+    if (!tenantId) {
+      setEquipment([])
+      setLoading(tenantLoading)
+      return
+    }
+    loadPrintableEquipment(tenantId)
       .then(setEquipment)
       .catch(err => console.error('[print] fetch failed', err))
       .finally(() => setLoading(false))
-  }, [])
+  }, [tenantId, tenantLoading])
 
   const filtered = useMemo(() => {
     if (!search.trim()) return equipment

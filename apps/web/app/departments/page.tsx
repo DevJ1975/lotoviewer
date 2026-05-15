@@ -11,6 +11,7 @@ import { buildDeptStats } from '@/lib/utils'
 import { applyRenameToStats, applyRenameToReviews } from '@/lib/departments'
 import RenameDepartmentModal from '@/components/RenameDepartmentModal'
 import { useVisibilityRefetch } from '@/hooks/useVisibilityRefetch'
+import { useTenant } from '@/components/TenantProvider'
 
 type LatestReviewMap = Record<string, LotoReview>
 
@@ -19,15 +20,24 @@ export default function DepartmentsPage() {
   const [latestReviews, setLatestReviews] = useState<LatestReviewMap>({})
   const [loading, setLoading]             = useState(true)
   const [renamingDept, setRenamingDept]   = useState<string | null>(null)
+  const { tenantId, loading: tenantLoading } = useTenant()
 
   const fetchData = useCallback(async () => {
+    if (!tenantId) {
+      setStats([])
+      setLatestReviews({})
+      setLoading(tenantLoading)
+      return
+    }
     const [equipRes, reviewRes] = await Promise.all([
       supabase
         .from('loto_equipment')
-        .select('department, photo_status'),
+        .select('department, photo_status')
+        .eq('tenant_id', tenantId),
       supabase
         .from('loto_reviews')
         .select('*')
+        .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false })
         .limit(200),
     ])
@@ -41,7 +51,7 @@ export default function DepartmentsPage() {
     setLatestReviews(map)
 
     setLoading(false)
-  }, [])
+  }, [tenantId, tenantLoading])
 
   useEffect(() => { fetchData() }, [fetchData])
   useVisibilityRefetch(fetchData)
@@ -128,9 +138,10 @@ export default function DepartmentsPage() {
         })}
       </div>
 
-      {renamingDept && (
+      {renamingDept && tenantId && (
         <RenameDepartmentModal
           currentName={renamingDept}
+          tenantId={tenantId}
           onClose={() => setRenamingDept(null)}
           onRenamed={newName => handleRenamed(renamingDept, newName)}
         />

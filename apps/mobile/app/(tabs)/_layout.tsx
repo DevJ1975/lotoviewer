@@ -61,6 +61,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="hazardous-waste"
+        options={{
+          title: 'Waste',
+          tabBarIcon: ({ color }) => <TabBarIcon name="recycle" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="loto-devices"
         options={{
           title: 'Devices',

@@ -2,8 +2,9 @@
 
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, type ReactNode } from 'react'
-import { Loader2 } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
+import { useTenant } from '@/components/TenantProvider'
+import OpsSpinner from '@/components/OpsSpinner'
 
 // Routes that should render WITHOUT requiring an authenticated session.
 //
@@ -38,8 +39,10 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   const router   = useRouter()
   const pathname = usePathname()
   const { userId, profile, loading } = useAuth()
+  const { role, loading: tenantLoading } = useTenant()
 
   const isPublic = isPublicPath(pathname)
+  const isTenantAdmin = role === 'owner' || role === 'admin'
 
   useEffect(() => {
     if (loading) return
@@ -53,8 +56,11 @@ export default function AuthGate({ children }: { children: ReactNode }) {
       router.replace('/welcome')
       return
     }
-    // Gate /admin routes to admin users.
-    if (userId && pathname.startsWith('/admin') && profile && !profile.is_admin) {
+    // Gate /admin routes to active-tenant admins. The server remains the
+    // source of truth; this only prevents obvious client-side navigation.
+    if (userId && pathname.startsWith('/admin') && profile && !profile.is_admin && !profile.is_superadmin) {
+      if (tenantLoading) return
+      if (isTenantAdmin) return
       router.replace('/')
     }
     // Gate /superadmin routes to superadmin users (the DB flag is the
@@ -62,12 +68,12 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     if (userId && pathname.startsWith('/superadmin') && profile && !profile.is_superadmin) {
       router.replace('/')
     }
-  }, [loading, userId, profile, pathname, isPublic, router])
+  }, [loading, tenantLoading, userId, profile, pathname, isPublic, isTenantAdmin, router])
 
-  if (loading) {
+  if (loading || (userId && pathname.startsWith('/admin') && tenantLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" />
+        <OpsSpinner size="lg" label="Authorizing" />
       </div>
     )
   }

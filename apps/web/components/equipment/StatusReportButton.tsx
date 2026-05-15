@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { FileText, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Equipment, LotoReview } from '@soteria/core/types'
+import { useTenant } from '@/components/TenantProvider'
 
 interface Props {
   equipment:      Equipment[]
@@ -13,14 +14,20 @@ interface Props {
 export default function StatusReportButton({ equipment, decommissioned }: Props) {
   const [busy, setBusy]   = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { tenantId, tenant } = useTenant()
 
   const generate = async () => {
+    if (!tenantId) {
+      setError('No active tenant selected.')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
       const { data: reviews, error: fetchErr } = await supabase
         .from('loto_reviews')
         .select('*')
+        .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false })
         .limit(500)
       if (fetchErr) throw new Error(fetchErr.message)
@@ -32,6 +39,7 @@ export default function StatusReportButton({ equipment, decommissioned }: Props)
         equipment,
         decommissioned,
         reviews: (reviews ?? []) as LotoReview[],
+        facility: tenant?.name,
       })
       downloadStatusReport(bytes)
     } catch (e) {

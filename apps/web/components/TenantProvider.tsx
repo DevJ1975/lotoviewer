@@ -11,6 +11,7 @@ import {
 } from 'react'
 import { supabase, ACTIVE_TENANT_KEY } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { isSelectableTenant } from '@/lib/tenantDisplay'
 import type { Tenant, TenantRole } from '@soteria/core/types'
 
 // Active tenant state for the signed-in user. Mounted under AuthProvider in
@@ -139,14 +140,14 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     }
     type Row = { role: TenantRole; tenants: Tenant | null }
     const rows = (data ?? []) as unknown as Row[]
-    const list = rows
-      .filter(r => r.tenants && !r.tenants.disabled_at)
-      .map(r => ({ ...(r.tenants as Tenant), role: r.role }))
+    const list = rows.flatMap(r =>
+      isSelectableTenant(r.tenants) ? [{ ...r.tenants, role: r.role }] : [],
+    )
     setAvailable(list)
 
     // Pick the active tenant. Three cases:
-    //   - stored is in the user's memberships → use it
-    //   - stored is set but NOT in memberships AND user is superadmin →
+    //   - stored is in the user's selectable memberships → use it
+    //   - stored is set but NOT in selectable memberships AND user is superadmin →
     //     keep it (the lazy externalTenant fetch will resolve the row)
     //   - stored is set but NOT in memberships AND user is NOT superadmin →
     //     fall back to first membership (or null)
@@ -164,9 +165,9 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     setLoading(false)
 
     // B3: only fires when a NON-superadmin had a previously-active
-    // tenant that disappeared from their memberships (disabled or
-    // member-removed). Superadmin's cross-tenant view is handled by
-    // the keepStoredForSuperadmin branch above.
+    // tenant that disappeared from their selectable memberships (disabled,
+    // archived, numberless, or member-removed). Superadmin's cross-tenant
+    // view is handled by the keepStoredForSuperadmin branch above.
     if (
       !isSuperadmin
       && stored
@@ -247,7 +248,16 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     if (externalTenant?.id === tenantId) return
     void supabase
       .from('tenants').select('*').eq('id', tenantId).maybeSingle()
-      .then(({ data }) => { if (data) setExternalTenant(data as Tenant) })
+      .then(({ data }) => {
+        const tenant = data as Tenant | null
+        if (isSelectableTenant(tenant)) {
+          setExternalTenant(tenant)
+          return
+        }
+        const fallback = available[0] ?? null
+        writeStoredTenantId(fallback?.id ?? null)
+        setTenantId(fallback?.id ?? null)
+      })
   }, [tenantId, available, externalTenant])
 
   const role = (tenant && 'role' in tenant ? tenant.role : null) as TenantRole | null

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Hash, Loader2 } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
-import { supabase } from '@/lib/supabase'
 import { Avatar } from '@/components/ui/Avatar'
 import ChannelSidebar from '@/components/chat/ChannelSidebar'
 import MessageList from '@/components/chat/MessageList'
@@ -16,6 +15,7 @@ import {
   markRead,
   type ChatChannelSummary, type ChatMessage, type ChatReactionAggregate,
 } from '@/lib/chat/client'
+import { searchMembers } from '@/lib/members/client'
 import type { MentionMember } from '@/components/MentionInput'
 
 // /chat — sidebar (channels + DMs) + active thread view.
@@ -47,26 +47,21 @@ export default function ChatPage() {
   // RLS-scoped query pattern from the actions page.
   const loadMembers = useCallback(async () => {
     if (!tenant?.id) return
-    const { data: mems } = await supabase
-      .from('tenant_memberships')
-      .select('user_id, profiles:profiles!inner(email, full_name, avatar_url)')
-      .eq('tenant_id', tenant.id)
-    type Row = {
-      user_id: string
-      profiles:
-        | { email: string | null; full_name: string | null; avatar_url: string | null }
-        | { email: string | null; full_name: string | null; avatar_url: string | null }[]
-        | null
-    }
-    const next: MentionMember[] = ((mems as Row[] | null) ?? []).map(m => {
-      const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles
-      return {
-        user_id:    m.user_id,
-        email:      p?.email ?? null,
-        full_name:  p?.full_name ?? null,
-        avatar_url: p?.avatar_url ?? null,
-      }
-    })
+    const roster = await searchMembers(tenant.id, { limit: 250 })
+    const next: MentionMember[] = roster
+      .filter(m => !!m.user_id)
+      .map(m => ({
+        user_id:          m.user_id as string,
+        member_id:        m.member_id,
+        handle:           m.handle,
+        email:            m.email,
+        full_name:        m.display_name,
+        avatar_url:       m.avatar_url,
+        position_title:   m.position_title,
+        department:       m.department,
+        shift_label:      m.shift_label,
+        readiness_status: m.readiness_status,
+      }))
     setMembers(next)
   }, [tenant])
 

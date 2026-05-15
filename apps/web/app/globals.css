@@ -16,6 +16,28 @@
 @theme {
   --color-brand-navy: #1B3A6B;
   --color-brand-yellow: #FFD900;
+  --color-ops-ink: #111827;
+  --color-ops-panel: #F8FAFC;
+  --color-ops-line: #CBD5E1;
+  --color-ops-surface: #FFFFFF;
+
+  /* Industrial palette. Steel + concrete neutrals with OSHA-coded
+     semantic colors. Used by the placard/tag surface utilities and
+     in module components that want to lean into the field-safety
+     visual language instead of generic SaaS neutrals. */
+  --color-steel-deep:   #0E1A2E;
+  --color-steel:        #1B2A44;
+  --color-steel-line:   #2A3B57;
+  --color-concrete-50:  #EEF1F4;
+  --color-concrete-100: #DDE3EA;
+  --color-concrete-200: #BFC8D2;
+  --color-concrete-300: #97A4B3;
+  --color-hazard-yellow:  #F5C400;
+  --color-hazard-amber:   #F59E0B;
+  --color-caution-orange: #EA580C;
+  --color-danger-red:     #C8102E;
+  --color-cleared-green:  #15803D;
+  --color-info-blue:      #1D4ED8;
 }
 
 @theme inline {
@@ -87,6 +109,15 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.75rem;
+  --ops-canvas: #eef3f8;
+  --ops-surface: #ffffff;
+  --ops-surface-raised: #fbfdff;
+  --ops-line: #cbd5e1;
+  --ops-line-strong: #94a3b8;
+  --ops-ink: #111827;
+  --ops-muted: #64748b;
+  --ops-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px rgba(15, 23, 42, 0.05);
+  --ops-shadow-hover: 0 8px 24px rgba(15, 23, 42, 0.09);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -121,6 +152,15 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
+  --ops-canvas: #07111f;
+  --ops-surface: #0f172a;
+  --ops-surface-raised: #111c31;
+  --ops-line: rgba(148, 163, 184, 0.24);
+  --ops-line-strong: rgba(203, 213, 225, 0.32);
+  --ops-ink: #f8fafc;
+  --ops-muted: #94a3b8;
+  --ops-shadow: 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 32px rgba(0, 0, 0, 0.26);
+  --ops-shadow-hover: 0 18px 44px rgba(0, 0, 0, 0.34);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
@@ -163,9 +203,70 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Concrete-tinted canvas with a faint grid — gives the app a
+       deliberate industrial substrate instead of the flat slate-50
+       that ships with every B2B React template. The grid lines are
+       barely visible (3% opacity) so they read as texture, not noise. */
+    background:
+      linear-gradient(180deg, rgba(14, 26, 46, 0.06), transparent 22rem),
+      repeating-linear-gradient(0deg,
+        rgba(15, 23, 42, 0.025) 0 1px,
+        transparent 1px 32px),
+      repeating-linear-gradient(90deg,
+        rgba(15, 23, 42, 0.025) 0 1px,
+        transparent 1px 32px),
+      var(--ops-canvas);
+  }
+  .dark body {
+    background:
+      linear-gradient(180deg, rgba(245, 196, 0, 0.045), transparent 22rem),
+      repeating-linear-gradient(0deg,
+        rgba(148, 163, 184, 0.05) 0 1px,
+        transparent 1px 32px),
+      repeating-linear-gradient(90deg,
+        rgba(148, 163, 184, 0.05) 0 1px,
+        transparent 1px 32px),
+      var(--ops-canvas);
   }
   html {
     @apply font-sans;
+  }
+
+  /* ── Industrial type ramp ─────────────────────────────────────
+     Uppercase, tracked-out labels read like real safety signage
+     and field placards — and they signal "this is an ops tool,
+     not a marketing site." Pair with the Inter variable font's
+     wider weights for a stencil-adjacent feel without shipping
+     a second webfont. */
+  .placard-label {
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: 0.6875rem;        /* 11px */
+    line-height: 1;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+  }
+  .placard-label-lg {
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: 0.8125rem;        /* 13px */
+    line-height: 1;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+  }
+  .stencil-title {
+    font-family: var(--font-sans);
+    font-weight: 900;
+    letter-spacing: -0.01em;
+    line-height: 1.05;
+    font-feature-settings: "ss02" on;
+  }
+  .placard-numeric {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
   }
 
   /* Dark-mode form-control defaults.
@@ -229,6 +330,409 @@
     background-image:
       url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='5' height='5'><path d='M0 5 L5 0 M-1 1 L1 -1 M4 6 L6 4' stroke='rgba(255,255,255,0.30)' stroke-width='1'/></svg>");
     background-size: 5px 5px;
+  }
+}
+
+@layer utilities {
+  .ops-shell {
+    background:
+      linear-gradient(180deg, rgba(27, 58, 107, 0.08), transparent 16rem),
+      var(--ops-canvas);
+  }
+
+  /* ── Hazard stripes ────────────────────────────────────────────
+     Diagonal yellow-and-black stripes are the universal safety
+     vocabulary (machine guards, lockout barriers, caution tape).
+     Use the thin variant as a 4-6px top/bottom border on chrome
+     headers, banners, and module headers; the bold variant for
+     callouts and high-attention banners. */
+  .hazard-stripe {
+    background-image: repeating-linear-gradient(
+      135deg,
+      #F5C400 0 14px,
+      #0E1A2E 14px 28px
+    );
+  }
+  .hazard-stripe-thin {
+    background-image: repeating-linear-gradient(
+      135deg,
+      #F5C400 0 8px,
+      #0E1A2E 8px 16px
+    );
+  }
+  .danger-stripe-thin {
+    background-image: repeating-linear-gradient(
+      135deg,
+      #C8102E 0 8px,
+      #1A1A1A 8px 16px
+    );
+  }
+
+  /* Steel scanline — subtle horizontal banding for hero/console
+     surfaces. Layer over a solid steel-deep background. */
+  .steel-scanlines {
+    background-image:
+      linear-gradient(180deg, rgba(255,255,255,0.04), transparent 60%),
+      repeating-linear-gradient(
+        0deg,
+        rgba(255,255,255,0.025) 0 1px,
+        transparent 1px 4px
+      );
+  }
+
+  /* ── Placard surface ────────────────────────────────────────────
+     Equipment-placard styled card: white surface, slightly heavier
+     bottom border (mimics a metal-mounted tag's shadow), and a
+     yellow accent strip available via the `placard-accent` modifier.
+     Sharper corners than shadcn defaults so it reads as utilitarian. */
+  .placard-surface {
+    background: var(--ops-surface);
+    border: 1px solid var(--ops-line);
+    border-bottom-width: 2px;
+    border-bottom-color: var(--ops-line-strong);
+    border-radius: 6px;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.7) inset,
+      0 1px 2px rgba(15, 23, 42, 0.06),
+      0 8px 20px -12px rgba(15, 23, 42, 0.18);
+  }
+  .placard-surface-interactive {
+    transition:
+      border-color 160ms ease,
+      box-shadow 160ms ease,
+      transform 160ms ease;
+  }
+  .placard-surface-interactive:hover {
+    border-color: var(--color-brand-navy);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.7) inset,
+      0 2px 4px rgba(15, 23, 42, 0.08),
+      0 14px 28px -14px rgba(27, 58, 107, 0.32);
+    transform: translateY(-2px);
+  }
+  .placard-corner-mark {
+    position: relative;
+  }
+  /* Subtle bolt-head / rivet marker in two corners — adds physical
+     placard feeling without an asset. Suppressed under reduced
+     transparency / forced-colors so it doesn't fight a11y modes. */
+  .placard-corner-mark::before,
+  .placard-corner-mark::after {
+    content: "";
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--ops-line-strong);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+    opacity: 0.55;
+    pointer-events: none;
+  }
+  .placard-corner-mark::before { top: 6px; left: 6px; }
+  .placard-corner-mark::after  { top: 6px; right: 6px; }
+
+  /* ── Safety tags ────────────────────────────────────────────────
+     Real LOTO tags taper at the top where the cable threads through.
+     We can't easily clip-path a card cheaply, but a flat colored band
+     with bold uppercase copy + tabular numbers reads unambiguously
+     as a safety tag. */
+  .safety-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 3px;
+    font-weight: 800;
+    font-size: 0.6875rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    line-height: 1;
+    border: 1px solid transparent;
+    font-variant-numeric: tabular-nums;
+  }
+  .safety-tag-danger {
+    background: var(--color-danger-red);
+    color: #fff;
+    border-color: rgba(0,0,0,0.18);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.18) inset;
+  }
+  .safety-tag-locked {
+    background: var(--color-hazard-yellow);
+    color: #0E1A2E;
+    border-color: rgba(14,26,46,0.35);
+  }
+  .safety-tag-cleared {
+    background: var(--color-cleared-green);
+    color: #fff;
+    border-color: rgba(0,0,0,0.18);
+  }
+  .safety-tag-caution {
+    background: var(--color-caution-orange);
+    color: #fff;
+    border-color: rgba(0,0,0,0.18);
+  }
+  .safety-tag-info {
+    background: #E0E7FF;
+    color: var(--color-info-blue);
+    border-color: rgba(29, 78, 216, 0.25);
+  }
+
+  /* Module-icon treatment. Lucide icons ship as thin (stroke-width
+     1.5/2) line marks — fine for utility icons, but they read as
+     generic "React-template" iconography when used as module
+     identity at tile size. Pumping the stroke up to ~2.25 inside a
+     module tile, and dropping a translucent fill behind closed
+     paths, brings them in line with the custom safety pictograms
+     in `components/icons/safety/`. Apply by adding the
+     `module-icon-tile` class to the wrapper element. */
+  .module-icon-tile svg {
+    stroke-width: 2.25;
+  }
+
+  /* ── Ops table treatment ────────────────────────────────────────
+     Dense data table for operational lists (equipment, permits,
+     audit log). Tight row heights, monospaced ID columns, sticky
+     header with a subtle hazard underline. Apply by wrapping the
+     <table> in `.ops-table`. Pairs with `.ops-table-id` on serial /
+     equipment-ID cells and `.ops-table-numeric` on count columns. */
+  .ops-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;          /* 13px — denser than the 14px shadcn default */
+  }
+  .ops-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--ops-surface);
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    font-weight: 800;
+    font-size: 0.6875rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ops-muted);
+    border-bottom: 2px solid var(--ops-line-strong);
+    white-space: nowrap;
+  }
+  /* Faint hazard-yellow underline echoes the placard rail vocabulary
+     without shouting at the user mid-scroll. */
+  .ops-table thead th::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -2px;
+    height: 2px;
+    background: linear-gradient(
+      90deg,
+      transparent 0,
+      var(--color-hazard-yellow, #F5C400) 10%,
+      var(--color-hazard-yellow, #F5C400) 90%,
+      transparent 100%
+    );
+    opacity: 0.18;
+    pointer-events: none;
+  }
+  .ops-table tbody td {
+    padding: 0.4375rem 0.75rem;     /* 7px vertical — denser than shadcn's 8px */
+    border-bottom: 1px solid var(--ops-line);
+    vertical-align: middle;
+    color: var(--ops-ink);
+  }
+  .ops-table tbody tr:hover td {
+    background: rgba(245, 196, 0, 0.06);   /* faint hazard-yellow row hover */
+  }
+  .ops-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .ops-table-id {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+    font-weight: 600;
+  }
+  .ops-table-numeric {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  /* Dense list row — for vertical-list panels (active permits,
+     recent activity) that aren't quite tables. Halves the default
+     shadcn spacing so the eye can scan more rows. */
+  .ops-list-row {
+    padding: 0.5rem 0.5rem;
+    border-bottom: 1px solid var(--ops-line);
+    transition: background-color 120ms ease;
+  }
+  .ops-list-row:last-child {
+    border-bottom: none;
+  }
+  .ops-list-row:hover {
+    background: rgba(245, 196, 0, 0.05);
+  }
+
+  /* Section heading for placard panels — a compact, tracked-out
+     uppercase title with an accent rail and right-aligned counter
+     slot. Use via the wrapper pattern, not as a single class. */
+  .placard-section-title {
+    color: var(--ops-ink);
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: 0.8125rem;
+    letter-spacing: 0.14em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+  .dark .placard-section-title {
+    color: rgb(241 245 249);
+  }
+
+  /* Corner bracket frame — adds a subtle HUD-style corner accent
+     to console panels (hero, command center). Pure CSS, no asset. */
+  .corner-brackets {
+    position: relative;
+  }
+  .corner-brackets::before,
+  .corner-brackets::after {
+    content: "";
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--color-hazard-yellow);
+    pointer-events: none;
+  }
+  .corner-brackets::before {
+    top: 10px; left: 10px;
+    border-right: none; border-bottom: none;
+  }
+  .corner-brackets::after {
+    bottom: 10px; right: 10px;
+    border-left: none; border-top: none;
+  }
+
+  .ops-surface {
+    background: var(--ops-surface);
+    border: 1px solid var(--ops-line);
+    box-shadow: var(--ops-shadow);
+  }
+
+  .ops-surface-raised {
+    background: var(--ops-surface-raised);
+    border: 1px solid var(--ops-line);
+    box-shadow: var(--ops-shadow);
+  }
+
+  .ops-surface-interactive {
+    transition:
+      border-color 160ms ease,
+      box-shadow 160ms ease,
+      transform 160ms ease,
+      background-color 160ms ease;
+  }
+
+  .ops-surface-interactive:hover {
+    border-color: var(--ops-line-strong);
+    box-shadow: var(--ops-shadow-hover);
+    transform: translateY(-1px);
+  }
+
+  .ops-section-title {
+    color: var(--ops-ink);
+    letter-spacing: 0;
+  }
+
+  .ops-muted {
+    color: var(--ops-muted);
+  }
+
+  .ops-scanline {
+    background-image:
+      repeating-linear-gradient(
+        90deg,
+        rgba(15, 23, 42, 0.055) 0,
+        rgba(15, 23, 42, 0.055) 1px,
+        transparent 1px,
+        transparent 18px
+      );
+  }
+
+  .motion-reactive {
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease,
+      color 160ms ease,
+      box-shadow 160ms ease,
+      transform 160ms ease,
+      opacity 160ms ease;
+  }
+
+  .motion-press {
+    transition: transform 90ms ease, box-shadow 160ms ease;
+  }
+
+  .motion-press:active {
+    transform: translateY(1px) scale(0.99);
+  }
+
+  .animate-panel-in {
+    animation: panel-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .animate-meter-fill {
+    transform-origin: left center;
+    animation: meter-fill 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .animate-gauge-sweep {
+    transform-origin: center;
+    animation: gauge-sweep 650ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes meter-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes gauge-sweep {
+  from {
+    stroke-dashoffset: var(--gauge-empty, 240);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-surface-interactive,
+  .motion-reactive,
+  .motion-press {
+    transition: none;
+  }
+
+  .ops-surface-interactive:hover,
+  .motion-press:active {
+    transform: none;
+  }
+
+  .animate-panel-in,
+  .animate-meter-fill,
+  .animate-gauge-sweep {
+    animation: none;
   }
 }
 /* Browser-print rules. Most printable artifacts (placard PDF, permit

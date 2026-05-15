@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import type { Equipment } from '@soteria/core/types'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useFormDraft } from '@/hooks/useFormDraft'
+import { useTenant } from '@/components/TenantProvider'
 
 interface Props {
   equipment: Equipment[]
@@ -31,7 +32,7 @@ const DEFAULT_DRAFT: DraftState = {
   prefixDirty: false, needsEquip: true, needsIso: true, notes: '',
 }
 
-const DRAFT_KEY = 'loto:addEquipmentDraft'
+const DRAFT_KEY_PREFIX = 'loto:addEquipmentDraft'
 
 function derivePrefix(equipmentId: string): string {
   return equipmentId.includes('-') ? equipmentId.split('-')[0] : equipmentId
@@ -49,8 +50,10 @@ function draftHasContent(d: DraftState): boolean {
 }
 
 export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Props) {
+  const { tenantId } = useTenant()
+  const draftKey = tenantId ? `${DRAFT_KEY_PREFIX}:${tenantId}` : DRAFT_KEY_PREFIX
   const [draft, setDraft, clearDraft, wasRestored] =
-    useFormDraft<DraftState>(DRAFT_KEY, DEFAULT_DRAFT)
+    useFormDraft<DraftState>(draftKey, DEFAULT_DRAFT)
 
   const [submitting,  setSubmitting]  = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
@@ -96,6 +99,7 @@ export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Prop
   const trimmedPrefix = draft.prefix.trim() || derivePrefix(trimmedId)
 
   const canSubmit =
+    Boolean(tenantId) &&
     trimmedId.length > 0 &&
     !existingIds.has(trimmedId) &&
     trimmedDesc.length > 0 &&
@@ -104,10 +108,15 @@ export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Prop
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit) return
+    if (!tenantId) {
+      setServerError('No active tenant selected.')
+      return
+    }
     setSubmitting(true)
     setServerError(null)
 
     const payload = {
+      tenant_id:          tenantId,
       equipment_id:       trimmedId,
       description:        trimmedDesc,
       department:         trimmedDept,
@@ -142,7 +151,7 @@ export default function AddEquipmentDialog({ equipment, onClose, onAdded }: Prop
     clearDraft()
     onAdded(data as Equipment)
     onClose()
-  }, [canSubmit, trimmedId, trimmedDesc, trimmedDept, trimmedPrefix, draft, clearDraft, onAdded, onClose])
+  }, [canSubmit, tenantId, trimmedId, trimmedDesc, trimmedDept, trimmedPrefix, draft, clearDraft, onAdded, onClose])
 
   const handleStartOver = useCallback(() => {
     clearDraft()

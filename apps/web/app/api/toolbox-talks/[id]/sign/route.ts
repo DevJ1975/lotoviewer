@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
-import { requireTenantMember } from '@/lib/auth/tenantGate'
+import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { verifyPngDataUrl } from '@/lib/security/magicBytes'
-import { sanitizeError } from '@/lib/security/sanitizeError'
+import { localDateString, tenantTimeZone } from '@/lib/toolboxDates'
+import { TOOLBOX_TALKS_MODULE_ID } from '@/lib/toolboxTalkPacks'
 
 // POST /api/toolbox-talks/[id]/sign
 //
@@ -43,7 +44,7 @@ interface SignBody {
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const gate = await requireTenantMember(req)
+  const gate = await requireTenantModuleMember(req, TOOLBOX_TALKS_MODULE_ID)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   const { id: talkId } = await ctx.params
@@ -87,12 +88,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // gate, but the explicit check returns a clean 404 to the UI).
     const { data: talk, error: talkErr } = await gate.authedClient
       .from('toolbox_talks')
-      .select('id')
+      .select('id, talk_date')
       .eq('id', talkId)
       .eq('tenant_id', gate.tenantId)
       .maybeSingle()
     if (talkErr) throw new Error(talkErr.message)
     if (!talk) return NextResponse.json({ error: 'Talk not found' }, { status: 404 })
+
+    const todayStr = localDateString(new Date(), tenantTimeZone(gate.tenantSettings))
+    if (String(talk.talk_date) > todayStr) {
+      return NextResponse.json({
+        error: `This talk is scheduled for ${talk.talk_date} and cannot be signed before that date.`,
+      }, { status: 409 })
+    }
 
     // Capture the signer's IP for the audit trail. Vercel forwards
     // the original request IP via x-forwarded-for; fall back to

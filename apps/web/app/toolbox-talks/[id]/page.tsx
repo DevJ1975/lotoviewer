@@ -27,11 +27,10 @@ import { renderTalkMd } from '@/lib/markdown'
 // localStorage under `toolboxTalkLang` so a foreman who reads in
 // Spanish doesn't have to re-flip every morning.
 //
-// Print + iPad: SoteriaField logo lives in a printable header band
-// that's visible on screen and on paper. The Print button calls
-// window.print(); the .print-hide / .print-only / .print-keep
-// classes (defined inline below) shape the output — sign-in roster
-// + body print; nav, modals, and the "Back to talks" link don't.
+// Print + retained records: the Print button fetches a purpose-built
+// PDF from /api/toolbox-talks/[id]/print. That keeps stored copies
+// professional and audit-readable instead of relying on a browser
+// screenshot of the screen DOM.
 
 type Lang = 'en' | 'es'
 
@@ -70,10 +69,13 @@ interface DetailResponse {
 export default function ToolboxTalkDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { tenant } = useTenant()
+  const tenantId = tenant?.id ?? null
   const { profile, email, userId } = useAuth()
+  const requestSeq = useRef(0)
 
   const [data,    setData]    = useState<DetailResponse | null>(null)
   const [error,   setError]   = useState<string | null>(null)
+  const [printLoading, setPrintLoading] = useState(false)
 
   const [signOpen,  setSignOpen]  = useState(false)
   const [coworker,  setCoworker]  = useState(false)
@@ -101,22 +103,30 @@ export default function ToolboxTalkDetailPage({ params }: { params: Promise<{ id
   }
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
+    const seq = ++requestSeq.current
     setError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+      const headers: Record<string, string> = { 'x-active-tenant': tenantId }
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
       const res  = await fetch(`/api/toolbox-talks/${id}`, { headers })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
-      setData(body as DetailResponse)
+      if (seq === requestSeq.current) setData(body as DetailResponse)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      if (seq === requestSeq.current) setError(e instanceof Error ? e.message : String(e))
     }
-  }, [tenant, id])
+  }, [tenantId, id])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    requestSeq.current += 1
+    setData(null)
+    setError(null)
+    setSignOpen(false)
+    setSubmitErr(null)
+    void load()
+  }, [tenantId, id, load])
 
   // Default the self-sign name to the auth profile's full_name on
   // open, so the worker doesn't have to retype what we already know.
@@ -141,7 +151,7 @@ export default function ToolboxTalkDetailPage({ params }: { params: Promise<{ id
   }
 
   async function submit() {
-    if (!tenant?.id) return
+    if (!tenantId || submitting) return
     setSubmitErr(null)
 
     const trimmed = signName.trim()
@@ -164,7 +174,7 @@ export default function ToolboxTalkDetailPage({ params }: { params: Promise<{ id
       const { data: { session } } = await supabase.auth.getSession()
       const headers: Record<string, string> = {
         'content-type':    'application/json',
-        'x-active-tenant': tenant.id,
+        'x-active-tenant': tenantId,
       }
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
 
@@ -191,6 +201,39 @@ export default function ToolboxTalkDetailPage({ params }: { params: Promise<{ id
     }
   }
 
+  async function openPrintPdf() {
+    if (!tenantId || !data) return
+    setPrintLoading(true)
+    setError(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: Record<string, string> = { 'x-active-tenant': tenantId }
+      if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
+
+      const res = await fetch(`/api/toolbox-talks/${id}/print?lang=${lang}`, { headers })
+      if (!res.ok) {
+        const body = await res.json().catch(() => null) as { error?: string } | null
+        throw new Error(body?.error ?? `PDF failed with HTTP ${res.status}`)
+      }
+      const blob = await res.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer')
+      if (!opened) {
+        const a = document.createElement('a')
+        a.href = objectUrl
+        a.download = `toolbox-talk-${data.talk.talk_date}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+      }
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setPrintLoading(false)
+    }
+  }
+
   if (!data && !error) {
     return (
       <div className="flex items-center justify-center min-h-[40vh]">
@@ -212,11 +255,9 @@ export default function ToolboxTalkDetailPage({ params }: { params: Promise<{ id
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6">
       {/* Print-only CSS. Inlined per-page so we don't pollute the
-          global stylesheet with rules that only matter on this
-          screen. `.print-hide` removes nav, modals, the Back link,
-          and any interactive controls; `.print-only` reveals
-          paper-only branding (the URL footer); the SoteriaLogo at
-          the top stays visible in both modes. */}
+          global stylesheet with fallback rules that only matter if a
+          user invokes the browser's native print command. The primary
+          print path is the generated PDF. */}
       <style jsx global>{`
         @media print {
           .print-hide { display: none !important; }
@@ -285,11 +326,12 @@ export default function ToolboxTalkDetailPage({ params }: { params: Promise<{ id
 
           <button
             type="button"
-            onClick={() => typeof window !== 'undefined' && window.print()}
+            onClick={() => void openPrintPdf()}
+            disabled={printLoading}
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 min-h-[44px] text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
           >
-            <Printer className="h-3.5 w-3.5" />
-            {labels.print}
+            {printLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
+            {printLoading ? labels.preparingPrint : labels.print}
           </button>
         </div>
       </header>
@@ -529,6 +571,7 @@ export default function ToolboxTalkDetailPage({ params }: { params: Promise<{ id
 const LABELS_EN = {
   heading:         'Toolbox Talk',
   print:           'Print',
+  preparingPrint:  'Preparing…',
   back:            'Back to talks',
   keyPoints:       'Key points',
   forSupervisor:   'For the supervisor',
@@ -542,6 +585,7 @@ const LABELS_EN = {
 const LABELS_ES = {
   heading:         'Plática de Seguridad',
   print:           'Imprimir',
+  preparingPrint:  'Preparando…',
   back:            'Volver a las pláticas',
   keyPoints:       'Puntos clave',
   forSupervisor:   'Para el supervisor',

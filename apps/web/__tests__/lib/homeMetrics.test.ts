@@ -394,6 +394,25 @@ describe('summarizeMetricsFromRows', () => {
       permits: [], equipRows, audits: [], spaceDescById: new Map(), nowMs: NOW,
     })
     expect(m.totalEquipment).toBe(4)
+    expect(m.photoCompleteCount).toBe(3)
+    expect(m.photoPartialCount).toBe(1)
+    expect(m.photoMissingCount).toBe(0)
+    expect(m.photoCompletionPct).toBe(75)
+  })
+
+  it('accepts pre-counted equipment photo totals without fetching equipment rows', () => {
+    const m = summarizeMetricsFromRows({
+      permits: [],
+      equipmentCounts: { total: 20, complete: 15, partial: 3, missing: 2 },
+      audits: [],
+      spaceDescById: new Map(),
+      nowMs: NOW,
+    })
+
+    expect(m.totalEquipment).toBe(20)
+    expect(m.photoCompleteCount).toBe(15)
+    expect(m.photoPartialCount).toBe(3)
+    expect(m.photoMissingCount).toBe(2)
     expect(m.photoCompletionPct).toBe(75)
   })
 

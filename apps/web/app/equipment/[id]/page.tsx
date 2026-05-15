@@ -18,6 +18,7 @@ import { parseAnnotations, type Annotation } from '@/lib/photoAnnotations'
 import { Sheet } from '@/components/ui/sheet'
 import HazardReportView from '@/components/HazardReport'
 import EquipmentReadinessPanel from '@/components/equipment/EquipmentReadinessPanel'
+import { useTenant } from '@/components/TenantProvider'
 
 export default function EquipmentDetailPage() {
   return (
@@ -52,13 +53,22 @@ function EquipmentDetail() {
 
   const { toast, showToast, clearToast } = useToast()
   const { recordVisit } = useSession()
+  const { tenantId, loading: tenantLoading } = useTenant()
 
   useEffect(() => { if (equipmentId) recordVisit(equipmentId) }, [equipmentId, recordVisit])
 
   const load = useCallback(async () => {
+    if (!tenantId) {
+      setEquipment(null)
+      setSteps([])
+      setNotFound(!tenantLoading)
+      setLoading(tenantLoading)
+      return
+    }
     const { data, error } = await supabase
       .from('loto_equipment')
       .select('*')
+      .eq('tenant_id', tenantId)
       .eq('equipment_id', equipmentId)
       .single()
 
@@ -74,6 +84,7 @@ function EquipmentDetail() {
     const { data: stepRows, error: stepErr } = await supabase
       .from('loto_energy_steps')
       .select('*')
+      .eq('tenant_id', tenantId)
       .eq('equipment_id', equipmentId)
       .order('energy_type', { ascending: true })
       .order('step_number', { ascending: true })
@@ -96,6 +107,7 @@ function EquipmentDetail() {
     const { data: siblings } = await supabase
       .from('loto_equipment')
       .select('equipment_id')
+      .eq('tenant_id', tenantId)
       .eq('department', eq.department)
       .order('equipment_id', { ascending: true })
     if (siblings) {
@@ -106,7 +118,7 @@ function EquipmentDetail() {
     }
 
     setLoading(false)
-  }, [equipmentId])
+  }, [equipmentId, tenantId, tenantLoading])
 
   useEffect(() => { load() }, [load])
 
@@ -115,8 +127,14 @@ function EquipmentDetail() {
   }
 
   async function handlePhotoUploaded(/* url */) {
+    if (!tenantId) return
     // Re-load equipment to pick up URL + photo_status changes from hook's DB patch
-    const { data } = await supabase.from('loto_equipment').select('*').eq('equipment_id', equipmentId).single()
+    const { data } = await supabase
+      .from('loto_equipment')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .eq('equipment_id', equipmentId)
+      .single()
     if (data) setEquipment(data as Equipment)
   }
 
@@ -214,6 +232,7 @@ function EquipmentDetail() {
                 const { data, error } = await supabase
                   .from('loto_equipment')
                   .update({ annotations: next, updated_at: new Date().toISOString() })
+                  .eq('tenant_id', tenantId)
                   .eq('equipment_id', equipmentId)
                   .select('*')
                   .single()
@@ -254,6 +273,7 @@ function EquipmentDetail() {
                 const { data, error } = await supabase
                   .from('loto_equipment')
                   .update({ iso_annotations: next, updated_at: new Date().toISOString() })
+                  .eq('tenant_id', tenantId)
                   .eq('equipment_id', equipmentId)
                   .select('*')
                   .single()

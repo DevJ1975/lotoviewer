@@ -146,6 +146,13 @@ function ReadinessHeader({ readiness }: { readiness: MyReadiness }) {
               <InfoPill icon={<Clock className="h-3.5 w-3.5" />} label={readiness.assignment.shiftLabel ?? 'Shift not assigned'} />
               <InfoPill icon={<CalendarClock className="h-3.5 w-3.5" />} label={readiness.assignment.serviceLabel ? `${readiness.assignment.serviceLabel} service` : 'Service date not set'} />
             </div>
+            <Link
+              href="/settings/profile"
+              className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 sm:hidden"
+            >
+              <UserRoundCog className="h-4 w-4" />
+              My Profile
+            </Link>
           </div>
         </div>
 
@@ -161,6 +168,13 @@ function ReadinessHeader({ readiness }: { readiness: MyReadiness }) {
           >
             <ShieldCheck className="h-4 w-4" />
             {readiness.primaryAction.label}
+          </Link>
+          <Link
+            href="/settings/profile"
+            className="mt-2 hidden min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 sm:inline-flex"
+          >
+            <UserRoundCog className="h-4 w-4" />
+            My Profile
           </Link>
           <div className="mt-4 grid grid-cols-3 gap-2 text-center">
             <MiniMetric label="Required" value={String(readiness.matrixPlaceholder.requiredTrainingCount)} />

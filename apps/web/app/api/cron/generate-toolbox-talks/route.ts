@@ -8,11 +8,19 @@ import { MalformedTenantKeyError } from '@/lib/ai/getTenantApiKey'
 import { SONNET } from '@/lib/ai/models'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { sortTopicsForRotation, pickTopicsForDates } from '@/lib/toolboxRotation'
+import { dateWindow, localDateString, tenantTimeZone } from '@/lib/toolboxDates'
+import { normalizeGeneratedToolboxTalk, parseGenerationBudget } from '@/lib/toolboxTalkGeneration'
+import {
+  TOOLBOX_TALK_DAYS_AHEAD,
+  normalizeToolboxTalkIndustry,
+  toolboxTalkIndustryPrompt,
+  type ToolboxTalkIndustry,
+} from '@/lib/toolboxTalkPacks'
 
 // Weekly toolbox-talk generation cron.
 //
 // For every tenant with the `toolbox-talks` module enabled, this job
-// makes sure the next 7 calendar days (today + the following 6) each
+// makes sure the next 14 calendar days (today + the following 13) each
 // have one generated talk. For any missing day it:
 //   1. Picks an unused topic from the tenant's industry pool
 //      (toolbox_topics rows). "Unused" = least-recently-delivered
@@ -41,21 +49,15 @@ import { sortTopicsForRotation, pickTopicsForDates } from '@/lib/toolboxRotation
 // before the Monday morning shift.
 
 export const runtime = 'nodejs'
-// Anthropic generation × N tenants × up to 7 days each can take a
+// Anthropic generation × N tenants × up to 14 days each can take a
 // while. Bumping max duration above the default 10s keeps a tenant
 // from getting half a week if their generation is slow.
 export const maxDuration = 300
 
 const MODULE_ID         = 'toolbox-talks'
-const DAYS_AHEAD        = 7
+const DAYS_AHEAD        = TOOLBOX_TALK_DAYS_AHEAD
 const AI_MODEL          = SONNET
-// Caps on AI output so a misbehaving model can't blow up a row. The
-// system prompt asks for 350-700 words (~5KB at typical density);
-// 20KB is generous headroom and still leaves the talk renderable
-// without scrolling forever.
-const BODY_MAX_CHARS    = 20_000
-const KEY_POINT_MAX_LEN = 200
-const KEY_POINTS_MAX    = 8
+const DEFAULT_GENERATION_BUDGET = 40
 // TODO(toolbox-talks-i18n): the cron currently produces English only.
 // Migration 111 added title_es/body_markdown_es/key_points_es/
 // delivery_notes_es columns and the detail page renders both. The
@@ -116,6 +118,14 @@ interface TenantRow {
   settings: Record<string, unknown> | null
 }
 
+interface GenerationResult {
+  generated: number
+  skipped:   number
+  failed:    number
+  deferred:  number
+  attempted: number
+}
+
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false
   let mismatch = 0
@@ -171,30 +181,42 @@ async function runCron(): Promise<NextResponse> {
       return NextResponse.json({ tenants_scanned: 0, talks_generated: 0, message: 'No tenants have the toolbox-talks module enabled.' })
     }
 
-    // 2. Build the date list once — today + 6.
-    const today = new Date()
-    today.setUTCHours(0, 0, 0, 0)
-    const dates: string[] = []
-    for (let i = 0; i < DAYS_AHEAD; i++) {
-      const d = new Date(today.getTime() + i * 86_400_000)
-      dates.push(d.toISOString().slice(0, 10))
-    }
-
     let totalGenerated = 0
     let totalFailed    = 0
-    const perTenantSummary: Array<{ tenant_id: string; generated: number; skipped: number; failed: number }> = []
+    let totalDeferred  = 0
+    let remainingBudget = parseGenerationBudget(
+      process.env.TOOLBOX_TALK_MAX_GENERATIONS_PER_RUN,
+      DEFAULT_GENERATION_BUDGET,
+    )
+    const perTenantSummary: Array<{ tenant_id: string; generated: number; skipped: number; failed: number; deferred: number }> = []
 
     for (const tenant of enabled) {
-      const result = await generateForTenant(tenant, dates)
+      if (remainingBudget <= 0) {
+        perTenantSummary.push({ tenant_id: tenant.id, generated: 0, skipped: 0, failed: 0, deferred: DAYS_AHEAD })
+        totalDeferred += DAYS_AHEAD
+        continue
+      }
+
+      const result = await generateForTenant(tenant, remainingBudget)
       totalGenerated += result.generated
       totalFailed    += result.failed
-      perTenantSummary.push({ tenant_id: tenant.id, ...result })
+      totalDeferred  += result.deferred
+      remainingBudget -= result.attempted
+      perTenantSummary.push({
+        tenant_id: tenant.id,
+        generated: result.generated,
+        skipped:   result.skipped,
+        failed:    result.failed,
+        deferred:  result.deferred,
+      })
     }
 
     return NextResponse.json({
       tenants_scanned: enabled.length,
       talks_generated: totalGenerated,
       talks_failed:    totalFailed,
+      talks_deferred:  totalDeferred,
+      generation_budget_remaining: remainingBudget,
       per_tenant:      perTenantSummary,
     })
   } catch (err) {
@@ -205,19 +227,19 @@ async function runCron(): Promise<NextResponse> {
 
 async function generateForTenant(
   tenant: TenantRow,
-  dates: string[],
-): Promise<{ generated: number; skipped: number; failed: number }> {
+  remainingBudget: number,
+): Promise<GenerationResult> {
   const admin = supabaseAdmin()
+  const timeZone = tenantTimeZone(tenant.settings)
+  const dates = dateWindow(localDateString(new Date(), timeZone), DAYS_AHEAD)
 
-  // Industry preference per tenant. Default to 'general' — the only
-  // pool seeded today. When more industries land, set
-  // tenants.settings.toolbox_industry on the tenant row to switch.
-  const industry =
-    typeof tenant.settings?.toolbox_industry === 'string'
-      ? (tenant.settings.toolbox_industry as string)
-      : 'general'
+  // Industry preference per tenant. Superadmin writes this via the
+  // tenant setup/edit form; unknown legacy values fall back to the
+  // general-industry pack rather than burning cron time on an empty
+  // topic pool.
+  const industry = normalizeToolboxTalkIndustry(tenant.settings?.toolbox_industry)
 
-  // Find which of the 7 dates already have a talk so we skip them.
+  // Find which of the 14 dates already have a talk so we skip them.
   const { data: existing } = await admin
     .from('toolbox_talks')
     .select('talk_date')
@@ -227,15 +249,14 @@ async function generateForTenant(
   const existingDates = new Set((existing ?? []).map(r => r.talk_date as string))
   const missingDates  = dates.filter(d => !existingDates.has(d))
   if (missingDates.length === 0) {
-    return { generated: 0, skipped: dates.length, failed: 0 }
+    return { generated: 0, skipped: dates.length, failed: 0, deferred: 0, attempted: 0 }
   }
 
-  // Topic pool for this tenant's industry. If a tenant typo'd their
-  // settings.toolbox_industry to a value that matches no rows, fall
-  // back to 'general' rather than skipping the whole tenant — being
-  // wrong about WHICH topic to deliver is better than delivering NO
-  // topic.
-  const fetchTopics = (i: string) => admin
+  // Topic pool for this tenant's industry. If a pack is incomplete in
+  // a target environment, fall back to 'general' rather than skipping
+  // the whole tenant — being wrong about WHICH topic to deliver is
+  // better than delivering NO topic.
+  const fetchTopics = (i: ToolboxTalkIndustry) => admin
     .from('toolbox_topics')
     .select('id, title, summary, reference')
     .eq('industry', i)
@@ -258,7 +279,7 @@ async function generateForTenant(
   if (topicsErr || !topics || topics.length === 0) {
     Sentry.captureException(new Error(topicsErr?.message ?? 'No active topics available'),
       { tags: { route: '/api/cron/generate-toolbox-talks', stage: 'topics', tenant_id: tenant.id } })
-    return { generated: 0, skipped: existingDates.size, failed: missingDates.length }
+    return { generated: 0, skipped: existingDates.size, failed: missingDates.length, deferred: 0, attempted: 0 }
   }
 
   // Determine recency per topic — the talk_date of the most recent
@@ -278,7 +299,11 @@ async function generateForTenant(
   }
 
   const sorted = sortTopicsForRotation(topics, lastUsed)
-  const picks  = pickTopicsForDates(sorted, missingDates)
+  const picks  = pickTopicsForDates(sorted, missingDates).slice(0, Math.max(0, remainingBudget))
+  const deferred = missingDates.length - picks.length
+  if (picks.length === 0) {
+    return { generated: 0, skipped: existingDates.size, failed: 0, deferred, attempted: 0 }
+  }
 
   // Per-tenant Anthropic client. Skip the tenant on configuration
   // errors — toolbox-talks isn't worth failing the whole cron over,
@@ -296,7 +321,7 @@ async function generateForTenant(
     } else {
       Sentry.captureException(err, { tags: { source: 'toolbox-talks', tenant_id: tenant.id } })
     }
-    return { generated: 0, skipped: existingDates.size, failed: missingDates.length }
+    return { generated: 0, skipped: existingDates.size, failed: picks.length, deferred, attempted: 0 }
   }
 
   let generated = 0
@@ -306,22 +331,9 @@ async function generateForTenant(
   // on — the cron will retry that date on its next run.
   for (const { date, topic } of picks) {
     try {
-      const fields = await generateTalkBody(client, topic, tenant.name)
+      const fields = await generateTalkBody(client, topic, tenant.name, industry)
 
-      // Defense-in-depth: the JSON-schema output_config should
-      // guarantee these shapes, but a future SDK regression or a
-      // partial response shouldn't crash the cron. Coerce defensively
-      // so a malformed AI return degrades to a sparse-but-valid row
-      // rather than throwing.
-      const safeTitle    = typeof fields.title === 'string' ? fields.title.trim().slice(0, 200) : ''
-      const safeBody     = typeof fields.body_markdown === 'string' ? fields.body_markdown.slice(0, BODY_MAX_CHARS) : ''
-      const safePoints   = Array.isArray(fields.key_points)
-        ? fields.key_points
-            .filter((p): p is string => typeof p === 'string')
-            .map(p => p.slice(0, KEY_POINT_MAX_LEN))
-            .slice(0, KEY_POINTS_MAX)
-        : []
-      const safeNotes    = typeof fields.delivery_notes === 'string' ? fields.delivery_notes.trim().slice(0, 1000) : ''
+      const normalized = normalizeGeneratedToolboxTalk(fields, topic.title)
 
       const { error: insertErr } = await admin
         .from('toolbox_talks')
@@ -329,10 +341,10 @@ async function generateForTenant(
           tenant_id:      tenant.id,
           topic_id:       topic.id,
           talk_date:      date,
-          title:          safeTitle || topic.title,
-          body_markdown:  safeBody,
-          key_points:     safePoints,
-          delivery_notes: safeNotes,
+          title:          normalized.title,
+          body_markdown:  normalized.bodyMarkdown,
+          key_points:     normalized.keyPoints,
+          delivery_notes: normalized.deliveryNotes,
           generated_by:   'cron',
           ai_model:       AI_MODEL,
         })
@@ -356,13 +368,14 @@ async function generateForTenant(
     }
   }
 
-  return { generated, skipped: existingDates.size, failed }
+  return { generated, skipped: existingDates.size, failed, deferred, attempted: picks.length }
 }
 
 async function generateTalkBody(
   client: Anthropic,
   topic: TopicRow,
   tenantName: string,
+  industry: ToolboxTalkIndustry,
 ): Promise<GeneratedFields> {
   const userPrompt = [
     `Write today's toolbox talk for the crew at ${tenantName}.`,
@@ -375,7 +388,7 @@ async function generateTalkBody(
   const response = await client.messages.create({
     model:      AI_MODEL,
     max_tokens: 4000,
-    system:     SYSTEM_PROMPT,
+    system:     `${SYSTEM_PROMPT}\n\n${toolboxTalkIndustryPrompt(industry)}`,
     messages:   [{ role: 'user', content: userPrompt }],
     output_config: {
       format: { type: 'json_schema', schema: SCHEMA },

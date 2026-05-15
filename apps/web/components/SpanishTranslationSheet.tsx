@@ -6,6 +6,7 @@ import { energyCodeFor } from '@soteria/core/energyCodes'
 import { Sheet } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import type { LotoEnergyStep } from '@soteria/core/types'
+import { useTenant } from '@/components/TenantProvider'
 
 interface Props {
   open:         boolean
@@ -25,6 +26,7 @@ export default function SpanishTranslationSheet({
   const [draftReviewed, setDraftRev]    = useState(reviewed)
   const [draftSteps, setDraftSteps]     = useState<LotoEnergyStep[]>(steps)
   const [saving, setSaving]             = useState(false)
+  const { tenantId }                    = useTenant()
 
   // Reset drafts when sheet opens
   useEffect(() => {
@@ -39,6 +41,10 @@ export default function SpanishTranslationSheet({
   }
 
   async function handleSave() {
+    if (!tenantId) {
+      onToast('No active tenant selected.', 'error')
+      return
+    }
     setSaving(true)
 
     const equipPromise = supabase
@@ -48,6 +54,7 @@ export default function SpanishTranslationSheet({
         spanish_reviewed: draftReviewed,
         updated_at:       new Date().toISOString(),
       })
+      .eq('tenant_id', tenantId)
       .eq('equipment_id', equipmentId)
 
     const changedSteps = draftSteps.filter(d => {
@@ -68,6 +75,7 @@ export default function SpanishTranslationSheet({
           isolation_procedure_es:    row.isolation_procedure_es,
           method_of_verification_es: row.method_of_verification_es,
         })
+        .eq('tenant_id', tenantId)
         .eq('id', row.id)
     )
 

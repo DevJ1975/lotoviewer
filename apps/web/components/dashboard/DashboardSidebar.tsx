@@ -71,9 +71,9 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
   }, [equipment, decommissioned])
 
   return (
-    <aside className="shrink-0 w-full lg:w-72 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-800 flex flex-col">
+    <aside className="shrink-0 w-full lg:w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col">
       {/* Action toolbar */}
-      <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 flex items-center gap-1">
+      <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-800 flex items-center gap-1">
         <StatusReportButton equipment={equipment} decommissioned={decommissioned} />
         <ExportCsvButton    equipment={equipment} decommissioned={decommissioned} />
         <AddEquipmentButton equipment={equipment} onAdded={onEquipmentAdded} />
@@ -97,12 +97,14 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
       </div>
 
       {/* Completion summary */}
-      <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+      <div className="p-4 border-b border-slate-200 dark:border-slate-800">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Overall Progress</span>
-          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 tabular-nums">{pct}%</span>
+          <span className="placard-label text-slate-500 dark:text-slate-500">Overall Progress</span>
+          <span className="placard-numeric text-sm font-black text-slate-800 dark:text-slate-200">
+            {pct.toString().padStart(3, '0')}%
+          </span>
         </div>
-        <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+        <div className="relative h-2 rounded-sm bg-slate-100 dark:bg-slate-800 overflow-hidden">
           <div
             className={`h-full transition-all ${pct === 100 ? 'bg-emerald-500' : 'bg-brand-navy'}`}
             style={{ width: `${pct}%` }}
@@ -110,7 +112,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
         </div>
         <div className="grid grid-cols-4 gap-2 mt-3">
           <StatChip label="Total"   value={total}    color="slate" />
-          <StatChip label="Done"    value={complete} color="emerald" />
+          <StatChip label="Cleared" value={complete} color="emerald" />
           <StatChip label="Partial" value={partial}  color="amber" />
           <StatChip label="Missing" value={missing}  color="rose" />
         </div>
@@ -121,66 +123,88 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
         <button
           type="button"
           onClick={() => onSelectDept(null)}
-          className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors ${
-            selectedDept === null ? 'bg-brand-navy/5' : 'hover:bg-slate-50 dark:hover:bg-slate-900/40'
+          className={`relative w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors ${
+            selectedDept === null
+              ? 'bg-brand-yellow/10 dark:bg-brand-yellow/5'
+              : 'hover:bg-slate-50 dark:hover:bg-slate-900/40'
           }`}
         >
+          {selectedDept === null && (
+            <span aria-hidden="true" className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-sm bg-brand-yellow" />
+          )}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-base">🗂️</span>
-              <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">All Equipment</span>
-            </div>
-            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 tabular-nums bg-slate-100 dark:bg-slate-800 rounded-full px-2 py-0.5">{total}</span>
+            <span className="placard-label-lg text-slate-800 dark:text-slate-200">All Equipment</span>
+            <span className="placard-numeric text-[11px] font-black text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-sm px-2 py-0.5">
+              {total.toString().padStart(3, '0')}
+            </span>
           </div>
         </button>
 
-        {departments.map(d => (
-          <button
-            key={d.name}
-            type="button"
-            onClick={() => onSelectDept(d.name)}
-            className={`w-full text-left px-4 py-3 border-b border-slate-50 transition-colors ${
-              selectedDept === d.name ? 'bg-brand-navy/5' : 'hover:bg-slate-50 dark:hover:bg-slate-900/40'
-            }`}
-          >
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate flex-1">{d.name}</span>
-              <span className="text-[11px] text-slate-400 dark:text-slate-500 tabular-nums ml-2 shrink-0">{d.complete}/{d.total}</span>
-            </div>
-            <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-              <div
-                className={`h-full transition-all ${d.pct === 100 ? 'bg-emerald-500' : 'bg-brand-navy'}`}
-                style={{ width: `${d.pct}%` }}
-              />
-            </div>
-          </button>
-        ))}
+        {departments.map(d => {
+          const active = selectedDept === d.name
+          return (
+            <button
+              key={d.name}
+              type="button"
+              onClick={() => onSelectDept(d.name)}
+              className={`relative w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors ${
+                active
+                  ? 'bg-brand-yellow/10 dark:bg-brand-yellow/5'
+                  : 'hover:bg-slate-50 dark:hover:bg-slate-900/40'
+              }`}
+            >
+              {active && (
+                <span aria-hidden="true" className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-sm bg-brand-yellow" />
+              )}
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate flex-1">{d.name}</span>
+                <span className="placard-numeric text-[11px] text-slate-500 dark:text-slate-400 ml-2 shrink-0">
+                  {d.complete.toString().padStart(2, '0')}/{d.total.toString().padStart(2, '0')}
+                </span>
+              </div>
+              <div className="h-1.5 rounded-sm bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                <div
+                  className={`h-full transition-all ${d.pct === 100 ? 'bg-emerald-500' : 'bg-brand-navy'}`}
+                  style={{ width: `${d.pct}%` }}
+                />
+              </div>
+            </button>
+          )
+        })}
 
         {recentEquipment.length > 0 && (
-          <div className="border-t-2 border-slate-100 dark:border-slate-800 mt-2">
-            <p className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+          <div className="border-t-2 border-slate-200 dark:border-slate-800 mt-2">
+            <p className="placard-label px-4 py-2 text-slate-500 dark:text-slate-500">
               Recently Visited
             </p>
             <ul>
-              {recentEquipment.map(eq => (
-                <li key={eq.equipment_id}>
-                  <button
-                    type="button"
-                    onClick={() => onSelectEquip(eq.equipment_id)}
-                    className={`w-full text-left px-4 py-2 border-b border-slate-50 transition-colors ${
-                      selectedEqId === eq.equipment_id ? 'bg-brand-navy/5' : 'hover:bg-slate-50 dark:hover:bg-slate-900/40'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${statusDotClass(computePhotoStatusFromEquipment(eq))} shrink-0`} />
-                      <div className="min-w-0 flex-1">
-                        <p className="font-mono text-xs font-bold text-brand-navy truncate">{eq.equipment_id}</p>
-                        <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{shortName(eq.description)}</p>
+              {recentEquipment.map(eq => {
+                const active = selectedEqId === eq.equipment_id
+                return (
+                  <li key={eq.equipment_id}>
+                    <button
+                      type="button"
+                      onClick={() => onSelectEquip(eq.equipment_id)}
+                      className={`relative w-full text-left px-4 py-2 border-b border-slate-100 dark:border-slate-800 transition-colors ${
+                        active
+                          ? 'bg-brand-yellow/10 dark:bg-brand-yellow/5'
+                          : 'hover:bg-slate-50 dark:hover:bg-slate-900/40'
+                      }`}
+                    >
+                      {active && (
+                        <span aria-hidden="true" className="absolute left-0 top-1 bottom-1 w-1 rounded-r-sm bg-brand-yellow" />
+                      )}
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-sm ${statusDotClass(computePhotoStatusFromEquipment(eq))} shrink-0`} />
+                        <div className="min-w-0 flex-1">
+                          <p className="placard-numeric text-xs font-bold text-brand-navy dark:text-brand-yellow truncate">{eq.equipment_id}</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-500 truncate">{shortName(eq.description)}</p>
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                </li>
-              ))}
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           </div>
         )}
@@ -197,9 +221,9 @@ function StatChip({ label, value, color }: { label: string; value: number; color
     rose:    'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300',
   }[color]
   return (
-    <div className={`rounded-md px-2 py-1.5 text-center ${bgClass}`}>
-      <div className="text-sm font-bold tabular-nums leading-tight">{value}</div>
-      <div className="text-[9px] font-semibold uppercase tracking-wider opacity-70">{label}</div>
+    <div className={`rounded-sm px-2 py-1.5 text-center ${bgClass}`}>
+      <div className="placard-numeric text-sm font-black leading-tight">{value.toString().padStart(2, '0')}</div>
+      <div className="placard-label opacity-80 mt-0.5 text-[9px]">{label}</div>
     </div>
   )
 }

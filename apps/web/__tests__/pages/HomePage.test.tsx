@@ -75,10 +75,10 @@ describe('HomePage dashboard', () => {
     expect(screen.getByText('Beta')).toBeInTheDocument()
   })
 
-  it('renders stat chips Total / Done / Partial / Missing', async () => {
+  it('renders stat chips Total / Cleared / Partial / Missing', async () => {
     render(<HomePage />)
     await waitFor(() => screen.getByText('Total'))
-    expect(screen.getByText('Done')).toBeInTheDocument()
+    expect(screen.getByText('Cleared')).toBeInTheDocument()
     // "Partial" and "Missing" appear in both stat chips and status pills
     expect(screen.getAllByText('Partial').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Missing').length).toBeGreaterThanOrEqual(1)
@@ -91,9 +91,9 @@ describe('HomePage dashboard', () => {
     expect(screen.getByText('EQ-003')).toBeInTheDocument()
   })
 
-  it('shows the "select equipment" placeholder in the right panel', async () => {
+  it('shows the "no item selected" placeholder in the right panel', async () => {
     render(<HomePage />)
-    await waitFor(() => screen.getByText('Select an equipment item'))
+    await waitFor(() => screen.getByText('No item selected'))
   })
 
   it('renders Retry button on load error', async () => {

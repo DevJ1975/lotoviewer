@@ -20,7 +20,7 @@ This document hands off the result of the toolbox-talks build session to whoever
 
 ## What's left (action item for the next person)
 
-**Trigger the weekly cron once to backfill the first 7 days of talks for every active tenant.** Without this, the `/toolbox-talks` page renders the empty "no talk scheduled for today yet" state until the next scheduled run on Sunday 05:00 UTC.
+**Trigger the weekly cron once to backfill the first 14 days of talks for every active tenant.** Without this, the `/toolbox-talks` page renders the empty "no talk scheduled for today yet" state until the next scheduled run on Sunday 05:00 UTC.
 
 ```bash
 curl -X POST "https://soteriafield.app/api/cron/generate-toolbox-talks" \
@@ -51,7 +51,7 @@ from public.toolbox_talks
 order by tenant_id, talk_date;
 ```
 
-You should see 7 rows per active tenant, each with a distinct `talk_date` covering today + 6, body lengths typically 1500–8000 chars, `ai_model = 'claude-sonnet-4-6'`, `generated_by = 'cron'`.
+You should see 14 rows per active tenant, each with a distinct `talk_date` covering today + 13, body lengths typically 1500–8000 chars, `ai_model = 'claude-sonnet-4-6'`, `generated_by = 'cron'`.
 
 ---
 
@@ -72,14 +72,14 @@ Three new tables, all in the `public` schema:
 - File: `apps/web/app/api/cron/generate-toolbox-talks/route.ts`
 - Schedule: `0 5 * * 0` (Sundays 05:00 UTC = 00:00 EST / 01:00 EDT) via `apps/web/vercel.json`.
 - Auth: same `safeEqual(bearer, CRON_SECRET)` posture as the other 10 crons.
-- Behavior: for every tenant with `disabled_at IS NULL` AND module enabled, fills the next 7 days of missing talks. Topic rotation extracted into `apps/web/lib/toolboxRotation.ts` for unit testability — picks unused topics least-recently-delivered first, cycles through the pool.
+- Behavior: for every tenant with `disabled_at IS NULL` AND module enabled, fills the next 14 days of missing talks. Topic rotation extracted into `apps/web/lib/toolboxRotation.ts` for unit testability — picks unused topics least-recently-delivered first, cycles through the pool.
 - Per-tenant Anthropic key honored via `getTenantApiKey(tenant.id)` — same posture as the LOTO/CS generation routes.
 
 ### API routes
 
 | Route | Method | Auth | Purpose |
 |---|---|---|---|
-| `/api/toolbox-talks` | GET | `requireTenantMember` | Today + upcoming 6 + last 30 with sign-in counts. |
+| `/api/toolbox-talks` | GET | `requireTenantMember` | Today + upcoming 13 + last 30 with sign-in counts. |
 | `/api/toolbox-talks/[id]` | GET | `requireTenantMember` | Single talk + roster. |
 | `/api/toolbox-talks/[id]/sign` | POST | `requireTenantMember` | Add a signature (self or coworker). |
 
@@ -99,7 +99,7 @@ There is intentionally **no client-facing generate endpoint** — the operator's
 ### Tests added (35)
 
 - `__tests__/lib/markdown.test.ts` — 18 cases for the new `renderTalkMd` (XSS, h3, bullets, links, unicode subscripts, edge cases).
-- `__tests__/lib/toolboxRotation.test.ts` — 17 cases for the rotation helpers (never-used precedence, date sort, tie-break, no-mutation, idempotency, cycling, two-week simulation).
+- `__tests__/lib/toolboxRotation.test.ts` — 18 cases for the rotation helpers (never-used precedence, date sort, tie-break, no-mutation, idempotency, cycling, two-week simulation).
 
 ### Smoke test doc
 
@@ -119,7 +119,7 @@ There is intentionally **no client-facing generate endpoint** — the operator's
 
 5. **The `lastUsed` lookup limits to 500 most recent talks per tenant.** A tenant who's been on the system for over 71 weeks (500/7) and has more than 500 historical talks will see topics older than that show up as "never used" again — which is fine, the rotation will just cycle them in.
 
-6. **Industry fallback is `'general'`.** If a tenant sets `tenants.settings.toolbox_industry = 'food'` (or anything else), the cron looks for active topics in that industry, and falls back to `general` if none are found, with a warning Sentry event. Today only `general` has rows; adding new industries means seeding at least one row before flipping a tenant's settings.
+6. **Industry fallback is `'general'`.** Superadmin can set `tenants.settings.toolbox_industry` to `general` or `construction`. Unknown legacy values normalize to `general`; if the selected pack has no active topics, the cron falls back to `general` with a warning Sentry event.
 
 7. **Coworker signs allow duplicates.** The unique constraint allows multiple NULL `signer_user_id` per talk. The UI disables the button while submitting, but a network glitch + double-tap could insert two identical-name rows. This is acceptable for v1 — the audit trail is preserved through `inserted_by` so disputes can be resolved.
 

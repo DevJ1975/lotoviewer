@@ -13,7 +13,8 @@ tablet before TestFlight or prod.
 - [ ] On the tenant you're testing as: `tenants.modules->>'toolbox-talks'
       = 'true'` (or `null`, since the module's static default is
       enabled).
-- [ ] At least one toolbox talk exists for today. To force one without
+- [ ] At least one toolbox talk exists for today. To force the two-week
+      schedule without
       waiting for the Sunday cron, curl the cron with `CRON_SECRET`:
 
       ```
@@ -43,7 +44,7 @@ tablet before TestFlight or prod.
 
 - [ ] Loads without console errors, shows the "Today's Talk" card
       with a real title.
-- [ ] "Coming up" grid shows the next 6 days.
+- [ ] "Coming up" grid shows the next 13 days.
 - [ ] "Recent" table is empty on day 1 (correct) — verify it
       populates the morning after the first talk's `talk_date` passes.
 - [ ] Click "Today's talk" → navigates to `/toolbox-talks/<id>`.
@@ -62,6 +63,12 @@ tablet before TestFlight or prod.
 - [ ] No raw HTML / scripts in the body — paste a known-injection
       string into one row's `body_markdown` via SQL and confirm it
       escapes.
+- [ ] Click "Print" — browser opens a generated PDF, not a screen
+      capture. Confirm the PDF has the SoteriaField header, talk
+      metadata, key points, script, supervisor cue card, and roster.
+- [ ] After at least one signature exists, print again and confirm
+      the roster row appears in the PDF with name, employee ID,
+      signed timestamp, and signature area.
 
 ## Sign-in flow — self
 
@@ -135,7 +142,7 @@ tablet before TestFlight or prod.
 
 - `lib/markdown.ts:renderTalkMd` — 18 cases incl. XSS escapes,
   unicode, h3, bullets, links, edge cases (`__tests__/lib/markdown.test.ts`).
-- `lib/toolboxRotation.ts` — 17 cases incl. never-used precedence,
+- `lib/toolboxRotation.ts` — 18 cases incl. never-used precedence,
   date sorting, tie-breaking, idempotency, cycling
   (`__tests__/lib/toolboxRotation.test.ts`).
 - Module registration — `__tests__/lib/features.test.ts`,

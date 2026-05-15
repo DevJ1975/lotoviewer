@@ -18,23 +18,32 @@ function unwrap<T>(result: { data: T | null; error: { message: string } | null }
   return result.data
 }
 
+function requireTenantId(tenantId: string | null | undefined, caller: string): string {
+  if (!tenantId) throw new Error(`${caller}: active tenant is required`)
+  return tenantId
+}
+
 // All active + decommissioned equipment, ordered by equipment_id. Used by
 // the LOTO main list, the decommission page, the status page, and the
 // print queue's "all equipment" filter.
-export async function loadAllEquipment(): Promise<Equipment[]> {
+export async function loadAllEquipment(tenantId: string): Promise<Equipment[]> {
+  const activeTenantId = requireTenantId(tenantId, 'loadAllEquipment')
   const result = await supabase
     .from('loto_equipment')
     .select('*')
+    .eq('tenant_id', activeTenantId)
     .order('equipment_id', { ascending: true })
   return unwrap(result as { data: Equipment[] | null; error: { message: string } | null }, 'loadAllEquipment')
 }
 
 // Equipment for a single department. Used by the department detail page
 // and the department-grouped print queue.
-export async function loadEquipmentByDepartment(department: string): Promise<Equipment[]> {
+export async function loadEquipmentByDepartment(department: string, tenantId: string): Promise<Equipment[]> {
+  const activeTenantId = requireTenantId(tenantId, 'loadEquipmentByDepartment')
   const result = await supabase
     .from('loto_equipment')
     .select('*')
+    .eq('tenant_id', activeTenantId)
     .eq('department', department)
     .order('equipment_id', { ascending: true })
   return unwrap(result as { data: Equipment[] | null; error: { message: string } | null }, 'loadEquipmentByDepartment')
@@ -42,10 +51,12 @@ export async function loadEquipmentByDepartment(department: string): Promise<Equ
 
 // Single equipment by id. Used by the equipment detail page, the
 // post-photo-upload reconcile, and elsewhere when we need a fresh row.
-export async function loadEquipment(equipmentId: string): Promise<Equipment | null> {
+export async function loadEquipment(equipmentId: string, tenantId: string): Promise<Equipment | null> {
+  const activeTenantId = requireTenantId(tenantId, 'loadEquipment')
   const { data, error } = await supabase
     .from('loto_equipment')
     .select('*')
+    .eq('tenant_id', activeTenantId)
     .eq('equipment_id', equipmentId)
     .single()
   if (error) {
@@ -61,10 +72,12 @@ export async function loadEquipment(equipmentId: string): Promise<Equipment | nu
 
 // Print-queue subset: only equipment with a placard generated. The print
 // page lists, optionally groups by department, and merges PDFs.
-export async function loadPrintableEquipment(): Promise<Equipment[]> {
+export async function loadPrintableEquipment(tenantId: string): Promise<Equipment[]> {
+  const activeTenantId = requireTenantId(tenantId, 'loadPrintableEquipment')
   const result = await supabase
     .from('loto_equipment')
     .select('*')
+    .eq('tenant_id', activeTenantId)
     .not('placard_url', 'is', null)
     .order('department')
   return unwrap(result as { data: Equipment[] | null; error: { message: string } | null }, 'loadPrintableEquipment')

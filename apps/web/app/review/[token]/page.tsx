@@ -42,6 +42,11 @@ interface PlacardReviewRow {
   notes:        string | null
 }
 
+interface ReviewLinkEquipmentRow {
+  equipment_id: string
+  sort_order:   number
+}
+
 export default async function ReviewPage({
   params,
 }: { params: Promise<{ token: string }> }) {
@@ -67,23 +72,13 @@ export default async function ReviewPage({
     return <ErrorScreen title="Link expired" body={`This review link expired on ${formatDate(link.expires_at)}. Reach out to the sender for a fresh one.`} />
   }
 
-  // Fetch the equipment in this department + its energy steps + any
-  // previous note-saves (in case the reviewer is mid-review and
-  // refreshed). All three in parallel.
-  const [{ data: equipment }, { data: steps }, { data: prevReviews }, { data: tenantRow }] = await Promise.all([
+  const [{ data: snapshotRows }, { data: prevReviews }, { data: tenantRow }] = await Promise.all([
     admin
-      .from('loto_equipment')
-      .select('*')
-      .eq('tenant_id',     link.tenant_id)
-      .eq('department',    link.department)
-      .eq('decommissioned', false)
+      .from('loto_review_link_equipment')
+      .select('equipment_id, sort_order')
+      .eq('review_link_id', link.id)
+      .order('sort_order', { ascending: true })
       .order('equipment_id', { ascending: true }),
-    admin
-      .from('loto_steps')
-      .select('*')
-      .eq('tenant_id', link.tenant_id)
-      .order('equipment_id', { ascending: true })
-      .order('step_number',   { ascending: true }),
     admin
       .from('loto_placard_reviews')
       .select('equipment_id, status, notes')
@@ -95,9 +90,35 @@ export default async function ReviewPage({
       .maybeSingle(),
   ])
 
-  const equipmentList = (equipment ?? []) as Equipment[]
+  const snapshotEquipment = (snapshotRows ?? []) as ReviewLinkEquipmentRow[]
+  const equipmentIds = snapshotEquipment.map(row => row.equipment_id)
+  let equipment: unknown[] = []
+  let steps: unknown[] = []
+  if (equipmentIds.length > 0) {
+    const [equipmentRes, stepsRes] = await Promise.all([
+      admin
+        .from('loto_equipment')
+        .select('*')
+        .eq('tenant_id', link.tenant_id)
+        .in('equipment_id', equipmentIds),
+      admin
+        .from('loto_steps')
+        .select('*')
+        .eq('tenant_id', link.tenant_id)
+        .in('equipment_id', equipmentIds)
+        .order('equipment_id', { ascending: true })
+        .order('step_number', { ascending: true }),
+    ])
+    equipment = equipmentRes.data ?? []
+    steps = stepsRes.data ?? []
+  }
+
+  const equipmentById = new Map((equipment as Equipment[]).map(eq => [eq.equipment_id, eq]))
+  const equipmentList = equipmentIds
+    .map(id => equipmentById.get(id))
+    .filter((eq): eq is Equipment => Boolean(eq))
   const stepsByEquipment = new Map<string, LotoEnergyStep[]>()
-  for (const s of (steps ?? []) as LotoEnergyStep[]) {
+  for (const s of steps as LotoEnergyStep[]) {
     const list = stepsByEquipment.get(s.equipment_id) ?? []
     list.push(s)
     stepsByEquipment.set(s.equipment_id, list)
