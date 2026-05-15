@@ -96,6 +96,7 @@ function TakeExam() {
   }
 
   async function submit() {
+    if (!exam || !worker) return
     setError(null)
     setSubmitting(true)
     try {

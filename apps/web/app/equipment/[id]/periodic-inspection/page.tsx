@@ -101,9 +101,10 @@ function PeriodicInspectionForm() {
   }, [profile, inspectorName])
 
   const previewedNextDue = useMemo(() => computeNextDueAt(new Date()), [])
+  const dueAt = equipment?.next_periodic_review_due_at ?? null
   const status = useMemo(
-    () => classifyPeriodic(equipment?.next_periodic_review_due_at ?? null, new Date()),
-    [equipment],
+    () => classifyPeriodic(dueAt, new Date()),
+    [dueAt],
   )
 
   if (authLoading) return <Loader />
@@ -216,8 +217,8 @@ function PeriodicInspectionForm() {
         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
           Current status:{' '}
           <span className="font-semibold text-slate-700 dark:text-slate-300">{status}</span>
-          {equipment.next_periodic_review_due_at && (
-            <> · next due {new Date(equipment.next_periodic_review_due_at).toLocaleDateString()}</>
+          {dueAt && (
+            <> · next due {new Date(dueAt).toLocaleDateString()}</>
           )}
         </p>
       </div>

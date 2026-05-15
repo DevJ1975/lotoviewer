@@ -9,7 +9,6 @@ import {
   classifyPeriodic,
   type PeriodicStatus,
 } from '@soteria/core/lotoPeriodicInspection'
-import type { Equipment } from '@soteria/core/types'
 
 // Dashboard banner for §147(c)(6) overdue periodic inspections.
 //
@@ -33,9 +32,10 @@ export default function PeriodicInspectionWidget() {
       if (canceled || error || !data) return
       const now = new Date()
       const buckets: Record<PeriodicStatus, number> = { overdue: 0, due_soon: 0, never: 0, current: 0 }
-      for (const row of data as Pick<Equipment, 'equipment_id' | 'next_periodic_review_due_at' | 'decommissioned'>[]) {
+      type Row = { equipment_id: string; next_periodic_review_due_at: string | null; decommissioned: boolean }
+      for (const row of data as Row[]) {
         if (row.decommissioned) continue
-        buckets[classifyPeriodic(row.next_periodic_review_due_at, now)]++
+        buckets[classifyPeriodic(row.next_periodic_review_due_at ?? null, now)]++
       }
       setCounts(buckets)
     })()

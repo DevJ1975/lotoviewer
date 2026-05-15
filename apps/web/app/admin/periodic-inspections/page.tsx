@@ -84,7 +84,17 @@ export default function PeriodicInspectionsPage() {
   useEffect(() => { if (!authLoading && profile?.is_admin) load() }, [authLoading, profile, load])
 
   const now = useMemo(() => new Date(), [])
-  const cohorts = useMemo(() => groupByPeriodic(equipment ?? [], now), [equipment, now])
+  // The Equipment type marks next_periodic_review_due_at as optional
+  // for backward compatibility with pre-migration fixtures; the
+  // grouping helper requires it to be present (null = never), so we
+  // coerce here at the boundary.
+  const cohorts = useMemo(
+    () => groupByPeriodic(
+      (equipment ?? []).map(e => ({ ...e, next_periodic_review_due_at: e.next_periodic_review_due_at ?? null })),
+      now,
+    ),
+    [equipment, now],
+  )
 
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>

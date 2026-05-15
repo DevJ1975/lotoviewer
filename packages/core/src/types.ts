@@ -33,6 +33,12 @@ export interface Equipment {
   annotations: unknown[]
   // Same schema, but for the isolation photo (migration 022).
   iso_annotations: unknown[]
+  // §1910.147(c)(6) annual inspection (migration 141). Trigger sets
+  // this to the latest signed inspection's next_due_at + 365 days.
+  // NULL = never inspected, surfaced as "Never" in the admin list.
+  // Optional so pre-migration test fixtures don't need an explicit
+  // field; the PeriodicEquipmentSnapshot helper coerces undefined → null.
+  next_periodic_review_due_at?: string | null
   created_at: string | null
   updated_at: string | null
 }
