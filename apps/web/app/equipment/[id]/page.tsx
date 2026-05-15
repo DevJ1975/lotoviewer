@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useState, useCallback } from 'react'
+import { Suspense, useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -19,6 +19,7 @@ import { Sheet } from '@/components/ui/sheet'
 import HazardReportView from '@/components/HazardReport'
 import EquipmentReadinessPanel from '@/components/equipment/EquipmentReadinessPanel'
 import { useTenant } from '@/components/TenantProvider'
+import { emitEquipmentViewed } from '@/lib/xapi/emit'
 
 export default function EquipmentDetailPage() {
   return (
@@ -121,6 +122,22 @@ function EquipmentDetail() {
   }, [equipmentId, tenantId, tenantLoading])
 
   useEffect(() => { load() }, [load])
+
+  // Emit one xAPI "experienced" Statement per distinct equipment that
+  // the user opens during this mount. Editing or uploading a photo
+  // triggers a setEquipment() re-render with the same id; the ref
+  // guard keeps those from re-firing.
+  const lastViewedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!equipment) return
+    if (lastViewedRef.current === equipment.equipment_id) return
+    lastViewedRef.current = equipment.equipment_id
+    emitEquipmentViewed({
+      equipmentId: equipment.equipment_id,
+      name:        equipment.description || undefined,
+      department:  equipment.department || undefined,
+    })
+  }, [equipment])
 
   function navTo(targetId: string) {
     router.push(`/equipment/${encodeURIComponent(targetId)}?from=${encodeURIComponent(fromUrl)}`)

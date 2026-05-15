@@ -6,6 +6,7 @@ import { Sheet } from '@/components/ui/sheet'
 import type { Equipment } from '@soteria/core/types'
 import { isOffline, OFFLINE_WRITE_MESSAGE } from '@/lib/netGuard'
 import { useTenant } from '@/components/TenantProvider'
+import { emitEquipmentEdited } from '@/lib/xapi/emit'
 
 type PlacardPatch = {
   description:    string
@@ -67,6 +68,17 @@ export default function PlacardDetailsSheet({ open, onClose, equipment, onSaved,
       onToast('Could not save. Check your connection and try again.', 'error')
     } else {
       onSaved(patch)
+      const fieldsChanged: string[] = []
+      if (patch.description    !== description)   fieldsChanged.push('description')
+      if (patch.notes          !== (notes || null))         fieldsChanged.push('notes')
+      if (patch.internal_notes !== (internalNotes || null)) fieldsChanged.push('internal_notes')
+      if (fieldsChanged.length > 0) {
+        emitEquipmentEdited({
+          equipmentId,
+          name: patch.description,
+          fieldsChanged,
+        })
+      }
       onToast('Changes saved.', 'success')
       onClose()
     }
