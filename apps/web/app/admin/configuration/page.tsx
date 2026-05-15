@@ -5,8 +5,15 @@ import Link from 'next/link'
 import { ArrowLeft, Loader2, Settings } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useTenant } from '@/components/TenantProvider'
 import { formatWorkOrderUrl } from '@soteria/core/orgConfig'
 import { formatSupabaseError } from '@/lib/supabaseError'
+import {
+  LANGUAGE_LABEL,
+  SUPPORTED_LANGUAGES,
+  normalizeLanguage,
+  type Language,
+} from '@soteria/core/i18n'
 import type { OrgConfig } from '@soteria/core/types'
 
 // Org-level configuration. Two sections:
@@ -19,6 +26,7 @@ import type { OrgConfig } from '@soteria/core/types'
 
 export default function ConfigurationPage() {
   const { profile, loading: authLoading } = useAuth()
+  const { tenantId } = useTenant()
   const [config, setConfig] = useState<OrgConfig | null>(null)
   const [template, setTemplate] = useState('')
   const [pushUrl, setPushUrl]       = useState('')
@@ -29,6 +37,8 @@ export default function ConfigurationPage() {
   const [loadError, setLoadError]   = useState<string | null>(null)
   const [saveError, setSaveError]   = useState<string | null>(null)
   const [savedAt, setSavedAt]       = useState<number | null>(null)
+  const [tenantLanguage, setTenantLanguage]       = useState<Language>('en')
+  const [tenantLanguageSaved, setTenantLangSaved] = useState<Language>('en')
 
   useEffect(() => {
     if (authLoading) return
@@ -53,6 +63,38 @@ export default function ConfigurationPage() {
       })
     return () => { cancelled = true }
   }, [authLoading, profile])
+
+  useEffect(() => {
+    if (authLoading || !profile?.is_admin || !tenantId) return
+    let cancelled = false
+    supabase
+      .from('tenants')
+      .select('language')
+      .eq('id', tenantId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return
+        const lang = normalizeLanguage((data as { language?: string } | null)?.language)
+        setTenantLanguage(lang)
+        setTenantLangSaved(lang)
+      })
+    return () => { cancelled = true }
+  }, [authLoading, profile, tenantId])
+
+  async function saveLanguage(next: Language) {
+    if (!tenantId) return
+    const prev = tenantLanguageSaved
+    setTenantLanguage(next)
+    const { error } = await supabase.from('tenants').update({ language: next }).eq('id', tenantId)
+    if (error) {
+      // Roll back optimistic update so the dropdown reflects DB truth.
+      setTenantLanguage(prev)
+      setSaveError(formatSupabaseError(error, 'save language'))
+      return
+    }
+    setTenantLangSaved(next)
+    setSavedAt(Date.now())
+  }
 
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
@@ -114,6 +156,28 @@ export default function ConfigurationPage() {
         <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-slate-400 dark:text-slate-500" /></div>
       ) : (
         <>
+          <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5 space-y-3">
+            <header>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Language</h2>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                Default language for printed artifacts (placards, signage, posted forms). Per-user
+                language overrides are a future enhancement; this is the tenant fallback.
+              </p>
+            </header>
+            <label className="block space-y-1.5">
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Default language</span>
+              <select
+                value={tenantLanguage}
+                onChange={e => saveLanguage(e.target.value as Language)}
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              >
+                {SUPPORTED_LANGUAGES.map(l => (
+                  <option key={l} value={l}>{LANGUAGE_LABEL[l]}</option>
+                ))}
+              </select>
+            </label>
+          </section>
+
           <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5 space-y-3">
             <header>
               <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Work-order URL template</h2>

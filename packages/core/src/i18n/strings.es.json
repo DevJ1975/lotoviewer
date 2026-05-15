@@ -1,0 +1,27 @@
+{
+  "nav.dashboard":        "Panel principal",
+  "nav.equipment":        "Equipo",
+  "nav.incidents":        "Incidentes",
+  "nav.bbs":              "Seguridad conductual",
+  "nav.contractors":      "Contratistas",
+  "nav.admin":            "Administración",
+
+  "placard.title":              "PROCEDIMIENTO DE BLOQUEO/ETIQUETADO",
+  "placard.equipmentLabel":     "EQUIPO:",
+  "placard.applicationHeader":  "PROCESO DE APLICACIÓN DE BLOQUEO",
+  "placard.removalHeader":      "PROCESO DE RETIRO DEL BLOQUEO",
+  "placard.signatureLabel":     "Firma",
+  "placard.dateLabel":          "Fecha",
+
+  "form.save":           "Guardar",
+  "form.cancel":         "Cancelar",
+  "form.submit":         "Enviar",
+  "form.description":    "Descripción",
+  "form.location":       "Ubicación",
+  "form.severity":       "Severidad",
+  "form.required":       "Requerido",
+
+  "common.loading":      "Cargando…",
+  "common.error":        "Error",
+  "common.back":         "Atrás"
+}
