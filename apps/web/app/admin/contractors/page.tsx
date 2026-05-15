@@ -153,6 +153,12 @@ export default function ContractorsPage() {
                     )}
                   </div>
                   {c.notes && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{c.notes}</p>}
+                  <Link
+                    href={`/admin/contractors/${c.id}/prequalification`}
+                    className="mt-2 inline-block text-[11px] font-semibold text-brand-navy hover:underline"
+                  >
+                    Manage prequalification →
+                  </Link>
                 </div>
                 <button
                   type="button"
