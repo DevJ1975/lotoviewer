@@ -362,11 +362,43 @@ export async function DELETE(req: Request) {
     .eq('user_id', id)
   if (error) return sanitizeError(error, 'admin/users/DELETE membership delete')
 
-  await admin
+  // Find the canonical member rows before we null profile_id so we
+  // can emit a login_revoked event keyed on member_id (NOT auth.uid()
+  // — the actor is the admin doing the revocation, not the user being
+  // revoked).
+  const { data: affectedMembers } = await admin
     .from('members')
-    .update({ profile_id: null, status: 'archived', updated_by: gate.userId })
+    .select('id, metadata')
     .eq('tenant_id', gate.tenantId)
     .eq('profile_id', id)
+
+  const archivedReasonPatch = {
+    archived_reason: 'admin_removed',
+    archived_at: new Date().toISOString(),
+  }
+
+  for (const row of (affectedMembers ?? []) as Array<{ id: string; metadata: Record<string, unknown> | null }>) {
+    const nextMetadata = { ...(row.metadata ?? {}), ...archivedReasonPatch }
+    await admin
+      .from('members')
+      .update({
+        profile_id: null,
+        status:     'archived',
+        metadata:   nextMetadata,
+        updated_by: gate.userId,
+      })
+      .eq('id', row.id)
+
+    await admin.from('member_status_events').insert({
+      tenant_id:     gate.tenantId,
+      member_id:     row.id,
+      event_type:    'login_revoked',
+      actor_user_id: gate.userId,
+      reason:        'admin removed user via /admin/users',
+      old_values:    { profile_id: id },
+      new_values:    { profile_id: null, status: 'archived' },
+    })
+  }
 
   const shouldDeleteNeverAcceptedInvite = !lastSignInAt && (otherMemberships ?? 0) === 0
   if (shouldDeleteNeverAcceptedInvite) {

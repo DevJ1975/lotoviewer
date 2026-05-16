@@ -77,6 +77,38 @@ export async function listAdminMembers(
   return json.members
 }
 
+export interface GrantLoginResult {
+  memberId:     string
+  profileId:    string
+  tempPassword: string | null
+  emailSent:    boolean
+}
+
+export async function grantMemberLogin(
+  tenantId: string,
+  memberId: string,
+  body: { email?: string; fullName?: string } = {},
+): Promise<GrantLoginResult> {
+  const res = await fetch(`/api/admin/members/${memberId}/grant-login`, {
+    method: 'POST',
+    headers: await jsonHeaders(tenantId),
+    body: JSON.stringify(body),
+  })
+  return readJson<GrantLoginResult>(res)
+}
+
+export async function mergeMembers(
+  tenantId: string,
+  body: { sourceMemberId: string; targetMemberId: string; reason: string },
+): Promise<{ targetMemberId: string }> {
+  const res = await fetch('/api/admin/members/merge', {
+    method: 'POST',
+    headers: await jsonHeaders(tenantId),
+    body: JSON.stringify(body),
+  })
+  return readJson<{ targetMemberId: string }>(res)
+}
+
 export async function patchAdminMember(
   tenantId: string,
   memberId: string,
