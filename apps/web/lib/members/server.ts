@@ -180,6 +180,70 @@ export async function getOrCreateMemberForProfile(
   return getMemberForProfile(client, tenantId, profileId)
 }
 
+// Compact, route-friendly version of getOrCreateMemberForProfile that
+// returns just the member id. Used by /api/admin/members/[id]/grant-login
+// to attach a freshly-created profile to a pre-existing roster row, and
+// by other admin paths that need a stable handle for the active member
+// without round-tripping the full v_member_roster shape.
+export async function getOrCreateMemberForTenantUser(args: {
+  authUserId: string
+  tenantId:   string
+  supabase:   SupabaseClient
+}): Promise<{ memberId: string }> {
+  const { authUserId, tenantId, supabase } = args
+  const { data: existing, error: lookupErr } = await supabase
+    .from('members')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('profile_id', authUserId)
+    .maybeSingle()
+  if (lookupErr) throw new Error(`member lookup failed: ${lookupErr.message}`)
+  if (existing?.id) return { memberId: existing.id as string }
+
+  const { data: profile, error: profileErr } = await supabase
+    .from('profiles')
+    .select('id, email, full_name')
+    .eq('id', authUserId)
+    .maybeSingle()
+  if (profileErr) throw new Error(`profile lookup failed: ${profileErr.message}`)
+  if (!profile) throw new Error(`profile ${authUserId} not found`)
+
+  const profileRow = profile as { id: string; email: string | null; full_name: string | null }
+  const displayName = profileRow.full_name?.trim() || profileRow.email?.trim() || 'Member'
+
+  const { data: inserted, error: insertErr } = await supabase
+    .from('members')
+    .insert({
+      tenant_id: tenantId,
+      profile_id: authUserId,
+      source: 'profile',
+      legal_name: profileRow.full_name,
+      preferred_name: profileRow.full_name,
+      display_name: displayName,
+      display_name_source: 'system',
+      email: profileRow.email,
+      employment_type: 'employee',
+      status: 'active',
+      readiness_status: 'setup_needed',
+    })
+    .select('id')
+    .single()
+
+  // 23505 = unique_violation. Two concurrent callers racing for the
+  // (tenant_id, profile_id) slot; the other one won — re-read.
+  if (insertErr && (insertErr as { code?: string }).code === '23505') {
+    const { data: again } = await supabase
+      .from('members')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('profile_id', authUserId)
+      .single()
+    if (again?.id) return { memberId: again.id as string }
+  }
+  if (insertErr) throw new Error(`member insert failed: ${insertErr.message}`)
+  return { memberId: (inserted as { id: string }).id }
+}
+
 export function isMissingMembersSchema(error: unknown): boolean {
   const err = error as { code?: string; message?: string; details?: string; hint?: string } | null
   const code = err?.code ?? ''
