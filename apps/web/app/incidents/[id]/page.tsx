@@ -8,6 +8,7 @@ import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import RepeatIncidentBanner from '@/app/_components/RepeatIncidentBanner'
 import EpaRqBanner from '@/app/_components/EpaRqBanner'
+import { Prop65IncidentBanner } from '@/app/_components/Prop65IncidentBanner'
 import ChemicalExposuresPanel from './_components/ChemicalExposuresPanel'
 import CapaPanel from './_components/CapaPanel'
 import EscalationPredictionPanel from './_components/EscalationPredictionPanel'
@@ -209,6 +210,10 @@ export default function IncidentDetailPage() {
           quantity_unit={incident.spill_quantity_unit}
         />
       )}
+
+      {/* ── Prop 65 follow-up callout ───────────────────────────── */}
+      <Prop65IncidentBanner tenantId={tenant?.id ?? null} incidentId={incident.id} />
+
 
       {/* ── Description ──────────────────────────────────────────── */}
       <section className="rounded-xl border border-slate-200 dark:border-slate-800 p-4">

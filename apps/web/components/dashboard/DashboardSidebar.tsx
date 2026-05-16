@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import Link from 'next/link'
-import { Printer, BookOpen, ClipboardCheck, Users, Building2, ClipboardList, FileCheck2, Archive, BookText, Cable, Eye, KeyRound, ShieldCheck } from 'lucide-react'
+import { Printer, BookOpen, ClipboardCheck, Users, Building2, ClipboardList, FileCheck2, Archive, BookText, Cable, Eye, KeyRound, ShieldCheck, ShieldAlert } from 'lucide-react'
 import type { Equipment } from '@soteria/core/types'
 import { computePhotoStatusFromEquipment } from '@soteria/core/photoStatus'
 import { useSession } from '@/components/SessionProvider'
@@ -149,6 +149,14 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
           className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
         >
           <BookText className="h-3.5 w-3.5" />
+        </Link>
+        <Link
+          href="/admin/prop65"
+          title="California Proposition 65 / Title 8 §5194"
+          aria-label="California Proposition 65"
+          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
+        >
+          <ShieldAlert className="h-3.5 w-3.5" />
         </Link>
         <Link
           href="/admin/sso"
