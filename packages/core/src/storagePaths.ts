@@ -65,3 +65,15 @@ export function walkdownPhotoPath(
 ): string {
   return `${tenantId}/walkdowns/${sanitizeId(equipmentId)}/${sanitizeId(itemId)}_${timestamp}.jpg`
 }
+
+// Cal. Code Regs tit. 27 §25602 — photo of the actual posted Prop 65
+// sign. Stored under prop65/<tenant>/warning_photos/<site_id>/<ts>.jpg
+// so the tenant-scoped RLS (migration 033) gates writes.
+//   loto-photos/<tenant_uuid>/prop65/warning_photos/<sanitized_site_id>/<ts>.jpg
+export function prop65WarningPhotoPath(
+  tenantId: string,
+  siteId: string,
+  timestamp: number = Date.now(),
+): string {
+  return `${tenantId}/prop65/warning_photos/${sanitizeId(siteId)}/${timestamp}.jpg`
+}

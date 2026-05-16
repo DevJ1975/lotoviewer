@@ -52,6 +52,11 @@ export const ISO45001_CLAUSE_MAP: readonly Iso45001ClauseEntry[] = [
     sources: ['risks'],
   },
   {
+    code:    '6.1.3',
+    title:   'Determination of legal requirements and other requirements',
+    sources: ['prop65_annual_reviews', 'prop65_exposure_assessments'],
+  },
+  {
     code:    '7.2',
     title:   'Competence',
     sources: ['loto_training_records', 'loto_competency_exam_attempts'],
@@ -64,7 +69,7 @@ export const ISO45001_CLAUSE_MAP: readonly Iso45001ClauseEntry[] = [
   {
     code:    '7.4',
     title:   'Communication',
-    sources: ['audit_log'],
+    sources: ['audit_log', 'prop65_notifications', 'prop65_warnings'],
   },
   {
     code:    '7.5',
