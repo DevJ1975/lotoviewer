@@ -16,6 +16,7 @@ import {
   MessageSquare,
   Recycle,
   Settings,
+  ShieldAlert,
   Siren,
   Sparkles,
   Tag,
@@ -178,7 +179,7 @@ const MODULE_ICONS: Record<string, ModuleIconComponent> = {
   // ── Lucide fallbacks for non-signature modules ─────────────────────
   AlertOctagon, AlertTriangle, BarChart3, Bell, BookOpen, Brush,
   ClipboardList, Eye, FileArchive, GraduationCap, LifeBuoy,
-  Megaphone, MessageSquare, Settings, Siren, Sparkles,
+  Megaphone, MessageSquare, Settings, ShieldAlert, Siren, Sparkles,
   Tag, Webhook, Recycle,
 }
 
