@@ -920,6 +920,17 @@ export const FEATURES: FeatureDef[] = [
     icon:        'Building2',
     color:       'slate',
   },
+  {
+    id:          'prop65',
+    name:        'California Prop 65',
+    description: 'OEHHA chemicals, exposure assessments, posted warnings, §5194(h) notifications, annual reviews',
+    href:        '/admin/prop65',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'ShieldAlert',
+    color:       'amber',
+  },
 ]
 
 // ─── Lookups ───────────────────────────────────────────────────────────────
