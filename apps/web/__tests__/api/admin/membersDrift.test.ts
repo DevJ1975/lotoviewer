@@ -61,15 +61,39 @@ describe('POST /api/admin/members/drift', () => {
     })
     mockState.queue('rpc:audit_member_drift', { data: null, error: null })
 
-    const res = await reconcileDrift(jsonRequest('POST', { tenantId: 't1' }))
+    const validTenant = '00000000-0000-0000-0000-0000000000a1'
+    const res = await reconcileDrift(jsonRequest('POST', { tenantId: validTenant }))
     expect(res.status).toBe(200)
     expect(mockState.rpcCalls).toContainEqual({
       name: 'reconcile_members_backfill',
-      args: { p_tenant_id: 't1' },
+      args: { p_tenant_id: validTenant },
     })
     expect(mockState.rpcCalls).toContainEqual({
       name: 'audit_member_drift',
       args: undefined,
+    })
+  })
+
+  it('rejects a non-UUID tenantId with 400', async () => {
+    gateOk()
+    const res = await reconcileDrift(jsonRequest('POST', { tenantId: 'not-a-uuid' }))
+    expect(res.status).toBe(400)
+    expect(mockState.rpcCalls).toEqual([])
+  })
+
+  it('accepts an omitted tenantId for an all-tenants reconcile', async () => {
+    gateOk()
+    mockState.queue('rpc:reconcile_members_backfill', {
+      data: [{ inserted_count: 0, updated_count: 0 }],
+      error: null,
+    })
+    mockState.queue('rpc:audit_member_drift', { data: null, error: null })
+
+    const res = await reconcileDrift(jsonRequest('POST', {}))
+    expect(res.status).toBe(200)
+    expect(mockState.rpcCalls[0]).toEqual({
+      name: 'reconcile_members_backfill',
+      args: { p_tenant_id: null },
     })
   })
 })

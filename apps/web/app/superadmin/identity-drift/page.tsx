@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, ArrowLeft, Loader2, RefreshCw, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase'
@@ -31,9 +31,17 @@ export default function SuperadminIdentityDriftPage() {
   const [reconciling, setReconciling] = useState<string | null>(null)
   const [error, setError]   = useState<string | null>(null)
 
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
   const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+    if (mountedRef.current) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/api/admin/members/drift?limit=100', {
@@ -43,19 +51,24 @@ export default function SuperadminIdentityDriftPage() {
         const body = await res.json().catch(() => ({ error: res.statusText }))
         throw new Error(body.error ?? `HTTP ${res.status}`)
       }
-      setData(await res.json() as DriftResponse)
+      const next = await res.json() as DriftResponse
+      if (mountedRef.current) setData(next)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load drift findings')
+      if (mountedRef.current) {
+        setError(err instanceof Error ? err.message : 'Could not load drift findings')
+      }
     } finally {
-      setLoading(false)
+      if (mountedRef.current) setLoading(false)
     }
   }, [])
 
   useEffect(() => { void load() }, [load])
 
   const onReconcile = useCallback(async (tenantId: string) => {
-    setReconciling(tenantId)
-    setError(null)
+    if (mountedRef.current) {
+      setReconciling(tenantId)
+      setError(null)
+    }
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/api/admin/members/drift', {
@@ -72,9 +85,11 @@ export default function SuperadminIdentityDriftPage() {
       }
       await load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Reconcile failed')
+      if (mountedRef.current) {
+        setError(err instanceof Error ? err.message : 'Reconcile failed')
+      }
     } finally {
-      setReconciling(null)
+      if (mountedRef.current) setReconciling(null)
     }
   }, [load])
 

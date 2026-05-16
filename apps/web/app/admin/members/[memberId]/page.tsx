@@ -8,7 +8,7 @@
 
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
   Check,
@@ -76,23 +76,34 @@ export default function AdminMemberDetailPage() {
   const [mergeReason, setMergeReason] = useState('')
   const [merging, setMerging] = useState(false)
 
+  // Grant-login email prompt state
+  const [grantPromptOpen, setGrantPromptOpen] = useState(false)
+  const [grantEmail, setGrantEmail] = useState('')
+
+  // mountedRef is the unmount guard for every async setState in this
+  // component. We set false in the cleanup callback so a navigation
+  // away mid-fetch doesn't warn or overwrite a fresh page's state.
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
   const load = useCallback(async () => {
     if (!tenantId || !canManage || !UUID_RE.test(memberId)) {
-      setLoading(false)
+      if (mountedRef.current) setLoading(false)
       return
     }
-    setLoading(true)
-    setError(null)
+    if (mountedRef.current) {
+      setLoading(true)
+      setError(null)
+    }
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const headers = new Headers()
-      if (session?.access_token) headers.set('Authorization', `Bearer ${session.access_token}`)
-      headers.set('x-active-tenant', tenantId)
-
       // Member detail comes from the listing endpoint filtered to the
       // exact id — saves a dedicated GET-by-id route and reuses
       // v_member_roster's existing shape.
       const list = await listAdminMembers(tenantId, { includeArchived: true, limit: 500 })
+      if (!mountedRef.current) return
       const found = list.find(m => m.member_id === memberId) ?? null
       setMember(found)
 
@@ -104,55 +115,88 @@ export default function AdminMemberDetailPage() {
         .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false })
         .limit(20)
+      if (!mountedRef.current) return
       setEvents((eventRows ?? []) as MemberStatusEvent[])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load member')
+      if (mountedRef.current) {
+        setError(err instanceof Error ? err.message : 'Could not load member')
+      }
     } finally {
-      setLoading(false)
+      if (mountedRef.current) setLoading(false)
     }
   }, [tenantId, canManage, memberId])
 
   useEffect(() => { void load() }, [load])
 
-  const onGrantLogin = useCallback(async () => {
+  const doGrantLogin = useCallback(async (email: string) => {
     if (!tenantId || !member) return
     setGranting(true)
     setError(null)
+    setGrantPromptOpen(false)
     try {
-      const result = await grantMemberLogin(tenantId, member.member_id, {})
+      const result = await grantMemberLogin(tenantId, member.member_id, email ? { email } : {})
+      if (!mountedRef.current) return
       setGrantResult(result)
       await load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not grant login')
+      if (mountedRef.current) {
+        setError(err instanceof Error ? err.message : 'Could not grant login')
+      }
     } finally {
-      setGranting(false)
+      if (mountedRef.current) setGranting(false)
     }
   }, [tenantId, member, load])
 
-  const openMerge = useCallback(async () => {
+  // If the member has an email on file, send directly. Otherwise open
+  // the prompt so the admin can supply one — without it the server
+  // returns 400 EMAIL_REQUIRED with no obvious next step in the UI.
+  const onGrantLoginClick = useCallback(() => {
+    if (!member) return
+    if (member.email) { void doGrantLogin(member.email) }
+    else { setGrantEmail(''); setGrantPromptOpen(true) }
+  }, [member, doGrantLogin])
+
+  // Search cancellation: each typed character starts a new fetch. We
+  // tag each invocation with a monotonically-increasing id and ignore
+  // any result whose id is not the latest — keeps the dropdown showing
+  // the most-recently-typed query even when an earlier fetch finishes
+  // last.
+  const mergeSearchSeqRef = useRef(0)
+
+  const fetchMergeOptions = useCallback(async (q: string) => {
+    if (!tenantId) return
+    const seq = ++mergeSearchSeqRef.current
+    try {
+      const list = await listAdminMembers(tenantId, { q, includeArchived: false, limit: 50 })
+      if (seq !== mergeSearchSeqRef.current || !mountedRef.current) return
+      setMergeOptions(list.filter(m => m.member_id !== member?.member_id))
+    } catch (err) {
+      if (seq !== mergeSearchSeqRef.current || !mountedRef.current) return
+      setError(err instanceof Error ? err.message : 'Could not search members')
+    }
+  }, [tenantId, member])
+
+  const openMerge = useCallback(() => {
     if (!tenantId) return
     setMergeOpen(true)
     setMergeSearch('')
     setMergeTargetId(null)
     setMergeReason('')
-    try {
-      const list = await listAdminMembers(tenantId, { includeArchived: false, limit: 50 })
-      setMergeOptions(list.filter(m => m.member_id !== member?.member_id))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load members for merge')
-    }
-  }, [tenantId, member])
+    void fetchMergeOptions('')
+  }, [tenantId, fetchMergeOptions])
 
-  const onSearchMerge = useCallback(async (q: string) => {
+  // 200 ms debounce: typical type-cadence is ~70-100 ms/char, so 200 ms
+  // batches a normal name-typing burst into a single fetch while still
+  // feeling responsive.
+  useEffect(() => {
+    if (!mergeOpen) return
+    const handle = setTimeout(() => { void fetchMergeOptions(mergeSearch) }, 200)
+    return () => clearTimeout(handle)
+  }, [mergeOpen, mergeSearch, fetchMergeOptions])
+
+  const onSearchMerge = useCallback((q: string) => {
     setMergeSearch(q)
-    if (!tenantId) return
-    try {
-      const list = await listAdminMembers(tenantId, { q, includeArchived: false, limit: 50 })
-      setMergeOptions(list.filter(m => m.member_id !== member?.member_id))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not search members')
-    }
-  }, [tenantId, member])
+  }, [])
 
   const onConfirmMerge = useCallback(async () => {
     if (!tenantId || !member || !mergeTargetId || !mergeReason.trim()) return
@@ -164,13 +208,16 @@ export default function AdminMemberDetailPage() {
         targetMemberId: mergeTargetId,
         reason: mergeReason.trim(),
       })
+      if (!mountedRef.current) return
       setMergeOpen(false)
       // The source row is now status='merged' — redirect to the target.
       router.push(`/admin/members/${mergeTargetId}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Merge failed')
+      if (mountedRef.current) {
+        setError(err instanceof Error ? err.message : 'Merge failed')
+      }
     } finally {
-      setMerging(false)
+      if (mountedRef.current) setMerging(false)
     }
   }, [tenantId, member, mergeTargetId, mergeReason, router])
 
@@ -228,7 +275,7 @@ export default function AdminMemberDetailPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={onGrantLogin} disabled={hasLogin || granting}>
+            <Button onClick={onGrantLoginClick} disabled={hasLogin || granting}>
               {granting ? <Loader2 className="h-4 w-4 animate-spin" /> : hasLogin ? <UserCheck className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
               {hasLogin ? 'Login active' : 'Grant app access'}
             </Button>
@@ -314,6 +361,34 @@ export default function AdminMemberDetailPage() {
           </ul>
         )}
       </section>
+
+      <AlertDialog open={grantPromptOpen} onOpenChange={setGrantPromptOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Email required to grant access</AlertDialogTitle>
+            <AlertDialogDescription>
+              {member.display_name} has no email on file. Enter one to send the invite to.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <input
+            type="email"
+            value={grantEmail}
+            onChange={e => setGrantEmail(e.target.value)}
+            placeholder="name@company.com"
+            autoFocus
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={granting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => doGrantLogin(grantEmail.trim())}
+              disabled={!grantEmail.trim() || granting}
+            >
+              {granting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send invite'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={mergeOpen} onOpenChange={setMergeOpen}>
         <AlertDialogContent>

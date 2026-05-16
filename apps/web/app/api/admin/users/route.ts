@@ -379,7 +379,7 @@ export async function DELETE(req: Request) {
 
   for (const row of (affectedMembers ?? []) as Array<{ id: string; metadata: Record<string, unknown> | null }>) {
     const nextMetadata = { ...(row.metadata ?? {}), ...archivedReasonPatch }
-    await admin
+    const { error: archiveErr } = await admin
       .from('members')
       .update({
         profile_id: null,
@@ -388,8 +388,9 @@ export async function DELETE(req: Request) {
         updated_by: gate.userId,
       })
       .eq('id', row.id)
+    if (archiveErr) return sanitizeError(archiveErr, 'admin/users/DELETE member archive')
 
-    await admin.from('member_status_events').insert({
+    const { error: eventErr } = await admin.from('member_status_events').insert({
       tenant_id:     gate.tenantId,
       member_id:     row.id,
       event_type:    'login_revoked',
@@ -398,6 +399,7 @@ export async function DELETE(req: Request) {
       old_values:    { profile_id: id },
       new_values:    { profile_id: null, status: 'archived' },
     })
+    if (eventErr) return sanitizeError(eventErr, 'admin/users/DELETE event insert')
   }
 
   const shouldDeleteNeverAcceptedInvite = !lastSignInAt && (otherMemberships ?? 0) === 0

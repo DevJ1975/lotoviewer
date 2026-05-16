@@ -94,10 +94,22 @@ begin
       'active',
       jsonb_build_object('synced_from', 'profiles_trigger')
     )
+    -- preferred_name and display_name only refresh when display_name_source
+    -- is 'system' (the default for sync-created rows). If a user has set a
+    -- preferred name explicitly via the UI (display_name_source='user'), we
+    -- never clobber it from a profile rename.
     on conflict (tenant_id, profile_id) do update
-       set legal_name = coalesce(excluded.legal_name, public.members.legal_name),
-           email = coalesce(excluded.email, public.members.email),
-           updated_at = now();
+       set legal_name      = coalesce(excluded.legal_name, public.members.legal_name),
+           email           = coalesce(excluded.email, public.members.email),
+           preferred_name  = case
+                               when public.members.display_name_source = 'user' then public.members.preferred_name
+                               else coalesce(excluded.preferred_name, public.members.preferred_name)
+                             end,
+           display_name    = case
+                               when public.members.display_name_source = 'user' then public.members.display_name
+                               else coalesce(excluded.display_name, public.members.display_name)
+                             end,
+           updated_at      = now();
   end loop;
 
   return new;
@@ -187,9 +199,18 @@ begin
       jsonb_build_object('synced_from', 'loto_workers_trigger')
     );
   else
+    -- preferred_name/display_name only refresh when display_name_source
+    -- is 'system'; never clobber a user-edited preferred name.
     update public.members
        set legal_name      = coalesce(v_full_name, legal_name),
-           preferred_name  = coalesce(v_full_name, preferred_name),
+           preferred_name  = case
+                               when display_name_source = 'user' then preferred_name
+                               else coalesce(v_full_name, preferred_name)
+                             end,
+           display_name    = case
+                               when display_name_source = 'user' then display_name
+                               else coalesce(v_full_name, display_name)
+                             end,
            email           = coalesce(v_email, email),
            employee_id     = coalesce(v_employee_id, employee_id),
            notes           = coalesce(v_notes, notes),

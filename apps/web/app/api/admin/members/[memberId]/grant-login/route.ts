@@ -212,7 +212,12 @@ export async function POST(req: Request, ctx: RouteContext) {
     return sanitizeError(linkErr, 'admin/members/grant-login member link')
   }
 
-  await admin.from('member_status_events').insert({
+  // Audit insert is best-effort but failures must be visible — a
+  // silently-missing login_granted event would compromise the audit
+  // trail. We surface as 500 only after the link has already happened,
+  // so the caller sees "the access was granted but the audit row
+  // failed to write" rather than swallowing it.
+  const { error: eventErr } = await admin.from('member_status_events').insert({
     tenant_id:     gate.tenantId,
     member_id:     memberId,
     event_type:    'login_granted',
@@ -220,6 +225,9 @@ export async function POST(req: Request, ctx: RouteContext) {
     reason:        'admin granted app access via members page',
     new_values:    { profile_id: userId, email },
   })
+  if (eventErr) {
+    return sanitizeError(eventErr, 'admin/members/grant-login event insert')
+  }
 
   const loginUrl = computeLoginUrl(req)
   const emailSent = await sendInviteEmail({

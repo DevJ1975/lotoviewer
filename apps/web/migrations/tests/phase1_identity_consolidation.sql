@@ -229,6 +229,91 @@ begin
     raise notice 'TEST 7 ok: dual-profile merge refused';
   end;
   rollback to savepoint t7;
+
+  -- ────────────────────────────────────────────────────────────────
+  -- TEST 8: profile rename propagates display_name when the member's
+  -- display_name_source is 'system', and is suppressed when 'user'.
+  -- Migration 180 owns this conflict-resolution policy.
+  -- ────────────────────────────────────────────────────────────────
+  savepoint t8;
+  declare
+    v_uid       uuid := gen_random_uuid();
+    v_dn        text;
+    v_dn_after  text;
+    v_member_a  uuid;
+  begin
+    insert into auth.users (id, email) values (v_uid, 'rename@test')
+      on conflict (id) do nothing;
+    insert into public.profiles (id, email, full_name)
+    values (v_uid, 'rename@test', 'Original Name')
+      on conflict (id) do update set full_name = excluded.full_name;
+    insert into public.tenant_memberships (tenant_id, user_id, role)
+    values (v_tenant_id, v_uid, 'member')
+      on conflict do nothing;
+
+    select id, display_name into v_member_a, v_dn
+      from public.members where tenant_id = v_tenant_id and profile_id = v_uid;
+    if v_dn <> 'Original Name' then
+      raise exception 'TEST 8a failed: expected display_name "Original Name", got "%"', v_dn;
+    end if;
+
+    update public.profiles set full_name = 'New Name' where id = v_uid;
+    select display_name into v_dn_after
+      from public.members where id = v_member_a;
+    if v_dn_after <> 'New Name' then
+      raise exception 'TEST 8b failed: display_name did not track rename (system source), got "%"', v_dn_after;
+    end if;
+
+    -- Flip to user source — subsequent profile renames must NOT touch
+    -- display_name or preferred_name.
+    update public.members
+       set display_name = 'Custom Handle', display_name_source = 'user'
+     where id = v_member_a;
+    update public.profiles set full_name = 'Renamed Again' where id = v_uid;
+    select display_name into v_dn_after
+      from public.members where id = v_member_a;
+    if v_dn_after <> 'Custom Handle' then
+      raise exception 'TEST 8c failed: user-set display_name was clobbered by sync ("%")', v_dn_after;
+    end if;
+
+    raise notice 'TEST 8 ok: display_name tracks profile rename when system, immutable when user';
+  end;
+  rollback to savepoint t8;
+
+  -- ────────────────────────────────────────────────────────────────
+  -- TEST 9: the destructive RPCs are NOT exposed to the authenticated
+  -- role. Any logged-in user calling supabase.rpc('merge_members', …)
+  -- must be rejected at the privilege layer — the route gate is not
+  -- the only line of defence.
+  -- ────────────────────────────────────────────────────────────────
+  savepoint t9;
+  declare
+    v_has_merge       boolean;
+    v_has_reconcile   boolean;
+    v_has_audit       boolean;
+  begin
+    v_has_merge := has_function_privilege(
+      'authenticated',
+      'public.merge_members(uuid,uuid,uuid,text)',
+      'execute'
+    );
+    v_has_reconcile := has_function_privilege(
+      'authenticated',
+      'public.reconcile_members_backfill(uuid)',
+      'execute'
+    );
+    v_has_audit := has_function_privilege(
+      'authenticated',
+      'public.audit_member_drift()',
+      'execute'
+    );
+    if v_has_merge or v_has_reconcile or v_has_audit then
+      raise exception 'TEST 9 failed: authenticated has execute on a destructive RPC (merge=%, reconcile=%, audit=%)',
+        v_has_merge, v_has_reconcile, v_has_audit;
+    end if;
+    raise notice 'TEST 9 ok: destructive RPCs not reachable from authenticated';
+  end;
+  rollback to savepoint t9;
 end $$;
 
 rollback;

@@ -16,6 +16,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 const DEFAULT_LIMIT = 50
 const MAX_LIMIT     = 200
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export async function GET(req: Request) {
   const gate = await requireSuperadmin(req.headers.get('authorization'))
@@ -60,7 +61,17 @@ export async function POST(req: Request) {
   try { body = await req.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
-  const tenantId = typeof body.tenantId === 'string' ? body.tenantId : null
+  // null = "reconcile all tenants" (operator omitted the field). A
+  // non-string or malformed value is a 400, not a silent all-tenants
+  // run — the Postgres cast error that would otherwise surface is
+  // noisier than necessary.
+  let tenantId: string | null = null
+  if (body.tenantId !== undefined && body.tenantId !== null) {
+    if (typeof body.tenantId !== 'string' || !UUID_RE.test(body.tenantId)) {
+      return NextResponse.json({ error: 'tenantId must be a UUID or omitted' }, { status: 400 })
+    }
+    tenantId = body.tenantId
+  }
 
   const admin = supabaseAdmin()
   const { data: backfillData, error: backfillErr } = await admin.rpc('reconcile_members_backfill', {

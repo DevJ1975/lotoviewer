@@ -139,8 +139,13 @@ begin
 end;
 $$;
 
+-- Service-role only: the SP writes to members on behalf of a tenant
+-- without re-checking the caller's admin status. The drift API route
+-- is the only intended caller; it gates with requireSuperadmin and
+-- uses the service client.
 revoke all on function public.reconcile_members_backfill(uuid) from public;
-grant execute on function public.reconcile_members_backfill(uuid) to authenticated;
+revoke all on function public.reconcile_members_backfill(uuid) from authenticated;
+grant execute on function public.reconcile_members_backfill(uuid) to service_role;
 
 notify pgrst, 'reload schema';
 
