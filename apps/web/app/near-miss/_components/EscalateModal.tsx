@@ -5,6 +5,11 @@ import { useRouter } from 'next/navigation'
 import { Loader2, AlertTriangle, X } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
+import {
+  HAZARD_CONTROL_HIERARCHY,
+  HAZARD_CONTROL_LABEL,
+  type HazardControlHierarchyLevel,
+} from '@soteria/core/hazardControls'
 
 // Modal that collects the two fields the near-miss can't supply
 // (activity_type + exposure_frequency) and POSTs to the escalate
@@ -41,13 +46,19 @@ export default function EscalateModal({ nearMissId, onClose }: Props) {
 
   const [activity, setActivity] = useState<ActivityType | ''>('')
   const [exposure, setExposure] = useState<ExposureFreq | ''>('')
+  const [controlName,      setControlName]      = useState('')
+  const [controlHierarchy, setControlHierarchy] = useState<HazardControlHierarchyLevel | ''>('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!tenant?.id) { setError('No active tenant'); return }
-    if (!activity || !exposure) { setError('Both fields are required'); return }
+    if (!activity || !exposure) { setError('Activity type and exposure frequency are required.'); return }
+    if (!controlHierarchy || !controlName.trim()) {
+      setError('ISO 45001 8.1.2 requires at least one mitigating control with a hierarchy level before escalation.')
+      return
+    }
 
     setSubmitting(true); setError(null)
     try {
@@ -61,7 +72,14 @@ export default function EscalateModal({ nearMissId, onClose }: Props) {
       const res = await fetch(`/api/near-miss/${nearMissId}/escalate`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ activity_type: activity, exposure_frequency: exposure }),
+        body: JSON.stringify({
+          activity_type:      activity,
+          exposure_frequency: exposure,
+          initial_control: {
+            hierarchy_level: controlHierarchy,
+            name:            controlName.trim(),
+          },
+        }),
       })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
@@ -141,6 +159,33 @@ export default function EscalateModal({ nearMissId, onClose }: Props) {
                 <option key={f.v} value={f.v}>{f.label}</option>
               ))}
             </select>
+          </div>
+
+          <div className="space-y-1.5 border-t border-slate-200 dark:border-slate-700 pt-3">
+            <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+              Initial mitigating control <span className="text-rose-600">*</span>
+            </label>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              ISO 45001 8.1.2 — escalating without naming at least one control creates an unmitigated risk row in the register. Pick the highest level you can realistically apply.
+            </p>
+            <select
+              value={controlHierarchy}
+              onChange={e => setControlHierarchy(e.target.value as HazardControlHierarchyLevel)}
+              required
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm"
+            >
+              <option value="">Select hierarchy level…</option>
+              {HAZARD_CONTROL_HIERARCHY.map(lv => (
+                <option key={lv} value={lv}>{HAZARD_CONTROL_LABEL[lv]}</option>
+              ))}
+            </select>
+            <input
+              type="text"
+              value={controlName}
+              onChange={e => setControlName(e.target.value)}
+              placeholder="e.g. Install guard interlock on conveyor #4"
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm"
+            />
           </div>
 
           <p className="text-[11px] text-slate-500 dark:text-slate-400">

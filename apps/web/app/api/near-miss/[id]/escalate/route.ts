@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nextjs'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { deriveInherentScore, type NearMissRow } from '@soteria/core/nearMiss'
+import { normalizeHierarchyLevel } from '@soteria/core/hazardControls'
 
 // POST /api/near-miss/[id]/escalate
 // Atomically (best-effort) creates a `risks` register entry from a
@@ -36,12 +37,25 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const VALID_ACTIVITY_TYPES  = ['routine', 'non_routine', 'emergency'] as const
 const VALID_EXPOSURE_FREQS  = ['continuous', 'daily', 'weekly', 'monthly', 'rare'] as const
 
+// risk_controls' check constraint uses the long form. We accept either
+// short or long on input — the helper imported below normalises both
+// directions.
+const VALID_HIERARCHY_LEVELS_SHORT = [
+  'eliminate', 'substitute', 'engineering', 'administrative', 'ppe',
+] as const
+
 interface EscalateBody {
   activity_type?:       unknown
   exposure_frequency?:  unknown
   title?:               unknown
   inherent_severity?:   unknown
   inherent_likelihood?: unknown
+  /**
+   * ISO 45001 8.1.2 — every escalation must record at least one
+   * mitigating control with a hierarchy level. Forces the caller to
+   * declare intent rather than create an unmitigated risk row.
+   */
+  initial_control?:     unknown
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -72,6 +86,38 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (!Number.isInteger(val) || val < 1 || val > 5) {
       return NextResponse.json({ error: `${key} must be an integer 1..5` }, { status: 400 })
     }
+  }
+
+  // ISO 45001 8.1.2 — every escalation MUST include at least one
+  // control with a hierarchy level. The UI mirrors this constraint;
+  // the API is the authoritative gate so a hand-rolled request can't
+  // bypass it.
+  const rawControl = body.initial_control as { hierarchy_level?: unknown; name?: unknown } | undefined
+  if (!rawControl || typeof rawControl !== 'object') {
+    return NextResponse.json({
+      error: 'initial_control with at least one hierarchy_level is required to escalate (ISO 45001 8.1.2).',
+    }, { status: 400 })
+  }
+  const rawHierarchy = typeof rawControl.hierarchy_level === 'string' ? rawControl.hierarchy_level : ''
+  const normalizedHierarchy = normalizeHierarchyLevel(rawHierarchy)
+  if (!normalizedHierarchy) {
+    return NextResponse.json({
+      error: `initial_control.hierarchy_level must be one of ${VALID_HIERARCHY_LEVELS_SHORT.join(', ')}`,
+    }, { status: 400 })
+  }
+  // risk_controls' check constraint stores the long form
+  // (elimination, substitution, engineering, administrative, ppe).
+  // Map the short form back here so the insert satisfies the
+  // existing constraint without a schema change.
+  const controlHierarchyLong =
+    normalizedHierarchy === 'eliminate'  ? 'elimination' :
+    normalizedHierarchy === 'substitute' ? 'substitution' :
+    normalizedHierarchy
+  const controlName = typeof rawControl.name === 'string' ? rawControl.name.trim() : ''
+  if (!controlName) {
+    return NextResponse.json({
+      error: 'initial_control.name is required so the control is identifiable in the register.',
+    }, { status: 400 })
   }
 
   const admin = supabaseAdmin()
@@ -127,6 +173,26 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (riskErr) {
       Sentry.captureException(riskErr, { tags: { route: 'near-miss/escalate', stage: 'risk-insert' } })
       return NextResponse.json({ error: riskErr.message }, { status: 500 })
+    }
+
+    // Step 1b: insert the seed control. ISO 45001 8.1.2 requires the
+    // org to document its planned mitigations at the point a risk is
+    // accepted into the register. If the insert fails we delete the
+    // risk row so the user re-tries from a clean state.
+    const { error: controlErr } = await admin
+      .from('risk_controls')
+      .insert({
+        tenant_id:       gate.tenantId,
+        risk_id:         risk.id,
+        custom_name:     controlName,
+        hierarchy_level: controlHierarchyLong,
+        status:          'planned',
+        created_by:      gate.userId,
+      })
+    if (controlErr) {
+      Sentry.captureException(controlErr, { tags: { route: 'near-miss/escalate', stage: 'control-insert', risk_id: risk.id } })
+      await admin.from('risks').delete().eq('id', risk.id).eq('tenant_id', gate.tenantId)
+      return NextResponse.json({ error: `Failed to add initial control: ${controlErr.message}` }, { status: 500 })
     }
 
     // Step 2: link + close the near-miss. Compensate by deleting the

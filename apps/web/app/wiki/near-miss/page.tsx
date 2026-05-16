@@ -1,10 +1,19 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-05'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-05-15'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.0',
+    date:    '2026-05-15',
+    changes: [
+      'Escalate-to-risk action now requires the reporter to pick a ' +
+      'hierarchy-of-controls level for at least one mitigating control ' +
+      'before the linked risk row is created.',
+    ],
+  },
   { version: '1.0.0', date: '2026-05-05', changes: ['Initial near-miss wiki page.'] },
 ]
 

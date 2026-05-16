@@ -1,0 +1,27 @@
+{
+  "nav.dashboard":        "Dashboard",
+  "nav.equipment":        "Equipment",
+  "nav.incidents":        "Incidents",
+  "nav.bbs":              "Behavioral safety",
+  "nav.contractors":      "Contractors",
+  "nav.admin":            "Admin",
+
+  "placard.title":              "LOCKOUT/TAGOUT PROCEDURE",
+  "placard.equipmentLabel":     "EQUIPMENT:",
+  "placard.applicationHeader":  "LOCKOUT APPLICATION PROCESS",
+  "placard.removalHeader":      "LOCKOUT REMOVAL PROCESS",
+  "placard.signatureLabel":     "Signature",
+  "placard.dateLabel":          "Date",
+
+  "form.save":           "Save",
+  "form.cancel":         "Cancel",
+  "form.submit":         "Submit",
+  "form.description":    "Description",
+  "form.location":       "Location",
+  "form.severity":       "Severity",
+  "form.required":       "Required",
+
+  "common.loading":      "Loading…",
+  "common.error":        "Error",
+  "common.back":         "Back"
+}

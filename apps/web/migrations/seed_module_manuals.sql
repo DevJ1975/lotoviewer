@@ -39,7 +39,12 @@ values
   ('admin-training',            'Training records',   'Training certifications + expiry tracking.',             E'## Overview\n\nThis manual covers Training records. **Edit me.**'),
   ('admin-ai-usage',            'AI usage',           'Tenant AI usage trends, budget caps, model spend, and invocation audit views.', E'## Overview\n\nThis manual covers AI usage administration. **Edit me.**'),
   ('admin-hygiene-log',         'Data hygiene log',   'Per-tenant data-cleanup audit trail.',                   E'## Overview\n\nThis manual covers the Data hygiene log. **Edit me.**'),
-  ('settings-notifications',    'Notifications',      'Web Push subscription + per-user notification toggles.', E'## Overview\n\nThis manual covers Notification settings. **Edit me.**')
+  ('settings-notifications',    'Notifications',      'Web Push subscription + per-user notification toggles.', E'## Overview\n\nThis manual covers Notification settings. **Edit me.**'),
+  ('admin-sso',                 'Single sign-on',     'SAML or OIDC federation for tenant logins.',             E'## Overview\n\nThis manual covers SSO configuration. **Edit me.**'),
+  ('admin-scim',                'SCIM tokens',        'SCIM 2.0 bearer tokens for workforce provisioning.',     E'## Overview\n\nThis manual covers SCIM tokens. **Edit me.**'),
+  ('admin-cmms',                'CMMS integrations',  'Webhook-driven CMMS sync (Maximo / SAP PM / eMaint).',   E'## Overview\n\nThis manual covers CMMS integrations. **Edit me.**'),
+  ('admin-bbs-dashboard',       'BBS leading indicators', 'Safe-to-unsafe ratio + follow-ups-due dashboard.',  E'## Overview\n\nThis manual covers the BBS v2 dashboard. **Edit me.**'),
+  ('admin-contractors',         'Contractors',        'Host-procedure acknowledgement and prequalification.',   E'## Overview\n\nThis manual covers contractor administration. **Edit me.**')
 on conflict (module_id) do nothing;
 
 commit;

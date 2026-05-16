@@ -1,0 +1,27 @@
+{
+  "nav.dashboard":        "Tableau de bord",
+  "nav.equipment":        "Équipement",
+  "nav.incidents":        "Incidents",
+  "nav.bbs":              "Sécurité comportementale",
+  "nav.contractors":      "Sous-traitants",
+  "nav.admin":            "Administration",
+
+  "placard.title":              "PROCÉDURE DE CONSIGNATION/DÉCONSIGNATION",
+  "placard.equipmentLabel":     "ÉQUIPEMENT :",
+  "placard.applicationHeader":  "PROCESSUS DE CONSIGNATION",
+  "placard.removalHeader":      "PROCESSUS DE DÉCONSIGNATION",
+  "placard.signatureLabel":     "Signature",
+  "placard.dateLabel":          "Date",
+
+  "form.save":           "Enregistrer",
+  "form.cancel":         "Annuler",
+  "form.submit":         "Soumettre",
+  "form.description":    "Description",
+  "form.location":       "Emplacement",
+  "form.severity":       "Gravité",
+  "form.required":       "Requis",
+
+  "common.loading":      "Chargement…",
+  "common.error":        "Erreur",
+  "common.back":         "Retour"
+}

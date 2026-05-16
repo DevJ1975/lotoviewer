@@ -8,6 +8,7 @@ import { fetchInsightsMetrics, type InsightsMetrics } from '@soteria/core/insigh
 import { WorstSpacesCard }   from './_components/WorstSpacesCard'
 import { AnomalyCard }       from './_components/AnomalyCard'
 import { SupervisorTable }   from './_components/SupervisorTable'
+import CapaWidget            from './_components/CapaWidget'
 
 // Risk-intelligence dashboard. Sits one tier deeper than the EHS scorecard
 // (/admin/scorecard) — that one answers "how is my safety program doing?"
@@ -122,6 +123,7 @@ export default function InsightsPage() {
             <WorstSpacesCard rows={metrics.worstSpaces} windowDays={metrics.windowDays} />
             <AnomalyCard anomalies={metrics.anomalies} windowDays={metrics.windowDays} />
           </div>
+          <CapaWidget />
           <SupervisorTable rows={metrics.supervisors} windowDays={metrics.windowDays} />
         </>
       )}

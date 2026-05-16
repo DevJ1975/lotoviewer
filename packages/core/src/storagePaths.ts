@@ -54,3 +54,14 @@ export function confinedSpacePhotoPath(
 ): string {
   return `${tenantId}/confined-spaces/${sanitizeId(spaceId)}/${slot}_${timestamp}.jpg`
 }
+
+// §147(c)(6) walkdown checklist per-item photo evidence.
+//   loto-photos/<tenant_uuid>/walkdowns/<sanitized_equipment_id>/<item_id>_<ts>.jpg
+export function walkdownPhotoPath(
+  tenantId: string,
+  equipmentId: string,
+  itemId: string,
+  timestamp: number = Date.now(),
+): string {
+  return `${tenantId}/walkdowns/${sanitizeId(equipmentId)}/${sanitizeId(itemId)}_${timestamp}.jpg`
+}

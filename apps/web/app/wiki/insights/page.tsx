@@ -1,10 +1,20 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-05'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-05-15'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.0',
+    date:    '2026-05-15',
+    changes: [
+      'Added the CAPA widget: "CAPAs awaiting verification" and ' +
+      '"Overdue CAPAs" counts surface here with drill-down to the ' +
+      'incident detail page, paired with the ISO 45001 §10.2 verification-' +
+      'of-effectiveness workflow.',
+    ],
+  },
   { version: '1.0.0', date: '2026-05-05', changes: ['Initial insights wiki page.'] },
 ]
 

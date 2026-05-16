@@ -1,5 +1,6 @@
 import { PDFDocument, PDFFont, PDFPage, RGB, StandardFonts, degrees, rgb } from 'pdf-lib'
 import { ENERGY_CODES, energyCodeFor, hexToRgb01 } from '@soteria/core/energyCodes'
+import { validateProcedure as validateProcedureForPlacard } from '@soteria/core/lotoProcedureValidation'
 import { PLACARD_TEXT } from '@/lib/placardText'
 import { type Annotation, parseAnnotations } from '@/lib/photoAnnotations'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
@@ -763,11 +764,30 @@ async function addPlacardPages(
 }
 
 export async function generatePlacardPdf({ equipment, steps }: GeneratePlacardArgs): Promise<Uint8Array> {
+  assertProcedureValid(steps)
   const pdfDoc = await PDFDocument.create()
   const regular = await pdfDoc.embedFont(StandardFonts.Helvetica)
   const bold    = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
   await addPlacardPages(pdfDoc, { regular, bold }, equipment, steps)
   return pdfDoc.save()
+}
+
+// Refuse to render a placard that doesn't satisfy §147(c)(4)(ii). The
+// validator surfaces the same gap in the editor, but enforcing it at
+// the generator means a future API path (batch print, regenerate-all)
+// can't accidentally ship an incomplete procedure to the field.
+function assertProcedureValid(steps: LotoEnergyStep[]): void {
+  // Skip when the equipment legitimately has no procedure at all — the
+  // existing UI handles that case with "no steps yet" rather than a
+  // failed validation.
+  if (steps.length === 0) return
+  const result = validateProcedureForPlacard(steps)
+  if (result.valid) return
+  const phases = result.missing.map(p => p).join(', ')
+  throw new Error(
+    `Placard refused: procedure is missing required §147(c)(4)(ii) phase(s): ${phases}. ` +
+    'Open Edit Steps, tag at least one step per phase, and try again.',
+  )
 }
 
 // Single-page bilingual placard. Renders the existing EN and ES placards
@@ -785,6 +805,7 @@ export async function generatePlacardPdf({ equipment, steps }: GeneratePlacardAr
 export async function generateBilingualPlacardPdf(
   { equipment, steps }: GeneratePlacardArgs,
 ): Promise<Uint8Array> {
+  assertProcedureValid(steps)
   // Step 1: render EN + ES at full size into a temporary doc. Reuse
   // addPlacardPages so any future fix to the per-language layout
   // automatically lands here.
@@ -839,6 +860,7 @@ export async function generateBatchPlacardPdf(
   const fonts   = { regular, bold }
 
   for (let i = 0; i < items.length; i++) {
+    assertProcedureValid(items[i].steps)
     await addPlacardPages(pdfDoc, fonts, items[i].equipment, items[i].steps)
     onProgress?.(i + 1, items.length)
   }

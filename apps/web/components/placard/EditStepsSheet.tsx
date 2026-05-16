@@ -4,6 +4,12 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
 import { ENERGY_CODES, energyCodeFor } from '@soteria/core/energyCodes'
+import {
+  LOTO_STEP_TYPE_LABELS,
+  LOTO_STEP_ORDER,
+  validateProcedure,
+  type LotoStepType,
+} from '@soteria/core/lotoProcedureValidation'
 import { Sheet } from '@/components/ui/sheet'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 
@@ -27,6 +33,13 @@ type Draft = {
   tag_description:        string
   isolation_procedure:    string
   method_of_verification: string
+  // Migration 140 — §147(c)(4)(ii) structured-step fields. Drafted as
+  // local-only so save-time blanks default to 'isolate' (the historical
+  // best-fit phase) without forcing the user through a picker for every
+  // single row when AI generation hands us many at once.
+  step_type:              LotoStepType
+  sequence_order:         number
+  tryout_required:        boolean
 }
 
 function toDraft(step: LotoEnergyStep): Draft {
@@ -38,6 +51,9 @@ function toDraft(step: LotoEnergyStep): Draft {
     tag_description:        step.tag_description        ?? '',
     isolation_procedure:    step.isolation_procedure    ?? '',
     method_of_verification: step.method_of_verification ?? '',
+    step_type:              step.step_type,
+    sequence_order:         step.sequence_order,
+    tryout_required:        step.tryout_required,
   }
 }
 
@@ -97,6 +113,9 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
         tag_description:        '',
         isolation_procedure:    '',
         method_of_verification: '',
+        step_type:              'isolate',
+        sequence_order:         prev.reduce((m, d) => Math.max(m, d.sequence_order), 0) + 1,
+        tryout_required:        false,
       }
       return [...prev, newDraft]
     })
@@ -143,7 +162,9 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
       // whatever the user already had.
       setDrafts(prev => {
         const next = [...prev]
+        let nextSeq = prev.reduce((m, d) => Math.max(m, d.sequence_order), 0)
         for (const s of json.steps) {
+          nextSeq += 1
           next.push({
             key:                    makeNewKey(),
             energy_type:            s.energy_type,
@@ -151,6 +172,12 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
             tag_description:        s.tag_description,
             isolation_procedure:    s.isolation_procedure,
             method_of_verification: s.method_of_verification,
+            // The AI generator emits free-text steps; tag every one
+            // as 'isolate' (the dominant phase historically) and let
+            // the admin re-tag the verify step before saving.
+            step_type:              'isolate',
+            sequence_order:         nextSeq,
+            tryout_required:        false,
           })
         }
         return next
@@ -195,7 +222,10 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
       return (
         (o.tag_description        ?? '') !== d.tag_description        ||
         (o.isolation_procedure    ?? '') !== d.isolation_procedure    ||
-        (o.method_of_verification ?? '') !== d.method_of_verification
+        (o.method_of_verification ?? '') !== d.method_of_verification ||
+        o.step_type                       !== d.step_type              ||
+        o.sequence_order                  !== d.sequence_order         ||
+        o.tryout_required                 !== d.tryout_required
       )
     })
 
@@ -215,6 +245,9 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
         tag_description:        d.tag_description.trim()        || null,
         isolation_procedure:    d.isolation_procedure.trim()    || null,
         method_of_verification: d.method_of_verification.trim() || null,
+        step_type:              d.step_type,
+        sequence_order:         d.sequence_order,
+        tryout_required:        d.tryout_required,
       }))
       const { data, error } = await supabase
         .from('loto_energy_steps')
@@ -234,6 +267,9 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
           tag_description:        d.tag_description.trim()        || null,
           isolation_procedure:    d.isolation_procedure.trim()    || null,
           method_of_verification: d.method_of_verification.trim() || null,
+          step_type:              d.step_type,
+          sequence_order:         d.sequence_order,
+          tryout_required:        d.tryout_required,
         }).eq('tenant_id', tenant.id).eq('id', d.dbId!),
       ))
       if (updateResults.some(r => r.error)) {
@@ -255,6 +291,9 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
         tag_description:        d.tag_description.trim()        || null,
         isolation_procedure:    d.isolation_procedure.trim()    || null,
         method_of_verification: d.method_of_verification.trim() || null,
+        step_type:              d.step_type,
+        sequence_order:         d.sequence_order,
+        tryout_required:        d.tryout_required,
       }
     })
 
@@ -287,12 +326,47 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
     return (
       (o.tag_description        ?? '') !== d.tag_description        ||
       (o.isolation_procedure    ?? '') !== d.isolation_procedure    ||
-      (o.method_of_verification ?? '') !== d.method_of_verification
+      (o.method_of_verification ?? '') !== d.method_of_verification ||
+      o.step_type                       !== d.step_type              ||
+      o.sequence_order                  !== d.sequence_order         ||
+      o.tryout_required                 !== d.tryout_required
     )
   })
 
+  // §147(c)(4)(ii) procedure-structure preview. Lights up the banner
+  // when a required phase is missing so the admin can fix it before
+  // the placard generator refuses to render.
+  const procedureCheck = validateProcedure(
+    drafts.filter(d =>
+      !!d.dbId
+      || d.tag_description.trim()
+      || d.isolation_procedure.trim()
+      || d.method_of_verification.trim(),
+    ),
+  )
+
   return (
     <Sheet open={open} onClose={() => !saving && onClose()} title="Edit Energy Steps" subtitle={equipmentId}>
+      {/* §147(c)(4)(ii) procedure-structure banner. Lights up when a
+          required phase is missing — the placard generator refuses
+          to render in that state, so surfacing it here saves an
+          edit-save-fail cycle. */}
+      {!procedureCheck.valid && (
+        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/40 p-3">
+          <p className="text-xs font-bold text-amber-900 dark:text-amber-100">
+            Procedure incomplete (§147(c)(4)(ii))
+          </p>
+          <p className="text-[11px] text-amber-900/85 dark:text-amber-100/85 mt-0.5">
+            OSHA requires every documented procedure to cover: isolate,
+            release stored energy, lockout, and verify zero energy.
+            Missing phase{procedureCheck.missing.length === 1 ? '' : 's'}:{' '}
+            <span className="font-semibold">
+              {procedureCheck.missing.map(p => LOTO_STEP_TYPE_LABELS[p]).join(', ')}
+            </span>
+          </p>
+        </div>
+      )}
+
       {/* ── AI generator ───────────────────────────────────────────────────
           Produces draft "New" rows the user reviews and saves. Kept
           collapsed by default so it never surprises users who just want
@@ -408,6 +482,38 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
                       </button>
                     </>
                   )}
+                </div>
+
+                {/* §147(c)(4)(ii) phase tag — required for placard validation.
+                    The Tryout toggle marks this row as the §147(d)(6) zero-
+                    energy verification (typically attached to the
+                    verify_zero_energy phase but the table-level toggle is
+                    independent so a multi-source machine can mark "verify"
+                    on each isolate step). */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Procedure phase (§147(c)(4)(ii))
+                    <select
+                      value={draft.step_type}
+                      onChange={e => patch(draft.key, { step_type: e.target.value as LotoStepType })}
+                      disabled={saving}
+                      className="mt-1 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20"
+                    >
+                      {LOTO_STEP_ORDER.map(type => (
+                        <option key={type} value={type}>{LOTO_STEP_TYPE_LABELS[type]}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300 mt-5 sm:mt-7">
+                    <input
+                      type="checkbox"
+                      checked={draft.tryout_required}
+                      onChange={e => patch(draft.key, { tryout_required: e.target.checked })}
+                      disabled={saving}
+                      className="h-4 w-4 rounded border-slate-300 text-brand-navy focus:ring-brand-navy/30"
+                    />
+                    Tryout required (§147(d)(6) — attempt restart to verify zero state)
+                  </label>
                 </div>
 
                 <FieldArea label="Tag & Description"                    value={draft.tag_description}        onChange={v => patch(draft.key, { tag_description: v })}        rows={2} />

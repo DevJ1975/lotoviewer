@@ -6,6 +6,12 @@ import { ArrowLeft, GraduationCap, Loader2, Plus, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
 import { TRAINING_ROLE_LABELS } from '@/lib/trainingRecords'
+import {
+  RETRAINING_TRIGGER_LABELS,
+  classifyRetraining,
+  type RetrainingTrigger,
+  type WorkerRetrainingStatusRow,
+} from '@soteria/core/lotoRetraining'
 import type { TrainingRecord, TrainingRole } from '@soteria/core/types'
 
 // Training-records register for §1910.146(g) compliance. Admin-only at
@@ -20,6 +26,8 @@ const ROLES: TrainingRole[] = ['entrant', 'attendant', 'entry_supervisor', 'resc
 export default function TrainingRecordsPage() {
   const { profile, loading: authLoading } = useAuth()
   const [rows, setRows] = useState<TrainingRecord[]>([])
+  const [retrainingStatus, setRetrainingStatus] = useState<WorkerRetrainingStatusRow[]>([])
+  const [openTriggers, setOpenTriggers] = useState<RetrainingTrigger[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
@@ -29,16 +37,36 @@ export default function TrainingRecordsPage() {
   const load = useCallback(async () => {
     setLoading(true)
     setLoadError(null)
-    const { data, error } = await supabase
-      .from('loto_training_records')
-      .select('*')
-      .order('worker_name', { ascending: true })
-      .order('role',        { ascending: true })
-    if (error) {
-      setLoadError(error.message)
+    const [recordsResult, statusResult, triggersResult] = await Promise.all([
+      supabase
+        .from('loto_training_records')
+        .select('*')
+        .order('worker_name', { ascending: true })
+        .order('role',        { ascending: true }),
+      // The view security_invoker honours RLS on the underlying tables,
+      // so a tenant filter is belt-and-suspenders rather than required.
+      supabase
+        .from('loto_worker_retraining_status')
+        .select('*')
+        .eq('active', true)
+        .order('full_name', { ascending: true }),
+      supabase
+        .from('loto_retraining_triggers')
+        .select('*')
+        .is('resolved_at', null)
+        .order('triggered_at', { ascending: false }),
+    ])
+    if (recordsResult.error) {
+      setLoadError(recordsResult.error.message)
       setRows([])
     } else {
-      setRows((data ?? []) as TrainingRecord[])
+      setRows((recordsResult.data ?? []) as TrainingRecord[])
+    }
+    if (!statusResult.error) {
+      setRetrainingStatus((statusResult.data ?? []) as WorkerRetrainingStatusRow[])
+    }
+    if (!triggersResult.error) {
+      setOpenTriggers((triggersResult.data ?? []) as RetrainingTrigger[])
     }
     setLoading(false)
   }, [])
@@ -48,6 +76,23 @@ export default function TrainingRecordsPage() {
     if (!profile?.is_admin) return
     load()
   }, [authLoading, profile, load])
+
+  // Resolve a single trigger by linking it to a specific training
+  // record. The migration-142 schema allows training_record_id to
+  // stay null for "resolved without a new cert" cases (e.g. the admin
+  // determined the existing cert is still adequate); we surface both
+  // paths via the button text.
+  async function resolveTrigger(triggerId: string, trainingRecordId: string | null) {
+    const { error } = await supabase
+      .from('loto_retraining_triggers')
+      .update({
+        resolved_at:        new Date().toISOString(),
+        training_record_id: trainingRecordId,
+      })
+      .eq('id', triggerId)
+    if (error) { setLoadError(error.message); return }
+    await load()
+  }
 
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
@@ -104,6 +149,13 @@ export default function TrainingRecordsPage() {
       {loadError && (
         <p className="text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">{loadError}</p>
       )}
+
+      <RetrainingPanel
+        status={retrainingStatus}
+        openTriggers={openTriggers}
+        records={rows}
+        onResolve={resolveTrigger}
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
         <input
@@ -311,5 +363,171 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       </span>
       {children}
     </label>
+  )
+}
+
+// ── §147(g)(2) retraining panel ─────────────────────────────────────────────
+
+function RetrainingPanel({
+  status,
+  openTriggers,
+  records,
+  onResolve,
+}: {
+  status: WorkerRetrainingStatusRow[]
+  openTriggers: RetrainingTrigger[]
+  records: TrainingRecord[]
+  onResolve: (triggerId: string, trainingRecordId: string | null) => Promise<void>
+}) {
+  if (status.length === 0 && openTriggers.length === 0) return null
+
+  const now = new Date()
+  // Group triggers by worker for one-row-per-worker display.
+  const triggersByWorker = new Map<string, RetrainingTrigger[]>()
+  for (const t of openTriggers) {
+    const list = triggersByWorker.get(t.worker_id) ?? []
+    list.push(t)
+    triggersByWorker.set(t.worker_id, list)
+  }
+
+  // Highlight only workers with action items: open trigger, due,
+  // or never trained. Current workers are silenced — the lower
+  // table shows them.
+  const flagged = status.filter(row => {
+    const c = classifyRetraining(row, now)
+    return c !== 'current'
+  })
+
+  if (flagged.length === 0) return null
+
+  return (
+    <section className="rounded-xl border border-amber-200 bg-amber-50/60 dark:bg-amber-950/40 p-4 space-y-3">
+      <header>
+        <h2 className="text-sm font-bold text-amber-900 dark:text-amber-100">
+          Retraining attention — §1910.147(g)(2)
+        </h2>
+        <p className="text-[11px] text-amber-900/80 dark:text-amber-100/80 mt-0.5">
+          Workers with open retraining triggers (procedure change, deviation observed)
+          or a stale authorized-employee certification.
+        </p>
+      </header>
+      <ul className="space-y-2">
+        {flagged.map(worker => {
+          const triggers = triggersByWorker.get(worker.worker_id) ?? []
+          const cls = classifyRetraining(worker, now)
+          return (
+            <li key={worker.worker_id} className="rounded-lg border border-amber-200 bg-white dark:bg-slate-900 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    {worker.full_name}
+                    {worker.employee_id && <span className="ml-1 text-[11px] text-slate-500 dark:text-slate-400 font-normal">· {worker.employee_id}</span>}
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {cls === 'never_trained'
+                      ? 'No authorized_employee training on file'
+                      : cls === 'due'
+                        ? `Last trained ${worker.last_trained_at} — past annual cadence`
+                        : `${triggers.length} open trigger${triggers.length === 1 ? '' : 's'}`}
+                  </p>
+                </div>
+              </div>
+              {triggers.length > 0 && (
+                <ul className="mt-2 space-y-1.5 border-t border-amber-100 pt-2">
+                  {triggers.map(t => (
+                    <li key={t.id} className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                          {RETRAINING_TRIGGER_LABELS[t.trigger_type]}
+                          {t.equipment_id && <span className="text-slate-500 dark:text-slate-400 font-normal"> · {t.equipment_id}</span>}
+                        </p>
+                        {t.reason && <p className="text-[11px] text-slate-500 dark:text-slate-400">{t.reason}</p>}
+                        <ResolveControl
+                          worker={worker}
+                          records={records}
+                          onResolve={recordId => onResolve(t.id, recordId)}
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
+function ResolveControl({
+  worker,
+  records,
+  onResolve,
+}: {
+  worker: WorkerRetrainingStatusRow
+  records: TrainingRecord[]
+  onResolve: (trainingRecordId: string | null) => Promise<void>
+}) {
+  // Show only the most recent few authorized_employee records for this
+  // worker as resolution candidates. Older certs can be picked via the
+  // "Other…" option (manual UUID), but in practice the admin resolves
+  // a trigger by linking to the certificate they just issued.
+  const candidates = records
+    .filter(r => r.role === 'authorized_employee' && r.worker_name.toLowerCase() === worker.full_name.toLowerCase())
+    .sort((a, b) => b.completed_at.localeCompare(a.completed_at))
+    .slice(0, 5)
+
+  const [picked, setPicked] = useState<string>('')
+  const [busy, setBusy] = useState(false)
+
+  async function resolve(asRecordId: string | null) {
+    setBusy(true)
+    try { await onResolve(asRecordId) }
+    finally { setBusy(false) }
+  }
+
+  return (
+    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+      {candidates.length > 0 ? (
+        <>
+          <select
+            value={picked}
+            onChange={e => setPicked(e.target.value)}
+            className="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1 text-[11px] focus:outline-none focus:ring-2 focus:ring-brand-navy/20"
+          >
+            <option value="">Pick a training record…</option>
+            {candidates.map(r => (
+              <option key={r.id} value={r.id}>
+                {TRAINING_ROLE_LABELS[r.role]} · {r.completed_at}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            disabled={!picked || busy}
+            onClick={() => resolve(picked)}
+            className="text-[11px] px-2 py-1 rounded-md bg-brand-navy text-white font-semibold disabled:opacity-40"
+          >
+            Resolve with record
+          </button>
+        </>
+      ) : (
+        <span className="text-[11px] text-slate-500 dark:text-slate-400 italic">
+          Add a new authorized_employee record for this worker first.
+        </span>
+      )}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          if (!confirm('Mark this trigger resolved without linking a new training record? The admin determined the existing cert is still adequate.')) return
+          resolve(null)
+        }}
+        className="text-[11px] px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+      >
+        Resolve without
+      </button>
+    </div>
   )
 }

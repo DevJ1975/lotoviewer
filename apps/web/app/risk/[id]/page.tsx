@@ -9,6 +9,7 @@ import { useAuth } from '@/components/AuthProvider'
 import { readRiskConfig } from '@soteria/core/risk'
 import RiskScoreCard from '../_components/RiskScoreCard'
 import ControlsTable from '../_components/ControlsTable'
+import ControlsHierarchySummary from '../_components/ControlsHierarchySummary'
 import ReviewsTable from '../_components/ReviewsTable'
 import AuditTimeline from '../_components/AuditTimeline'
 import RiskQuickActions from '../_components/RiskQuickActions'
@@ -129,10 +130,11 @@ export default function RiskDetailPage({ params }: { params: Promise<{ id: strin
         <p className="text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{risk.description}</p>
       </section>
 
-      <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5">
-        <h2 className="text-[10px] font-bold tracking-widest uppercase text-slate-500 dark:text-slate-400 mb-3">
+      <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5 space-y-4">
+        <h2 className="text-[10px] font-bold tracking-widest uppercase text-slate-500 dark:text-slate-400">
           Controls (Hierarchy of Controls · ISO 45001 8.1.2)
         </h2>
+        <ControlsHierarchySummary controls={controls} />
         <ControlsTable
           controls={controls}
           inherentScore={risk.inherent_score}

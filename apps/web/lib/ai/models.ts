@@ -57,6 +57,10 @@ export const MODEL_BY_SURFACE = {
   'summarize-audit':                  SONNET,
   'classify-near-miss':               SONNET,
   'superadmin-daily-report':          SONNET,
+  // Severity-prediction is a short, structured Q&A — Haiku is the
+  // right cost/accuracy trade. Admin always reviews before any
+  // mutation; the model never auto-edits severity_actual.
+  'predict-incident-escalation':      HAIKU,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { verifyJPEG } from '@/lib/security/magicBytes'
 import { equipmentPhotoPath, type PhotoSlot } from '@soteria/core/storagePaths'
+import { sealReviewPlacards } from '@/lib/sealedArtifact'
 
 // Public review-portal API. No auth — the URL token is the auth.
 // Service-role under the hood; every request:
@@ -189,6 +190,42 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     if (!signed?.length) {
       return NextResponse.json({ error: 'This review has already been signed off.' }, { status: 409 })
     }
+
+    // Seal each approved placard: hash the bytes, upload to storage,
+    // write the audit row. Best-effort — the signoff itself has
+    // already landed, so a sealing miss surfaces in Sentry rather
+    // than rolling back the signature. The signed_at timestamp comes
+    // from the RPC's `now()` so the row and the hash agree.
+    const signedAt = new Date().toISOString()
+    try {
+      const { data: placardRows } = await admin
+        .from('loto_review_link_equipment')
+        .select('equipment_id')
+        .eq('review_link_id', lookup.link.id)
+      const equipmentIds = (placardRows ?? []).map(r => r.equipment_id as string)
+      if (equipmentIds.length > 0) {
+        const { data: equipmentRows } = await admin
+          .from('loto_equipment')
+          .select('equipment_id, placard_url')
+          .eq('tenant_id', lookup.link.tenant_id)
+          .in('equipment_id', equipmentIds)
+        await sealReviewPlacards(
+          {
+            tenantId:         lookup.link.tenant_id,
+            reviewLinkId:     lookup.link.id,
+            signedAt,
+            typedName,
+            signatureDataUrl: signature,
+            signerIp:         ip,
+            signerUserAgent:  userAgent,
+          },
+          (equipmentRows ?? []) as { equipment_id: string; placard_url: string | null }[],
+        )
+      }
+    } catch (sealErr) {
+      Sentry.captureException(sealErr, { tags: { route: 'review/[token]', stage: 'seal-artifacts' } })
+    }
+
     return NextResponse.json({ ok: true })
   }
 

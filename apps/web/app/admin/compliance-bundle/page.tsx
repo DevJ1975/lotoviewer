@@ -122,12 +122,29 @@ export default function CompliancePage() {
 
       setStage('Generating PDF — this can take 10-30s for large windows…')
 
+      // Sealed LOTO placard signoffs in the same window — the cover
+      // sheet surfaces these alongside the permit hashes so an auditor
+      // sees one unified chain-of-custody list. RLS-scoped to the
+      // active tenant via the supabase client.
+      const { data: artifactRows } = await supabase
+        .from('loto_signed_pdf_artifacts')
+        .select('equipment_id, signer_typed_name, signed_at, sha256_hex')
+        .gte('signed_at', startTs)
+        .lte('signed_at', endTs)
+        .order('signed_at', { ascending: true })
+
       const origin = typeof window !== 'undefined' ? window.location.origin : undefined
       const bytes = await generateCompliancePdfBundle({
         startDate:      start,
         endDate:        end,
         csPermits:      csEntries,
         hotWorkPermits: hwPermitsRaw.map(p => ({ permit: p })),
+        signedArtifacts: (artifactRows ?? []) as Array<{
+          equipment_id:      string
+          signer_typed_name: string
+          signed_at:         string
+          sha256_hex:        string
+        }>,
         origin,
       })
 

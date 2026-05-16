@@ -33,6 +33,12 @@ export interface Equipment {
   annotations: unknown[]
   // Same schema, but for the isolation photo (migration 022).
   iso_annotations: unknown[]
+  // §1910.147(c)(6) annual inspection (migration 141). Trigger sets
+  // this to the latest signed inspection's next_due_at + 365 days.
+  // NULL = never inspected, surfaced as "Never" in the admin list.
+  // Optional so pre-migration test fixtures don't need an explicit
+  // field; the PeriodicEquipmentSnapshot helper coerces undefined → null.
+  next_periodic_review_due_at?: string | null
   created_at: string | null
   updated_at: string | null
 }
@@ -48,6 +54,13 @@ export interface LotoEnergyStep {
   tag_description_es: string | null
   isolation_procedure_es: string | null
   method_of_verification_es: string | null
+  // §1910.147(c)(4)(ii) phase tagging (migration 140). The placard
+  // groups by step_type in OSHA's required order; the validator in
+  // lotoProcedureValidation.ts refuses to clear a procedure without
+  // a verify_zero_energy step.
+  step_type: 'shutdown' | 'isolate' | 'release_stored_energy' | 'lockout' | 'verify_zero_energy'
+  sequence_order: number
+  tryout_required: boolean
 }
 
 export interface LotoReview {

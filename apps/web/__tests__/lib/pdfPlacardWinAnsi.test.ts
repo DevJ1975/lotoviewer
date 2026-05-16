@@ -64,8 +64,24 @@ function makeStep(partial: Partial<LotoEnergyStep> = {}): LotoEnergyStep {
     tag_description_es:          null,
     isolation_procedure_es:      null,
     method_of_verification_es:   null,
+    step_type:                   'isolate',
+    sequence_order:              1,
+    tryout_required:             false,
     ...partial,
   }
+}
+
+// Procedure that satisfies §147(c)(4)(ii) validation in the generator.
+// Wraps a caller's single-step overrides into a 4-step procedure with
+// the required phases so unit tests of rendering (Unicode, layout)
+// don't have to model an OSHA-complete procedure themselves.
+function makeValidProcedure(extra: Partial<LotoEnergyStep> = {}): LotoEnergyStep[] {
+  return [
+    makeStep({ ...extra, id: 's-iso', step_type: 'isolate',              sequence_order: 1 }),
+    makeStep({ id: 's-rel', step_type: 'release_stored_energy',          sequence_order: 2 }),
+    makeStep({ id: 's-loc', step_type: 'lockout',                        sequence_order: 3 }),
+    makeStep({ id: 's-ver', step_type: 'verify_zero_energy',             sequence_order: 4, tryout_required: true }),
+  ]
 }
 
 describe('placard PDF — WinAnsi safety', () => {
@@ -122,8 +138,8 @@ describe('placard PDF — WinAnsi safety', () => {
     // The energy-type code is normally a single ASCII letter, but
     // the schema allows any string. A pasted subscript would crash
     // the per-step row draw.
-    const step = makeStep({ energy_type: 'CO₂' })
-    const bytes = await generatePlacardPdf({ equipment: makeEquipment(), steps: [step] })
+    const steps = makeValidProcedure({ energy_type: 'CO₂' })
+    const bytes = await generatePlacardPdf({ equipment: makeEquipment(), steps })
     expect(bytes.length).toBeGreaterThan(1000)
   })
 
@@ -131,14 +147,14 @@ describe('placard PDF — WinAnsi safety', () => {
     // All three step-row fields go through drawWrapped → wrapText →
     // sanitised. Combined into one test so the row exercises every
     // column.
-    const step = makeStep({
+    const steps = makeValidProcedure({
       tag_description:        'Open valve V₁₂ — verify pressure ≤ 10 psi',
       isolation_procedure:    'Lock with red padlock; tag with worker ID and date — verify O₂ vent line',
       method_of_verification: 'Confirm pressure gauge reads 0 ± 0.5 psi after 5-min hold',
     })
     const bytes = await generatePlacardPdf({
       equipment: makeEquipment(),
-      steps:     [step],
+      steps,
     })
     expect(bytes.length).toBeGreaterThan(1000)
   })
@@ -152,13 +168,13 @@ describe('placard PDF — WinAnsi safety', () => {
       description: 'O₂ regulator "HP-4" with CJK label 高压',
       notes:       'Emergency stop ⚠ — verify O₂ ≥ 19.5%, H₂S ≤ 10 ppm 🔒 紧急',
     })
-    const step = makeStep({
+    const steps = makeValidProcedure({
       energy_type:            'E₁',
       tag_description:        'Open breaker — "OFF" position 关',
       isolation_procedure:    'Apply lock × tag · verify ≤ 0.5V across L1-L2-L3 ⚡',
       method_of_verification: 'Multimeter reads 0V ± 0.1V — confirm with peer 验证',
     })
-    const bytes = await generatePlacardPdf({ equipment: eq, steps: [step] })
+    const bytes = await generatePlacardPdf({ equipment: eq, steps })
     const doc = await PDFDocument.load(bytes)
     expect(doc.getPageCount()).toBe(2)
     // The placard should still be a substantive document, not just an

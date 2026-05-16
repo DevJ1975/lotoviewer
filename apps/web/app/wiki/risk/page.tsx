@@ -1,10 +1,20 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-05'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-05-15'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.0',
+    date:    '2026-05-15',
+    changes: [
+      'Risk detail page now shows a hierarchy-of-controls summary ' +
+      '(Eliminate → Substitute → Engineering → Administrative → PPE) ' +
+      'with a "top-of-hierarchy" indicator. Near-miss escalation forces ' +
+      'a hierarchy level on at least one mitigating control.',
+    ],
+  },
   { version: '1.0.0', date: '2026-05-05', changes: ['Initial risk-assessment wiki page.'] },
 ]
 

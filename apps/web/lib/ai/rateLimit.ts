@@ -32,6 +32,7 @@ export type AiSurface =
   | 'summarize-audit'
   | 'classify-near-miss'
   | 'superadmin-daily-report'
+  | 'predict-incident-escalation'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
@@ -65,6 +66,10 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   'summarize-audit':                  { perHour: 30, perDay: 100 },
   'classify-near-miss':               { perHour: 30, perDay: 200 },
   'superadmin-daily-report':          { perHour: 10, perDay: 30 },
+  // Predict-escalation runs Haiku on a single description; admins
+  // typically run it once per incident triage. Capped conservatively
+  // to keep cost predictable on a bursty intake day.
+  'predict-incident-escalation':      { perHour: 30, perDay: 150 },
 }
 
 interface CheckArgs {
