@@ -243,6 +243,14 @@ jamil@trainovations.com`
         </div>
       </header>
 
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+        This page is being replaced by the unified{' '}
+        <Link href="/admin/members" className="font-semibold underline hover:text-amber-700 dark:hover:text-amber-200">
+          Members page
+        </Link>
+        . Role management still works here.
+      </div>
+
       {/* Invite form — react-hook-form + zod */}
       <section className="bg-white dark:bg-slate-900 rounded-xl ring-1 ring-slate-200 dark:ring-slate-700 p-5">
         <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-3 flex items-center gap-2">
