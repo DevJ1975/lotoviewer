@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft, Loader2, Trash2 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
+import { Prop65InventoryBadge } from '@/components/prop65/Prop65InventoryBadge'
 import {
   ACTIVE_INVENTORY_STATUSES,
   INVENTORY_STATUSES,
@@ -185,6 +186,9 @@ export default function InventoryDetailPage() {
             <Link href={`/chemicals/${item.product_id}`} className="text-indigo-600 hover:underline">
               View chemical
             </Link>
+          </div>
+          <div className="mt-2">
+            <Prop65InventoryBadge tenantId={tenant?.id ?? null} inventoryItemId={id ?? null} />
           </div>
         </div>
         <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded ${
