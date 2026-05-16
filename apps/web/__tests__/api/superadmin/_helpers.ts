@@ -75,6 +75,8 @@ class MockChain {
         neq:    () => chain,
         in:     () => chain,
         order:  () => chain,
+        range:  () => chain,
+        limit:  () => chain,
         single: result,
         maybeSingle: result,
         insert: (payload: unknown) => { self.inserts.push({ table, payload }); return chain },
