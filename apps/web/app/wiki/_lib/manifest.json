@@ -20,6 +20,35 @@
       ]
     },
     {
+      "slug":     "prop65",
+      "module":   "California Prop 65",
+      "tagline":  "§25249.6 + Cal/OSHA Title 8 §5194 — OEHHA chemicals, exposure assessments, posted warnings, §5194(h) notifications, annual reviews.",
+      "category": "safety",
+      "href":     "/admin/prop65",
+      "wikiPage": "apps/web/app/wiki/prop65/page.tsx",
+      "sources":  [
+        "apps/web/app/admin/prop65/**",
+        "apps/web/app/admin/prop65-manual/**",
+        "apps/web/app/prop65/**",
+        "apps/web/app/api/prop65/**",
+        "apps/web/app/api/admin/prop65/**",
+        "apps/web/components/prop65/**",
+        "apps/web/app/_components/Prop65IncidentBanner.tsx",
+        "apps/web/migrations/170_prop65_chemicals.sql",
+        "apps/web/migrations/171_prop65_chemical_links.sql",
+        "apps/web/migrations/172_prop65_sites.sql",
+        "apps/web/migrations/173_prop65_exposure_assessments.sql",
+        "apps/web/migrations/174_prop65_warnings.sql",
+        "apps/web/migrations/175_prop65_notifications.sql",
+        "apps/web/migrations/176_prop65_annual_reviews.sql",
+        "apps/web/migrations/177_prop65_compliance_status.sql",
+        "apps/web/migrations/178_prop65_anon_column_grants.sql",
+        "packages/core/src/prop65.ts",
+        "packages/core/src/prop65WarningText.ts",
+        "packages/core/src/prop65SafeHarbor.ts"
+      ]
+    },
+    {
       "slug":     "platform-features",
       "module":   "Platform Features",
       "tagline":  "SSO + SCIM, CMMS bidirectional sync, BBS v2 observations, vendor prequalification, i18n (EN/ES/FR).",
