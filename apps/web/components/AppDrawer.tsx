@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ChevronDown, ChevronRight, Search, Settings2, Shield, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Clock, Search, Settings2, Shield, X } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -29,6 +29,8 @@ import { getModuleVisuals } from '@/lib/moduleVisuals'
 import SoteriaLogo from '@/components/SoteriaLogo'
 import { isFeatureAccessible, type FeatureDef } from '@soteria/core/features'
 import { cn } from '@/lib/utils'
+import { useRecentRoutes } from '@/lib/useRecentRoutes'
+import { resolveHref } from '@/lib/resolveHref'
 
 interface Props {
   onClose?: () => void
@@ -92,6 +94,7 @@ export default function AppDrawer({ onClose }: Props) {
       </SidebarHeader>
 
       <SidebarContent className="py-2">
+        <RecentsSection tenantId={tenant?.id ?? null} pathname={pathname} onNavigate={close} />
         {groups.map((group, index) => (
           <NavigationGroupSection
             key={group.id}
@@ -268,6 +271,58 @@ function ChildRow({
         </SidebarMenuSubButton>
       )}
     </SidebarMenuSubItem>
+  )
+}
+
+function RecentsSection({
+  tenantId,
+  pathname,
+  onNavigate,
+}: {
+  tenantId: string | null
+  pathname: string | null
+  onNavigate: () => void
+}) {
+  const recents = useRecentRoutes(tenantId)
+
+  // Resolve to display-ready rows; drop anything we can't render with a
+  // proper label (e.g. deep detail pages not in the catalog) so the
+  // section stays curated rather than a raw URL bar.
+  const rows = recents
+    .map(href => resolveHref(href))
+    .filter((r): r is NonNullable<ReturnType<typeof resolveHref>> => r !== null)
+
+  // First load — no recents yet. Hide the section entirely so the
+  // drawer doesn't show a stub.
+  if (rows.length === 0) return null
+
+  return (
+    <SidebarGroup className="animate-panel-in">
+      <SidebarGroupLabel title="Most recently visited pages in this tenant">
+        <span className="inline-flex items-center gap-1.5">
+          <Clock className="size-3" />
+          Recents
+        </span>
+      </SidebarGroupLabel>
+      <SidebarMenu>
+        {rows.map(row => {
+          const Icon = row.Icon
+          const active = pathname === row.href
+          return (
+            <SidebarMenuItem key={row.href}>
+              <SidebarMenuButton asChild isActive={active} className="motion-reactive">
+                <Link href={row.href} onClick={onNavigate}>
+                  <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-md bg-sidebar-accent/40 text-sidebar-foreground/70">
+                    <Icon className="size-4" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{row.label}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )
+        })}
+      </SidebarMenu>
+    </SidebarGroup>
   )
 }
 

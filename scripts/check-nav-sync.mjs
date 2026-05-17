@@ -33,6 +33,8 @@ const repo = resolve(here, '..')
 const adminDir       = resolve(repo, 'apps/web/app/admin')
 const catalogPath    = resolve(repo, 'apps/web/lib/adminCatalog.ts')
 const featuresPath   = resolve(repo, 'packages/core/src/features.ts')
+const wikiManifest   = resolve(repo, 'apps/web/app/wiki/_lib/manifest.json')
+const appDir         = resolve(repo, 'apps/web/app')
 
 // Directories under apps/web/app/admin/ that aren't user-facing tiles
 // but are routing helpers. The landing should NOT list these.
@@ -142,6 +144,80 @@ if (featureBrokenHrefs.length > 0) {
   featureBrokenHrefs.forEach(f => console.error(`        - href: '${f.href}' (no apps/web/app/admin/${f.slug}/)`))
   console.error('      Update or remove the entry in packages/core/src/features.ts.\n')
 }
+
+// Check 5 — wiki manifest integrity. Every entry must have:
+//   - a wikiPage that exists on disk
+//   - an href that resolves to a real app route (page.tsx)
+//   - a unique slug
+// External URLs (http(s)://) are not validated.
+function checkWikiManifest() {
+  if (!existsSync(wikiManifest)) {
+    fail(`wiki manifest missing at ${wikiManifest}`)
+    return
+  }
+  let manifest
+  try {
+    manifest = JSON.parse(readFileSync(wikiManifest, 'utf8'))
+  } catch (err) {
+    fail(`wiki manifest is not valid JSON: ${err.message}`)
+    return
+  }
+  const entries = Array.isArray(manifest.entries) ? manifest.entries : []
+  if (entries.length === 0) return
+
+  const seenSlugs   = new Set()
+  const dupeSlugs   = []
+  const missingWiki = []
+  const brokenHref  = []
+
+  for (const entry of entries) {
+    if (typeof entry.slug !== 'string' || !entry.slug) {
+      fail(`wiki manifest entry missing slug: ${JSON.stringify(entry)}`)
+      continue
+    }
+    if (seenSlugs.has(entry.slug)) dupeSlugs.push(entry.slug)
+    else seenSlugs.add(entry.slug)
+
+    if (typeof entry.wikiPage === 'string') {
+      const wp = resolve(repo, entry.wikiPage)
+      if (!existsSync(wp)) missingWiki.push(entry)
+    } else {
+      fail(`wiki manifest entry "${entry.slug}" missing wikiPage`)
+    }
+
+    if (typeof entry.href === 'string' && entry.href.startsWith('/')) {
+      // Map the href to a candidate page file. Next.js App Router
+      // expects /foo to resolve to apps/web/app/foo/page.tsx (or .ts).
+      // Trailing dynamic segments [param] are rare in wiki hrefs and
+      // not validated here.
+      const segments = entry.href.split('/').filter(Boolean)
+      const candidates = [
+        resolve(appDir, ...segments, 'page.tsx'),
+        resolve(appDir, ...segments, 'page.ts'),
+      ]
+      const hit = candidates.some(c => existsSync(c))
+      if (!hit) brokenHref.push(entry)
+    }
+  }
+
+  if (dupeSlugs.length > 0) {
+    fail(`wiki manifest has duplicate slug(s): ${[...new Set(dupeSlugs)].join(', ')}`)
+  }
+  if (missingWiki.length > 0) {
+    fail(`${missingWiki.length} wiki manifest entry/entries reference a missing wikiPage:`)
+    missingWiki.forEach(e => console.error(`        - slug: '${e.slug}' (no ${e.wikiPage})`))
+  }
+  if (brokenHref.length > 0) {
+    fail(`${brokenHref.length} wiki manifest entry/entries reference a missing route:`)
+    brokenHref.forEach(e => console.error(`        - slug: '${e.slug}' → href '${e.href}' (no apps/web/app${e.href}/page.tsx)`))
+  }
+
+  if (!process.exitCode) {
+    console.log(`[nav-sync] ✓ ${entries.length} wiki manifest entry/entries — all wikiPages + hrefs resolve.`)
+  }
+}
+
+checkWikiManifest()
 
 if (process.exitCode) {
   process.exit(process.exitCode)
