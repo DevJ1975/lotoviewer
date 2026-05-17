@@ -13,7 +13,7 @@ export default function WikiAuditPage() {
     <WikiPage
       title="Audit Log"
       subtitle="Per-row change history with actor, timestamp, and old/new values."
-      modulePath="/admin/audit"
+      modulePath="/admin/evidence/audit"
       audience="admin"
       category="Admin"
       version={CURRENT_VERSION}
@@ -59,7 +59,7 @@ export default function WikiAuditPage() {
             a: <>No — the table is append-only and protected by RLS. Even
               superadmins can&apos;t delete rows from the UI. If a true
               correction is needed (e.g., GDPR), it requires a documented
-              migration and shows up in <Link href="/admin/hygiene-log">/admin/hygiene-log</Link>.</>,
+              migration and shows up in <Link href="/admin/insights/hygiene-log">/admin/insights/hygiene-log</Link>.</>,
           },
           {
             q: 'Why is the log paginated to 100 rows?',
@@ -84,7 +84,7 @@ export default function WikiAuditPage() {
             q: 'Can I export the log?',
             a: <>Filter to the rows you need, then use the per-page export.
               For period-bound exports, include audit data in a{' '}
-              <Link href="/admin/compliance-bundle">compliance bundle</Link>.</>,
+              <Link href="/admin/compliance/compliance-bundle">compliance bundle</Link>.</>,
           },
           {
             q: 'Does the log capture file uploads (photos, signatures)?',

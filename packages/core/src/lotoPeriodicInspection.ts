@@ -4,7 +4,7 @@
 // the database. This module only handles the bits the UI repeats:
 //   - "is this overdue / due-soon / current / never-inspected?"
 //   - bucketing a list of equipment into those four cohorts for the
-//     /admin/periodic-inspections list
+//     /admin/loto/periodic-inspections list
 //   - computing the next-due date from a completed inspection so the
 //     form can preview "next inspection: 2027-05-15" before signing
 //

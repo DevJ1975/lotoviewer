@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ADMIN_SECTIONS, SETTINGS_NOTIFICATIONS_TILE, getAllAdminTiles, getAdminTile } from '@/lib/adminCatalog'
+import { ADMIN_SECTIONS, SETTINGS_NOTIFICATIONS_TILE, getAdminRedirects, getAllAdminTiles, getAdminTile } from '@/lib/adminCatalog'
 
 describe('adminCatalog', () => {
   it('has at least one section and at least one tile per section', () => {
@@ -24,9 +24,38 @@ describe('adminCatalog', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it('points every admin tile at /admin/<slug>', () => {
-    for (const tile of getAllAdminTiles()) {
-      expect(tile.href, `tile ${tile.slug} href mismatch`).toBe(`/admin/${tile.slug}`)
+  it('points every admin tile at /admin/<section>/<slug> (Phase B URL shape)', () => {
+    for (const section of ADMIN_SECTIONS) {
+      for (const tile of section.tiles) {
+        expect(tile.href, `tile ${tile.slug} href mismatch`).toBe(`/admin/${section.urlSegment}/${tile.slug}`)
+      }
+    }
+  })
+
+  it('every section uses a non-empty url segment', () => {
+    for (const section of ADMIN_SECTIONS) {
+      expect(section.urlSegment.length, `section ${section.id} urlSegment`).toBeGreaterThan(0)
+      expect(/^[a-z0-9-]+$/.test(section.urlSegment), `section ${section.id} urlSegment shape`).toBe(true)
+    }
+  })
+
+  it('generates one 301 redirect per tile that carries a legacyHref', () => {
+    const redirects = getAdminRedirects()
+    const tilesWithLegacy = getAllAdminTiles().filter(t => t.legacyHref)
+    // tile redirects + 8 section-bare redirects (one per section).
+    expect(redirects.length).toBe(tilesWithLegacy.length + ADMIN_SECTIONS.length)
+    for (const r of redirects) {
+      expect(r.permanent).toBe(true)
+      expect(r.source.startsWith('/admin/')).toBe(true)
+    }
+  })
+
+  it('produces a wildcard subpath on tile redirects so deep links survive the rename', () => {
+    const redirects = getAdminRedirects()
+    const tileRedirects = redirects.filter(r => r.destination !== '/admin')
+    for (const r of tileRedirects) {
+      expect(r.source.endsWith('/:path*'),       `source ${r.source} missing /:path*`).toBe(true)
+      expect(r.destination.endsWith('/:path*'),  `destination ${r.destination} missing /:path*`).toBe(true)
     }
   })
 

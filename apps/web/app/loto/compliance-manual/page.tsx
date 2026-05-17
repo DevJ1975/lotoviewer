@@ -46,7 +46,7 @@ export default function LotoComplianceManualPage() {
     <main className="max-w-3xl mx-auto px-4 py-8 space-y-8 text-slate-800 dark:text-slate-100">
       <div className="flex items-center justify-between gap-3">
         <Link
-          href="/admin/periodic-inspections"
+          href="/admin/loto/periodic-inspections"
           className="inline-flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
         >
           <ArrowLeft className="h-4 w-4" /> Back to LOTO Compliance
@@ -139,7 +139,7 @@ export default function LotoComplianceManualPage() {
         </p>
         <p>
           <strong>Where to find it.</strong>{' '}
-          <Link href="/admin/periodic-inspections">/admin/periodic-inspections</Link>
+          <Link href="/admin/loto/periodic-inspections">/admin/loto/periodic-inspections</Link>
           {' '}lists every piece of equipment grouped by status —{' '}
           <em>overdue</em>, <em>due within 30 days</em>,{' '}
           <em>never inspected</em>, <em>current</em>. Click into a row to
@@ -201,7 +201,7 @@ export default function LotoComplianceManualPage() {
         </p>
         <p>
           <strong>Where to find it.</strong>{' '}
-          <Link href="/admin/competency-exams">/admin/competency-exams</Link>.
+          <Link href="/admin/loto/competency-exams">/admin/loto/competency-exams</Link>.
         </p>
         <p>
           <strong>Authoring an exam.</strong> Click <em>New exam</em>,
@@ -215,7 +215,7 @@ export default function LotoComplianceManualPage() {
         </p>
         <p>
           <strong>Proctoring an attempt.</strong> From{' '}
-          <Link href="/admin/workers">/admin/workers</Link>, open a
+          <Link href="/admin/people/workers">/admin/people/workers</Link>, open a
           worker and click <em>Take exam</em>. The system records the
           proctor (you) and the worker, presents the questions, and
           on submit returns score + pass/fail. A pass with the
@@ -253,7 +253,7 @@ export default function LotoComplianceManualPage() {
           <strong>Adding members.</strong> From the permit detail page,
           attach members with their personal lock serials. Members can
           be either workers (shop-floor identity from{' '}
-          <Link href="/admin/workers">/admin/workers</Link>) or app
+          <Link href="/admin/people/workers">/admin/people/workers</Link>) or app
           users — the schema enforces exactly one of the two per row.
           You cannot add members until the primary is set, and you
           cannot add members to a closed permit.
@@ -286,7 +286,7 @@ export default function LotoComplianceManualPage() {
         </p>
         <p>
           <strong>Where to find it.</strong>{' '}
-          <Link href="/admin/contractors">/admin/contractors</Link>.
+          <Link href="/admin/people/contractors">/admin/people/contractors</Link>.
         </p>
         <p>
           <strong>Workflow.</strong> Add a contractor company (name,
@@ -333,7 +333,7 @@ export default function LotoComplianceManualPage() {
         </ul>
         <p>
           <strong>Where to find them.</strong>{' '}
-          <Link href="/admin/training-records">/admin/training-records</Link>{' '}
+          <Link href="/admin/loto/training-records">/admin/loto/training-records</Link>{' '}
           surfaces open triggers in a retraining-attention panel above
           the records table.
         </p>
@@ -364,7 +364,7 @@ export default function LotoComplianceManualPage() {
         <ul>
           <li>
             <strong>The signed inspector URL.</strong>{' '}
-            <Link href="/admin/inspector">/admin/inspector</Link>
+            <Link href="/admin/compliance/inspector">/admin/compliance/inspector</Link>
             {' '}generates a tokenized read-only snapshot covering a
             date range. The inspector sees inspections, group
             permits, training records, walkdowns — without logging in
@@ -372,14 +372,14 @@ export default function LotoComplianceManualPage() {
           </li>
           <li>
             <strong>The compliance bundle.</strong>{' '}
-            <Link href="/admin/compliance-bundle">/admin/compliance-bundle</Link>
+            <Link href="/admin/compliance/compliance-bundle">/admin/compliance/compliance-bundle</Link>
             {' '}generates a date-range PDF including the per-permit
             SHA-256 hashes (sealed artifact support is the focus of
             Module 2&apos;s integrity work).
           </li>
           <li>
             <strong>The audit log.</strong>{' '}
-            <Link href="/admin/audit">/admin/audit</Link> filtered by
+            <Link href="/admin/evidence/audit">/admin/evidence/audit</Link> filtered by
             table (<code>loto_periodic_inspections</code>,{' '}
             <code>loto_group_permits</code>,{' '}
             <code>loto_competency_exam_attempts</code>,{' '}

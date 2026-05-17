@@ -204,7 +204,7 @@ function PeriodicInspectionForm() {
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-5">
       <div>
-        <Link href="/admin/periodic-inspections" className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300">
+        <Link href="/admin/loto/periodic-inspections" className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300">
           <ArrowLeft className="h-3 w-3" /> Back to periodic inspections
         </Link>
         <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -255,7 +255,7 @@ function PeriodicInspectionForm() {
           </p>
           {workers.length === 0 ? (
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 italic">
-              No workers in the LOTO roster yet. <Link href="/admin/workers" className="underline">Add some.</Link>
+              No workers in the LOTO roster yet. <Link href="/admin/people/workers" className="underline">Add some.</Link>
             </p>
           ) : (
             <ul className="mt-2 max-h-48 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-md divide-y divide-slate-100 dark:divide-slate-800">

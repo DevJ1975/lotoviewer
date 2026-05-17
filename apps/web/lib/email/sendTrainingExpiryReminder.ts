@@ -20,9 +20,9 @@ export interface TrainingExpiryReminderArgs {
   reviewerName: string
   tenantName:   string
   rows:         DigestRow[]
-  /** Public URL for /admin/training-records (RLS scopes the read). */
+  /** Public URL for /admin/loto/training-records (RLS scopes the read). */
   trainingUrl:  string
-  /** Public URL for /admin/workers (RLS scopes the read). */
+  /** Public URL for /admin/people/workers (RLS scopes the read). */
   workersUrl:   string
 }
 

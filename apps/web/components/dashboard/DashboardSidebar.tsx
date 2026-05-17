@@ -95,7 +95,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
           <BookOpen className="h-3.5 w-3.5" />
         </Link>
         <Link
-          href="/admin/periodic-inspections"
+          href="/admin/loto/periodic-inspections"
           title="Annual periodic inspections (§147(c)(6))"
           aria-label="Periodic procedure inspections"
           className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
@@ -111,7 +111,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
           <Users className="h-3.5 w-3.5" />
         </Link>
         <Link
-          href="/admin/contractors"
+          href="/admin/people/contractors"
           title="Contractor companies (§147(f)(2))"
           aria-label="Contractor companies"
           className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
@@ -119,7 +119,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
           <Building2 className="h-3.5 w-3.5" />
         </Link>
         <Link
-          href="/admin/competency-exams"
+          href="/admin/loto/competency-exams"
           title="Competency exams (§147(c)(7))"
           aria-label="Competency exams"
           className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
@@ -127,7 +127,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
           <ClipboardList className="h-3.5 w-3.5" />
         </Link>
         <Link
-          href="/admin/signed-artifacts"
+          href="/admin/evidence/signed-artifacts"
           title="Sealed PDF audit artifacts"
           aria-label="Sealed PDF audit artifacts"
           className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
@@ -135,7 +135,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
           <FileCheck2 className="h-3.5 w-3.5" />
         </Link>
         <Link
-          href="/admin/retention"
+          href="/admin/compliance/retention"
           title="Data retention policy and legal holds"
           aria-label="Retention and legal holds"
           className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
@@ -143,7 +143,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
           <Archive className="h-3.5 w-3.5" />
         </Link>
         <Link
-          href="/admin/iso45001"
+          href="/admin/evidence/iso45001"
           title="ISO 45001 clause evidence map"
           aria-label="ISO 45001 clause evidence map"
           className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
@@ -151,7 +151,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
           <BookText className="h-3.5 w-3.5" />
         </Link>
         <Link
-          href="/admin/prop65"
+          href="/admin/chemicals/prop65"
           title="California Proposition 65 / Title 8 §5194"
           aria-label="California Proposition 65"
           className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
@@ -159,7 +159,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
           <ShieldAlert className="h-3.5 w-3.5" />
         </Link>
         <Link
-          href="/admin/sso"
+          href="/admin/people/sso"
           title="Single sign-on (SAML / OIDC)"
           aria-label="Single sign-on"
           className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
@@ -167,7 +167,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
           <ShieldCheck className="h-3.5 w-3.5" />
         </Link>
         <Link
-          href="/admin/scim"
+          href="/admin/people/scim"
           title="SCIM 2.0 provisioning tokens"
           aria-label="SCIM tokens"
           className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
@@ -175,7 +175,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
           <KeyRound className="h-3.5 w-3.5" />
         </Link>
         <Link
-          href="/admin/cmms"
+          href="/admin/platform/cmms"
           title="CMMS integrations"
           aria-label="CMMS integrations"
           className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
@@ -183,7 +183,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
           <Cable className="h-3.5 w-3.5" />
         </Link>
         <Link
-          href="/admin/bbs/dashboard"
+          href="/admin/observations/bbs/dashboard"
           title="BBS leading-indicator dashboard"
           aria-label="BBS leading-indicator dashboard"
           className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"

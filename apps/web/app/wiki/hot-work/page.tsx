@@ -89,7 +89,7 @@ export default function WikiHotWorkPage() {
             q: 'Where do these permits show up for an auditor?',
             a: <>Three places: the live status board at{' '}
               <Link href="/hot-work/status">/hot-work/status</Link>, the
-              audit log at <Link href="/admin/audit">/admin/audit</Link>{' '}
+              audit log at <Link href="/admin/evidence/audit">/admin/evidence/audit</Link>{' '}
               (filter by <code>hot_work_permits</code>), and any compliance
               bundle generated for the period.</>,
           },
@@ -104,7 +104,7 @@ export default function WikiHotWorkPage() {
             a: <>No — webhooks are tenant-wide and event-typed. If you
               don&apos;t want a downstream system pinged on every permit,
               remove the subscription at{' '}
-              <Link href="/admin/webhooks">/admin/webhooks</Link>.</>,
+              <Link href="/admin/platform/webhooks">/admin/platform/webhooks</Link>.</>,
           },
         ]} />
       </Section>

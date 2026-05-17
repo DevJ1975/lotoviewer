@@ -2,6 +2,7 @@ import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs';
 import { execSync } from 'node:child_process';
 import pkg from './package.json';
+import { getAdminRedirects } from './lib/adminCatalog';
 
 // Iteration number = total git commits on the current branch. Bumps
 // automatically with every build, so the footer reflects exactly which
@@ -62,6 +63,14 @@ const nextConfig: NextConfig = {
         pathname: '/storage/v1/object/public/**',
       },
     ],
+  },
+  // Phase B URL reshape: /admin/* routes were flat (one segment) and
+  // are now section-nested (/admin/<section>/<slug>). One 301 per
+  // renamed tile keeps every old bookmark, email link, and audit-trail
+  // URL working forever. The map is derived from lib/adminCatalog.ts
+  // so the redirects table cannot drift from the catalog.
+  async redirects() {
+    return getAdminRedirects();
   },
   // Apple's Universal-Links validator demands `application/json` for the
   // extensionless `apple-app-site-association` file. Without this rewrite

@@ -22,7 +22,7 @@ export default function WikiCompliancePage() {
     <WikiPage
       title="Compliance Bundle"
       subtitle="Single-PDF audit export for a date range, with chain-of-custody hashes."
-      modulePath="/admin/compliance-bundle"
+      modulePath="/admin/compliance/compliance-bundle"
       audience="admin"
       category="Reports"
       version={CURRENT_VERSION}
@@ -90,7 +90,7 @@ export default function WikiCompliancePage() {
             a: <>No — it&apos;s downloaded straight to your browser. Save it
               to your retention store (SharePoint, S3, etc.) immediately. The
               act of generating it is logged at{' '}
-              <Link href="/admin/audit">/admin/audit</Link>.</>,
+              <Link href="/admin/evidence/audit">/admin/evidence/audit</Link>.</>,
           },
           {
             q: 'My bundle is huge — can I split it?',

@@ -24,7 +24,7 @@ export default function WikiPlatformFeaturesPage() {
     <WikiPage
       title="Platform Features"
       subtitle="SSO + SCIM, CMMS sync, BBS v2, vendor prequal, i18n."
-      modulePath="/admin/sso"
+      modulePath="/admin/people/sso"
       audience="admin"
       category="Admin"
       version={CURRENT_VERSION}
@@ -57,7 +57,7 @@ export default function WikiPlatformFeaturesPage() {
       <Section id="sso" title="SAML / OIDC SSO config">
         <p>
           The active-tenant SAML or OIDC configuration is persisted at{' '}
-          <Link href="/admin/sso">/admin/sso</Link>. Two paths: paste an
+          <Link href="/admin/people/sso">/admin/people/sso</Link>. Two paths: paste an
           IdP metadata URL (Azure AD, Okta), or paste the metadata XML
           directly (Ping, ADFS).
         </p>
@@ -99,7 +99,7 @@ export default function WikiPlatformFeaturesPage() {
       <Section id="cmms" title="CMMS bidirectional sync">
         <p>
           A generic webhook-driven CMMS bridge. Add an integration at{' '}
-          <Link href="/admin/cmms">/admin/cmms</Link>, get a signed
+          <Link href="/admin/platform/cmms">/admin/platform/cmms</Link>, get a signed
           webhook URL, drop it into the CMMS&apos;s outbound webhook
           config. The CMMS posts work-order events; we verify HMAC,
           record the event in <code>cmms_sync_events</code>, upsert
@@ -136,7 +136,7 @@ export default function WikiPlatformFeaturesPage() {
           <strong>Where to find it.</strong> Workers capture at{' '}
           <Link href="/bbs/observe">/bbs/observe</Link> (mobile-first
           tap targets). Admins review at{' '}
-          <Link href="/admin/bbs/dashboard">/admin/bbs/dashboard</Link>.
+          <Link href="/admin/observations/bbs/dashboard">/admin/observations/bbs/dashboard</Link>.
         </p>
         <p>
           <strong>Headline metric.</strong> safe-to-unsafe ratio,
@@ -175,7 +175,7 @@ export default function WikiPlatformFeaturesPage() {
       <Section id="i18n" title="Multi-language (i18n)">
         <p>
           Tenant-level language preference (en / es / fr). Set at{' '}
-          <Link href="/admin/configuration">/admin/configuration</Link>
+          <Link href="/admin/platform/configuration">/admin/platform/configuration</Link>
           {' '}via the language dropdown.
         </p>
         <p>
@@ -204,7 +204,7 @@ export default function WikiPlatformFeaturesPage() {
               SCIM config with the new token.</>,
           },
           {
-            q: 'Why doesn\'t toggling SSO on in /admin/sso actually enable SAML for my users?',
+            q: 'Why doesn\'t toggling SSO on in /admin/people/sso actually enable SAML for my users?',
             a: <>The tenant-side configuration persists, but Supabase
               Auth tenant-level SAML enablement is a superadmin step
               with irreversible side effects on the auth flow. The
@@ -231,7 +231,7 @@ export default function WikiPlatformFeaturesPage() {
             q: 'My contractor lost the prequal URL. Can I re-send it?',
             a: <>The token is on the contractor&apos;s row — open
               their prequal management page in{' '}
-              <Link href="/admin/contractors">/admin/contractors</Link>,
+              <Link href="/admin/people/contractors">/admin/people/contractors</Link>,
               copy the URL, re-send. The token doesn&apos;t expire
               until the prequal is submitted or marked expired/
               rejected by an admin.</>,

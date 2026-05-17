@@ -23,7 +23,7 @@ export default function WikiInsightsPage() {
     <WikiPage
       title="Risk Intelligence"
       subtitle="Worst spaces, anomalous atmospheric readings, supervisor activity breakdown."
-      modulePath="/admin/insights"
+      modulePath="/admin/insights/risk-intelligence"
       audience="admin"
       category="Reports"
       version={CURRENT_VERSION}
@@ -102,7 +102,7 @@ export default function WikiInsightsPage() {
           {
             q: 'Is the data exportable?',
             a: <>Not directly from this page; include the underlying records
-              in a <Link href="/admin/compliance-bundle">compliance bundle</Link>{' '}
+              in a <Link href="/admin/compliance/compliance-bundle">compliance bundle</Link>{' '}
               if you need a permanent archive.</>,
           },
         ]} />

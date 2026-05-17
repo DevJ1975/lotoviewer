@@ -23,7 +23,7 @@ export default function WikiLotoCompliancePage() {
     <WikiPage
       title="LOTO Compliance"
       subtitle="29 CFR 1910.147 — periodic inspections, group permits, contractors, competency, retraining."
-      modulePath="/admin/periodic-inspections"
+      modulePath="/admin/loto/periodic-inspections"
       audience="admin"
       category="Safety"
       version={CURRENT_VERSION}
@@ -55,7 +55,7 @@ export default function WikiLotoCompliancePage() {
         </p>
         <p>
           Every record is tenant-scoped, audit-logged, and surfaces on the{' '}
-          <Link href="/admin/compliance-bundle">compliance bundle</Link> for
+          <Link href="/admin/compliance/compliance-bundle">compliance bundle</Link> for
           a date-range export.
         </p>
       </Section>
@@ -87,8 +87,8 @@ export default function WikiLotoCompliancePage() {
           and frozen.
         </p>
         <p>
-          The list at <Link href="/admin/periodic-inspections">
-          /admin/periodic-inspections</Link> groups equipment into four
+          The list at <Link href="/admin/loto/periodic-inspections">
+          /admin/loto/periodic-inspections</Link> groups equipment into four
           cohorts (<strong>overdue</strong>, <strong>due within 30 days</strong>,
           <strong> never inspected</strong>, <strong>current</strong>) so a
           compliance lead can target the right pieces first. The dashboard
@@ -121,7 +121,7 @@ export default function WikiLotoCompliancePage() {
           Training records establish that an employee was instructed.
           Competency exams establish that an authorized employee actually
           knows the procedure. The proctored exam workflow at{' '}
-          <Link href="/admin/competency-exams">/admin/competency-exams</Link>
+          <Link href="/admin/loto/competency-exams">/admin/loto/competency-exams</Link>
           lets admins build multiple-choice exams scoped by role
           (operator, supervisor, energy isolation, rescue), proctor an
           attempt with the worker, and — on a pass — auto-create the
@@ -159,7 +159,7 @@ export default function WikiLotoCompliancePage() {
           Multi-employer worksites carry the obligation to inform outside
           contractors of the host&apos;s energy-control procedures and to
           receive their procedures in return. The contractor register at{' '}
-          <Link href="/admin/contractors">/admin/contractors</Link>
+          <Link href="/admin/people/contractors">/admin/people/contractors</Link>
           captures the company, primary contact, insurance expiry, and
           the host-procedure acknowledgement (who acknowledged on the
           host side, and when). Workers on the host roster can be tagged
@@ -197,7 +197,7 @@ export default function WikiLotoCompliancePage() {
         </ul>
         <p>
           Open triggers surface on{' '}
-          <Link href="/admin/training-records">/admin/training-records</Link>
+          <Link href="/admin/loto/training-records">/admin/loto/training-records</Link>
           in a retraining-attention panel. Resolve a trigger by linking a
           new training record (the system creates it) or by marking the
           trigger resolved without retraining (requires a note).

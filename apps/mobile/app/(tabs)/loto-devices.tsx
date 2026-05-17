@@ -30,7 +30,7 @@ import {
 } from '@soteria/core/trainingRecords'
 import type { LotoDevice, LotoWorker, TrainingRecord } from '@soteria/core/types'
 
-// Mobile parity for /admin/loto-devices.
+// Mobile parity for /admin/loto/devices.
 //
 // Uses the shared @soteria/core query layer so the data shape + RLS
 // scoping match the web app. Switching tenants on the mobile

@@ -66,7 +66,7 @@ export function classifyInsurance(
  * Returns one row per contractor that is expiring or recently
  * expired. 'current' and 'missing' are excluded — current rows are
  * reassurance the digest doesn't need to call out, and 'missing'
- * is an admin-data issue that surfaces in the /admin/contractors UI.
+ * is an admin-data issue that surfaces in the /admin/people/contractors UI.
  */
 export function buildContractorInsuranceDigest(
   companies: ContractorCompany[],

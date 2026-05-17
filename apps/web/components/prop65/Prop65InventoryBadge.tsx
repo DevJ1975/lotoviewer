@@ -52,7 +52,7 @@ export function Prop65InventoryBadge(props: { tenantId: string | null; inventory
       <ShieldAlert className="h-3.5 w-3.5" />
       <span>Prop 65: {rows.map(r => r.chemical_name).join(', ')}{allConfirmed ? '' : ' (auto)'}</span>
       {inventoryItemId && (
-        <Link href={`/admin/prop65/assessments/new?chemicalId=${inventoryItemId}`} className="underline">
+        <Link href={`/admin/chemicals/prop65/assessments/new?chemicalId=${inventoryItemId}`} className="underline">
           assess →
         </Link>
       )}

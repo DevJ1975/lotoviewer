@@ -13,7 +13,7 @@ export default function WikiScorecardPage() {
     <WikiPage
       title="EHS Scorecard"
       subtitle="Strategic KPI dashboard with selectable time windows."
-      modulePath="/admin/scorecard"
+      modulePath="/admin/insights/scorecard"
       audience="admin"
       category="Reports"
       version={CURRENT_VERSION}
@@ -65,7 +65,7 @@ export default function WikiScorecardPage() {
           {
             q: 'Can I export the underlying numbers?',
             a: <>Not yet — the scorecard is read-only. Use the{' '}
-              <Link href="/admin/compliance-bundle">compliance bundle</Link>{' '}
+              <Link href="/admin/compliance/compliance-bundle">compliance bundle</Link>{' '}
               for a permanent dated export, or pull straight from the Supabase
               dashboard if you need raw rows.</>,
           },

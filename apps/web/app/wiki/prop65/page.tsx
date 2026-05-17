@@ -24,7 +24,7 @@ export default function WikiProp65Page() {
     <WikiPage
       title="Proposition 65"
       subtitle="California Health & Safety Code §25249.6 + Cal/OSHA Title 8 §5194 — chemicals, sites, exposure assessments, warnings, notifications."
-      modulePath="/admin/prop65"
+      modulePath="/admin/chemicals/prop65"
       audience="admin"
       category="Safety"
       version={CURRENT_VERSION}
@@ -76,14 +76,14 @@ export default function WikiProp65Page() {
         <p>
           Each tenant&apos;s <code>chemicals_inventory</code> rows
           map to OEHHA entries via{' '}
-          <Link href="/admin/prop65/chemicals">/admin/prop65/chemicals</Link>.
+          <Link href="/admin/chemicals/prop65/chemicals">/admin/chemicals/prop65/chemicals</Link>.
           The page auto-suggests links by CAS number; admins confirm
           (or clear) per row. Confidence is recorded as{' '}
           <code>auto</code> until explicitly confirmed.
         </p>
         <p>
           Superadmins refresh the OEHHA list via CSV upload at{' '}
-          <Link href="/admin/prop65/import">/admin/prop65/import</Link>.
+          <Link href="/admin/chemicals/prop65/import">/admin/chemicals/prop65/import</Link>.
           The list updates a few times per year as OEHHA adds new
           chemicals.
         </p>
@@ -145,7 +145,7 @@ export default function WikiProp65Page() {
         </p>
         <p>
           When an admin records a posted warning at{' '}
-          <Link href="/admin/prop65/warnings/new">/admin/prop65/warnings/new</Link>,
+          <Link href="/admin/chemicals/prop65/warnings/new">/admin/chemicals/prop65/warnings/new</Link>,
           they pick the chemicals + warning type (long-form per
           §25603, or short-form per §25603(b)) + language (EN or ES;
           additional languages aren&apos;t safe-harbor), and the
@@ -194,7 +194,7 @@ export default function WikiProp65Page() {
           {
             q: 'A chemical on our inventory has a CAS that matches an OEHHA entry. Is the link automatic?',
             a: <>The match suggestion is automatic; the confirmation
-              is a human step. The /admin/prop65/chemicals page shows
+              is a human step. The /admin/chemicals/prop65/chemicals page shows
               auto-matches with a Confirm button. We leave the
               confirmation step in because OEHHA&apos;s list
               sometimes covers a CAS-identical substance only at
@@ -241,7 +241,7 @@ export default function WikiProp65Page() {
             a: <>It helps by giving you a single place to find the
               relevant assessments, warnings, and notifications for
               the chemical + site at issue. The compliance bundle on
-              /admin/compliance-bundle pulls the data into an
+              /admin/compliance/compliance-bundle pulls the data into an
               auditable PDF. The module does NOT track the litigation
               itself — that&apos;s your counsel&apos;s job.</>,
           },

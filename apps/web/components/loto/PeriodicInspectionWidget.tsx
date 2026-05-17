@@ -13,7 +13,7 @@ import {
 // Dashboard banner for §147(c)(6) overdue periodic inspections.
 //
 // Surfaces a one-line count on /loto and /status. Clicking jumps to
-// /admin/periodic-inspections where the admin sees the per-equipment
+// /admin/loto/periodic-inspections where the admin sees the per-equipment
 // list. Silent when there are no overdue items so it doesn't pollute
 // the dashboard during normal operation.
 
@@ -48,7 +48,7 @@ export default function PeriodicInspectionWidget() {
 
   return (
     <Link
-      href="/admin/periodic-inspections"
+      href="/admin/loto/periodic-inspections"
       className="block rounded-xl border border-rose-300 bg-rose-50 dark:bg-rose-950/40 px-4 py-3 hover:bg-rose-100/70 dark:hover:bg-rose-950/60 transition-colors"
     >
       <div className="flex items-center gap-3">

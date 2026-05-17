@@ -12,7 +12,7 @@ export default function WikiHygienePage() {
     <WikiPage
       title="Data Hygiene Log"
       subtitle="High-level log of data-cleanup operations — one row per business decision."
-      modulePath="/admin/hygiene-log"
+      modulePath="/admin/insights/hygiene-log"
       audience="admin"
       category="Admin"
       version={CURRENT_VERSION}
@@ -50,7 +50,7 @@ export default function WikiHygienePage() {
       <Section id="faq" title="Frequently asked questions">
         <Faq items={[
           {
-            q: 'Why isn\'t this in /admin/audit?',
+            q: 'Why isn\'t this in /admin/evidence/audit?',
             a: <>Because one decision (&quot;rename Maintenance to Maintenance &amp; Reliability&quot;)
               can produce hundreds of audit rows. The hygiene log gives the
               one-liner; the audit log gives the row-by-row.</>,

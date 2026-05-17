@@ -185,7 +185,7 @@ async function runCron(req: Request): Promise<NextResponse> {
       // Deep-link to the configuration page where the gas-meter
       // register lives. Could be improved to a per-meter detail view
       // if/when that exists.
-      url:  '/admin/configuration',
+      url:  '/admin/platform/configuration',
     })
 
     const results = await Promise.allSettled(

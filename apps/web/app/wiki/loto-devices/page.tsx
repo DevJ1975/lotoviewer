@@ -12,7 +12,7 @@ export default function WikiLotoDevicesPage() {
     <WikiPage
       title="LOTO Devices"
       subtitle="Inventory of physical lock + tag hardware, with checkout tracking and stale-checkout alerts."
-      modulePath="/admin/loto-devices"
+      modulePath="/admin/loto/devices"
       audience="admin"
       category="Admin"
       version={CURRENT_VERSION}

@@ -71,7 +71,7 @@ export default function WikiIndexPage() {
               <XCircle className="h-4 w-4" /> Don&apos;t
             </h3>
             <ul className="text-sm space-y-2.5 text-rose-900 dark:text-rose-200">
-              <Item color="rose">Don&apos;t share your account — every action is logged against the signed-in user via <code className="kbd">/admin/audit</code>.</Item>
+              <Item color="rose">Don&apos;t share your account — every action is logged against the signed-in user via <code className="kbd">/admin/evidence/audit</code>.</Item>
               <Item color="rose">Don&apos;t edit data while you see the <strong>offline banner</strong> unless the module explicitly supports queued writes (LOTO equipment + decommission).</Item>
               <Item color="rose">Don&apos;t back-date entries — the system stamps server time and that&apos;s the inspector-facing record.</Item>
               <Item color="rose">Don&apos;t paste tokenized public URLs (<code className="kbd">/review/…</code>, <code className="kbd">/permit-signon/…</code>, <code className="kbd">/inspector?sig=…</code>) into shared chat channels — they&apos;re bearer tokens.</Item>
