@@ -288,8 +288,11 @@ $$;
 
 -- Service-role only: pg_cron runs as superuser so the daily schedule
 -- works regardless of the role grant, and the API route uses the
--- service client. No authenticated user should kick off a full scan.
+-- service client. No authenticated/anon user should kick off a full
+-- scan. `anon` keeps its own grant from function creation, so revoke
+-- it explicitly.
 revoke all on function public.audit_member_drift() from public;
+revoke all on function public.audit_member_drift() from anon;
 revoke all on function public.audit_member_drift() from authenticated;
 grant execute on function public.audit_member_drift() to service_role;
 

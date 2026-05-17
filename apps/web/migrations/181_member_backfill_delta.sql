@@ -142,8 +142,10 @@ $$;
 -- Service-role only: the SP writes to members on behalf of a tenant
 -- without re-checking the caller's admin status. The drift API route
 -- is the only intended caller; it gates with requireSuperadmin and
--- uses the service client.
+-- uses the service client. `anon` gets its own grant on creation, so
+-- revoking from public alone isn't enough.
 revoke all on function public.reconcile_members_backfill(uuid) from public;
+revoke all on function public.reconcile_members_backfill(uuid) from anon;
 revoke all on function public.reconcile_members_backfill(uuid) from authenticated;
 grant execute on function public.reconcile_members_backfill(uuid) to service_role;
 

@@ -290,6 +290,14 @@ create trigger trg_sync_membership_to_members
   after insert on public.tenant_memberships
   for each row execute function public.sync_membership_to_members();
 
+-- These functions are invoked by triggers only — they have no callable
+-- shape from PostgREST (return type `trigger`) but Postgres still grants
+-- EXECUTE to PUBLIC on create. Revoke explicitly so that the public
+-- surface area is exactly what we intend.
+revoke all on function public.sync_profile_to_members()      from public, anon, authenticated;
+revoke all on function public.sync_loto_worker_to_members()  from public, anon, authenticated;
+revoke all on function public.sync_membership_to_members()   from public, anon, authenticated;
+
 notify pgrst, 'reload schema';
 
 commit;

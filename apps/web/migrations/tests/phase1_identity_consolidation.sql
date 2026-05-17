@@ -288,30 +288,29 @@ begin
   -- ────────────────────────────────────────────────────────────────
   savepoint t9;
   declare
-    v_has_merge       boolean;
-    v_has_reconcile   boolean;
-    v_has_audit       boolean;
-  begin
-    v_has_merge := has_function_privilege(
-      'authenticated',
+    v_role       text;
+    v_fn         text;
+    v_can_exec   boolean;
+    v_destructive text[] := array[
       'public.merge_members(uuid,uuid,uuid,text)',
-      'execute'
-    );
-    v_has_reconcile := has_function_privilege(
-      'authenticated',
       'public.reconcile_members_backfill(uuid)',
-      'execute'
-    );
-    v_has_audit := has_function_privilege(
-      'authenticated',
       'public.audit_member_drift()',
-      'execute'
-    );
-    if v_has_merge or v_has_reconcile or v_has_audit then
-      raise exception 'TEST 9 failed: authenticated has execute on a destructive RPC (merge=%, reconcile=%, audit=%)',
-        v_has_merge, v_has_reconcile, v_has_audit;
-    end if;
-    raise notice 'TEST 9 ok: destructive RPCs not reachable from authenticated';
+      'public.sync_profile_to_members()',
+      'public.sync_loto_worker_to_members()',
+      'public.sync_membership_to_members()'
+    ];
+    v_callers text[] := array['anon','authenticated'];
+  begin
+    foreach v_role in array v_callers loop
+      foreach v_fn in array v_destructive loop
+        v_can_exec := has_function_privilege(v_role, v_fn, 'execute');
+        if v_can_exec then
+          raise exception 'TEST 9 failed: role % has execute on %',
+            v_role, v_fn;
+        end if;
+      end loop;
+    end loop;
+    raise notice 'TEST 9 ok: 6 destructive RPCs unreachable from anon + authenticated';
   end;
   rollback to savepoint t9;
 end $$;

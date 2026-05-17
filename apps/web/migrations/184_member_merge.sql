@@ -259,10 +259,12 @@ $$;
 -- Why service_role only: this SP is destructive (re-points FKs, marks
 -- a member merged). The /api/admin/members/merge route uses the service
 -- client and gates with requireTenantAdmin; granting execute to
--- `authenticated` would let any logged-in user invoke it directly via
+-- `authenticated` or `anon` would let any user invoke it directly via
 -- supabase.rpc(), bypassing the route's admin check. Keep the surface
--- single: the route is the only caller.
+-- single: the route is the only caller. `anon` keeps its own grant
+-- from function creation, so revoke explicitly.
 revoke all on function public.merge_members(uuid, uuid, uuid, text) from public;
+revoke all on function public.merge_members(uuid, uuid, uuid, text) from anon;
 revoke all on function public.merge_members(uuid, uuid, uuid, text) from authenticated;
 grant execute on function public.merge_members(uuid, uuid, uuid, text) to service_role;
 
