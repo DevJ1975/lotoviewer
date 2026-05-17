@@ -158,7 +158,7 @@ export default function AdminMembersPage() {
                   <Avatar src={m.avatar_url} name={m.display_name} email={m.email} size="sm" />
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate text-sm font-black text-slate-950 dark:text-slate-50">{m.display_name}</p>
+                      <Link href={`/admin/members/${m.member_id}`} className="truncate text-sm font-black text-slate-950 hover:text-brand-navy dark:text-slate-50 dark:hover:text-brand-yellow">{m.display_name}</Link>
                       <span className="placard-numeric text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-sm px-1.5 py-0.5">@{m.handle}</span>
                       <span className="placard-numeric text-[11px] font-bold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900 rounded-sm px-1.5 py-0.5">#{m.member_code}</span>
                     </div>

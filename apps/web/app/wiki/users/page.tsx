@@ -1,10 +1,17 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-05'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-05-16'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.0',
+    date: '2026-05-16',
+    changes: [
+      'Added deprecation banner pointing at /admin/members. Role management still lives here; the unified members roster (login users + shop-floor workers) is the new home for invite, deactivate, and per-person detail.',
+    ],
+  },
   { version: '1.0.0', date: '2026-05-05', changes: ['Initial users-and-roles wiki page.'] },
 ]
 

@@ -151,6 +151,14 @@ export default function WorkersPage() {
         </p>
       </div>
 
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+        This page is being replaced by the unified{' '}
+        <Link href="/admin/members" className="font-semibold underline hover:text-amber-700 dark:hover:text-amber-200">
+          Members page
+        </Link>
+        . Role management still works here.
+      </div>
+
       {/* Tiles */}
       <div className="grid grid-cols-3 gap-3">
         <Tile label="Active"          value={activeCount}        />
