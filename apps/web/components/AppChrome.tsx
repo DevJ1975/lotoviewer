@@ -68,6 +68,10 @@ export default function AppChrome({ children }: { children: ReactNode }) {
   // and any non-module route. The strip sits below the chrome header
   // and stays sticky alongside it as a persistent "you are here" cue.
   const { classes: accentClasses } = getModuleVisualsForPath(pathname)
+  // Cross-tenant operator mode. /superadmin/* surfaces use a distinct
+  // accent + a header pill so a user with both roles can never mistake
+  // the platform-operator surface for tenant administration.
+  const inPlatformOpsMode = pathname.startsWith('/superadmin')
 
   if (hideChrome) return <><PwaRegister />{children}</>
 
@@ -95,6 +99,15 @@ export default function AppChrome({ children }: { children: ReactNode }) {
 
             <TenantHeaderPill />
 
+            {inPlatformOpsMode && (
+              <span
+                className="shrink-0 rounded-md border border-amber-400/60 bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200"
+                title="You are in the platform-operator surface. Actions here cross tenant boundaries."
+              >
+                Platform Ops
+              </span>
+            )}
+
             <div className="hidden md:block flex-1 min-w-0 max-w-md">
               <GlobalSearch />
             </div>
@@ -118,9 +131,10 @@ export default function AppChrome({ children }: { children: ReactNode }) {
           user always knows which module they're in, even when scrolling
           through long content. Sticks below the chrome header. The
           +0.375rem accounts for the hazard stripe sitting above the
-          main header row. */}
+          main header row. In platform-ops mode we override to amber so
+          the cross-tenant context reads as cautionary, not branded. */}
       <div
-        className={`h-[3px] sticky z-30 motion-reactive ${accentClasses.strip}`}
+        className={`h-[3px] sticky z-30 motion-reactive ${inPlatformOpsMode ? 'bg-amber-400/80' : accentClasses.strip}`}
         style={{ top: `calc(${scrolled ? '3.375rem' : '3.875rem'} + env(safe-area-inset-top))` }}
         aria-hidden="true"
       />
