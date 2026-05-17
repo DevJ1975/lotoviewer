@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ChevronDown, ChevronRight, Search, Shield, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Search, Settings2, Shield, X } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -104,6 +104,16 @@ export default function AppDrawer({ onClose }: Props) {
       </SidebarContent>
 
       <SidebarFooter className="space-y-2">
+        {(profile?.is_admin || profile?.is_superadmin) && (
+          <Link
+            href="/admin"
+            onClick={close}
+            className="flex min-h-10 items-center gap-2 rounded-md px-2.5 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-sidebar-accent dark:text-slate-200"
+          >
+            <Settings2 className="size-4" />
+            Administration
+          </Link>
+        )}
         {profile?.is_superadmin && (
           <Link
             href="/superadmin"
