@@ -16,6 +16,13 @@ import {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.2.0',
+    date: '2026-05-19',
+    changes: [
+      'Six inventory create forms shipped under /admin/working-at-heights/<slug>/new — Authorizations (member + role + validity window, conditional PE license for QP), Fall protection components (10 ANSI Z359 types with serial + service-life tracking), Portable ladders (ANSI A14 type + duty with auto-fill of capacity), Fixed ladders (with the 2036 retrofit-target-date auto-defaulting to Nov 18 2036 when height ≥24 ft and no safety system), Anchors (engineered + improvised with QP cert + recert cycle), Rescue plans (named primary + backup rescuer + drill cadence). The "+ New" CTAs on the inventory lists now resolve.',
+    ],
+  },
+  {
     version: '1.1.0',
     date: '2026-05-19',
     changes: [
