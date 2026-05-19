@@ -205,6 +205,55 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     return NextResponse.json({ ok: true })
   }
 
+  // ─── unmark-for-review ──────────────────────────────────────────────────
+  // Lets a supervisor undo a flag they set in error during the floor
+  // walk. Requires reviewer_name for the audit trail (the underlying
+  // log_audit trigger captures who changed the row); validates the
+  // equipment is in the link's tenant before clearing.
+  //
+  // We intentionally allow any holder of the public link to clear any
+  // flagged row in the tenant, not just rows they themselves flagged.
+  // The link is the only auth here; tying clear-permissions to a
+  // typed-in name would be a paper boundary, not real security.
+  if (action === 'unmark-for-review') {
+    const equipmentId  = typeof body.equipment_id === 'string' ? body.equipment_id.trim() : ''
+    const reviewerName = typeof body.reviewer_name === 'string' ? body.reviewer_name.trim() : ''
+    if (!equipmentId) {
+      return NextResponse.json({ error: 'equipment_id required' }, { status: 400 })
+    }
+    if (!reviewerName) {
+      return NextResponse.json({ error: 'reviewer_name required' }, { status: 400 })
+    }
+    const { data: eq, error: eqErr } = await admin
+      .from('loto_equipment')
+      .select('equipment_id')
+      .eq('tenant_id',   lookup.link.tenant_id)
+      .eq('equipment_id', equipmentId)
+      .maybeSingle()
+    if (eqErr) {
+      Sentry.captureException(eqErr, { tags: { route: 'review/[token]', stage: 'unmark-for-review-lookup' } })
+      return NextResponse.json({ error: eqErr.message }, { status: 500 })
+    }
+    if (!eq) {
+      return NextResponse.json({ error: 'Equipment not found in this tenant' }, { status: 404 })
+    }
+    const { error: clearErr } = await admin
+      .from('loto_equipment')
+      .update({
+        flagged_for_review_at:   null,
+        flagged_for_review_by:   null,
+        flagged_for_review_via:  null,
+        flagged_for_review_note: null,
+      })
+      .eq('tenant_id',   lookup.link.tenant_id)
+      .eq('equipment_id', equipmentId)
+    if (clearErr) {
+      Sentry.captureException(clearErr, { tags: { route: 'review/[token]', stage: 'unmark-for-review' } })
+      return NextResponse.json({ error: clearErr.message }, { status: 500 })
+    }
+    return NextResponse.json({ ok: true })
+  }
+
   // ─── signoff ────────────────────────────────────────────────────────────
   // Final write. Sets signed_off_at + the signature payload + IP / UA
   // for audit. Capping at one signoff per link — if the reviewer has

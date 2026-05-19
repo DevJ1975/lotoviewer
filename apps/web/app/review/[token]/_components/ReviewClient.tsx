@@ -119,6 +119,35 @@ export default function ReviewClient({
   const [pendingReasonByEqId, setPendingReasonByEqId] = useState<Record<string, string>>({})
   const [reasonOpenByEqId, setReasonOpenByEqId] = useState<Record<string, boolean>>({})
 
+  async function unmarkForReview(eqId: string) {
+    ensureReviewerName(async () => {
+      setFlagBusyByEqId(s => ({ ...s, [eqId]: true }))
+      try {
+        const name = (publicReviewerName || effectiveReviewerName).trim()
+        const res = await fetch(`/api/review/${token}`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            action:        'unmark-for-review',
+            equipment_id:  eqId,
+            reviewer_name: name,
+          }),
+        })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          throw new Error(body.error ?? `HTTP ${res.status}`)
+        }
+        setFlaggedByEqId(s => ({ ...s, [eqId]: undefined }))
+      } catch (err) {
+        if (typeof window !== 'undefined') {
+          window.alert(err instanceof Error ? err.message : 'Could not clear this flag.')
+        }
+      } finally {
+        setFlagBusyByEqId(s => ({ ...s, [eqId]: false }))
+      }
+    })
+  }
+
   async function markForReview(eqId: string, reason?: string) {
     ensureReviewerName(async () => {
       setFlagBusyByEqId(s => ({ ...s, [eqId]: true }))
@@ -477,6 +506,7 @@ export default function ReviewClient({
                         void markForReview(eq.equipment_id)
                       }
                     }}
+                    onUndo={isPublic ? () => void unmarkForReview(eq.equipment_id) : undefined}
                   />
                 </div>
 
@@ -651,11 +681,12 @@ export default function ReviewClient({
 }
 
 function ReviewFlagButton({
-  flagged, busy, onClick,
+  flagged, busy, onClick, onUndo,
 }: {
   flagged: { by: string; at: string } | undefined
   busy:    boolean
   onClick: () => void
+  onUndo?: () => void
 }) {
   if (flagged) {
     return (
@@ -664,6 +695,17 @@ function ReviewFlagButton({
         className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800"
       >
         ⚑ Flagged for review
+        {onUndo && (
+          <button
+            type="button"
+            onClick={onUndo}
+            disabled={busy}
+            title="Undo this flag"
+            className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-amber-700 hover:bg-amber-200 hover:text-amber-900 disabled:opacity-50"
+          >
+            ×
+          </button>
+        )}
       </span>
     )
   }
