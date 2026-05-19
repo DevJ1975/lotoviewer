@@ -56,7 +56,7 @@ export const EXPIRY_BAND_CLASS: Record<ExpiryBand, string> = {
   expired:        'font-semibold text-rose-700 dark:text-rose-300',
   expiring_soon:  'font-semibold text-amber-700 dark:text-amber-300',
   ok:             'text-slate-700 dark:text-slate-300',
-  unknown:        'text-slate-400',
+  unknown:        'text-slate-400 dark:text-slate-500',
 }
 
 // ─── Label maps ────────────────────────────────────────────────────────
