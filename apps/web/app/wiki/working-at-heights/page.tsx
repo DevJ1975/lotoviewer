@@ -16,6 +16,13 @@ import {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.4.0',
+    date: '2026-05-19',
+    changes: [
+      'Phase 4 — Working-at-Heights permit issuance + status board shipped. The /admin/working-at-heights/permits surface lists every permit with status badges and an "hours remaining" decoration for active rows. The /new form runs a live seven-point pre-condition checklist (worker holds current Authorized-Person designation; CP holds current Competent-Person designation; anchor in_service + recert not lapsed; components in_service + service-life not expired; rescue plan associated; clearance verdict SAFE; weather check clears) and disables Save until every gate passes. The clearance calculation is computed live and persisted as a JSON snapshot on wah_permits.clearance_calculation so an auditor can see the math at issue time even if defaults shift later. Detail page exposes suspend / resume / close-out / cancel actions with closed_at + closed_by stamped on terminal transitions. The worker-facing status board at /working-at-heights/permits/status mirrors the hot-work board layout — dark theme, big timers, visibility-aware 30-second polling, stale-data banner.',
+    ],
+  },
+  {
     version: '1.3.0',
     date: '2026-05-19',
     changes: [
