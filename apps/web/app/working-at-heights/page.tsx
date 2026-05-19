@@ -56,13 +56,12 @@ export default function WorkingAtHeightsHome() {
           />
         </Section>
 
-        <Section title="Calculator (Phase 3)">
+        <Section title="Calculator">
           <ModuleCard
-            href="/wiki/working-at-heights#clearance-calculation"
+            href="/working-at-heights/calculator"
             Icon={Calculator}
             title="Fall clearance calculator"
-            desc="Reads the math today in the manual; the interactive UI ships in Phase 3. 6-ft shock lanyard needs 18 ft below the anchor; Class 1 SRL needs 10.5 ft."
-            comingSoonLabel="UI in flight"
+            desc="Pick a system (lanyard / SRL / restraint), enter the available clearance, see the verdict and the breakdown live. The math is the same one cited in the manual; the unit-tested helpers in packages/core drive both."
           />
         </Section>
 

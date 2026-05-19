@@ -16,6 +16,13 @@ import {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.3.0',
+    date: '2026-05-19',
+    changes: [
+      'Phase 3 — interactive Fall Clearance Calculator shipped at /working-at-heights/calculator. Pick a system (shock lanyard / Class 1 SRL / Class 2 SRL / restraint), enter the available clearance below the anchor, and see the verdict (SAFE / MARGINAL / UNSAFE) update live with the breakdown and a side-view SVG diagram. The math is the same calculateRequiredClearance() the unit tests pin down; the page consumes that helper directly so a regression on either side fails CI.',
+    ],
+  },
+  {
     version: '1.2.0',
     date: '2026-05-19',
     changes: [
