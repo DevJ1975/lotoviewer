@@ -71,10 +71,9 @@ function makeStep(partial: Partial<LotoEnergyStep> = {}): LotoEnergyStep {
   }
 }
 
-// Procedure that satisfies §147(c)(4)(ii) validation in the generator.
-// Wraps a caller's single-step overrides into a 4-step procedure with
-// the required phases so unit tests of rendering (Unicode, layout)
-// don't have to model an OSHA-complete procedure themselves.
+// Realistic four-phase procedure (isolate → release → lockout → verify)
+// used by rendering tests that want a representative table to draw,
+// not the empty "no steps yet" placeholder.
 function makeValidProcedure(extra: Partial<LotoEnergyStep> = {}): LotoEnergyStep[] {
   return [
     makeStep({ ...extra, id: 's-iso', step_type: 'isolate',              sequence_order: 1 }),
