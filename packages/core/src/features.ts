@@ -931,6 +931,22 @@ export const FEATURES: FeatureDef[] = [
     icon:        'ShieldAlert',
     color:       'amber',
   },
+  {
+    // Working at Heights module entry. Phase 1 shipped the manual +
+    // AI ingest + calculator math; Phase 2 shipped the admin
+    // inventory CRUD. The worker-facing module home at
+    // /working-at-heights surfaces the manual + admin entry points +
+    // "coming soon" Phase 3 surfaces (calculator UI, QR-scan pre-use).
+    id:          'working-at-heights',
+    name:        'Working at Heights',
+    description: 'Fall protection, ladders, anchors, rescue plans — Federal OSHA + Cal/OSHA',
+    href:        '/working-at-heights',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'Mountain',
+    color:       'sky',
+  },
 ]
 
 // ─── Lookups ───────────────────────────────────────────────────────────────
