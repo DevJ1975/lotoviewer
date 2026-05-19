@@ -409,9 +409,15 @@ export default function ReviewClient({
                     <div className="font-mono text-sm font-bold text-slate-900">{eq.equipment_id}</div>
                     <div className="text-sm text-slate-700 mt-0.5">{eq.description}</div>
                   </div>
-                  {saving === 'saving' && <span className="text-[11px] text-slate-500">Saving…</span>}
-                  {saving === 'saved'   && <span className="text-[11px] text-emerald-600 font-semibold">Saved</span>}
-                  {saving === 'error'   && (
+                  {/* The save-state indicator is tied to the per-placard
+                      comment textarea (submit-note action). On the public
+                      supervisor link there's no comment textarea and the
+                      submit-note path doesn't apply (no review batch),
+                      so suppress the indicator entirely. The legacy
+                      per-reviewer flow keeps it. */}
+                  {!isPublic && saving === 'saving' && <span className="text-[11px] text-slate-500">Saving…</span>}
+                  {!isPublic && saving === 'saved'   && <span className="text-[11px] text-emerald-600 font-semibold">Saved</span>}
+                  {!isPublic && saving === 'error'   && (
                     <button
                       type="button"
                       onClick={() => local && void save(eq.equipment_id, local)}
@@ -552,7 +558,7 @@ export default function ReviewClient({
               value={typedName}
               onChange={e => setTypedName(e.target.value)}
               placeholder="Type your full name"
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
             />
           </label>
 
@@ -599,7 +605,7 @@ export default function ReviewClient({
           <label className="block">
             <span className="text-xs font-semibold text-slate-600">Overall comments (optional)</span>
             <textarea
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
               rows={3}
               value={overallNotes}
               onChange={e => setOverallNotes(e.target.value)}
@@ -701,7 +707,7 @@ function NameModal({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Full name"
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
           />
           <div className="flex justify-end gap-2">
             <button
