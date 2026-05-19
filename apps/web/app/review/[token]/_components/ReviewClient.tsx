@@ -112,7 +112,14 @@ export default function ReviewClient({
   })
   const [flagBusyByEqId, setFlagBusyByEqId] = useState<Record<string, boolean>>({})
 
-  async function markForReview(eqId: string) {
+  // Optional per-row note attached to the next mark-for-review POST.
+  // The button shows an inline textarea before firing so the
+  // supervisor can explain WHY they're flagging without needing a
+  // separate comment surface.
+  const [pendingReasonByEqId, setPendingReasonByEqId] = useState<Record<string, string>>({})
+  const [reasonOpenByEqId, setReasonOpenByEqId] = useState<Record<string, boolean>>({})
+
+  async function markForReview(eqId: string, reason?: string) {
     ensureReviewerName(async () => {
       setFlagBusyByEqId(s => ({ ...s, [eqId]: true }))
       try {
@@ -124,6 +131,7 @@ export default function ReviewClient({
             action:        'mark-for-review',
             equipment_id:  eqId,
             reviewer_name: name,
+            reason:        reason ?? pendingReasonByEqId[eqId] ?? '',
           }),
         })
         if (!res.ok) {
@@ -134,6 +142,8 @@ export default function ReviewClient({
           ...s,
           [eqId]: { by: name, at: new Date().toISOString() },
         }))
+        setReasonOpenByEqId(s => ({ ...s, [eqId]: false }))
+        setPendingReasonByEqId(s => ({ ...s, [eqId]: '' }))
       } catch (err) {
         // Surface as alert — there's no per-row error slot since this
         // is a button click, not a form, and the public surface
@@ -454,22 +464,74 @@ export default function ReviewClient({
                   <ReviewFlagButton
                     flagged={flaggedByEqId[eq.equipment_id]}
                     busy={!!flagBusyByEqId[eq.equipment_id]}
-                    onClick={() => void markForReview(eq.equipment_id)}
+                    onClick={() => {
+                      if (isPublic) {
+                        setReasonOpenByEqId(s => ({ ...s, [eq.equipment_id]: !s[eq.equipment_id] }))
+                      } else {
+                        void markForReview(eq.equipment_id)
+                      }
+                    }}
                   />
                 </div>
 
-                <textarea
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
-                  rows={2}
-                  placeholder="Optional comment for this placard"
-                  value={local?.notes ?? ''}
-                  onChange={(e) => {
-                    const status = local?.status ?? 'approved'
-                    const next = { status, notes: e.target.value }
-                    setReviews(r => ({ ...r, [eq.equipment_id]: next }))
-                    scheduleSave(eq.equipment_id, next)
-                  }}
-                />
+                {/* Inline reason capture for the public supervisor flow.
+                    Lets the supervisor explain why they're flagging
+                    without a separate comment textarea. Submitting
+                    fires the actual API call. */}
+                {isPublic && reasonOpenByEqId[eq.equipment_id] && !flaggedByEqId[eq.equipment_id] && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+                    <label className="block text-xs font-semibold text-amber-900">
+                      Why are you flagging this? <span className="font-normal text-amber-700">(optional — but helpful for the admin)</span>
+                    </label>
+                    <textarea
+                      autoFocus
+                      rows={2}
+                      placeholder="e.g. EQUIP photo is faded; isolation point is wrong; serial doesn't match"
+                      value={pendingReasonByEqId[eq.equipment_id] ?? ''}
+                      onChange={(e) => setPendingReasonByEqId(s => ({ ...s, [eq.equipment_id]: e.target.value }))}
+                      className="w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void markForReview(eq.equipment_id, pendingReasonByEqId[eq.equipment_id] ?? '')}
+                        disabled={!!flagBusyByEqId[eq.equipment_id]}
+                        className="rounded-md bg-amber-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-50"
+                      >
+                        {flagBusyByEqId[eq.equipment_id] ? 'Flagging…' : 'Flag for review'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReasonOpenByEqId(s => ({ ...s, [eq.equipment_id]: false }))}
+                        className="rounded-md px-2.5 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* The per-placard comment textarea is only used in the
+                    legacy per-reviewer flow. On the public supervisor
+                    link, the "Mark for review" button already takes an
+                    optional note — and posting a comment here would
+                    bounce off the upsert_loto_placard_review RPC's
+                    batch-membership check (public links have no
+                    snapshot batch). */}
+                {!isPublic && (
+                  <textarea
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+                    rows={2}
+                    placeholder="Optional comment for this placard"
+                    value={local?.notes ?? ''}
+                    onChange={(e) => {
+                      const status = local?.status ?? 'approved'
+                      const next = { status, notes: e.target.value }
+                      setReviews(r => ({ ...r, [eq.equipment_id]: next }))
+                      scheduleSave(eq.equipment_id, next)
+                    }}
+                  />
+                )}
               </article>
             )
           })}
