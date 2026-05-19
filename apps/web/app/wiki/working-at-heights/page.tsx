@@ -16,6 +16,13 @@ import {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.1.0',
+    date: '2026-05-19',
+    changes: [
+      'Module now reachable from the drawer, the home dashboard ModulesGrid, and the Cmd-K palette. A worker-facing module home at /working-at-heights surfaces the manual, the calculator placeholder, and the admin tiles (admins only). The manual itself is unchanged in this release; this entry records the navigation wiring that was missing in 1.0.0.',
+    ],
+  },
+  {
     version: '1.0.0',
     date: '2026-05-19',
     changes: [
