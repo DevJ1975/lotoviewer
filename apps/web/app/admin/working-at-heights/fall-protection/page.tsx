@@ -6,6 +6,13 @@ import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { InventoryShell, InventoryEmpty } from '../_components/InventoryShell'
+import {
+  decorateWithDaysLeft,
+  expiryBand,
+  EXPIRY_BAND_CLASS,
+  FALL_PROTECTION_TYPE_LABELS,
+  STATUS_BADGE_CLASS,
+} from '@/lib/wah/inventoryHelpers'
 
 interface ComponentRow {
   id:                    string
@@ -18,37 +25,11 @@ interface ComponentRow {
   storage_location:      string | null
 }
 
-interface DecoratedRow extends ComponentRow {
-  /** Days until service_expires_at; null when no expiry on file. Snapshotted at fetch. */
-  days_left: number | null
-}
-
-const TYPE_LABEL: Record<string, string> = {
-  harness:                'Harness',
-  shock_lanyard:          'Shock lanyard',
-  positioning_lanyard:    'Positioning lanyard',
-  restraint_lanyard:      'Restraint lanyard',
-  srl_class1:             'SRL (Class 1)',
-  srl_class2:             'SRL (Class 2)',
-  anchor_connector:       'Anchor connector',
-  rope_grab:              'Rope grab',
-  trauma_strap:           'Trauma strap',
-  rescue_descent_device:  'Rescue descent device',
-}
-
-const STATUS_BADGE: Record<string, string> = {
-  in_service:      'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
-  quarantined:     'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
-  condemned:       'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200',
-  in_rescue_cache: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200',
-  pending_recert:  'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200',
-}
-
 export default function FallProtectionPage() {
   const { tenantId, loading: tenantLoading } = useTenant()
   const { profile, loading: authLoading } = useAuth()
   const canManage = !!profile?.is_admin || !!profile?.is_superadmin
-  const [rows, setRows] = useState<DecoratedRow[] | null>(null)
+  const [rows, setRows] = useState<Array<ComponentRow & { days_left: number | null }> | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -63,14 +44,7 @@ export default function FallProtectionPage() {
         .returns<ComponentRow[]>()
       if (cancelled) return
       if (err) { setError(err.message); return }
-      const now = Date.now()
-      const decorated: DecoratedRow[] = (data ?? []).map(r => ({
-        ...r,
-        days_left: r.service_expires_at
-          ? Math.ceil((new Date(r.service_expires_at).getTime() - now) / (24 * 3600 * 1000))
-          : null,
-      }))
-      setRows(decorated)
+      setRows(decorateWithDaysLeft(data ?? [], 'service_expires_at'))
     })()
     return () => { cancelled = true }
   }, [tenantId, canManage])
@@ -113,27 +87,24 @@ export default function FallProtectionPage() {
           </thead>
           <tbody>
             {rows.map(r => {
-              const daysLeft = r.days_left
+              const band = expiryBand(r.days_left)
+              const typeLabel = (FALL_PROTECTION_TYPE_LABELS as Record<string, string>)[r.type] ?? r.type
               return (
                 <tr key={r.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900/40">
-                  <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{TYPE_LABEL[r.type] ?? r.type}</td>
+                  <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{typeLabel}</td>
                   <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
                     {r.manufacturer}{r.model ? ` · ${r.model}` : ''}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-700 dark:text-slate-300">{r.serial}</td>
                   <td className="px-4 py-3">
                     {r.service_expires_at ? (
-                      <span className={
-                        daysLeft !== null && daysLeft < 0     ? 'font-semibold text-rose-700 dark:text-rose-300'
-                        : daysLeft !== null && daysLeft <= 90 ? 'font-semibold text-amber-700 dark:text-amber-300'
-                                                              : 'text-slate-700 dark:text-slate-300'
-                      }>
+                      <span className={EXPIRY_BAND_CLASS[band]}>
                         {new Date(r.service_expires_at).toLocaleDateString()}
                       </span>
                     ) : <span className="text-slate-400">—</span>}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ${STATUS_BADGE[r.status] ?? 'bg-slate-100'}`}>
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ${STATUS_BADGE_CLASS[r.status] ?? 'bg-slate-100'}`}>
                       {r.status.replaceAll('_', ' ')}
                     </span>
                   </td>
