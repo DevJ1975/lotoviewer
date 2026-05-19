@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import * as Sentry from '@sentry/nextjs'
 import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
 import { placardPdfPath } from '@soteria/core/storagePaths'
@@ -24,6 +25,10 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
   const [pdfUrl, setPdfUrl]       = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
   const [uploadState, setUploadState] = useState<UploadState>('idle')
+  // Last failure message, surfaced in the modal body when generation
+  // fails. Mirrors what's sent to onError so the operator sees the
+  // same diagnosis whether the toast is still on screen or not.
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   // Bilingual mode = single-page side-by-side EN/ES instead of two
   // sequential per-language pages. Toggling regenerates + re-uploads.
   const [bilingual, setBilingual] = useState(false)
@@ -57,6 +62,7 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
     setUploadState('idle')
     setPdfBytes(null)
     setPdfUrl(null)
+    setErrorMessage(null)
 
     ;(async () => {
       try {
@@ -83,7 +89,21 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
           .from('loto-photos')
           .upload(storagePath, bytes, { contentType: 'application/pdf', upsert: true })
         if (cancelled) return
-        if (upErr) { setUploadState('error'); onErrorRef.current?.('Could not save placard to cloud.'); return }
+        if (upErr) {
+          // Storage upload failed mid-flight. Surface the actual cause
+          // (RLS denial, quota, network) instead of a generic message
+          // so the operator knows whether to retry, free up space, or
+          // ping IT. Sentry captures the full envelope.
+          Sentry.captureException(upErr, {
+            tags:  { source: 'placard-pdf', stage: 'storage-upload' },
+            extra: { equipmentId, tenantId, bilingual },
+          })
+          const msg = `Could not save placard to cloud: ${upErr.message}`
+          setUploadState('error')
+          setErrorMessage(msg)
+          onErrorRef.current?.(msg)
+          return
+        }
 
         const { data: { publicUrl } } = supabase.storage.from('loto-photos').getPublicUrl(storagePath)
         const { error: patchErr } = await supabase
@@ -92,16 +112,46 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
           .eq('tenant_id', tenantId)
           .eq('equipment_id', equipmentId)
         if (cancelled) return
-        if (patchErr) { setUploadState('error'); onErrorRef.current?.('Placard saved but record update failed.'); return }
+        if (patchErr) {
+          Sentry.captureException(patchErr, {
+            tags:  { source: 'placard-pdf', stage: 'record-patch' },
+            extra: { equipmentId, tenantId, bilingual, publicUrl },
+          })
+          const msg = `Placard saved but record update failed: ${patchErr.message}`
+          setUploadState('error')
+          setErrorMessage(msg)
+          onErrorRef.current?.(msg)
+          return
+        }
 
         setUploadState('saved')
         onSavedRef.current?.(publicUrl)
-      } catch {
-        if (!cancelled) {
-          setGenerating(false)
-          setUploadState('error')
-          onErrorRef.current?.('Could not generate placard.')
-        }
+      } catch (err) {
+        if (cancelled) return
+        // Two kinds of failures land here:
+        //   1. assertProcedureValid throws when the procedure is missing
+        //      a §147(c)(4)(ii) phase. The thrown message names the
+        //      missing phase(s) and tells the operator to fix it via
+        //      Edit Steps — that is exactly what the toast should say.
+        //   2. pdf-lib internals (font embed, image embed, malformed
+        //      WinAnsi char). Less actionable for the operator, but
+        //      Sentry needs the stack to triage.
+        // Either way, surface the real message — never the generic
+        // "Could not generate placard" string that hid the diagnosis.
+        const message = err instanceof Error && err.message
+          ? err.message
+          : 'Could not generate placard.'
+        Sentry.captureException(err, {
+          tags:  { source: 'placard-pdf', stage: 'generate' },
+          extra: { equipmentId, bilingual, stepCount: stepsRef.current.length },
+        })
+        // Also log to the browser console so a dev poking with devtools
+        // sees the full Error without needing Sentry access.
+        console.error('[placard] generation failed:', err)
+        setGenerating(false)
+        setUploadState('error')
+        setErrorMessage(message)
+        onErrorRef.current?.(message)
       }
     })()
 
@@ -209,8 +259,13 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
             className="w-full h-full border-0 bg-white dark:bg-slate-900"
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-white text-sm">
-            Could not generate placard.
+          <div className="absolute inset-0 flex items-center justify-center p-6">
+            <div className="max-w-lg rounded-lg bg-rose-950/40 border border-rose-500/40 text-rose-100 text-sm p-4 whitespace-pre-wrap">
+              <p className="font-semibold mb-1">Placard not generated</p>
+              <p className="text-rose-200/90 leading-relaxed">
+                {errorMessage ?? 'Could not generate placard.'}
+              </p>
+            </div>
           </div>
         )}
       </div>
