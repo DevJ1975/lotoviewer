@@ -690,20 +690,22 @@ function ReviewFlagButton({
 }) {
   if (flagged) {
     return (
-      <span
-        title={`Flagged by ${flagged.by} on ${new Date(flagged.at).toLocaleString()}`}
-        className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800"
-      >
-        ⚑ Flagged for review
+      <span className="inline-flex items-center gap-1">
+        <span
+          title={`Flagged by ${flagged.by} on ${new Date(flagged.at).toLocaleString()}`}
+          className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800"
+        >
+          ⚑ Flagged for review
+        </span>
         {onUndo && (
           <button
             type="button"
             onClick={onUndo}
             disabled={busy}
             title="Undo this flag"
-            className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-amber-700 hover:bg-amber-200 hover:text-amber-900 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-rose-50 hover:border-rose-300 hover:text-rose-700 disabled:opacity-50"
           >
-            ×
+            {busy ? 'Clearing…' : '↶ Undo'}
           </button>
         )}
       </span>
