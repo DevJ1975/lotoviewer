@@ -439,4 +439,70 @@ describe('LOTO review-link business rules', () => {
 
     expect(response.status).toBe(400)
   })
+
+  // ─── Public link mint (is_public: true) ──────────────────────────────────
+
+  it('public mint creates a new tenant-wide link when none active', async () => {
+    queue('profiles', { data: { is_superadmin: true }, error: null })
+    // get-or-create check: no existing public link
+    queue('loto_review_links', { data: null, error: null })
+    // insert returning the new row
+    queue('loto_review_links', {
+      data: {
+        id: LINK_ID,
+        token: VALID_TOKEN,
+        expires_at: '2099-01-01T00:00:00.000Z',
+        extension_count: 0,
+        last_extended_at: null,
+        created_at: '2026-05-19T00:00:00.000Z',
+      },
+      error: null,
+    })
+
+    const response = await createReviewLinks(new Request('http://localhost/api/admin/review-links', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer test-token',
+        'Content-Type': 'application/json',
+        'x-active-tenant': TENANT_ID,
+      },
+      body: JSON.stringify({ is_public: true }),
+    }))
+
+    expect(response.status).toBe(201)
+    const body = await response.json()
+    expect(body.created).toBe(true)
+    expect(body.link.token).toBe(VALID_TOKEN)
+    expect(body.link.review_url).toContain(`/review/${VALID_TOKEN}`)
+  })
+
+  it('public mint returns the existing link when one is already active', async () => {
+    queue('profiles', { data: { is_superadmin: true }, error: null })
+    queue('loto_review_links', {
+      data: {
+        id: LINK_ID,
+        token: VALID_TOKEN,
+        expires_at: '2099-01-01T00:00:00.000Z',
+        extension_count: 0,
+        last_extended_at: null,
+        created_at: '2026-05-19T00:00:00.000Z',
+      },
+      error: null,
+    })
+
+    const response = await createReviewLinks(new Request('http://localhost/api/admin/review-links', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer test-token',
+        'Content-Type': 'application/json',
+        'x-active-tenant': TENANT_ID,
+      },
+      body: JSON.stringify({ is_public: true }),
+    }))
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.created).toBe(false)
+    expect(body.link.id).toBe(LINK_ID)
+  })
 })
