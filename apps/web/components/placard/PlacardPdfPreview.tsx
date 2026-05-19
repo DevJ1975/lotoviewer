@@ -128,16 +128,10 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
         onSavedRef.current?.(publicUrl)
       } catch (err) {
         if (cancelled) return
-        // Two kinds of failures land here:
-        //   1. assertProcedureValid throws when the procedure is missing
-        //      a §147(c)(4)(ii) phase. The thrown message names the
-        //      missing phase(s) and tells the operator to fix it via
-        //      Edit Steps — that is exactly what the toast should say.
-        //   2. pdf-lib internals (font embed, image embed, malformed
-        //      WinAnsi char). Less actionable for the operator, but
-        //      Sentry needs the stack to triage.
-        // Either way, surface the real message — never the generic
-        // "Could not generate placard" string that hid the diagnosis.
+        // Generation failures (pdf-lib font/image embed errors, malformed
+        // WinAnsi char, network) land here. Surface the real message
+        // instead of a generic string so the operator and Sentry both
+        // see what actually broke.
         const message = err instanceof Error && err.message
           ? err.message
           : 'Could not generate placard.'
