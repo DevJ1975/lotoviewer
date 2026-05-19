@@ -65,45 +65,41 @@ if (!dryRun) {
 
 // ── Load manual content ──────────────────────────────────────────────────
 //
-// The TS source is straight data — no React, no Node-incompatible
-// imports — but tsc isn't in the script path. We read the file as text
-// and extract the SECTIONS array via a minimal `eval`-free parser by
-// using import.meta.resolve plus tsx if available, OR fall back to a
-// text-based scan. The cleanest path is to use the TypeScript compiler
-// API; for portability we use dynamic import via a transient .mjs.
+// The TS source is plain data — no React, no Node-incompatible
+// imports — so a dynamic `import()` will resolve it whenever the
+// host loader understands TS. The two supported invocations are:
+//
+//   npx tsx apps/web/scripts/seed-working-at-heights-manual.mjs
+//   node --import tsx apps/web/scripts/seed-working-at-heights-manual.mjs
+//
+// Either way, tsx's hook is registered before the script runs and the
+// import below resolves the TS file. Plain `node script.mjs` will
+// fail at the import — we surface a clean error so the operator knows
+// which invocation to retry with.
 
 const contentTsPath = resolve(repo, 'apps/web/app/wiki/working-at-heights/_content.ts')
 
 async function loadSections() {
-  // tsx, esbuild-register, or ts-node may all be available depending
-  // on the host. Try each in turn. If none works, fall back to a
-  // regex-based extractor (last resort — fragile but no deps).
-  const tryLoaders = [
-    async () => {
-      const { register } = await import('tsx/esm/api')
-      const unregister = register()
-      try {
-        const mod = await import(contentTsPath)
-        return { sections: mod.SECTIONS, title: mod.MANUAL_TITLE, version: mod.MANUAL_VERSION, lastUpdated: mod.MANUAL_LAST_UPDATED }
-      } finally { unregister() }
-    },
-    async () => {
-      // esbuild-runner / esbuild-register fallback
-      await import('esbuild-register/dist/node.js')
-      const mod = await import(contentTsPath)
-      return { sections: mod.SECTIONS, title: mod.MANUAL_TITLE, version: mod.MANUAL_VERSION, lastUpdated: mod.MANUAL_LAST_UPDATED }
-    },
-  ]
-  for (const loader of tryLoaders) {
-    try {
-      const out = await loader()
-      if (out && Array.isArray(out.sections)) return out
-    } catch (err) {
-      // try next loader
-      if (process.env.DEBUG_SEED) console.error('loader failed:', err.message)
+  try {
+    const mod = await import(contentTsPath)
+    // tsx wraps default + named depending on the source shape; merge both.
+    const exports = { ...mod, ...(mod.default ?? {}) }
+    if (!Array.isArray(exports.SECTIONS)) {
+      throw new Error(`SECTIONS not exported by ${contentTsPath}`)
     }
+    return {
+      sections:    exports.SECTIONS,
+      title:       exports.MANUAL_TITLE,
+      version:     exports.MANUAL_VERSION,
+      lastUpdated: exports.MANUAL_LAST_UPDATED,
+    }
+  } catch (err) {
+    throw new Error(
+      `Could not load ${contentTsPath}. Re-run via:\n` +
+      `  npx tsx apps/web/scripts/seed-working-at-heights-manual.mjs\n` +
+      `Underlying error: ${err.message}`,
+    )
   }
-  throw new Error('Could not load _content.ts — install tsx or esbuild-register, or run via `npx tsx apps/web/scripts/seed-working-at-heights-manual.mjs`.')
 }
 
 // ── Format a section as the text that will be embedded ───────────────────
