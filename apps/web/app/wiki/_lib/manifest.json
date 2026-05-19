@@ -317,6 +317,18 @@
       "sources":  ["apps/web/app/welcome/**"]
     },
     {
+      "slug":     "working-at-heights",
+      "module":   "Working at Heights",
+      "tagline":  "Federal OSHA + Cal/OSHA fall protection — equipment, people, paperwork.",
+      "category": "safety",
+      "href":     "/wiki/working-at-heights",
+      "wikiPage": "apps/web/app/wiki/working-at-heights/page.tsx",
+      "sources":  [
+        "apps/web/app/wiki/working-at-heights/**",
+        "packages/core/src/workingAtHeights.ts"
+      ]
+    },
+    {
       "slug":     "review-portal",
       "module":   "Client Review Portal",
       "tagline":  "Tokenized link for non-Soteria reviewers to sign off placards.",
