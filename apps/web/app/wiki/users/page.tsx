@@ -9,7 +9,7 @@ const CHANGELOG: ChangelogEntry[] = [
     version: '1.1.0',
     date: '2026-05-16',
     changes: [
-      'Added deprecation banner pointing at /admin/members. Role management still lives here; the unified members roster (login users + shop-floor workers) is the new home for invite, deactivate, and per-person detail.',
+      'Added deprecation banner pointing at /admin/people/members. Role management still lives here; the unified members roster (login users + shop-floor workers) is the new home for invite, deactivate, and per-person detail.',
     ],
   },
   { version: '1.0.0', date: '2026-05-05', changes: ['Initial users-and-roles wiki page.'] },
@@ -20,7 +20,7 @@ export default function WikiUsersPage() {
     <WikiPage
       title="Users & Roles"
       subtitle="Invite users, mark admins, revoke access."
-      modulePath="/admin/users"
+      modulePath="/admin/people/users"
       audience="admin"
       category="Admin"
       version={CURRENT_VERSION}
@@ -91,7 +91,7 @@ export default function WikiUsersPage() {
           },
           {
             q: 'Where can I see what a user has done?',
-            a: <>Open <Link href="/admin/audit">/admin/audit</Link> and
+            a: <>Open <Link href="/admin/evidence/audit">/admin/evidence/audit</Link> and
               filter by user. The audit log records every insert / update /
               delete with old + new values.</>,
           },

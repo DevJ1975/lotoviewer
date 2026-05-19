@@ -80,7 +80,7 @@ export function MeterAlertsBanner() {
 
   return (
     <Link
-      href="/admin/configuration"
+      href="/admin/platform/configuration"
       className="block bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-950/60 border border-amber-300 rounded-xl p-4 ring-1 ring-amber-300 transition-colors"
     >
       <div className="flex items-start gap-3">

@@ -58,7 +58,7 @@ export default function UserMenu() {
           {profile?.is_admin && (
             <>
               <Link
-                href="/admin/members"
+                href="/admin/people/members"
                 onClick={() => setOpen(false)}
                 className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
               >
@@ -66,7 +66,7 @@ export default function UserMenu() {
                 Member Management
               </Link>
               <Link
-                href="/admin/audit"
+                href="/admin/evidence/audit"
                 onClick={() => setOpen(false)}
                 className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
               >

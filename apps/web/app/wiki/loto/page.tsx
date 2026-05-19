@@ -66,7 +66,7 @@ export default function WikiLotoPage() {
         <ul>
           <li><strong>Maintenance techs</strong> — capture photos, mark verification, re-print placards.</li>
           <li><strong>EHS director</strong> — review status, batch-print updated placards, send for client review.</li>
-          <li><strong>Admins</strong> — manage the device inventory at <Link href="/admin/loto-devices">/admin/loto-devices</Link>.</li>
+          <li><strong>Admins</strong> — manage the device inventory at <Link href="/admin/loto/devices">/admin/loto/devices</Link>.</li>
         </ul>
       </Section>
 
@@ -137,7 +137,7 @@ export default function WikiLotoPage() {
             a: <>Yes — the typed name, drawn signature, and timestamp are
               written to <code>loto_reviews</code> and the signed PDF is
               stored in Supabase Storage. View the full chain at{' '}
-              <Link href="/admin/audit">/admin/audit</Link>.</>,
+              <Link href="/admin/evidence/audit">/admin/evidence/audit</Link>.</>,
           },
           {
             q: 'Can I work offline?',

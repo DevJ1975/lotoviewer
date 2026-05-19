@@ -33,7 +33,7 @@ export default function WikiIntegrityCompliancePage() {
     <WikiPage
       title="Integrity & Compliance"
       subtitle="Chain-of-custody, retention + legal holds, CAPA loops, hierarchy of controls, ISO 45001, AI triage."
-      modulePath="/admin/iso45001"
+      modulePath="/admin/evidence/iso45001"
       audience="admin"
       category="Admin"
       version={CURRENT_VERSION}
@@ -82,10 +82,10 @@ export default function WikiIntegrityCompliancePage() {
         </p>
         <p>
           The hash also lands on the cover sheet of any{' '}
-          <Link href="/admin/compliance-bundle">compliance bundle</Link>
+          <Link href="/admin/compliance/compliance-bundle">compliance bundle</Link>
           {' '}generated for a window that includes the signoff. The
           read-only listing at{' '}
-          <Link href="/admin/signed-artifacts">/admin/signed-artifacts</Link>
+          <Link href="/admin/evidence/signed-artifacts">/admin/evidence/signed-artifacts</Link>
           {' '}lets you spot-check: copy the hash, download the PDF,
           run <code>openssl dgst -sha256 -hex</code> on it, confirm
           they match. A mismatch is evidence the bytes were modified
@@ -164,7 +164,7 @@ export default function WikiIntegrityCompliancePage() {
         </p>
         <p>
           The map at{' '}
-          <Link href="/admin/iso45001">/admin/iso45001</Link> lists
+          <Link href="/admin/evidence/iso45001">/admin/evidence/iso45001</Link> lists
           every clause the platform satisfies and which modules
           contribute. Click into a clause to see the evidence rows
           themselves (filtered to the tenant); export an evidence
@@ -201,7 +201,7 @@ export default function WikiIntegrityCompliancePage() {
           {
             q: 'I have one tenant that wants 10-year retention. Can I set that?',
             a: <>Yes — open{' '}
-              <Link href="/admin/retention">/admin/retention</Link>{' '}
+              <Link href="/admin/compliance/retention">/admin/compliance/retention</Link>{' '}
               and change the days field for the relevant record type.
               Numbers are tenant-scoped; the default seed only applies
               to tenants that haven&apos;t edited theirs.</>,
@@ -232,7 +232,7 @@ export default function WikiIntegrityCompliancePage() {
           {
             q: 'A reviewer signed off on a placard. Can I recompute the SHA-256 a year later?',
             a: <>Yes. Download the PDF from{' '}
-              <Link href="/admin/signed-artifacts">/admin/signed-artifacts</Link>
+              <Link href="/admin/evidence/signed-artifacts">/admin/evidence/signed-artifacts</Link>
               {' '}or from the compliance bundle, then run{' '}
               <code>openssl dgst -sha256 -hex</code>. Matching the
               stored hash proves the bytes weren&apos;t modified

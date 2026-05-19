@@ -12,7 +12,7 @@ export default function WikiWebhooksPage() {
     <WikiPage
       title="Webhooks"
       subtitle="Outbound event subscriptions so external systems stay in sync with permits and tests."
-      modulePath="/admin/webhooks"
+      modulePath="/admin/platform/webhooks"
       audience="admin"
       category="Admin"
       version={CURRENT_VERSION}

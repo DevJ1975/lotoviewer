@@ -469,7 +469,7 @@ function summarizeTraining(
       status,
       completedAt:      best?.completed_at ?? null,
       expiresAt:        best?.expires_at ?? null,
-      evidenceHref:     canManage ? `/admin/training-records?search=${encodeURIComponent(workerName)}` : null,
+      evidenceHref:     canManage ? `/admin/loto/training-records?search=${encodeURIComponent(workerName)}` : null,
       evidenceLabel:    best ? 'Training record' : 'Record missing',
     }
   })
@@ -612,13 +612,13 @@ export function buildAdminLinks(canManage: boolean): AdminManageLink[] {
       id:     'position',
       label:  'Manage assignment',
       detail: 'Position, shift, service date, supervisor',
-      href:   '/admin/users',
+      href:   '/admin/people/users',
     },
     {
       id:     'training',
       label:  'Manage training',
       detail: 'Required records and certificate dates',
-      href:   '/admin/training-records',
+      href:   '/admin/loto/training-records',
     },
     {
       id:     'equipment',

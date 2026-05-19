@@ -82,7 +82,7 @@ export default function WikiRiskPage() {
             q: 'Can I export the register to a spreadsheet?',
             a: <>Yes — open <Link href="/risk/export">/risk/export</Link>{' '}
               for CSV, or include the register in the next compliance bundle
-              from <Link href="/admin/compliance-bundle">/admin/compliance-bundle</Link>.</>,
+              from <Link href="/admin/compliance/compliance-bundle">/admin/compliance/compliance-bundle</Link>.</>,
           },
           {
             q: 'Where do near-miss escalations end up?',
@@ -96,7 +96,7 @@ export default function WikiRiskPage() {
             a: <>No — edits are per-risk so the audit trail captures the
               &quot;why&quot; for each change. For one-time bulk migrations contact a
               superadmin who can run a migration script and log it under{' '}
-              <Link href="/admin/hygiene-log">/admin/hygiene-log</Link>.</>,
+              <Link href="/admin/insights/hygiene-log">/admin/insights/hygiene-log</Link>.</>,
           },
           {
             q: 'How do I see only risks in my department?',

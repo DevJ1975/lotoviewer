@@ -24,7 +24,7 @@ function training(overrides: Partial<TrainingRequirementStatus> = {}): TrainingR
     status:           'current',
     completedAt:      '2026-01-01',
     expiresAt:        '2026-12-31',
-    evidenceHref:     '/admin/training-records',
+    evidenceHref:     '/admin/loto/training-records',
     evidenceLabel:    'Training record',
     ...overrides,
   }
@@ -268,7 +268,7 @@ describe('My Safety Readiness rules', () => {
 
   describe('evidence and certificate link state', () => {
     it('keeps available evidence links on completed records', () => {
-      expect(training().evidenceHref).toBe('/admin/training-records')
+      expect(training().evidenceHref).toBe('/admin/loto/training-records')
       expect(equipment().evidenceLabel).toBe('Authorization record')
     })
 

@@ -182,7 +182,7 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
         {sorted.length === 0 ? (
           equipment.length === 0 ? (
             // First-time empty state — tenant has zero equipment.
-            // The CTA points at /import (CSV) or /admin/loto-devices,
+            // The CTA points at /import (CSV) or /admin/loto/devices,
             // not at an inline form, because adding equipment lives
             // on a separate page.
             <div className="flex flex-col items-center justify-center text-center px-6 py-16 gap-3">
@@ -202,7 +202,7 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
                   Import CSV
                 </a>
                 <a
-                  href="/admin/loto-devices"
+                  href="/admin/loto/devices"
                   className="placard-label rounded-sm px-3 py-1.5 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                 >
                   Manage Devices

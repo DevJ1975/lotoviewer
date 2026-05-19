@@ -61,7 +61,7 @@ export default function WikiJhaPage() {
         </ul>
         <p>
           A nightly cron flags overdue JHAs in the register. See{' '}
-          <Link href="/admin/scorecard">/admin/scorecard</Link> for the
+          <Link href="/admin/insights/scorecard">/admin/insights/scorecard</Link> for the
           on-time-review trend.
         </p>
       </Section>
@@ -111,7 +111,7 @@ export default function WikiJhaPage() {
             a: <>Not yet — the cross-link is planned. In the meantime,
               reference the JHA id in the permit&apos;s notes field and the
               clickable link will work via the work-order URL template at{' '}
-              <Link href="/admin/configuration">/admin/configuration</Link>.</>,
+              <Link href="/admin/platform/configuration">/admin/platform/configuration</Link>.</>,
           },
           {
             q: 'A JHA shows "review overdue" — what do I do?',
@@ -123,7 +123,7 @@ export default function WikiJhaPage() {
           {
             q: 'Can I export a JHA as a PDF for a tailgate meeting?',
             a: <>Not yet from the JHA module directly. Include the JHA in
-              your next <Link href="/admin/compliance-bundle">compliance bundle</Link>{' '}
+              your next <Link href="/admin/compliance/compliance-bundle">compliance bundle</Link>{' '}
               or copy/paste from the detail page into a tailgate template.</>,
           },
         ]} />

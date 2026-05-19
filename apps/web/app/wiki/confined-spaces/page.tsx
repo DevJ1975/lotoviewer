@@ -58,7 +58,7 @@ export default function WikiConfinedSpacesPage() {
               an entrant, or any other recognized serious hazard. The
               classification badge on each row reflects the
               <code> permit_required</code> column. Switching it requires an
-              admin and is logged to <Link href="/admin/audit">/admin/audit</Link>.</>,
+              admin and is logged to <Link href="/admin/evidence/audit">/admin/evidence/audit</Link>.</>,
           },
           {
             q: 'How do I issue a permit?',

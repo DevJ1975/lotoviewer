@@ -4,7 +4,7 @@ import {
   type Prop65Chemical,
 } from '@soteria/core/prop65'
 
-// Cross-reference: migration 173 + the /admin/prop65/assessments/new
+// Cross-reference: migration 173 + the /admin/chemicals/prop65/assessments/new
 // form rely on classifyExposure returning EXACTLY these values.
 
 const lead: Pick<Prop65Chemical, 'nsrl_mg_day' | 'madl_mg_day'> = {

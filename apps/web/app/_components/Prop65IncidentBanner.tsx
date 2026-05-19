@@ -60,7 +60,7 @@ export function Prop65IncidentBanner(props: { tenantId: string | null; incidentI
           Exposure events on this incident involve OEHHA-listed substances: {hit.map(h => h.chemical_name).join(', ')}.
         </p>
       </div>
-      <Link href="/admin/prop65/assessments/new" className="text-xs font-medium text-amber-900 dark:text-amber-100 underline whitespace-nowrap">
+      <Link href="/admin/chemicals/prop65/assessments/new" className="text-xs font-medium text-amber-900 dark:text-amber-100 underline whitespace-nowrap">
         Open assessment →
       </Link>
     </div>

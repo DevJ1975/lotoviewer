@@ -13,7 +13,7 @@ export default function WikiInspectorPage() {
     <WikiPage
       title="Inspector Access"
       subtitle="Mint signed read-only URLs that show permits in a date range to anyone — no login required."
-      modulePath="/admin/inspector"
+      modulePath="/admin/compliance/inspector"
       audience="admin"
       category="Reports"
       version={CURRENT_VERSION}

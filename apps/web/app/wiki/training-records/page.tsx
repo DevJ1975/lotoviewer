@@ -22,7 +22,7 @@ export default function WikiTrainingPage() {
     <WikiPage
       title="Training Records"
       subtitle="§1910.146(g) confined-space training certifications, by role."
-      modulePath="/admin/training-records"
+      modulePath="/admin/loto/training-records"
       audience="admin"
       category="Admin"
       version={CURRENT_VERSION}
@@ -67,7 +67,7 @@ export default function WikiTrainingPage() {
           {
             q: 'A cert was entered with the wrong date. How do I fix it?',
             a: <>Delete the bad row and add the correct one. Both actions
-              show in <Link href="/admin/audit">/admin/audit</Link> with
+              show in <Link href="/admin/evidence/audit">/admin/evidence/audit</Link> with
               your name and timestamps. There&apos;s no in-place edit by
               design — keeping the trail clean is the whole point.</>,
           },

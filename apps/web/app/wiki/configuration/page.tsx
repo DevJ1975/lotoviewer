@@ -21,7 +21,7 @@ export default function WikiConfigurationPage() {
     <WikiPage
       title="Configuration"
       subtitle="Org-level settings: work-order URL template + push-dispatch webhook."
-      modulePath="/admin/configuration"
+      modulePath="/admin/platform/configuration"
       audience="admin"
       category="Admin"
       version={CURRENT_VERSION}
@@ -74,7 +74,7 @@ export default function WikiConfigurationPage() {
           {
             q: 'How is the push-dispatch secret different from a webhook secret?',
             a: <>Push-dispatch is <em>inbound</em> (someone calls us);
-              webhooks under <Link href="/admin/webhooks">/admin/webhooks</Link>{' '}
+              webhooks under <Link href="/admin/platform/webhooks">/admin/platform/webhooks</Link>{' '}
               are <em>outbound</em> (we call someone). Different secrets,
               different rotation cadences.</>,
           },

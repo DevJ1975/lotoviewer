@@ -47,7 +47,7 @@ const CHANGELOG: ChangelogEntry[] = [
       'Initial publication of the LOTO user manual.',
       'Covers Equipment Dashboard, Equipment Detail, Status Report, ' +
       'Departments, Print Queue, Import, Decommission, and Admin ' +
-      '/admin/loto-devices.',
+      '/admin/loto/devices.',
     ],
   },
 ]
@@ -197,7 +197,7 @@ export default function LotoManualPage() {
         </p>
       </Section>
 
-      <Section id="admin-loto-devices" title="Admin · LOTO devices ( /admin/loto-devices )">
+      <Section id="admin-loto-devices" title="Admin · LOTO devices ( /admin/loto/devices )">
         <p>
           Inventory of physical lock + tag hardware. Tracks current
           checkout (who has which device), serial numbers, location, and
@@ -292,7 +292,7 @@ export default function LotoManualPage() {
       <Section id="audit" title="Audit trail">
         <p>
           Every create, update, photo capture, and decommission is logged.
-          Open <Link className="link" href="/admin/audit">/admin/audit</Link>
+          Open <Link className="link" href="/admin/evidence/audit">/admin/evidence/audit</Link>
           {' '}to see who did what when. Filterable by equipment, user, and
           time range. This is the record an OSHA inspector wants to see.
         </p>

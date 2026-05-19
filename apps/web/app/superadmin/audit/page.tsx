@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { useUrlState } from '@/hooks/useUrlState'
 import type { SuperadminAuditResponse } from '@/app/api/superadmin/audit/route'
 
-// Cross-tenant audit explorer. Mirrors /admin/audit's UX but adds
+// Cross-tenant audit explorer. Mirrors /admin/evidence/audit's UX but adds
 // a tenant filter and reads via the superadmin route (service-role,
 // bypasses RLS).
 

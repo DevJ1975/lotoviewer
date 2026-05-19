@@ -24,11 +24,11 @@
       "module":   "California Prop 65",
       "tagline":  "§25249.6 + Cal/OSHA Title 8 §5194 — OEHHA chemicals, exposure assessments, posted warnings, §5194(h) notifications, annual reviews.",
       "category": "safety",
-      "href":     "/admin/prop65",
+      "href":     "/admin/chemicals/prop65",
       "wikiPage": "apps/web/app/wiki/prop65/page.tsx",
       "sources":  [
-        "apps/web/app/admin/prop65/**",
-        "apps/web/app/admin/prop65-manual/**",
+        "apps/web/app/admin/chemicals/prop65/**",
+        "apps/web/app/admin/chemicals/prop65-manual/**",
         "apps/web/app/prop65/**",
         "apps/web/app/api/prop65/**",
         "apps/web/app/api/admin/prop65/**",
@@ -53,15 +53,15 @@
       "module":   "Platform Features",
       "tagline":  "SSO + SCIM, CMMS bidirectional sync, BBS v2 observations, vendor prequalification, i18n (EN/ES/FR).",
       "category": "admin",
-      "href":     "/admin/sso",
+      "href":     "/admin/people/sso",
       "wikiPage": "apps/web/app/wiki/platform-features/page.tsx",
       "sources":  [
-        "apps/web/app/admin/sso/**",
-        "apps/web/app/admin/scim/**",
-        "apps/web/app/admin/cmms/**",
-        "apps/web/app/admin/bbs/**",
-        "apps/web/app/admin/contractors/[id]/prequalification/**",
-        "apps/web/app/admin/platform-manual/**",
+        "apps/web/app/admin/people/sso/**",
+        "apps/web/app/admin/people/scim/**",
+        "apps/web/app/admin/platform/cmms/**",
+        "apps/web/app/admin/observations/bbs/**",
+        "apps/web/app/admin/people/contractors/[id]/prequalification/**",
+        "apps/web/app/admin/platform/platform-manual/**",
         "apps/web/app/api/admin/scim-tokens/**",
         "apps/web/app/api/scim/v2/**",
         "apps/web/app/api/cmms/**",
@@ -87,13 +87,13 @@
       "module":   "Integrity & Compliance",
       "tagline":  "Chain-of-custody PDF hashes, retention + legal holds, CAPA verification, hierarchy of controls, ISO 45001 evidence, AI severity prediction.",
       "category": "admin",
-      "href":     "/admin/iso45001",
+      "href":     "/admin/evidence/iso45001",
       "wikiPage": "apps/web/app/wiki/integrity-compliance/page.tsx",
       "sources":  [
-        "apps/web/app/admin/signed-artifacts/**",
-        "apps/web/app/admin/retention/**",
-        "apps/web/app/admin/iso45001/**",
-        "apps/web/app/admin/integrity-manual/**",
+        "apps/web/app/admin/evidence/signed-artifacts/**",
+        "apps/web/app/admin/compliance/retention/**",
+        "apps/web/app/admin/evidence/iso45001/**",
+        "apps/web/app/admin/evidence/integrity-manual/**",
         "apps/web/app/api/incidents/[id]/capas/**",
         "apps/web/app/api/incidents/[id]/predict-escalation/**",
         "apps/web/app/incidents/[id]/_components/CapaPanel.tsx",
@@ -119,12 +119,12 @@
       "module":   "LOTO Compliance",
       "tagline":  "29 CFR 1910.147 — periodic inspections, group permits, contractors, competency, retraining.",
       "category": "safety",
-      "href":     "/admin/periodic-inspections",
+      "href":     "/admin/loto/periodic-inspections",
       "wikiPage": "apps/web/app/wiki/loto-compliance/page.tsx",
       "sources":  [
-        "apps/web/app/admin/periodic-inspections/**",
-        "apps/web/app/admin/contractors/**",
-        "apps/web/app/admin/competency-exams/**",
+        "apps/web/app/admin/loto/periodic-inspections/**",
+        "apps/web/app/admin/people/contractors/**",
+        "apps/web/app/admin/loto/competency-exams/**",
         "apps/web/app/loto/group-permits/**",
         "apps/web/app/loto/compliance-manual/**",
         "apps/web/app/equipment/[id]/periodic-inspection/**",
@@ -195,16 +195,16 @@
       "module":   "EHS Scorecard",
       "tagline":  "KPI dashboard with selectable time windows.",
       "category": "reports",
-      "href":     "/admin/scorecard",
+      "href":     "/admin/insights/scorecard",
       "wikiPage": "apps/web/app/wiki/scorecard/page.tsx",
-      "sources":  ["apps/web/app/admin/scorecard/**"]
+      "sources":  ["apps/web/app/admin/insights/scorecard/**"]
     },
     {
       "slug":     "insights",
       "module":   "Risk Intelligence",
       "tagline":  "Worst spaces, anomalous tests, supervisor activity.",
       "category": "reports",
-      "href":     "/admin/insights",
+      "href":     "/admin/insights/risk-intelligence",
       "wikiPage": "apps/web/app/wiki/insights/page.tsx",
       "sources":  ["apps/web/app/admin/insights/**"]
     },
@@ -213,81 +213,81 @@
       "module":   "Compliance Bundle",
       "tagline":  "Single-PDF audit export for a date range.",
       "category": "reports",
-      "href":     "/admin/compliance-bundle",
+      "href":     "/admin/compliance/compliance-bundle",
       "wikiPage": "apps/web/app/wiki/compliance-bundle/page.tsx",
-      "sources":  ["apps/web/app/admin/compliance-bundle/**"]
+      "sources":  ["apps/web/app/admin/compliance/compliance-bundle/**"]
     },
     {
       "slug":     "inspector",
       "module":   "Inspector Access",
       "tagline":  "Mint signed read-only URLs for inspectors and clients.",
       "category": "reports",
-      "href":     "/admin/inspector",
+      "href":     "/admin/compliance/inspector",
       "wikiPage": "apps/web/app/wiki/inspector/page.tsx",
-      "sources":  ["apps/web/app/admin/inspector/**", "apps/web/app/inspector/**"]
+      "sources":  ["apps/web/app/admin/compliance/inspector/**", "apps/web/app/inspector/**"]
     },
     {
       "slug":     "users",
       "module":   "Users & Roles",
       "tagline":  "Invite users, mark admins, revoke access.",
       "category": "admin",
-      "href":     "/admin/users",
+      "href":     "/admin/people/users",
       "wikiPage": "apps/web/app/wiki/users/page.tsx",
-      "sources":  ["apps/web/app/admin/users/**"]
+      "sources":  ["apps/web/app/admin/people/users/**"]
     },
     {
       "slug":     "loto-devices",
       "module":   "LOTO Devices",
       "tagline":  "Physical lock + tag inventory and checkouts.",
       "category": "admin",
-      "href":     "/admin/loto-devices",
+      "href":     "/admin/loto/devices",
       "wikiPage": "apps/web/app/wiki/loto-devices/page.tsx",
-      "sources":  ["apps/web/app/admin/loto-devices/**"]
+      "sources":  ["apps/web/app/admin/loto/devices/**"]
     },
     {
       "slug":     "audit",
       "module":   "Audit Log",
       "tagline":  "Per-row change history with filtering.",
       "category": "admin",
-      "href":     "/admin/audit",
+      "href":     "/admin/evidence/audit",
       "wikiPage": "apps/web/app/wiki/audit/page.tsx",
-      "sources":  ["apps/web/app/admin/audit/**"]
+      "sources":  ["apps/web/app/admin/evidence/audit/**"]
     },
     {
       "slug":     "training-records",
       "module":   "Training Records",
       "tagline":  "§1910.146(g) certs by role.",
       "category": "admin",
-      "href":     "/admin/training-records",
+      "href":     "/admin/loto/training-records",
       "wikiPage": "apps/web/app/wiki/training-records/page.tsx",
-      "sources":  ["apps/web/app/admin/training-records/**"]
+      "sources":  ["apps/web/app/admin/loto/training-records/**"]
     },
     {
       "slug":     "configuration",
       "module":   "Configuration",
       "tagline":  "Work-order URL template and push-dispatch webhook.",
       "category": "admin",
-      "href":     "/admin/configuration",
+      "href":     "/admin/platform/configuration",
       "wikiPage": "apps/web/app/wiki/configuration/page.tsx",
-      "sources":  ["apps/web/app/admin/configuration/**"]
+      "sources":  ["apps/web/app/admin/platform/configuration/**"]
     },
     {
       "slug":     "webhooks",
       "module":   "Webhooks",
       "tagline":  "Outbound event subscriptions for external systems.",
       "category": "admin",
-      "href":     "/admin/webhooks",
+      "href":     "/admin/platform/webhooks",
       "wikiPage": "apps/web/app/wiki/webhooks/page.tsx",
-      "sources":  ["apps/web/app/admin/webhooks/**"]
+      "sources":  ["apps/web/app/admin/platform/webhooks/**"]
     },
     {
       "slug":     "hygiene-log",
       "module":   "Hygiene Log",
       "tagline":  "High-level data-cleanup operations log.",
       "category": "admin",
-      "href":     "/admin/hygiene-log",
+      "href":     "/admin/insights/hygiene-log",
       "wikiPage": "apps/web/app/wiki/hygiene-log/page.tsx",
-      "sources":  ["apps/web/app/admin/hygiene-log/**"]
+      "sources":  ["apps/web/app/admin/insights/hygiene-log/**"]
     },
     {
       "slug":     "notifications",

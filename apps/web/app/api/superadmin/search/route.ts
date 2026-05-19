@@ -159,7 +159,7 @@ export async function GET(req: Request) {
       tenant_name: tenantNameById.get(r.tenant_id) ?? null,
       title:       r.full_name,
       subtitle:    [r.employee_id, r.email].filter(Boolean).join(' · ') || null,
-      href:        '/admin/workers',
+      href:        '/admin/people/workers',
     })
     counts.worker++
   }
