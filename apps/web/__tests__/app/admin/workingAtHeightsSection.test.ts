@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ADMIN_SECTIONS, getAdminTile } from '@/lib/adminCatalog'
 
-// The Working at Heights admin section ships with seven inventory
+// The Working at Heights admin section ships with eight inventory
 // tiles. Each one maps to a `/admin/working-at-heights/<slug>/page.tsx`
 // the nav-sync gate is already covering. These assertions pin the
 // section's shape so a future edit that drops a tile or moves the URL
@@ -18,8 +18,8 @@ describe('Working at Heights admin section', () => {
     expect(section?.urlSegment).toBe('working-at-heights')
   })
 
-  it('ships seven inventory tiles', () => {
-    expect(section?.tiles.length).toBe(7)
+  it('ships eight inventory tiles', () => {
+    expect(section?.tiles.length).toBe(8)
   })
 
   it('every tile resolves to /admin/working-at-heights/<slug>', () => {
@@ -44,6 +44,7 @@ describe('Working at Heights admin section', () => {
       'inspections',
       'ladders-fixed',
       'ladders-portable',
+      'permits',
       'rescue-plans',
     ])
   })
