@@ -29,6 +29,8 @@ import SoteriaLogo from '@/components/SoteriaLogo'
 import { useAuth } from '@/components/AuthProvider'
 import { requestPersistentStorage } from '@/lib/platform'
 import { getModuleVisualsForPath } from '@/lib/moduleVisuals'
+import { pushRecent } from '@/lib/recentRoutes'
+import { useTenant } from '@/components/TenantProvider'
 
 const PUBLIC_PATHS = new Set(['/login', '/welcome'])
 
@@ -42,6 +44,7 @@ const PUBLIC_PATHS = new Set(['/login', '/welcome'])
 export default function AppChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const { userId, loading } = useAuth()
+  const { tenant } = useTenant()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const hideChrome = PUBLIC_PATHS.has(pathname) || (!loading && !userId)
@@ -49,6 +52,14 @@ export default function AppChrome({ children }: { children: ReactNode }) {
   // Close the drawer on route change so navigating from inside the drawer
   // doesn't leave it sitting open over the new page.
   useEffect(() => { setDrawerOpen(false) }, [pathname])
+
+  // Record the current path in the per-tenant Recents list. Excluded
+  // paths (dashboard, /welcome, login, raw /admin and /superadmin
+  // landings) are filtered inside pushRecent itself.
+  useEffect(() => {
+    if (!tenant?.id || !userId) return
+    pushRecent(tenant.id, pathname)
+  }, [pathname, tenant?.id, userId])
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8)
