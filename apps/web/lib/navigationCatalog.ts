@@ -81,6 +81,7 @@ const MODULE_GROUPS: Record<string, NavigationGroupId> = {
   'confined-spaces': 'permits-controls',
   chemicals: 'permits-controls',
   'hazardous-waste': 'permits-controls',
+  'working-at-heights': 'permits-controls',
 
   'reports-scorecard': 'reporting',
   'reports-insights': 'reporting',
@@ -112,6 +113,7 @@ const KEYWORDS: Record<string, string[]> = {
   bbs: ['behavior', 'observation', 'coaching'],
   chemicals: ['chemical', 'sds', 'inventory', 'tier ii', 'restricted'],
   'hazardous-waste': ['waste', 'manifest', 'rcra', 'epa', 'cers', 'cupa', 'dtsc', 'accumulation', 'biennial', 'tier ii'],
+  'working-at-heights': ['fall protection', 'harness', 'lanyard', 'srl', 'ladder', 'anchor', 'rescue', 'osha 1910.28', 'osha 1926.501', 'ansi z359'],
   'hot-work': ['permit', 'fire watch', 'spark'],
   'confined-spaces': ['permit', 'entry', 'atmosphere'],
   jha: ['job hazard analysis', 'task', 'hazard'],

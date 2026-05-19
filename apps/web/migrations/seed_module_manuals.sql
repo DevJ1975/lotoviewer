@@ -45,7 +45,8 @@ values
   ('admin-scim',                'SCIM tokens',        'SCIM 2.0 bearer tokens for workforce provisioning.',     E'## Overview\n\nThis manual covers SCIM tokens. **Edit me.**'),
   ('admin-cmms',                'CMMS integrations',  'Webhook-driven CMMS sync (Maximo / SAP PM / eMaint).',   E'## Overview\n\nThis manual covers CMMS integrations. **Edit me.**'),
   ('admin-bbs-dashboard',       'BBS leading indicators', 'Safe-to-unsafe ratio + follow-ups-due dashboard.',  E'## Overview\n\nThis manual covers the BBS v2 dashboard. **Edit me.**'),
-  ('admin-contractors',         'Contractors',        'Host-procedure acknowledgement and prequalification.',   E'## Overview\n\nThis manual covers contractor administration. **Edit me.**')
+  ('admin-contractors',         'Contractors',        'Host-procedure acknowledgement and prequalification.',   E'## Overview\n\nThis manual covers contractor administration. **Edit me.**'),
+  ('working-at-heights',        'Working at Heights', 'Fall protection, ladders, anchors, rescue plans — Federal OSHA + Cal/OSHA.', E'## Overview\n\nThis stub points at the long-form manual at /wiki/working-at-heights. **Edit me.**')
 on conflict (module_id) do nothing;
 
 commit;

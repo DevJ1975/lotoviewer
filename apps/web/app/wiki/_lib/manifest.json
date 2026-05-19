@@ -321,10 +321,15 @@
       "module":   "Working at Heights",
       "tagline":  "Federal OSHA + Cal/OSHA fall protection — equipment, people, paperwork.",
       "category": "safety",
-      "href":     "/wiki/working-at-heights",
+      "href":     "/working-at-heights",
       "wikiPage": "apps/web/app/wiki/working-at-heights/page.tsx",
       "sources":  [
         "apps/web/app/wiki/working-at-heights/**",
+        "apps/web/app/working-at-heights/**",
+        "apps/web/app/admin/working-at-heights/**",
+        "apps/web/lib/wah/**",
+        "apps/web/migrations/187_module_manual_source_type.sql",
+        "apps/web/migrations/188_working_at_heights_schema.sql",
         "packages/core/src/workingAtHeights.ts"
       ]
     },

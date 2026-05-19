@@ -14,6 +14,7 @@ import {
   LifeBuoy,
   Megaphone,
   MessageSquare,
+  Mountain,
   Recycle,
   Settings,
   ShieldAlert,
@@ -179,8 +180,8 @@ const MODULE_ICONS: Record<string, ModuleIconComponent> = {
   // ── Lucide fallbacks for non-signature modules ─────────────────────
   AlertOctagon, AlertTriangle, BarChart3, Bell, BookOpen, Brush,
   ClipboardList, Eye, FileArchive, GraduationCap, LifeBuoy,
-  Megaphone, MessageSquare, Settings, ShieldAlert, Siren, Sparkles,
-  Tag, Webhook, Recycle,
+  Megaphone, MessageSquare, Mountain, Settings, ShieldAlert, Siren,
+  Sparkles, Tag, Webhook, Recycle,
 }
 
 const FALLBACK_ICON: ModuleIconComponent = Box
