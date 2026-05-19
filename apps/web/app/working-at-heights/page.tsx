@@ -10,8 +10,9 @@ import {
   Anchor,
   Triangle,
   LifeBuoy,
+  Monitor,
   ScanSearch,
-  Settings2,
+  ScrollText,
 } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 
@@ -65,6 +66,15 @@ export default function WorkingAtHeightsHome() {
           />
         </Section>
 
+        <Section title="Live operations">
+          <ModuleCard
+            href="/working-at-heights/permits/status"
+            Icon={Monitor}
+            title="Permit status board"
+            desc="Big-monitor live view of every active permit — countdowns, suspended work, and forced close-outs. Pair with the hot-work board on the same TV."
+          />
+        </Section>
+
         {isAdmin && (
           <Section title="Administration">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -74,6 +84,7 @@ export default function WorkingAtHeightsHome() {
               <ModuleCard href="/admin/working-at-heights/ladders-fixed"    Icon={Triangle}     title="Fixed ladders"            desc="1910.28(b)(9) inventory with the 2036 cage phase-out retrofit dashboard." />
               <ModuleCard href="/admin/working-at-heights/anchors"          Icon={Anchor}       title="Anchor points"            desc="Engineered + improvised anchors with QP certifications + 5-year recert cycle." />
               <ModuleCard href="/admin/working-at-heights/rescue-plans"     Icon={LifeBuoy}     title="Rescue plans"             desc="Per-location written rescue plans — the most-cited fall violation when missing." />
+              <ModuleCard href="/admin/working-at-heights/permits"          Icon={ScrollText}   title="Permits"                  desc="One-shift authorisation gating every at-height task. Pre-condition checklist + clearance snapshot." />
               <ModuleCard href="/admin/working-at-heights/inspections"      Icon={ScanSearch}   title="Inspections log"          desc="Pre-use, periodic, and post-event inspection history across every component." />
             </div>
           </Section>
@@ -85,11 +96,6 @@ export default function WorkingAtHeightsHome() {
               Icon={ScanSearch}
               title="QR-scan pre-use inspection"
               desc="Mobile scan into a 30-second harness / lanyard / SRL pre-use checklist. Failed items quarantine on the spot."
-            />
-            <ComingSoonCard
-              Icon={Settings2}
-              title="Working-at-Heights Permit"
-              desc="Pre-condition checklist + clearance calc snapshot + named rescuer verification before any at-height task starts."
             />
           </div>
         </Section>
