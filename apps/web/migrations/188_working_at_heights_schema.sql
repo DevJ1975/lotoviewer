@@ -139,11 +139,14 @@ create index if not exists idx_wah_auth_tenant
   on public.wah_authorizations(tenant_id);
 create index if not exists idx_wah_auth_member
   on public.wah_authorizations(member_id);
--- Expiring-soon dashboard: 90-day window query is a common operator
--- read. Partial index on still-valid rows keeps it tight.
-create index if not exists idx_wah_auth_expiring
-  on public.wah_authorizations(tenant_id, valid_until)
-  where valid_until >= current_date;
+-- Tenant + expiry index for the "expiring soon" dashboard. Plain
+-- composite (no partial WHERE) — Postgres requires immutable
+-- predicates and `current_date` is STABLE, not IMMUTABLE, so a
+-- WHERE-clause filter on it would reject the migration with
+-- ERROR 42P17. The dashboard query filters expiry at read time;
+-- the resulting plan still uses this index efficiently.
+create index if not exists idx_wah_auth_valid_until
+  on public.wah_authorizations(tenant_id, valid_until);
 
 alter table public.wah_authorizations enable row level security;
 
