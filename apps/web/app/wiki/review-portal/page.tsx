@@ -1,10 +1,17 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-05'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-05-19'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.0',
+    date: '2026-05-19',
+    changes: [
+      'Supervisor floor-walk flow. New tenant-wide public review link (one active per tenant, 72-hour default expiry, no reviewer identity) lives at /admin/loto/public-review-link. A supervisor on the link can replace EQUIP or ISO photos (placard PDF regenerates inline), and can mark equipment "for review" — admins triage the queue at /admin/loto/review-queue and clear flags as they go. The reviewer types their name once on first action; the name attaches to every photo replacement audit row and every flag. The admin can extend the link by +24h / +72h / +168h or revoke it instantly. The legacy per-reviewer signed-off flow continues to coexist for external auditors.',
+    ],
+  },
   { version: '1.0.0', date: '2026-05-05', changes: ['Initial review-portal wiki page.'] },
 ]
 

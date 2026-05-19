@@ -23,10 +23,11 @@ export const dynamic = 'force-dynamic' // never cache; each load reflects curren
 interface ReviewLinkRow {
   id:                 string
   tenant_id:          string
-  department:         string
-  reviewer_name:      string
-  reviewer_email:     string
+  department:         string | null
+  reviewer_name:      string | null
+  reviewer_email:     string | null
   admin_message:      string | null
+  is_public:          boolean
   expires_at:         string
   revoked_at:         string | null
   signed_off_at:      string | null
@@ -58,7 +59,7 @@ export default async function ReviewPage({
 
   const { data: link, error } = await admin
     .from('loto_review_links')
-    .select('id, tenant_id, department, reviewer_name, reviewer_email, admin_message, expires_at, revoked_at, signed_off_at, signoff_approved, signoff_typed_name, signoff_notes, first_viewed_at')
+    .select('id, tenant_id, department, reviewer_name, reviewer_email, admin_message, is_public, expires_at, revoked_at, signed_off_at, signoff_approved, signoff_typed_name, signoff_notes, first_viewed_at')
     .eq('token', token)
     .maybeSingle<ReviewLinkRow>()
 
@@ -68,17 +69,27 @@ export default async function ReviewPage({
   if (link.revoked_at) {
     return <ErrorScreen title="Link revoked" body="This review link has been revoked by the sender. Reach out to them for a new one." />
   }
+  // Server component runs on every request (force-dynamic above); Date.now()
+  // here is a request-time check, not a React-render mutation. The compiler
+  // purity rule is conservative — opted out explicitly.
+  // eslint-disable-next-line react-hooks/purity
   if (Date.parse(link.expires_at) < Date.now()) {
     return <ErrorScreen title="Link expired" body={`This review link expired on ${formatDate(link.expires_at)}. Reach out to the sender for a fresh one.`} />
   }
 
   const [{ data: snapshotRows }, { data: prevReviews }, { data: tenantRow }] = await Promise.all([
-    admin
-      .from('loto_review_link_equipment')
-      .select('equipment_id, sort_order')
-      .eq('review_link_id', link.id)
-      .order('sort_order', { ascending: true })
-      .order('equipment_id', { ascending: true }),
+    // For per-reviewer (legacy) links, the snapshot pins which equipment
+    // the reviewer can see. For public (tenant-wide) links the snapshot
+    // is intentionally absent — we render every active equipment row in
+    // the tenant. Skip the snapshot query entirely for is_public.
+    link.is_public
+      ? Promise.resolve({ data: null as ReviewLinkEquipmentRow[] | null })
+      : admin
+          .from('loto_review_link_equipment')
+          .select('equipment_id, sort_order')
+          .eq('review_link_id', link.id)
+          .order('sort_order', { ascending: true })
+          .order('equipment_id', { ascending: true }),
     admin
       .from('loto_placard_reviews')
       .select('equipment_id, status, notes')
@@ -90,33 +101,57 @@ export default async function ReviewPage({
       .maybeSingle(),
   ])
 
-  const snapshotEquipment = (snapshotRows ?? []) as ReviewLinkEquipmentRow[]
-  const equipmentIds = snapshotEquipment.map(row => row.equipment_id)
   let equipment: unknown[] = []
-  let steps: unknown[] = []
-  if (equipmentIds.length > 0) {
+  let steps:     unknown[] = []
+  let equipmentList: Equipment[] = []
+  if (link.is_public) {
+    // Tenant-wide load — every active equipment row. Sort by department
+    // then equipment_id so the supervisor on the floor sees the rows
+    // grouped how they walk.
     const [equipmentRes, stepsRes] = await Promise.all([
       admin
         .from('loto_equipment')
         .select('*')
         .eq('tenant_id', link.tenant_id)
-        .in('equipment_id', equipmentIds),
+        .eq('decommissioned', false)
+        .order('department',   { ascending: true })
+        .order('equipment_id', { ascending: true }),
       admin
         .from('loto_steps')
         .select('*')
         .eq('tenant_id', link.tenant_id)
-        .in('equipment_id', equipmentIds)
         .order('equipment_id', { ascending: true })
-        .order('step_number', { ascending: true }),
+        .order('step_number',  { ascending: true }),
     ])
-    equipment = equipmentRes.data ?? []
-    steps = stepsRes.data ?? []
+    equipment     = equipmentRes.data ?? []
+    steps         = stepsRes.data ?? []
+    equipmentList = equipment as Equipment[]
+  } else {
+    const snapshotEquipment = (snapshotRows ?? []) as ReviewLinkEquipmentRow[]
+    const equipmentIds = snapshotEquipment.map(row => row.equipment_id)
+    if (equipmentIds.length > 0) {
+      const [equipmentRes, stepsRes] = await Promise.all([
+        admin
+          .from('loto_equipment')
+          .select('*')
+          .eq('tenant_id', link.tenant_id)
+          .in('equipment_id', equipmentIds),
+        admin
+          .from('loto_steps')
+          .select('*')
+          .eq('tenant_id', link.tenant_id)
+          .in('equipment_id', equipmentIds)
+          .order('equipment_id', { ascending: true })
+          .order('step_number',  { ascending: true }),
+      ])
+      equipment = equipmentRes.data ?? []
+      steps     = stepsRes.data ?? []
+    }
+    const equipmentById = new Map((equipment as Equipment[]).map(eq => [eq.equipment_id, eq]))
+    equipmentList = equipmentIds
+      .map(id => equipmentById.get(id))
+      .filter((eq): eq is Equipment => Boolean(eq))
   }
-
-  const equipmentById = new Map((equipment as Equipment[]).map(eq => [eq.equipment_id, eq]))
-  const equipmentList = equipmentIds
-    .map(id => equipmentById.get(id))
-    .filter((eq): eq is Equipment => Boolean(eq))
   const stepsByEquipment = new Map<string, LotoEnergyStep[]>()
   for (const s of steps as LotoEnergyStep[]) {
     const list = stepsByEquipment.get(s.equipment_id) ?? []
@@ -127,7 +162,9 @@ export default async function ReviewPage({
   const tenantName = tenantRow?.name ?? 'your client'
 
   // If the reviewer is already done, show the read-only thank-you.
-  if (link.signed_off_at) {
+  // The public-link mode never signs off, so this only fires for the
+  // legacy per-reviewer flow.
+  if (link.signed_off_at && !link.is_public) {
     return (
       <SignedOffScreen
         link={link}
@@ -143,11 +180,12 @@ export default async function ReviewPage({
       token={token}
       reviewLinkId={link.id}
       tenantName={tenantName}
-      department={link.department}
-      reviewerName={link.reviewer_name}
+      department={link.department ?? 'Floor walk'}
+      reviewerName={link.reviewer_name ?? ''}
       adminMessage={link.admin_message}
       expiresAt={link.expires_at}
       isFirstView={!link.first_viewed_at}
+      isPublic={link.is_public}
       equipment={equipmentList}
       stepsByEquipment={Object.fromEntries(stepsByEquipment)}
       initialReviews={initialReviews}
@@ -194,10 +232,10 @@ function SignedOffScreen({
             Review submitted
           </div>
           <h1 className="text-2xl font-bold text-emerald-900">
-            Thanks, {link.signoff_typed_name ?? link.reviewer_name}.
+            Thanks, {link.signoff_typed_name ?? link.reviewer_name ?? 'reviewer'}.
           </h1>
           <p className="text-sm text-emerald-800 mt-1">
-            Your review of <strong>{tenantName}</strong>'s <strong>{link.department}</strong> placards has been recorded.
+            Your review of <strong>{tenantName}</strong>&apos;s <strong>{link.department ?? 'placards'}</strong> placards has been recorded.
           </p>
           <p className="text-xs text-emerald-700 mt-2">
             Outcome: <strong>{link.signoff_approved ? 'Approved' : 'Needs changes'}</strong>

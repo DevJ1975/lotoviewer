@@ -328,6 +328,7 @@ describe('LOTO review-link business rules', () => {
     form.set('action', 'replace-photo')
     form.set('equipment_id', 'EQ-404')
     form.set('slot', 'EQUIP')
+    form.set('reviewer_name', 'Floor supervisor')
     form.set('photo', new File([new Uint8Array([0xff, 0xd8, 0xff, 0x00])], 'photo.jpg', { type: 'image/jpeg' }))
 
     const response = await publicReviewAction(new Request('http://localhost/api/review', {
@@ -349,5 +350,159 @@ describe('LOTO review-link business rules', () => {
         p_user_agent: 'vitest',
       },
     })
+  })
+
+  // ─── mark-for-review (Phase: supervisor review flow) ─────────────────────
+
+  it('mark-for-review flags the equipment after confirming tenant match', async () => {
+    queue('loto_review_links', {
+      data: {
+        id: LINK_ID,
+        tenant_id: TENANT_ID,
+        department: null,
+        is_public: true,
+        expires_at: '2099-01-01T00:00:00.000Z',
+        revoked_at: null,
+        first_viewed_at: '2026-05-19T00:00:00.000Z',
+        signed_off_at: null,
+      },
+      error: null,
+    })
+    // Equipment tenant-match lookup
+    queue('loto_equipment', { data: { equipment_id: 'EQ-101' }, error: null })
+    // Update result (the chain ends with no .select() so a single null return is fine)
+    queue('loto_equipment', { data: null, error: null })
+
+    const response = await publicReviewAction(jsonRequest({
+      action:        'mark-for-review',
+      equipment_id:  'EQ-101',
+      reviewer_name: 'Sam Supervisor',
+    }), ctx())
+
+    expect(response.status).toBe(200)
+    const updates = captured.updates.filter(u => u.table === 'loto_equipment')
+    expect(updates.length).toBeGreaterThan(0)
+    expect(updates[0]?.payload).toMatchObject({
+      flagged_for_review_by:   'Sam Supervisor',
+      flagged_for_review_via:  'public-link',
+    })
+    expect((updates[0]?.payload as Record<string, unknown>)?.flagged_for_review_at).toBeTruthy()
+  })
+
+  it('mark-for-review 404s when the equipment is not in the link tenant', async () => {
+    queue('loto_review_links', {
+      data: {
+        id: LINK_ID,
+        tenant_id: TENANT_ID,
+        department: null,
+        is_public: true,
+        expires_at: '2099-01-01T00:00:00.000Z',
+        revoked_at: null,
+        first_viewed_at: '2026-05-19T00:00:00.000Z',
+        signed_off_at: null,
+      },
+      error: null,
+    })
+    queue('loto_equipment', { data: null, error: null })
+
+    const response = await publicReviewAction(jsonRequest({
+      action:        'mark-for-review',
+      equipment_id:  'EQ-OTHER-TENANT',
+      reviewer_name: 'Sam Supervisor',
+    }), ctx())
+
+    expect(response.status).toBe(404)
+    // No update should fire when the tenant-match check fails.
+    const updates = captured.updates.filter(u => u.table === 'loto_equipment')
+    expect(updates.length).toBe(0)
+  })
+
+  it('mark-for-review requires reviewer_name', async () => {
+    queue('loto_review_links', {
+      data: {
+        id: LINK_ID,
+        tenant_id: TENANT_ID,
+        department: null,
+        is_public: true,
+        expires_at: '2099-01-01T00:00:00.000Z',
+        revoked_at: null,
+        first_viewed_at: '2026-05-19T00:00:00.000Z',
+        signed_off_at: null,
+      },
+      error: null,
+    })
+
+    const response = await publicReviewAction(jsonRequest({
+      action:        'mark-for-review',
+      equipment_id:  'EQ-101',
+    }), ctx())
+
+    expect(response.status).toBe(400)
+  })
+
+  // ─── Public link mint (is_public: true) ──────────────────────────────────
+
+  it('public mint creates a new tenant-wide link when none active', async () => {
+    queue('profiles', { data: { is_superadmin: true }, error: null })
+    // get-or-create check: no existing public link
+    queue('loto_review_links', { data: null, error: null })
+    // insert returning the new row
+    queue('loto_review_links', {
+      data: {
+        id: LINK_ID,
+        token: VALID_TOKEN,
+        expires_at: '2099-01-01T00:00:00.000Z',
+        extension_count: 0,
+        last_extended_at: null,
+        created_at: '2026-05-19T00:00:00.000Z',
+      },
+      error: null,
+    })
+
+    const response = await createReviewLinks(new Request('http://localhost/api/admin/review-links', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer test-token',
+        'Content-Type': 'application/json',
+        'x-active-tenant': TENANT_ID,
+      },
+      body: JSON.stringify({ is_public: true }),
+    }))
+
+    expect(response.status).toBe(201)
+    const body = await response.json()
+    expect(body.created).toBe(true)
+    expect(body.link.token).toBe(VALID_TOKEN)
+    expect(body.link.review_url).toContain(`/review/${VALID_TOKEN}`)
+  })
+
+  it('public mint returns the existing link when one is already active', async () => {
+    queue('profiles', { data: { is_superadmin: true }, error: null })
+    queue('loto_review_links', {
+      data: {
+        id: LINK_ID,
+        token: VALID_TOKEN,
+        expires_at: '2099-01-01T00:00:00.000Z',
+        extension_count: 0,
+        last_extended_at: null,
+        created_at: '2026-05-19T00:00:00.000Z',
+      },
+      error: null,
+    })
+
+    const response = await createReviewLinks(new Request('http://localhost/api/admin/review-links', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer test-token',
+        'Content-Type': 'application/json',
+        'x-active-tenant': TENANT_ID,
+      },
+      body: JSON.stringify({ is_public: true }),
+    }))
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.created).toBe(false)
+    expect(body.link.id).toBe(LINK_ID)
   })
 })

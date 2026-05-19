@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { verifyJPEG } from '@/lib/security/magicBytes'
 import { equipmentPhotoPath, type PhotoSlot } from '@soteria/core/storagePaths'
 import { sealReviewPlacards } from '@/lib/sealedArtifact'
+import { regenerateAndUploadPlacard } from '@/lib/loto/regeneratePlacard'
 
 // Public review-portal API. No auth — the URL token is the auth.
 // Service-role under the hood; every request:
@@ -26,7 +27,8 @@ type LinkLookup =
       link: {
         id:               string
         tenant_id:        string
-        department:       string
+        department:       string | null
+        is_public:        boolean
         first_viewed_at:  string | null
         signed_off_at:    string | null
       }
@@ -40,7 +42,7 @@ async function lookupLink(token: string): Promise<LinkLookup> {
   const admin = supabaseAdmin()
   const { data: link, error } = await admin
     .from('loto_review_links')
-    .select('id, tenant_id, department, expires_at, revoked_at, first_viewed_at, signed_off_at')
+    .select('id, tenant_id, department, is_public, expires_at, revoked_at, first_viewed_at, signed_off_at')
     .eq('token', token)
     .maybeSingle()
   if (error) {
@@ -62,6 +64,7 @@ async function lookupLink(token: string): Promise<LinkLookup> {
       id:              link.id,
       tenant_id:       link.tenant_id,
       department:      link.department,
+      is_public:       !!link.is_public,
       first_viewed_at: link.first_viewed_at,
       signed_off_at:   link.signed_off_at,
     },
@@ -70,12 +73,16 @@ async function lookupLink(token: string): Promise<LinkLookup> {
 
 interface PostBody {
   action?:        unknown
-  // submit-note
+  // submit-note, mark-for-review
   equipment_id?:  unknown
   status?:        unknown
   notes?:         unknown
-  // signoff
+  // signoff, mark-for-review
   typed_name?:    unknown
+  // mark-for-review
+  reviewer_name?: unknown
+  reason?:        unknown
+  // signoff
   signature?:     unknown
   approved?:      unknown
 }
@@ -145,6 +152,55 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     if (upsertErr) {
       Sentry.captureException(upsertErr, { tags: { route: 'review/[token]', stage: 'submit-note' } })
       return rpcErrorResponse(upsertErr)
+    }
+    return NextResponse.json({ ok: true })
+  }
+
+  // ─── mark-for-review ────────────────────────────────────────────────────
+  // Flag an equipment row for an admin to take a deeper look. Used on
+  // the public supervisor link: the supervisor sees something off
+  // (faded photo, wrong description, unclear isolation) but can't fix
+  // it on the spot. Idempotent — re-flagging just overwrites the
+  // note and timestamp; clearing happens through the admin queue API.
+  if (action === 'mark-for-review') {
+    const equipmentId  = typeof body.equipment_id === 'string' ? body.equipment_id.trim() : ''
+    const reviewerName = typeof body.reviewer_name === 'string' ? body.reviewer_name.trim() : ''
+    const reason       = typeof body.reason === 'string' ? body.reason.trim() : ''
+    if (!equipmentId) {
+      return NextResponse.json({ error: 'equipment_id required' }, { status: 400 })
+    }
+    if (!reviewerName) {
+      return NextResponse.json({ error: 'reviewer_name required' }, { status: 400 })
+    }
+    // Confirm the equipment belongs to this link's tenant before we
+    // patch. Without this check, a holder of any token could mark
+    // any tenant's equipment by guessing equipment ids.
+    const { data: eq, error: eqErr } = await admin
+      .from('loto_equipment')
+      .select('equipment_id')
+      .eq('tenant_id',   lookup.link.tenant_id)
+      .eq('equipment_id', equipmentId)
+      .maybeSingle()
+    if (eqErr) {
+      Sentry.captureException(eqErr, { tags: { route: 'review/[token]', stage: 'mark-for-review-lookup' } })
+      return NextResponse.json({ error: eqErr.message }, { status: 500 })
+    }
+    if (!eq) {
+      return NextResponse.json({ error: 'Equipment not found in this tenant' }, { status: 404 })
+    }
+    const { error: flagErr } = await admin
+      .from('loto_equipment')
+      .update({
+        flagged_for_review_at:   new Date().toISOString(),
+        flagged_for_review_by:   reviewerName,
+        flagged_for_review_via:  'public-link',
+        flagged_for_review_note: reason || null,
+      })
+      .eq('tenant_id',   lookup.link.tenant_id)
+      .eq('equipment_id', equipmentId)
+    if (flagErr) {
+      Sentry.captureException(flagErr, { tags: { route: 'review/[token]', stage: 'mark-for-review' } })
+      return NextResponse.json({ error: flagErr.message }, { status: 500 })
     }
     return NextResponse.json({ ok: true })
   }
@@ -253,15 +309,19 @@ async function handlePhotoReplace(
     return NextResponse.json({ error: 'Unsupported multipart action' }, { status: 400 })
   }
 
-  const equipmentId = stringField(form, 'equipment_id')
-  const slot = stringField(form, 'slot')
-  const photo = form.get('photo')
+  const equipmentId  = stringField(form, 'equipment_id')
+  const slot         = stringField(form, 'slot')
+  const reviewerName = stringField(form, 'reviewer_name')
+  const photo        = form.get('photo')
 
   if (!equipmentId) {
     return NextResponse.json({ error: 'equipment_id required' }, { status: 400 })
   }
   if (slot !== 'EQUIP' && slot !== 'ISO') {
     return NextResponse.json({ error: 'slot must be EQUIP or ISO' }, { status: 400 })
+  }
+  if (!reviewerName) {
+    return NextResponse.json({ error: 'reviewer_name required' }, { status: 400 })
   }
   if (!(photo instanceof File)) {
     return NextResponse.json({ error: 'photo file required' }, { status: 400 })
@@ -316,16 +376,45 @@ async function handlePhotoReplace(
     return rpcErrorResponse(replaceErr)
   }
 
+  // Patch the audit row created by the RPC with the typed reviewer name.
+  // The RPC predates the supervisor flow and only captures IP + UA; we
+  // attribute by name post-hoc rather than push the column through the
+  // RPC signature (which would require a SECURITY DEFINER migration).
+  // The row we want is the most recent replacement for (link, eq, slot)
+  // — there's exactly one per call because the RPC inserts before
+  // returning.
+  await admin
+    .from('loto_review_photo_replacements')
+    .update({ replaced_by_name: reviewerName })
+    .eq('review_link_id', link.id)
+    .eq('equipment_id',   equipmentId)
+    .eq('slot',           slot)
+    .order('replaced_at', { ascending: false })
+    .limit(1)
+
   const photoStatus = Array.isArray(result) && typeof result[0]?.photo_status === 'string'
     ? result[0].photo_status
     : 'partial'
+
+  // Inline placard regeneration. Errors here are non-fatal — the photo
+  // is already in storage and the equipment row points to it, so a
+  // later admin viewer can re-render. We surface in Sentry so a
+  // recurring failure is visible.
+  let placardUrl: string | null = null
+  try {
+    const regen = await regenerateAndUploadPlacard(admin, link.tenant_id, equipmentId)
+    placardUrl = regen.placardUrl
+  } catch (regenErr) {
+    Sentry.captureException(regenErr, { tags: { route: 'review/[token]', stage: 'placard-regen' } })
+  }
 
   return NextResponse.json({
     ok: true,
     equipment_id: equipmentId,
     slot,
-    public_url: publicUrl,
+    public_url:   publicUrl,
     photo_status: photoStatus,
+    placard_url:  placardUrl,
   })
 }
 

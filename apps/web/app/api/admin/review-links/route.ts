@@ -95,7 +95,7 @@ export async function GET(req: Request) {
   const admin = supabaseAdmin()
   let query = admin
     .from('loto_review_links')
-    .select('id, department, reviewer_name, reviewer_email, admin_message, sent_at, first_viewed_at, signed_off_at, signoff_approved, signoff_typed_name, signoff_notes, expires_at, revoked_at, created_at, token, email_channel')
+    .select('id, department, reviewer_name, reviewer_email, admin_message, sent_at, first_viewed_at, signed_off_at, signoff_approved, signoff_typed_name, signoff_notes, expires_at, revoked_at, created_at, token, email_channel, is_public, extension_count, last_extended_at')
     .eq('tenant_id', gate.tenantId)
     .order('created_at', { ascending: false })
   if (department) query = query.eq('department', department)
@@ -125,11 +125,16 @@ interface PostBody {
   // Batch shape — preferred. 1..MAX_REVIEWERS_PER_BATCH entries.
   reviewers?:      unknown
   admin_message?:  unknown
-  expires_at?:     unknown   // optional ISO; default = 30d from now
+  expires_at?:     unknown   // optional ISO; default = 72h from now
   // When true, skip the Resend send entirely. The row is still
   // created (token + URL still valid); the admin sends the message
   // through their own mail client via the manual-send fallback.
   skip_email?:     unknown
+  // When true, mint (or fetch) the tenant-wide public link — no
+  // reviewer identity, no email, 72h default expiry. Mutually
+  // exclusive with the per-reviewer shape; if both are sent, public
+  // wins.
+  is_public?:      unknown
 }
 
 interface ParsedReviewer {
@@ -206,6 +211,49 @@ export async function POST(req: Request) {
   let body: PostBody
   try { body = await req.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+
+  // ─── Public mode ──────────────────────────────────────────────────────
+  // Tenant-wide anonymous link for the supervisor floor-walk flow. No
+  // reviewer identity, no department, 72h default expiry. Get-or-create:
+  // returns the existing active public link if one exists (enforced by
+  // the partial unique index on is_public + revoked_at IS NULL).
+  if (body.is_public === true) {
+    const admin = supabaseAdmin()
+    const { data: existing } = await admin
+      .from('loto_review_links')
+      .select('id, token, expires_at, extension_count, last_extended_at, created_at')
+      .eq('tenant_id', gate.tenantId)
+      .eq('is_public', true)
+      .is('revoked_at', null)
+      .maybeSingle()
+    if (existing) {
+      const baseUrl = publicAppUrl(req)
+      return NextResponse.json({
+        link: { ...existing, review_url: `${baseUrl}/review/${existing.token}` },
+        created: false,
+      })
+    }
+    const { data: row, error } = await admin
+      .from('loto_review_links')
+      .insert({
+        tenant_id:    gate.tenantId,
+        is_public:    true,
+        created_by:   gate.userId,
+        email_channel: 'manual',
+        // expires_at + token come from defaults (72h via migration 189)
+      })
+      .select('id, token, expires_at, extension_count, last_extended_at, created_at')
+      .single()
+    if (error || !row) {
+      Sentry.captureException(error, { tags: { route: 'review-links/POST', stage: 'public-insert' } })
+      return NextResponse.json({ error: error?.message ?? 'Insert failed' }, { status: 500 })
+    }
+    const baseUrl = publicAppUrl(req)
+    return NextResponse.json({
+      link: { ...row, review_url: `${baseUrl}/review/${row.token}` },
+      created: true,
+    }, { status: 201 })
+  }
 
   const department   = typeof body.department === 'string' ? body.department.trim() : ''
   const adminMessage = typeof body.admin_message === 'string' ? body.admin_message.trim() : ''

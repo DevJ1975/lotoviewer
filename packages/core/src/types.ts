@@ -39,6 +39,13 @@ export interface Equipment {
   // Optional so pre-migration test fixtures don't need an explicit
   // field; the PeriodicEquipmentSnapshot helper coerces undefined → null.
   next_periodic_review_due_at?: string | null
+  // Supervisor review flag (migration 189). A public-link reviewer or
+  // admin marks equipment for closer admin follow-up; the admin queue
+  // surface drains these. NULL on every row that's never been flagged.
+  flagged_for_review_at?:    string | null
+  flagged_for_review_by?:    string | null
+  flagged_for_review_via?:   'public-link' | 'admin' | null
+  flagged_for_review_note?:  string | null
   created_at: string | null
   updated_at: string | null
 }
