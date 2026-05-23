@@ -87,6 +87,7 @@ const MODULE_GROUPS: Record<string, NavigationGroupId> = {
   'reports-scorecard': 'reporting',
   'reports-insights': 'reporting',
   'reports-compliance-bundle': 'reporting',
+  'reports-compliance-calendar': 'reporting',
   'reports-inspector': 'reporting',
 
   'admin-loto-devices': 'administration',

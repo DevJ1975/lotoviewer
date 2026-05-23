@@ -731,6 +731,17 @@ export const FEATURES: FeatureDef[] = [
     color:       'slate',
   },
   {
+    id:          'reports-compliance-calendar',
+    name:        'Compliance Calendar',
+    description: 'Recurring regulatory + tenant obligations with owners, due dates, and completion history',
+    href:        '/admin/compliance/calendar',
+    category:    'reports',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'CalendarClock',
+    color:       'slate',
+  },
+  {
     id:          'reports-inspector',
     name:        'Inspector access',
     description: 'Mint a signed read-only URL for an OSHA / Cal-OSHA inspector',
