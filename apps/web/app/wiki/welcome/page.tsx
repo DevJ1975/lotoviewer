@@ -1,9 +1,10 @@
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-05'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-05-23'
 
 const CHANGELOG: ChangelogEntry[] = [
+  { version: '1.1.0', date: '2026-05-23', changes: ['Documented the one-time onboarding walkthrough shown after first-login setup.'] },
   { version: '1.0.0', date: '2026-05-05', changes: ['Initial welcome / first-login wiki page.'] },
 ]
 
@@ -20,6 +21,7 @@ export default function WikiWelcomePage() {
       changelog={CHANGELOG}
       toc={[
         { id: 'overview', label: 'What it\'s for' },
+        { id: 'quick-tour', label: 'The quick tour' },
         { id: 'faq',      label: 'FAQ' },
         { id: 'dodonts',  label: 'Do\'s & Don\'ts' },
         { id: 'related',  label: 'Related modules' },
@@ -31,6 +33,22 @@ export default function WikiWelcomePage() {
           gave you, the system routes you here. Set your full name and a
           real password before doing anything else; the redirect to the
           dashboard happens automatically once you submit.
+        </p>
+      </Section>
+
+      <Section id="quick-tour" title="The quick tour">
+        <p>
+          Right after you set your password, a one-time walkthrough pops up
+          with the basics: how to find modules, search, the command palette,
+          and the everyday safety actions (report a hazard, scan a placard,
+          ask the assistant). Step through it or dismiss it — either way it
+          won&apos;t show again.
+        </p>
+        <p>
+          It only appears once per person (we record that you&apos;ve seen it).
+          There&apos;s no way to &quot;replay&quot; it today; the same guidance
+          lives in these wiki pages and behind the <strong>Help (?)</strong>
+          button in the header.
         </p>
       </Section>
 
