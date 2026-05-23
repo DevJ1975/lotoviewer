@@ -27,7 +27,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
   try {
     const { data, error } = await g.authedClient
-      .from('compliance_obligations').update(patch).eq('id', id).select('*').maybeSingle()
+      .from('compliance_calendar_obligations').update(patch).eq('id', id).select('*').maybeSingle()
     if (error) return sanitizeError(error, 'PATCH /api/compliance/obligations/[id]')
     if (!data) return Response.json({ error: 'not_found' }, { status: 404 })
     return Response.json({ obligation: data })
@@ -43,7 +43,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
   if (!UUID_RE.test(id)) return Response.json({ error: 'invalid_id' }, { status: 400 })
 
   try {
-    const { error } = await g.authedClient.from('compliance_obligations').delete().eq('id', id)
+    const { error } = await g.authedClient.from('compliance_calendar_obligations').delete().eq('id', id)
     if (error) return sanitizeError(error, 'DELETE /api/compliance/obligations/[id]')
     return Response.json({ ok: true })
   } catch (e) {

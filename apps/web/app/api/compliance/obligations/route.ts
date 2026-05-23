@@ -24,7 +24,7 @@ export async function GET(req: Request) {
     const modules = (tenantRow?.modules ?? null) as Record<string, boolean> | null
 
     const { data: existing, error: exErr } = await g.authedClient
-      .from('compliance_obligations').select('system_key').eq('source', 'system')
+      .from('compliance_calendar_obligations').select('system_key').eq('source', 'system')
     if (exErr) return sanitizeError(exErr, 'GET /api/compliance/obligations')
 
     const existingKeys = new Set(
@@ -33,7 +33,7 @@ export async function GET(req: Request) {
     const seeds = planSystemSeeds(existingKeys, id => isModuleVisible(id, modules))
     if (seeds.length > 0) {
       await g.authedClient
-        .from('compliance_obligations')
+        .from('compliance_calendar_obligations')
         .upsert(
           seeds.map(s => ({
             tenant_id: g.tenantId, title: s.title, description: s.description,
@@ -45,7 +45,7 @@ export async function GET(req: Request) {
     }
 
     const { data, error } = await g.authedClient
-      .from('compliance_obligations')
+      .from('compliance_calendar_obligations')
       .select('*')
       .order('next_due_at', { ascending: true })
     if (error) return sanitizeError(error, 'GET /api/compliance/obligations')
@@ -77,7 +77,7 @@ export async function POST(req: Request) {
 
   try {
     const { data, error } = await g.authedClient
-      .from('compliance_obligations')
+      .from('compliance_calendar_obligations')
       .insert({
         tenant_id:      g.tenantId,
         title,

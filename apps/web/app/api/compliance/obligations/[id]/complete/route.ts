@@ -22,14 +22,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   try {
     const { data: ob, error: loadErr } = await g.authedClient
-      .from('compliance_obligations')
+      .from('compliance_calendar_obligations')
       .select('id, cadence, cadence_days, next_due_at, status')
       .eq('id', id)
       .maybeSingle()
     if (loadErr) return sanitizeError(loadErr, 'POST /api/compliance/obligations/[id]/complete')
     if (!ob) return Response.json({ error: 'not_found' }, { status: 404 })
 
-    const { error: evErr } = await g.authedClient.from('obligation_events').insert({
+    const { error: evErr } = await g.authedClient.from('compliance_calendar_events').insert({
       tenant_id:     g.tenantId,
       obligation_id: ob.id as string,
       occurrence_at: ob.next_due_at as string,
@@ -49,7 +49,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         }
 
     const { data, error } = await g.authedClient
-      .from('compliance_obligations').update(update).eq('id', ob.id as string).select('*').single()
+      .from('compliance_calendar_obligations').update(update).eq('id', ob.id as string).select('*').single()
     if (error) return sanitizeError(error, 'POST /api/compliance/obligations/[id]/complete')
     return Response.json({ obligation: data })
   } catch (e) {
