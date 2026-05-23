@@ -98,6 +98,9 @@ export interface Profile {
   is_admin:             boolean
   is_superadmin:        boolean
   must_change_password: boolean
+  // Null until the user finishes (or dismisses) the first-login
+  // onboarding walkthrough; stamped once so it never shows again.
+  onboarding_completed_at: string | null
   created_at:           string
   updated_at:           string
 }

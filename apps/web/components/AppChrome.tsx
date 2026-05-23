@@ -23,6 +23,7 @@ import CommandPalette from '@/components/CommandPalette'
 import TenantHeaderPill from '@/components/TenantHeaderPill'
 import SupportBot from '@/components/SupportBot'
 import AssistantDock from '@/components/AssistantDock'
+import OnboardingDialog from '@/components/OnboardingDialog'
 import ChatHeaderButton from '@/components/chat/ChatHeaderButton'
 import HelpHeaderButton from '@/components/manuals/HelpHeaderButton'
 import SoteriaLogo from '@/components/SoteriaLogo'
@@ -170,6 +171,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
       <IdleLogout />
       <SupportBot />
       <AssistantDock />
+      <OnboardingDialog />
 
       <footer
         className="mt-0 border-t-2 border-slate-300/80 bg-white/90 py-4 text-xs text-slate-500 backdrop-blur dark:border-slate-800/70 dark:bg-slate-950/90 dark:text-slate-400"
