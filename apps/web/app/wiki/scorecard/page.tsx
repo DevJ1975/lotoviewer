@@ -1,10 +1,22 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-05'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-05-23'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.0',
+    date:    '2026-05-23',
+    changes: [
+      'Presentation mode: a "Present" button puts the scorecard fullscreen ' +
+      'with page chrome hidden for live leadership reviews; Esc restores it.',
+      'Branded PDF export: a "PDF" button downloads a one-page report with ' +
+      'your tenant logo in the header.',
+      'Weekly weather report: an automated Monday email to owners/admins ' +
+      'with week-over-week movement on key indicators plus TRIR/DART to date.',
+    ],
+  },
   { version: '1.0.0', date: '2026-05-05', changes: ['Initial scorecard wiki page.'] },
 ]
 
@@ -22,6 +34,7 @@ export default function WikiScorecardPage() {
       toc={[
         { id: 'overview', label: 'What it\'s for' },
         { id: 'metrics',  label: 'What it measures' },
+        { id: 'sharing',  label: 'Present, export & email' },
         { id: 'faq',      label: 'FAQ' },
         { id: 'dodonts',  label: 'Do\'s & Don\'ts' },
         { id: 'related',  label: 'Related modules' },
@@ -47,6 +60,29 @@ export default function WikiScorecardPage() {
         </ul>
       </Section>
 
+      <Section id="sharing" title="Present, export & email">
+        <p>
+          Three ways to get the scorecard in front of people who aren&apos;t
+          looking at the screen:
+        </p>
+        <ul>
+          <li><strong>Present.</strong> The &quot;Present&quot; button drops the
+            page into fullscreen with the back-link and surrounding chrome
+            hidden — clean enough to project in a leadership review. Press
+            Esc (or &quot;Exit&quot;) to return to the normal layout.</li>
+          <li><strong>PDF.</strong> The &quot;PDF&quot; button downloads a
+            one-page report of the current window&apos;s program metrics with
+            your tenant logo affixed in the header — drop it straight into a
+            board pack. Set the logo under tenant settings if the header looks
+            empty.</li>
+          <li><strong>Weekly weather report.</strong> Every Monday, owners and
+            admins get an automated email summarizing week-over-week movement
+            on the key leading and lagging indicators (recordables, near-miss
+            reports, corrective actions closed) plus TRIR and DART to date — a
+            30-second read of which way the program moved.</li>
+        </ul>
+      </Section>
+
       <Section id="faq" title="Frequently asked questions">
         <Faq items={[
           {
@@ -63,11 +99,14 @@ export default function WikiScorecardPage() {
               refresh the page.</>,
           },
           {
-            q: 'Can I export the underlying numbers?',
-            a: <>Not yet — the scorecard is read-only. Use the{' '}
+            q: 'Can I export the scorecard?',
+            a: <>Yes — the &quot;PDF&quot; button produces a branded one-page
+              summary for the current window (see{' '}
+              <Link href="#sharing">Present, export &amp; email</Link>). For the
+              raw underlying rows, use the{' '}
               <Link href="/admin/compliance/compliance-bundle">compliance bundle</Link>{' '}
               for a permanent dated export, or pull straight from the Supabase
-              dashboard if you need raw rows.</>,
+              dashboard.</>,
           },
           {
             q: 'Why does the trend shift when I change the window?',
