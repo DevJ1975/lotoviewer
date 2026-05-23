@@ -19,7 +19,11 @@
 }
 
 @theme {
-  --color-brand-navy: #1B3A6B;
+  /* Spectrum migration Phase 2b: brand primary shifted from the muted navy
+     (#1B3A6B) to a deep Spectrum-2 blue. This token drives ~191 surfaces
+     (bg/text/border-brand-navy) — buttons, accents, links, KPI tiles — so it's
+     the app-wide visible step. Tunable / reversible (one value). */
+  --color-brand-navy: #1D3ECF;
   --color-brand-yellow: #FFD900;
   --color-ops-ink: #111827;
   --color-ops-panel: #F8FAFC;
