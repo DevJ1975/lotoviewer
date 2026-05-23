@@ -1,6 +1,7 @@
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
 import { logEmailSend } from '@/lib/email/instrument'
+import { unsubscribeFooterText, unsubscribeFooterHtml } from '@/lib/email/unsubscribe'
 import { formatDelta, type WeatherMetricRow } from '@soteria/core/scorecardWeatherReport'
 
 // Weekly EHS "weather report" email. Week-over-week movement on the key
@@ -17,6 +18,9 @@ export interface ScorecardWeatherReportArgs {
   appUrl:        string
   tenantName?:   string | null
   tenantId?:     string | null
+  /** RFC 8058 unsubscribe URL. When set, adds the List-Unsubscribe headers
+   *  and a footer link; omit it and the email goes out unchanged. */
+  unsubscribeUrl?: string | null
 }
 
 const TONE_COLOR: Record<WeatherMetricRow['tone'], string> = {
@@ -33,11 +37,15 @@ export async function sendScorecardWeatherReport(args: ScorecardWeatherReportArg
   }
   const from = process.env.INVITE_FROM_EMAIL ?? process.env.SUPPORT_FROM_EMAIL ?? 'SoteriaField <invites@soteriafield.app>'
   const subject = `[Weekly] EHS weather report — week of ${args.weekStart}`
-  const text = renderText(args)
-  const html = renderHtml(args)
+  const unsub = args.unsubscribeUrl ?? null
+  const text = renderText(args, unsub)
+  const html = renderHtml(args, unsub)
+  const headers = unsub
+    ? { 'List-Unsubscribe': `<${unsub}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
+    : undefined
 
   try {
-    const { data, error } = await new Resend(apiKey).emails.send({ from, to: args.to, subject, text, html })
+    const { data, error } = await new Resend(apiKey).emails.send({ from, to: args.to, subject, text, html, headers })
     if (error) {
       Sentry.captureException(error, { tags: { module: 'sendScorecardWeatherReport' } })
       await logEmailSend({ kind: 'scorecard-weather', to: args.to, subject, tenantId: args.tenantId ?? null, status: 'failed', errorText: error.message })
@@ -56,7 +64,7 @@ function fmtRate(v: number | null): string {
   return v === null ? 'n/a' : v.toFixed(2)
 }
 
-function renderText(a: ScorecardWeatherReportArgs): string {
+function renderText(a: ScorecardWeatherReportArgs, unsubscribeUrl: string | null): string {
   const name = a.recipientName || a.to.split('@')[0]!
   const lines = a.rows.map(r => `  ${r.label}: ${r.current} (was ${r.previous}) ${formatDelta(r)}`)
   return `Hi ${name},
@@ -73,10 +81,10 @@ To date:
 Full scorecard: ${a.appUrl}/admin/insights/scorecard
 
 — SoteriaField
-`
+${unsubscribeUrl ? unsubscribeFooterText(unsubscribeUrl) : ''}`
 }
 
-function renderHtml(a: ScorecardWeatherReportArgs): string {
+function renderHtml(a: ScorecardWeatherReportArgs, unsubscribeUrl: string | null): string {
   const safe = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const name = safe(a.recipientName || a.to.split('@')[0]!)
   const rows = a.rows.map(r => `
@@ -122,7 +130,7 @@ function renderHtml(a: ScorecardWeatherReportArgs): string {
         <a href="${safe(a.appUrl)}/admin/insights/scorecard" style="display:inline-block;background:#1D3ECF;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:11px 22px;border-radius:10px;">Open the scorecard →</a>
       </p>
     </td></tr>
-    <tr><td style="background:#f6f8fb;padding:14px 26px;text-align:center;font-size:11px;color:#5b6675;border-top:1px solid #e6ebf2;">Sent weekly from SoteriaField</td></tr>
+    <tr><td style="background:#f6f8fb;padding:14px 26px;text-align:center;font-size:11px;color:#5b6675;border-top:1px solid #e6ebf2;">Sent weekly from SoteriaField${unsubscribeUrl ? unsubscribeFooterHtml(unsubscribeUrl) : ''}</td></tr>
   </table>
 </td></tr></table>
 </body></html>`

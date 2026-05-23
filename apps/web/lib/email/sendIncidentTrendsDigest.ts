@@ -5,6 +5,7 @@
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
 import { logEmailSend } from '@/lib/email/instrument'
+import { unsubscribeFooterText, unsubscribeFooterHtml } from '@/lib/email/unsubscribe'
 
 export interface IncidentTrendsDigestArgs {
   to:                       string
@@ -21,6 +22,9 @@ export interface IncidentTrendsDigestArgs {
   appUrl:                   string
   tenantName?:              string | null
   tenantId?:                string | null
+  /** RFC 8058 unsubscribe URL. When set, adds the List-Unsubscribe headers
+   *  and a footer link; omit it and the email goes out unchanged. */
+  unsubscribeUrl?:          string | null
 }
 
 export async function sendIncidentTrendsDigest(args: IncidentTrendsDigestArgs): Promise<boolean> {
@@ -62,7 +66,7 @@ Open the full scorecard:
   ${link}
 
 — SoteriaField
-`
+${args.unsubscribeUrl ? unsubscribeFooterText(args.unsubscribeUrl) : ''}`
 
   const safe = (s: string) => s
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -104,7 +108,7 @@ Open the full scorecard:
       </table>
       <p style="margin:24px 0 0 0;text-align:center;">
         <a href="${safe(link)}" style="display:inline-block;background:#214488;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 24px;border-radius:10px;">Open full scorecard →</a>
-      </p>
+      </p>${args.unsubscribeUrl ? unsubscribeFooterHtml(args.unsubscribeUrl) : ''}
     </td></tr>
   </table>
 </td></tr>
@@ -112,7 +116,10 @@ Open the full scorecard:
 
   try {
     const resend = new Resend(apiKey)
-    const { data, error } = await resend.emails.send({ from, to: args.to, subject, text, html })
+    const headers = args.unsubscribeUrl
+      ? { 'List-Unsubscribe': `<${args.unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
+      : undefined
+    const { data, error } = await resend.emails.send({ from, to: args.to, subject, text, html, headers })
     if (error) {
       Sentry.captureException(error, { tags: { module: 'sendIncidentTrendsDigest', stage: 'resend' } })
       await logEmailSend({

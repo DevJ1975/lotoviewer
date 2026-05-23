@@ -3,6 +3,8 @@ import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { withCronLogging } from '@/lib/cronInstrumentation'
 import { sendScorecardWeatherReport } from '@/lib/email/sendScorecardWeatherReport'
+import { loadSuppressedEmails } from '@/lib/email/suppression'
+import { buildUnsubscribe } from '@/lib/email/unsubscribe'
 import { buildWeatherReport, type WeatherMetricInput } from '@soteria/core/scorecardWeatherReport'
 import {
   trir as trirRate,
@@ -71,6 +73,9 @@ async function runCron(req: Request): Promise<NextResponse> {
   let failed = 0
 
   try {
+    // One unsubscribe stream covers every weekly leadership email.
+    const suppressed = await loadSuppressedEmails(admin, 'weekly_digest')
+
     const { data: tenants, error: tErr } = await admin
       .from('tenants')
       .select('id, name')
@@ -169,21 +174,24 @@ async function runCron(req: Request): Promise<NextResponse> {
       const recipients: Array<{ email: string; full_name: string | null }> = []
       for (const m of (mRes.data ?? []) as MRow[]) {
         const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles
-        if (p?.email) recipients.push({ email: p.email, full_name: p.full_name ?? null })
+        if (p?.email && !suppressed.has(p.email.toLowerCase())) {
+          recipients.push({ email: p.email, full_name: p.full_name ?? null })
+        }
       }
       if (recipients.length === 0) { skipped++; continue }
 
       for (const r of recipients) {
         const { sent: ok } = await sendScorecardWeatherReport({
-          to:            r.email,
-          recipientName: r.full_name,
+          to:             r.email,
+          recipientName:  r.full_name,
           weekStart,
           rows,
           trir,
           dart,
           appUrl,
-          tenantName:    t.name,
-          tenantId:      t.id,
+          tenantName:     t.name,
+          tenantId:       t.id,
+          unsubscribeUrl: buildUnsubscribe(appUrl, r.email, 'weekly_digest')?.url ?? null,
         })
         if (ok) sent++; else failed++
       }
