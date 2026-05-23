@@ -5,6 +5,7 @@
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
 import { logEmailSend } from '@/lib/email/instrument'
+import { unsubscribeFooterText, unsubscribeFooterHtml } from '@/lib/email/unsubscribe'
 import {
   CARE_CASE_STATUS_LABEL,
   type CareCaseStatus,
@@ -22,6 +23,9 @@ export interface CareCheckInArgs {
   appUrl:         string
   tenantName?:    string | null
   tenantId?:      string | null
+  /** RFC 8058 unsubscribe URL. When set, adds the List-Unsubscribe headers
+   *  and a footer link; omit it and the email goes out unchanged. */
+  unsubscribeUrl?: string | null
 }
 
 export async function sendCareCheckInEmail(args: CareCheckInArgs): Promise<boolean> {
@@ -56,7 +60,7 @@ Reach out, log a visit, and update restrictions / RTW status:
   ${link}
 
 — SoteriaField
-`
+${args.unsubscribeUrl ? unsubscribeFooterText(args.unsubscribeUrl, 'reminder emails') : ''}`
 
   const safe = (s: string) => s
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -87,7 +91,7 @@ Reach out, log a visit, and update restrictions / RTW status:
       </p>
       <p style="margin:18px 0 0 0;font-size:12px;line-height:1.55;color:#5b6675;">
         Reach out, log a visit, and update restrictions / RTW status to push the next follow-up date forward.
-      </p>
+      </p>${args.unsubscribeUrl ? unsubscribeFooterHtml(args.unsubscribeUrl, 'reminder emails') : ''}
     </td></tr>
   </table>
 </td></tr>
@@ -95,7 +99,10 @@ Reach out, log a visit, and update restrictions / RTW status:
 
   try {
     const resend = new Resend(apiKey)
-    const { data, error } = await resend.emails.send({ from, to: args.to, subject, text, html })
+    const headers = args.unsubscribeUrl
+      ? { 'List-Unsubscribe': `<${args.unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
+      : undefined
+    const { data, error } = await resend.emails.send({ from, to: args.to, subject, text, html, headers })
     if (error) {
       Sentry.captureException(error, { tags: { module: 'sendCareCheckIn', stage: 'resend' } })
       await logEmailSend({

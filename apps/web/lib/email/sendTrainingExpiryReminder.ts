@@ -1,6 +1,7 @@
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
 import { logEmailSend } from '@/lib/email/instrument'
+import { unsubscribeFooterText, unsubscribeFooterHtml } from '@/lib/email/unsubscribe'
 import type { DigestRow } from '@soteria/core/trainingExpiryDigest'
 
 // Daily training-expiry reminder email.
@@ -24,6 +25,9 @@ export interface TrainingExpiryReminderArgs {
   trainingUrl:  string
   /** Public URL for /admin/people/workers (RLS scopes the read). */
   workersUrl:   string
+  /** RFC 8058 unsubscribe URL. When set, adds the List-Unsubscribe headers
+   *  and a footer link; omit it and the email goes out unchanged. */
+  unsubscribeUrl?: string | null
 }
 
 export async function sendTrainingExpiryReminder(
@@ -52,12 +56,16 @@ export async function sendTrainingExpiryReminder(
 
   try {
     const resend = new Resend(apiKey)
+    const headers = args.unsubscribeUrl
+      ? { 'List-Unsubscribe': `<${args.unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
+      : undefined
     const { data, error } = await resend.emails.send({
       from,
       to:        args.to,
       subject,
       text:      renderText(args),
       html:      renderHtml(args),
+      headers,
     })
     if (error) {
       Sentry.captureException(error, { tags: { module: 'sendTrainingExpiryReminder', stage: 'resend' } })
@@ -106,7 +114,7 @@ Update training records:  ${a.trainingUrl}
 Worker roster:            ${a.workersUrl}
 
 — SoteriaField on behalf of ${a.tenantName}
-`
+${a.unsubscribeUrl ? unsubscribeFooterText(a.unsubscribeUrl, 'reminder emails') : ''}`
 }
 
 function renderHtml(a: TrainingExpiryReminderArgs): string {
@@ -187,7 +195,7 @@ function renderHtml(a: TrainingExpiryReminderArgs): string {
     <tr><td style="padding:0 28px 28px 28px;">
       <p style="margin:0;font-size:11px;color:#5b6675;line-height:1.5;">
         29 CFR 1910.147(c)(7) and 29 CFR 1910.146(g) require workers to hold current certifications before being issued a locktag or named on an entry permit. The app blocks both flows automatically when a cert is missing or expired.
-      </p>
+      </p>${a.unsubscribeUrl ? unsubscribeFooterHtml(a.unsubscribeUrl, 'reminder emails') : ''}
     </td></tr>
   </table>
 </td></tr>

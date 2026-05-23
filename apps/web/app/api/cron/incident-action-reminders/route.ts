@@ -3,6 +3,8 @@ import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { withCronLogging } from '@/lib/cronInstrumentation'
 import { sendActionReminderEmail } from '@/lib/email/sendActionReminder'
+import { loadSuppressedEmails } from '@/lib/email/suppression'
+import { buildUnsubscribe } from '@/lib/email/unsubscribe'
 import {
   type IncidentActionType,
 } from '@soteria/core/incidentAction'
@@ -101,6 +103,7 @@ async function runCron(req: Request): Promise<NextResponse> {
     }
 
     const rows = actions as ActionRow[]
+    const suppressed = await loadSuppressedEmails(admin, 'reminders')
 
     // Cache per-tenant context (tenant name) and per-user owner data.
     const tenantCache = new Map<string, string | null>()
@@ -144,6 +147,7 @@ async function runCron(req: Request): Promise<NextResponse> {
 
       const owner = await getOwner(a.owner_user_id)
       if (!owner.email) { skipped++; continue }
+      if (suppressed.has(owner.email.toLowerCase())) { skipped++; continue }
 
       const incident = await getIncident(a.incident_id)
       const tenantName = await getTenantName(a.tenant_id)
@@ -164,6 +168,7 @@ async function runCron(req: Request): Promise<NextResponse> {
         appUrl,
         tenantName,
         tenantId:       a.tenant_id,
+        unsubscribeUrl: buildUnsubscribe(appUrl, owner.email, 'reminders')?.url ?? null,
       })
       if (ok) sent++; else failed++
     }

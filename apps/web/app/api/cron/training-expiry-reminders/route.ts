@@ -4,6 +4,8 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { withCronLogging } from '@/lib/cronInstrumentation'
 import { buildExpiryDigest, type RawTrainingRow } from '@soteria/core/trainingExpiryDigest'
 import { sendTrainingExpiryReminder } from '@/lib/email/sendTrainingExpiryReminder'
+import { loadSuppressedEmails } from '@/lib/email/suppression'
+import { buildUnsubscribe } from '@/lib/email/unsubscribe'
 import type { TrainingRole } from '@soteria/core/types'
 
 // Daily training-expiry reminder cron.
@@ -162,22 +164,26 @@ async function runCron(req: Request): Promise<NextResponse> {
       })
     }
 
-    // 6. Fan out one email per (tenant, admin). Use Promise.allSettled
-    //    so a single Resend failure doesn't sink the whole batch.
+    // 6. Drop recipients who opted out of reminder emails, then fan out
+    //    one email per (tenant, admin). Use Promise.allSettled so a single
+    //    Resend failure doesn't sink the whole batch.
     const trainingUrl = `${appUrl}/admin/training-records`
     const workersUrl  = `${appUrl}/admin/workers`
+    const suppressed  = await loadSuppressedEmails(admin, 'reminders')
+    const sendable    = recipients.filter(r => !suppressed.has(r.email.toLowerCase()))
 
     const results = await Promise.allSettled(
-      recipients.map(r => {
+      sendable.map(r => {
         const digest = digests.find(d => d.tenant_id === r.tenant_id)
         if (!digest) return Promise.resolve({ sent: false, providerId: null })
         return sendTrainingExpiryReminder({
-          to:           r.email,
-          reviewerName: r.full_name ?? '',
-          tenantName:   tenantNameById.get(r.tenant_id) ?? 'your tenant',
-          rows:         digest.rows,
+          to:             r.email,
+          reviewerName:   r.full_name ?? '',
+          tenantName:     tenantNameById.get(r.tenant_id) ?? 'your tenant',
+          rows:           digest.rows,
           trainingUrl,
           workersUrl,
+          unsubscribeUrl: buildUnsubscribe(appUrl, r.email, 'reminders')?.url ?? null,
         })
       }),
     )
@@ -186,7 +192,7 @@ async function runCron(req: Request): Promise<NextResponse> {
 
     return NextResponse.json({
       tenants_scanned: digests.length,
-      recipients:      recipients.length,
+      recipients:      sendable.length,
       emails_sent:     sent,
       emails_failed:   failed,
     })
