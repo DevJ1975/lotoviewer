@@ -1,23 +1,24 @@
 "use client"
 
-import { Separator as SeparatorPrimitive } from "@base-ui/react/separator"
+import { Separator as AriaSeparator, type SeparatorProps } from "react-aria-components"
 
 import { cn } from "@/lib/utils"
 
+// Migrated to React Aria Components (Spectrum migration Phase 1). Same
+// `orientation`/`className` API; renders an accessible separator.
 function Separator({
   className,
   orientation = "horizontal",
   ...props
-}: SeparatorPrimitive.Props) {
+}: SeparatorProps) {
   return (
-    <SeparatorPrimitive
+    <AriaSeparator
       data-slot="separator"
       orientation={orientation}
       className={cn(
         "shrink-0 bg-border",
-        "data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full",
-        "data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px",
-        className
+        orientation === "horizontal" ? "h-px w-full" : "h-full w-px",
+        className,
       )}
       {...props}
     />
