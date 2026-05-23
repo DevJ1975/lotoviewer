@@ -7,6 +7,7 @@ import {
   BookOpen,
   Box,
   Brush,
+  CalendarClock,
   ClipboardList,
   Eye,
   FileArchive,
@@ -179,7 +180,7 @@ const MODULE_ICONS: Record<string, ModuleIconComponent> = {
 
   // ── Lucide fallbacks for non-signature modules ─────────────────────
   AlertOctagon, AlertTriangle, BarChart3, Bell, BookOpen, Brush,
-  ClipboardList, Eye, FileArchive, GraduationCap, LifeBuoy,
+  CalendarClock, ClipboardList, Eye, FileArchive, GraduationCap, LifeBuoy,
   Megaphone, MessageSquare, Mountain, Settings, ShieldAlert, Siren,
   Sparkles, Tag, Webhook, Recycle,
 }

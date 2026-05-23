@@ -23,6 +23,7 @@ import {
   Brush,
   Building2,
   Cable,
+  CalendarClock,
   ClipboardCheck,
   Eye,
   FileArchive,
@@ -205,6 +206,9 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       tile('compliance', 'retention',         'retention',
         FileCog, 'Retention & legal holds',
         'Data retention policies and legal-hold flags by table.'),
+      tile('compliance', 'calendar',          null,
+        CalendarClock, 'Compliance calendar',
+        'Recurring regulatory + tenant obligations — overdue, due soon, upcoming.'),
     ],
   },
   {
