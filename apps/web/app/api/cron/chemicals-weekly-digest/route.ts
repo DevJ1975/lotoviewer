@@ -3,6 +3,8 @@ import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { withCronLogging } from '@/lib/cronInstrumentation'
 import { sendChemicalsDigest } from '@/lib/email/sendChemicalsDigest'
+import { loadSuppressedEmails } from '@/lib/email/suppression'
+import { buildUnsubscribe } from '@/lib/email/unsubscribe'
 import {
   isDigestEmpty,
   type ChemicalsDigest,
@@ -254,6 +256,7 @@ async function runCron(req: Request): Promise<NextResponse> {
     }
 
     // 5. Send.
+    const suppressed = await loadSuppressedEmails(admin, 'weekly_digest')
     let sent = 0, failed = 0, skippedEmpty = 0
     for (const [tenantId, digest] of digests) {
       if (isDigestEmpty(digest)) { skippedEmpty += 1; continue }
@@ -264,16 +267,17 @@ async function runCron(req: Request): Promise<NextResponse> {
 
       for (const uid of recipientIds) {
         const email = emailById.get(uid)
-        if (!email) continue
+        if (!email || suppressed.has(email.toLowerCase())) continue
         const profile = profileById.get(uid)
         const result = await sendChemicalsDigest({
-          to:           email,
-          reviewerName: profile?.full_name ?? '',
+          to:             email,
+          reviewerName:   profile?.full_name ?? '',
           digest,
-          reviewUrl:    `${appUrl}/chemicals/review`,
-          approvalsUrl: `${appUrl}/chemicals/approvals`,
-          driftUrl:     `${appUrl}/chemicals/drift`,
-          expiringUrl:  `${appUrl}/chemicals/inventory?expiring=true`,
+          reviewUrl:      `${appUrl}/chemicals/review`,
+          approvalsUrl:   `${appUrl}/chemicals/approvals`,
+          driftUrl:       `${appUrl}/chemicals/drift`,
+          expiringUrl:    `${appUrl}/chemicals/inventory?expiring=true`,
+          unsubscribeUrl: buildUnsubscribe(appUrl, email, 'weekly_digest')?.url ?? null,
         })
         if (result.sent) sent += 1
         else failed += 1

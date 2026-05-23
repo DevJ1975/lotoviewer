@@ -235,7 +235,7 @@
       "category": "reports",
       "href":     "/admin/insights/risk-intelligence",
       "wikiPage": "apps/web/app/wiki/insights/page.tsx",
-      "sources":  ["apps/web/app/admin/insights/**"]
+      "sources":  ["apps/web/app/admin/insights/risk-intelligence/**"]
     },
     {
       "slug":     "compliance-bundle",

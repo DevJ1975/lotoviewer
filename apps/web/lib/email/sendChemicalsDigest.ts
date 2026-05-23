@@ -1,6 +1,7 @@
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
 import { logEmailSend } from '@/lib/email/instrument'
+import { unsubscribeFooterText, unsubscribeFooterHtml } from '@/lib/email/unsubscribe'
 import {
   digestSubjectSummary,
   type ChemicalsDigest,
@@ -28,6 +29,9 @@ export interface ChemicalsDigestArgs {
   driftUrl:     string
   /** Public URL for /chemicals/inventory?expiring=true. */
   expiringUrl:  string
+  /** RFC 8058 unsubscribe URL. When set, adds the List-Unsubscribe headers
+   *  and a footer link; omit it and the email goes out unchanged. */
+  unsubscribeUrl?: string | null
 }
 
 export async function sendChemicalsDigest(
@@ -57,12 +61,16 @@ export async function sendChemicalsDigest(
 
   try {
     const resend = new Resend(apiKey)
+    const headers = args.unsubscribeUrl
+      ? { 'List-Unsubscribe': `<${args.unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
+      : undefined
     const { data, error } = await resend.emails.send({
       from,
       to:        args.to,
       subject,
       text:      renderText(args),
       html:      renderHtml(args),
+      headers,
     })
     if (error) {
       Sentry.captureException(error, { tags: { module: 'sendChemicalsDigest', stage: 'resend' } })
@@ -142,6 +150,7 @@ function renderText(a: ChemicalsDigestArgs): string {
     'You can mute this digest from /settings/notifications.',
     '— SoteriaField',
   )
+  if (a.unsubscribeUrl) lines.push(unsubscribeFooterText(a.unsubscribeUrl))
   return lines.join('\n')
 }
 
@@ -209,7 +218,7 @@ function renderHtml(a: ChemicalsDigestArgs): string {
       <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0">
       <p style="margin:0;color:#94a3b8;font-size:11px">
         Mute this digest from <a href="/settings/notifications" style="color:#94a3b8">notification settings</a>. — SoteriaField
-      </p>
+      </p>${a.unsubscribeUrl ? unsubscribeFooterHtml(a.unsubscribeUrl) : ''}
     </div>
   </body></html>`
 }

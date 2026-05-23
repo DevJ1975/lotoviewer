@@ -2,21 +2,20 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { withCronLogging } from '@/lib/cronInstrumentation'
-import { sendIncidentTrendsDigest } from '@/lib/email/sendIncidentTrendsDigest'
+import { sendScorecardWeatherReport } from '@/lib/email/sendScorecardWeatherReport'
 import { loadSuppressedEmails } from '@/lib/email/suppression'
 import { buildUnsubscribe } from '@/lib/email/unsubscribe'
+import { buildWeatherReport, type WeatherMetricInput } from '@soteria/core/scorecardWeatherReport'
 import {
   trir as trirRate,
   dart as dartRate,
-  daysSinceLastRecordable as daysSinceFn,
-  type IncidentWithClassification,
   type ClassificationRowForMetrics,
-  type IncidentRowForMetrics,
 } from '@soteria/core/incidentScorecardMetrics'
 
-// Weekly cron — Mondays. For each tenant, computes a 7-day +
-// instantaneous snapshot and emails every owner / admin a digest.
-// Vercel schedule: 0 14 * * 1 (Monday 09:00 EST).
+// Weekly EHS "weather report" cron — Mondays. For each tenant it compares
+// this-week vs last-week on the key leading/lagging indicators, adds the
+// year-to-date TRIR/DART, and emails every owner/admin.
+// Vercel schedule: 30 14 * * 1 (staggered after incident-trends-weekly).
 
 export const runtime = 'nodejs'
 
@@ -47,6 +46,8 @@ function publicAppUrl(req: Request): string {
   return 'https://soteriafield.app'
 }
 
+const DAY_MS = 86_400_000
+
 export async function GET(req: Request)  {
   if (!authorize(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   return withCronLogging(req, () => runCron(req))
@@ -60,7 +61,11 @@ async function runCron(req: Request): Promise<NextResponse> {
   const admin = supabaseAdmin()
   const appUrl = publicAppUrl(req)
   const now = new Date()
-  const weekStart = new Date(now.getTime() - 7 * 86_400_000).toISOString().slice(0, 10)
+  const nowMs = now.getTime()
+  const thisWeekStart = nowMs - 7 * DAY_MS
+  const lastWeekStart = nowMs - 14 * DAY_MS
+  const weekStart = new Date(thisWeekStart).toISOString().slice(0, 10)
+  const yearStartMs = Date.UTC(now.getUTCFullYear(), 0, 1)
   const yearKey = String(now.getUTCFullYear())
 
   let sent = 0
@@ -68,6 +73,7 @@ async function runCron(req: Request): Promise<NextResponse> {
   let failed = 0
 
   try {
+    // One unsubscribe stream covers every weekly leadership email.
     const suppressed = await loadSuppressedEmails(admin, 'weekly_digest')
 
     const { data: tenants, error: tErr } = await admin
@@ -81,18 +87,16 @@ async function runCron(req: Request): Promise<NextResponse> {
 
     type T = { id: string; name: string | null }
     for (const t of (tenants as T[])) {
-      // Pull per-tenant data in parallel.
       const [incRes, classRes, actionsRes, estRes, mRes] = await Promise.all([
         admin.from('incidents')
-          .select('id, incident_type, occurred_at, reported_at, closed_at, shift, severity_actual, status')
+          .select('id, incident_type, occurred_at')
           .eq('tenant_id', t.id),
         admin.from('incident_classifications')
           .select('incident_id, meets_recording_criteria, classification')
           .eq('tenant_id', t.id),
         admin.from('incident_actions')
-          .select('id, due_at, status')
-          .eq('tenant_id', t.id)
-          .in('status', ['open', 'in_progress', 'blocked']),
+          .select('id, status, completed_at')
+          .eq('tenant_id', t.id),
         admin.from('osha_establishments')
           .select('hours_employees_by_year')
           .eq('tenant_id', t.id),
@@ -104,39 +108,52 @@ async function runCron(req: Request): Promise<NextResponse> {
 
       if (incRes.error || classRes.error || actionsRes.error || estRes.error || mRes.error) {
         Sentry.captureException(incRes.error ?? classRes.error ?? actionsRes.error ?? estRes.error ?? mRes.error, {
-          tags: { route: 'cron/incident-trends-weekly', tenant: t.id },
+          tags: { route: 'cron/scorecard-weekly', tenant: t.id },
         })
         skipped++; continue
       }
 
-      const incidents = (incRes.data ?? []) as IncidentRowForMetrics[]
-      const classByIncident = new Map<string, ClassificationRowForMetrics>()
-      for (const c of (classRes.data ?? []) as ClassificationRowForMetrics[]) {
-        classByIncident.set(c.incident_id, c)
+      type IncRow = { id: string; incident_type: string; occurred_at: string }
+      const incidents = (incRes.data ?? []) as IncRow[]
+      const recordableIds = new Set(
+        ((classRes.data ?? []) as ClassificationRowForMetrics[])
+          .filter(c => c.meets_recording_criteria === true)
+          .map(c => c.incident_id),
+      )
+
+      const inRange = (iso: string, fromMs: number, toMs: number): boolean => {
+        const ms = new Date(iso).getTime()
+        return !Number.isNaN(ms) && ms >= fromMs && ms < toMs
       }
-      const incidentsJoined: IncidentWithClassification[] = incidents.map(r => ({
-        ...r, classification: classByIncident.get(r.id) ?? null,
-      }))
 
-      const sevenAgo = now.getTime() - 7 * 86_400_000
-      const newIncidents7d = incidents.filter(r => new Date(r.occurred_at).getTime() >= sevenAgo).length
-      const newRecordable7d = incidentsJoined.filter(r =>
-        r.classification?.meets_recording_criteria === true
-        && new Date(r.occurred_at).getTime() >= sevenAgo).length
-      const newNearMiss7d = incidents.filter(r =>
-        r.incident_type === 'near_miss'
-        && new Date(r.occurred_at).getTime() >= sevenAgo).length
+      // This-week vs last-week leading/lagging counts.
+      const recordableThis = incidents.filter(r => recordableIds.has(r.id) && inRange(r.occurred_at, thisWeekStart, nowMs)).length
+      const recordableLast = incidents.filter(r => recordableIds.has(r.id) && inRange(r.occurred_at, lastWeekStart, thisWeekStart)).length
+      const nearMissThis = incidents.filter(r => r.incident_type === 'near_miss' && inRange(r.occurred_at, thisWeekStart, nowMs)).length
+      const nearMissLast = incidents.filter(r => r.incident_type === 'near_miss' && inRange(r.occurred_at, lastWeekStart, thisWeekStart)).length
 
-      // Critical CAPAs = open + due in ≤7 days OR overdue.
-      const cutoff = now.getTime() + 7 * 86_400_000
-      type ARow = { id: string; due_at: string | null; status: string }
-      const criticalCount = ((actionsRes.data ?? []) as ARow[]).filter(a => {
-        if (!a.due_at) return false
-        return new Date(a.due_at).getTime() <= cutoff
-      }).length
+      type ARow = { id: string; status: string; completed_at: string | null }
+      const isClosed = (a: ARow) => (a.status === 'complete' || a.status === 'verified') && !!a.completed_at
+      const actions = (actionsRes.data ?? []) as ARow[]
+      const capasThis = actions.filter(a => isClosed(a) && inRange(a.completed_at!, thisWeekStart, nowMs)).length
+      const capasLast = actions.filter(a => isClosed(a) && inRange(a.completed_at!, lastWeekStart, thisWeekStart)).length
 
-      // Hours worked: sum across the tenant's establishments for the
-      // current year.
+      const inputs: WeatherMetricInput[] = [
+        { key: 'recordables', label: 'Recordable injuries', current: recordableThis, previous: recordableLast, higherIsBetter: false },
+        { key: 'near_miss', label: 'Near-miss reports', current: nearMissThis, previous: nearMissLast, higherIsBetter: true },
+        { key: 'capas_closed', label: 'Corrective actions closed', current: capasThis, previous: capasLast, higherIsBetter: true },
+      ]
+      const rows = buildWeatherReport(inputs)
+
+      // Year-to-date TRIR/DART: recordables this calendar year over the
+      // current year's hours-worked denominator.
+      const classById = new Map<string, ClassificationRowForMetrics>()
+      for (const c of (classRes.data ?? []) as ClassificationRowForMetrics[]) classById.set(c.incident_id, c)
+      const recordablesYtd = incidents.filter(r => recordableIds.has(r.id) && inRange(r.occurred_at, yearStartMs, nowMs))
+      const ytdDeaths = recordablesYtd.filter(r => classById.get(r.id)?.classification === 'death').length
+      const ytdDaysAway = recordablesYtd.filter(r => classById.get(r.id)?.classification === 'days_away').length
+      const ytdRestricted = recordablesYtd.filter(r => classById.get(r.id)?.classification === 'restricted').length
+
       type EstYears = { hours_employees_by_year: Record<string, { hours?: number }> | null }
       let hoursWorked = 0
       for (const e of ((estRes.data ?? []) as EstYears[])) {
@@ -144,17 +161,8 @@ async function runCron(req: Request): Promise<NextResponse> {
         if (typeof h === 'number') hoursWorked += h
       }
 
-      // Snapshot rates (use ALL recordables, not the 7-day window —
-      // this is the running rate the program is being judged by).
-      const recordablesAll = incidentsJoined.filter(r => r.classification?.meets_recording_criteria)
-      const totalRecordable = recordablesAll.length
-      const totalDeaths = recordablesAll.filter(r => r.classification?.classification === 'death').length
-      const totalDaysAway = recordablesAll.filter(r => r.classification?.classification === 'days_away').length
-      const totalRestricted = recordablesAll.filter(r => r.classification?.classification === 'restricted').length
-
-      const snapshotTrir = trirRate(totalRecordable, hoursWorked)
-      const snapshotDart = dartRate(totalDeaths, totalDaysAway, totalRestricted, hoursWorked)
-      const dsr = daysSinceFn(recordablesAll, now.getTime())
+      const trir = trirRate(recordablesYtd.length, hoursWorked)
+      const dart = dartRate(ytdDeaths, ytdDaysAway, ytdRestricted, hoursWorked)
 
       type MRow = {
         user_id: string
@@ -173,21 +181,17 @@ async function runCron(req: Request): Promise<NextResponse> {
       if (recipients.length === 0) { skipped++; continue }
 
       for (const r of recipients) {
-        const ok = await sendIncidentTrendsDigest({
-          to:                      r.email,
-          recipientName:           r.full_name,
+        const { sent: ok } = await sendScorecardWeatherReport({
+          to:             r.email,
+          recipientName:  r.full_name,
           weekStart,
-          newIncidents7d,
-          newRecordable7d,
-          newNearMiss7d,
-          openCriticalActions:     criticalCount,
-          daysSinceLastRecordable: dsr,
-          trir:                    snapshotTrir,
-          dart:                    snapshotDart,
+          rows,
+          trir,
+          dart,
           appUrl,
-          tenantName:              t.name,
-          tenantId:                t.id,
-          unsubscribeUrl:          buildUnsubscribe(appUrl, r.email, 'weekly_digest')?.url ?? null,
+          tenantName:     t.name,
+          tenantId:       t.id,
+          unsubscribeUrl: buildUnsubscribe(appUrl, r.email, 'weekly_digest')?.url ?? null,
         })
         if (ok) sent++; else failed++
       }
@@ -195,7 +199,7 @@ async function runCron(req: Request): Promise<NextResponse> {
 
     return NextResponse.json({ ok: true, sent, skipped, failed, tenants: tenants.length })
   } catch (e) {
-    Sentry.captureException(e, { tags: { route: 'cron/incident-trends-weekly' } })
+    Sentry.captureException(e, { tags: { route: 'cron/scorecard-weekly' } })
     const msg = e instanceof Error ? e.message : String(e)
     return NextResponse.json({ error: msg }, { status: 500 })
   }

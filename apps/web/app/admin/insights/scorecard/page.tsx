@@ -7,8 +7,11 @@ import {
   BarChart3,
   Camera,
   ClipboardCheck,
+  FileDown,
   Gauge,
   Loader2,
+  Maximize2,
+  Minimize2,
   Timer,
   Wind,
   type LucideIcon,
@@ -22,6 +25,8 @@ import {
   Cell,
 } from 'recharts'
 import { useAuth } from '@/components/AuthProvider'
+import { useTenant } from '@/components/TenantProvider'
+import { supabase } from '@/lib/supabase'
 import { fetchScorecardMetrics, type DayBucket, type ScorecardMetrics } from '@soteria/core/scorecardMetrics'
 
 // EHS scorecard - an operations-board view for safety leaders.
@@ -94,6 +99,58 @@ export default function ScorecardPage() {
     return () => { cancelled = true }
   }, [authLoading, profile, windowDays])
 
+  const { tenantId } = useTenant()
+  const [presentation, setPresentation] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+
+  // Keep presentation mode in sync with the browser fullscreen state, so the
+  // Esc key (which exits fullscreen) also drops the clean layout.
+  useEffect(() => {
+    function onFsChange() { if (!document.fullscreenElement) setPresentation(false) }
+    document.addEventListener('fullscreenchange', onFsChange)
+    return () => document.removeEventListener('fullscreenchange', onFsChange)
+  }, [])
+
+  async function togglePresentation() {
+    if (!presentation) {
+      try { await document.documentElement.requestFullscreen?.() } catch { /* fullscreen optional */ }
+      setPresentation(true)
+    } else {
+      if (document.fullscreenElement) { try { await document.exitFullscreen?.() } catch { /* ignore */ } }
+      setPresentation(false)
+    }
+  }
+
+  async function exportPdf() {
+    if (!tenantId || !metrics) return
+    setExporting(true); setExportError(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/scorecard/export', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-active-tenant': tenantId,
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ metrics, windowDays }),
+      })
+      if (!res.ok) throw new Error(`Export failed (${res.status})`)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `ehs-scorecard-${new Date().toISOString().slice(0, 10)}.pdf`
+      document.body.appendChild(a); a.click(); a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : 'Could not export PDF')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   if (authLoading) {
     return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
@@ -102,16 +159,20 @@ export default function ScorecardPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">
+    <div className={presentation
+      ? 'fixed inset-0 z-50 space-y-5 overflow-y-auto bg-white p-6 dark:bg-slate-950'
+      : 'mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6 lg:px-8'}>
       <header className="ops-surface-raised animate-panel-in rounded-lg px-4 py-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Link
-            href="/"
-            className="motion-press flex size-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:border-brand-navy/30 hover:bg-brand-navy/5 hover:text-brand-navy dark:border-slate-800 dark:text-slate-400 dark:hover:border-brand-yellow/30 dark:hover:bg-brand-yellow/10 dark:hover:text-brand-yellow"
-            aria-label="Back to home"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
+          {!presentation && (
+            <Link
+              href="/"
+              className="motion-press flex size-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:border-brand-navy/30 hover:bg-brand-navy/5 hover:text-brand-navy dark:border-slate-800 dark:text-slate-400 dark:hover:border-brand-yellow/30 dark:hover:bg-brand-yellow/10 dark:hover:text-brand-yellow"
+              aria-label="Back to home"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          )}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-brand-navy text-white dark:bg-brand-yellow dark:text-slate-950">
@@ -125,21 +186,45 @@ export default function ScorecardPage() {
               </div>
             </div>
           </div>
-          <select
-            value={windowDays}
-            onChange={e => setWindowDays(Number(e.target.value))}
-            className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 shadow-sm focus:border-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-navy/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          >
-            {WINDOW_OPTIONS.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <select
+              value={windowDays}
+              onChange={e => setWindowDays(Number(e.target.value))}
+              className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 shadow-sm focus:border-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-navy/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            >
+              {WINDOW_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <button
+              onClick={exportPdf}
+              disabled={exporting || !metrics}
+              className="motion-press flex h-10 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-brand-navy/30 hover:text-brand-navy disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              aria-label="Download PDF report"
+            >
+              {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+              <span className="hidden sm:inline">PDF</span>
+            </button>
+            <button
+              onClick={togglePresentation}
+              className="motion-press flex h-10 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-brand-navy/30 hover:text-brand-navy dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              aria-label={presentation ? 'Exit presentation mode' : 'Enter presentation mode'}
+            >
+              {presentation ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              <span className="hidden sm:inline">{presentation ? 'Exit' : 'Present'}</span>
+            </button>
+          </div>
         </div>
       </header>
 
       {loadError && (
         <div className="animate-panel-in rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-900 dark:border-rose-900/70 dark:bg-rose-950/40 dark:text-rose-100">
           Could not load scorecard: {loadError}
+        </div>
+      )}
+      {exportError && (
+        <div className="animate-panel-in rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/40 dark:text-amber-100">
+          {exportError}
         </div>
       )}
 
