@@ -19,6 +19,7 @@
     "check:version": "node scripts/check-version-sync.mjs",
     "check:repo": "npm run check:migrations && npm run check:manuals && npm run check:nav && npm run check:version && ALLOW_DEEPLINK_PLACEHOLDERS=1 npm run check:deeplinks",
     "check:wiki": "node scripts/check-wiki-sync.mjs",
+    "build:tokens": "node scripts/build-spectrum-tokens.mjs",
     "check:wiki:staged": "node scripts/check-wiki-sync.mjs --staged",
     "doctor:git": "bash scripts/repo-doctor.sh",
     "wiki:touch": "node scripts/wiki-touch.mjs"

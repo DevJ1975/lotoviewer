@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter, Geist_Mono } from 'next/font/google'
 import { UploadQueueProvider } from '@/components/UploadQueueProvider'
 import { SessionProvider } from '@/components/SessionProvider'
+import { SpectrumProvider } from '@/components/SpectrumProvider'
 import { AuthProvider } from '@/components/AuthProvider'
 import { TenantProvider } from '@/components/TenantProvider'
 import { ThemeProvider, NO_FLASH_SCRIPT } from '@/components/ThemeProvider'
@@ -52,17 +53,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-full bg-slate-50 dark:bg-slate-900/40 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
         <ThemeProvider>
-          <AuthProvider>
-            <TenantProvider>
-              <SessionProvider>
-                <UploadQueueProvider>
-                  <AuthGate>
-                    <AppChrome>{children}</AppChrome>
-                  </AuthGate>
-                </UploadQueueProvider>
-              </SessionProvider>
-            </TenantProvider>
-          </AuthProvider>
+          <SpectrumProvider>
+            <AuthProvider>
+              <TenantProvider>
+                <SessionProvider>
+                  <UploadQueueProvider>
+                    <AuthGate>
+                      <AppChrome>{children}</AppChrome>
+                    </AuthGate>
+                  </UploadQueueProvider>
+                </SessionProvider>
+              </TenantProvider>
+            </AuthProvider>
+          </SpectrumProvider>
         </ThemeProvider>
         {/* Global toast surface — call `toast.success(...)` etc. from
             anywhere via `import { toast } from '@/components/ui/sonner'`. */}
