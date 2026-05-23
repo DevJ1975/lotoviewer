@@ -20,6 +20,21 @@
       ]
     },
     {
+      "slug":     "inspections",
+      "module":   "Inspections",
+      "tagline":  "Configurable inspection + audit checklists with scoring and a field runner.",
+      "category": "safety",
+      "href":     "/inspections",
+      "wikiPage": "apps/web/app/wiki/inspections/page.tsx",
+      "sources":  [
+        "apps/web/app/inspections/**",
+        "apps/web/app/admin/inspections/**",
+        "apps/web/app/api/inspections/**",
+        "packages/core/src/inspectionScoring.ts",
+        "apps/web/migrations/193_inspection_templates.sql"
+      ]
+    },
+    {
       "slug":     "compliance-calendar",
       "module":   "Compliance Calendar",
       "tagline":  "Recurring regulatory + tenant obligations — overdue, due soon, upcoming.",

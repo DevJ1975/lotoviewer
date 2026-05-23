@@ -212,6 +212,17 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     ],
   },
   {
+    id:          'inspections',
+    urlSegment:  'inspections',
+    title:       'Inspections',
+    description: 'Build configurable inspection + audit checklist templates.',
+    tiles: [
+      tile('inspections', 'templates', null,
+        ClipboardCheck, 'Inspection templates',
+        'Create and manage reusable inspection / audit checklists.'),
+    ],
+  },
+  {
     id:          'platform',
     urlSegment:  'platform',
     title:       'Platform Configuration',

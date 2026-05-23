@@ -70,6 +70,7 @@ const MODULE_GROUPS: Record<string, NavigationGroupId> = {
   loto: 'daily-work',
   'equipment-readiness': 'daily-work',
   jha: 'daily-work',
+  inspections: 'daily-work',
 
   incidents: 'hazards-incidents',
   bbs: 'hazards-incidents',

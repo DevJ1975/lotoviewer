@@ -47,7 +47,8 @@ values
   ('admin-cmms',                'CMMS integrations',  'Webhook-driven CMMS sync (Maximo / SAP PM / eMaint).',   E'## Overview\n\nThis manual covers CMMS integrations. **Edit me.**'),
   ('admin-bbs-dashboard',       'BBS leading indicators', 'Safe-to-unsafe ratio + follow-ups-due dashboard.',  E'## Overview\n\nThis manual covers the BBS v2 dashboard. **Edit me.**'),
   ('admin-contractors',         'Contractors',        'Host-procedure acknowledgement and prequalification.',   E'## Overview\n\nThis manual covers contractor administration. **Edit me.**'),
-  ('working-at-heights',        'Working at Heights', 'Fall protection, ladders, anchors, rescue plans — Federal OSHA + Cal/OSHA.', E'## Overview\n\nThis stub points at the long-form manual at /wiki/working-at-heights. **Edit me.**')
+  ('working-at-heights',        'Working at Heights', 'Fall protection, ladders, anchors, rescue plans — Federal OSHA + Cal/OSHA.', E'## Overview\n\nThis stub points at the long-form manual at /wiki/working-at-heights. **Edit me.**'),
+  ('inspections',               'Inspections',        'Configurable inspection + audit checklist builder with scoring and field runner.', E'## Overview\n\nThis manual covers the Inspections module. See /wiki/inspections. **Edit me.**')
 on conflict (module_id) do nothing;
 
 commit;

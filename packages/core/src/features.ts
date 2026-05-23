@@ -958,6 +958,17 @@ export const FEATURES: FeatureDef[] = [
     icon:        'Mountain',
     color:       'sky',
   },
+  {
+    id:          'inspections',
+    name:        'Inspections',
+    description: 'Build configurable inspection + audit checklists; run them in the field with scoring',
+    href:        '/inspections',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'ClipboardList',
+    color:       'teal',
+  },
 ]
 
 // ─── Lookups ───────────────────────────────────────────────────────────────
