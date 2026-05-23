@@ -1,10 +1,17 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.1.0'
-const LAST_UPDATED    = '2026-05-16'
+const CURRENT_VERSION = '1.2.0'
+const LAST_UPDATED    = '2026-05-23'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.2.0',
+    date: '2026-05-23',
+    changes: [
+      'Documented the invite lifecycle: weekly reminder emails for invitees who never sign in, and the reversible soft-cancel after four reminders.',
+    ],
+  },
   {
     version: '1.1.0',
     date: '2026-05-16',
@@ -29,6 +36,7 @@ export default function WikiUsersPage() {
       toc={[
         { id: 'overview', label: 'What it\'s for' },
         { id: 'roles',    label: 'Roles' },
+        { id: 'invite-lifecycle', label: 'Invite lifecycle' },
         { id: 'faq',      label: 'FAQ' },
         { id: 'dodonts',  label: 'Do\'s & Don\'ts' },
         { id: 'related',  label: 'Related modules' },
@@ -51,6 +59,27 @@ export default function WikiUsersPage() {
           <li><strong>Superadmin</strong> — cross-tenant access; granted by
             another superadmin from <Link href="/superadmin">/superadmin</Link>.
             Not visible on this page.</li>
+        </ul>
+      </Section>
+
+      <Section id="invite-lifecycle" title="Invite lifecycle & reminders">
+        <p>
+          An invitee who never signs in is nudged automatically. A daily job
+          sends a reminder email <strong>once a week, up to four times</strong>.
+          If they still haven&apos;t signed in about a week after the fourth
+          reminder, the invite is <strong>soft-cancelled</strong>.
+        </p>
+        <ul>
+          <li><strong>Reversible by design.</strong> Soft-cancel deletes
+            nothing — the person&apos;s row is kept. An admin can reactivate
+            the invite (clearing the cancelled flag), which restarts the
+            lifecycle.</li>
+          <li><strong>Access stops while cancelled.</strong> A cancelled invite
+            no longer grants access to the tenant, even if the person later
+            tries the original temporary password.</li>
+          <li><strong>Only applies before first sign-in.</strong> Once someone
+            signs in, reminders stop for good — existing accounts added to a
+            new tenant are never affected.</li>
         </ul>
       </Section>
 
