@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "./spectrum-tokens.css";
+
+/* React Aria Components state variants (data-[selected], data-[focused], …).
+   Used as components migrate to React Aria in the Spectrum migration. */
+@plugin "tailwindcss-react-aria-components";
 
 @custom-variant dark (&:is(.dark *));
 
