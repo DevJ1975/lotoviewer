@@ -25,6 +25,16 @@
      the app-wide visible step. Tunable / reversible (one value). */
   --color-brand-navy: #1D3ECF;
   --color-brand-yellow: #FFD900;
+
+  /* Spectrum migration Phase 2c: neutralize the light slate surfaces toward
+     Adobe's S2 gray ramp (removes the blue tint from backgrounds + borders
+     app-wide — every bg-slate-50/100 + border-slate-200/300). Text stops
+     (slate-400…950) and dark-mode surfaces are left as-is to preserve
+     contrast. Reversible. */
+  --color-slate-50:  #f8f8f8;
+  --color-slate-100: #f3f3f3;
+  --color-slate-200: #e9e9e9;
+  --color-slate-300: #dadada;
   --color-ops-ink: #111827;
   --color-ops-panel: #F8FAFC;
   --color-ops-line: #CBD5E1;
