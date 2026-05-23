@@ -20,6 +20,20 @@
       ]
     },
     {
+      "slug":     "compliance-calendar",
+      "module":   "Compliance Calendar",
+      "tagline":  "Recurring regulatory + tenant obligations — overdue, due soon, upcoming.",
+      "category": "admin",
+      "href":     "/admin/compliance/calendar",
+      "wikiPage": "apps/web/app/wiki/compliance-calendar/page.tsx",
+      "sources":  [
+        "apps/web/app/admin/compliance/calendar/**",
+        "apps/web/app/api/compliance/obligations/**",
+        "packages/core/src/complianceCalendar.ts",
+        "apps/web/migrations/192_compliance_obligations.sql"
+      ]
+    },
+    {
       "slug":     "prop65",
       "module":   "California Prop 65",
       "tagline":  "§25249.6 + Cal/OSHA Title 8 §5194 — OEHHA chemicals, exposure assessments, posted warnings, §5194(h) notifications, annual reviews.",

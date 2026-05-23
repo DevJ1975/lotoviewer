@@ -32,6 +32,7 @@ values
   ('reports-scorecard',         'EHS Scorecard',      'Leading + lagging indicators rolled up tenant-wide.',    E'## Overview\n\nThis manual covers the EHS Scorecard. **Edit me.**'),
   ('reports-insights',          'Insights',           'Auto-surfaced trends across the safety modules.',        E'## Overview\n\nThis manual covers the Insights module. **Edit me.**'),
   ('reports-compliance-bundle', 'Compliance bundle',  'One-click PDF pack of OSHA forms + records.',            E'## Overview\n\nThis manual covers the Compliance bundle export. **Edit me.**'),
+  ('reports-compliance-calendar', 'Compliance Calendar', 'Recurring regulatory + tenant obligations, overdue/due-soon/upcoming.', E'## Overview\n\nThis manual covers the Compliance Calendar. See /wiki/compliance-calendar for the operating guide. **Edit me.**'),
   ('reports-inspector',         'Inspector view',     'Tokenized read-only view for outside inspectors.',       E'## Overview\n\nThis manual covers the Inspector view. **Edit me.**'),
   ('admin-loto-devices',        'LOTO devices',       'Manage lock + tag inventory.',                           E'## Overview\n\nThis manual covers LOTO device administration. **Edit me.**'),
   ('admin-workers',             'Workers',            'Worker roster + role management.',                       E'## Overview\n\nThis manual covers worker administration. **Edit me.**'),
