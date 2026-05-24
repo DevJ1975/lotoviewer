@@ -35,6 +35,35 @@ const CHECK_CATALOG = new Map<string, { critical: boolean; areaTypes: ReadonlyAr
   HAZARDOUS_WASTE_FIELD_CHECKS.map(c => [c.id, { critical: c.critical, areaTypes: c.areaTypes }]),
 )
 
+const MAX_PHOTOS = 12
+
+// Evidence photos arrive as already-uploaded public URLs from the field
+// form. We only persist URLs that point at our own loto-photos bucket so a
+// client can't smuggle an arbitrary external link into the CUPA binder.
+// Exported for unit tests (Next ignores non-handler named exports here).
+export function parsePhotoUrls(raw: unknown):
+  | { ok: true;  urls: string[] }
+  | { ok: false; error: string }
+{
+  if (raw === undefined || raw === null) return { ok: true, urls: [] }
+  if (!Array.isArray(raw)) return { ok: false, error: 'photo_urls must be an array' }
+  if (raw.length > MAX_PHOTOS) return { ok: false, error: `At most ${MAX_PHOTOS} photos per inspection` }
+  const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').replace(/\/$/, '')
+  const required = '/storage/v1/object/public/loto-photos/'
+  const out: string[] = []
+  for (const entry of raw) {
+    if (typeof entry !== 'string') return { ok: false, error: 'each photo_url must be a string' }
+    const url = entry.trim()
+    if (!url || url.length > 512) return { ok: false, error: 'photo_url empty or too long' }
+    const wellFormed = base
+      ? url.startsWith(`${base}${required}`)
+      : url.startsWith('https://') && url.includes(required)
+    if (!wellFormed) return { ok: false, error: 'photo_url must be a loto-photos storage URL' }
+    out.push(url)
+  }
+  return { ok: true, urls: out }
+}
+
 function parseFindings(raw: unknown, areaType: HazardousWasteAreaType):
   | { ok: true;  findings: HazardousWasteInspectionFinding[] }
   | { ok: false; error: string }
@@ -83,7 +112,7 @@ export async function GET(req: Request) {
   try {
     let q = gate.authedClient
       .from('hazardous_waste_inspections')
-      .select('id, tenant_id, area_id, area_type, inspected_by, inspected_at, container_label, waste_description, observations, findings, total_checks, passing_checks, critical_failures, status, created_at, updated_at, created_by, updated_by',
+      .select('id, tenant_id, area_id, area_type, inspected_by, inspected_at, container_label, waste_description, observations, findings, photo_urls, total_checks, passing_checks, critical_failures, status, created_at, updated_at, created_by, updated_by',
         { count: 'exact' })
       .eq('tenant_id', gate.tenantId)
       .order('inspected_at', { ascending: false })
@@ -145,6 +174,9 @@ export async function POST(req: Request) {
   const parsed = parseFindings(body.findings, area_type)
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
 
+  const photos = parsePhotoUrls(body.photo_urls)
+  if (!photos.ok) return NextResponse.json({ error: photos.error }, { status: 400 })
+
   const statusRaw = typeof body.status === 'string' ? body.status : 'submitted'
   if (!(VALID_INSPECTION_STATUSES as readonly string[]).includes(statusRaw)) {
     return NextResponse.json({ error: `status must be one of ${VALID_INSPECTION_STATUSES.join(', ')}` }, { status: 400 })
@@ -168,6 +200,7 @@ export async function POST(req: Request) {
                           ? body.observations.trim().slice(0, 2000)
                           : null,
     findings:           parsed.findings,
+    photo_urls:         photos.urls,
     status:             statusRaw,
     created_by:         gate.userId,
     updated_by:         gate.userId,

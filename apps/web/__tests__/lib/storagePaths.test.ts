@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hotWorkPhotoPath, sanitizeId } from '@soteria/core/storagePaths'
+import { hotWorkPhotoPath, hazWasteInspectionPhotoPath, sanitizeId } from '@soteria/core/storagePaths'
 
 const TENANT = '00000000-0000-0000-0000-000000000001'
 
@@ -23,5 +23,18 @@ describe('hotWorkPhotoPath', () => {
     const path = hotWorkPhotoPath(TENANT, 'a/b#c d', 5)
     expect(path).toBe(`${TENANT}/hot-work/a_b_c_d/5.jpg`)
     expect(sanitizeId('a/b#c d')).toBe('a_b_c_d')
+  })
+})
+
+describe('hazWasteInspectionPhotoPath', () => {
+  it('builds <tenant>/hazardous-waste/inspections/<draft>/<ts>.jpg, tenant first', () => {
+    const path = hazWasteInspectionPhotoPath(TENANT, 'draft-9', 1_700_000_000_000)
+    expect(path).toBe(`${TENANT}/hazardous-waste/inspections/draft-9/1700000000000.jpg`)
+    expect(path.split('/')[0]).toBe(TENANT)
+  })
+
+  it('sanitizes the draft id and varies by timestamp', () => {
+    expect(hazWasteInspectionPhotoPath(TENANT, 'a/b', 1)).toBe(`${TENANT}/hazardous-waste/inspections/a_b/1.jpg`)
+    expect(hazWasteInspectionPhotoPath(TENANT, 'x', 1)).not.toBe(hazWasteInspectionPhotoPath(TENANT, 'x', 2))
   })
 })

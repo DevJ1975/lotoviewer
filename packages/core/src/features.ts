@@ -969,6 +969,53 @@ export const FEATURES: FeatureDef[] = [
     icon:        'ClipboardList',
     color:       'teal',
   },
+
+  // ── Fleet Safety & Journey Management module ────────────────────────────
+  // Vehicle + driver registers with comprehensive DOT data, hazmat placards,
+  // and scanned documents; ties road incidents into the Incident module and
+  // on-board chemicals into the SDS module. Later slices add pre-trip
+  // inspections and monitored Journey Management Plans.
+  {
+    id:          'fleet-safety',
+    name:        'Fleet Safety & Journeys',
+    description: 'Vehicle register, driver licensing, DOT + hazmat records, and monitored journey plans',
+    href:        '/fleet',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'Truck',
+    color:       'sky',
+  },
+  {
+    id:          'fleet-vehicles',
+    name:        'Vehicles',
+    description: 'Fleet inventory — photos, VIN/plate, DOT class, hazmat placards, insurance + registration scans',
+    href:        '/fleet/vehicles',
+    category:    'safety',
+    parent:      'fleet-safety',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'fleet-drivers',
+    name:        'Drivers',
+    description: 'Driver licensing, DOT medical cards, and hazmat endorsements layered on the worker roster',
+    href:        '/fleet/drivers',
+    category:    'safety',
+    parent:      'fleet-safety',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'fleet-inspections',
+    name:        'Inspections',
+    description: 'Pre-trip vehicle safety checklists (FMCSA 49 CFR 396.13); a failed check pulls the vehicle out of service',
+    href:        '/fleet/inspections',
+    category:    'safety',
+    parent:      'fleet-safety',
+    enabled:     true,
+    comingSoon:  false,
+  },
 ]
 
 // ─── Lookups ───────────────────────────────────────────────────────────────

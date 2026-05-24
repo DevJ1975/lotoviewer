@@ -93,58 +93,16 @@ describe('getFeaturesByCategory', () => {
   it('returns all enabled features in a category, preserving registry order', () => {
     const safety = getFeaturesByCategory('safety')
     const ids = safety.map(f => f.id)
-    expect(ids).toEqual([
-      'my-safety-readiness',
-      'loto',
-      'loto-status',
-      'loto-departments',
-      'loto-print',
-      'loto-import',
-      'loto-decommission',
-      'loto-review-portal',
-      'equipment-readiness',
-      'equipment-readiness-scan',
-      'equipment-readiness-defects',
-      'equipment-readiness-qr',
-      'equipment-readiness-config',
-      'risk-assessment',
-      'risk-heatmap',
-      'risk-list',
-      'risk-new',
-      'risk-controls',
-      'confined-spaces',
-      'cs-status-board',
-      'cs-import',
-      'incidents',
-      'incidents-new',
-      'incidents-osha',
-      'incidents-scorecard',
-      'incidents-lessons',
-      'incidents-qr',
-      'bbs',
-      'bbs-new',
-      'bbs-leaderboard',
-      'bbs-qr',
-      'bbs-scorecard',
-      'chemicals',
-      'chemicals-new',
-      'chemicals-review',
-      'chemicals-inventory',
-      'chemicals-scan',
-      'chemicals-locations',
-      'chemicals-drift',
-      'chemicals-tier-two',
-      'chemicals-restricted',
-      'chemicals-approvals',
-      'chemicals-maq',
-      'near-miss',
-      'hot-work',
-      'hot-work-status',
-      'jha',
-      'toolbox-talks',
-      'strike',
-      'safety-boards',
-    ])
+    // Every returned feature really is enabled + in this category.
+    expect(safety.every(f => f.category === 'safety' && f.enabled)).toBe(true)
+    // Order matches the registry declaration order (derive rather than
+    // snapshot a literal so adding a module doesn't silently rot this test).
+    expect(ids).toEqual(FEATURES.filter(f => f.category === 'safety' && f.enabled).map(f => f.id))
+    // Spot-check a module + one of its children are both present (flat list).
+    expect(ids).toContain('loto')
+    expect(ids).toContain('loto-status')
+    expect(ids).toContain('fleet-safety')
+    expect(ids).toContain('fleet-vehicles')
   })
 
   it('returns coming-soon entries with comingSoon=true when any exist', () => {
@@ -174,23 +132,13 @@ describe('getFeaturesByCategory', () => {
 
 describe('getModules', () => {
   it('returns only top-level features (no parent) for a category', () => {
-    const ids = getModules('safety').map(m => m.id)
-    expect(ids).toEqual([
-      'my-safety-readiness',
-      'loto',
-      'equipment-readiness',
-      'risk-assessment',
-      'confined-spaces',
-      'incidents',
-      'bbs',
-      'chemicals',
-      'near-miss',
-      'hot-work',
-      'jha',
-      'toolbox-talks',
-      'strike',
-      'safety-boards',
-    ])
+    const mods = getModules('safety')
+    const ids = mods.map(m => m.id)
+    // No child features leak in, and order matches the registry.
+    expect(mods.every(m => m.category === 'safety' && m.enabled && !m.parent)).toBe(true)
+    expect(ids).toEqual(FEATURES.filter(f => f.category === 'safety' && f.enabled && !f.parent).map(f => f.id))
+    expect(ids).toContain('fleet-safety')
+    expect(ids).not.toContain('fleet-vehicles')
   })
 
   it('excludes child features even though they share the parent\'s category', () => {

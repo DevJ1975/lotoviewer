@@ -71,6 +71,7 @@ const MODULE_GROUPS: Record<string, NavigationGroupId> = {
   'equipment-readiness': 'daily-work',
   jha: 'daily-work',
   inspections: 'daily-work',
+  'fleet-safety': 'daily-work',
 
   incidents: 'hazards-incidents',
   bbs: 'hazards-incidents',
@@ -119,6 +120,7 @@ const KEYWORDS: Record<string, string[]> = {
   'hot-work': ['permit', 'fire watch', 'spark'],
   'confined-spaces': ['permit', 'entry', 'atmosphere'],
   jha: ['job hazard analysis', 'task', 'hazard'],
+  'fleet-safety': ['fleet', 'vehicle', 'truck', 'driver', 'journey', 'trip', 'road', 'dot', 'hazmat', 'placard', 'license', 'insurance', 'registration'],
   strike: ['training', 'microlearning', 'lesson'],
   'toolbox-talks': ['talks', 'briefing', 'training'],
   'safety-boards': ['boards', 'announcements', 'discussions'],

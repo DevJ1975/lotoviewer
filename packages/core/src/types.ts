@@ -39,6 +39,12 @@ export interface Equipment {
   // Optional so pre-migration test fixtures don't need an explicit
   // field; the PeriodicEquipmentSnapshot helper coerces undefined → null.
   next_periodic_review_due_at?: string | null
+  // Equipment make + model (migration 208). Nullable; admins fill in
+  // via PlacardDetailsSheet. Used by admin search + by future
+  // photo-plausibility tooling that needs to know what the machine
+  // should look like.
+  manufacturer?:             string | null
+  model?:                    string | null
   // Supervisor review flag (migration 189). A public-link reviewer or
   // admin marks equipment for closer admin follow-up; the admin queue
   // surface drains these. NULL on every row that's never been flagged.
@@ -140,6 +146,32 @@ export interface TenantMembership {
   invited_by: string | null
   created_at: string
   updated_at: string
+}
+
+// ── Facility model (migrations 209-211) ─────────────────────────────────────
+// A physical site BENEATH a tenant. One tenant -> many facilities. The active
+// facility is held in FacilityProvider / sessionStorage and injected as the
+// x-active-facility header; RLS scopes domain rows by it. A NULL active
+// facility means the roll-up view (all of the tenant's facilities). A domain
+// row with facility_id NULL is "shared" across the tenant's facilities.
+
+export type FacilityStatus = 'active' | 'archived'
+
+export interface Facility {
+  id:          string
+  tenant_id:   string
+  name:        string
+  // Optional short human handle ('PLANT-A'); unique within a tenant.
+  code:        string | null
+  address:     string | null
+  city:        string | null
+  state:       string | null
+  // The tenant's default facility. Exactly one per tenant.
+  is_primary:  boolean
+  status:      FacilityStatus
+  settings:    Record<string, unknown>
+  created_at:  string
+  updated_at:  string
 }
 
 // ── Confined Space module (OSHA 29 CFR 1910.146) ────────────────────────────

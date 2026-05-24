@@ -11,6 +11,8 @@ type PlacardPatch = {
   description:    string
   notes:          string | null
   internal_notes: string | null
+  manufacturer:   string | null
+  model:          string | null
 }
 
 interface Props {
@@ -27,9 +29,13 @@ export default function PlacardDetailsSheet({ open, onClose, equipment, onSaved,
   const description   = equipment.description
   const notes         = equipment.notes ?? ''
   const internalNotes = equipment.internal_notes ?? ''
+  const manufacturer  = equipment.manufacturer ?? ''
+  const model         = equipment.model ?? ''
   const [draftDesc, setDraftDesc]                   = useState(description)
   const [draftNotes, setDraftNotes]                 = useState(notes)
   const [draftInternalNotes, setDraftInternalNotes] = useState(internalNotes)
+  const [draftMfr, setDraftMfr]                     = useState(manufacturer)
+  const [draftModel, setDraftModel]                 = useState(model)
   const [saving, setSaving]                         = useState(false)
 
   useEffect(() => {
@@ -37,7 +43,9 @@ export default function PlacardDetailsSheet({ open, onClose, equipment, onSaved,
     setDraftDesc(description)
     setDraftNotes(notes)
     setDraftInternalNotes(internalNotes)
-  }, [open, description, notes, internalNotes])
+    setDraftMfr(manufacturer)
+    setDraftModel(model)
+  }, [open, description, notes, internalNotes, manufacturer, model])
 
   async function handleSave() {
     if (isOffline()) {
@@ -53,6 +61,8 @@ export default function PlacardDetailsSheet({ open, onClose, equipment, onSaved,
       description:    draftDesc.trim() || description,
       notes:          draftNotes.trim() || null,
       internal_notes: draftInternalNotes.trim() || null,
+      manufacturer:   draftMfr.trim()   || null,
+      model:          draftModel.trim() || null,
     }
     const { error } = await supabase
       .from('loto_equipment')
@@ -83,8 +93,35 @@ export default function PlacardDetailsSheet({ open, onClose, equipment, onSaved,
             type="text"
             value={draftDesc}
             onChange={e => setDraftDesc(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
           />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300" htmlFor="plc-mfr">
+              Manufacturer <span className="text-slate-400 dark:text-slate-500 font-normal">(OEM)</span>
+            </label>
+            <input
+              id="plc-mfr"
+              type="text"
+              value={draftMfr}
+              onChange={e => setDraftMfr(e.target.value)}
+              placeholder="e.g. Jensen, SKA Pack"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300" htmlFor="plc-model">Model</label>
+            <input
+              id="plc-model"
+              type="text"
+              value={draftModel}
+              onChange={e => setDraftModel(e.target.value)}
+              placeholder="e.g. SKAP-2400, J-3000"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
+            />
+          </div>
         </div>
 
         <div className="space-y-1.5">
@@ -96,7 +133,7 @@ export default function PlacardDetailsSheet({ open, onClose, equipment, onSaved,
             rows={4}
             value={draftNotes}
             onChange={e => setDraftNotes(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
           />
         </div>
 
@@ -110,7 +147,7 @@ export default function PlacardDetailsSheet({ open, onClose, equipment, onSaved,
             value={draftInternalNotes}
             onChange={e => setDraftInternalNotes(e.target.value)}
             placeholder="Visible to staff in the app only. Won't appear on the PDF or printed placard."
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors placeholder:text-slate-400 dark:placeholder:text-slate-500"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors placeholder:text-slate-400 dark:placeholder:text-slate-500"
           />
         </div>
       </div>

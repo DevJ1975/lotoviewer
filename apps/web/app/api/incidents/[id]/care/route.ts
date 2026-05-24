@@ -50,6 +50,39 @@ interface RouteContext {
   params: Promise<{ id: string }>
 }
 
+// ─── PHI access logging ──────────────────────────────────────────────────
+//
+// Postgres has no SELECT trigger, so every authorized read of medical
+// data is recorded here (migration 201's append-only phi_access_log).
+// Best-effort: a logging failure must never block the clinical read, but
+// it is captured to Sentry so a silently-broken trail is visible.
+
+async function logPhiAccess(
+  gate: TenantGateOk,
+  entry: {
+    resource_type: 'care_case' | 'care_visit' | 'medical_document' | 'medical_authorization' | 'claim_packet'
+    resource_id:   string | null
+    incident_id:   string
+    action:        'view' | 'export' | 'print' | 'download'
+    context?:      string
+  },
+): Promise<void> {
+  try {
+    await supabaseAdmin().from('phi_access_log').insert({
+      tenant_id:     gate.tenantId,
+      actor_id:      gate.userId,
+      actor_email:   gate.userEmail,
+      resource_type: entry.resource_type,
+      resource_id:   entry.resource_id,
+      incident_id:   entry.incident_id,
+      action:        entry.action,
+      context:       entry.context ?? null,
+    })
+  } catch (e) {
+    Sentry.captureException(e, { tags: { route: 'care/phiAccessLog' } })
+  }
+}
+
 // ─── Authorization helper ──────────────────────────────────────────────────
 //
 // Care data is PII-adjacent (diagnosis, restrictions). Members can
@@ -121,6 +154,17 @@ export async function GET(req: Request, ctx: RouteContext) {
         .order('visit_at', { ascending: false })
       if (vErr) throw new Error(vErr.message)
       visits = vs ?? []
+
+      // Record the medical-data disclosure (HIPAA §164.312(b) / ADA
+      // need-to-know trail). Only when a case actually exists — a read
+      // that returns no case discloses no PHI.
+      await logPhiAccess(auth.gate, {
+        resource_type: 'care_case',
+        resource_id:   (caseRow as unknown as { id: string }).id,
+        incident_id:   incidentId,
+        action:        'view',
+        context:       'care GET',
+      })
     }
     return NextResponse.json({ case: caseRow ?? null, visits })
   } catch (e) {
