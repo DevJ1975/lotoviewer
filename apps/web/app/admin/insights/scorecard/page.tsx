@@ -877,6 +877,7 @@ function IncidentScorecardSection({ metrics: m, annualHistory }: {
   const streak = m.daysSinceLastRecordable
   const monthly = mergeMonthly(m.recordablesByMonth, m.nearMissByMonth)
   const bodyParts = m.bodyPartHeatmap.slice(0, 8).map(b => ({ name: humanizeBodyPart(b.body_part), count: b.count }))
+  const injuryNatures = m.injuryNatureBreakdown.slice(0, 8).map(b => ({ name: humanizeNature(b.injury_nature), count: b.count }))
   const yoy = buildYearOverYear(annualHistory, m)
 
   return (
@@ -894,6 +895,13 @@ function IncidentScorecardSection({ metrics: m, annualHistory }: {
         <IncidentStatCard icon={Activity} label="TRIR" value={fmtRate(m.trir)} sub="per 100 FTE" accent="neutral" href="/osha" />
         <IncidentStatCard icon={Activity} label="DART" value={fmtRate(m.dart)} sub="per 100 FTE" accent="neutral" href="/osha" />
         <IncidentStatCard icon={Activity} label="LTIR" value={fmtRate(m.ltir)} sub="per 100 FTE" accent="neutral" href="/osha" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <IncidentStatCard icon={Gauge} label="Severity rate" value={fmtRate(m.severityRate)} sub="days × 200K / hrs" accent="neutral" href="/osha" />
+        <IncidentStatCard icon={ClipboardCheck} label="CAPA on time" value={fmtPct(m.actionClosureOnTimePct)} sub="closed by due date" accent={pctTone(m.actionClosureOnTimePct)} href="/incidents" />
+        <IncidentStatCard icon={ShieldCheck} label="RCA completion" value={fmtPct(m.rcaCompletionPct)} sub={`${m.recordablesWithCompletedRca} of ${m.totalRecordable} recordable`} accent={pctTone(m.rcaCompletionPct)} href="/incidents" />
+        <IncidentStatCard icon={Timer} label="Time to close" value={m.meanTimeToCloseDays === null ? '—' : m.meanTimeToCloseDays.toFixed(1)} sub="avg days, reported→closed" accent="neutral" href="/incidents" />
       </div>
 
       {yoy.length >= 2 && (
@@ -966,18 +974,81 @@ function IncidentScorecardSection({ metrics: m, annualHistory }: {
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Where people are getting hurt" subtitle="Injuries by body part — top reported." loading={false} empty={bodyParts.length === 0} href="/incidents">
-        <ResponsiveContainer width="100%" height={Math.max(160, bodyParts.length * 34)}>
-          <BarChart data={bodyParts} layout="vertical" margin={{ top: 4, right: 28, left: 8, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#dbe3ee" horizontal={false} />
-            <XAxis type="number" allowDecimals={false} stroke="#64748b" tick={{ fontSize: 10 }} />
-            <YAxis type="category" dataKey="name" width={132} stroke="#64748b" tick={{ fontSize: 11 }} />
-            <Tooltip wrapperStyle={{ fontSize: 11 }} cursor={{ fill: 'rgba(15, 23, 42, 0.05)' }} />
-            <Bar dataKey="count" name="Injuries" fill="#1B3A6B" radius={[0, 4, 4, 0]} animationDuration={600} />
-          </BarChart>
-        </ResponsiveContainer>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <ChartCard title="Where people are getting hurt" subtitle="Injuries by body part — top reported." loading={false} empty={bodyParts.length === 0} href="/incidents">
+          <ResponsiveContainer width="100%" height={Math.max(160, bodyParts.length * 34)}>
+            <BarChart data={bodyParts} layout="vertical" margin={{ top: 4, right: 28, left: 8, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#dbe3ee" horizontal={false} />
+              <XAxis type="number" allowDecimals={false} stroke="#64748b" tick={{ fontSize: 10 }} />
+              <YAxis type="category" dataKey="name" width={132} stroke="#64748b" tick={{ fontSize: 11 }} />
+              <Tooltip wrapperStyle={{ fontSize: 11 }} cursor={{ fill: 'rgba(15, 23, 42, 0.05)' }} />
+              <Bar dataKey="count" name="Injuries" fill="#1B3A6B" radius={[0, 4, 4, 0]} animationDuration={600} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="How people are getting hurt" subtitle="Injuries by nature — top reported." loading={false} empty={injuryNatures.length === 0} href="/incidents">
+          <ResponsiveContainer width="100%" height={Math.max(160, injuryNatures.length * 34)}>
+            <BarChart data={injuryNatures} layout="vertical" margin={{ top: 4, right: 28, left: 8, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#dbe3ee" horizontal={false} />
+              <XAxis type="number" allowDecimals={false} stroke="#64748b" tick={{ fontSize: 10 }} />
+              <YAxis type="category" dataKey="name" width={132} stroke="#64748b" tick={{ fontSize: 11 }} />
+              <Tooltip wrapperStyle={{ fontSize: 11 }} cursor={{ fill: 'rgba(15, 23, 42, 0.05)' }} />
+              <Bar dataKey="count" name="Injuries" fill="#0F766E" radius={[0, 4, 4, 0]} animationDuration={600} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </div>
+
+      <ChartCard title="When incidents happen" subtitle="Incident count by shift and weekday." loading={false} empty={m.shiftDayHeatmap.every(b => b.count === 0)} href="/incidents">
+        <ShiftHeatmapGrid buckets={m.shiftDayHeatmap} />
       </ChartCard>
     </section>
+  )
+}
+
+const HEATMAP_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
+const HEATMAP_SHIFTS = ['day', 'swing', 'night', 'unknown'] as const
+const HEATMAP_SHIFT_LABEL: Record<typeof HEATMAP_SHIFTS[number], string> = {
+  day: 'Day', swing: 'Swing', night: 'Night', unknown: 'Unknown',
+}
+
+// Day-of-week × shift heatmap. The summarizer pre-fills all 28 cells, so
+// the grid always renders complete; intensity scales each cell's alpha
+// against the busiest cell.
+function ShiftHeatmapGrid({ buckets }: { buckets: IncidentScorecardMetrics['shiftDayHeatmap'] }) {
+  const countByKey = new Map<string, number>()
+  for (const b of buckets) countByKey.set(`${b.shift}|${b.weekday}`, b.count)
+  const max = buckets.reduce((acc, b) => Math.max(acc, b.count), 0)
+  return (
+    <div className="grid grid-cols-[56px_repeat(7,minmax(0,1fr))] gap-1">
+      <div />
+      {HEATMAP_WEEKDAYS.map(d => (
+        <div key={d} className="text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{d}</div>
+      ))}
+      {HEATMAP_SHIFTS.map(shift => (
+        <div key={shift} className="contents">
+          <div className="self-center text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{HEATMAP_SHIFT_LABEL[shift]}</div>
+          {HEATMAP_WEEKDAYS.map((weekdayLabel, weekday) => {
+            const count = countByKey.get(`${shift}|${weekday}`) ?? 0
+            const intensity = max ? Math.min(1, count / max) : 0
+            const background = count === 0
+              ? 'rgba(148, 163, 184, 0.15)'
+              : `rgba(190, 18, 60, ${0.15 + intensity * 0.7})`
+            return (
+              <div
+                key={shift + weekday}
+                title={count > 0 ? `${HEATMAP_SHIFT_LABEL[shift]} · ${weekdayLabel}: ${count} incident${count === 1 ? '' : 's'}` : `${HEATMAP_SHIFT_LABEL[shift]} · ${weekdayLabel}: no incidents`}
+                className="flex aspect-square items-center justify-center rounded text-[10px] font-mono tabular-nums text-slate-700 dark:text-slate-200"
+                style={{ backgroundColor: background }}
+              >
+                {count > 0 ? count : ''}
+              </div>
+            )
+          })}
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -1064,6 +1135,24 @@ function capitalize(s: string): string {
 
 function fmtRate(v: number | null): string {
   return v === null ? '—' : v.toFixed(2)
+}
+
+function fmtPct(v: number | null): string {
+  return v === null ? '—' : `${Math.round(v)}%`
+}
+
+// Percentage indicators where higher is better (CAPA on-time, RCA
+// completion). Null (no data) stays neutral rather than alarming.
+function pctTone(v: number | null): Tone {
+  if (v === null) return 'neutral'
+  if (v >= 90) return 'safe'
+  if (v >= 70) return 'watch'
+  return 'critical'
+}
+
+// Nature of injury is free text; render it in sentence case for the chart.
+function humanizeNature(nature: string): string {
+  return nature.charAt(0).toUpperCase() + nature.slice(1)
 }
 
 // ── Year-over-year history (from saved OSHA 300A annual summaries) ──────────
