@@ -24,6 +24,7 @@ import {
 import {
   ResponsiveContainer,
   BarChart, Bar,
+  ComposedChart, Line,
   XAxis, YAxis,
   Tooltip,
   CartesianGrid,
@@ -172,6 +173,23 @@ export default function ScorecardPage() {
     return () => { cancelled = true }
   }, [authLoading, profile])
 
+  // Year-over-year history from saved OSHA 300A annual summaries (imported
+  // prior-year data + posted current year). RLS-scoped client-side read; the
+  // current calendar year is overlaid live from incidentMetrics.
+  const [annualHistory, setAnnualHistory] = useState<YearMetric[] | null>(null)
+  useEffect(() => {
+    if (authLoading || !profile?.is_admin) return
+    let cancelled = false
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('osha_annual_summaries')
+        .select('year, totals_json, total_hours_worked')
+      if (error || !data) return
+      if (!cancelled) setAnnualHistory(aggregateAnnualHistory(data as AnnualSummaryRow[]))
+    })()
+    return () => { cancelled = true }
+  }, [authLoading, profile])
+
   // Data-driven incident-risk score (deterministic, computed server-side).
   const [risk, setRisk] = useState<IncidentRiskResult | null>(null)
   useEffect(() => {
@@ -308,7 +326,7 @@ export default function ScorecardPage() {
 
       {risk && <PredictedRiskCard risk={risk} />}
 
-      {incidentMetrics && <IncidentScorecardSection metrics={incidentMetrics} />}
+      {incidentMetrics && <IncidentScorecardSection metrics={incidentMetrics} annualHistory={annualHistory} />}
 
       <div className="flex items-center gap-2 pt-1">
         <span className="ops-section-title text-[11px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Permits &amp; LOTO</span>
@@ -852,10 +870,14 @@ function PredictedRiskCard({ risk }: { risk: IncidentRiskResult }) {
 // LTIR), the 300A recordkeeping roll-up, this-week momentum, the recordable +
 // near-miss trend, and where on the body people are getting hurt. All from the
 // trailing-12-month IncidentScorecardMetrics.
-function IncidentScorecardSection({ metrics: m }: { metrics: IncidentScorecardMetrics }) {
+function IncidentScorecardSection({ metrics: m, annualHistory }: {
+  metrics: IncidentScorecardMetrics
+  annualHistory: YearMetric[] | null
+}) {
   const streak = m.daysSinceLastRecordable
   const monthly = mergeMonthly(m.recordablesByMonth, m.nearMissByMonth)
   const bodyParts = m.bodyPartHeatmap.slice(0, 8).map(b => ({ name: humanizeBodyPart(b.body_part), count: b.count }))
+  const yoy = buildYearOverYear(annualHistory, m)
 
   return (
     <section className="space-y-4">
@@ -873,6 +895,28 @@ function IncidentScorecardSection({ metrics: m }: { metrics: IncidentScorecardMe
         <IncidentStatCard icon={Activity} label="DART" value={fmtRate(m.dart)} sub="per 100 FTE" accent="neutral" href="/osha" />
         <IncidentStatCard icon={Activity} label="LTIR" value={fmtRate(m.ltir)} sub="per 100 FTE" accent="neutral" href="/osha" />
       </div>
+
+      {yoy.length >= 2 && (
+        <ChartCard
+          title="Year over year — TRIR & recordables"
+          subtitle={`${yoy[0]!.year}–${yoy[yoy.length - 1]!.year} · imported history + live current year`}
+          loading={false}
+          empty={false}
+          href="/osha"
+        >
+          <ResponsiveContainer width="100%" height={260}>
+            <ComposedChart data={yoy} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#dbe3ee" vertical={false} />
+              <XAxis dataKey="year" stroke="#64748b" tick={{ fontSize: 10 }} />
+              <YAxis yAxisId="left" allowDecimals={false} stroke="#64748b" tick={{ fontSize: 10 }} />
+              <YAxis yAxisId="right" orientation="right" stroke="#1D3ECF" tick={{ fontSize: 10 }} />
+              <Tooltip wrapperStyle={{ fontSize: 11 }} cursor={{ fill: 'rgba(27, 58, 107, 0.06)' }} />
+              <Bar yAxisId="left" dataKey="recordables" name="Recordables" fill="#cbd5e1" radius={[3, 3, 0, 0]} animationDuration={600} />
+              <Line yAxisId="right" type="monotone" dataKey="trir" name="TRIR" stroke="#1D3ECF" strokeWidth={2.5} dot={{ r: 2 }} animationDuration={700} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      )}
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <div className="ops-surface animate-panel-in rounded-lg p-4">
@@ -1020,4 +1064,64 @@ function capitalize(s: string): string {
 
 function fmtRate(v: number | null): string {
   return v === null ? '—' : v.toFixed(2)
+}
+
+// ── Year-over-year history (from saved OSHA 300A annual summaries) ──────────
+
+interface AnnualSummaryRow {
+  year:              number
+  total_hours_worked: number | null
+  totals_json: {
+    total_deaths?:           number
+    total_days_away?:        number
+    total_restricted?:       number
+    total_other_recordable?: number
+  } | null
+}
+
+export interface YearMetric {
+  year:        number
+  recordables: number
+  trir:        number | null
+  dart:        number | null
+}
+
+const OSHA_RATE = 200_000
+
+// Blend imported prior-year summaries with the live current calendar year
+// (from the trailing-12-month incident metrics) into one sorted YoY series.
+function buildYearOverYear(history: YearMetric[] | null, live: IncidentScorecardMetrics): YearMetric[] {
+  const currentYear = new Date(live.nowMs).getUTCFullYear()
+  const past = (history ?? []).filter(h => h.year < currentYear)
+  const liveYear: YearMetric = {
+    year:        currentYear,
+    recordables: live.totalRecordable,
+    trir:        live.trir,
+    dart:        live.dart,
+  }
+  return [...past, liveYear].sort((a, b) => a.year - b.year)
+}
+
+// Roll establishment-year rows up to one row per year for the tenant, then
+// derive TRIR/DART. A year with no logged hours yields null rates (renders "—").
+function aggregateAnnualHistory(rows: AnnualSummaryRow[]): YearMetric[] {
+  const byYear = new Map<number, { recordable: number; dartCases: number; hours: number }>()
+  for (const r of rows) {
+    const t = r.totals_json ?? {}
+    const recordable = (t.total_deaths ?? 0) + (t.total_days_away ?? 0) + (t.total_restricted ?? 0) + (t.total_other_recordable ?? 0)
+    const dartCases  = (t.total_deaths ?? 0) + (t.total_days_away ?? 0) + (t.total_restricted ?? 0)
+    const e = byYear.get(r.year) ?? { recordable: 0, dartCases: 0, hours: 0 }
+    e.recordable += recordable
+    e.dartCases  += dartCases
+    e.hours      += r.total_hours_worked ?? 0
+    byYear.set(r.year, e)
+  }
+  return [...byYear.entries()]
+    .map(([year, e]) => ({
+      year,
+      recordables: e.recordable,
+      trir: e.hours ? (e.recordable * OSHA_RATE) / e.hours : null,
+      dart: e.hours ? (e.dartCases * OSHA_RATE) / e.hours : null,
+    }))
+    .sort((a, b) => a.year - b.year)
 }

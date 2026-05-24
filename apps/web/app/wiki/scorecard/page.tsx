@@ -1,10 +1,20 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.6.0'
+const CURRENT_VERSION = '1.7.0'
 const LAST_UPDATED    = '2026-05-24'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.7.0',
+    date:    '2026-05-24',
+    changes: [
+      'Year-over-year trend: a TRIR + recordables chart spanning up to 20 ' +
+      'years, built from saved OSHA 300A annual summaries (imported prior-year ' +
+      'data) blended with the live current calendar year. Phase 1 of the ' +
+      'historical-import feature.',
+    ],
+  },
   {
     version: '1.6.0',
     date:    '2026-05-24',
