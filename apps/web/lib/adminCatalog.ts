@@ -207,6 +207,9 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       tile('environmental', 'objectives', null,
         BarChart3, 'Objectives & targets',
         'ISO 14001 clauses 6.2 & 9.1.1 — measurable environmental objectives tracked by periodic readings.'),
+      tile('environmental', 'management-review', null,
+        ScrollText, 'Management review',
+        'ISO 14001 clause 9.3 — periodic EMS management reviews with the standard input/output agenda.'),
     ],
   },
   {
