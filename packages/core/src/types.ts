@@ -492,6 +492,26 @@ export interface HotWorkPermit {
   updated_at:                  string
 }
 
+// Area-condition photo attached to a hot work permit (migration 199).
+// One permit can carry several; `phase` distinguishes pre-work area prep
+// from post-work fire-watch evidence.
+export type HotWorkPhotoPhase = 'pre_work' | 'post_work'
+
+export interface HotWorkPermitPhoto {
+  id:         string
+  permit_id:  string
+  photo_url:  string
+  phase:      HotWorkPhotoPhase
+  caption:    string | null
+  created_at: string
+  created_by: string | null
+}
+
+export const HOT_WORK_PHOTO_PHASE_LABELS: Record<HotWorkPhotoPhase, string> = {
+  pre_work:  'Pre-work area prep',
+  post_work: 'Post-work fire watch',
+}
+
 // Human-readable labels for HotWorkType — used in form pickers and
 // PDF generation. Mirrors the CONFINED_SPACE labels in
 // lib/confinedSpaceLabels.ts (which is where this would live if it

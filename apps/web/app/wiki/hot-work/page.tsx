@@ -1,10 +1,11 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-05'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-05-24'
 
 const CHANGELOG: ChangelogEntry[] = [
+  { version: '1.1.0', date: '2026-05-24', changes: ['Area-condition photos: attach pre-work and post-work fire-watch photos directly to a permit (OSHA 1910.252 / NFPA 51B evidence).'] },
   { version: '1.0.0', date: '2026-05-05', changes: ['Initial hot-work wiki page.'] },
 ]
 
@@ -22,6 +23,7 @@ export default function WikiHotWorkPage() {
       toc={[
         { id: 'overview', label: 'What it\'s for' },
         { id: 'states',   label: 'Permit states' },
+        { id: 'photos',   label: 'Area-condition photos' },
         { id: 'faq',      label: 'FAQ' },
         { id: 'dodonts',  label: 'Do\'s & Don\'ts' },
         { id: 'related',  label: 'Related modules' },
@@ -46,6 +48,27 @@ export default function WikiHotWorkPage() {
           <li><strong>Canceled</strong> — supervisor or admin terminated the permit early.</li>
           <li><strong>Fire observed</strong> — emergency cancel; flagged in red on the status board.</li>
         </ul>
+      </Section>
+
+      <Section id="photos" title="Area-condition photos">
+        <p>
+          Attach photos of the work area directly to a permit as
+          §1910.252(a)(2) / NFPA 51B evidence — combustibles cleared to 35 ft,
+          an extinguisher staged, the fire blanket or shield in place. Open a
+          permit, scroll to <strong>Area condition photos</strong>, and tap{' '}
+          <strong>Add photo</strong> (camera or library; HEIC is handled
+          automatically). Each photo is tagged by lifecycle phase:
+        </p>
+        <ul>
+          <li><strong>Pre-work</strong> — captured before the permit is marked
+            work-complete; documents how the area was prepared.</li>
+          <li><strong>Post-work</strong> — captured after work-complete;
+            documents the fire-watch area while the post-watch countdown runs.</li>
+        </ul>
+        <p>
+          Photos stay with the permit for the OSHA audit trail. Once a permit
+          is closed the gallery is read-only.
+        </p>
       </Section>
 
       <Section id="faq" title="Frequently asked questions">
@@ -113,7 +136,7 @@ export default function WikiHotWorkPage() {
         <DoDont
           dos={[
             'Set the post-watch duration based on the actual hazard, not the minimum (NFPA 51B suggests 30+ minutes; some jobs need 60+).',
-            'Take a "before" photo of the work area attached to the permit so the post-watch attendant knows what to monitor.',
+            'Attach a pre-work photo of the area (Area condition photos → Add photo) so the post-watch attendant knows what to monitor.',
             'Cancel and re-issue if the scope expands materially — the original permit was scoped to the smaller job.',
             'Use Fire observed even for a near-miss spark; the audit trail value comes from honest reporting.',
           ]}
