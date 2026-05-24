@@ -1,5 +1,5 @@
 // Shared logic for the source-agnostic nonconformity & CAPA register
-// (ISO 14001 §10.2 / §9.2; migration 203). The separation-of-duty rule —
+// (ISO 14001 §10.2 / §9.2; migration 206). The separation-of-duty rule —
 // the verifier must differ from the completer — is enforced in the DB; it
 // is mirrored here so the UI can disable "verify" for the completer
 // instead of round-tripping to a failed insert.

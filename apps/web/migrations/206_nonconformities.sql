@@ -1,4 +1,4 @@
--- Migration 203: source-agnostic nonconformity & CAPA register
+-- Migration 206: source-agnostic nonconformity & CAPA register
 -- (ISO 14001 §10.2 / §9.2; benefits ISO 45001 too).
 --
 -- incident_capas (152) and incident_actions (063/198) can only hang off an

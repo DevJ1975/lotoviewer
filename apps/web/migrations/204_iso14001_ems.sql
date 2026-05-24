@@ -1,4 +1,4 @@
--- Migration 201: ISO 14001:2015 Environmental Management System — phase 1.
+-- Migration 204: ISO 14001:2015 Environmental Management System — phase 1.
 --
 -- Two tables, mirroring the ISO 45001 pattern (migration 154):
 --

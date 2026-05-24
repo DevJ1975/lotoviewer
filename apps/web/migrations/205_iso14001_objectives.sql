@@ -1,6 +1,6 @@
--- Migration 202: ISO 14001:2015 EMS — phase 2 (objectives & monitoring).
+-- Migration 205: ISO 14001:2015 EMS — phase 2 (objectives & monitoring).
 --
--- Two tables that turn the significant aspects from migration 201 into a
+-- Two tables that turn the significant aspects from migration 204 into a
 -- managed improvement programme:
 --
 --   1. environmental_objectives — clause 6.2. A measurable (where
@@ -33,7 +33,7 @@ create table if not exists public.environmental_objectives (
 
   title                text        not null check (length(btrim(title)) > 0),
   description          text,
-  -- The significant aspect (migration 201) this objective addresses.
+  -- The significant aspect (migration 204) this objective addresses.
   related_aspect_id    uuid        references public.environmental_aspects(id) on delete set null,
 
   -- What is measured + its unit. Nullable so a qualitative objective is

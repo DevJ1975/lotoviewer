@@ -1,6 +1,6 @@
 // Shared logic for the ISO 14001:2015 clause-6.1.2 environmental aspects
 // & impacts register. Significance uses the same deterministic criterion
-// the database enforces (see migration 201): severity × likelihood on a
+// the database enforces (see migration 204): severity × likelihood on a
 // 1-5 scale, "significant" once the score reaches the high band (≥ 12).
 //
 // Keeping the bands here (not just in SQL) lets the register UI colour
@@ -20,7 +20,7 @@ export type AspectStatus = 'identified' | 'controlled' | 'monitored' | 'closed'
 export type AspectSignificanceBand = 'low' | 'moderate' | 'high' | 'extreme'
 
 /** Score at/above which an aspect is "significant" (drives objectives +
- * operational controls). Mirrors the generated column in migration 201. */
+ * operational controls). Mirrors the generated column in migration 204. */
 export const ASPECT_SIGNIFICANCE_THRESHOLD = 12
 
 /** severity × likelihood, each on a 1-5 scale → 1..25. */

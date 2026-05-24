@@ -1,4 +1,4 @@
--- Migration 204: management review register (ISO 14001:2015 §9.3).
+-- Migration 207: management review register (ISO 14001:2015 §9.3).
 --
 -- Top management reviews the EMS at planned intervals. §9.3.2 prescribes
 -- the inputs (status of prior-review actions; changes in issues,
@@ -11,7 +11,7 @@
 --
 -- A review is one row. Its inputs are captured as a summary and its
 -- outputs as conclusions + decisions. Action items arising from a review
--- are NOT a new table — they are nonconformities (migration 203) with
+-- are NOT a new table — they are nonconformities (migration 206) with
 -- source_type = 'management_review', so they flow through the same §10.2
 -- CAPA + verification loop as every other finding.
 --
