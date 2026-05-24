@@ -167,3 +167,135 @@ export function daysUntilFollowup(
 export function isCaseActive(c: Pick<IncidentCareCaseRow, 'case_status'>): boolean {
   return c.case_status === 'open' || c.case_status === 'modified_duty'
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// Medical authorizations + documents (migration 201 — confidentiality phase)
+// ──────────────────────────────────────────────────────────────────────────
+//
+// These back the ADA / HIPAA-Security-Rule confidentiality work: a signed
+// release that permits disclosure, and metadata for files kept in the
+// restricted `medical-records` bucket (segregated from incident evidence).
+
+export const MEDICAL_AUTHORIZATION_TYPES = [
+  'disclose_to_carrier', 'disclose_to_employer', 'general_medical_release', 'treatment',
+] as const
+export type MedicalAuthorizationType = typeof MEDICAL_AUTHORIZATION_TYPES[number]
+
+export const SIGNATORY_RELATIONS = [
+  'self', 'guardian', 'legal_representative',
+] as const
+export type SignatoryRelation = typeof SIGNATORY_RELATIONS[number]
+
+export const MEDICAL_DOCUMENT_TYPES = [
+  'work_status_note', 'clinic_note', 'fmla', 'authorization',
+  'rtw_plan', 'wage_statement', 'other',
+] as const
+export type MedicalDocumentType = typeof MEDICAL_DOCUMENT_TYPES[number]
+
+// Mirrors phi_access_log's check constraints — shared so the API layer
+// can't drift from the DB enum.
+export const PHI_ACCESS_RESOURCE_TYPES = [
+  'care_case', 'care_visit', 'medical_document', 'medical_authorization', 'claim_packet',
+] as const
+export type PhiAccessResourceType = typeof PHI_ACCESS_RESOURCE_TYPES[number]
+
+export const PHI_ACCESS_ACTIONS = [
+  'view', 'export', 'print', 'download',
+] as const
+export type PhiAccessAction = typeof PHI_ACCESS_ACTIONS[number]
+
+export interface IncidentMedicalAuthorizationRow {
+  id:                  string
+  tenant_id:           string
+  incident_id:         string
+  person_id:           string | null
+  authorization_type:  MedicalAuthorizationType
+  signatory_name:      string | null
+  signatory_relation:  SignatoryRelation | null
+  scope:               string[]
+  signed_at:           string | null
+  effective_at:        string | null
+  expires_at:          string | null
+  revoked_at:          string | null
+  storage_path:        string | null
+  created_at:          string
+  updated_at:          string
+  created_by:          string | null
+  updated_by:          string | null
+}
+
+export interface IncidentMedicalAuthorizationInput {
+  authorization_type:  MedicalAuthorizationType
+  person_id?:          string | null
+  signatory_name?:     string | null
+  signatory_relation?: SignatoryRelation | null
+  scope?:              string[]
+  signed_at?:          string | null
+  effective_at?:       string | null
+  expires_at?:         string | null
+  storage_path?:       string | null
+}
+
+export interface IncidentMedicalDocumentRow {
+  id:               string
+  tenant_id:        string
+  incident_id:      string
+  care_case_id:     string | null
+  doc_type:         MedicalDocumentType
+  storage_path:     string
+  mime_type:        string | null
+  file_size_bytes:  number | null
+  caption:          string | null
+  created_at:       string
+  created_by:       string | null
+}
+
+export function validateMedicalAuthorization(
+  input: Partial<IncidentMedicalAuthorizationInput>,
+): string | null {
+  if (!input.authorization_type
+      || !(MEDICAL_AUTHORIZATION_TYPES as readonly string[]).includes(input.authorization_type))
+    return `Invalid authorization_type: ${input.authorization_type}`
+  if (input.signatory_relation
+      && !(SIGNATORY_RELATIONS as readonly string[]).includes(input.signatory_relation))
+    return `Invalid signatory_relation: ${input.signatory_relation}`
+  if (input.scope && !Array.isArray(input.scope))
+    return 'scope must be an array of strings'
+  for (const k of ['signed_at', 'effective_at', 'expires_at'] as const) {
+    const v = input[k]
+    if (v != null && Number.isNaN(Date.parse(v)))
+      return `${k} is not a valid timestamp`
+  }
+  if (input.effective_at && input.expires_at) {
+    const a = Date.parse(input.effective_at)
+    const b = Date.parse(input.expires_at)
+    if (!Number.isNaN(a) && !Number.isNaN(b) && b < a)
+      return 'expires_at cannot be before effective_at'
+  }
+  return null
+}
+
+export function validateMedicalDocument(
+  input: Partial<Pick<IncidentMedicalDocumentRow, 'doc_type' | 'storage_path'>>,
+): string | null {
+  if (!input.doc_type
+      || !(MEDICAL_DOCUMENT_TYPES as readonly string[]).includes(input.doc_type))
+    return `Invalid doc_type: ${input.doc_type}`
+  if (!input.storage_path || !input.storage_path.trim())
+    return 'storage_path is required'
+  return null
+}
+
+// A consent is usable for disclosure only when signed, in its effective
+// window, and not revoked. The carrier-disclosure paths in later phases
+// gate on this before sharing any medical detail.
+export function isAuthorizationActive(
+  a: Pick<IncidentMedicalAuthorizationRow, 'signed_at' | 'effective_at' | 'expires_at' | 'revoked_at'>,
+  now: Date = new Date(),
+): boolean {
+  if (!a.signed_at || a.revoked_at) return false
+  const t = now.getTime()
+  if (a.effective_at && Date.parse(a.effective_at) > t) return false
+  if (a.expires_at && Date.parse(a.expires_at) < t) return false
+  return true
+}

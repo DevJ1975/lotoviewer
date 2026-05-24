@@ -5,6 +5,11 @@ import {
   daysUntilFollowup,
   isCaseActive,
   CARE_CASE_STATUSES,
+  validateMedicalAuthorization,
+  validateMedicalDocument,
+  isAuthorizationActive,
+  MEDICAL_AUTHORIZATION_TYPES,
+  MEDICAL_DOCUMENT_TYPES,
 } from '@soteria/core/incidentCare'
 
 describe('validateCareCasePatch', () => {
@@ -106,4 +111,100 @@ describe('isCaseActive', () => {
       expect(isCaseActive({ case_status: s })).toBe(false)
     },
   )
+})
+
+describe('validateMedicalAuthorization', () => {
+  it('accepts every valid authorization_type', () => {
+    for (const t of MEDICAL_AUTHORIZATION_TYPES) {
+      expect(validateMedicalAuthorization({ authorization_type: t })).toBeNull()
+    }
+  })
+
+  it('rejects a missing/unknown authorization_type', () => {
+    expect(validateMedicalAuthorization({})).toMatch(/authorization_type/i)
+    expect(validateMedicalAuthorization({ authorization_type: 'verbal_ok' as never }))
+      .toMatch(/authorization_type/i)
+  })
+
+  it('rejects an unknown signatory_relation', () => {
+    expect(validateMedicalAuthorization({
+      authorization_type: 'disclose_to_carrier',
+      signatory_relation: 'spouse' as never,
+    })).toMatch(/signatory_relation/i)
+  })
+
+  it('rejects a non-array scope', () => {
+    expect(validateMedicalAuthorization({
+      authorization_type: 'general_medical_release',
+      scope: 'everything' as never,
+    })).toMatch(/scope/i)
+  })
+
+  it('rejects expires_at before effective_at', () => {
+    expect(validateMedicalAuthorization({
+      authorization_type: 'disclose_to_carrier',
+      effective_at: '2026-04-10T00:00:00Z',
+      expires_at:   '2026-04-01T00:00:00Z',
+    })).toMatch(/expires_at/i)
+  })
+
+  it('rejects a malformed timestamp', () => {
+    expect(validateMedicalAuthorization({
+      authorization_type: 'treatment',
+      signed_at: 'last tuesday',
+    })).toMatch(/timestamp/i)
+  })
+})
+
+describe('validateMedicalDocument', () => {
+  it('accepts every valid doc_type with a path', () => {
+    for (const t of MEDICAL_DOCUMENT_TYPES) {
+      expect(validateMedicalDocument({ doc_type: t, storage_path: 't/i/x.pdf' })).toBeNull()
+    }
+  })
+
+  it('rejects an unknown doc_type', () => {
+    expect(validateMedicalDocument({ doc_type: 'x-ray' as never, storage_path: 'a' }))
+      .toMatch(/doc_type/i)
+  })
+
+  it('requires a storage_path', () => {
+    expect(validateMedicalDocument({ doc_type: 'clinic_note', storage_path: '  ' }))
+      .toMatch(/storage_path/i)
+  })
+})
+
+describe('isAuthorizationActive', () => {
+  const at = '2026-04-10T00:00:00Z'
+  const now = new Date('2026-04-10T12:00:00Z')
+
+  it('is false when never signed', () => {
+    expect(isAuthorizationActive(
+      { signed_at: null, effective_at: null, expires_at: null, revoked_at: null }, now,
+    )).toBe(false)
+  })
+
+  it('is false when revoked', () => {
+    expect(isAuthorizationActive(
+      { signed_at: at, effective_at: null, expires_at: null, revoked_at: at }, now,
+    )).toBe(false)
+  })
+
+  it('is false before the effective date', () => {
+    expect(isAuthorizationActive(
+      { signed_at: at, effective_at: '2026-05-01T00:00:00Z', expires_at: null, revoked_at: null }, now,
+    )).toBe(false)
+  })
+
+  it('is false after expiry', () => {
+    expect(isAuthorizationActive(
+      { signed_at: at, effective_at: null, expires_at: '2026-04-09T00:00:00Z', revoked_at: null }, now,
+    )).toBe(false)
+  })
+
+  it('is true when signed and inside the window', () => {
+    expect(isAuthorizationActive(
+      { signed_at: at, effective_at: at, expires_at: '2026-12-31T00:00:00Z', revoked_at: null }, now,
+    )).toBe(true)
+  })
 })
