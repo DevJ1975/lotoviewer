@@ -18,6 +18,9 @@ export interface ScorecardWeatherReportArgs {
   appUrl:        string
   tenantName?:   string | null
   tenantId?:     string | null
+  /** Data-driven incident-risk score (0–100) + band + the single biggest
+   *  driver ("where to focus"). Omitted when unavailable. */
+  risk?:         { score: number; band: string; topDriver?: string | null } | null
   /** RFC 8058 unsubscribe URL. When set, adds the List-Unsubscribe headers
    *  and a footer link; omit it and the email goes out unchanged. */
   unsubscribeUrl?: string | null
@@ -77,7 +80,9 @@ ${lines.join('\n')}
 To date:
   TRIR: ${fmtRate(a.trir)}
   DART: ${fmtRate(a.dart)}
-
+${a.risk ? `
+Predicted incident risk: ${Math.round(a.risk.score)}/100 (${a.risk.band})${a.risk.topDriver ? `\n  Focus area: ${a.risk.topDriver}` : ''}
+` : ''}
 Full scorecard: ${a.appUrl}/admin/insights/scorecard
 
 — SoteriaField
@@ -126,6 +131,13 @@ function renderHtml(a: ScorecardWeatherReportArgs, unsubscribeUrl: string | null
           </td>
         </tr>
       </table>
+      ${a.risk ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:16px;border:1px solid #e6ebf2;border-radius:10px;">
+        <tr><td style="padding:12px 14px;">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#5b6675;">Predicted incident risk</div>
+          <div style="font-size:22px;font-weight:800;margin-top:2px;">${Math.round(a.risk.score)}<span style="font-size:13px;color:#5b6675;font-weight:600;">/100 · ${safe(a.risk.band)}</span></div>
+          ${a.risk.topDriver ? `<div style="font-size:12px;color:#5b6675;margin-top:4px;">Focus area: ${safe(a.risk.topDriver)}</div>` : ''}
+        </td></tr>
+      </table>` : ''}
       <p style="margin:20px 0 0 0;text-align:center;">
         <a href="${safe(a.appUrl)}/admin/insights/scorecard" style="display:inline-block;background:#1D3ECF;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:11px 22px;border-radius:10px;">Open the scorecard →</a>
       </p>

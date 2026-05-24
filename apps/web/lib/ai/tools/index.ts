@@ -2,6 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { FEATURES } from '@soteria/core'
 import { trir as trirRate, dart as dartRate } from '@soteria/core/incidentScorecardMetrics'
+import { computeIncidentRisk } from '@/lib/incidentRiskFeatures'
 
 // Tool registry for the home-page assistant.
 //
@@ -640,6 +641,22 @@ const navigate_to: ToolDef = {
   },
 }
 
+const incident_risk_score: ToolDef = {
+  definition: {
+    name: 'incident_risk_score',
+    description:
+      "Get the tenant's current data-driven incident risk score (0–100) and band, plus the ranked drivers — the specific factors raising risk and where to work to lower the probability of an incident. Deterministic (not an opinion). Use for \"what is our incident risk\", \"where should we focus to prevent incidents\", \"are we getting safer\".",
+    input_schema: { type: 'object', properties: {} },
+  },
+  async handler(_input, ctx) {
+    try {
+      return ok(await computeIncidentRisk(supabaseAdmin(), ctx.tenantId))
+    } catch (e) {
+      return fail(e instanceof Error ? e.message : 'failed to compute incident risk')
+    }
+  },
+}
+
 // ── Registry ─────────────────────────────────────────────────────────────
 
 export const ASSISTANT_TOOLS: Record<string, ToolDef> = {
@@ -656,6 +673,7 @@ export const ASSISTANT_TOOLS: Record<string, ToolDef> = {
   compliance_obligations_due,
   near_misses_recent,
   scorecard_kpis,
+  incident_risk_score,
   navigate_to,
   open_support_ticket,
   send_alert,
