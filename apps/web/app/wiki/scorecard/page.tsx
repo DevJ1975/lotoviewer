@@ -1,10 +1,22 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.4.0'
+const CURRENT_VERSION = '1.5.0'
 const LAST_UPDATED    = '2026-05-24'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.5.0',
+    date:    '2026-05-24',
+    changes: [
+      'Injury & OSHA recordkeeping section now leads the scorecard: days ' +
+      'since last recordable, TRIR / DART / LTIR, the OSHA 300A recordkeeping ' +
+      'roll-up (days-away / restricted / other recordable), this-week-vs-last ' +
+      'movement, a recordable + near-miss monthly trend, and a "where people ' +
+      'are getting hurt" body-part chart — all trailing 12 months. The ' +
+      'permit / atmospheric / LOTO tiles move below it.',
+    ],
+  },
   {
     version: '1.4.0',
     date:    '2026-05-24',
