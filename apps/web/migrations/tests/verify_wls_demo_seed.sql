@@ -1,8 +1,8 @@
--- Verification test for the WLS Demo seed (migration 199 + the
+-- Verification test for the WLS Demo seed (migration 200 + the
 -- seed_wls_incidents_demo / seed_wls_near_miss_demo / seed_wls_bbs_demo
 -- functions). Asserts that the seed reconciles with the EHS scorecard.
 --
--- Usage (run AFTER the seed has been applied — migration 199 self-seeds on
+-- Usage (run AFTER the seed has been applied — migration 200 self-seeds on
 -- apply, or run Reset Demo / the seed_*.sql wrappers first):
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f \
 --     apps/web/migrations/tests/verify_wls_demo_seed.sql
