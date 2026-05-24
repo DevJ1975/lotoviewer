@@ -21,6 +21,7 @@ import { VERSION_LINE } from '@/lib/version'
 import AppDrawer from '@/components/AppDrawer'
 import CommandPalette from '@/components/CommandPalette'
 import TenantHeaderPill from '@/components/TenantHeaderPill'
+import FacilityHeaderPill from '@/components/FacilityHeaderPill'
 import SupportBot from '@/components/SupportBot'
 import AssistantDock from '@/components/AssistantDock'
 import OnboardingDialog from '@/components/OnboardingDialog'
@@ -110,6 +111,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
             </Link>
 
             <TenantHeaderPill />
+            <FacilityHeaderPill />
 
             {inPlatformOpsMode && (
               <span

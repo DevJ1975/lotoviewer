@@ -120,5 +120,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: insertErr.message }, { status: 500 })
   }
 
+  // Every tenant needs a primary facility (migrations 199-201): it's the
+  // default scope for facility-aware records and the auto-selected facility
+  // for single-facility tenants. Best-effort — a failure here is recoverable
+  // (migration 199's backfill mints one for any tenant missing it), so we log
+  // it rather than failing the tenant creation.
+  const { error: facilityErr } = await admin
+    .from('facilities')
+    .insert({ tenant_id: tenant.id, name, is_primary: true })
+  if (facilityErr) {
+    Sentry.captureException(facilityErr,
+      { tags: { route: '/api/superadmin/tenants', stage: 'primary-facility' } })
+  }
+
   return NextResponse.json({ tenant }, { status: 201 })
 }
