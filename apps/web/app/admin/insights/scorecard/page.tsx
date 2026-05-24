@@ -454,7 +454,11 @@ function InfographicTile({
 }) {
   const style = TONE_STYLES[tone]
   return (
-    <article className={`ops-surface-interactive ops-surface animate-panel-in rounded-lg p-4 ${style.border}`}>
+    <article
+      tabIndex={0}
+      title={`${label}: ${display} ${unit} — ${narrative}`}
+      className={`ops-surface-interactive ops-surface animate-panel-in rounded-lg p-4 outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/40 dark:focus-visible:ring-brand-yellow/40 ${style.border}`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-black uppercase text-slate-500 dark:text-slate-400">{label}</p>
@@ -504,7 +508,7 @@ function RadialGauge({ percent, tone, inverse = false }: { percent: number; tone
   const offset = circumference - (clamped / 100) * circumference
   const targetLabel = inverse ? 'lower is better' : 'target 90%+'
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex cursor-help items-center gap-3" title={`${Math.round(clamped)}% · ${targetLabel}`}>
       <svg viewBox="0 0 92 92" className="h-20 w-20 shrink-0 -rotate-90">
         <circle cx="46" cy="46" r={radius} fill="none" stroke="rgba(148, 163, 184, 0.24)" strokeWidth="9" />
         <circle
@@ -536,7 +540,7 @@ function DurationTimeline({ minutes }: { minutes: number }) {
   const tone = durationTone(minutes)
   const style = TONE_STYLES[tone]
   return (
-    <div className="rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/50">
+    <div className="cursor-help rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/50" title={`Average closure: ${humanizeMin(minutes)}`}>
       <div className="flex justify-between text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">
         <span>0m</span>
         <span>2h</span>
@@ -558,7 +562,7 @@ function SensorStack({ percent, tone }: { percent: number; tone: Tone }) {
   const style = TONE_STYLES[tone]
   const active = Math.ceil(clamp(percent, 0, 100) / 20)
   return (
-    <div className="grid grid-cols-5 gap-1.5 rounded-md border border-slate-200 bg-slate-50 p-2 dark:border-slate-800 dark:bg-slate-950/50">
+    <div className="grid cursor-help grid-cols-5 gap-1.5 rounded-md border border-slate-200 bg-slate-50 p-2 dark:border-slate-800 dark:bg-slate-950/50" title={`${Math.round(clamp(percent, 0, 100))}% failing readings`}>
       {[0, 1, 2, 3, 4].map(i => (
         <div key={i} className="flex h-20 flex-col-reverse gap-1">
           {[0, 1, 2, 3].map(j => {

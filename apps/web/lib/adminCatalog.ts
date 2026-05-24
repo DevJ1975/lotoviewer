@@ -317,11 +317,21 @@ export function getAdminTile(slug: string): AdminTile | undefined {
 export function getAdminRedirects(): Array<{ source: string; destination: string; permanent: true }> {
   const tileRedirects = getAllAdminTiles()
     .filter(t => t.legacyHref)
-    .map(t => ({
-      source:      `${t.legacyHref}/:path*`,
-      destination: `${t.href}/:path*`,
-      permanent:   true as const,
-    }))
+    .map(t => {
+      const legacy = t.legacyHref as string
+      // When the new canonical href is nested *under* the legacy path — e.g.
+      // the Risk Intelligence tile moved /admin/insights → /admin/insights/
+      // risk-intelligence — a `/:path*` source greedily matches the live
+      // /admin/insights/* pages (scorecard, ai-usage, …) and, because the
+      // destination is itself under /admin/insights, every hop re-matches the
+      // source: an infinite redirect loop (ERR_TOO_MANY_REDIRECTS). Redirect
+      // the bare legacy path exactly in that case; otherwise carry subroutes
+      // through with `/:path*`.
+      const nested = t.href === legacy || t.href.startsWith(`${legacy}/`)
+      return nested
+        ? { source: legacy, destination: t.href, permanent: true as const }
+        : { source: `${legacy}/:path*`, destination: `${t.href}/:path*`, permanent: true as const }
+    })
   const sectionLanders = ADMIN_SECTIONS.map(s => ({
     source:      `/admin/${s.urlSegment}`,
     destination: '/admin',

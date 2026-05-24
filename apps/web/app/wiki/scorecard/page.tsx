@@ -1,10 +1,19 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.3.0'
+const CURRENT_VERSION = '1.4.0'
 const LAST_UPDATED    = '2026-05-24'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.4.0',
+    date:    '2026-05-24',
+    changes: [
+      'Interactive infographics: the metric tiles are keyboard-focusable, and ' +
+      'hovering (or focusing) the gauges, the permit-cycle timeline, and the ' +
+      'atmospheric sensor stack reveals the exact value behind the shape.',
+    ],
+  },
   {
     version: '1.3.0',
     date:    '2026-05-24',
