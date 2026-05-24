@@ -196,6 +196,17 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     ],
   },
   {
+    id:          'environmental',
+    urlSegment:  'environmental',
+    title:       'Environmental Management',
+    description: 'ISO 14001:2015 environmental aspects, impacts, and significance.',
+    tiles: [
+      tile('environmental', 'aspects', null,
+        Mountain, 'Aspects & impacts register',
+        'ISO 14001 clause 6.1.2 — environmental aspects, impacts, and significance scoring.'),
+    ],
+  },
+  {
     id:          'compliance',
     urlSegment:  'compliance',
     title:       'Compliance Operations',
