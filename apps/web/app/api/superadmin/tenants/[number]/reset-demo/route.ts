@@ -164,6 +164,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     } else if (typeof readinessData === 'string') {
       seedResult = seedResult ? `${seedResult}; ${readinessData}` : readinessData
     }
+
+    // Module seeds added after the original WLS demo seed (migration 196):
+    // incidents/investigations, dedicated near-miss reports, and BBS
+    // observations. The wipe above clears bbs_observations, so these
+    // restore them; incidents/near_misses re-seed idempotently. Older
+    // databases without these functions return 42883/PGRST202 and are
+    // skipped so the reset still succeeds.
+    for (const fn of ['seed_wls_incidents_demo', 'seed_wls_near_miss_demo', 'seed_wls_bbs_demo'] as const) {
+      const { data: modData, error: modErr } = await admin.rpc(fn)
+      if (modErr) {
+        const code = (modErr as { code?: string }).code
+        if (code !== '42883' && code !== 'PGRST202') {
+          Sentry.captureException(modErr, { tags: { route: '/api/superadmin/tenants/[number]/reset-demo', stage: `rpc-${fn}` } })
+          return NextResponse.json({
+            error: `Re-seed (${fn}) failed: ${modErr.message}`,
+            wiped,
+          }, { status: 500 })
+        }
+      } else if (typeof modData === 'string') {
+        seedResult = seedResult ? `${seedResult}; ${modData}` : modData
+      }
+    }
   } else {
     seedSkipped = true
   }
