@@ -22,6 +22,7 @@ import {
   Siren,
   Sparkles,
   Tag,
+  Truck,
   Users,
   Webhook,
 } from 'lucide-react'
@@ -182,7 +183,7 @@ const MODULE_ICONS: Record<string, ModuleIconComponent> = {
   AlertOctagon, AlertTriangle, BarChart3, Bell, BookOpen, Brush,
   CalendarClock, ClipboardList, Eye, FileArchive, GraduationCap, LifeBuoy,
   Megaphone, MessageSquare, Mountain, Settings, ShieldAlert, Siren,
-  Sparkles, Tag, Webhook, Recycle,
+  Sparkles, Tag, Truck, Webhook, Recycle,
 }
 
 const FALLBACK_ICON: ModuleIconComponent = Box

@@ -1,6 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { ModulesGrid } from '@/app/_components/ModulesGrid'
+import { getModules } from '@soteria/core/features'
 
 // Stub useTenant — we want to drive the visibility logic directly,
 // not mount the real provider (which fetches Supabase).
@@ -26,16 +27,10 @@ describe('ModulesGrid', () => {
   })
 
   it('returns null when no modules are visible', () => {
-    mockUseTenant.mockReturnValue({
-      tenant: tenantWith({
-        'my-safety-readiness': false, 'equipment-readiness': false,
-        loto: false, 'confined-spaces': false, 'hot-work': false,
-        'risk-assessment': false, 'jha': false, 'near-miss': false,
-        'incidents': false, 'toolbox-talks': false, 'safety-boards': false,
-        'bbs': false, 'chemicals': false,
-        strike: false,
-      }),
-    })
+    // Disable every top-level safety module (derive from the registry so a
+    // newly-added module doesn't silently leave this grid non-empty).
+    const allOff = Object.fromEntries(getModules('safety').map(m => [m.id, false]))
+    mockUseTenant.mockReturnValue({ tenant: tenantWith(allOff) })
     const { container } = render(<ModulesGrid />)
     expect(container.firstChild).toBeNull()
   })
