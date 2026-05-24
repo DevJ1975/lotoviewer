@@ -1,10 +1,24 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.8.0'
+const CURRENT_VERSION = '1.9.0'
 const LAST_UPDATED    = '2026-05-24'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.9.0',
+    date:    '2026-05-24',
+    changes: [
+      'Goals: set a target for TRIR, DART, recordables, CAPA on-time %, and ' +
+      'RCA completion % right on the board (Edit goals). The TRIR goal draws ' +
+      'a line on the year-over-year chart, and each metric shows a ' +
+      'progress-to-goal chip.',
+      'Industry benchmark: your TRIR / DART now sit against the BLS average ' +
+      'for your establishment’s NAICS sector, overlaid on the ' +
+      'year-over-year chart. Override the built-in BLS default with your own ' +
+      'peer figure if you have one.',
+    ],
+  },
   {
     version: '1.8.0',
     date:    '2026-05-24',
@@ -147,6 +161,7 @@ export default function WikiScorecardPage() {
           <li>Days since last recordable, this-week-vs-last movement, recordable + near-miss trend</li>
           <li>Where &amp; how people are getting hurt — body-part and nature-of-injury breakdowns</li>
           <li>When incidents cluster — a shift × weekday heatmap</li>
+          <li>Goals vs. actuals + your TRIR/DART vs. the BLS industry benchmark for your sector</li>
           <li>Confined-space permits issued, completed, expired, canceled</li>
           <li>Atmospheric-test failures and the spaces that drove them</li>
           <li>LOTO photo-completion percentage trend</li>
