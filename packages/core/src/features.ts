@@ -1006,6 +1006,16 @@ export const FEATURES: FeatureDef[] = [
     enabled:     true,
     comingSoon:  false,
   },
+  {
+    id:          'fleet-inspections',
+    name:        'Inspections',
+    description: 'Pre-trip vehicle safety checklists (FMCSA 49 CFR 396.13); a failed check pulls the vehicle out of service',
+    href:        '/fleet/inspections',
+    category:    'safety',
+    parent:      'fleet-safety',
+    enabled:     true,
+    comingSoon:  false,
+  },
 ]
 
 // ─── Lookups ───────────────────────────────────────────────────────────────

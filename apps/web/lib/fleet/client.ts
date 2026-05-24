@@ -119,6 +119,40 @@ export async function deleteDriver(tenantId: string, id: string): Promise<void> 
   await readJson(res)
 }
 
+// ── Inspections ─────────────────────────────────────────────────────────────
+export interface InspectionRow {
+  id: string; vehicle_id: string; driver_id: string | null
+  inspection_type: string; performed_at: string; odometer_miles: number | null
+  items: { key: string; label: string; status: 'pass' | 'fail' | 'na'; note?: string }[]
+  passed: boolean; defects_noted: string | null
+  fleet_vehicles?: { unit_number: string | null; make: string | null; model: string | null } | null
+  fleet_driver_profiles?: { id: string; loto_workers?: { full_name: string } | null } | null
+}
+
+export async function listVehicleInspections(tenantId: string, vehicleId: string): Promise<InspectionRow[]> {
+  const res = await fetch(`/api/fleet/vehicles/${vehicleId}/inspections`, { headers: await headers(tenantId) })
+  return (await readJson<{ inspections: InspectionRow[] }>(res)).inspections
+}
+
+export async function listInspections(tenantId: string, opts: { failedOnly?: boolean } = {}): Promise<InspectionRow[]> {
+  const u = new URL('/api/fleet/inspections', window.location.origin)
+  if (opts.failedOnly) u.searchParams.set('failedOnly', 'true')
+  const res = await fetch(u.pathname + u.search, { headers: await headers(tenantId) })
+  return (await readJson<{ inspections: InspectionRow[] }>(res)).inspections
+}
+
+export async function createInspection(tenantId: string, vehicleId: string, body: {
+  inspection_type?: string
+  items: { key: string; label: string; status: 'pass' | 'fail' | 'na'; note?: string }[]
+  driver_id?: string | null
+  odometer_miles?: number | null
+}): Promise<{ passed: boolean; vehicleOutOfService: boolean }> {
+  const res = await fetch(`/api/fleet/vehicles/${vehicleId}/inspections`, {
+    method: 'POST', headers: await headers(tenantId, true), body: JSON.stringify(body),
+  })
+  return readJson<{ passed: boolean; vehicleOutOfService: boolean }>(res)
+}
+
 // ── Picker queries (read directly via RLS-scoped supabase client) ───────────
 export interface WorkerOption { id: string; full_name: string; employee_id: string | null }
 

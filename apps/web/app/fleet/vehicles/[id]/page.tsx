@@ -3,13 +3,14 @@
 import { use, useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Truck, Loader2, Pencil, Trash2, Upload, ShieldAlert, FileText, FlaskConical, Siren, X } from 'lucide-react'
+import { Truck, Loader2, Pencil, Trash2, Upload, ShieldAlert, FileText, FlaskConical, Siren, X, ClipboardCheck, Check } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { PageHeader } from '@/components/PageHeader'
 import {
   getVehicle, updateVehicle, deleteVehicle, putPlacards, putChemicals,
   addDocument, deleteDocument, uploadFleetFile, fleetSignedUrl, removeFleetFile,
-  searchChemicalProducts, type VehicleChemicalRow, type ChemicalOption,
+  searchChemicalProducts, listVehicleInspections,
+  type VehicleChemicalRow, type ChemicalOption, type InspectionRow,
 } from '@/lib/fleet/client'
 import { VehicleForm } from '../../_components/VehicleForm'
 import {
@@ -102,13 +103,16 @@ export default function VehicleDetailPage({ params }: { params: Promise<{ id: st
         title={title}
         description={[vehicle.model_year, vehicle.make, vehicle.model].filter(Boolean).join(' ') || undefined}
         back="/fleet/vehicles"
-        actions={isAdmin ? (
+        actions={
           <div className="flex items-center gap-2">
-            <Link href={`/incidents/new?source=fleet&vehicle=${id}`} className="inline-flex items-center gap-1.5 rounded-md border border-rose-200 px-3 py-1.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 dark:border-rose-900 dark:text-rose-300"><Siren className="h-4 w-4" /> Report incident</Link>
-            <button onClick={() => setEditing(true)} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"><Pencil className="h-4 w-4" /> Edit</button>
-            <button onClick={handleDelete} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700"><Trash2 className="h-4 w-4" /></button>
+            <Link href={`/fleet/vehicles/${id}/inspect`} className="inline-flex items-center gap-1.5 rounded-md bg-brand-navy px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-navy/90"><ClipboardCheck className="h-4 w-4" /> Inspect</Link>
+            {isAdmin && <>
+              <Link href={`/incidents/new?source=fleet&vehicle=${id}`} className="inline-flex items-center gap-1.5 rounded-md border border-rose-200 px-3 py-1.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 dark:border-rose-900 dark:text-rose-300"><Siren className="h-4 w-4" /> Report incident</Link>
+              <button onClick={() => setEditing(true)} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"><Pencil className="h-4 w-4" /> Edit</button>
+              <button onClick={handleDelete} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700"><Trash2 className="h-4 w-4" /></button>
+            </>}
           </div>
-        ) : undefined}
+        }
       />
 
       {hazmat.messages.length > 0 && (
@@ -126,7 +130,45 @@ export default function VehicleDetailPage({ params }: { params: Promise<{ id: st
       <PlacardManager vehicleId={id} placards={placards} canEdit={isAdmin} onSaved={setPlacards} tenantId={tenantId ?? ''} />
       <ChemicalManager vehicleId={id} chemicals={chemicals} canEdit={isAdmin} onSaved={setChemicals} tenantId={tenantId ?? ''} />
       <DocumentManager vehicleId={id} documents={documents} canEdit={isAdmin} onChange={load} tenantId={tenantId ?? ''} />
+      <InspectionHistory vehicleId={id} tenantId={tenantId ?? ''} />
     </main>
+  )
+}
+
+// ── Inspection history ──────────────────────────────────────────────────────
+function InspectionHistory({ vehicleId, tenantId }: { vehicleId: string; tenantId: string }) {
+  const [rows, setRows] = useState<InspectionRow[]>([])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    if (!tenantId) return
+    let cancelled = false
+    void listVehicleInspections(tenantId, vehicleId)
+      .then(r => { if (!cancelled) setRows(r) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [tenantId, vehicleId])
+
+  return (
+    <Card title="Inspection history" icon={ClipboardCheck}>
+      {loading ? <p className="text-sm text-slate-500">Loading…</p>
+        : rows.length === 0 ? <p className="text-sm text-slate-500">No inspections recorded yet.</p>
+        : (
+          <ul className="space-y-2">
+            {rows.map(r => (
+              <li key={r.id} className="flex items-center justify-between gap-2 rounded-md border border-slate-100 px-3 py-2 dark:border-slate-800">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{r.inspection_type.replace(/_/g, '-')} · {new Date(r.performed_at).toLocaleDateString()}</p>
+                  <p className="text-xs text-slate-500">{r.fleet_driver_profiles?.loto_workers?.full_name ?? 'Unknown'}{r.defects_noted ? ` · ${r.defects_noted}` : ''}</p>
+                </div>
+                {r.passed
+                  ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"><Check className="h-3 w-3" /> Pass</span>
+                  : <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"><X className="h-3 w-3" /> Fail</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+    </Card>
   )
 }
 
