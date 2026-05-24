@@ -1,4 +1,4 @@
--- Migration 201: Fleet Safety — pre-trip vehicle inspections (Phase 2).
+-- Migration 203: Fleet Safety — pre-trip vehicle inspections (Phase 2).
 --
 -- A driver runs a checklist against a vehicle before a trip (and optionally
 -- post-trip / periodic). Mirrors the equipment-readiness pre-use pattern:
@@ -8,7 +8,7 @@
 -- flips fleet_vehicles.status — kept explicit rather than a trigger so the
 -- side effect is visible at the call site).
 --
--- Standard tenant_id + RLS + audit/touch triggers, same as migration 200.
+-- Standard tenant_id + RLS + audit/touch triggers, same as migration 202.
 
 begin;
 
