@@ -25,7 +25,7 @@ const SELECT_COLS = [
   'id', 'tenant_id', 'incident_id',
   'action_type', 'hierarchy_of_controls',
   'description', 'owner_user_id', 'due_at',
-  'status', 'completed_at', 'verified_at', 'verified_by',
+  'status', 'completed_at', 'completed_by', 'verified_at', 'verified_by',
   'verification_evidence', 'source_rca_node_id', 'cancel_reason',
   'created_at', 'updated_at', 'created_by', 'updated_by',
 ].join(', ')
@@ -111,15 +111,15 @@ export async function PATCH(req: Request, ctx: RouteContext) {
       }, { status: 400 })
     }
 
-    // Separation-of-duty: a 'verified' transition requires a verifier
-    // who didn't close the action. The closer is whoever owned/
-    // updated_by the action when it crossed into 'complete'. Phase 1
-    // approximation: verified_by must be different from the
-    // owner_user_id and from updated_by on the existing row.
+    // Separation-of-duty (ISO 45001 §10.2): a 'verified' transition
+    // requires a verifier who didn't complete the action. We key off the
+    // recorded completer (completed_by); for legacy rows that predate
+    // migration 198 (no completer captured) we fall back to the owner.
     if (body.status === 'verified') {
-      if (cur.owner_user_id === gate.userId) {
+      const completer = cur.completed_by ?? cur.owner_user_id
+      if (completer === gate.userId) {
         return NextResponse.json({
-          error: 'Verifier must be a different user than the action owner (separation of duty).',
+          error: 'Verification must be performed by a different user than the one who completed the action (separation of duty).',
         }, { status: 403 })
       }
     }
@@ -134,7 +134,12 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     // before the constraint fires.
     const nextStatus = (body.status ?? cur.status) as IncidentActionStatus
     if (nextStatus === 'complete') {
-      if (!cur.completed_at) update.completed_at = new Date().toISOString()
+      // Capture who completed it (the completer) the first time it crosses
+      // into 'complete' — this is what the verify gate keys off.
+      if (!cur.completed_at) {
+        update.completed_at = new Date().toISOString()
+        update.completed_by = gate.userId
+      }
       // verified fields stay null; will be filled when a different
       // user transitions to 'verified'.
     } else if (nextStatus === 'verified') {
@@ -144,9 +149,10 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     } else if (nextStatus === 'in_progress' || nextStatus === 'open' || nextStatus === 'blocked') {
       // Reopening — clear completion stamps so the row honours the
       // CHECK constraint.
-      if (cur.completed_at) update.completed_at = null
-      if (cur.verified_at)  update.verified_at  = null
-      if (cur.verified_by)  update.verified_by  = null
+      if (cur.completed_at)  update.completed_at = null
+      if (cur.completed_by)  update.completed_by = null
+      if (cur.verified_at)   update.verified_at  = null
+      if (cur.verified_by)   update.verified_by  = null
     }
 
     const { data, error } = await admin

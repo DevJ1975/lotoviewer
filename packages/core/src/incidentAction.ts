@@ -71,6 +71,11 @@ export interface IncidentActionRow {
   due_at:                  string | null
   status:                  IncidentActionStatus
   completed_at:            string | null
+  /** Who marked the action complete — drives the ISO 45001 §10.2
+   *  separation-of-duty gate (the verifier must differ). Optional on the
+   *  type so existing callers that select a narrower column set still
+   *  type-check; null/absent on rows completed before migration 198. */
+  completed_by?:           string | null
   verified_at:             string | null
   verified_by:             string | null
   verification_evidence:   string | null
@@ -151,6 +156,22 @@ export function isClosedOnTime(action: Pick<IncidentActionRow, 'status' | 'compl
   if (!action.completed_at) return false
   if (!action.due_at) return true
   return new Date(action.completed_at).getTime() <= new Date(action.due_at).getTime()
+}
+
+// ISO 45001 §10.2 separation-of-duty gate: the user verifying a completed
+// action must be different from the one who completed it. Returns true when
+// the verify action is allowed. Lets the UI hide the control + the API
+// reject without a roundtrip; the DB trigger (migration 198) is the
+// backstop. Legacy rows with no captured completer (completed_by null) read
+// as verifiable — the API still falls back to the owner check there.
+export function canVerifyAction(
+  action: Pick<IncidentActionRow, 'status' | 'completed_at' | 'completed_by'>,
+  verifierUserId: string | null | undefined,
+): boolean {
+  if (!verifierUserId) return false
+  if (action.status !== 'complete') return false
+  if (!action.completed_at) return false
+  return action.completed_by !== verifierUserId
 }
 
 // Days until due — negative when overdue. Returns null when there's
