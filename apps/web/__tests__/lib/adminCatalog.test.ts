@@ -52,11 +52,47 @@ describe('adminCatalog', () => {
 
   it('produces a wildcard subpath on tile redirects so deep links survive the rename', () => {
     const redirects = getAdminRedirects()
-    const tileRedirects = redirects.filter(r => r.destination !== '/admin')
-    for (const r of tileRedirects) {
-      expect(r.source.endsWith('/:path*'),       `source ${r.source} missing /:path*`).toBe(true)
-      expect(r.destination.endsWith('/:path*'),  `destination ${r.destination} missing /:path*`).toBe(true)
+    // The genuine flat rename (e.g. /admin/scorecard → /admin/insights/scorecard)
+    // must carry /:path* on both ends so deep links survive.
+    const scorecard = redirects.find(r => r.source.startsWith('/admin/scorecard'))
+    expect(scorecard?.source).toBe('/admin/scorecard/:path*')
+    expect(scorecard?.destination).toBe('/admin/insights/scorecard/:path*')
+    // Whenever a source is a wildcard, its destination must be one too.
+    for (const r of redirects) {
+      if (r.source.endsWith('/:path*')) {
+        expect(r.destination.endsWith('/:path*'), `destination ${r.destination} missing /:path*`).toBe(true)
+      }
     }
+  })
+
+  it('never emits a wildcard redirect whose destination is nested under its own source (ERR_TOO_MANY_REDIRECTS)', () => {
+    // Regression: the Risk Intelligence rename (/admin/insights →
+    // /admin/insights/risk-intelligence) once emitted a `/admin/insights/:path*`
+    // wildcard whose destination lived under /admin/insights, so every
+    // /admin/insights/* request (incl. the EHS scorecard) re-matched the
+    // source forever — an infinite redirect loop.
+    for (const r of getAdminRedirects()) {
+      if (!r.source.endsWith('/:path*')) continue
+      const sourceBase = r.source.replace(/\/:path\*$/, '')
+      const destBase = r.destination.replace(/\/:path\*$/, '')
+      const loops = destBase === sourceBase || destBase.startsWith(`${sourceBase}/`)
+      expect(loops, `redirect ${r.source} → ${r.destination} loops`).toBe(false)
+    }
+  })
+
+  it('routes the legacy /admin/insights page to risk-intelligence and leaves sibling pages untouched', () => {
+    const redirects = getAdminRedirects()
+    // Legacy bare path redirects exactly (no wildcard) to the renamed tile.
+    expect(redirects.find(r => r.source === '/admin/insights')?.destination)
+      .toBe('/admin/insights/risk-intelligence')
+    // No redirect should match the live /admin/insights/scorecard path.
+    const swallows = redirects.some(r => {
+      const base = r.source.replace(/\/:path\*$/, '')
+      return r.source.endsWith('/:path*')
+        ? '/admin/insights/scorecard' === base || '/admin/insights/scorecard'.startsWith(`${base}/`)
+        : r.source === '/admin/insights/scorecard'
+    })
+    expect(swallows, 'a redirect still swallows /admin/insights/scorecard').toBe(false)
   })
 
   it('gives every tile a non-empty title and description', () => {
