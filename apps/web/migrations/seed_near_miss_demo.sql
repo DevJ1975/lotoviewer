@@ -6,7 +6,7 @@
 -- reporting-culture spread across hazard categories and statuses.
 --
 -- The canonical logic lives in public.seed_wls_near_miss_demo()
--- (migration 199) so that "Reset Demo" restores it via seed_wls_demo().
+-- (migration 200) so that "Reset Demo" restores it via seed_wls_demo().
 -- This file is a thin, idempotent wrapper for a manual run-once seed.
 --
 -- Seeds 7 near-miss reports (new / triaged / investigating / closed /
@@ -14,7 +14,7 @@
 -- ergonomic, and physical hazards.
 --
 -- Prereqs:
---   • Migrations through 199 applied (defines the function)
+--   • Migrations through 200 applied (defines the function)
 --   • At least one tenant flagged is_demo=true
 --   • At least one tenant_membership on the demo tenant
 
