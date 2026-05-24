@@ -14,6 +14,7 @@ import {
   type HazardousWasteFindingStatus,
   type HazardousWasteInspectionFinding,
 } from '@soteria/core/hazardousWaste'
+import { EvidencePhotos } from '../_components/EvidencePhotos'
 
 // /hazardous-waste/inspections/new — submit a walk-through for one
 // accumulation area. Mirrors the offline Expo screen's surface but
@@ -37,8 +38,13 @@ export default function NewHazardousWasteInspectionPage() {
   const [wasteDescription, setWasteDescription] = useState('')
   const [observations,     setObservations]     = useState('')
   const [findings,   setFindings]   = useState<Record<string, FindingDraft>>({})
+  const [photoUrls,  setPhotoUrls]  = useState<string[]>([])
   const [busy,       setBusy]       = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+
+  // Stable per-form id: an inspection row doesn't exist until submit, so
+  // evidence photos share this draft folder in storage until then.
+  const [draftId] = useState(() => crypto.randomUUID())
 
   const loadAreas = useCallback(async () => {
     if (!tenant?.id) return
@@ -142,6 +148,7 @@ export default function NewHazardousWasteInspectionPage() {
           status:   findings[c.id]?.status ?? 'na',
           note:     findings[c.id]?.note.trim() || null,
         })),
+        photo_urls: photoUrls,
         status: 'submitted',
       }
       const res = await fetch('/api/hazardous-waste/inspections', {
@@ -313,6 +320,14 @@ export default function NewHazardousWasteInspectionPage() {
                   className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm"
                 />
               </label>
+              {tenant?.id && (
+                <EvidencePhotos
+                  tenantId={tenant.id}
+                  draftId={draftId}
+                  value={photoUrls}
+                  onChange={setPhotoUrls}
+                />
+              )}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-slate-300">
                   <span className="inline-flex items-center gap-1"><Check className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-300" />{passes} pass</span>

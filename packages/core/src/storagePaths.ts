@@ -77,6 +77,19 @@ export function hotWorkPhotoPath(
   return `${tenantId}/hot-work/${sanitizeId(permitId)}/${timestamp}.jpg`
 }
 
+// Hazardous-waste inspection evidence photo (RCRA 40 CFR 262.16/262.17).
+// An inspection is submitted in one shot from the field form, so photos are
+// uploaded against a client-generated draft id (the inspection row does not
+// exist yet) and the resolved URLs are saved on the row's photo_urls[].
+//   loto-photos/<tenant_uuid>/hazardous-waste/inspections/<draft_id>/<ts>.jpg
+export function hazWasteInspectionPhotoPath(
+  tenantId: string,
+  draftId: string,
+  timestamp: number = Date.now(),
+): string {
+  return `${tenantId}/hazardous-waste/inspections/${sanitizeId(draftId)}/${timestamp}.jpg`
+}
+
 // Cal. Code Regs tit. 27 §25602 — photo of the actual posted Prop 65
 // sign. Stored under prop65/<tenant>/warning_photos/<site_id>/<ts>.jpg
 // so the tenant-scoped RLS (migration 033) gates writes.
