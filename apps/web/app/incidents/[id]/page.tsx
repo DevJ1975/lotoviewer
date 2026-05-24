@@ -11,6 +11,7 @@ import EpaRqBanner from '@/app/_components/EpaRqBanner'
 import { Prop65IncidentBanner } from '@/app/_components/Prop65IncidentBanner'
 import ChemicalExposuresPanel from './_components/ChemicalExposuresPanel'
 import CapaPanel from './_components/CapaPanel'
+import RegulatoryReportingPanel from './_components/RegulatoryReportingPanel'
 import EscalationPredictionPanel from './_components/EscalationPredictionPanel'
 import {
   INCIDENT_TYPE_LABEL,
@@ -213,6 +214,11 @@ export default function IncidentDetailPage() {
 
       {/* ── Prop 65 follow-up callout ───────────────────────────── */}
       <Prop65IncidentBanner tenantId={tenant?.id ?? null} incidentId={incident.id} />
+
+      {/* ── OSHA 1904.39 severe-injury reporting clock ───────────── */}
+      {incident.incident_type === 'injury_illness' && (
+        <RegulatoryReportingPanel incidentId={incident.id} defaultBasisAt={incident.reported_at} />
+      )}
 
 
       {/* ── Description ──────────────────────────────────────────── */}
