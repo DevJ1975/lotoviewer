@@ -1009,20 +1009,33 @@ begin
    where not exists (select 1 from public.incident_rca_fishbone where investigation_id = v_inv_ped_id);
 
   -- ────────────────────────────────────────────────────────────────────
-  -- Notification log (a few "alert sent" rows for the Notifications card)
+  -- Notification log (a few "alert sent" rows for the Notifications card).
+  -- incident_notifications has no natural unique key (PK is a random uuid),
+  -- so a bare ON CONFLICT can't de-dupe — guard on (incident, trigger,
+  -- recipient) so repeated Reset Demo runs don't pile up duplicate rows.
   -- ────────────────────────────────────────────────────────────────────
 
   insert into public.incident_notifications (
     tenant_id, incident_id, trigger_type, channel,
     recipient_user_id, recipient_email, status
-  ) values
-    (v_tenant_id, v_inc_injury_id, 'initial', 'email', v_admin_id, 'admin@demo.example', 'sent'),
-    (v_tenant_id, v_inc_injury_id, 'escalation', 'email', v_owner_id, 'owner@demo.example', 'sent'),
-    (v_tenant_id, v_inc_environmental_id, 'initial', 'email', v_admin_id, 'admin@demo.example', 'sent'),
-    (v_tenant_id, v_inc_anon_id, 'initial', 'email', v_admin_id, 'admin@demo.example', 'sent'),
-    (v_tenant_id, v_inc_arc_id, 'initial', 'email', v_admin_id, 'admin@demo.example', 'sent'),
-    (v_tenant_id, v_inc_back_id, 'initial', 'email', v_admin_id, 'admin@demo.example', 'sent')
-  on conflict do nothing;
+  )
+  select v_tenant_id, v.incident_id, v.trigger_type, 'email',
+         v.recipient_user_id, v.recipient_email, 'sent'
+    from (values
+      (v_inc_injury_id,        'initial'::text,    v_admin_id, 'admin@demo.example'),
+      (v_inc_injury_id,        'escalation',       v_owner_id, 'owner@demo.example'),
+      (v_inc_environmental_id, 'initial',          v_admin_id, 'admin@demo.example'),
+      (v_inc_anon_id,          'initial',          v_admin_id, 'admin@demo.example'),
+      (v_inc_arc_id,           'initial',          v_admin_id, 'admin@demo.example'),
+      (v_inc_back_id,          'initial',          v_admin_id, 'admin@demo.example')
+    ) as v(incident_id, trigger_type, recipient_user_id, recipient_email)
+   where not exists (
+     select 1 from public.incident_notifications n
+      where n.tenant_id        = v_tenant_id
+        and n.incident_id       = v.incident_id
+        and n.trigger_type      = v.trigger_type
+        and n.recipient_user_id = v.recipient_user_id
+   );
 
   -- ────────────────────────────────────────────────────────────────────
   -- 300A annual summary — upserted to the 3-recordable current-year
