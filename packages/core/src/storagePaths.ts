@@ -66,6 +66,17 @@ export function walkdownPhotoPath(
   return `${tenantId}/walkdowns/${sanitizeId(equipmentId)}/${sanitizeId(itemId)}_${timestamp}.jpg`
 }
 
+// Hot work permit area-condition photo (OSHA 1910.252 / NFPA 51B).
+// One permit can carry several, so the permit_id folder groups them.
+//   loto-photos/<tenant_uuid>/hot-work/<sanitized_permit_id>/<ts>.jpg
+export function hotWorkPhotoPath(
+  tenantId: string,
+  permitId: string,
+  timestamp: number = Date.now(),
+): string {
+  return `${tenantId}/hot-work/${sanitizeId(permitId)}/${timestamp}.jpg`
+}
+
 // Cal. Code Regs tit. 27 §25602 — photo of the actual posted Prop 65
 // sign. Stored under prop65/<tenant>/warning_photos/<site_id>/<ts>.jpg
 // so the tenant-scoped RLS (migration 033) gates writes.

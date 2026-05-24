@@ -32,6 +32,7 @@ import { loadAllTrainingRecordsSafe }   from '@/lib/queries/trainingRecords'
 import { FireWatchSignOnDialog } from './_components/FireWatchSignOnDialog'
 import { CancelDialog }          from './_components/CancelDialog'
 import { ChecklistDisplay }      from './_components/ChecklistDisplay'
+import { AreaPhotos }            from './_components/AreaPhotos'
 
 // Hot Work permit detail page. Six-state lifecycle with action buttons
 // shown contextually:
@@ -311,6 +312,18 @@ export default function HotWorkPermitDetailPage() {
       {/* Pre-work checklist */}
       <Section title="Pre-work checklist">
         <ChecklistDisplay checks={permit.pre_work_checks} />
+      </Section>
+
+      {/* Area-condition photos — §1910.252(a)(2) / NFPA 51B evidence */}
+      <Section title="Area condition photos">
+        <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-1 mb-1">
+          Document combustibles cleared, extinguisher staged, and the fire-watch area before authorizing — and post-work watch evidence after completion.
+        </p>
+        <AreaPhotos
+          permitId={permit.id}
+          phase={permit.work_completed_at ? 'post_work' : 'pre_work'}
+          readOnly={state === 'canceled'}
+        />
       </Section>
 
       {/* Sign gates / training warnings (only when relevant) */}
