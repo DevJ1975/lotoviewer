@@ -47,3 +47,15 @@ Investigation-SLA escalations and the annual OSHA-300A posting prompt intentiona
 - [ ] **Mobile parity** — see `docs/mobile-parity-plan.md`. Tier 1: mobile AI assistant (reuse `/api/assistant/chat`), field permit/incident/inspection/BBS capture, push notifications.
 - **WLS demo seed — DONE:** the WLS Demo tenant has demo overdue CAPAs + expired certs (tagged "Demo —") so the incident-risk predictor + weather-report preview show a rich scenario.
 
+## 8. Scorecard historical import — year-over-year (2026-05-24)
+Lets a client backfill up to 20 years of EHS data so the scorecard shows YoY trends. Historical years are stored as annual aggregates in `osha_annual_summaries` (no per-incident fabrication); the current year stays live from `incidents`.
+- **Phase 1 — YoY chart — DONE** (merged): TRIR + recordables by year on the scorecard. WLS seeded 2006→2026.
+- **Phase 2 — PDF import — IN REVIEW** (PR #159): upload a 300A PDF → Claude structured extraction → admin review/edit → confirm → upsert. Human-in-the-loop required.
+- **Phase 3a — CSV/spreadsheet import — IN REVIEW** (PR #160, stacked on #159): upload a SaaS export → column mapping → preview → batch upsert many years.
+- [ ] **Phase 3b — Intelex API connector — BLOCKED on credentials.** Build a direct connector that pulls annual EHS metrics from Intelex into `osha_annual_summaries` (same upsert path as PDF/CSV). **Needs from the client before coding a live adapter:**
+  - [ ] Intelex **API credentials** (token or OAuth client id/secret).
+  - [ ] The client's **Intelex instance/base URL**.
+  - [ ] Which **Intelex object/endpoint** holds the annual rollup (or per-incident data we aggregate), + field mapping to the 300A fields.
+  - [ ] Where to store the secret (Vercel env / a `tenant_integrations` table) + per-tenant scoping.
+  - Plan: scaffold a generic `HistoryConnector` interface + a stubbed Intelex adapter first (plumbing + admin "Connect Intelex" UI), then drop in the live adapter once creds land.
+
