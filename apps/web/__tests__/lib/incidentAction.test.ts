@@ -2,12 +2,45 @@ import { describe, it, expect } from 'vitest'
 import {
   validateActionCreate,
   canTransition,
+  canVerifyAction,
   isClosedOnTime,
   daysUntilDue,
   HIERARCHY_RANK,
   type IncidentActionRow,
   type IncidentActionStatus,
 } from '@soteria/core/incidentAction'
+
+describe('canVerifyAction', () => {
+  const base = {
+    status: 'complete' as IncidentActionStatus,
+    completed_at: '2026-05-01T00:00:00Z',
+    completed_by: 'completer-1',
+  }
+
+  it('allows a different user to verify a completed action', () => {
+    expect(canVerifyAction(base, 'verifier-2')).toBe(true)
+  })
+
+  it('blocks the completer from verifying their own action', () => {
+    expect(canVerifyAction(base, 'completer-1')).toBe(false)
+  })
+
+  it('requires a verifier id', () => {
+    expect(canVerifyAction(base, null)).toBe(false)
+    expect(canVerifyAction(base, undefined)).toBe(false)
+  })
+
+  it('only applies to completed actions', () => {
+    expect(canVerifyAction({ ...base, status: 'in_progress' }, 'verifier-2')).toBe(false)
+    expect(canVerifyAction({ ...base, status: 'open', completed_at: null, completed_by: null }, 'verifier-2')).toBe(false)
+  })
+
+  it('treats a legacy row with no captured completer as verifiable', () => {
+    // Pre-migration-198 rows: completer unknown, so the helper can't
+    // block — the API falls back to the owner check there.
+    expect(canVerifyAction({ status: 'complete', completed_at: '2026-05-01T00:00:00Z', completed_by: null }, 'anyone')).toBe(true)
+  })
+})
 
 describe('validateActionCreate', () => {
   const ok = { action_type: 'corrective' as const, description: 'fix the guard' }

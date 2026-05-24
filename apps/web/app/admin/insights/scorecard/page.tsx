@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import Link from 'next/link'
 import {
   Activity,
@@ -17,6 +17,7 @@ import {
   Maximize2,
   Minimize2,
   ShieldCheck,
+  Target,
   Timer,
   Wind,
   type LucideIcon,
@@ -29,6 +30,7 @@ import {
   Tooltip,
   CartesianGrid,
   Cell,
+  ReferenceLine,
 } from 'recharts'
 import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
@@ -36,6 +38,12 @@ import { supabase } from '@/lib/supabase'
 import { fetchScorecardMetrics, type DayBucket, type ScorecardMetrics } from '@soteria/core/scorecardMetrics'
 import { fetchIncidentScorecardMetrics, type IncidentScorecardMetrics } from '@soteria/core/incidentScorecardMetrics'
 import type { IncidentRiskResult, IncidentRiskBand } from '@soteria/core/incidentRiskModel'
+import { benchmarkForNaics, BLS_DATA_YEAR } from '@soteria/core/industryBenchmark'
+import {
+  TARGET_METRICS, TARGET_METRIC_META,
+  evaluateTarget, compareToBenchmark,
+  type TargetMetric,
+} from '@soteria/core/ehsTargets'
 
 // EHS scorecard - an operations-board view for safety leaders.
 // The top strip intentionally reads as infographics instead of plain
@@ -190,6 +198,70 @@ export default function ScorecardPage() {
     return () => { cancelled = true }
   }, [authLoading, profile])
 
+  // Tenant's NAICS sector (from the first establishment that has one) — the
+  // key for the BLS industry benchmark. RLS-scoped read; null when unset.
+  const [naics, setNaics] = useState<string | null>(null)
+  useEffect(() => {
+    if (authLoading || !profile?.is_admin) return
+    let cancelled = false
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('osha_establishments')
+        .select('naics_code')
+        .not('naics_code', 'is', null)
+        .limit(1)
+      if (error || !data) return
+      if (!cancelled) setNaics((data[0]?.naics_code as string | undefined) ?? null)
+    })()
+    return () => { cancelled = true }
+  }, [authLoading, profile])
+
+  // Scorecard goals + benchmark overrides (kind='target' / 'benchmark').
+  // RLS- + admin-scoped. The table ships in migration 196; until it's
+  // applied the read errors and we fall back to no goals + BLS defaults.
+  const [targetRows, setTargetRows] = useState<TargetRow[]>([])
+  const loadTargets = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('ehs_scorecard_targets')
+      .select('kind, metric, period_year, value, note')
+    if (error || !data) return
+    setTargetRows(data as TargetRow[])
+  }, [])
+  useEffect(() => {
+    if (authLoading || !profile?.is_admin) return
+    void loadTargets()
+  }, [authLoading, profile, loadTargets])
+
+  // Replace-in-place save: per metric, delete the existing row then insert
+  // the new value (PostgREST upsert can't target our partial unique
+  // indexes). Clearing a field (null) just leaves the delete.
+  const persistTargets = useCallback(async (draft: TargetDraft) => {
+    if (!tenantId) throw new Error('No active tenant.')
+    const { data: { user } } = await supabase.auth.getUser()
+    const year = new Date().getUTCFullYear()
+    const table = supabase.from('ehs_scorecard_targets')
+
+    for (const metric of TARGET_METRICS) {
+      if (!(metric in draft.targets)) continue
+      await table.delete().eq('tenant_id', tenantId).eq('kind', 'target').eq('metric', metric).eq('period_year', year)
+      const v = draft.targets[metric]
+      if (v != null) {
+        const { error } = await table.insert({ tenant_id: tenantId, kind: 'target', metric, period_year: year, value: v, created_by: user?.id ?? null })
+        if (error) throw new Error(error.message)
+      }
+    }
+    for (const metric of ['trir', 'dart'] as const) {
+      if (!(metric in draft.overrides)) continue
+      await table.delete().eq('tenant_id', tenantId).eq('kind', 'benchmark').eq('metric', metric).is('period_year', null)
+      const v = draft.overrides[metric]
+      if (v != null) {
+        const { error } = await table.insert({ tenant_id: tenantId, kind: 'benchmark', metric, period_year: null, value: v, created_by: user?.id ?? null })
+        if (error) throw new Error(error.message)
+      }
+    }
+    await loadTargets()
+  }, [tenantId, loadTargets])
+
   // Data-driven incident-risk score (deterministic, computed server-side).
   const [risk, setRisk] = useState<IncidentRiskResult | null>(null)
   useEffect(() => {
@@ -326,7 +398,15 @@ export default function ScorecardPage() {
 
       {risk && <PredictedRiskCard risk={risk} />}
 
-      {incidentMetrics && <IncidentScorecardSection metrics={incidentMetrics} annualHistory={annualHistory} />}
+      {incidentMetrics && (
+        <IncidentScorecardSection
+          metrics={incidentMetrics}
+          annualHistory={annualHistory}
+          targetRows={targetRows}
+          naics={naics}
+          onSaveTargets={persistTargets}
+        />
+      )}
 
       <div className="flex items-center gap-2 pt-1">
         <span className="ops-section-title text-[11px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Permits &amp; LOTO</span>
@@ -870,14 +950,24 @@ function PredictedRiskCard({ risk }: { risk: IncidentRiskResult }) {
 // LTIR), the 300A recordkeeping roll-up, this-week momentum, the recordable +
 // near-miss trend, and where on the body people are getting hurt. All from the
 // trailing-12-month IncidentScorecardMetrics.
-function IncidentScorecardSection({ metrics: m, annualHistory }: {
+function IncidentScorecardSection({ metrics: m, annualHistory, targetRows, naics, onSaveTargets }: {
   metrics: IncidentScorecardMetrics
   annualHistory: YearMetric[] | null
+  targetRows: TargetRow[]
+  naics: string | null
+  onSaveTargets: (draft: TargetDraft) => Promise<void>
 }) {
   const streak = m.daysSinceLastRecordable
   const monthly = mergeMonthly(m.recordablesByMonth, m.nearMissByMonth)
   const bodyParts = m.bodyPartHeatmap.slice(0, 8).map(b => ({ name: humanizeBodyPart(b.body_part), count: b.count }))
+  const injuryNatures = m.injuryNatureBreakdown.slice(0, 8).map(b => ({ name: humanizeNature(b.injury_nature), count: b.count }))
   const yoy = buildYearOverYear(annualHistory, m)
+
+  // TRIR goal + industry benchmark drive reference lines on the YoY chart.
+  const currentYear = new Date(m.nowMs).getUTCFullYear()
+  const bls = benchmarkForNaics(naics)
+  const trirTarget = targetRows.find(r => r.kind === 'target' && r.metric === 'trir' && r.period_year === currentYear)?.value ?? null
+  const trirBenchmark = targetRows.find(r => r.kind === 'benchmark' && r.metric === 'trir')?.value ?? bls.trir
 
   return (
     <section className="space-y-4">
@@ -896,6 +986,13 @@ function IncidentScorecardSection({ metrics: m, annualHistory }: {
         <IncidentStatCard icon={Activity} label="LTIR" value={fmtRate(m.ltir)} sub="per 100 FTE" accent="neutral" href="/osha" />
       </div>
 
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <IncidentStatCard icon={Gauge} label="Severity rate" value={fmtRate(m.severityRate)} sub="days × 200K / hrs" accent="neutral" href="/osha" />
+        <IncidentStatCard icon={ClipboardCheck} label="CAPA on time" value={fmtPct(m.actionClosureOnTimePct)} sub="closed by due date" accent={pctTone(m.actionClosureOnTimePct)} href="/incidents" />
+        <IncidentStatCard icon={ShieldCheck} label="RCA completion" value={fmtPct(m.rcaCompletionPct)} sub={`${m.recordablesWithCompletedRca} of ${m.totalRecordable} recordable`} accent={pctTone(m.rcaCompletionPct)} href="/incidents" />
+        <IncidentStatCard icon={Timer} label="Time to close" value={m.meanTimeToCloseDays === null ? '—' : m.meanTimeToCloseDays.toFixed(1)} sub="avg days, reported→closed" accent="neutral" href="/incidents" />
+      </div>
+
       {yoy.length >= 2 && (
         <ChartCard
           title="Year over year — TRIR & recordables"
@@ -911,12 +1008,22 @@ function IncidentScorecardSection({ metrics: m, annualHistory }: {
               <YAxis yAxisId="left" allowDecimals={false} stroke="#64748b" tick={{ fontSize: 10 }} />
               <YAxis yAxisId="right" orientation="right" stroke="#1D3ECF" tick={{ fontSize: 10 }} />
               <Tooltip wrapperStyle={{ fontSize: 11 }} cursor={{ fill: 'rgba(27, 58, 107, 0.06)' }} />
+              {trirBenchmark !== null && (
+                <ReferenceLine yAxisId="right" y={trirBenchmark} stroke="#64748b" strokeDasharray="2 2" strokeWidth={1.5}
+                  label={{ value: `Industry ${trirBenchmark.toFixed(1)}`, position: 'insideTopLeft', fontSize: 9, fill: '#64748b' }} />
+              )}
+              {trirTarget !== null && (
+                <ReferenceLine yAxisId="right" y={trirTarget} stroke="#059669" strokeDasharray="5 3" strokeWidth={1.5}
+                  label={{ value: `Goal ${trirTarget.toFixed(1)}`, position: 'insideBottomLeft', fontSize: 9, fill: '#059669' }} />
+              )}
               <Bar yAxisId="left" dataKey="recordables" name="Recordables" fill="#cbd5e1" radius={[3, 3, 0, 0]} animationDuration={600} />
               <Line yAxisId="right" type="monotone" dataKey="trir" name="TRIR" stroke="#1D3ECF" strokeWidth={2.5} dot={{ r: 2 }} animationDuration={700} />
             </ComposedChart>
           </ResponsiveContainer>
         </ChartCard>
       )}
+
+      <TargetsBenchmarkPanel metrics={m} targetRows={targetRows} naics={naics} year={currentYear} onSave={onSaveTargets} />
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <div className="ops-surface animate-panel-in rounded-lg p-4">
@@ -966,17 +1073,269 @@ function IncidentScorecardSection({ metrics: m, annualHistory }: {
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Where people are getting hurt" subtitle="Injuries by body part — top reported." loading={false} empty={bodyParts.length === 0} href="/incidents">
-        <ResponsiveContainer width="100%" height={Math.max(160, bodyParts.length * 34)}>
-          <BarChart data={bodyParts} layout="vertical" margin={{ top: 4, right: 28, left: 8, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#dbe3ee" horizontal={false} />
-            <XAxis type="number" allowDecimals={false} stroke="#64748b" tick={{ fontSize: 10 }} />
-            <YAxis type="category" dataKey="name" width={132} stroke="#64748b" tick={{ fontSize: 11 }} />
-            <Tooltip wrapperStyle={{ fontSize: 11 }} cursor={{ fill: 'rgba(15, 23, 42, 0.05)' }} />
-            <Bar dataKey="count" name="Injuries" fill="#1B3A6B" radius={[0, 4, 4, 0]} animationDuration={600} />
-          </BarChart>
-        </ResponsiveContainer>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <ChartCard title="Where people are getting hurt" subtitle="Injuries by body part — top reported." loading={false} empty={bodyParts.length === 0} href="/incidents">
+          <ResponsiveContainer width="100%" height={Math.max(160, bodyParts.length * 34)}>
+            <BarChart data={bodyParts} layout="vertical" margin={{ top: 4, right: 28, left: 8, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#dbe3ee" horizontal={false} />
+              <XAxis type="number" allowDecimals={false} stroke="#64748b" tick={{ fontSize: 10 }} />
+              <YAxis type="category" dataKey="name" width={132} stroke="#64748b" tick={{ fontSize: 11 }} />
+              <Tooltip wrapperStyle={{ fontSize: 11 }} cursor={{ fill: 'rgba(15, 23, 42, 0.05)' }} />
+              <Bar dataKey="count" name="Injuries" fill="#1B3A6B" radius={[0, 4, 4, 0]} animationDuration={600} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="How people are getting hurt" subtitle="Injuries by nature — top reported." loading={false} empty={injuryNatures.length === 0} href="/incidents">
+          <ResponsiveContainer width="100%" height={Math.max(160, injuryNatures.length * 34)}>
+            <BarChart data={injuryNatures} layout="vertical" margin={{ top: 4, right: 28, left: 8, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#dbe3ee" horizontal={false} />
+              <XAxis type="number" allowDecimals={false} stroke="#64748b" tick={{ fontSize: 10 }} />
+              <YAxis type="category" dataKey="name" width={132} stroke="#64748b" tick={{ fontSize: 11 }} />
+              <Tooltip wrapperStyle={{ fontSize: 11 }} cursor={{ fill: 'rgba(15, 23, 42, 0.05)' }} />
+              <Bar dataKey="count" name="Injuries" fill="#0F766E" radius={[0, 4, 4, 0]} animationDuration={600} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </div>
+
+      <ChartCard title="When incidents happen" subtitle="Incident count by shift and weekday." loading={false} empty={m.shiftDayHeatmap.every(b => b.count === 0)} href="/incidents">
+        <ShiftHeatmapGrid buckets={m.shiftDayHeatmap} />
       </ChartCard>
+    </section>
+  )
+}
+
+const HEATMAP_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
+const HEATMAP_SHIFTS = ['day', 'swing', 'night', 'unknown'] as const
+const HEATMAP_SHIFT_LABEL: Record<typeof HEATMAP_SHIFTS[number], string> = {
+  day: 'Day', swing: 'Swing', night: 'Night', unknown: 'Unknown',
+}
+
+// Day-of-week × shift heatmap. The summarizer pre-fills all 28 cells, so
+// the grid always renders complete; intensity scales each cell's alpha
+// against the busiest cell.
+function ShiftHeatmapGrid({ buckets }: { buckets: IncidentScorecardMetrics['shiftDayHeatmap'] }) {
+  const countByKey = new Map<string, number>()
+  for (const b of buckets) countByKey.set(`${b.shift}|${b.weekday}`, b.count)
+  const max = buckets.reduce((acc, b) => Math.max(acc, b.count), 0)
+  return (
+    <div className="grid grid-cols-[56px_repeat(7,minmax(0,1fr))] gap-1">
+      <div />
+      {HEATMAP_WEEKDAYS.map(d => (
+        <div key={d} className="text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{d}</div>
+      ))}
+      {HEATMAP_SHIFTS.map(shift => (
+        <div key={shift} className="contents">
+          <div className="self-center text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{HEATMAP_SHIFT_LABEL[shift]}</div>
+          {HEATMAP_WEEKDAYS.map((weekdayLabel, weekday) => {
+            const count = countByKey.get(`${shift}|${weekday}`) ?? 0
+            const intensity = max ? Math.min(1, count / max) : 0
+            const background = count === 0
+              ? 'rgba(148, 163, 184, 0.15)'
+              : `rgba(190, 18, 60, ${0.15 + intensity * 0.7})`
+            return (
+              <div
+                key={shift + weekday}
+                title={count > 0 ? `${HEATMAP_SHIFT_LABEL[shift]} · ${weekdayLabel}: ${count} incident${count === 1 ? '' : 's'}` : `${HEATMAP_SHIFT_LABEL[shift]} · ${weekdayLabel}: no incidents`}
+                className="flex aspect-square items-center justify-center rounded text-[10px] font-mono tabular-nums text-slate-700 dark:text-slate-200"
+                style={{ backgroundColor: background }}
+              >
+                {count > 0 ? count : ''}
+              </div>
+            )
+          })}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Raw ehs_scorecard_targets row, as read by the page.
+interface TargetRow {
+  kind:        'target' | 'benchmark'
+  metric:      TargetMetric
+  period_year: number | null
+  value:       number
+  note:        string | null
+}
+
+// What the inline editor hands back: only the keys present are persisted;
+// a null value clears the stored goal/override.
+interface TargetDraft {
+  targets:   Partial<Record<TargetMetric, number | null>>
+  overrides: Partial<Record<'trir' | 'dart', number | null>>
+}
+
+function currentMetricValue(m: IncidentScorecardMetrics, metric: TargetMetric): number | null {
+  switch (metric) {
+    case 'trir':               return m.trir
+    case 'dart':               return m.dart
+    case 'recordables':        return m.totalRecordable
+    case 'capa_on_time_pct':   return m.actionClosureOnTimePct
+    case 'rca_completion_pct': return m.rcaCompletionPct
+  }
+}
+
+function fmtMetricValue(metric: TargetMetric, v: number | null): string {
+  if (v === null) return '—'
+  if (metric === 'recordables') return String(Math.round(v))
+  if (metric === 'capa_on_time_pct' || metric === 'rca_completion_pct') return `${Math.round(v)}%`
+  return v.toFixed(2)
+}
+
+// Goals + industry-benchmark panel. Reads the loaded target rows, renders
+// current-vs-goal-vs-industry per metric, and offers an inline editor that
+// hands a draft back to the page for persistence. Admin-only by virtue of
+// the page gate; the table's RLS is admin-scoped too.
+function TargetsBenchmarkPanel({ metrics: m, targetRows, naics, year, onSave }: {
+  metrics:    IncidentScorecardMetrics
+  targetRows: TargetRow[]
+  naics:      string | null
+  year:       number
+  onSave:     (draft: TargetDraft) => Promise<void>
+}) {
+  const bls = benchmarkForNaics(naics)
+  const targetByMetric = useMemo(() => {
+    const map = new Map<TargetMetric, number>()
+    for (const r of targetRows) if (r.kind === 'target' && r.period_year === year) map.set(r.metric, r.value)
+    return map
+  }, [targetRows, year])
+  const overrideByMetric = useMemo(() => {
+    const map = new Map<TargetMetric, number>()
+    for (const r of targetRows) if (r.kind === 'benchmark') map.set(r.metric, r.value)
+    return map
+  }, [targetRows])
+
+  const [editing, setEditing]           = useState(false)
+  const [saving, setSaving]             = useState(false)
+  const [error, setError]               = useState<string | null>(null)
+  const [targetDraft, setTargetDraft]   = useState<Record<string, string>>({})
+  const [overrideDraft, setOverrideDraft] = useState<Record<string, string>>({})
+
+  function beginEdit() {
+    const td: Record<string, string> = {}
+    for (const metric of TARGET_METRICS) { const v = targetByMetric.get(metric); td[metric] = v == null ? '' : String(v) }
+    const od: Record<string, string> = {}
+    for (const metric of ['trir', 'dart'] as const) { const v = overrideByMetric.get(metric); od[metric] = v == null ? '' : String(v) }
+    setTargetDraft(td); setOverrideDraft(od); setError(null); setEditing(true)
+  }
+
+  function parseField(raw: string | undefined, label: string): number | null {
+    const s = (raw ?? '').trim()
+    if (s === '') return null
+    const v = Number(s)
+    if (!Number.isFinite(v) || v < 0) throw new Error(`${label} must be a non-negative number.`)
+    return v
+  }
+
+  async function commit() {
+    setSaving(true); setError(null)
+    try {
+      const targets: Partial<Record<TargetMetric, number | null>> = {}
+      for (const metric of TARGET_METRICS) targets[metric] = parseField(targetDraft[metric], 'Goals')
+      const overrides: Partial<Record<'trir' | 'dart', number | null>> = {}
+      for (const metric of ['trir', 'dart'] as const) overrides[metric] = parseField(overrideDraft[metric], 'Benchmarks')
+      await onSave({ targets, overrides })
+      setEditing(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save goals.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const cols = 'grid grid-cols-[minmax(0,1fr)_3.5rem_6.5rem_7rem] items-center gap-2'
+
+  return (
+    <section className="ops-surface animate-panel-in rounded-lg p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="flex size-7 items-center justify-center rounded-md bg-brand-navy/10 text-brand-navy dark:bg-brand-yellow/15 dark:text-brand-yellow"><Target className="h-4 w-4" /></span>
+        <h3 className="text-sm font-black text-slate-900 dark:text-slate-100">Goals &amp; industry benchmark</h3>
+        <span className="hidden text-[11px] text-slate-400 sm:inline">vs. BLS {bls.sector} ({BLS_DATA_YEAR})</span>
+        {!editing ? (
+          <button onClick={beginEdit} className="ml-auto text-[11px] font-bold text-brand-navy hover:underline dark:text-brand-yellow">Edit goals</button>
+        ) : (
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={() => setEditing(false)} disabled={saving} className="text-[11px] font-semibold text-slate-500 hover:underline disabled:opacity-50 dark:text-slate-400">Cancel</button>
+            <button onClick={commit} disabled={saving} className="motion-press flex items-center gap-1 rounded-md bg-brand-navy px-2.5 py-1 text-[11px] font-bold text-white hover:bg-brand-navy/90 disabled:opacity-50 dark:bg-brand-yellow dark:text-slate-950">
+              {saving && <Loader2 className="h-3 w-3 animate-spin" />} Save
+            </button>
+          </div>
+        )}
+      </div>
+
+      {error && <p className="mb-2 rounded-md bg-rose-50 px-2.5 py-1.5 text-[11px] font-semibold text-rose-700 dark:bg-rose-950/40 dark:text-rose-200">{error}</p>}
+
+      <div className="space-y-2">
+        <div className={`${cols} border-b border-slate-100 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:border-slate-800`}>
+          <span>Metric</span>
+          <span className="text-right">Now</span>
+          <span className="text-right">Goal {year}</span>
+          <span className="text-right">Industry</span>
+        </div>
+        {TARGET_METRICS.map(metric => {
+          const meta = TARGET_METRIC_META[metric]
+          const current = currentMetricValue(m, metric)
+          const target = targetByMetric.get(metric) ?? null
+          const verdict = target !== null ? evaluateTarget(current, target, meta.lowerIsBetter) : null
+          const industry = meta.hasBenchmark ? (overrideByMetric.get(metric) ?? (metric === 'trir' ? bls.trir : bls.dart)) : null
+          const bench = industry !== null ? compareToBenchmark(current, industry) : null
+          const isOverridden = overrideByMetric.get(metric) != null
+          return (
+            <div key={metric} className={`${cols} text-xs`}>
+              <span className="truncate font-semibold text-slate-700 dark:text-slate-200">{meta.label}</span>
+              <span className="text-right font-black tabular-nums text-slate-900 dark:text-slate-100">{fmtMetricValue(metric, current)}</span>
+
+              <span className="text-right">
+                {editing ? (
+                  <input type="number" min="0" step="any" inputMode="decimal" aria-label={`${meta.label} goal`}
+                    value={targetDraft[metric] ?? ''} onChange={e => setTargetDraft(d => ({ ...d, [metric]: e.target.value }))}
+                    placeholder="—"
+                    className="h-7 w-full rounded border border-slate-300 bg-white px-1.5 text-right text-xs tabular-nums focus:border-brand-navy focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                ) : target === null ? (
+                  <span className="text-slate-300 dark:text-slate-600">—</span>
+                ) : (
+                  <span className="inline-flex items-center justify-end gap-1 tabular-nums">
+                    <span className="font-semibold text-slate-600 dark:text-slate-300">{fmtMetricValue(metric, target)}</span>
+                    {verdict && (
+                      <span className={`rounded px-1 py-0.5 text-[10px] font-bold ${verdict.onTrack ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'}`}>
+                        {verdict.onTrack ? '✓' : verdict.deltaPct === null ? '!' : `${verdict.deltaPct > 0 ? '+' : ''}${Math.round(verdict.deltaPct)}%`}
+                      </span>
+                    )}
+                  </span>
+                )}
+              </span>
+
+              <span className="text-right">
+                {!meta.hasBenchmark ? (
+                  <span className="text-slate-300 dark:text-slate-600">—</span>
+                ) : editing ? (
+                  <input type="number" min="0" step="any" inputMode="decimal" aria-label={`${meta.label} industry benchmark`}
+                    value={overrideDraft[metric] ?? ''} onChange={e => setOverrideDraft(d => ({ ...d, [metric]: e.target.value }))}
+                    placeholder={(metric === 'trir' ? bls.trir : bls.dart).toFixed(1)}
+                    className="h-7 w-full rounded border border-slate-300 bg-white px-1.5 text-right text-xs tabular-nums focus:border-brand-navy focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                ) : (
+                  <span className="inline-flex items-center justify-end gap-1 tabular-nums" title={isOverridden ? 'Tenant override' : `BLS ${bls.sector} ${BLS_DATA_YEAR}`}>
+                    <span className="font-semibold text-slate-600 dark:text-slate-300">{industry!.toFixed(1)}</span>
+                    {bench && bench.deltaPct !== null && (
+                      <span className={`rounded px-1 py-0.5 text-[10px] font-bold ${bench.betterThanIndustry ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'}`}>
+                        {bench.deltaPct > 0 ? '+' : ''}{Math.round(bench.deltaPct)}%
+                      </span>
+                    )}
+                  </span>
+                )}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+
+      <p className="mt-3 text-[11px] text-slate-400">
+        {editing
+          ? `Goals are saved for ${year}. Industry defaults come from BLS ${BLS_DATA_YEAR} (${bls.sector}) — leave a benchmark blank to use the default.`
+          : 'Goal vs. current and your rates vs. the industry average. The TRIR goal and industry lines also overlay the year-over-year chart above.'}
+      </p>
     </section>
   )
 }
@@ -1064,6 +1423,24 @@ function capitalize(s: string): string {
 
 function fmtRate(v: number | null): string {
   return v === null ? '—' : v.toFixed(2)
+}
+
+function fmtPct(v: number | null): string {
+  return v === null ? '—' : `${Math.round(v)}%`
+}
+
+// Percentage indicators where higher is better (CAPA on-time, RCA
+// completion). Null (no data) stays neutral rather than alarming.
+function pctTone(v: number | null): Tone {
+  if (v === null) return 'neutral'
+  if (v >= 90) return 'safe'
+  if (v >= 70) return 'watch'
+  return 'critical'
+}
+
+// Nature of injury is free text; render it in sentence case for the chart.
+function humanizeNature(nature: string): string {
+  return nature.charAt(0).toUpperCase() + nature.slice(1)
 }
 
 // ── Year-over-year history (from saved OSHA 300A annual summaries) ──────────

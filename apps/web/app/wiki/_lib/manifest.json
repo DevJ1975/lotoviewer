@@ -144,6 +144,24 @@
       ]
     },
     {
+      "slug":     "iso-45001",
+      "module":   "ISO 45001",
+      "tagline":  "OH&S management-system standard — a plain-language, clause-by-clause implementation guide (Clauses 4–10, PDCA, certification path).",
+      "category": "admin",
+      "href":     "/admin/evidence/iso45001",
+      "wikiPage": "apps/web/app/wiki/iso-45001/page.tsx",
+      "sources":  ["apps/web/app/wiki/iso-45001/**"]
+    },
+    {
+      "slug":     "iso-14001",
+      "module":   "ISO 14001",
+      "tagline":  "Environmental management-system standard — a plain-language, clause-by-clause implementation guide (aspects/impacts, life-cycle perspective, compliance obligations).",
+      "category": "admin",
+      "href":     null,
+      "wikiPage": "apps/web/app/wiki/iso-14001/page.tsx",
+      "sources":  ["apps/web/app/wiki/iso-14001/**"]
+    },
+    {
       "slug":     "loto-compliance",
       "module":   "LOTO Compliance",
       "tagline":  "29 CFR 1910.147 — periodic inspections, group permits, contractors, competency, retraining.",
