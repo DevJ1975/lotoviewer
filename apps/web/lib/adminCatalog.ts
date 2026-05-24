@@ -190,6 +190,9 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       tile('evidence', 'iso45001',         'iso45001',
         ShieldAlert, 'ISO 45001 clauses',
         'Clause-by-clause evidence mapping for ISO 45001 audits.'),
+      tile('evidence', 'iso14001',         null,
+        Mountain, 'ISO 14001 clauses',
+        'Clause-by-clause environmental-management evidence mapping for ISO 14001 audits.'),
     ],
   },
   {
