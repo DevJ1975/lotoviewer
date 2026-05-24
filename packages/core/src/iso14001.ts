@@ -62,7 +62,7 @@ export const ISO14001_CLAUSE_MAP: readonly Iso14001ClauseEntry[] = [
   {
     code:    '6.2.1',
     title:   'Environmental objectives',
-    sources: ['environmental_aspects', 'ehs_scorecard_targets'],
+    sources: ['environmental_objectives', 'environmental_aspects', 'ehs_scorecard_targets'],
   },
   {
     code:    '7.2',
@@ -97,7 +97,7 @@ export const ISO14001_CLAUSE_MAP: readonly Iso14001ClauseEntry[] = [
   {
     code:    '9.1.1',
     title:   'Monitoring, measurement, analysis and evaluation — general',
-    sources: ['inspections', 'chemical_exposure_events', 'hazardous_waste_inspections'],
+    sources: ['environmental_objective_readings', 'inspections', 'chemical_exposure_events', 'hazardous_waste_inspections'],
   },
   {
     code:    '9.1.2',

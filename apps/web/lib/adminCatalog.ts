@@ -204,6 +204,9 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       tile('environmental', 'aspects', null,
         Mountain, 'Aspects & impacts register',
         'ISO 14001 clause 6.1.2 — environmental aspects, impacts, and significance scoring.'),
+      tile('environmental', 'objectives', null,
+        BarChart3, 'Objectives & targets',
+        'ISO 14001 clauses 6.2 & 9.1.1 — measurable environmental objectives tracked by periodic readings.'),
     ],
   },
   {
