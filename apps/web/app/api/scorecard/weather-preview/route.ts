@@ -32,6 +32,7 @@ export async function GET(req: Request) {
       rows:          data.rows,
       trir:          data.trir,
       dart:          data.dart,
+      recordablesYtd: data.recordablesYtd,
       appUrl:        publicAppUrl(req),
       tenantName:    (tenant?.name as string | undefined) ?? null,
       tenantId:      g.tenantId,
