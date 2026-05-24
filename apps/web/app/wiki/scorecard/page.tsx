@@ -1,10 +1,21 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.5.0'
+const CURRENT_VERSION = '1.6.0'
 const LAST_UPDATED    = '2026-05-24'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.6.0',
+    date:    '2026-05-24',
+    changes: [
+      'Click-through drill-downs: every scorecard tile now links to the ' +
+      'module behind it — the injury/OSHA headline cards open Incidents and ' +
+      'the OSHA 300 log, the trend + body-part charts open Incidents, and the ' +
+      'permit/atmospheric/photo tiles open Confined Spaces and Equipment ' +
+      'Readiness.',
+    ],
+  },
   {
     version: '1.5.0',
     date:    '2026-05-24',
