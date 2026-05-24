@@ -17,7 +17,7 @@ import type { Facility } from '@soteria/core/types'
 // under TenantProvider (app/layout.tsx) so the active tenant is known.
 //
 // The active facility is injected as the x-active-facility header by the
-// Supabase fetch wrapper (lib/supabase.ts); migration 201's RLS scopes domain
+// Supabase fetch wrapper (lib/supabase.ts); migration 211's RLS scopes domain
 // rows by it. A NULL active facility = the roll-up view (all of the tenant's
 // facilities). See FacilityProvider's sibling TenantProvider.tsx for a deeper
 // walk-through of the Context / useCallback / useMemo patterns reused here.
@@ -70,7 +70,7 @@ export function FacilityProvider({ children }: { children: ReactNode }) {
 
   const fetchAll = useCallback(async (activeTenantId: string) => {
     setLoading(true)
-    // RLS scopes facilities to the active tenant (migration 199). The
+    // RLS scopes facilities to the active tenant (migration 209). The
     // explicit tenant filter is belt-and-suspenders, matching the rest of
     // the app's query style.
     const { data, error } = await supabase

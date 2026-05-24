@@ -12,7 +12,7 @@ import { useFacility } from '@/components/FacilityProvider'
 // The menu offers an "All facilities" roll-up option (facilityId = null) plus
 // one row per facility. Selecting writes sessionStorage and hard-reloads via
 // switchFacility; the Supabase fetch wrapper then carries the new
-// x-active-facility header and migration 201's RLS scopes the data.
+// x-active-facility header and migration 211's RLS scopes the data.
 
 export default function FacilityHeaderPill() {
   const { facilityId, facility, available, loading, switchFacility } = useFacility()

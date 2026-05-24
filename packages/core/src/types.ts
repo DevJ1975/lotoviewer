@@ -142,7 +142,7 @@ export interface TenantMembership {
   updated_at: string
 }
 
-// ── Facility model (migrations 199-201) ─────────────────────────────────────
+// ── Facility model (migrations 209-211) ─────────────────────────────────────
 // A physical site BENEATH a tenant. One tenant -> many facilities. The active
 // facility is held in FacilityProvider / sessionStorage and injected as the
 // x-active-facility header; RLS scopes domain rows by it. A NULL active

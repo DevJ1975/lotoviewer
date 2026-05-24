@@ -1,4 +1,4 @@
--- Migration 200: add facility_id to the domain tables (additive, nullable).
+-- Migration 210: add facility_id to the domain tables (additive, nullable).
 --
 -- Phase 1 of facility-scoping the domain tables. Mirrors the multi-tenant
 -- rollout shape (027 additive -> 028 backfill -> 029 lockdown): this migration
@@ -21,7 +21,7 @@
 --   BUCKET B — client-wide catalog/config tables. Authored once per client and
 --     reused across facilities. facility_id is NULLABLE with NO default; NULL
 --     means "shared across all of the tenant's facilities". Existing rows stay
---     NULL (shared). The RLS predicate in migration 201 surfaces NULL rows in
+--     NULL (shared). The RLS predicate in migration 211 surfaces NULL rows in
 --     both roll-up and per-facility mode, which is exactly the shared behavior.
 --
 -- Tables NOT in either list are intentionally excluded: tenants /

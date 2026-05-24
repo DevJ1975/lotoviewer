@@ -1,4 +1,4 @@
--- Migration 199: facilities — a per-tenant registry of physical sites.
+-- Migration 209: facilities — a per-tenant registry of physical sites.
 --
 -- A "client" is a tenants row (migrations 027-029). Until now every domain
 -- table was scoped ONLY by tenant_id, so a client that operates more than one
@@ -15,7 +15,7 @@
 --     immune to facility scoping.
 --
 -- Facility-scoping of the domain tables themselves (the facility_id columns and
--- the RLS rewrite) lands in migrations 200 + 201. This migration is purely
+-- the RLS rewrite) lands in migrations 210 + 211. This migration is purely
 -- additive and non-breaking.
 --
 -- Idempotent.
@@ -58,7 +58,7 @@ create unique index if not exists uq_facilities_one_primary_per_tenant
   on public.facilities (tenant_id) where is_primary;
 
 comment on table public.facilities is
-  'Per-tenant registry of physical facilities/sites. Domain rows carry a facility_id (migrations 200/201) scoped to one of these; NULL facility_id = shared across all of the tenant''s facilities.';
+  'Per-tenant registry of physical facilities/sites. Domain rows carry a facility_id (migrations 210/211) scoped to one of these; NULL facility_id = shared across all of the tenant''s facilities.';
 
 drop trigger if exists trg_facilities_touch on public.facilities;
 create trigger trg_facilities_touch
@@ -75,7 +75,7 @@ create trigger trg_audit_facilities
 --
 -- Verbatim mirror of public.active_tenant_id() (migration 032). Returns
 -- NULL when no header was sent (or the JSON parse fails). That NULL is
--- the "roll-up" signal: domain-table RLS (migration 201) shows ALL of the
+-- the "roll-up" signal: domain-table RLS (migration 211) shows ALL of the
 -- tenant's facilities when this is NULL, and narrows to the one facility
 -- when it is set. It is also what immunizes cron / supabaseAdmin /
 -- migrations, which never carry the header.
@@ -97,7 +97,7 @@ as $$
 $$;
 
 comment on function public.active_facility_id() is
-  'The facility_id from the x-active-facility request header, or NULL when no header was sent. NULL = roll-up (all facilities in the active tenant). Used by domain-table RLS in migration 201.';
+  'The facility_id from the x-active-facility request header, or NULL when no header was sent. NULL = roll-up (all facilities in the active tenant). Used by domain-table RLS in migration 211.';
 
 -- ────────────────────────────────────────────────────────────────────
 -- RLS — tenant scope only.

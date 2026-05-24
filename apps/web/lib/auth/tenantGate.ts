@@ -118,7 +118,7 @@ function makeOk(
   // Authenticated client carrying the user's JWT — RLS sees the
   // user, the active-tenant header, and (when set) the active-facility
   // header, scoping everything. Forwarding x-active-facility also lets the
-  // facility_id column DEFAULT (migration 200) auto-stamp inserts done
+  // facility_id column DEFAULT (migration 210) auto-stamp inserts done
   // through this client.
   const headers: Record<string, string> = {
     Authorization:     `Bearer ${token}`,

@@ -1,4 +1,4 @@
--- Migration 201: honor x-active-facility in domain-table RLS.
+-- Migration 211: honor x-active-facility in domain-table RLS.
 --
 -- Extends the header-scoping from migration 032. After this migration each
 -- generated <table>_tenant_scope policy filters by facility too:
@@ -10,7 +10,7 @@
 --
 -- Symmetric with 032's "no x-active-tenant header => all the user's tenants".
 -- A facility_id IS NULL row is visible in BOTH modes — that is the "shared
--- across all facilities" semantics for bucket-B catalog rows (migration 200).
+-- across all facilities" semantics for bucket-B catalog rows (migration 210).
 --
 -- SAFETY: we ONLY touch tables that (a) carry both tenant_id and facility_id
 -- AND (b) already have the generated <table>_tenant_scope policy from 029/032.
