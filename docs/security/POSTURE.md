@@ -105,3 +105,41 @@ The hardening pass landing alongside this document closes the customer-visible C
 - Manual probe scripts can be supplied on request (forged `x-active-tenant`, raw-error fuzz, malformed-PNG signature, mismatched-Origin POST).
 
 For deeper diligence questions or to schedule a live review, contact the platform team.
+
+## 12. Medical-data confidentiality (injured-person case management)
+
+Case management for injured persons (`incident_care_cases`, `incident_care_visits`,
+and the related authorization/document tables) stores employee medical detail —
+diagnosis, restrictions, treating physician, work-status. This section states the
+controls and the legal frame.
+
+### Legal frame
+
+Employer-held workers'-compensation injury records are largely **outside** the
+HIPAA Privacy Rule (the employment-records exclusion, plus the §164.512(l)
+workers'-comp disclosure permission). What unambiguously binds the employer is
+**ADA 29 CFR 1630.14(c)** — employee medical information must be collected
+separately, stored in **separate, confidential files**, and accessed only on a
+need-to-know basis — and **GINA** for genetic/family-history information. Some
+states add medical-privacy statutes (e.g. California CMIA). Our standard is to
+**build to the HIPAA Security Rule safeguard bar** so the ADA/GINA/state
+obligations are satisfied by construction, and so we can sign a **Business
+Associate Agreement** if a tenant's occupational-health clinic ever makes us a
+Business Associate.
+
+### Controls (mapped to HIPAA Security Rule safeguards)
+
+| Safeguard | Control | Implementation |
+|---|---|---|
+| Access control (§164.312(a)) | Least privilege enforced **at the data layer**, not just the app. Medical rows are visible only to superadmin, tenant owner/admin, the assigned investigator, or the designated case manager. | `can_view_care_phi()` predicate; RLS on `incident_care_cases`, `incident_care_visits`, `incident_medical_authorizations`, `incident_medical_documents` (`migrations/201_care_phi_confidentiality.sql`). |
+| Audit controls (§164.312(b)) | Every change is captured immutably; every authorized **read/export** is logged (Postgres has no SELECT trigger, so the API records the disclosure). | `log_audit('id')` triggers on care tables → `audit_log`; `phi_access_log` (append-only: REVOKE update/delete + immutable trigger), written by `app/api/incidents/[id]/care/route.ts`. |
+| Integrity (§164.312(c)) | The access trail cannot be altered or deleted through DML. | `phi_access_log_immutable()` trigger. |
+| Storage segregation | Medical files (work-status notes, FMLA, signed releases) live in a **restricted `medical-records` bucket**, separate from the investigator-visible `incident-evidence` bucket. | `incident_medical_documents` + Storage RLS (bucket provisioned via dashboard; paths `{tenant_id}/{incident_id}/{uuid}.{ext}`). |
+| Authorization for disclosure | A signed release is tracked before any medical detail is shared with a carrier/employer; disclosure paths gate on an **active** authorization. | `incident_medical_authorizations`; `isAuthorizationActive()` in `packages/core/src/incidentCare.ts`. |
+| Minimum necessary | The AI assistant never surfaces diagnosis to unauthorized roles, and aggregates (scorecard, cost trend) are de-identified counts/rates. | Assistant PHI rule (case-management phase); existing scorecard aggregates. |
+
+### Scheduled (case-management roadmap)
+
+See `docs/injury-case-management-plan.md`. Open items that touch this section:
+column-level encryption for the free-text `diagnosis` field (beyond at-rest disk
+encryption) and a tenant-facing BAA workflow are tracked there, not yet shipped.
