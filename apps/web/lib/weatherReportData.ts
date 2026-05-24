@@ -12,11 +12,16 @@ import { computeIncidentRisk } from '@/lib/incidentRiskFeatures'
 const DAY_MS = 86_400_000
 
 export interface WeatherReportData {
-  weekStart: string
-  rows:      WeatherMetricRow[]
-  trir:      number | null
-  dart:      number | null
-  risk:      { score: number; band: string; topDriver?: string | null } | null
+  weekStart:      string
+  rows:           WeatherMetricRow[]
+  trir:           number | null
+  dart:           number | null
+  recordablesYtd: number
+  risk:           {
+    score:   number
+    band:    string
+    drivers: { label: string; value: string; target: string; contribution: number; href: string }[]
+  } | null
 }
 
 export async function buildWeatherReportData(admin: SupabaseClient, tenantId: string): Promise<WeatherReportData> {
@@ -85,8 +90,15 @@ export async function buildWeatherReportData(admin: SupabaseClient, tenantId: st
   let risk: WeatherReportData['risk'] = null
   try {
     const rr = await computeIncidentRisk(admin, tenantId)
-    risk = { score: rr.score, band: rr.band, topDriver: rr.drivers[0]?.label ?? null }
+    risk = {
+      score: rr.score,
+      band:  rr.band,
+      drivers: rr.drivers
+        .filter(d => d.contribution > 0)
+        .slice(0, 5)
+        .map(d => ({ label: d.label, value: d.value, target: d.target, contribution: d.contribution, href: d.href })),
+    }
   } catch { risk = null }
 
-  return { weekStart, rows, trir, dart, risk }
+  return { weekStart, rows, trir, dart, recordablesYtd: recordablesYtd.length, risk }
 }

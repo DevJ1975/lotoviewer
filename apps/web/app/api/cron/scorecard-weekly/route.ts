@@ -116,6 +116,7 @@ async function runCron(req: Request): Promise<NextResponse> {
           rows:           data.rows,
           trir:           data.trir,
           dart:           data.dart,
+          recordablesYtd: data.recordablesYtd,
           appUrl,
           tenantName:     t.name,
           tenantId:       t.id,
