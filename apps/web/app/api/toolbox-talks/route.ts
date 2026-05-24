@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { dateWindow, localDateString, tenantTimeZone } from '@/lib/toolboxDates'
 import { TOOLBOX_TALK_ARCHIVE_DAYS, TOOLBOX_TALK_DAYS_AHEAD, TOOLBOX_TALKS_MODULE_ID } from '@/lib/toolboxTalkPacks'
 
@@ -48,8 +49,19 @@ export async function GET(req: Request) {
     // is here to keep the default page response under ~30 KB; the
     // archive opt-in sends one round-trip when the user actually
     // wants the full library.
+    //
+    // Runs through the service-role client, not gate.authedClient:
+    // migration 137 hardened toolbox_talk_signatures to a column-level
+    // grant for `authenticated` (the signature_data blob stays
+    // service-role-only). The embedded `toolbox_talk_signatures(count)`
+    // aggregate references the table at the whole-relation level, which
+    // needs a table-level SELECT grant the role no longer holds — under
+    // RLS it fails with "permission denied for table". Signature reads
+    // are owned by the service role here (same posture as the sign and
+    // print routes); the explicit tenant_id filter scopes the rows to
+    // the tenant the gate already verified membership of.
     const pastLimit = archive ? TOOLBOX_TALK_ARCHIVE_DAYS : 30
-    const pastQuery = gate.authedClient
+    const pastQuery = supabaseAdmin()
       .from('toolbox_talks')
       .select('id, talk_date, title, topic_id, generated_at, toolbox_talk_signatures(count)')
       .eq('tenant_id', gate.tenantId)
