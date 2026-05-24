@@ -1,10 +1,22 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.7.1'
+const CURRENT_VERSION = '1.8.0'
 const LAST_UPDATED    = '2026-05-24'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.8.0',
+    date:    '2026-05-24',
+    changes: [
+      'Leading + investigation-quality strip: severity rate, CAPA on-time %, ' +
+      'RCA completion %, and mean time-to-close now sit alongside TRIR / DART / ' +
+      'LTIR on the board.',
+      'Injury breakdowns: a "how people are getting hurt" nature-of-injury ' +
+      'chart now sits beside the "where" body-part chart, plus a shift × ' +
+      'weekday heatmap showing when incidents cluster.',
+    ],
+  },
   {
     version: '1.7.1',
     date:    '2026-05-24',
@@ -124,12 +136,19 @@ export default function WikiScorecardPage() {
       </Section>
 
       <Section id="metrics" title="What it measures">
+        <p>
+          The scorecard leads with the injury &amp; OSHA recordkeeping picture
+          (trailing 12 months), then drops into the permit / atmospheric /
+          equipment program metrics for the selected window.
+        </p>
         <ul>
+          <li>OSHA rates — TRIR, DART, LTIR, and severity rate (days × 200K / hours)</li>
+          <li>Leading + investigation quality — CAPA on-time %, RCA completion %, mean time-to-close</li>
+          <li>Days since last recordable, this-week-vs-last movement, recordable + near-miss trend</li>
+          <li>Where &amp; how people are getting hurt — body-part and nature-of-injury breakdowns</li>
+          <li>When incidents cluster — a shift × weekday heatmap</li>
           <li>Confined-space permits issued, completed, expired, canceled</li>
-          <li>Hot-work permits by outcome (clean / fire-observed / canceled)</li>
           <li>Atmospheric-test failures and the spaces that drove them</li>
-          <li>Near-miss volume + severity mix</li>
-          <li>Open vs. closed risks, residual-score distribution</li>
           <li>LOTO photo-completion percentage trend</li>
         </ul>
       </Section>

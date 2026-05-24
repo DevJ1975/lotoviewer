@@ -11,6 +11,7 @@ import {
   severityActualBreakdown,
   hierarchyOfControlsMix,
   bodyPartHeatmap,
+  injuryNatureBreakdown,
   shiftDayHeatmap,
   selectRecordableInWindow,
   summarizeIncidentScorecard,
@@ -289,9 +290,9 @@ describe('hierarchyOfControlsMix', () => {
 describe('bodyPartHeatmap', () => {
   it('counts each body part across all injured rows', () => {
     const rows: PersonRowForMetrics[] = [
-      { incident_id: '1', body_part: ['hand_right', 'arm_left'] },
-      { incident_id: '2', body_part: ['hand_right'] },
-      { incident_id: '3', body_part: null },
+      { incident_id: '1', body_part: ['hand_right', 'arm_left'], injury_nature: null },
+      { incident_id: '2', body_part: ['hand_right'], injury_nature: null },
+      { incident_id: '3', body_part: null, injury_nature: null },
     ]
     const out = bodyPartHeatmap(rows)
     expect(out.find(b => b.body_part === 'hand_right')?.count).toBe(2)
@@ -300,12 +301,39 @@ describe('bodyPartHeatmap', () => {
 
   it('sorts descending by count', () => {
     const out = bodyPartHeatmap([
-      { incident_id: '1', body_part: ['back_lower'] },
-      { incident_id: '2', body_part: ['hand_right'] },
-      { incident_id: '3', body_part: ['hand_right'] },
-      { incident_id: '4', body_part: ['hand_right'] },
+      { incident_id: '1', body_part: ['back_lower'], injury_nature: null },
+      { incident_id: '2', body_part: ['hand_right'], injury_nature: null },
+      { incident_id: '3', body_part: ['hand_right'], injury_nature: null },
+      { incident_id: '4', body_part: ['hand_right'], injury_nature: null },
     ])
     expect(out[0]!.body_part).toBe('hand_right')
+    expect(out[0]!.count).toBe(3)
+  })
+})
+
+describe('injuryNatureBreakdown', () => {
+  it('counts each nature and drops blank/null entries', () => {
+    const rows: PersonRowForMetrics[] = [
+      { incident_id: '1', body_part: null, injury_nature: 'laceration' },
+      { incident_id: '2', body_part: null, injury_nature: 'laceration' },
+      { incident_id: '3', body_part: null, injury_nature: 'sprain' },
+      { incident_id: '4', body_part: null, injury_nature: null },
+      { incident_id: '5', body_part: null, injury_nature: '   ' },
+    ]
+    const out = injuryNatureBreakdown(rows)
+    expect(out.find(b => b.injury_nature === 'laceration')?.count).toBe(2)
+    expect(out.find(b => b.injury_nature === 'sprain')?.count).toBe(1)
+    expect(out).toHaveLength(2)                          // null + blank dropped
+  })
+
+  it('trims whitespace before bucketing and sorts descending', () => {
+    const out = injuryNatureBreakdown([
+      { incident_id: '1', body_part: null, injury_nature: 'burn' },
+      { incident_id: '2', body_part: null, injury_nature: ' sprain ' },
+      { incident_id: '3', body_part: null, injury_nature: 'sprain' },
+      { incident_id: '4', body_part: null, injury_nature: 'sprain' },
+    ])
+    expect(out[0]!.injury_nature).toBe('sprain')         // ' sprain ' merged with 'sprain'
     expect(out[0]!.count).toBe(3)
   })
 })

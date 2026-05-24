@@ -39,6 +39,11 @@ export interface BodyPartBucket {
   count:     number
 }
 
+export interface InjuryNatureBucket {
+  injury_nature: string             // free text, e.g. 'laceration'
+  count:         number
+}
+
 export interface ShiftDayBucket {
   shift:     'day' | 'swing' | 'night' | 'unknown'
   /** 0 = Sunday, 6 = Saturday, in the tenant's local time at intake. */
@@ -115,6 +120,9 @@ export interface IncidentScorecardMetrics {
   severityActualBreakdown: Record<IncidentSeverityActual, number>
   hierarchyOfControlsMix:  HierarchyMixBucket[]
   bodyPartHeatmap:       BodyPartBucket[]
+  /** Reported nature-of-injury counts (free text from incident_people),
+   *  most frequent first. Blank/whitespace natures are dropped. */
+  injuryNatureBreakdown: InjuryNatureBucket[]
   shiftDayHeatmap:       ShiftDayBucket[]
 
   /** This-week vs last-week movement on the headline indicators (7-day
@@ -165,8 +173,9 @@ export interface InvestigationRowForMetrics {
 }
 
 export interface PersonRowForMetrics {
-  incident_id: string
-  body_part:   string[] | null
+  incident_id:   string
+  body_part:     string[] | null
+  injury_nature: string | null
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -378,6 +387,23 @@ export function bodyPartHeatmap(
   return list
 }
 
+// Nature of injury is free text (e.g. 'laceration', 'sprain'). We trim
+// surrounding whitespace and bucket by the exact value — blank entries
+// are dropped so the chart never carries an empty bar.
+export function injuryNatureBreakdown(
+  people: ReadonlyArray<PersonRowForMetrics>,
+): InjuryNatureBucket[] {
+  const counts = new Map<string, number>()
+  for (const p of people) {
+    const nature = p.injury_nature?.trim()
+    if (!nature) continue
+    counts.set(nature, (counts.get(nature) ?? 0) + 1)
+  }
+  const list = Array.from(counts.entries()).map(([injury_nature, count]) => ({ injury_nature, count }))
+  list.sort((a, b) => b.count - a.count)
+  return list
+}
+
 export function shiftDayHeatmap(
   rows: ReadonlyArray<IncidentRowForMetrics>,
 ): ShiftDayBucket[] {
@@ -521,6 +547,7 @@ export function summarizeIncidentScorecard(input: SummariseInput): IncidentScore
     severityActualBreakdown:  severityActualBreakdown(incidentsInWindow),
     hierarchyOfControlsMix:   hierarchyOfControlsMix(input.actions),
     bodyPartHeatmap:          bodyPartHeatmap(input.injuredPeople),
+    injuryNatureBreakdown:    injuryNatureBreakdown(input.injuredPeople),
     shiftDayHeatmap:          shiftDayHeatmap(incidentsInWindow),
     weekOverWeek,
   }
@@ -566,7 +593,7 @@ export async function fetchIncidentScorecardMetrics(
       .select('incident_id, completed_at'),
     supabase
       .from('incident_people_safe')
-      .select('incident_id, body_part')
+      .select('incident_id, body_part, injury_nature')
       .eq('person_role', 'injured'),
     supabase
       .from('osha_establishments')
