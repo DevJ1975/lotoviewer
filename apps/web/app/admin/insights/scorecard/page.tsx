@@ -10,6 +10,7 @@ import {
   FileDown,
   Gauge,
   Loader2,
+  Mail,
   Maximize2,
   Minimize2,
   Timer,
@@ -103,6 +104,7 @@ export default function ScorecardPage() {
   const { tenantId } = useTenant()
   const [presentation, setPresentation] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
   // Keep presentation mode in sync with the browser fullscreen state, so the
@@ -174,6 +176,32 @@ export default function ScorecardPage() {
     return () => { cancelled = true }
   }, [tenantId])
 
+  // Open the weekly weather-report email exactly as it will send, in a new
+  // tab — so an admin can see it before it goes out. Auth needs the bearer +
+  // tenant header, so fetch the HTML and open it as a blob.
+  async function previewWeather() {
+    if (!tenantId) return
+    setPreviewing(true); setExportError(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/scorecard/weather-preview', {
+        headers: {
+          'x-active-tenant': tenantId,
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+      })
+      if (!res.ok) throw new Error(`Preview failed (${res.status})`)
+      const html = await res.text()
+      const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
+      window.open(url, '_blank', 'noopener,noreferrer')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : 'Could not preview the weekly email')
+    } finally {
+      setPreviewing(false)
+    }
+  }
+
   if (authLoading) {
     return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
@@ -227,6 +255,15 @@ export default function ScorecardPage() {
             >
               {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
               <span className="hidden sm:inline">PDF</span>
+            </button>
+            <button
+              onClick={previewWeather}
+              disabled={previewing}
+              className="motion-press flex h-10 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-brand-navy/30 hover:text-brand-navy disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              aria-label="Preview the weekly email"
+            >
+              {previewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+              <span className="hidden sm:inline">Preview email</span>
             </button>
             <button
               onClick={togglePresentation}

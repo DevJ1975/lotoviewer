@@ -1,10 +1,20 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.2.0'
+const CURRENT_VERSION = '1.3.0'
 const LAST_UPDATED    = '2026-05-24'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.3.0',
+    date:    '2026-05-24',
+    changes: [
+      'Preview email: a "Preview email" button renders the weekly weather ' +
+      'report exactly as it will send (week-over-week movement, TRIR/DART, and ' +
+      'the predicted incident-risk score) in a new tab, so you can see it ' +
+      'before it goes out Monday.',
+    ],
+  },
   {
     version: '1.2.0',
     date:    '2026-05-24',

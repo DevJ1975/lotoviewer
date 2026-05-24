@@ -63,6 +63,12 @@ export async function sendScorecardWeatherReport(args: ScorecardWeatherReportArg
   }
 }
 
+// Render the exact HTML body of the weekly email without sending — used by
+// the admin preview route so a client can see the report before it goes out.
+export function renderWeatherReportHtml(args: ScorecardWeatherReportArgs): string {
+  return renderHtml(args, args.unsubscribeUrl ?? null)
+}
+
 function fmtRate(v: number | null): string {
   return v === null ? 'n/a' : v.toFixed(2)
 }
