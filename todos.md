@@ -42,3 +42,8 @@ Investigation-SLA escalations and the annual OSHA-300A posting prompt intentiona
   - [ ] Confirm `ALLOW_DEEPLINK_PLACEHOLDERS=1` is set in the **Vercel** build env (the web `prebuild` runs the strict deep-link check and would otherwise fail the deploy until the placeholders above are real).
 - [ ] **Test-suite health (dev task, not a blocker):** 81 pre-existing unit tests across 14 files fail on `main` — stale fixtures after the Spectrum UI restyle (text matchers) and hardcoded `features` registry counts that grew as modules were added. They do **not** gate CI (CI runs the repo/wiki guards, not vitest) and are **not** caused by this session's work (verified: `main` fails the identical set). Worth a dedicated repair pass — tell me if you want me to take it.
 
+## 7. AI follow-ups (2026-05-24)
+- [ ] **Train the agent on more manuals — admin upload UI.** The RAG ingest pipeline exists (`apps/web/lib/ai/{chunker,embeddings,policyExtract,syncManualToRag}.ts` → `knowledge_documents`/`knowledge_chunks`), but there's no friendly admin page to upload an arbitrary manual/policy and run it. Build that page (global regs vs. per-tenant policy) so you can train the agent without code. _(Deferred — its own focused build.)_
+- [ ] **Mobile parity** — see `docs/mobile-parity-plan.md`. Tier 1: mobile AI assistant (reuse `/api/assistant/chat`), field permit/incident/inspection/BBS capture, push notifications.
+- **WLS demo seed — DONE:** the WLS Demo tenant has demo overdue CAPAs + expired certs (tagged "Demo —") so the incident-risk predictor + weather-report preview show a rich scenario.
+
