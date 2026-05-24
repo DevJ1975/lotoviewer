@@ -3,16 +3,20 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import Link from 'next/link'
 import {
+  Activity,
   ArrowLeft,
   BarChart3,
+  CalendarClock,
   Camera,
   ClipboardCheck,
   FileDown,
   Gauge,
+  HeartPulse,
   Loader2,
   Mail,
   Maximize2,
   Minimize2,
+  ShieldCheck,
   Timer,
   Wind,
   type LucideIcon,
@@ -29,6 +33,7 @@ import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { fetchScorecardMetrics, type DayBucket, type ScorecardMetrics } from '@soteria/core/scorecardMetrics'
+import { fetchIncidentScorecardMetrics, type IncidentScorecardMetrics } from '@soteria/core/incidentScorecardMetrics'
 import type { IncidentRiskResult, IncidentRiskBand } from '@soteria/core/incidentRiskModel'
 
 // EHS scorecard - an operations-board view for safety leaders.
@@ -153,6 +158,19 @@ export default function ScorecardPage() {
       setExporting(false)
     }
   }
+
+  // Injury & OSHA recordkeeping metrics — trailing 12 months, RLS-scoped
+  // client-side fetch (same pattern as fetchScorecardMetrics). Independent of
+  // the permit window selector since TRIR/DART are annual by definition.
+  const [incidentMetrics, setIncidentMetrics] = useState<IncidentScorecardMetrics | null>(null)
+  useEffect(() => {
+    if (authLoading || !profile?.is_admin) return
+    let cancelled = false
+    fetchIncidentScorecardMetrics(365)
+      .then(m => { if (!cancelled && m) setIncidentMetrics(m) })
+      .catch(() => { /* non-fatal — section just stays hidden */ })
+    return () => { cancelled = true }
+  }, [authLoading, profile])
 
   // Data-driven incident-risk score (deterministic, computed server-side).
   const [risk, setRisk] = useState<IncidentRiskResult | null>(null)
@@ -290,6 +308,12 @@ export default function ScorecardPage() {
 
       {risk && <PredictedRiskCard risk={risk} />}
 
+      {incidentMetrics && <IncidentScorecardSection metrics={incidentMetrics} />}
+
+      <div className="flex items-center gap-2 pt-1">
+        <span className="ops-section-title text-[11px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Permits &amp; LOTO</span>
+        <span aria-hidden="true" className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
+      </div>
       {metrics ? (
         <ScorecardInfographics key={windowDays} metrics={metrics} windowDays={windowDays} loading={loading} />
       ) : (
@@ -809,4 +833,177 @@ function PredictedRiskCard({ risk }: { risk: IncidentRiskResult }) {
       </div>
     </section>
   )
+}
+
+// Injury & OSHA recordkeeping — the lagging/leading safety metrics an EHS
+// director reads first: the recordable-free streak, OSHA rates (TRIR/DART/
+// LTIR), the 300A recordkeeping roll-up, this-week momentum, the recordable +
+// near-miss trend, and where on the body people are getting hurt. All from the
+// trailing-12-month IncidentScorecardMetrics.
+function IncidentScorecardSection({ metrics: m }: { metrics: IncidentScorecardMetrics }) {
+  const streak = m.daysSinceLastRecordable
+  const monthly = mergeMonthly(m.recordablesByMonth, m.nearMissByMonth)
+  const bodyParts = m.bodyPartHeatmap.slice(0, 8).map(b => ({ name: humanizeBodyPart(b.body_part), count: b.count }))
+
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center gap-2">
+        <span className="ops-section-title text-[11px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Injury &amp; OSHA recordkeeping · trailing 12 months</span>
+        <span aria-hidden="true" className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <IncidentStatCard icon={CalendarClock} label="Days since last recordable"
+          value={streak < 0 ? '—' : String(streak)}
+          sub={streak < 0 ? 'none on file' : streak === 1 ? 'day' : 'days'}
+          accent={streak < 0 || streak >= 30 ? 'safe' : 'neutral'} />
+        <IncidentStatCard icon={Activity} label="TRIR" value={fmtRate(m.trir)} sub="per 100 FTE" accent="neutral" />
+        <IncidentStatCard icon={Activity} label="DART" value={fmtRate(m.dart)} sub="per 100 FTE" accent="neutral" />
+        <IncidentStatCard icon={Activity} label="LTIR" value={fmtRate(m.ltir)} sub="per 100 FTE" accent="neutral" />
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="ops-surface animate-panel-in rounded-lg p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="flex size-7 items-center justify-center rounded-md bg-brand-navy/10 text-brand-navy dark:bg-brand-yellow/15 dark:text-brand-yellow"><ShieldCheck className="h-4 w-4" /></span>
+            <h3 className="text-sm font-black text-slate-900 dark:text-slate-100">OSHA recordkeeping</h3>
+          </div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+            <RecordkeepingStat label="Total recordable" value={m.totalRecordable} />
+            <RecordkeepingStat label="Days-away cases" value={m.totalDaysAwayCases} />
+            <RecordkeepingStat label="Restricted/xfer" value={m.totalRestrictedCases} />
+            <RecordkeepingStat label="Other recordable" value={m.totalOtherRecordable} />
+            <RecordkeepingStat label="Days away (total)" value={m.totalDaysAwayCount} />
+            <RecordkeepingStat label="Fatalities" value={m.totalDeaths} critical />
+          </div>
+        </div>
+
+        <div className="ops-surface animate-panel-in rounded-lg p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="flex size-7 items-center justify-center rounded-md bg-brand-navy/10 text-brand-navy dark:bg-brand-yellow/15 dark:text-brand-yellow"><HeartPulse className="h-4 w-4" /></span>
+            <h3 className="text-sm font-black text-slate-900 dark:text-slate-100">This week vs last</h3>
+          </div>
+          <div className="space-y-3">
+            <WowRow label="Recordable injuries" current={m.weekOverWeek.recordables.current} previous={m.weekOverWeek.recordables.previous} higherIsBetter={false} />
+            <WowRow label="Near-miss reports" current={m.weekOverWeek.nearMiss.current} previous={m.weekOverWeek.nearMiss.previous} higherIsBetter={true} />
+            <p className="border-t border-slate-100 pt-3 text-[11px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
+              Near-miss-to-recordable ratio:&nbsp;
+              <span className="font-bold text-slate-700 dark:text-slate-200">{m.nearMissToRecordableRatio === null ? '—' : `${m.nearMissToRecordableRatio.toFixed(1)} : 1`}</span>
+              &nbsp;· higher = stronger reporting culture
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <ChartCard title="Recordable & near-miss trend" subtitle="Monthly counts across the trailing 12 months." loading={false} empty={monthly.every(d => d.recordables === 0 && d.nearMiss === 0)}>
+        <ResponsiveContainer width="100%" height={240}>
+          <BarChart data={monthly} margin={{ top: 8, right: 4, left: -16, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#dbe3ee" vertical={false} />
+            <XAxis dataKey="month" tickFormatter={monthShort} stroke="#64748b" tick={{ fontSize: 10 }} />
+            <YAxis allowDecimals={false} stroke="#64748b" tick={{ fontSize: 10 }} />
+            <Tooltip wrapperStyle={{ fontSize: 11 }} labelFormatter={(label) => monthShort(String(label))} cursor={{ fill: 'rgba(27, 58, 107, 0.08)' }} />
+            <Bar dataKey="nearMiss" name="Near-miss" fill="#059669" radius={[4, 4, 0, 0]} animationDuration={600} />
+            <Bar dataKey="recordables" name="Recordable" fill="#BE123C" radius={[4, 4, 0, 0]} animationDuration={600} />
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartCard>
+
+      <ChartCard title="Where people are getting hurt" subtitle="Injuries by body part — top reported." loading={false} empty={bodyParts.length === 0}>
+        <ResponsiveContainer width="100%" height={Math.max(160, bodyParts.length * 34)}>
+          <BarChart data={bodyParts} layout="vertical" margin={{ top: 4, right: 28, left: 8, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#dbe3ee" horizontal={false} />
+            <XAxis type="number" allowDecimals={false} stroke="#64748b" tick={{ fontSize: 10 }} />
+            <YAxis type="category" dataKey="name" width={132} stroke="#64748b" tick={{ fontSize: 11 }} />
+            <Tooltip wrapperStyle={{ fontSize: 11 }} cursor={{ fill: 'rgba(15, 23, 42, 0.05)' }} />
+            <Bar dataKey="count" name="Injuries" fill="#1B3A6B" radius={[0, 4, 4, 0]} animationDuration={600} />
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartCard>
+    </section>
+  )
+}
+
+function IncidentStatCard({ icon: Icon, label, value, sub, accent }: {
+  icon: LucideIcon; label: string; value: string; sub: string; accent: Tone
+}) {
+  const style = TONE_STYLES[accent]
+  return (
+    <article tabIndex={0} className={`ops-surface-interactive ops-surface animate-panel-in rounded-lg p-4 outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/40 dark:focus-visible:ring-brand-yellow/40 ${style.border}`}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-black uppercase leading-tight text-slate-500 dark:text-slate-400">{label}</p>
+        <span className={`flex size-7 shrink-0 items-center justify-center rounded-md ${style.soft}`}><Icon className="h-4 w-4" /></span>
+      </div>
+      <p className={`mt-2 text-3xl font-black tabular-nums leading-none ${style.text}`}>{value}</p>
+      <p className="mt-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">{sub}</p>
+    </article>
+  )
+}
+
+function RecordkeepingStat({ label, value, critical = false }: { label: string; value: number; critical?: boolean }) {
+  const color = critical && value > 0 ? 'text-rose-700 dark:text-rose-300' : 'text-slate-900 dark:text-slate-100'
+  return (
+    <div>
+      <p className={`text-2xl font-black tabular-nums leading-none ${color}`}>{value}</p>
+      <p className="mt-1 text-[11px] font-semibold uppercase text-slate-500 dark:text-slate-400">{label}</p>
+    </div>
+  )
+}
+
+function WowRow({ label, current, previous, higherIsBetter }: {
+  label: string; current: number; previous: number; higherIsBetter: boolean
+}) {
+  const delta = current - previous
+  const dir = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat'
+  const good = dir === 'flat' ? null : (dir === 'up' ? higherIsBetter : !higherIsBetter)
+  const color = good === null ? 'text-slate-400'
+    : good ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+  const arrow = dir === 'up' ? '↑' : dir === 'down' ? '↓' : '—'
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{label}</span>
+      <span className="flex items-baseline gap-2">
+        <span className="text-lg font-black tabular-nums text-slate-900 dark:text-slate-100">{current}</span>
+        <span className="text-[11px] text-slate-400">was {previous}</span>
+        <span className={`text-xs font-bold ${color}`}>{dir === 'flat' ? '—' : `${arrow} ${Math.abs(delta)}`}</span>
+      </span>
+    </div>
+  )
+}
+
+function mergeMonthly(
+  rec: ReadonlyArray<{ month: string; count: number }>,
+  nm: ReadonlyArray<{ month: string; count: number }>,
+): Array<{ month: string; recordables: number; nearMiss: number }> {
+  const map = new Map<string, { month: string; recordables: number; nearMiss: number }>()
+  for (const b of rec) map.set(b.month, { month: b.month, recordables: b.count, nearMiss: 0 })
+  for (const b of nm) {
+    const e = map.get(b.month) ?? { month: b.month, recordables: 0, nearMiss: 0 }
+    e.nearMiss = b.count
+    map.set(b.month, e)
+  }
+  return [...map.values()].sort((a, b) => a.month.localeCompare(b.month))
+}
+
+function monthShort(ym: string): string {
+  const [y, mo] = ym.split('-').map(Number)
+  if (!y || !mo) return ym
+  return new Date(Date.UTC(y, mo - 1, 1)).toLocaleDateString(undefined, { month: 'short' })
+}
+
+function humanizeBodyPart(slug: string): string {
+  const parts = slug.split(/[_\s]+/).filter(Boolean)
+  if (parts.length === 0) return slug
+  const side = parts[parts.length - 1]
+  if (side === 'left' || side === 'right') {
+    return `${parts.slice(0, -1).map(capitalize).join(' ')} (${side})`
+  }
+  return parts.map(capitalize).join(' ')
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+function fmtRate(v: number | null): string {
+  return v === null ? '—' : v.toFixed(2)
 }

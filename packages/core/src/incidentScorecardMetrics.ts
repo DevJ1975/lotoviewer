@@ -110,10 +110,20 @@ export interface IncidentScorecardMetrics {
 
   // ── Trend + breakdown series ──────────────────────────────────────────
   recordablesByMonth:    MonthBucket[]
+  /** Near-miss reports filed per month — the reporting-culture trend. */
+  nearMissByMonth:       MonthBucket[]
   severityActualBreakdown: Record<IncidentSeverityActual, number>
   hierarchyOfControlsMix:  HierarchyMixBucket[]
   bodyPartHeatmap:       BodyPartBucket[]
   shiftDayHeatmap:       ShiftDayBucket[]
+
+  /** This-week vs last-week movement on the headline indicators (7-day
+   *  windows ending now). Lets the scorecard show recent momentum without
+   *  a separate fetch. */
+  weekOverWeek: {
+    recordables: { current: number; previous: number }
+    nearMiss:    { current: number; previous: number }
+  }
 
   /** Echo of "now" for the chart axes. */
   nowMs: number
@@ -448,6 +458,31 @@ export function summarizeIncidentScorecard(input: SummariseInput): IncidentScore
   const incidentsInWindow = input.incidents.filter(r =>
     isWithinWindow(r.occurred_at, windowDays, nowMs))
 
+  const nearMissInWindow = incidentsInWindow.filter(r => r.incident_type === 'near_miss')
+  const nearMissByMonth = bucketByMonth(
+    nearMissInWindow.map(r => ({ occurred_at: r.occurred_at })),
+    windowDays, nowMs,
+  )
+
+  // This-week vs last-week momentum (7-day windows ending now).
+  const inRange = (iso: string, fromMs: number, toMs: number): boolean => {
+    const ms = new Date(iso).getTime()
+    return !Number.isNaN(ms) && ms >= fromMs && ms < toMs
+  }
+  const wkThisFrom = nowMs - 7 * DAY_MS
+  const wkPrevFrom = nowMs - 14 * DAY_MS
+  const allNearMiss = input.incidents.filter(r => r.incident_type === 'near_miss')
+  const weekOverWeek = {
+    recordables: {
+      current:  recordablesAll.filter(r => inRange(r.occurred_at, wkThisFrom, nowMs)).length,
+      previous: recordablesAll.filter(r => inRange(r.occurred_at, wkPrevFrom, wkThisFrom)).length,
+    },
+    nearMiss: {
+      current:  allNearMiss.filter(r => inRange(r.occurred_at, wkThisFrom, nowMs)).length,
+      previous: allNearMiss.filter(r => inRange(r.occurred_at, wkPrevFrom, wkThisFrom)).length,
+    },
+  }
+
   return {
     windowDays, nowMs, hoursWorked,
 
@@ -482,10 +517,12 @@ export function summarizeIncidentScorecard(input: SummariseInput): IncidentScore
 
     // Series.
     recordablesByMonth,
+    nearMissByMonth,
     severityActualBreakdown:  severityActualBreakdown(incidentsInWindow),
     hierarchyOfControlsMix:   hierarchyOfControlsMix(input.actions),
     bodyPartHeatmap:          bodyPartHeatmap(input.injuredPeople),
     shiftDayHeatmap:          shiftDayHeatmap(incidentsInWindow),
+    weekOverWeek,
   }
 }
 

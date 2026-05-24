@@ -415,4 +415,38 @@ describe('summarizeIncidentScorecard', () => {
     expect(out.nearMissToRecordableRatio).toBe(1)
     expect(out.recordablesByMonth.length).toBeGreaterThan(0)
   })
+
+  it('computes week-over-week movement and a near-miss-by-month trend', () => {
+    const now = new Date('2026-04-30T00:00:00Z').getTime()
+    const DAY = 86_400_000
+    const iso = (msAgo: number) => new Date(now - msAgo).toISOString()
+    const recordable = (id: string, msAgo: number): IncidentWithClassification => ({
+      id, incident_type: 'injury_illness', occurred_at: iso(msAgo),
+      reported_at: iso(msAgo), closed_at: null, shift: 'day',
+      severity_actual: 'medical', status: 'investigating',
+      classification: { incident_id: id, meets_recording_criteria: true, classification: 'other_recordable' },
+    })
+    const nearMiss = (id: string, msAgo: number): IncidentWithClassification => ({
+      id, incident_type: 'near_miss', occurred_at: iso(msAgo),
+      reported_at: iso(msAgo), closed_at: null, shift: 'day',
+      severity_actual: 'none', status: 'reported', classification: null,
+    })
+    const incidents: IncidentWithClassification[] = [
+      recordable('r-this', 2 * DAY),    // this week
+      recordable('r-prev', 9 * DAY),    // last week
+      recordable('r-prev2', 11 * DAY),  // last week
+      nearMiss('n-this1', 1 * DAY),     // this week
+      nearMiss('n-this2', 3 * DAY),     // this week
+      nearMiss('n-prev', 10 * DAY),     // last week
+    ]
+    const out = summarizeIncidentScorecard({
+      windowDays: 365, nowMs: now, hoursWorked: 0,
+      incidents, actions: [], careCases: [], investigations: [], injuredPeople: [],
+    })
+
+    expect(out.weekOverWeek.recordables).toEqual({ current: 1, previous: 2 })
+    expect(out.weekOverWeek.nearMiss).toEqual({ current: 2, previous: 1 })
+    // Three near-miss reports land in the trend; the month with "now" carries them.
+    expect(out.nearMissByMonth.reduce((s, b) => s + b.count, 0)).toBe(3)
+  })
 })
