@@ -18,6 +18,13 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export type TenantGate =
   | { ok: true;  userId: string; userEmail: string | null; tenantId: string;
+      /**
+       * Active facility from the x-active-facility header, or null for the
+       * roll-up view (all facilities in the tenant). Routes that CREATE
+       * facility-scoped records should reject a null facilityId; read routes
+       * may allow it.
+       */
+      facilityId: string | null
       role: 'owner' | 'admin' | 'member' | 'viewer' | 'superadmin'
       /** Per-request authenticated supabase client (RLS scoped). */
       authedClient: SupabaseClient }
@@ -58,6 +65,12 @@ async function gate(req: Request, opts: GateOptions = {}): Promise<TenantGate> {
     return { ok: false, status: 400, message: 'Missing or malformed x-active-tenant header' }
   }
 
+  // Optional: a missing/blank header means the roll-up view. A present but
+  // malformed value is treated as null rather than rejected, so a bad header
+  // never blocks a read — same posture as the client-side reader.
+  const rawFacility = req.headers.get('x-active-facility')?.trim() ?? ''
+  const facilityId  = UUID_RE.test(rawFacility) ? rawFacility : null
+
   const admin = supabaseAdmin()
 
   // Superadmin shortcut: DB flag + env allowlist (same posture as
@@ -72,7 +85,7 @@ async function gate(req: Request, opts: GateOptions = {}): Promise<TenantGate> {
   const isSuperadmin = !!profile?.is_superadmin && !!user.email && allow.includes(user.email.toLowerCase())
 
   if (isSuperadmin) {
-    return makeOk(user, tenantId, 'superadmin', token, url, anon)
+    return makeOk(user, tenantId, facilityId, 'superadmin', token, url, anon)
   }
 
   const { data: membership } = await admin
@@ -90,29 +103,34 @@ async function gate(req: Request, opts: GateOptions = {}): Promise<TenantGate> {
     return { ok: false, status: 403, message: 'Tenant admin or owner required' }
   }
 
-  return makeOk(user, tenantId, role, token, url, anon)
+  return makeOk(user, tenantId, facilityId, role, token, url, anon)
 }
 
 function makeOk(
   user: { id: string; email?: string },
   tenantId: string,
+  facilityId: string | null,
   role: 'owner' | 'admin' | 'member' | 'viewer' | 'superadmin',
   token: string,
   url: string,
   anon: string,
 ): TenantGate {
   // Authenticated client carrying the user's JWT — RLS sees the
-  // user and the active-tenant header, scopes everything.
+  // user, the active-tenant header, and (when set) the active-facility
+  // header, scoping everything. Forwarding x-active-facility also lets the
+  // facility_id column DEFAULT (migration 210) auto-stamp inserts done
+  // through this client.
+  const headers: Record<string, string> = {
+    Authorization:     `Bearer ${token}`,
+    'x-active-tenant': tenantId,
+  }
+  if (facilityId) headers['x-active-facility'] = facilityId
+
   const authedClient = createClient(url, anon, {
     auth: { persistSession: false },
-    global: {
-      headers: {
-        Authorization:    `Bearer ${token}`,
-        'x-active-tenant': tenantId,
-      },
-    },
+    global: { headers },
   })
-  return { ok: true, userId: user.id, userEmail: user.email ?? null, tenantId, role, authedClient }
+  return { ok: true, userId: user.id, userEmail: user.email ?? null, tenantId, facilityId, role, authedClient }
 }
 
 export function requireTenantMember(req: Request) {

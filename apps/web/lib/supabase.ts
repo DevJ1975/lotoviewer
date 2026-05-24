@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   ACTIVE_TENANT_KEY,
+  ACTIVE_FACILITY_KEY,
   createSupabaseClient,
   type AuthStorageAdapter,
 } from '@soteria/core/supabase'
@@ -14,7 +15,7 @@ import { setActiveSupabaseClient } from '@soteria/core/supabaseClient'
 // Re-exports ACTIVE_TENANT_KEY so existing call sites that read /
 // write sessionStorage directly keep working without code changes.
 
-export { ACTIVE_TENANT_KEY }
+export { ACTIVE_TENANT_KEY, ACTIVE_FACILITY_KEY }
 
 // Lazy-initialized: the previous version constructed the client at
 // module-load time, which dragged URL validation into Next's static
@@ -58,6 +59,19 @@ export function readActiveTenant(): string | null {
   } catch { return null }
 }
 
+/**
+ * Returns the active facility id from sessionStorage, or null for the
+ * roll-up view (no facility selected / SSR / unavailable storage). Read
+ * fresh on every Supabase request via the adapter below so a facility
+ * switch takes effect on the next query.
+ */
+export function readActiveFacility(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.sessionStorage.getItem(ACTIVE_FACILITY_KEY)
+  } catch { return null }
+}
+
 function getClient(): SupabaseClient {
   if (cached) return cached
   const url  = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -76,6 +90,7 @@ function getClient(): SupabaseClient {
     // when this is true. We rely on it for the /reset-password flow.
     detectSessionInUrl: true,
     readActiveTenant,
+    readActiveFacility,
     onMalformedTenant: raw => {
       console.warn('[supabase] Malformed active-tenant in sessionStorage, ignoring:', raw)
     },

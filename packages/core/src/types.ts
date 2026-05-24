@@ -148,6 +148,32 @@ export interface TenantMembership {
   updated_at: string
 }
 
+// ── Facility model (migrations 209-211) ─────────────────────────────────────
+// A physical site BENEATH a tenant. One tenant -> many facilities. The active
+// facility is held in FacilityProvider / sessionStorage and injected as the
+// x-active-facility header; RLS scopes domain rows by it. A NULL active
+// facility means the roll-up view (all of the tenant's facilities). A domain
+// row with facility_id NULL is "shared" across the tenant's facilities.
+
+export type FacilityStatus = 'active' | 'archived'
+
+export interface Facility {
+  id:          string
+  tenant_id:   string
+  name:        string
+  // Optional short human handle ('PLANT-A'); unique within a tenant.
+  code:        string | null
+  address:     string | null
+  city:        string | null
+  state:       string | null
+  // The tenant's default facility. Exactly one per tenant.
+  is_primary:  boolean
+  status:      FacilityStatus
+  settings:    Record<string, unknown>
+  created_at:  string
+  updated_at:  string
+}
+
 // ── Confined Space module (OSHA 29 CFR 1910.146) ────────────────────────────
 // Mirrors the schema introduced in migration 009. The split is:
 //   ConfinedSpace        — the inventory (one row per physical space)
