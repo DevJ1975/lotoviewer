@@ -29,6 +29,7 @@ import {
   FileArchive,
   FileCog,
   FileSignature,
+  FileUp,
   FlaskConical,
   GraduationCap,
   HardHat,
@@ -265,6 +266,9 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       tile('insights', 'hygiene-log',       'hygiene-log',
         Brush, 'Data hygiene log',
         'One-off LOTO data ops — decommissions, renames, FK repairs.'),
+      tile('insights', 'history-import',     null,
+        FileUp, 'Historical import',
+        'Upload prior-year OSHA 300A logs — AI extracts the numbers for your review, then fills the year-over-year scorecard.'),
     ],
   },
   {
