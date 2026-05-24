@@ -39,7 +39,7 @@ export interface Equipment {
   // Optional so pre-migration test fixtures don't need an explicit
   // field; the PeriodicEquipmentSnapshot helper coerces undefined → null.
   next_periodic_review_due_at?: string | null
-  // Equipment make + model (migration 190). Nullable; admins fill in
+  // Equipment make + model (migration 208). Nullable; admins fill in
   // via PlacardDetailsSheet. Used by admin search + by future
   // photo-plausibility tooling that needs to know what the machine
   // should look like.

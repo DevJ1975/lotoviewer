@@ -1,4 +1,4 @@
--- Migration 190: Manufacturer + model on loto_equipment.
+-- Migration 208: Manufacturer + model on loto_equipment.
 --
 -- Today the placard carries equipment_id (text PK) + a free-text
 -- description. There is no canonical "what kind of machine is this"
