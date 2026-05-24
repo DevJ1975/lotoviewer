@@ -1,10 +1,22 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.1.0'
-const LAST_UPDATED    = '2026-05-23'
+const CURRENT_VERSION = '1.2.0'
+const LAST_UPDATED    = '2026-05-24'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.2.0',
+    date:    '2026-05-24',
+    changes: [
+      'Predicted incident risk: a data-driven 0–100 score + band at the top ' +
+      'of the scorecard, with a ranked "where to work to lower it" list of ' +
+      'drivers (overdue CAPAs, near-miss reporting, open high risks, expiring ' +
+      'training, etc.) that deep-link to the module where the work happens. ' +
+      'The score is deterministic — computed from your leading/lagging ' +
+      'indicators, not an AI opinion — and also appears in the weekly email.',
+    ],
+  },
   {
     version: '1.1.0',
     date:    '2026-05-23',
@@ -35,6 +47,7 @@ export default function WikiScorecardPage() {
         { id: 'overview', label: 'What it\'s for' },
         { id: 'metrics',  label: 'What it measures' },
         { id: 'sharing',  label: 'Present, export & email' },
+        { id: 'predict',  label: 'Predicted incident risk' },
         { id: 'faq',      label: 'FAQ' },
         { id: 'dodonts',  label: 'Do\'s & Don\'ts' },
         { id: 'related',  label: 'Related modules' },
@@ -81,6 +94,26 @@ export default function WikiScorecardPage() {
             reports, corrective actions closed) plus TRIR and DART to date — a
             30-second read of which way the program moved.</li>
         </ul>
+      </Section>
+
+      <Section id="predict" title="Predicted incident risk">
+        <p>
+          The card at the top of the scorecard turns your leading and lagging
+          indicators into a single <strong>0–100 risk score</strong> and a band
+          (low / moderate / high / extreme). It&apos;s <strong>data-driven and
+          deterministic</strong> — computed from real signals like overdue
+          corrective actions, near-miss reporting rate, BBS safe-to-unsafe
+          ratio, open high/extreme risks, expiring training, and recent
+          recordable trend. It is <em>not</em> an AI guess, so the same data
+          always produces the same number.
+        </p>
+        <p>
+          Below the score is a ranked <strong>&quot;where to work to lower
+          it&quot;</strong> list — the specific drivers pushing the score up,
+          each linking straight to the module where you fix it. Work the top
+          driver first; it&apos;s contributing the most points. The same score
+          and top focus area are included in the weekly weather-report email.
+        </p>
       </Section>
 
       <Section id="faq" title="Frequently asked questions">

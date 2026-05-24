@@ -5,6 +5,7 @@ import { withCronLogging } from '@/lib/cronInstrumentation'
 import { sendScorecardWeatherReport } from '@/lib/email/sendScorecardWeatherReport'
 import { loadSuppressedEmails } from '@/lib/email/suppression'
 import { buildUnsubscribe } from '@/lib/email/unsubscribe'
+import { computeIncidentRisk } from '@/lib/incidentRiskFeatures'
 import { buildWeatherReport, type WeatherMetricInput } from '@soteria/core/scorecardWeatherReport'
 import {
   trir as trirRate,
@@ -164,6 +165,13 @@ async function runCron(req: Request): Promise<NextResponse> {
       const trir = trirRate(recordablesYtd.length, hoursWorked)
       const dart = dartRate(ytdDeaths, ytdDaysAway, ytdRestricted, hoursWorked)
 
+      // Data-driven incident-risk score for the email (fail-soft per tenant).
+      let risk: { score: number; band: string; topDriver?: string | null } | null = null
+      try {
+        const rr = await computeIncidentRisk(admin, t.id)
+        risk = { score: rr.score, band: rr.band, topDriver: rr.drivers[0]?.label ?? null }
+      } catch { risk = null }
+
       type MRow = {
         user_id: string
         role: string
@@ -191,6 +199,7 @@ async function runCron(req: Request): Promise<NextResponse> {
           appUrl,
           tenantName:     t.name,
           tenantId:       t.id,
+          risk,
           unsubscribeUrl: buildUnsubscribe(appUrl, r.email, 'weekly_digest')?.url ?? null,
         })
         if (ok) sent++; else failed++

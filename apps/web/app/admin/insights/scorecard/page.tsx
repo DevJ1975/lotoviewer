@@ -28,6 +28,7 @@ import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { fetchScorecardMetrics, type DayBucket, type ScorecardMetrics } from '@soteria/core/scorecardMetrics'
+import type { IncidentRiskResult, IncidentRiskBand } from '@soteria/core/incidentRiskModel'
 
 // EHS scorecard - an operations-board view for safety leaders.
 // The top strip intentionally reads as infographics instead of plain
@@ -151,6 +152,28 @@ export default function ScorecardPage() {
     }
   }
 
+  // Data-driven incident-risk score (deterministic, computed server-side).
+  const [risk, setRisk] = useState<IncidentRiskResult | null>(null)
+  useEffect(() => {
+    if (!tenantId) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        const res = await fetch('/api/insights/incident-risk', {
+          headers: {
+            'x-active-tenant': tenantId,
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          },
+        })
+        if (!res.ok) return
+        const j = (await res.json()) as IncidentRiskResult
+        if (!cancelled) setRisk(j)
+      } catch { /* non-fatal — the card just stays hidden */ }
+    })()
+    return () => { cancelled = true }
+  }, [tenantId])
+
   if (authLoading) {
     return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
@@ -227,6 +250,8 @@ export default function ScorecardPage() {
           {exportError}
         </div>
       )}
+
+      {risk && <PredictedRiskCard risk={risk} />}
 
       {metrics ? (
         <ScorecardInfographics key={windowDays} metrics={metrics} windowDays={windowDays} loading={loading} />
@@ -691,4 +716,56 @@ function cancelReasonColor(reason: string): string {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
+}
+
+const RISK_BAND_STYLE: Record<IncidentRiskBand, { ring: string; chip: string; bar: string; label: string }> = {
+  low:      { ring: 'border-emerald-200 dark:border-emerald-900/70', chip: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200', bar: 'bg-emerald-500', label: 'Low' },
+  moderate: { ring: 'border-amber-200 dark:border-amber-900/70',     chip: 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200',         bar: 'bg-amber-500',   label: 'Moderate' },
+  high:     { ring: 'border-orange-200 dark:border-orange-900/70',   chip: 'bg-orange-100 text-orange-800 dark:bg-orange-950/50 dark:text-orange-200',     bar: 'bg-orange-500',  label: 'High' },
+  extreme:  { ring: 'border-rose-200 dark:border-rose-900/70',       chip: 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-200',             bar: 'bg-rose-600',    label: 'Extreme' },
+}
+
+// Predicted incident-risk card — the deterministic score + the ranked drivers
+// ("where to work"). Each driver links to the module where the work happens.
+function PredictedRiskCard({ risk }: { risk: IncidentRiskResult }) {
+  const style = RISK_BAND_STYLE[risk.band]
+  const topDrivers = risk.drivers.filter(d => d.contribution > 0).slice(0, 4)
+  return (
+    <section className={`animate-panel-in rounded-xl border bg-white p-4 dark:bg-slate-900 ${style.ring}`}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="sm:w-48 shrink-0">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Predicted incident risk</p>
+          <div className="mt-1 flex items-end gap-2">
+            <span className="text-4xl font-black tabular-nums text-slate-900 dark:text-slate-50">{Math.round(risk.score)}</span>
+            <span className="mb-1 text-sm text-slate-400">/ 100</span>
+            <span className={`mb-1 rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${style.chip}`}>{style.label}</span>
+          </div>
+          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+            <div className={`h-full ${style.bar}`} style={{ width: `${clamp(risk.score, 0, 100)}%` }} />
+          </div>
+          <p className="mt-2 text-[11px] text-slate-400">Data-driven from leading + lagging indicators. Not a compliance determination.</p>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Where to work to lower it</p>
+          {topDrivers.length === 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">No elevated drivers — program indicators are healthy.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {topDrivers.map(d => (
+                <li key={d.key}>
+                  <Link href={d.href} className="group flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 hover:border-brand-navy/30 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50">
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-slate-800 group-hover:text-brand-navy dark:text-slate-100">{d.label}</span>
+                      <span className="block truncate text-[11px] text-slate-500 dark:text-slate-400">{d.value} · target {d.target}</span>
+                    </span>
+                    <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-slate-600 dark:bg-slate-800 dark:text-slate-300">+{d.contribution}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </section>
+  )
 }
