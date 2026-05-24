@@ -29,6 +29,13 @@ function tokenFrom(req: Request): string {
   return new URL(req.url).searchParams.get('token') ?? ''
 }
 
+// Human-readable name for the stream a token opts out of.
+function categoryLabel(category: string): string {
+  if (category === 'weekly_digest') return "SoteriaField's weekly digest emails"
+  if (category === 'reminders')     return "SoteriaField's reminder emails"
+  return 'these SoteriaField emails'
+}
+
 export function GET(req: Request): Response {
   const token = tokenFrom(req)
   const payload = verifyUnsubscribeToken(token)
@@ -38,8 +45,8 @@ export function GET(req: Request): Response {
   }
   const safeEmail = payload.email.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   return page('Unsubscribe',
-    `<h1 style="font-size:18px;margin:0 0 8px;">Unsubscribe from weekly emails?</h1>`
-    + `<p style="font-size:14px;color:#5b6675;margin:0 0 20px;">${safeEmail} will stop receiving SoteriaField's weekly digest emails. Transactional messages (invites, alerts) are unaffected.</p>`
+    `<h1 style="font-size:18px;margin:0 0 8px;">Unsubscribe?</h1>`
+    + `<p style="font-size:14px;color:#5b6675;margin:0 0 20px;">${safeEmail} will stop receiving ${categoryLabel(payload.category)}. Transactional messages (invites, alerts) are unaffected.</p>`
     + `<form method="post" action="/api/email/unsubscribe?token=${encodeURIComponent(token)}">`
     + `<button type="submit" style="background:#1D3ECF;color:#fff;border:0;border-radius:10px;font-size:15px;font-weight:700;padding:12px 24px;cursor:pointer;">Confirm unsubscribe</button>`
     + `</form>`)
@@ -53,5 +60,5 @@ export async function POST(req: Request): Promise<Response> {
   }
   await recordSuppression(supabaseAdmin(), payload.email, payload.category, 'user')
   return page('Unsubscribed', `<h1 style="font-size:18px;margin:0 0 8px;">You're unsubscribed</h1>`
-    + `<p style="font-size:14px;color:#5b6675;margin:0;">You won't receive any more weekly SoteriaField emails at this address. You'll still get transactional messages like invites and incident alerts.</p>`)
+    + `<p style="font-size:14px;color:#5b6675;margin:0;">You won't receive any more ${categoryLabel(payload.category)} at this address. You'll still get transactional messages like invites and incident alerts.</p>`)
 }

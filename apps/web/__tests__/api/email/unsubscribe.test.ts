@@ -37,6 +37,13 @@ describe('GET /api/email/unsubscribe', () => {
     expect(res.status).toBe(400)
     expect(upsertMock).not.toHaveBeenCalled()
   })
+
+  it('reflects the token category in the confirmation copy', async () => {
+    const digest = await GET(new Request(url(signUnsubscribeToken('a@b.com', 'weekly_digest')!))).text()
+    expect(digest).toContain('weekly digest emails')
+    const reminders = await GET(new Request(url(signUnsubscribeToken('a@b.com', 'reminders')!))).text()
+    expect(reminders).toContain('reminder emails')
+  })
 })
 
 describe('POST /api/email/unsubscribe', () => {

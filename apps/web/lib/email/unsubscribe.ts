@@ -74,12 +74,12 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-export function unsubscribeFooterText(url: string): string {
-  return `\nYou're receiving this because you're an owner or admin on SoteriaField.\nUnsubscribe from these weekly emails: ${url}\n`
+export function unsubscribeFooterText(url: string, label = 'weekly emails'): string {
+  return `\nYou're receiving this because you're an owner or admin on SoteriaField.\nUnsubscribe from these ${label}: ${url}\n`
 }
 
-export function unsubscribeFooterHtml(url: string): string {
+export function unsubscribeFooterHtml(url: string, label = 'weekly emails'): string {
   return `<p style="margin:18px 0 0 0;font-size:11px;color:#8a93a3;text-align:center;line-height:1.5;">`
     + `You're receiving this because you're an owner or admin on SoteriaField.<br>`
-    + `<a href="${escapeHtml(url)}" style="color:#8a93a3;text-decoration:underline;">Unsubscribe from weekly emails</a></p>`
+    + `<a href="${escapeHtml(url)}" style="color:#8a93a3;text-decoration:underline;">Unsubscribe from ${escapeHtml(label)}</a></p>`
 }

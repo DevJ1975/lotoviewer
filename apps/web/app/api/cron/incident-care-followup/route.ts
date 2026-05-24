@@ -3,6 +3,8 @@ import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { withCronLogging } from '@/lib/cronInstrumentation'
 import { sendCareCheckInEmail } from '@/lib/email/sendCareCheckIn'
+import { loadSuppressedEmails } from '@/lib/email/suppression'
+import { buildUnsubscribe } from '@/lib/email/unsubscribe'
 import {
   type CareCaseStatus,
 } from '@soteria/core/incidentCare'
@@ -94,6 +96,7 @@ async function runCron(req: Request): Promise<NextResponse> {
     }
 
     const rows = cases as CareRow[]
+    const suppressed = await loadSuppressedEmails(admin, 'reminders')
 
     const tenantCache = new Map<string, string | null>()
     const incidentCache = new Map<string, { report_number: string }>()
@@ -172,6 +175,7 @@ async function runCron(req: Request): Promise<NextResponse> {
       if (recipients.length === 0) { skipped++; continue }
 
       for (const r of recipients) {
+        if (suppressed.has(r.email.toLowerCase())) { skipped++; continue }
         const ok = await sendCareCheckInEmail({
           to:             r.email,
           recipientName:  r.full_name,
@@ -184,6 +188,7 @@ async function runCron(req: Request): Promise<NextResponse> {
           appUrl,
           tenantName,
           tenantId:       c.tenant_id,
+          unsubscribeUrl: buildUnsubscribe(appUrl, r.email, 'reminders')?.url ?? null,
         })
         if (ok) sent++; else failed++
       }
