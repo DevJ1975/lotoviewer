@@ -268,7 +268,7 @@ export default function ScorecardPage() {
               <div className="min-w-0">
                 <h1 className="truncate text-xl font-black text-slate-950 dark:text-slate-50">EHS Scorecard</h1>
                 <p className="ops-muted truncate text-sm">
-                  Program health across permits, atmospheric tests, and equipment readiness.
+                  Recordable trend, TRIR/DART, predicted risk, and year-over-year performance — your whole safety program at a glance.
                 </p>
               </div>
             </div>
