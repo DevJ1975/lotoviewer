@@ -1,5 +1,7 @@
--- Migration 199: WLS Demo seed functions for the Incident, Near-Miss,
+-- Migration 202: WLS Demo seed functions for the Incident, Near-Miss,
 -- and BBS modules — so "Reset Demo" restores them.
+-- (Renumbered from 199 → 202 to resolve a duplicate-199 collision with
+--  199_hot_work_permit_photos.sql; both #168 and #169 landed on 199.)
 --
 -- WHY THIS EXISTS
 -- ───────────────
