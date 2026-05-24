@@ -1,10 +1,19 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.7.0'
+const CURRENT_VERSION = '1.7.1'
 const LAST_UPDATED    = '2026-05-24'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.7.1',
+    date:    '2026-05-24',
+    changes: [
+      'Reworded the scorecard subtitle to reflect what it now leads with — ' +
+      'recordable trend, TRIR/DART, predicted risk, and year-over-year ' +
+      'performance — rather than only permits/atmospheric/equipment.',
+    ],
+  },
   {
     version: '1.7.0',
     date:    '2026-05-24',
