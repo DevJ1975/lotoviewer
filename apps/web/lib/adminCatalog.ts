@@ -227,6 +227,9 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       tile('compliance', 'calendar',          null,
         CalendarClock, 'Compliance calendar',
         'Recurring regulatory + tenant obligations — overdue, due soon, upcoming.'),
+      tile('compliance', 'nonconformities',   null,
+        ClipboardCheck, 'Nonconformities & CAPA',
+        'Findings from audits, reviews, compliance, or aspects — corrective actions with §10.2 verification.'),
     ],
   },
   {

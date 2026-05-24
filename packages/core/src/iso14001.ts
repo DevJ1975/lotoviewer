@@ -107,12 +107,12 @@ export const ISO14001_CLAUSE_MAP: readonly Iso14001ClauseEntry[] = [
   {
     code:    '9.2',
     title:   'Internal audit',
-    sources: ['inspections', 'inspection_templates', 'audit_log'],
+    sources: ['inspections', 'inspection_templates', 'nonconformities', 'audit_log'],
   },
   {
     code:    '10.2',
     title:   'Nonconformity and corrective action',
-    sources: ['incidents', 'incident_capas', 'near_misses'],
+    sources: ['nonconformities', 'nonconformity_actions', 'incidents', 'incident_capas', 'near_misses'],
   },
   {
     code:    '10.3',
