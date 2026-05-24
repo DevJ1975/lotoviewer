@@ -49,7 +49,7 @@ import OpenActionsPanel         from './OpenActionsPanel'
 const CLOCK_TICK_MS      = 1000        // every second so active-permit countdowns tick visibly
 const METRICS_REFRESH_MS = 60 * 1000   // permits / equipment / activity: every minute
 
-export default function MultiModuleDashboard() {
+export default function MultiModuleDashboard({ embedded = false }: { embedded?: boolean } = {}) {
   const { profile, email } = useAuth()
   const { tenant, loading: tenantLoading } = useTenant()
   const tenantId = tenant?.id ?? null
@@ -106,7 +106,9 @@ export default function MultiModuleDashboard() {
 
   return (
     <div className="animate-panel-in mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">
-      <Hero greeting={greeting} firstName={firstName} dateLabel={dateLabel} timeLabel={timeLabel} quote={quote} />
+      {!embedded && (
+        <Hero greeting={greeting} firstName={firstName} dateLabel={dateLabel} timeLabel={timeLabel} quote={quote} />
+      )}
 
       {/* Theme switch — right-aligned strip directly under the hero so
           it's easy to find without crowding the greeting band. The

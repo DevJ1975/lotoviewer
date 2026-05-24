@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTenant } from '@/components/TenantProvider'
 import { resolveLandingPath } from '@/lib/landing'
 import OpsSpinner from '@/components/OpsSpinner'
-import MultiModuleDashboard from './_components/MultiModuleDashboard'
+import AgentHome from './_components/AgentHome'
 
 // Home dispatcher. Visited as `/` after every sign-in.
 //
@@ -56,7 +56,7 @@ function HomeDispatcher() {
   // Don't paint the dashboard while a redirect is in flight; renders
   // null so the next module's chrome takes over without a flash.
   if (safeTarget) return null
-  return <MultiModuleDashboard />
+  return <AgentHome />
 }
 
 function FullPageSpinner() {
