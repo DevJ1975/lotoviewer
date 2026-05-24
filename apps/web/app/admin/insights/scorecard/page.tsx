@@ -350,6 +350,7 @@ function ScorecardInfographics({
           tone="neutral"
           icon={ClipboardCheck}
           visual={<ActivityBars buckets={metrics.permitsByDay} max={permitMax} tone="neutral" />}
+          href="/confined-spaces"
         />
         <InfographicTile
           label="Cancel Pressure"
@@ -359,6 +360,7 @@ function ScorecardInfographics({
           tone={cancelTone(metrics.cancelRate)}
           icon={Gauge}
           visual={<RadialGauge percent={metrics.cancelRate} tone={cancelTone(metrics.cancelRate)} inverse />}
+          href="/confined-spaces"
         />
         <InfographicTile
           label="Permit Cycle"
@@ -368,6 +370,7 @@ function ScorecardInfographics({
           tone={durationTone(metrics.avgPermitDurationMinutes)}
           icon={Timer}
           visual={<DurationTimeline minutes={metrics.avgPermitDurationMinutes} />}
+          href="/confined-spaces"
         />
         <InfographicTile
           label="Atmospheric Control"
@@ -377,6 +380,7 @@ function ScorecardInfographics({
           tone={failTone(metrics.failingTestRate)}
           icon={Wind}
           visual={<SensorStack percent={metrics.failingTestRate} tone={failTone(metrics.failingTestRate)} />}
+          href="/confined-spaces"
         />
         <InfographicTile
           label="LOTO Photo Readiness"
@@ -386,6 +390,7 @@ function ScorecardInfographics({
           tone={photoTone(metrics.photoCompletionPct)}
           icon={Camera}
           visual={<RadialGauge percent={metrics.photoCompletionPct} tone={photoTone(metrics.photoCompletionPct)} />}
+          href="/equipment-readiness"
         />
       </section>
 
@@ -467,6 +472,7 @@ function InfographicTile({
   tone,
   icon: Icon,
   visual,
+  href,
 }: {
   label: string
   display: string
@@ -475,14 +481,13 @@ function InfographicTile({
   tone: Tone
   icon: LucideIcon
   visual: ReactNode
+  href?: string
 }) {
   const style = TONE_STYLES[tone]
-  return (
-    <article
-      tabIndex={0}
-      title={`${label}: ${display} ${unit} — ${narrative}`}
-      className={`ops-surface-interactive ops-surface animate-panel-in rounded-lg p-4 outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/40 dark:focus-visible:ring-brand-yellow/40 ${style.border}`}
-    >
+  const className = `ops-surface-interactive ops-surface animate-panel-in block rounded-lg p-4 outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/40 dark:focus-visible:ring-brand-yellow/40 ${style.border}`
+  const title = `${label}: ${display} ${unit} — ${narrative}`
+  const body = (
+    <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-black uppercase text-slate-500 dark:text-slate-400">{label}</p>
@@ -499,8 +504,11 @@ function InfographicTile({
       <p className="mt-3 rounded-md bg-slate-50 px-2.5 py-2 text-xs font-semibold text-slate-700 dark:bg-slate-900/80 dark:text-slate-200">
         {narrative}
       </p>
-    </article>
+    </>
   )
+  return href
+    ? <Link href={href} title={title} className={className}>{body}</Link>
+    : <article tabIndex={0} title={title} className={className}>{body}</article>
 }
 
 function ActivityBars({ buckets, max, tone }: { buckets: DayBucket[]; max: number; tone: Tone }) {
@@ -629,19 +637,23 @@ function ScorecardSkeleton() {
 }
 
 function ChartCard({
-  title, subtitle, loading, empty, children,
+  title, subtitle, loading, empty, children, href,
 }: {
   title: string
   subtitle: string
   loading: boolean
   empty: boolean
   children: ReactNode
+  href?: string
 }) {
   return (
     <section className="ops-surface animate-panel-in rounded-lg p-4">
-      <header className="mb-3">
-        <h2 className="ops-section-title text-sm font-black">{title}</h2>
-        <p className="ops-muted text-xs">{subtitle}</p>
+      <header className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="ops-section-title text-sm font-black">{title}</h2>
+          <p className="ops-muted text-xs">{subtitle}</p>
+        </div>
+        {href && <Link href={href} className="shrink-0 text-[11px] font-bold text-brand-navy hover:underline dark:text-brand-yellow">View &rarr;</Link>}
       </header>
       {loading ? (
         <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-slate-400 dark:text-slate-500" /></div>
@@ -856,10 +868,10 @@ function IncidentScorecardSection({ metrics: m }: { metrics: IncidentScorecardMe
         <IncidentStatCard icon={CalendarClock} label="Days since last recordable"
           value={streak < 0 ? '—' : String(streak)}
           sub={streak < 0 ? 'none on file' : streak === 1 ? 'day' : 'days'}
-          accent={streak < 0 || streak >= 30 ? 'safe' : 'neutral'} />
-        <IncidentStatCard icon={Activity} label="TRIR" value={fmtRate(m.trir)} sub="per 100 FTE" accent="neutral" />
-        <IncidentStatCard icon={Activity} label="DART" value={fmtRate(m.dart)} sub="per 100 FTE" accent="neutral" />
-        <IncidentStatCard icon={Activity} label="LTIR" value={fmtRate(m.ltir)} sub="per 100 FTE" accent="neutral" />
+          accent={streak < 0 || streak >= 30 ? 'safe' : 'neutral'} href="/incidents" />
+        <IncidentStatCard icon={Activity} label="TRIR" value={fmtRate(m.trir)} sub="per 100 FTE" accent="neutral" href="/osha" />
+        <IncidentStatCard icon={Activity} label="DART" value={fmtRate(m.dart)} sub="per 100 FTE" accent="neutral" href="/osha" />
+        <IncidentStatCard icon={Activity} label="LTIR" value={fmtRate(m.ltir)} sub="per 100 FTE" accent="neutral" href="/osha" />
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -867,6 +879,7 @@ function IncidentScorecardSection({ metrics: m }: { metrics: IncidentScorecardMe
           <div className="mb-3 flex items-center gap-2">
             <span className="flex size-7 items-center justify-center rounded-md bg-brand-navy/10 text-brand-navy dark:bg-brand-yellow/15 dark:text-brand-yellow"><ShieldCheck className="h-4 w-4" /></span>
             <h3 className="text-sm font-black text-slate-900 dark:text-slate-100">OSHA recordkeeping</h3>
+            <Link href="/osha" className="ml-auto text-[11px] font-bold text-brand-navy hover:underline dark:text-brand-yellow">300 log &rarr;</Link>
           </div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
             <RecordkeepingStat label="Total recordable" value={m.totalRecordable} />
@@ -882,6 +895,7 @@ function IncidentScorecardSection({ metrics: m }: { metrics: IncidentScorecardMe
           <div className="mb-3 flex items-center gap-2">
             <span className="flex size-7 items-center justify-center rounded-md bg-brand-navy/10 text-brand-navy dark:bg-brand-yellow/15 dark:text-brand-yellow"><HeartPulse className="h-4 w-4" /></span>
             <h3 className="text-sm font-black text-slate-900 dark:text-slate-100">This week vs last</h3>
+            <Link href="/incidents" className="ml-auto text-[11px] font-bold text-brand-navy hover:underline dark:text-brand-yellow">Incidents &rarr;</Link>
           </div>
           <div className="space-y-3">
             <WowRow label="Recordable injuries" current={m.weekOverWeek.recordables.current} previous={m.weekOverWeek.recordables.previous} higherIsBetter={false} />
@@ -895,7 +909,7 @@ function IncidentScorecardSection({ metrics: m }: { metrics: IncidentScorecardMe
         </div>
       </div>
 
-      <ChartCard title="Recordable & near-miss trend" subtitle="Monthly counts across the trailing 12 months." loading={false} empty={monthly.every(d => d.recordables === 0 && d.nearMiss === 0)}>
+      <ChartCard title="Recordable & near-miss trend" subtitle="Monthly counts across the trailing 12 months." loading={false} empty={monthly.every(d => d.recordables === 0 && d.nearMiss === 0)} href="/incidents">
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={monthly} margin={{ top: 8, right: 4, left: -16, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#dbe3ee" vertical={false} />
@@ -908,7 +922,7 @@ function IncidentScorecardSection({ metrics: m }: { metrics: IncidentScorecardMe
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Where people are getting hurt" subtitle="Injuries by body part — top reported." loading={false} empty={bodyParts.length === 0}>
+      <ChartCard title="Where people are getting hurt" subtitle="Injuries by body part — top reported." loading={false} empty={bodyParts.length === 0} href="/incidents">
         <ResponsiveContainer width="100%" height={Math.max(160, bodyParts.length * 34)}>
           <BarChart data={bodyParts} layout="vertical" margin={{ top: 4, right: 28, left: 8, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#dbe3ee" horizontal={false} />
@@ -923,19 +937,19 @@ function IncidentScorecardSection({ metrics: m }: { metrics: IncidentScorecardMe
   )
 }
 
-function IncidentStatCard({ icon: Icon, label, value, sub, accent }: {
-  icon: LucideIcon; label: string; value: string; sub: string; accent: Tone
+function IncidentStatCard({ icon: Icon, label, value, sub, accent, href }: {
+  icon: LucideIcon; label: string; value: string; sub: string; accent: Tone; href: string
 }) {
   const style = TONE_STYLES[accent]
   return (
-    <article tabIndex={0} className={`ops-surface-interactive ops-surface animate-panel-in rounded-lg p-4 outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/40 dark:focus-visible:ring-brand-yellow/40 ${style.border}`}>
+    <Link href={href} className={`ops-surface-interactive ops-surface animate-panel-in block rounded-lg p-4 outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/40 dark:focus-visible:ring-brand-yellow/40 ${style.border}`}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] font-black uppercase leading-tight text-slate-500 dark:text-slate-400">{label}</p>
         <span className={`flex size-7 shrink-0 items-center justify-center rounded-md ${style.soft}`}><Icon className="h-4 w-4" /></span>
       </div>
       <p className={`mt-2 text-3xl font-black tabular-nums leading-none ${style.text}`}>{value}</p>
       <p className="mt-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">{sub}</p>
-    </article>
+    </Link>
   )
 }
 
