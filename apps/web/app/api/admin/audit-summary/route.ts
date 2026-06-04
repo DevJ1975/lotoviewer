@@ -111,6 +111,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ ...cached.payload, cached: true })
   }
 
+  // Evict stale-hour entries so the Map can't grow unbounded across a
+  // long-lived warm instance serving many tenants. Cheap: only sweeps
+  // when the map is non-trivial, and only drops entries from a prior hour.
+  if (CACHE.size > 50) {
+    for (const [tid, entry] of CACHE) {
+      if (entry.hourKey !== key) CACHE.delete(tid)
+    }
+  }
+
   // Per-tenant budget + per-user rate limit. Order: budget → rate
   // limit (consistent with the generate routes).
   const budget = await checkTenantBudget({ userId: gate.userId, tenantId: gate.tenantId, surface: SURFACE })

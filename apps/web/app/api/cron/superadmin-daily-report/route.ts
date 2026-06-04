@@ -31,6 +31,11 @@ export const runtime = 'nodejs'
 const MODEL    = MODEL_BY_SURFACE['superadmin-daily-report']
 const SURFACE  = 'superadmin-daily-report' as const
 
+// Safety ceiling for the in-JS AI-usage rollup. Lowered from 50k: a
+// single day rarely exceeds a few thousand invocations, and a hit means
+// the report is undercounting (we Sentry-warn so it's visible).
+const AI_ROWS_LIMIT = 20_000
+
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false
   let mismatch = 0
@@ -141,6 +146,10 @@ async function runCron(): Promise<NextResponse> {
   const forDate   = now.toISOString().slice(0, 10)
 
   // Aggregate everything in parallel — these are independent reads.
+  // AI rows are pulled to JS for the per-tenant/model/status rollup. The
+  // limit is a safety ceiling; if a single day's volume ever reaches it
+  // the report would silently undercount, so we Sentry-warn on a hit and
+  // the follow-up is to move this rollup into a SQL GROUP BY RPC.
   const [
     { data: aiRows },
     { data: cronRows },
@@ -153,7 +162,7 @@ async function runCron(): Promise<NextResponse> {
   ] = await Promise.all([
     admin.from('ai_invocations')
       .select('tenant_id, model, status, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens')
-      .gte('occurred_at', sinceISO).limit(50_000),
+      .gte('occurred_at', sinceISO).limit(AI_ROWS_LIMIT),
     admin.from('cron_runs')
       .select('cron_path, status').gte('started_at', sinceISO).limit(2_000),
     admin.from('loto_webhook_deliveries')
@@ -161,7 +170,10 @@ async function runCron(): Promise<NextResponse> {
     admin.from('support_tickets')
       .select('id').gte('created_at', sinceISO).limit(1_000),
     admin.from('support_tickets')
-      .select('id', { count: 'exact', head: true }).is('resolved_at', null).is('archived_at', null),
+      // Estimated count is fine for a narrative health report — this is
+      // a once-a-day rollup, not a precise figure, and 'estimated' avoids
+      // a full index scan of the tickets table.
+      .select('id', { count: 'estimated', head: true }).is('resolved_at', null).is('archived_at', null),
     admin.from('audit_log')
       .select('actor_email, tenant_id').gte('created_at', sinceISO).limit(20_000),
     admin.from('near_misses')
@@ -177,6 +189,15 @@ async function runCron(): Promise<NextResponse> {
     tenantById.set(t.id, {
       name:    t.name,
       capCents: typeof cap === 'number' && cap > 0 ? cap : null,
+    })
+  }
+
+  // If we hit the row ceiling the rollup is undercounting — make it
+  // loud rather than silently wrong.
+  if ((aiRows ?? []).length >= AI_ROWS_LIMIT) {
+    Sentry.captureMessage('superadmin-daily-report: ai_invocations row limit hit — rollup is undercounting; move to SQL GROUP BY', {
+      level: 'warning',
+      tags:  { route: '/api/cron/superadmin-daily-report' },
     })
   }
 

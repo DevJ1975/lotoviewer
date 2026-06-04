@@ -1,6 +1,7 @@
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
 import { logEmailSend } from '@/lib/email/instrument'
+import { isSafeEmailAddress } from '@/lib/security/inputGuards'
 
 // Daily superadmin health-narrative email.
 //
@@ -20,6 +21,16 @@ export interface DailyReportEmailArgs {
 export async function sendDailyReport(
   args: DailyReportEmailArgs,
 ): Promise<{ sent: boolean; providerId: string | null }> {
+  // Envelope-field guard: a newline or malformed address in `to` is an
+  // SMTP header-injection vector. Refuse rather than hand it to Resend.
+  if (!isSafeEmailAddress(args.to)) {
+    await logEmailSend({
+      kind: 'superadmin-daily-report', to: String(args.to).slice(0, 120),
+      status: 'failed', errorText: 'recipient failed email-format guard',
+    })
+    return { sent: false, providerId: null }
+  }
+
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) {
     console.warn('[daily-report] RESEND_API_KEY not set — skipping send')

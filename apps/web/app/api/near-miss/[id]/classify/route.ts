@@ -6,6 +6,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { checkAiRateLimit, checkTenantBudget, logAiInvocation } from '@/lib/ai/rateLimit'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 import { getTenantApiKey } from '@/lib/ai/getTenantApiKey'
+import { clampText } from '@/lib/security/inputGuards'
 
 // POST /api/near-miss/[id]/classify
 //
@@ -172,14 +173,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     `Hazard category: ${nm.hazard_category}`,
     `Severity potential: ${nm.severity_potential}`,
     `Occurred: ${nm.occurred_at}`,
-    `Location: ${nm.location ?? '(not specified)'}`,
+    `Location: ${clampText(nm.location, 200) || '(not specified)'}`,
     `Status: ${nm.status}`,
     '',
     `Description:`,
-    nm.description,
+    clampText(nm.description, 5000),
     '',
     nm.immediate_action_taken
-      ? `Immediate action taken:\n${nm.immediate_action_taken}`
+      ? `Immediate action taken:\n${clampText(nm.immediate_action_taken, 2000)}`
       : null,
     '',
     adjacentLines.length > 0
