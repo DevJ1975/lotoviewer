@@ -5,6 +5,7 @@ import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { checkAiRateLimit, checkTenantBudget, logAiInvocation } from '@/lib/ai/rateLimit'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 import { getAnthropic, aiErrorToResponse } from '@/lib/ai/client'
+import { clampText } from '@/lib/security/inputGuards'
 
 // Anthropic client comes from the shared lib/ai/client wrapper so
 // every AI route inherits the same timeout, retry, and key-handling
@@ -198,19 +199,27 @@ export async function POST(req: NextRequest) {
     // photos didn't change the verification burden — and the wrong
     // hazard call kills people, so a 100% review pass is mandatory.
 
-    const knownHazardsText = body.known_hazards && body.known_hazards.length > 0
-      ? `Already-recorded persistent hazards on this space: ${body.known_hazards.join('; ')}`
+    // Length caps on free-text fields before they reach the model. An
+    // unbounded description (the table column is TEXT) would bloat the
+    // request payload, spike token cost, and could exceed Anthropic's
+    // input size on the worst case.
+    const knownHazardsBounded = (body.known_hazards ?? [])
+      .slice(0, 50)
+      .map(h => clampText(String(h), 500))
+      .filter(s => s.length > 0)
+    const knownHazardsText = knownHazardsBounded.length > 0
+      ? `Already-recorded persistent hazards on this space: ${knownHazardsBounded.join('; ')}`
       : null
 
     const brief = [
-      `Space ID: ${body.space_id}`,
-      `Description: ${body.description}`,
-      `Department: ${body.department}`,
-      `Space type: ${body.space_type}`,
-      `OSHA classification: ${body.classification}`,
+      `Space ID: ${clampText(body.space_id, 200)}`,
+      `Description: ${clampText(body.description, 5000)}`,
+      `Department: ${clampText(body.department, 200)}`,
+      `Space type: ${clampText(body.space_type, 200)}`,
+      `OSHA classification: ${clampText(body.classification, 200)}`,
       knownHazardsText,
-      body.isolation_required ? `Standing isolation requirement: ${body.isolation_required}` : null,
-      body.context ? `Additional context from the author: ${body.context}` : null,
+      body.isolation_required ? `Standing isolation requirement: ${clampText(body.isolation_required, 2000)}` : null,
+      body.context ? `Additional context from the author: ${clampText(body.context, 4000)}` : null,
     ].filter(Boolean).join('\n')
 
     userContent.push({

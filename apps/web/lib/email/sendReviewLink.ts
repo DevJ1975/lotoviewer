@@ -12,6 +12,7 @@
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
 import { logEmailSend } from '@/lib/email/instrument'
+import { isSafeEmailAddress } from '@/lib/security/inputGuards'
 import { renderReviewLinkBody } from './renderReviewLinkBody'
 
 export interface ReviewLinkEmailArgs {
@@ -46,6 +47,24 @@ export interface ReviewLinkEmailArgs {
 export async function sendReviewLinkEmail(
   args: ReviewLinkEmailArgs,
 ): Promise<{ sent: boolean; providerId: string | null }> {
+  // Envelope-field guards: a CR/LF in `to` or `replyTo` is an SMTP
+  // header-injection vector that lets an attacker add Bcc/CC headers
+  // when the user controls these values via the review-links UI.
+  if (!isSafeEmailAddress(args.to)) {
+    await logEmailSend({
+      kind: 'review-link', to: String(args.to).slice(0, 120),
+      status: 'failed', errorText: 'recipient failed email-format guard',
+    })
+    return { sent: false, providerId: null }
+  }
+  if (args.replyTo && !isSafeEmailAddress(args.replyTo)) {
+    await logEmailSend({
+      kind: 'review-link', to: args.to,
+      status: 'failed', errorText: 'replyTo failed email-format guard',
+    })
+    return { sent: false, providerId: null }
+  }
+
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) {
     console.warn('[review-link-email] RESEND_API_KEY not set — skipping send')

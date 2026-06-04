@@ -19,6 +19,10 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const ALLOWED_LEAD = /^\s*(with\s|select\s|explain\s)/i
+// RECURSIVE CTEs can generate arbitrary row counts in memory inside
+// the DB's 10s timeout, bypassing the max_rows cap. Reject up-front
+// (the DB function mirrors this check; see migration 214).
+const RECURSIVE_CTE = /^\s*with\s+recursive\b/i
 
 export interface RunResponse {
   rows:        Array<Record<string, unknown>>
@@ -42,6 +46,12 @@ export async function POST(req: Request) {
   if (!ALLOWED_LEAD.test(sql)) {
     return NextResponse.json(
       { error: 'Only SELECT, WITH, or EXPLAIN statements are allowed' },
+      { status: 400 },
+    )
+  }
+  if (RECURSIVE_CTE.test(sql)) {
+    return NextResponse.json(
+      { error: 'WITH RECURSIVE is not allowed in saved queries (use the Supabase SQL editor for one-off recursive queries)' },
       { status: 400 },
     )
   }

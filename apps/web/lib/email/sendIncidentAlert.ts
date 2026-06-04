@@ -12,6 +12,7 @@
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
 import { logEmailSend } from '@/lib/email/instrument'
+import { isSafeEmailAddress } from '@/lib/security/inputGuards'
 import {
   INCIDENT_TYPE_LABEL,
   SEVERITY_ACTUAL_LABEL,
@@ -41,10 +42,21 @@ export interface IncidentAlertArgs {
 }
 
 export async function sendIncidentAlertEmail(args: IncidentAlertArgs): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY
   const subject = buildSubject(args)
   const tenantId = args.tenantId ?? null
   const triggeredBy = args.triggeredBy ?? null
+
+  // Envelope-field guard.
+  if (!isSafeEmailAddress(args.to)) {
+    await logEmailSend({
+      kind: 'incident-alert', to: String(args.to).slice(0, 120), subject,
+      tenantId, triggeredBy,
+      status: 'failed', errorText: 'recipient failed email-format guard',
+    })
+    return false
+  }
+
+  const apiKey = process.env.RESEND_API_KEY
 
   if (!apiKey) {
     console.warn('[incident-alert] RESEND_API_KEY not set — skipping send')

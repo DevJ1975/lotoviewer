@@ -10,6 +10,7 @@
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
 import { logEmailSend } from '@/lib/email/instrument'
+import { isSafeEmailAddress } from '@/lib/security/inputGuards'
 
 export interface InviteEmailArgs {
   to:           string
@@ -40,6 +41,16 @@ export function computeLoginUrl(req: Request): string {
 }
 
 export async function sendInviteEmail(args: InviteEmailArgs): Promise<boolean> {
+  // Envelope-field guard: a CR/LF or malformed address in `to` is an
+  // SMTP header-injection vector. Refuse before handing to Resend.
+  if (!isSafeEmailAddress(args.to)) {
+    await logEmailSend({
+      kind: 'invite', to: String(args.to).slice(0, 120),
+      status: 'failed', errorText: 'recipient failed email-format guard',
+    })
+    return false
+  }
+
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) {
     console.warn('[invite-email] RESEND_API_KEY not set — skipping send')

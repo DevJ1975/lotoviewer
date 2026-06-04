@@ -5,6 +5,7 @@
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
 import { logEmailSend } from '@/lib/email/instrument'
+import { isSafeEmailAddress } from '@/lib/security/inputGuards'
 import { unsubscribeFooterText, unsubscribeFooterHtml } from '@/lib/email/unsubscribe'
 import {
   CARE_CASE_STATUS_LABEL,
@@ -29,9 +30,18 @@ export interface CareCheckInArgs {
 }
 
 export async function sendCareCheckInEmail(args: CareCheckInArgs): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY
   const subject = `[${args.reportNumber}] Care case follow-up due`
   const tenantId = args.tenantId ?? null
+  // Envelope-field guard — see lib/security/inputGuards.ts.
+  if (!isSafeEmailAddress(args.to)) {
+    await logEmailSend({
+      kind: 'incident-care-followup', to: String(args.to).slice(0, 120), subject, tenantId,
+      status: 'failed', errorText: 'recipient failed email-format guard',
+    })
+    return false
+  }
+
+  const apiKey = process.env.RESEND_API_KEY
 
   if (!apiKey) {
     await logEmailSend({

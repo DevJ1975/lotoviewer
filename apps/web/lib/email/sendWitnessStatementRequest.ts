@@ -9,6 +9,7 @@
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
 import { logEmailSend } from '@/lib/email/instrument'
+import { isSafeEmailAddress } from '@/lib/security/inputGuards'
 
 export interface WitnessStatementRequestArgs {
   to:                 string
@@ -31,12 +32,23 @@ export interface WitnessStatementRequestArgs {
 export async function sendWitnessStatementRequestEmail(
   args: WitnessStatementRequestArgs,
 ): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY
   const subject = args.tenantName
     ? `[${args.reportNumber}] Witness statement requested — ${args.tenantName}`
     : `[${args.reportNumber}] Witness statement requested`
   const tenantId = args.tenantId ?? null
   const triggeredBy = args.triggeredBy ?? null
+
+  // Envelope-field guard.
+  if (!isSafeEmailAddress(args.to)) {
+    await logEmailSend({
+      kind: 'incident-witness-request', to: String(args.to).slice(0, 120), subject,
+      tenantId, triggeredBy,
+      status: 'failed', errorText: 'recipient failed email-format guard',
+    })
+    return false
+  }
+
+  const apiKey = process.env.RESEND_API_KEY
 
   if (!apiKey) {
     console.warn('[witness-request] RESEND_API_KEY not set — skipping send')

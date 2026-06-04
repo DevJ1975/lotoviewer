@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
+import { validateJsonBody } from '@/lib/security/validateBody'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+
+const CreateBodySchema = z.object({
+  name:        z.string().trim().min(1).max(120),
+  sql_text:    z.string().trim().min(1).max(8000),
+  description: z.string().trim().max(1000).nullable().optional()
+                 .transform(v => (v && v.length > 0 ? v : null)),
+})
 
 // GET    /api/superadmin/queries — list saved queries
 // POST   /api/superadmin/queries — create one ({ name, description?, sql_text })
@@ -41,15 +50,9 @@ export async function POST(req: Request) {
   const gate = await requireSuperadmin(req.headers.get('authorization'))
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
-  let body: { name?: string; description?: string | null; sql_text?: string }
-  try { body = (await req.json()) as typeof body }
-  catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }) }
-
-  const name        = (body.name ?? '').trim()
-  const sqlText     = (body.sql_text ?? '').trim()
-  const description = body.description?.trim() || null
-  if (name.length === 0   || name.length > 120)   return NextResponse.json({ error: 'name is 1-120 chars' },     { status: 400 })
-  if (sqlText.length === 0|| sqlText.length > 8000) return NextResponse.json({ error: 'sql_text is 1-8000 chars' },{ status: 400 })
+  const parsed = await validateJsonBody(req, CreateBodySchema)
+  if (!parsed.ok) return parsed.response
+  const { name, sql_text: sqlText, description } = parsed.data
 
   const admin = supabaseAdmin()
   const { data, error } = await admin

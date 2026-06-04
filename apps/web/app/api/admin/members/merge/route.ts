@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
 import { sanitizeError } from '@/lib/security/sanitizeError'
+import { validateJsonBody } from '@/lib/security/validateBody'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 // POST /api/admin/members/merge
@@ -14,13 +16,14 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 // The SP enforces tenant equality and the both-have-login guard a
 // second time as defence in depth.
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-interface MergeBody {
-  sourceMemberId?: unknown
-  targetMemberId?: unknown
-  reason?:         unknown
-}
+const MergeBodySchema = z.object({
+  sourceMemberId: z.string().uuid(),
+  targetMemberId: z.string().uuid(),
+  reason:         z.string().trim().min(1).max(500),
+}).refine(b => b.sourceMemberId !== b.targetMemberId, {
+  message: 'sourceMemberId and targetMemberId must differ',
+  path:    ['targetMemberId'],
+})
 
 interface MemberCheck {
   id:         string
@@ -33,23 +36,9 @@ export async function POST(req: Request) {
   const gate = await requireTenantAdmin(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
-  let body: MergeBody
-  try { body = await req.json() }
-  catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
-
-  const sourceId = typeof body.sourceMemberId === 'string' ? body.sourceMemberId : ''
-  const targetId = typeof body.targetMemberId === 'string' ? body.targetMemberId : ''
-  const reason   = typeof body.reason === 'string' ? body.reason.trim() : ''
-
-  if (!UUID_RE.test(sourceId) || !UUID_RE.test(targetId)) {
-    return NextResponse.json({ error: 'Valid sourceMemberId and targetMemberId required' }, { status: 400 })
-  }
-  if (sourceId === targetId) {
-    return NextResponse.json({ error: 'sourceMemberId and targetMemberId must differ' }, { status: 400 })
-  }
-  if (!reason) {
-    return NextResponse.json({ error: 'Reason is required' }, { status: 400 })
-  }
+  const parsed = await validateJsonBody(req, MergeBodySchema)
+  if (!parsed.ok) return parsed.response
+  const { sourceMemberId: sourceId, targetMemberId: targetId, reason } = parsed.data
 
   const admin = supabaseAdmin()
   const { data: members, error: lookupErr } = await admin

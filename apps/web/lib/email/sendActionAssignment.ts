@@ -5,6 +5,7 @@
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
 import { logEmailSend } from '@/lib/email/instrument'
+import { isSafeEmailAddress } from '@/lib/security/inputGuards'
 import {
   ACTION_TYPE_LABEL,
   HIERARCHY_LABEL,
@@ -29,10 +30,21 @@ export interface ActionAssignmentArgs {
 }
 
 export async function sendActionAssignmentEmail(args: ActionAssignmentArgs): Promise<boolean> {
-  const apiKey  = process.env.RESEND_API_KEY
   const subject = `[${args.reportNumber}] ${ACTION_TYPE_LABEL[args.actionType]} action assigned to you`
   const tenantId = args.tenantId ?? null
   const triggeredBy = args.triggeredBy ?? null
+
+  // Envelope-field guard.
+  if (!isSafeEmailAddress(args.to)) {
+    await logEmailSend({
+      kind: 'incident-action-assignment', to: String(args.to).slice(0, 120), subject,
+      tenantId, triggeredBy,
+      status: 'failed', errorText: 'recipient failed email-format guard',
+    })
+    return false
+  }
+
+  const apiKey  = process.env.RESEND_API_KEY
 
   if (!apiKey) {
     await logEmailSend({

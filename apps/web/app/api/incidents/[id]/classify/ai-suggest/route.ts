@@ -6,6 +6,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getAnthropic, aiErrorToResponse } from '@/lib/ai/client'
 import { checkAiRateLimit, logAiInvocation } from '@/lib/ai/rateLimit'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
+import { clampText } from '@/lib/security/inputGuards'
 
 // POST /api/incidents/[id]/classify/ai-suggest
 //
@@ -143,16 +144,20 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     const careRow = care as { days_away_from_work: number; days_restricted: number;
       days_lost: number; diagnosis: string | null } | null
 
+    // Cap free-text fields before they reach Claude. The incident
+    // description column is TEXT-typed (effectively unbounded), and an
+    // attacker who can author an incident could otherwise bloat every
+    // classify call with megabytes of input.
     const userBrief = [
       `Incident type: ${inc.incident_type}`,
       `Severity (intake estimate): ${inc.severity_actual}`,
-      `Location: ${inc.location_text ?? '(not specified)'}`,
-      `Description:\n${inc.description}`,
-      personRow?.body_part?.length ? `Body part(s): ${personRow.body_part.join(', ')}` : null,
-      personRow?.injury_nature     ? `Injury nature: ${personRow.injury_nature}` : null,
-      personRow?.injury_source     ? `Source: ${personRow.injury_source}` : null,
-      personRow?.treatment_facility ? `Treatment facility: ${personRow.treatment_facility}` : null,
-      careRow?.diagnosis           ? `Diagnosis: ${careRow.diagnosis}` : null,
+      `Location: ${clampText(inc.location_text, 200) || '(not specified)'}`,
+      `Description:\n${clampText(inc.description, 5000)}`,
+      personRow?.body_part?.length ? `Body part(s): ${personRow.body_part.slice(0, 20).join(', ')}` : null,
+      personRow?.injury_nature      ? `Injury nature: ${clampText(personRow.injury_nature, 400)}` : null,
+      personRow?.injury_source      ? `Source: ${clampText(personRow.injury_source, 400)}` : null,
+      personRow?.treatment_facility ? `Treatment facility: ${clampText(personRow.treatment_facility, 300)}` : null,
+      careRow?.diagnosis            ? `Diagnosis: ${clampText(careRow.diagnosis, 1000)}` : null,
       careRow ? `Days counters: ${careRow.days_away_from_work} away · ${careRow.days_restricted} restricted · ${careRow.days_lost} lost` : null,
     ].filter(Boolean).join('\n')
 
