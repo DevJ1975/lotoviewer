@@ -1,7 +1,18 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
+import { validateJsonBody } from '@/lib/security/validateBody'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import type { SavedQueryRow } from '../route'
+
+// Partial-update: each field is optional. Description normalizes to
+// null on empty-after-trim, matching the prior `description?.trim() || null`.
+const UpdateQuerySchema = z.object({
+  name:        z.string().trim().min(1).max(120).optional(),
+  sql_text:    z.string().trim().min(1).max(8000).optional(),
+  description: z.string().trim().max(1000).nullable().optional()
+                 .transform(v => (v && v.length > 0 ? v : null)),
+})
 
 // PATCH  /api/superadmin/queries/[id] — partial edit ({ name?, description?, sql_text? })
 // DELETE /api/superadmin/queries/[id]
@@ -19,28 +30,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
   }
 
-  let body: { name?: string; description?: string | null; sql_text?: string }
-  try { body = (await req.json()) as typeof body }
-  catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }) }
+  const parsed = await validateJsonBody(req, UpdateQuerySchema)
+  if (!parsed.ok) return parsed.response
+  const body = parsed.data
 
   const patch: Record<string, unknown> = { updated_by: gate.userId }
-  if (body.name !== undefined) {
-    const name = body.name.trim()
-    if (name.length === 0 || name.length > 120) {
-      return NextResponse.json({ error: 'name is 1-120 chars' }, { status: 400 })
-    }
-    patch.name = name
-  }
-  if (body.description !== undefined) {
-    patch.description = body.description?.trim() || null
-  }
-  if (body.sql_text !== undefined) {
-    const sqlText = body.sql_text.trim()
-    if (sqlText.length === 0 || sqlText.length > 8000) {
-      return NextResponse.json({ error: 'sql_text is 1-8000 chars' }, { status: 400 })
-    }
-    patch.sql_text = sqlText
-  }
+  if (body.name        !== undefined) patch.name        = body.name
+  if (body.sql_text    !== undefined) patch.sql_text    = body.sql_text
+  if (body.description !== undefined) patch.description = body.description
 
   const admin = supabaseAdmin()
   const { data, error } = await admin

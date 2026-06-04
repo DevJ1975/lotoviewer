@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
+import { validateJsonBody } from '@/lib/security/validateBody'
 
 // POST /api/superadmin/run-cron  { path: '/api/cron/...' }
 //
@@ -37,18 +39,22 @@ function publicAppUrl(req: Request): string {
   return 'https://soteriafield.app'
 }
 
+// Zod refine binds the allowlist + the trim to one schema. The earlier
+// hand-rolled `body.path.trim()` followed by `.has(path)` is preserved
+// behaviourally.
+const RunBodySchema = z.object({
+  path: z.string().trim().refine(p => ALLOWED_PATHS.has(p), {
+    message: 'Path not in allowlist',
+  }),
+})
+
 export async function POST(req: Request) {
   const gate = await requireSuperadmin(req.headers.get('authorization'))
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
-  let body: { path?: string }
-  try { body = await req.json() }
-  catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
-
-  const path = body?.path?.trim() ?? ''
-  if (!ALLOWED_PATHS.has(path)) {
-    return NextResponse.json({ error: 'Path not in allowlist' }, { status: 400 })
-  }
+  const parsed = await validateJsonBody(req, RunBodySchema)
+  if (!parsed.ok) return parsed.response
+  const { path } = parsed.data
 
   const secret = process.env.CRON_SECRET ?? process.env.INTERNAL_PUSH_SECRET
   if (!secret) {

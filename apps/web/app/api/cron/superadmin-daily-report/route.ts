@@ -31,11 +31,6 @@ export const runtime = 'nodejs'
 const MODEL    = MODEL_BY_SURFACE['superadmin-daily-report']
 const SURFACE  = 'superadmin-daily-report' as const
 
-// Safety ceiling for the in-JS AI-usage rollup. Lowered from 50k: a
-// single day rarely exceeds a few thousand invocations, and a hit means
-// the report is undercounting (we Sentry-warn so it's visible).
-const AI_ROWS_LIMIT = 20_000
-
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false
   let mismatch = 0
@@ -160,9 +155,11 @@ async function runCron(): Promise<NextResponse> {
     { data: nmRows },
     { data: tenantRows },
   ] = await Promise.all([
-    admin.from('ai_invocations')
-      .select('tenant_id, model, status, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens')
-      .gte('occurred_at', sinceISO).limit(AI_ROWS_LIMIT),
+    // Pre-aggregated server-side (mig 215) — cardinality is at most
+    // tenants × models × statuses (a few hundred rows even on a busy
+    // day) instead of every individual invocation. Removes the prior
+    // row-ceiling + undercount warn.
+    admin.rpc('aggregate_ai_invocations_for_report', { p_since: sinceISO }),
     admin.from('cron_runs')
       .select('cron_path, status').gte('started_at', sinceISO).limit(2_000),
     admin.from('loto_webhook_deliveries')
@@ -192,37 +189,34 @@ async function runCron(): Promise<NextResponse> {
     })
   }
 
-  // If we hit the row ceiling the rollup is undercounting — make it
-  // loud rather than silently wrong.
-  if ((aiRows ?? []).length >= AI_ROWS_LIMIT) {
-    Sentry.captureMessage('superadmin-daily-report: ai_invocations row limit hit — rollup is undercounting; move to SQL GROUP BY', {
-      level: 'warning',
-      tags:  { route: '/api/cron/superadmin-daily-report' },
-    })
-  }
 
   // ── AI rollup ──────────────────────────────────────────────────────
-  // Pull pricing in via the aggregator (reuse, don't reimplement).
+  // aiRows is now pre-aggregated buckets (mig 215): one row per
+  // (tenant_id, model, status). Cost math runs once per bucket on the
+  // bucket's SUMMED tokens — equivalent to per-row sums because the
+  // cost function is linear in each token category.
   const { costForInvocation } = await import('@/lib/ai/usageAggregator')
   type AiBucket = { invocations: number; spendUsd: number; cacheRead: number; uncachedInput: number; errors: number; bb: number }
   const aiByTenant = new Map<string, AiBucket>()
-  let aiTotal: AiBucket = { invocations: 0, spendUsd: 0, cacheRead: 0, uncachedInput: 0, errors: 0, bb: 0 }
+  const aiTotal: AiBucket = { invocations: 0, spendUsd: 0, cacheRead: 0, uncachedInput: 0, errors: 0, bb: 0 }
   for (const r of (aiRows ?? []) as Array<{
     tenant_id: string | null; model: string; status: string;
-    input_tokens: number | null; output_tokens: number | null;
-    cache_read_tokens: number | null; cache_write_tokens: number | null
+    invocations: number;
+    input_tokens: number; output_tokens: number;
+    cache_read_tokens: number; cache_write_tokens: number
   }>) {
     const cost = costForInvocation(r.model, r.input_tokens, r.output_tokens, r.cache_read_tokens, r.cache_write_tokens)
-    aiTotal.invocations  += 1
-    aiTotal.spendUsd     += cost
-    aiTotal.cacheRead    += r.cache_read_tokens ?? 0
-    aiTotal.uncachedInput += r.input_tokens ?? 0
-    if (r.status === 'error')           aiTotal.errors += 1
-    if (r.status === 'budget_blocked')  aiTotal.bb     += 1
+    const n = Number(r.invocations ?? 0)
+    aiTotal.invocations   += n
+    aiTotal.spendUsd      += cost
+    aiTotal.cacheRead     += Number(r.cache_read_tokens ?? 0)
+    aiTotal.uncachedInput += Number(r.input_tokens ?? 0)
+    if (r.status === 'error')           aiTotal.errors += n
+    if (r.status === 'budget_blocked')  aiTotal.bb     += n
 
     const tk = r.tenant_id ?? '__none__'
     const ten = aiByTenant.get(tk) ?? { invocations: 0, spendUsd: 0, cacheRead: 0, uncachedInput: 0, errors: 0, bb: 0 }
-    ten.invocations  += 1
+    ten.invocations  += n
     ten.spendUsd     += cost
     aiByTenant.set(tk, ten)
   }

@@ -1,7 +1,18 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
+import { validateJsonBody } from '@/lib/security/validateBody'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getFeature } from '@soteria/core/features'
+
+// Schema enforces what the hand-rolled checks did + adds tightenings:
+//   - every tenant_id is a UUID (prior code took any string)
+//   - tenant_ids min 1 / max 100 enforced in one place
+const BulkModulesSchema = z.object({
+  tenant_ids: z.array(z.string().uuid()).min(1).max(100),
+  module_id:  z.string().trim().min(1),
+  enabled:    z.boolean(),
+})
 
 // POST /api/superadmin/tenants/bulk-modules
 //   { tenant_ids: string[], module_id: string, enabled: boolean }
@@ -21,16 +32,10 @@ export async function POST(req: Request) {
   const gate = await requireSuperadmin(req.headers.get('authorization'))
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
-  let body: { tenant_ids?: unknown; module_id?: unknown; enabled?: unknown }
-  try { body = await req.json() }
-  catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+  const parsed = await validateJsonBody(req, BulkModulesSchema)
+  if (!parsed.ok) return parsed.response
+  const { tenant_ids: tenantIds, module_id: moduleId, enabled } = parsed.data
 
-  const tenantIds = Array.isArray(body.tenant_ids) ? body.tenant_ids.filter((x): x is string => typeof x === 'string') : []
-  const moduleId  = typeof body.module_id === 'string' ? body.module_id : ''
-  const enabled   = body.enabled === true
-
-  if (tenantIds.length === 0) return NextResponse.json({ error: 'tenant_ids: at least one required' }, { status: 400 })
-  if (tenantIds.length > 100)  return NextResponse.json({ error: 'tenant_ids: max 100 per call' }, { status: 400 })
   if (!getFeature(moduleId)) {
     return NextResponse.json({ error: `Unknown module_id: ${moduleId}` }, { status: 400 })
   }

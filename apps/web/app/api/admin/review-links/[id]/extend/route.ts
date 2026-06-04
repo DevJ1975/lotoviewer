@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createClient } from '@supabase/supabase-js'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { validateJsonBody } from '@/lib/security/validateBody'
 
 // POST /api/admin/review-links/[id]/extend
 //   Body: { hours: number }   default 24, max 168 (7 days)
@@ -15,6 +17,10 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DEFAULT_HOURS = 24
 const MAX_HOURS     = 168   // one week — beyond this, mint a new link
+
+const ExtendBodySchema = z.object({
+  hours: z.number().int().positive().max(MAX_HOURS).optional().default(DEFAULT_HOURS),
+})
 
 type Gate =
   | { ok: true;  userId: string; tenantId: string }
@@ -66,18 +72,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params
   if (!UUID_RE.test(id)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
 
-  let body: { hours?: unknown }
-  try { body = await req.json() }
-  catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
-
-  const hoursRaw = typeof body.hours === 'number' ? body.hours : DEFAULT_HOURS
-  const hours    = Math.floor(hoursRaw)
-  if (!Number.isFinite(hours) || hours <= 0) {
-    return NextResponse.json({ error: 'hours must be a positive number' }, { status: 400 })
-  }
-  if (hours > MAX_HOURS) {
-    return NextResponse.json({ error: `hours must be ≤ ${MAX_HOURS} (one week). Mint a new link for longer windows.` }, { status: 400 })
-  }
+  const parsed = await validateJsonBody(req, ExtendBodySchema)
+  if (!parsed.ok) return parsed.response
+  const { hours } = parsed.data
 
   const admin = supabaseAdmin()
 

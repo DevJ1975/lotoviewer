@@ -1,6 +1,18 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
+import { validateJsonBody } from '@/lib/security/validateBody'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+
+// Partial-update schema. Every field is optional, but the ones that
+// arrive must be well-shaped. `publish` toggles published_at on/off in
+// the handler — same semantics as the prior hand-rolled validation.
+const UpdateNoteSchema = z.object({
+  version: z.string().trim().min(1).max(40).optional(),
+  title:   z.string().trim().min(1).max(200).optional(),
+  body_md: z.string().min(1).max(20_000).optional(),
+  publish: z.boolean().optional(),
+})
 
 // PATCH  /api/superadmin/release-notes/[id]  → toggle publish, edit fields
 // DELETE                                      → permanent delete (drafts only safe;
@@ -18,16 +30,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const idNum = Number(id)
   if (!Number.isFinite(idNum)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
 
-  let body: { version?: unknown; title?: unknown; body_md?: unknown; publish?: unknown }
-  try { body = await req.json() }
-  catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+  const parsed = await validateJsonBody(req, UpdateNoteSchema)
+  if (!parsed.ok) return parsed.response
+  const body = parsed.data
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
-  if (typeof body.version === 'string') patch.version = body.version.trim()
-  if (typeof body.title   === 'string') patch.title   = body.title.trim()
-  if (typeof body.body_md === 'string') patch.body_md = body.body_md
-  if (body.publish === true)            patch.published_at = new Date().toISOString()
-  if (body.publish === false)           patch.published_at = null
+  if (body.version !== undefined) patch.version = body.version
+  if (body.title   !== undefined) patch.title   = body.title
+  if (body.body_md !== undefined) patch.body_md = body.body_md
+  if (body.publish === true)      patch.published_at = new Date().toISOString()
+  if (body.publish === false)     patch.published_at = null
 
   const admin = supabaseAdmin()
   const { data, error } = await admin

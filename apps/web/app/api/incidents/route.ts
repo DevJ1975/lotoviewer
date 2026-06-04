@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { escapePostgrestFilterValue } from '@/lib/security/inputGuards'
 import { computeLoginUrl } from '@/lib/email/sendInvite'
 import { sendIncidentAlertEmail } from '@/lib/email/sendIncidentAlert'
 import {
@@ -106,7 +107,13 @@ export async function GET(req: Request) {
     if (activeOnly)            q = q.in('status', ACTIVE_INCIDENT_STATUSES as unknown as string[])
     if (assignee && UUID_RE.test(assignee)) q = q.eq('assigned_investigator', assignee)
     if (search) {
-      const safe = search.replace(/[,()]/g, ' ').trim()
+      // PostgREST .or() expressions are comma-separated branches with
+      // parenthesized grouping; a literal comma or paren in the value
+      // would change the shape of the filter. escapePostgrestFilterValue
+      // neutralizes those (and collapses whitespace). Tenant isolation
+      // remains enforced by the .eq('tenant_id', …) above — this is
+      // defense in depth + cleaner search behaviour.
+      const safe = escapePostgrestFilterValue(search)
       if (safe) q = q.or(`description.ilike.%${safe}%,report_number.ilike.%${safe}%`)
     }
 

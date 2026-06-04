@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sanitizeError } from '@/lib/security/sanitizeError'
+import { escapePostgrestFilterValue } from '@/lib/security/inputGuards'
 import {
   NEAR_MISS_HAZARD_CATEGORIES,
   NEAR_MISS_SEVERITY_BANDS,
@@ -81,10 +82,11 @@ export async function GET(req: Request) {
     if (cats.length       > 0) q = q.in('hazard_category', cats)
     if (assignee && UUID_RE.test(assignee)) q = q.eq('assigned_to', assignee)
     if (search) {
-      // Match on description or report_number; ILIKE via .or() with
-      // proper escaping. Supabase's PostgREST .or() requires commas
-      // not in values, so we conservatively strip them from search.
-      const safe = search.replace(/[,()]/g, ' ').trim()
+      // PostgREST .or() expressions are comma-separated branches with
+      // parenthesized grouping; commas / parens in a value would change
+      // the shape of the filter. escapePostgrestFilterValue neutralizes
+      // those. Tenant isolation remains the .eq('tenant_id', …) above.
+      const safe = escapePostgrestFilterValue(search)
       if (safe) q = q.or(`description.ilike.%${safe}%,report_number.ilike.%${safe}%`)
     }
 

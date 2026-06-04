@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
+import { validateJsonBody } from '@/lib/security/validateBody'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+
+const CreateNoteSchema = z.object({
+  version: z.string().trim().min(1).max(40),
+  title:   z.string().trim().min(1).max(200),
+  body_md: z.string().min(1).max(20_000),
+  publish: z.boolean().optional().default(false),
+})
 
 // GET /api/superadmin/release-notes  → all rows (drafts + published)
 // POST                                → create a new note
@@ -40,18 +49,9 @@ export async function POST(req: Request) {
   const gate = await requireSuperadmin(req.headers.get('authorization'))
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
-  let body: { version?: unknown; title?: unknown; body_md?: unknown; publish?: unknown }
-  try { body = await req.json() }
-  catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
-
-  const version = typeof body.version === 'string' ? body.version.trim() : ''
-  const title   = typeof body.title   === 'string' ? body.title.trim()   : ''
-  const bodyMd  = typeof body.body_md === 'string' ? body.body_md        : ''
-  const publish = body.publish === true
-
-  if (!version) return NextResponse.json({ error: 'version required' }, { status: 400 })
-  if (!title)   return NextResponse.json({ error: 'title required'   }, { status: 400 })
-  if (!bodyMd)  return NextResponse.json({ error: 'body_md required' }, { status: 400 })
+  const parsed = await validateJsonBody(req, CreateNoteSchema)
+  if (!parsed.ok) return parsed.response
+  const { version, title, body_md: bodyMd, publish } = parsed.data
 
   const admin = supabaseAdmin()
   const { data, error } = await admin
