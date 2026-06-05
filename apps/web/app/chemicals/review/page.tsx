@@ -12,6 +12,7 @@ import {
   type ProductFieldsFromParse,
 } from '@soteria/core/chemicals'
 import { PictogramBadges, SignalWordBadge } from '../_components/PictogramBadges'
+import { SdsDiffPanel } from '../_components/SdsDiffPanel'
 
 interface PendingRow {
   id:               string
@@ -331,6 +332,12 @@ export default function ChemicalsReviewPage() {
                   <strong className="font-semibold">Parser notes:</strong> {activeRow.parsed_payload.parser_notes}
                 </div>
               )}
+
+              <SdsDiffPanel
+                productId={activeRow.product_id}
+                sdsId={activeRow.id}
+                tenantId={tenant?.id ?? null}
+              />
 
               <div className="grid grid-cols-[24px_180px_1fr_1fr] gap-x-3 gap-y-2 items-start text-sm">
                 <div />
