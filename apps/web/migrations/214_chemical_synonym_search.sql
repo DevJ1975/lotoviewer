@@ -9,12 +9,15 @@
 -- flattened synonyms into a generated column and trigram-index THAT; the
 -- route then adds a plain `synonyms_text.ilike` clause to the OR.
 --
--- The generated column is STORED so the trigram GIN index can sit on it.
--- array_to_string with a constant separator is immutable, which both the
--- generated-column expression and the index require.
+-- WHY the wrapper function: a STORED generated column (and the trigram
+-- index) require an IMMUTABLE expression, but Postgres marks the built-in
+-- `array_to_string` as STABLE (provolatile='s') — generic over element
+-- type — so it cannot back a generated column directly. Flattening a
+-- text[] with a constant separator IS deterministic, so we expose it
+-- through a thin IMMUTABLE SQL wrapper that the generated column can use.
 --
--- Idempotent — `if not exists` on the column, the extension, and the index.
--- pg_trgm is already enabled by migration 089.
+-- Idempotent — `create or replace` on the function, `if not exists` on the
+-- column and the index. pg_trgm is already enabled by migration 089.
 
 begin;
 
@@ -25,9 +28,16 @@ begin
   end if;
 end $$;
 
+create or replace function chemical_synonyms_text(vals text[])
+  returns text
+  language sql
+  immutable
+  parallel safe
+as $$ select array_to_string(vals, ' ') $$;
+
 alter table public.chemical_products
   add column if not exists synonyms_text text
-    generated always as (array_to_string(synonyms, ' ')) stored;
+    generated always as (chemical_synonyms_text(synonyms)) stored;
 
 create index if not exists idx_chem_products_synonyms_trgm
   on public.chemical_products
