@@ -20,7 +20,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 interface Ctx { params: Promise<{ id: string; sdsId: string }> }
 
 const APPLICABLE_FIELDS = new Set([
-  'name', 'manufacturer', 'product_code',
+  'name', 'manufacturer', 'product_code', 'emergency_phone',
   'cas_numbers', 'synonyms',
   'physical_state',
   'ghs_pictograms', 'ghs_signal_word',

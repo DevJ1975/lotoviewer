@@ -12,6 +12,7 @@ import {
   type ProductFieldsFromParse,
 } from '@soteria/core/chemicals'
 import { PictogramBadges, SignalWordBadge } from '../_components/PictogramBadges'
+import { SdsDiffPanel } from '../_components/SdsDiffPanel'
 
 interface PendingRow {
   id:               string
@@ -35,7 +36,7 @@ type FieldKey = keyof ProductFieldsFromParse
 // Order to render the proposed-field rows. Matches the SDS section flow
 // (1 → 16) so reviewers move top-to-bottom in regulatory order.
 const FIELD_ORDER: FieldKey[] = [
-  'name', 'manufacturer', 'product_code',
+  'name', 'manufacturer', 'product_code', 'emergency_phone',
   'cas_numbers', 'synonyms',
   'physical_state',
   'ghs_pictograms', 'ghs_signal_word',
@@ -54,6 +55,7 @@ const FIELD_LABEL: Record<FieldKey, string> = {
   name: 'Product name',
   manufacturer: 'Manufacturer',
   product_code: 'Product code',
+  emergency_phone: 'Emergency phone',
   cas_numbers: 'CAS numbers',
   synonyms: 'Synonyms',
   physical_state: 'Physical state',
@@ -330,6 +332,12 @@ export default function ChemicalsReviewPage() {
                   <strong className="font-semibold">Parser notes:</strong> {activeRow.parsed_payload.parser_notes}
                 </div>
               )}
+
+              <SdsDiffPanel
+                productId={activeRow.product_id}
+                sdsId={activeRow.id}
+                tenantId={tenant?.id ?? null}
+              />
 
               <div className="grid grid-cols-[24px_180px_1fr_1fr] gap-x-3 gap-y-2 items-start text-sm">
                 <div />

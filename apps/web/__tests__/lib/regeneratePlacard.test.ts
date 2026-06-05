@@ -30,7 +30,7 @@ interface AdminStubOpts {
  * Builds a minimal SupabaseClient-shaped object that satisfies the
  * regenerator's call graph:
  *   admin.from('loto_equipment').select('*').eq().eq().maybeSingle()
- *   admin.from('loto_steps').select('*').eq().eq().order()
+ *   admin.from('loto_energy_steps').select('*').eq().eq().order()
  *   admin.storage.from('loto-photos').upload(...)
  *   admin.storage.from('loto-photos').getPublicUrl(...)
  *   admin.from('loto_equipment').update().eq().eq()
@@ -102,7 +102,7 @@ function makeAdminStub(opts: AdminStubOpts) {
           // First call is the SELECT; second call is the UPDATE.
           return equipmentCallCount++ === 0 ? selectEquipment() : updateEquipment()
         }
-        if (name === 'loto_steps') return selectSteps()
+        if (name === 'loto_energy_steps') return selectSteps()
         throw new Error(`Unexpected table: ${name}`)
       }),
       storage: { from: vi.fn(() => bucket) },

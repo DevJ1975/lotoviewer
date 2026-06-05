@@ -117,7 +117,7 @@ export default async function ReviewPage({
         .order('department',   { ascending: true })
         .order('equipment_id', { ascending: true }),
       admin
-        .from('loto_steps')
+        .from('loto_energy_steps')
         .select('*')
         .eq('tenant_id', link.tenant_id)
         .order('equipment_id', { ascending: true })
@@ -137,7 +137,7 @@ export default async function ReviewPage({
           .eq('tenant_id', link.tenant_id)
           .in('equipment_id', equipmentIds),
         admin
-          .from('loto_steps')
+          .from('loto_energy_steps')
           .select('*')
           .eq('tenant_id', link.tenant_id)
           .in('equipment_id', equipmentIds)

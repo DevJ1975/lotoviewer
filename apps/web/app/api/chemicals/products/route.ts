@@ -56,13 +56,18 @@ export async function GET(req: Request) {
     if (search) {
       const safe = search.replace(/[,()]/g, ' ').trim()
       if (safe) {
-        // ilike on name + manufacturer + product_code; CAS exact match
-        // via array contains when the search term looks like a CAS.
+        // ilike on name + manufacturer + product_code + synonyms so a
+        // worker can find a product by an alternate name ("propan-2-one"
+        // → acetone). synonyms_text is a generated column flattening the
+        // synonyms text[] (migration 214) — PostgREST's .or() only filters
+        // real columns, not SQL expressions, and the matching trigram
+        // index lives on that column too.
         const escaped = safe.replace(/[%_]/g, m => `\\${m}`)
         q = q.or([
           `name.ilike.%${escaped}%`,
           `manufacturer.ilike.%${escaped}%`,
           `product_code.ilike.%${escaped}%`,
+          `synonyms_text.ilike.%${escaped}%`,
         ].join(','))
       }
     }
