@@ -43,7 +43,7 @@ export async function regenerateAndUploadPlacard(
          .eq('tenant_id', tenantId)
          .eq('equipment_id', equipmentId)
          .maybeSingle<Equipment>(),
-    admin.from('loto_steps')
+    admin.from('loto_energy_steps')
          .select('*')
          .eq('tenant_id', tenantId)
          .eq('equipment_id', equipmentId)
