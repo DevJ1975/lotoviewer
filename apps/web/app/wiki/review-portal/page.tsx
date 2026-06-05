@@ -1,10 +1,17 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.1.0'
-const LAST_UPDATED    = '2026-05-19'
+const CURRENT_VERSION = '1.1.1'
+const LAST_UPDATED    = '2026-06-05'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.1',
+    date: '2026-06-05',
+    changes: [
+      'Fixed: the reviewer page now renders each placard\'s energy-isolation steps. A table-name typo (querying loto_steps instead of loto_energy_steps) had caused the steps list to come back empty for every piece of equipment under review.',
+    ],
+  },
   {
     version: '1.1.0',
     date: '2026-05-19',
