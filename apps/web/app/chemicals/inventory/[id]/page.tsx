@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Loader2, Trash2 } from 'lucide-react'
+import { ArrowLeft, Loader2, Trash2, Siren } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { Prop65InventoryBadge } from '@/components/prop65/Prop65InventoryBadge'
@@ -172,6 +172,13 @@ export default function InventoryDetailPage() {
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
       <Link href="/chemicals/inventory" className="inline-flex items-center gap-1 text-sm text-indigo-600 hover:underline">
         <ArrowLeft className="w-4 h-4" /> Back to inventory
+      </Link>
+
+      <Link
+        href={`/chemicals/inventory/${id}/emergency`}
+        className="flex items-center justify-center gap-2 w-full rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold py-3 shadow"
+      >
+        <Siren className="w-5 h-5" /> Emergency / First Aid
       </Link>
 
       <header className="flex flex-wrap items-start justify-between gap-3">

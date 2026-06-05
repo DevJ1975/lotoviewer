@@ -35,7 +35,7 @@ type FieldKey = keyof ProductFieldsFromParse
 // Order to render the proposed-field rows. Matches the SDS section flow
 // (1 → 16) so reviewers move top-to-bottom in regulatory order.
 const FIELD_ORDER: FieldKey[] = [
-  'name', 'manufacturer', 'product_code',
+  'name', 'manufacturer', 'product_code', 'emergency_phone',
   'cas_numbers', 'synonyms',
   'physical_state',
   'ghs_pictograms', 'ghs_signal_word',
@@ -54,6 +54,7 @@ const FIELD_LABEL: Record<FieldKey, string> = {
   name: 'Product name',
   manufacturer: 'Manufacturer',
   product_code: 'Product code',
+  emergency_phone: 'Emergency phone',
   cas_numbers: 'CAS numbers',
   synonyms: 'Synonyms',
   physical_state: 'Physical state',

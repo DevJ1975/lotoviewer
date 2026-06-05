@@ -4,6 +4,8 @@ import {
   validateProductInput,
   chemicalSdsStoragePath,
   parseToProductFields,
+  firstAidEntries,
+  spillCleanupEntries,
   canAutoApplyParse,
   validateInventoryInput,
   validateExposureInput,
@@ -194,6 +196,13 @@ describe('parseToProductFields', () => {
     expect(fields.first_aid?.inhalation).toBe('Move to fresh air')
   })
 
+  it('persists the emergency phone when present and omits it when blank', () => {
+    expect(parseToProductFields(basePayload({ emergency_phone: '1-800-424-9300' })).emergency_phone)
+      .toBe('1-800-424-9300')
+    expect(parseToProductFields(basePayload({ emergency_phone: null })))
+      .not.toHaveProperty('emergency_phone')
+  })
+
   it('drops invalid CAS numbers from the parse', () => {
     const fields = parseToProductFields(basePayload({
       cas_numbers: ['67-64-1', 'bogus', '7732-18-5'],
@@ -269,6 +278,52 @@ describe('canAutoApplyParse', () => {
         spill_cleanup: 'low',
       },
     }))).toBe(true)
+  })
+})
+
+describe('firstAidEntries', () => {
+  it('returns entries in triage order, skipping blanks', () => {
+    const out = firstAidEntries({
+      inhalation: 'Move to fresh air',
+      skin:       '  ',          // blank → dropped
+      eyes:       'Rinse 15 min',
+      ingestion:  null,          // null → dropped
+      notes:      'Seek medical attention',
+    })
+    expect(out.map(e => e.label)).toEqual(['Inhalation', 'Eye contact', 'Notes'])
+    expect(out[1].text).toBe('Rinse 15 min')
+  })
+
+  it('trims surrounding whitespace from text', () => {
+    expect(firstAidEntries({ inhalation: '  Fresh air  ' })[0].text).toBe('Fresh air')
+  })
+
+  it('returns [] for null/undefined or an all-empty block', () => {
+    expect(firstAidEntries(null)).toEqual([])
+    expect(firstAidEntries(undefined)).toEqual([])
+    expect(firstAidEntries({ inhalation: null, skin: '', eyes: null, ingestion: null, notes: null })).toEqual([])
+  })
+})
+
+describe('spillCleanupEntries', () => {
+  it('returns entries in response order, skipping blanks', () => {
+    const out = spillCleanupEntries({
+      personal_precautions:      'Evacuate, ventilate',
+      environmental_precautions: 'Prevent entry to drains',
+      containment_methods:       null,
+      cleanup_methods:           'Absorb with inert material',
+    })
+    expect(out.map(e => e.label)).toEqual([
+      'Personal precautions', 'Cleanup', 'Environmental precautions',
+    ])
+  })
+
+  it('returns [] for null/undefined or an all-empty block', () => {
+    expect(spillCleanupEntries(null)).toEqual([])
+    expect(spillCleanupEntries({
+      personal_precautions: '', environmental_precautions: null,
+      containment_methods: null, cleanup_methods: '  ',
+    })).toEqual([])
   })
 })
 

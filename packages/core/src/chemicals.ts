@@ -244,6 +244,7 @@ export interface ProductFieldsFromParse {
   name?:                     string
   manufacturer?:             string | null
   product_code?:             string | null
+  emergency_phone?:          string | null
   cas_numbers?:              string[]
   synonyms?:                 string[]
   physical_state?:           PhysicalState | null
@@ -294,6 +295,7 @@ export function parseToProductFields(parsed: ParsedSdsPayload): ProductFieldsFro
   if (parsed.product_name && parsed.product_name.trim()) out.name = parsed.product_name.trim()
   if (parsed.manufacturer)    out.manufacturer    = parsed.manufacturer
   if (parsed.product_code)    out.product_code    = parsed.product_code
+  if (parsed.emergency_phone) out.emergency_phone = parsed.emergency_phone
   if (parsed.cas_numbers && parsed.cas_numbers.length > 0)
     out.cas_numbers = parsed.cas_numbers.filter(c => isValidCas(c))
   if (parsed.synonyms && parsed.synonyms.length > 0) out.synonyms = parsed.synonyms
@@ -346,6 +348,52 @@ function hasAnyValue(obj: object | null | undefined): boolean {
     return true
   }
   return false
+}
+
+// ─── First-aid emergency mode ────────────────────────────────────────────
+//
+// The container scan flow can surface a "panic" view that shows ONLY the
+// life-safety information from the SDS: first aid by exposure route and
+// spill response steps. These helpers flatten the JSONB blobs stored on
+// chemical_products into an ordered, gap-free list of labeled entries so
+// the UI stays dumb and the ordering/omission rules are unit-tested here.
+//
+// Order matters: it mirrors how a responder triages — what entered the
+// body first (first aid by route), then how to contain the release.
+
+export interface EmergencyEntry { label: string; text: string }
+
+// Drop entries whose text is blank/null so the panic view never renders an
+// empty "Eyes:" heading with nothing under it.
+function toEntries(rows: ReadonlyArray<readonly [string, string | null | undefined]>): EmergencyEntry[] {
+  const out: EmergencyEntry[] = []
+  for (const [label, text] of rows) {
+    if (typeof text === 'string' && text.trim() !== '') {
+      out.push({ label, text: text.trim() })
+    }
+  }
+  return out
+}
+
+export function firstAidEntries(fa: ParsedSdsFirstAid | null | undefined): EmergencyEntry[] {
+  if (!fa) return []
+  return toEntries([
+    ['Inhalation',   fa.inhalation],
+    ['Skin contact', fa.skin],
+    ['Eye contact',  fa.eyes],
+    ['Ingestion',    fa.ingestion],
+    ['Notes',        fa.notes],
+  ])
+}
+
+export function spillCleanupEntries(sc: ParsedSdsSpillCleanup | null | undefined): EmergencyEntry[] {
+  if (!sc) return []
+  return toEntries([
+    ['Personal precautions',      sc.personal_precautions],
+    ['Containment',               sc.containment_methods],
+    ['Cleanup',                   sc.cleanup_methods],
+    ['Environmental precautions', sc.environmental_precautions],
+  ])
 }
 
 // ─── Inventory items (Phase D) ───────────────────────────────────────────
