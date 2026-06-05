@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   isValidCas,
+  isValidHazardCode,
+  isValidPrecautionaryCode,
   validateProductInput,
   chemicalSdsStoragePath,
   parseToProductFields,
@@ -108,6 +110,45 @@ describe('isValidCas', () => {
   ])('rejects malformed CAS %s', cas => {
     expect(isValidCas(cas)).toBe(false)
   })
+
+  it.each([
+    '67-64-2',   // acetone with a wrong check digit (real is 67-64-1)
+    '7732-18-4', // water with a wrong check digit (real is 7732-18-5)
+  ])('rejects a well-formed CAS with a bad check digit %s', cas => {
+    expect(isValidCas(cas)).toBe(false)
+  })
+})
+
+describe('isValidHazardCode', () => {
+  it.each(['H225', 'H319', 'H400'])('accepts in-range hazard code %s', code => {
+    expect(isValidHazardCode(code)).toBe(true)
+  })
+
+  it.each([
+    'H999',  // no GHS block covers 999
+    'X100',  // wrong prefix
+    'H22',   // too few digits
+    'H2255', // too many digits
+    '',
+  ])('rejects junk hazard code %s', code => {
+    expect(isValidHazardCode(code)).toBe(false)
+  })
+})
+
+describe('isValidPrecautionaryCode', () => {
+  it.each(['P210', 'P501'])('accepts in-range precautionary code %s', code => {
+    expect(isValidPrecautionaryCode(code)).toBe(true)
+  })
+
+  it.each([
+    'P000',  // below the P101 floor
+    'P999',  // above the P501 ceiling
+    'X100',  // wrong prefix
+    'P21',   // too few digits
+    '',
+  ])('rejects junk precautionary code %s', code => {
+    expect(isValidPrecautionaryCode(code)).toBe(false)
+  })
 })
 
 describe('validateProductInput', () => {
@@ -152,6 +193,30 @@ describe('validateProductInput', () => {
       cas_numbers: ['67-64-1', 'bogus', 'also-bad'],
     })
     expect(errs.filter(e => e.field === 'cas_numbers')).toHaveLength(2)
+  })
+
+  it('flags an unknown hazard code', () => {
+    const errs = validateProductInput({
+      name: 'X',
+      hazard_statements: [
+        { code: 'H225', text: 'Highly flammable.' },
+        { code: 'H999', text: 'Not a real code.' },
+      ],
+    })
+    const hit = errs.find(e => e.field === 'hazard_statements')
+    expect(hit?.message).toBe('Unknown hazard code: H999')
+  })
+
+  it('flags an unknown precautionary code', () => {
+    const errs = validateProductInput({
+      name: 'X',
+      precautionary_statements: [
+        { code: 'P210', text: 'Keep away from heat.' },
+        { code: 'P000', text: 'Not a real code.' },
+      ],
+    })
+    const hit = errs.find(e => e.field === 'precautionary_statements')
+    expect(hit?.message).toBe('Unknown precautionary code: P000')
   })
 })
 
