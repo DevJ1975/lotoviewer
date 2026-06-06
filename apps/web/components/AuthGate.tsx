@@ -22,6 +22,8 @@ const PUBLIC_PATHS = new Set(['/login', '/welcome', '/forgot-password', '/reset-
 // flows whose authorization is the URL token, not a Supabase session.
 const PUBLIC_PREFIXES = [
   '/r/bbs',     // Behavior-Based Safety anonymous QR submission
+  '/review',    // LOTO placard reviewer portal — the URL token is the auth
+  '/qr',        // Public LOTO placard view from a scanned placard QR
 ] as const
 
 function isPublicPath(pathname: string): boolean {

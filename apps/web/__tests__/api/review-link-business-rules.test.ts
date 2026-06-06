@@ -316,7 +316,7 @@ describe('LOTO review-link business rules', () => {
       },
       error: null,
     })
-    queue('rpc:apply_loto_review_photo_replacement', {
+    queue('rpc:stage_loto_review_photo_replacement', {
       data: null,
       error: { message: 'equipment not in this review batch' },
     })
@@ -338,14 +338,18 @@ describe('LOTO review-link business rules', () => {
     }), ctx())
 
     expect(response.status).toBe(400)
+    // The staged object is cleaned up when staging fails.
     expect(storageBucket.remove).toHaveBeenCalledTimes(1)
     expect(captured.rpcCalls[0]).toMatchObject({
-      name: 'apply_loto_review_photo_replacement',
+      name: 'stage_loto_review_photo_replacement',
       args: {
         p_review_link_id: LINK_ID,
         p_equipment_id: 'EQ-404',
         p_slot: 'EQUIP',
         p_new_photo_url: 'https://cdn.example.com/photo.jpg',
+        // Parked in the staging area, not the live equipmentPhotoPath.
+        p_storage_path: expect.stringMatching(new RegExp(`^staging/${LINK_ID}/EQ-404/EQUIP-\\d+\\.jpg$`)),
+        p_replaced_by_name: 'Floor supervisor',
         p_ip: '203.0.113.10',
         p_user_agent: 'vitest',
       },

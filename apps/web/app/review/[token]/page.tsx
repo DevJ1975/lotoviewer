@@ -48,6 +48,12 @@ interface ReviewLinkEquipmentRow {
   sort_order:   number
 }
 
+interface StagedPhotoRow {
+  equipment_id:  string
+  slot:          'EQUIP' | 'ISO'
+  new_photo_url: string
+}
+
 export default async function ReviewPage({
   params,
 }: { params: Promise<{ token: string }> }) {
@@ -77,7 +83,7 @@ export default async function ReviewPage({
     return <ErrorScreen title="Link expired" body={`This review link expired on ${formatDate(link.expires_at)}. Reach out to the sender for a fresh one.`} />
   }
 
-  const [{ data: snapshotRows }, { data: prevReviews }, { data: tenantRow }] = await Promise.all([
+  const [{ data: snapshotRows }, { data: prevReviews }, { data: tenantRow }, { data: stagedRows }] = await Promise.all([
     // For per-reviewer (legacy) links, the snapshot pins which equipment
     // the reviewer can see. For public (tenant-wide) links the snapshot
     // is intentionally absent — we render every active equipment row in
@@ -99,6 +105,14 @@ export default async function ReviewPage({
       .select('name')
       .eq('id', link.tenant_id)
       .maybeSingle(),
+    // Pending photo replacements the reviewer already staged on a prior
+    // visit — so a refresh shows the staged image + "pending reconcile"
+    // badge instead of reverting to the live photo.
+    admin
+      .from('loto_review_photo_replacements')
+      .select('equipment_id, slot, new_photo_url')
+      .eq('review_link_id', link.id)
+      .eq('status', 'pending'),
   ])
 
   let equipment: unknown[] = []
@@ -159,6 +173,7 @@ export default async function ReviewPage({
     stepsByEquipment.set(s.equipment_id, list)
   }
   const initialReviews = (prevReviews ?? []) as PlacardReviewRow[]
+  const initialStagedPhotos = (stagedRows ?? []) as StagedPhotoRow[]
   const tenantName = tenantRow?.name ?? 'your client'
 
   // If the reviewer is already done, show the read-only thank-you.
@@ -189,6 +204,7 @@ export default async function ReviewPage({
       equipment={equipmentList}
       stepsByEquipment={Object.fromEntries(stepsByEquipment)}
       initialReviews={initialReviews}
+      initialStagedPhotos={initialStagedPhotos}
     />
   )
 }

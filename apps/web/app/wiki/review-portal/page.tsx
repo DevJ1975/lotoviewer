@@ -1,10 +1,18 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.1.1'
-const LAST_UPDATED    = '2026-06-05'
+const CURRENT_VERSION = '1.2.0'
+const LAST_UPDATED    = '2026-06-06'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.2.0',
+    date: '2026-06-06',
+    changes: [
+      'Photo replacements are now STAGED, not applied live. When a reviewer replaces an EQUIP or ISO photo it lands in a staging area (status "pending reconcile") and nothing on the equipment record changes. The reviewer can undo a staged photo before they finish. An admin reconciles from /admin/loto/public-review-link → "Photo replacements": side-by-side old-vs-new with per-item Apply / Reject and an "Apply all" shortcut. Applying swaps the photo into the live placard, sets the photo flag, clears the stale placard PDF for re-render, and writes audit + hygiene-log rows. On the legacy per-reviewer flow, sign-off auto-reconciles. Reconcile is idempotent — re-running never double-applies.',
+      'Public QR placard route. Scanning a printed placard QR opens /qr/{qr_token} — a read-only, no-login view of that machine\'s isolation photo (with annotation markers), ordered energy-control steps, and verified badge. Reads flow through a SECURITY DEFINER RPC granted to anon, so the service key never reaches the browser and RLS is untouched; each resolved scan is logged.',
+    ],
+  },
   {
     version: '1.1.1',
     date: '2026-06-05',
@@ -75,6 +83,17 @@ export default function WikiReviewPortalPage() {
             a: <>30 days by default. Revoke takes effect immediately. Once
               the reviewer signs off, re-opening the link shows a read-only
               thank-you page.</>,
+          },
+          {
+            q: 'What happens when a reviewer replaces a photo?',
+            a: <>It is <strong>staged</strong>, not applied. The new photo
+              uploads to a staging area and shows on the reviewer&apos;s tile
+              with a &quot;pending reconcile&quot; badge; the live equipment
+              record is untouched. An admin then reviews old-vs-new at{' '}
+              <Link href="/admin/loto/public-review-link">/admin/loto/public-review-link</Link>{' '}
+              and Applies or Rejects each one (sign-off on the per-reviewer
+              flow auto-applies). Only on Apply does the placard photo change —
+              and the stale placard PDF is cleared so it re-renders.</>,
           },
           {
             q: 'What can the reviewer NOT do?',
