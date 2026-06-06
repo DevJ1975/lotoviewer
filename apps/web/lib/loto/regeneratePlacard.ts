@@ -32,6 +32,39 @@ export interface RegenerateResult {
   placardUrl: string
 }
 
+// Load the tenant's logo as pdf-lib-embeddable PNG bytes for the placard
+// header. Tenant logos are stored as WebP, which pdf-lib can't embed — sharp
+// (server-only) decodes WebP/PNG/JPEG and re-encodes PNG. Best-effort: any
+// failure returns null and the placard falls back to the "SL" badge. Capped
+// in size since the header box is ~150×32pt.
+export async function loadTenantLogoPng(
+  admin: SupabaseClient,
+  tenantId: string,
+): Promise<Uint8Array | null> {
+  try {
+    const { data } = await admin
+      .from('tenants')
+      .select('logo_url')
+      .eq('id', tenantId)
+      .maybeSingle<{ logo_url: string | null }>()
+    const url = data?.logo_url
+    if (!url) return null
+
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const input = Buffer.from(await res.arrayBuffer())
+
+    const sharp = (await import('sharp')).default
+    const png = await sharp(input)
+      .resize({ width: 600, height: 600, fit: 'inside', withoutEnlargement: true })
+      .png()
+      .toBuffer()
+    return new Uint8Array(png)
+  } catch {
+    return null
+  }
+}
+
 export async function regenerateAndUploadPlacard(
   admin: SupabaseClient,
   tenantId:   string,
@@ -57,7 +90,8 @@ export async function regenerateAndUploadPlacard(
   const equipment = eqRes.data
   const steps     = (stepsRes.data ?? []) as LotoEnergyStep[]
 
-  const bytes = await generatePlacardPdf({ equipment, steps })
+  const tenantLogoPng = await loadTenantLogoPng(admin, tenantId)
+  const bytes = await generatePlacardPdf({ equipment, steps, tenantLogoPng })
   const path  = placardPdfPath(tenantId, equipmentId)
 
   const bucket = admin.storage.from(BUCKET)

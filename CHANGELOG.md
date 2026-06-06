@@ -11,11 +11,35 @@ app at `/superadmin/release-notes`.
 ## [Unreleased]
 
 ### Added
+- **Public QR placard view** (`/qr/{qr_token}`) — scanning a printed placard QR
+  opens a read-only, no-login view of that machine's isolation photo (with
+  annotation markers), ordered energy-control steps, and verified badge. Reads
+  flow through a `SECURITY DEFINER` RPC granted to anon (the service key never
+  reaches the browser; RLS unchanged); each resolved scan is logged.
+- **Reviewer photo staging + admin reconcile** — on the public review portal,
+  replacing an ISO/EQUIP photo now *stages* the upload with a "pending
+  reconcile" badge instead of writing the placard live. An admin applies or
+  rejects each one from `/admin/loto/public-review-link` → "Photo
+  replacements" (side-by-side old vs new, Apply / Reject / Apply all);
+  applying swaps the photo, clears the stale placard for re-render, and writes
+  audit + hygiene-log rows. Idempotent — re-running never double-applies.
+- **"Update photo" deep-link** — the public placard view links into the review
+  portal *focused on that one machine* (`?equipment=<id>`), so a field worker
+  can replace a photo from a single scan without loading the full floor-walk
+  batch page.
 - Weekly reminder emails for invitees who haven't signed up, with reversible
   soft-cancel after four reminders (daily `/api/cron/invite-reminders`).
 - First-login onboarding instruction walkthrough for new users.
 - Version-control scheme: `check:version` drift guard, this changelog, and the
   versioning runbook.
+
+### Notes
+- **Planned — LOTO verification-packet report generator.** The printed packet's
+  per-placard QR codes were repointed to the new `/qr/{qr_token}` convention
+  (cover/sign-off QR → the public `/review` link) out-of-band via a PyMuPDF +
+  `qrcode` script. This packet assembly + QR-stamping pipeline is the
+  groundwork for an in-app **report generator** that builds and refreshes the
+  verification packet from live equipment data.
 
 ## [1.9.0]
 
