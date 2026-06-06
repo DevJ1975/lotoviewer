@@ -20,6 +20,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const ALLOWED_PATHS = new Set<string>([
+  '/api/cron/regenerate-loto-placards',
   '/api/cron/meter-bump-reminders',
   '/api/cron/daily-health-report',
   '/api/cron/risk-review-reminders',

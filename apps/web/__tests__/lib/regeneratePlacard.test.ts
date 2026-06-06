@@ -166,9 +166,8 @@ describe('regenerateAndUploadPlacard', () => {
     // browsers (and the next admin viewer's <Image src>) won't pull a
     // stale copy from cache after a photo swap.
     expect(result.placardUrl).toMatch(/\?v=\d+$/)
-    // The patch nulls signed_placard_url because any prior signature
-    // was over the old bytes.
-    expect(updates[0]?.payload).toMatchObject({ signed_placard_url: null })
+    // The patch points placard_url at the fresh, cache-busted copy.
+    expect(updates[0]?.payload).toMatchObject({ placard_url: result.placardUrl })
   })
 
   it('throws when the storage upload fails', async () => {
