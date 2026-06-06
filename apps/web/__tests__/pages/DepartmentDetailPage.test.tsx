@@ -10,6 +10,14 @@ vi.mock('next/navigation', () => ({
   useParams: vi.fn().mockReturnValue({ dept: 'Mechanical' }),
 }))
 
+// DepartmentDetailPage and useReviews both call useTenant() to scope
+// their supabase queries. Without this mock the context default has
+// tenantId=null / loading=true, so the page resolves to empty equipment
+// immediately and the loading spinner never appears.
+vi.mock('@/components/TenantProvider', () => ({
+  useTenant: () => ({ tenantId: 'tenant-1', loading: false }),
+}))
+
 vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) =>
     <a href={href}>{children}</a>,

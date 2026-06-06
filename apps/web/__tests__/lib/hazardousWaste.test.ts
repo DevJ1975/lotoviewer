@@ -85,7 +85,7 @@ describe('containerAgeStatus', () => {
   })
 
   it('SQG baseline limit is 180 days; longHaul extends to 270', () => {
-    const start = '2025-12-01T12:00:00Z' // 164 days before now
+    const start = '2025-11-25T12:00:00Z' // 170 days before now (within the 14-day warn window)
     const sqg = containerAgeStatus(start, now, { category: 'sqg' })
     expect(sqg.limitDays).toBe(180)
     expect(sqg.status).toBe('approaching')

@@ -324,18 +324,39 @@ describe('LOTO review-link business rules', () => {
     storageBucket.getPublicUrl.mockReturnValue({ data: { publicUrl: 'https://cdn.example.com/photo.jpg' } })
     storageBucket.remove.mockResolvedValue({ data: [], error: null })
 
+    // In vitest's jsdom environment, `req.formData()` is powered by undici
+    // and returns File objects from Node's internal realm — a different
+    // prototype chain than jsdom's global `File`. The route guards the photo
+    // field with `photo instanceof File`, which uses the jsdom global, so
+    // the undici-realm File silently fails the check and the route returns
+    // 400 "photo file required" before ever reaching the RPC.
+    //
+    // Fix: supply a FormData that already holds a jsdom-realm File, and
+    // override `formData()` on the Request so the route reads from it
+    // directly instead of letting undici re-parse the multipart body.
+    const photo = new File([new Uint8Array([0xff, 0xd8, 0xff, 0x00])], 'photo.jpg', { type: 'image/jpeg' })
     const form = new FormData()
     form.set('action', 'replace-photo')
     form.set('equipment_id', 'EQ-404')
     form.set('slot', 'EQUIP')
     form.set('reviewer_name', 'Floor supervisor')
-    form.set('photo', new File([new Uint8Array([0xff, 0xd8, 0xff, 0x00])], 'photo.jpg', { type: 'image/jpeg' }))
+    form.set('photo', photo)
 
-    const response = await publicReviewAction(new Request('http://localhost/api/review', {
+    const baseReq = new Request('http://localhost/api/review', {
       method: 'POST',
-      headers: { 'x-forwarded-for': '203.0.113.10', 'user-agent': 'vitest' },
-      body: form,
-    }), ctx())
+      headers: {
+        'content-type': 'multipart/form-data; boundary=TestBoundary',
+        'x-forwarded-for': '203.0.113.10',
+        'user-agent': 'vitest',
+      },
+      // Body is a placeholder; formData() is overridden below.
+      body: '--TestBoundary--',
+    })
+    // Override formData() so the route receives the jsdom-realm File above
+    // rather than an undici-realm File that fails `instanceof File`.
+    const req = Object.assign(baseReq, { formData: () => Promise.resolve(form) })
+
+    const response = await publicReviewAction(req as unknown as Request, ctx())
 
     expect(response.status).toBe(400)
     // The staged object is cleaned up when staging fails.

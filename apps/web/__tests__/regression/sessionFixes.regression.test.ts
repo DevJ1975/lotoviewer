@@ -102,7 +102,15 @@ describe('Regression #104 — admin URL renames + 301 redirects', () => {
   })
 
   it('tile redirects carry :path* wildcards on both sides (preserves deep links)', () => {
-    const tileRedirects = getAdminRedirects().filter(r => r.destination !== '/admin')
+    // Exclude section landers (dest === '/admin') and "nested canonical
+    // promotion" redirects where the destination is a subtree of the
+    // source — those are intentionally bare to avoid infinite-redirect
+    // loops (e.g. /admin/insights → /admin/insights/risk-intelligence).
+    const tileRedirects = getAdminRedirects().filter(r =>
+      r.destination !== '/admin' &&
+      !r.destination.startsWith(r.source + '/'),
+    )
+    expect(tileRedirects.length).toBeGreaterThan(0)
     for (const r of tileRedirects) {
       expect(r.source.endsWith('/:path*')).toBe(true)
       expect(r.destination.endsWith('/:path*')).toBe(true)

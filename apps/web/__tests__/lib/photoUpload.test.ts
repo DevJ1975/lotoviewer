@@ -42,32 +42,39 @@ function setupDb(opts: {
     data: { equip_photo_url: TEST_URL, iso_photo_url: null, photo_status: 'partial', needs_equip_photo: true, needs_iso_photo: true },
   }
 
-  const reconcileUpdateEq = vi.fn().mockResolvedValue({ error: null })
+  const reconcileUpdateEq2 = vi.fn().mockResolvedValue({ error: null })
+  const reconcileUpdateEq = vi.fn().mockReturnValue({ eq: reconcileUpdateEq2 })
   const reconcileUpdate = vi.fn().mockImplementation((payload: Record<string, unknown>) => {
     opts.onReconcileUpdate?.(payload)
     return { eq: reconcileUpdateEq }
   })
 
   vi.mocked(supabase.from)
-    // 1. SELECT current URLs
+    // 1. SELECT current URLs — implementation chains .eq(tenant).eq(equipmentId).single()
     .mockImplementationOnce(() => ({
       select: vi.fn().mockReturnValue({
         eq: vi.fn().mockReturnValue({
-          single: vi.fn().mockResolvedValue(initialSelect),
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue(initialSelect),
+          }),
         }),
       }),
     } as unknown as ReturnType<typeof supabase.from>))
-    // 2. UPDATE with new URL + status
+    // 2. UPDATE with new URL + status — implementation chains .eq(tenant).eq(equipmentId)
     .mockImplementationOnce(() => ({
       update: vi.fn().mockReturnValue({
-        eq: vi.fn().mockResolvedValue(update),
+        eq: vi.fn().mockReturnValue({
+          eq: vi.fn().mockResolvedValue(update),
+        }),
       }),
     } as unknown as ReturnType<typeof supabase.from>))
-    // 3. Reconcile SELECT (and optional 4th reconcile UPDATE on the same chain)
+    // 3. Reconcile SELECT — same double-eq chain; reconcile UPDATE also chains two .eq()s
     .mockImplementation(() => ({
       select: vi.fn().mockReturnValue({
         eq: vi.fn().mockReturnValue({
-          single: vi.fn().mockResolvedValue({ data: reconcileSelect.data, error: null }),
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({ data: reconcileSelect.data, error: null }),
+          }),
         }),
       }),
       update: reconcileUpdate,

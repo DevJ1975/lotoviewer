@@ -38,6 +38,13 @@ const ONLY_LOTO_MODULES = {
   'bbs': false,
   'chemicals': false,
   'strike': false,
+  // Modules added after the original fixture — must be explicitly disabled
+  // so the "only LOTO visible" invariant holds as the catalog grows.
+  'hazardous-waste': false,
+  'prop65': false,
+  'working-at-heights': false,
+  'inspections': false,
+  'fleet-safety': false,
 }
 
 const NO_SAFETY_MODULES = {

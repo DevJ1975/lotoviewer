@@ -63,7 +63,8 @@ describe('POST /api/superadmin/tenants', () => {
     expect(body.tenant.slug).toBe('acme')
 
     // Insert payload should carry the allocated number + sanitized modules.
-    expect(mockState.inserts).toHaveLength(1)
+    // inserts[0] = tenants row; inserts[1] = primary-facility row (added in route v2).
+    expect(mockState.inserts).toHaveLength(2)
     const insert = mockState.inserts[0]!.payload as Record<string, unknown>
     expect(insert.tenant_number).toBe('0003')
     expect(insert.slug).toBe('acme')
