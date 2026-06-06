@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { FEATURES } from '@soteria/core'
 import { resolveLandingPath } from '@/lib/landing'
 import type { Tenant } from '@soteria/core/types'
 
@@ -23,22 +24,16 @@ function tenant(over: Partial<Tenant> = {}): Tenant {
   }
 }
 
-const ONLY_LOTO_MODULES = {
-  'my-safety-readiness': false,
-  'equipment-readiness': false,
-  'loto': true,
-  'confined-spaces': false,
-  'hot-work': false,
-  'risk-assessment': false,
-  'near-miss': false,
-  'incidents': false,
-  'jha': false,
-  'toolbox-talks': false,
-  'safety-boards': false,
-  'bbs': false,
-  'chemicals': false,
-  'strike': false,
-}
+// Every top-level safety module toggled OFF except LOTO, derived from the live
+// catalog so a newly-added module can't silently make this fixture
+// "multi-module" and break the single-module redirect assertion. (Hand-listing
+// these drifted: hazardous-waste, prop65, inspections, etc. were added later
+// and, defaulting to visible, made the tenant look multi-module.)
+const ONLY_LOTO_MODULES: Record<string, boolean> = Object.fromEntries(
+  (FEATURES as ReadonlyArray<{ id: string; category: string; parent?: string }>)
+    .filter(f => f.category === 'safety' && !f.parent)
+    .map(f => [f.id, f.id === 'loto']),
+)
 
 const NO_SAFETY_MODULES = {
   ...ONLY_LOTO_MODULES,
