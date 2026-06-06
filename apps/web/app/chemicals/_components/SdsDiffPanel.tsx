@@ -33,7 +33,13 @@ export function SdsDiffPanel({ productId, sdsId, tenantId }: Props) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!tenantId) return
+    // No active tenant yet: clear loading so we don't strand the panel on a
+    // perpetual "Computing diff…" spinner. The effect re-runs once tenantId
+    // resolves.
+    if (!tenantId) {
+      setLoading(false)
+      return
+    }
     let cancelled = false
     setLoading(true)
     setError(null)
@@ -45,12 +51,22 @@ export function SdsDiffPanel({ productId, sdsId, tenantId }: Props) {
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
 
       try {
-        const res  = await fetch(
+        const res = await fetch(
           `/api/chemicals/products/${productId}/sds/${sdsId}/diff`,
           { headers },
         )
-        const body = await res.json()
+        const raw = await res.text()
         if (cancelled) return
+
+        // Read the body as text first, then parse defensively: an infra-level
+        // error (gateway 5xx, body-size limit) returns HTML, not JSON, and a
+        // bare res.json() would throw "Unexpected token <" — masking the real
+        // HTTP status behind a parser error.
+        let body: Partial<DiffResponse> & { error?: string } = {}
+        if (raw) {
+          try { body = JSON.parse(raw) } catch { /* non-JSON body — keep {} */ }
+        }
+
         if (!res.ok) {
           setError(body.error ?? `HTTP ${res.status}`)
           return
