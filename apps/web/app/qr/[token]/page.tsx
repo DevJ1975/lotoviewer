@@ -147,11 +147,12 @@ function VerifiedBadge({
 function UpdatePhotoCta({
   token, equipmentId,
 }: { token: string; equipmentId: string }) {
-  // Deep-link into the tenant's public review portal, anchored to this
-  // equipment's card. The reviewer replaces the photo there; it stages as
+  // Deep-link into the tenant's public review portal, FOCUSED on this one
+  // machine (?equipment=…) so a phone isn't served the full batch page, and
+  // anchored to its card. The reviewer replaces the photo there; it stages as
   // "pending reconcile" and an admin applies it. No editing happens on this
   // read-only placard view itself.
-  const href = `/review/${token}#eq-${sanitizeId(equipmentId)}`
+  const href = `/review/${token}?equipment=${encodeURIComponent(equipmentId)}#eq-${sanitizeId(equipmentId)}`
   return (
     <a
       href={href}
