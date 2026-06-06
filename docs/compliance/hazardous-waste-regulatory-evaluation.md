@@ -300,54 +300,84 @@ change needed beyond keeping the cross-module links live.
 
 ## 6. Prioritized recommendations
 
-| # | Recommendation | Standard | Priority | Effort | Status |
-| --- | --- | --- | --- | --- | --- |
-| 1 | Area-aware accumulation clocks (UW 1-yr; satellite/used-oil not time-clocked) | 40 CFR 273.15, 262.15, 279 | **P0** | S | ✅ done (this PR) |
-| 2 | California VSQG = SQG rules (add jurisdiction dimension) | 22 CCR 66262.16 | **P1** | M | open |
-| 3 | Facility/site profile owns generator category (+ derive from monthly qty) | 40 CFR 262.13 | **P1** | M | open |
-| 4 | On-site quantity caps (SQG 6,000 kg / VSQG 1,000 kg / 1 kg acute) | 40 CFR 262.14, 262.16 | **P1** | M | open |
-| 5 | Satellite 3-day move clock once volume cap exceeded | 40 CFR 262.15(a)(6) | **P1** | S–M | open |
-| 6 | Split EPA vs. California waste codes (+ catalog/validation) | 22 CCR 66262 / manifest | **P1** | M | open |
-| 7 | Structured acute / extremely-hazardous flag on streams | 40 CFR 262.15, 22 CCR | **P2** | S | open |
-| 8 | LDR determination + one-time notice tracking | 40 CFR 268.7 | **P2** | M | open |
-| 9 | LQG contingency plan + Quick Reference Guide record & deadline | 40 CFR 262.262 | **P2** | M | open |
-| 10 | RCRA personnel training annual obligation (calendar seed) | 40 CFR 262.17(a)(7) | **P2** | S | open |
-| 11 | HAZWOPER applicability triage + 8-hr refresher deadline | 8 CCR 5192 | **P2** | M | open |
-| 12 | Incidental-vs-emergency spill decision aid | 8 CCR 5192(q) | **P2** | S | open |
-| 13 | California universal-waste sub-categories (e-waste/CRT/aerosol/PV) | 22 CCR 66273.1 | **P2** | M | open |
-| 14 | California EPA-ID verification / fee calendar mapping | DTSC | **P2** | S | open |
-| 15 | California used-oil management notes | 22 CCR 66279 | **P3** | S | open |
+| # | Recommendation | Standard | Priority | Status |
+| --- | --- | --- | --- | --- |
+| 1 | Area-aware accumulation clocks (UW 1-yr; satellite/used-oil not time-clocked) | 40 CFR 273.15, 262.15, 279 | **P0** | ✅ logic + UI |
+| 2 | California VSQG = SQG rules (jurisdiction dimension) | 22 CCR 66262.16 | **P1** | ✅ logic + schema + UI |
+| 3 | Facility/site profile owns generator category (+ derive from monthly qty) | 40 CFR 262.13 | **P1** | ⏳ deferred (see §3.2) |
+| 4 | On-site quantity caps (SQG 6,000 kg / VSQG 1,000 kg / 1 kg acute) | 40 CFR 262.14, 262.16 | **P1** | ✅ logic (`evaluateOnSiteQuantity`) |
+| 5 | Satellite 3-day move clock once volume cap exceeded | 40 CFR 262.15(a)(6) | **P1** | ✅ logic (`evaluateSatelliteCap`, `satelliteMoveClockStatus`) |
+| 6 | Split EPA vs. California waste codes (+ catalog/validation) | 22 CCR 66262 / manifest | **P1** | ✅ logic (`wasteCodes.ts`, pattern-partition — no schema split) |
+| 7 | Structured acute / extremely-hazardous flag on streams | 40 CFR 262.15, 22 CCR | **P2** | ✅ schema + UI (`acute_class`) |
+| 8 | LDR determination + one-time notice tracking | 40 CFR 268.7 | **P2** | ✅ schema + UI (`ldr_*`); manifest notice ⏳ |
+| 9 | LQG contingency plan + Quick Reference Guide record & deadline | 40 CFR 262.262 | **P2** | ◑ calendar entry; record table ⏳ |
+| 10 | RCRA personnel training annual obligation | 40 CFR 262.17(a)(7) | **P2** | ✅ calendar entry |
+| 11 | HAZWOPER applicability triage + 8-hr refresher deadline | 8 CCR 5192 | **P2** | ✅ logic (`hazwoper.ts`) + calendar |
+| 12 | Incidental-vs-emergency spill decision aid | 8 CCR 5192(q) | **P2** | ✅ logic (`classifyRelease`) |
+| 13 | California universal-waste sub-categories (e-waste/CRT/aerosol/PV) | 22 CCR 66273.1 | **P2** | ✅ catalog (`universalWasteCategories`) |
+| 14 | California EPA-ID verification / fee calendar mapping | DTSC | **P2** | ✅ calendar entry |
+| 15 | California used-oil management notes | 22 CCR 66279 | **P3** | ◑ calendar/manual note |
 
-`S` ≈ hours, `M` ≈ a day or two, given the existing patterns.
+**Legend:** ✅ implemented · ◑ partially implemented · ⏳ deferred.
 
-**Suggested next slice (highest value : lowest risk):** #5 (satellite 3-day
-clock) and #7 (acute flag) pair naturally and reuse the `ageStatusAgainstLimit`
-core shipped here; #10 (RCRA training calendar seed) is a one-line addition to
-an established pattern. #2 (California VSQG) is the most *important* correctness
-item but needs a jurisdiction design decision first — recommend confirming
-tenant-vs-site jurisdiction scope before building.
+The regulatory **logic** for every item is now implemented and unit-tested in
+`@soteria/core`. What remains is product surface area, not compliance logic:
+
+- **§3.2 / #3 — facility-level generator category.** Deliberately deferred. The
+  correct home is the `facilities` table (migration 209), but moving
+  `generator_category` there changes the aging signature and every call site; it
+  is a focused refactor that deserves its own PR. The per-stream model still
+  functions, and the new jurisdiction field rides alongside it.
+- **#8 manifest LDR notice / #9 contingency-plan record table.** These are CRUD
+  + document-generation features; the calendar reminders and the `ldr_*` /
+  jurisdiction fields deliver the tracking value now.
+- **Field wiring of the new helpers.** `evaluateSatelliteCap`,
+  `evaluateOnSiteQuantity`, the HAZWOPER triage, and the spill decision aid are
+  pure and tested but not yet surfaced on every screen (the containers page
+  consumes the area-aware + jurisdiction-aware aging today).
 
 ---
 
-## 7. What this PR changes
+## 7. What the implementation changes
 
-Code (the P0 correctness fix only — everything else is left as recommendations
-for the domain owner to prioritize):
+Delivered in two passes. **Pass 1** was the P0 area-aware-clock fix. **Pass 2**
+implements the regulatory logic for the remaining recommendations.
 
-- `packages/core/src/hazardousWaste.ts`
-  - `ageStatusForContainer()` is now **area-aware** (central / universal waste /
+**Core logic (`packages/core`):**
+
+- `hazardousWaste.ts`
+  - `ageStatusForContainer()` is **area-aware** (central / universal waste /
     satellite / used oil / inspection-only).
-  - New `universalWasteAgeStatus()` + `UNIVERSAL_WASTE_LIMIT_DAYS` (1-year clock).
-  - New `not_time_limited` member on `ContainerAgeStatus` for areas with no
-    dated clock (distinct from `unknown`).
-  - Extracted `ageStatusAgainstLimit()` shared core; `containerAgeStatus()`
-    delegates to it (behavior unchanged — existing tests still pass).
-- `apps/web/app/hazardous-waste/containers/page.tsx` — renders the new status
-  and corrects the header copy.
-- `apps/web/__tests__/lib/hazardousWaste.test.ts` — adds coverage for the
-  universal-waste clock and the area-aware dispatch.
+  - `universalWasteAgeStatus()` + `UNIVERSAL_WASTE_LIMIT_DAYS` (1-year clock);
+    `not_time_limited` status member; shared `ageStatusAgainstLimit()` core.
+  - **Jurisdiction-aware limits**: `WasteJurisdiction`; `baselineLimitDays`
+    holds a California VSQG to the SQG limit (22 CCR 66262.16).
+  - **Satellite caps**: `evaluateSatelliteCap` (40 CFR 262.15) +
+    `satelliteMoveClockStatus` (3-day rule) + `AcuteClass` + unit conversions
+    (`toGallons` / `toKilograms`).
+  - **On-site caps**: `evaluateOnSiteQuantity` (SQG 6,000 kg / VSQG 1,000 kg).
+  - **Universal-waste categories**: `universalWasteCategories(jurisdiction)`.
+  - Stream row/input + validation extended with `jurisdiction`, `acute_class`,
+    and `ldr_*`. New module reference-calendar entries (RCRA training, HAZWOPER
+    refresher, LQG contingency/QRG, LDR notice, California EPA-ID verification).
+- `hazwoper.ts` (new) — `assessHazwoperApplicability` (8 CCR 5192 triage +
+  training tiers + `HAZWOPER_REFRESHER_DAYS`) and `classifyRelease`
+  (incidental vs. emergency, 5192(q)).
+- `wasteCodes.ts` (new) — `classifyWasteCode` / `partitionWasteCodes` (EPA vs.
+  California) + the full D-list characteristic catalog.
 
-No schema migration is required for the fix.
+**Schema:** migration `217_hazardous_waste_stream_jurisdiction_acute_ldr.sql`
+— additive, idempotent columns (`jurisdiction` default `california`,
+`acute_class`, `ldr_restricted` / `ldr_notice_sent` / `ldr_notice_date`). No
+RLS change. No NOT-NULL lockdown (existing rows backfill to safe defaults).
+
+**API + UI:** stream create/update routes accept and validate the new fields;
+the stream form exposes jurisdiction, acute classification, and the LDR flag,
+and clarifies the VSQG label per jurisdiction; the containers list now feeds
+jurisdiction into the aging clock.
+
+**Tests:** `hazardousWaste.test.ts` (+jurisdiction, satellite, on-site, units),
+`hazwoper.test.ts`, `wasteCodes.test.ts`. Full suite green (3,429 tests).
 
 ---
 

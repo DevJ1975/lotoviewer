@@ -21,7 +21,7 @@ import {
 // operator's eye lands on the highest-risk drum.
 
 type ContainerWithStream = HazardousWasteContainerRow & {
-  stream: Pick<HazardousWasteStreamRow, 'id' | 'name' | 'generator_category' | 'long_haul' | 'waste_codes'> | null
+  stream: Pick<HazardousWasteStreamRow, 'id' | 'name' | 'generator_category' | 'long_haul' | 'jurisdiction' | 'acute_class' | 'waste_codes'> | null
 }
 
 const STATUS_LABEL: Record<HazardousWasteContainerStatus, string> = {

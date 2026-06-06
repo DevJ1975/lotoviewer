@@ -3,9 +3,15 @@ import {
   ageStatusForContainer,
   containerAgeStatus,
   createEmptyHazardousWasteFieldDraft,
+  evaluateOnSiteQuantity,
+  evaluateSatelliteCap,
   getChecksForArea,
+  isAcuteEquivalent,
   nextBiennialDueDate,
+  satelliteMoveClockStatus,
   summarizeHazardousWasteDraft,
+  toGallons,
+  toKilograms,
   universalWasteAgeStatus,
   UNIVERSAL_WASTE_LIMIT_DAYS,
   type HazardousWasteAreaType,
@@ -202,6 +208,137 @@ describe('ageStatusForContainer (area-aware clocks)', () => {
     const r = ageStatusForContainer(disposed, lqgStream, now)
     expect(r.status).toBe('unknown')
     expect(r.ageDays).toBeNull()
+  })
+})
+
+describe('jurisdiction-aware accumulation limit (California VSQG = SQG)', () => {
+  const now = new Date('2026-05-14T12:00:00Z')
+  // 200 days old: over the SQG 180-day limit, but federal VSQG has no limit.
+  const started = new Date(now.getTime() - 200 * 86_400_000).toISOString()
+
+  it('federal VSQG has no accumulation-time limit', () => {
+    const r = containerAgeStatus(started, now, { category: 'vsqg', jurisdiction: 'federal' })
+    expect(r.limitDays).toBeNull()
+    expect(r.status).toBe('unknown')
+  })
+
+  it('California VSQG is held to the SQG 180-day limit', () => {
+    const r = containerAgeStatus(started, now, { category: 'vsqg', jurisdiction: 'california' })
+    expect(r.limitDays).toBe(180)
+    expect(r.status).toBe('over_limit')
+  })
+
+  it('California VSQG long-haul extends to 270 days', () => {
+    const r = containerAgeStatus(started, now, {
+      category: 'vsqg', jurisdiction: 'california', longHaul: true,
+    })
+    expect(r.limitDays).toBe(270)
+    expect(r.status).toBe('ok')
+  })
+
+  it('defaults to federal when jurisdiction is omitted (back-compat)', () => {
+    const r = containerAgeStatus(started, now, { category: 'vsqg' })
+    expect(r.limitDays).toBeNull()
+  })
+
+  it('flows through ageStatusForContainer for central accumulation', () => {
+    const container = {
+      accumulation_started_at: started, status: 'open' as const,
+      area_type: 'central_accumulation' as const,
+    }
+    const ca = ageStatusForContainer(container, { generator_category: 'vsqg', long_haul: false, jurisdiction: 'california' }, now)
+    expect(ca.limitDays).toBe(180)
+    const fed = ageStatusForContainer(container, { generator_category: 'vsqg', long_haul: false, jurisdiction: 'federal' }, now)
+    expect(fed.limitDays).toBeNull()
+  })
+})
+
+describe('unit conversion', () => {
+  it('converts volume units to gallons, null for mass units', () => {
+    expect(toGallons(55, 'gallons')).toBe(55)
+    expect(toGallons(4, 'quarts')).toBe(1)
+    expect(toGallons(1, 'liters')).toBeCloseTo(0.2641720524, 6)
+    expect(toGallons(1, 'kilograms')).toBeNull()
+  })
+  it('converts mass units to kilograms, null for volume units', () => {
+    expect(toKilograms(1000, 'grams')).toBe(1)
+    expect(toKilograms(1, 'pounds')).toBeCloseTo(0.45359237, 6)
+    expect(toKilograms(1, 'gallons')).toBeNull()
+  })
+})
+
+describe('isAcuteEquivalent', () => {
+  it('treats acute and extremely-hazardous as acute-equivalent', () => {
+    expect(isAcuteEquivalent('none')).toBe(false)
+    expect(isAcuteEquivalent('acute')).toBe(true)
+    expect(isAcuteEquivalent('extremely_hazardous')).toBe(true)
+  })
+})
+
+describe('evaluateSatelliteCap (40 CFR 262.15)', () => {
+  it('non-acute cap is 55 gallons', () => {
+    expect(evaluateSatelliteCap('none', 50, 'gallons').status).toBe('within_cap')
+    expect(evaluateSatelliteCap('none', 55, 'gallons').status).toBe('at_or_over_cap')
+    expect(evaluateSatelliteCap('none', 220, 'liters').status).toBe('at_or_over_cap') // ~58 gal
+  })
+
+  it('acute liquid cap is 1 quart', () => {
+    expect(evaluateSatelliteCap('acute', 0.9, 'quarts').status).toBe('within_cap')
+    expect(evaluateSatelliteCap('acute', 1, 'quarts').status).toBe('at_or_over_cap')
+    expect(evaluateSatelliteCap('extremely_hazardous', 1, 'quarts').status).toBe('at_or_over_cap')
+  })
+
+  it('acute solid cap is 1 kg', () => {
+    expect(evaluateSatelliteCap('acute', 900, 'grams').status).toBe('within_cap')
+    expect(evaluateSatelliteCap('acute', 1, 'kilograms').status).toBe('at_or_over_cap')
+  })
+
+  it('returns unknown when the unit dimension cannot evaluate the cap', () => {
+    // Non-acute cap is volumetric; a mass unit can't be compared.
+    expect(evaluateSatelliteCap('none', 10, 'kilograms').status).toBe('unknown')
+    expect(evaluateSatelliteCap('none', null, 'gallons').status).toBe('unknown')
+  })
+})
+
+describe('satelliteMoveClockStatus (3-day rule)', () => {
+  const now = new Date('2026-05-14T12:00:00Z')
+  it('is ok on day 0, approaching by day 2, over by day 4', () => {
+    expect(satelliteMoveClockStatus(now, now).limitDays).toBe(3)
+    expect(satelliteMoveClockStatus(new Date(now.getTime() - 2 * 86_400_000), now).status).toBe('approaching')
+    expect(satelliteMoveClockStatus(new Date(now.getTime() - 4 * 86_400_000), now).status).toBe('over_limit')
+  })
+})
+
+describe('evaluateOnSiteQuantity', () => {
+  function c(volume_quantity: number | null, volume_unit: HazardousWasteContainerRow['volume_unit'], status: HazardousWasteContainerRow['status'] = 'open') {
+    return { volume_quantity, volume_unit, status }
+  }
+
+  it('sums mass and flags over the SQG 6,000 kg cap', () => {
+    const r = evaluateOnSiteQuantity([c(5000, 'kilograms'), c(2000, 'kilograms')], 'sqg')
+    expect(r.totalKg).toBe(7000)
+    expect(r.capKg).toBe(6000)
+    expect(r.status).toBe('over_limit')
+  })
+
+  it('flags VSQG approaching the 1,000 kg cap', () => {
+    const r = evaluateOnSiteQuantity([c(950, 'kilograms')], 'vsqg')
+    expect(r.status).toBe('approaching')
+  })
+
+  it('counts volume-unit containers as unconvertible and excludes shipped/disposed', () => {
+    const r = evaluateOnSiteQuantity(
+      [c(100, 'kilograms'), c(30, 'gallons'), c(9999, 'kilograms', 'disposed')],
+      'sqg',
+    )
+    expect(r.totalKg).toBe(100)
+    expect(r.unconvertibleCount).toBe(1)
+  })
+
+  it('LQG has no on-site cap', () => {
+    const r = evaluateOnSiteQuantity([c(20000, 'kilograms')], 'lqg')
+    expect(r.capKg).toBeNull()
+    expect(r.status).toBe('not_time_limited')
   })
 })
 

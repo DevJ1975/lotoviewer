@@ -187,6 +187,46 @@ export const HAZARDOUS_WASTE_CALENDAR: HazardousWasteCalendarItem[] = [
     ownerHint: 'Shipping coordinator or environmental manager',
     notes: 'Use configurable 30/45/60 day checkpoints by generator category, state, and manifest type. California non-electronic copy workflows need special attention.',
   },
+  {
+    id: 'rcra-personnel-training',
+    title: 'RCRA personnel hazardous waste training',
+    cadence: 'Annually (per employee)',
+    dueRule: 'LQG: within 6 months of assignment, then annually (40 CFR 262.17(a)(7)); SQG personnel must be thoroughly familiar (262.16(b)(9)(iii))',
+    ownerHint: 'Environmental manager with Training Records',
+    notes: 'Anniversary-based per employee, not a single facility date. Distinct from Cal/OSHA HAZWOPER training. Track in the Training Records module.',
+  },
+  {
+    id: 'hazwoper-refresher',
+    title: 'Cal/OSHA HAZWOPER 8-hour refresher',
+    cadence: 'Annually (per worker, if HAZWOPER applies)',
+    dueRule: 'Within 12 months of the prior HAZWOPER training (8 CCR 5192(e)(8))',
+    ownerHint: 'Safety manager',
+    notes: 'Only for workers doing HAZWOPER-covered work (TSD, corrective action/cleanup, or emergency response). Routine generator accumulation is not HAZWOPER — confirm applicability first.',
+  },
+  {
+    id: 'lqg-contingency-plan-review',
+    title: 'LQG contingency plan review + Quick Reference Guide',
+    cadence: 'On amendment; review at least annually',
+    dueRule: 'Maintain the contingency plan and submit/refresh the Quick Reference Guide to local emergency responders whenever it is amended (40 CFR 262 Subpart M, 262.262)',
+    ownerHint: 'Emergency coordinator or EHS manager',
+    notes: 'LQG only. The Quick Reference Guide goes to local fire/LEPC responders. Re-submit on any amendment.',
+  },
+  {
+    id: 'ldr-determination',
+    title: 'Land Disposal Restriction determination + one-time notice',
+    cadence: 'Per waste stream (one-time, re-issue on change)',
+    dueRule: 'Make the LDR determination and send the one-time LDR notification/certification to the TSDF with the first shipment of each restricted stream (40 CFR 268.7)',
+    ownerHint: 'Environmental manager',
+    notes: 'A frequent audit finding. Re-issue if the waste or treatment standard changes. Keep a copy in the shipment record.',
+  },
+  {
+    id: 'ca-epa-id-verification',
+    title: 'California EPA ID verification and generator fee',
+    cadence: 'Annually (California)',
+    dueRule: 'Confirm current DTSC EPA ID verification and the hazardous waste generation/handling fee cycle for the facility',
+    ownerHint: 'California hazardous waste program owner',
+    notes: 'California-specific; cycle and amounts are set by DTSC/CDTFA. Confirm current instructions — defaults are only defaults.',
+  },
 ]
 
 export const HAZARDOUS_WASTE_DOCUMENT_PACKETS: HazardousWasteDocumentPacket[] = [
@@ -387,6 +427,40 @@ export function isAreaOverdue(
  */
 export type RcraGeneratorCategory = 'lqg' | 'sqg' | 'vsqg'
 
+/**
+ * Regulatory jurisdiction whose rules govern a waste stream. The module is
+ * California-forward, so `california` is the default everywhere a jurisdiction
+ * is not explicitly known.
+ *
+ * The decisive difference for accumulation: California adopted the federal
+ * Generator Improvements Rule but did NOT adopt the federal VSQG conditional
+ * exemption — a California VSQG must meet Small Quantity Generator requirements,
+ * including the SQG accumulation-time limit (22 CCR 66262.16). Under federal
+ * rules a VSQG has no accumulation-time limit (40 CFR 262.14).
+ */
+export type WasteJurisdiction = 'federal' | 'california'
+
+export const WASTE_JURISDICTIONS = ['federal', 'california'] as const
+
+/**
+ * Acute-hazard classification of a waste stream. This drives the satellite
+ * accumulation cap (40 CFR 262.15) and the generator-category acute thresholds.
+ *
+ * - `none`                — ordinary (non-acute) hazardous waste.
+ * - `acute`               — federal acute hazardous waste (the P-list and the
+ *                           acute F-wastes); SAA cap is 1 qt liquid / 1 kg solid.
+ * - `extremely_hazardous` — California "extremely hazardous waste" (22 CCR
+ *                           66261.110/.113); treated like acute for the SAA cap.
+ */
+export type AcuteClass = 'none' | 'acute' | 'extremely_hazardous'
+
+export const ACUTE_CLASSES = ['none', 'acute', 'extremely_hazardous'] as const
+
+/** True when the class is acute-equivalent for the 1 qt / 1 kg satellite cap. */
+export function isAcuteEquivalent(acuteClass: AcuteClass): boolean {
+  return acuteClass === 'acute' || acuteClass === 'extremely_hazardous'
+}
+
 // `not_time_limited` is distinct from `unknown`: the container HAS a start
 // date, but its area type is not governed by a dated accumulation clock
 // (satellite accumulation below the volume cap, used oil, inspection-only).
@@ -399,6 +473,12 @@ export interface ContainerAgeOptions {
   category: RcraGeneratorCategory
   /** SQG only: set true when the TSDF is &gt; 200 miles, extending to 270 days. */
   longHaul?: boolean
+  /**
+   * Jurisdiction whose accumulation rules apply. Defaults to `federal` so the
+   * primitive's behavior is unchanged for callers that don't specify it.
+   * Under `california`, a VSQG is held to the SQG limit (22 CCR 66262.16).
+   */
+  jurisdiction?: WasteJurisdiction
   /** Day count before the limit that flips status to `approaching`. Default 14. */
   warnDaysBeforeLimit?: number
 }
@@ -424,7 +504,10 @@ function toDate(value: Date | string | null | undefined): Date | null {
 function baselineLimitDays(opts: ContainerAgeOptions): number | null {
   if (opts.category === 'lqg') return 90
   if (opts.category === 'sqg') return opts.longHaul ? 270 : 180
-  return null // vsqg: no federal limit
+  // vsqg: no FEDERAL accumulation-time limit, but California holds a VSQG to
+  // the SQG limit (it did not adopt the federal VSQG exemption).
+  if (opts.jurisdiction === 'california') return opts.longHaul ? 270 : 180
+  return null
 }
 
 /**
@@ -511,6 +594,49 @@ export function universalWasteAgeStatus(
   return ageStatusAgainstLimit(startedAt, now, UNIVERSAL_WASTE_LIMIT_DAYS, warnDaysBeforeLimit)
 }
 
+/**
+ * Universal-waste categories. The federal program (40 CFR 273) covers five;
+ * California (22 CCR 66273.1) is broader — it adds electronic devices, CRTs,
+ * CRT glass, and PV modules. The handler requirements differ by category, so
+ * the catalog is keyed by jurisdiction.
+ */
+export type UniversalWasteCategory =
+  | 'batteries'
+  | 'pesticides'
+  | 'mercury_containing_equipment'
+  | 'lamps'
+  | 'aerosol_cans'
+  | 'electronic_devices'
+  | 'crts'
+  | 'crt_glass'
+  | 'pv_modules'
+
+export const UNIVERSAL_WASTE_CATEGORY_LABEL: Record<UniversalWasteCategory, string> = {
+  batteries:                    'Batteries',
+  pesticides:                   'Pesticides',
+  mercury_containing_equipment: 'Mercury-containing equipment',
+  lamps:                        'Lamps',
+  aerosol_cans:                 'Aerosol cans',
+  electronic_devices:           'Electronic devices',
+  crts:                         'Cathode ray tubes (CRTs)',
+  crt_glass:                    'CRT glass',
+  pv_modules:                   'Photovoltaic (solar) modules',
+}
+
+const FEDERAL_UNIVERSAL_WASTE: UniversalWasteCategory[] = [
+  'batteries', 'pesticides', 'mercury_containing_equipment', 'lamps', 'aerosol_cans',
+]
+
+const CALIFORNIA_UNIVERSAL_WASTE: UniversalWasteCategory[] = [
+  'batteries', 'electronic_devices', 'mercury_containing_equipment', 'lamps',
+  'crts', 'crt_glass', 'aerosol_cans', 'pv_modules',
+]
+
+/** Universal-waste categories recognized in the given jurisdiction. */
+export function universalWasteCategories(jurisdiction: WasteJurisdiction): UniversalWasteCategory[] {
+  return jurisdiction === 'california' ? CALIFORNIA_UNIVERSAL_WASTE : FEDERAL_UNIVERSAL_WASTE
+}
+
 // ── Persisted records (migration 140) ────────────────────────────────────
 // Row shapes for the tables introduced in migration 140. The hazardous-
 // waste module now stores actual generator data per tenant — streams
@@ -542,8 +668,15 @@ export interface HazardousWasteStreamRow {
   hazards:              string[]
   waste_codes:          string[]
   generator_category:   RcraGeneratorCategory
+  jurisdiction:         WasteJurisdiction
+  acute_class:          AcuteClass
   long_haul:            boolean
   determination_basis:  string | null
+  // Land Disposal Restrictions (40 CFR 268.7): a one-time LDR notice/
+  // certification accompanies the first shipment of each restricted stream.
+  ldr_restricted:       boolean
+  ldr_notice_sent:      boolean
+  ldr_notice_date:      string | null
   status:               HazardousWasteStreamStatus
   owner_user_id:        string | null
   review_due_date:      string | null
@@ -582,8 +715,13 @@ export interface HazardousWasteStreamInput {
   hazards:              string[]
   waste_codes:          string[]
   generator_category:   RcraGeneratorCategory
+  jurisdiction:         WasteJurisdiction
+  acute_class:          AcuteClass
   long_haul:            boolean
   determination_basis:  string | null
+  ldr_restricted:       boolean
+  ldr_notice_sent:      boolean
+  ldr_notice_date:      string | null
   status:               HazardousWasteStreamStatus
   owner_user_id:        string | null
   review_due_date:      string | null
@@ -629,6 +767,18 @@ export function validateHazardousWasteStreamInput(input: HazardousWasteStreamInp
   }
   if (!(['lqg', 'sqg', 'vsqg'] as RcraGeneratorCategory[]).includes(input.generator_category)) {
     errors.push({ field: 'generator_category', message: 'Invalid generator category' })
+  }
+  if (!WASTE_JURISDICTIONS.includes(input.jurisdiction)) {
+    errors.push({ field: 'jurisdiction', message: 'Invalid jurisdiction' })
+  }
+  if (!ACUTE_CLASSES.includes(input.acute_class)) {
+    errors.push({ field: 'acute_class', message: 'Invalid acute class' })
+  }
+  if (input.ldr_notice_date) {
+    const d = new Date(input.ldr_notice_date)
+    if (Number.isNaN(d.getTime())) {
+      errors.push({ field: 'ldr_notice_date', message: 'Invalid LDR notice date' })
+    }
   }
   return errors
 }
@@ -688,7 +838,9 @@ export function validateHazardousWasteContainerInput(input: HazardousWasteContai
  */
 export function ageStatusForContainer(
   container: Pick<HazardousWasteContainerRow, 'accumulation_started_at' | 'status' | 'area_type'>,
-  stream: Pick<HazardousWasteStreamRow, 'generator_category' | 'long_haul'>,
+  stream: Pick<HazardousWasteStreamRow, 'generator_category' | 'long_haul'> & {
+    jurisdiction?: WasteJurisdiction
+  },
   now: Date | string,
 ): ContainerAgeResult {
   // Disposed and in-shipment containers no longer accumulate.
@@ -701,6 +853,7 @@ export function ageStatusForContainer(
       return containerAgeStatus(container.accumulation_started_at, now, {
         category: stream.generator_category,
         longHaul: stream.long_haul,
+        jurisdiction: stream.jurisdiction,
       })
     case 'universal_waste':
       return universalWasteAgeStatus(container.accumulation_started_at, now)
@@ -750,4 +903,186 @@ export function nextBiennialDueDate(now: Date | string): Date {
     candidate += 2
   }
   return new Date(Date.UTC(candidate, 2, 1, 0, 0, 0, 0))
+}
+
+// ── Unit conversion ─────────────────────────────────────────────────────────
+// Regulatory caps are stated in gallons (volume) or kilograms (mass). Converting
+// between volume and mass requires a density we don't have, so each converter
+// only handles units of its own dimension and returns null otherwise. Callers
+// must treat null as "cannot evaluate this cap from this unit".
+
+const GALLONS_PER_UNIT: Partial<Record<HazardousWasteVolumeUnit, number>> = {
+  gallons: 1,
+  quarts:  0.25,
+  liters:  0.2641720524,
+}
+
+const KILOGRAMS_PER_UNIT: Partial<Record<HazardousWasteVolumeUnit, number>> = {
+  kilograms: 1,
+  grams:     0.001,
+  pounds:    0.45359237,
+}
+
+/** Convert a volumetric quantity to US gallons. null for mass units. */
+export function toGallons(quantity: number, unit: HazardousWasteVolumeUnit): number | null {
+  const factor = GALLONS_PER_UNIT[unit]
+  return factor == null ? null : quantity * factor
+}
+
+/** Convert a mass quantity to kilograms. null for volume units. */
+export function toKilograms(quantity: number, unit: HazardousWasteVolumeUnit): number | null {
+  const factor = KILOGRAMS_PER_UNIT[unit]
+  return factor == null ? null : quantity * factor
+}
+
+/** Whether a unit measures volume (gallons/liters/quarts) or mass. */
+export function isVolumeUnit(unit: HazardousWasteVolumeUnit): boolean {
+  return unit in GALLONS_PER_UNIT
+}
+
+// ── Satellite accumulation caps (40 CFR 262.15) ─────────────────────────────
+//
+// A satellite accumulation area may hold, at or near the point of generation:
+//   - non-acute hazardous waste:        up to 55 gallons
+//   - acute / extremely hazardous waste: up to 1 quart of LIQUID, or 1 kg of SOLID
+//
+// We infer liquid vs solid from the container's unit (volume → liquid,
+// mass → solid). When the unit's dimension doesn't match the applicable cap
+// (e.g. a non-acute waste measured in kg, whose cap is volumetric), we return
+// `unknown` rather than guess.
+
+export const SAA_NON_ACUTE_GALLONS = 55
+export const SAA_ACUTE_LIQUID_GALLONS = 0.25 // 1 quart
+export const SAA_ACUTE_SOLID_KG = 1
+
+export type SatelliteCapStatus = 'unknown' | 'within_cap' | 'at_or_over_cap'
+
+export interface SatelliteCapResult {
+  status: SatelliteCapStatus
+  /** Applicable cap, human-readable (e.g. "55 gallons"). */
+  capLabel: string
+  /** The quantity normalized into the cap's unit. null when not evaluable. */
+  normalizedQuantity: number | null
+  /** The cap value in the same unit as normalizedQuantity. */
+  capValue: number | null
+}
+
+/**
+ * Evaluate a satellite container's quantity against the applicable 40 CFR
+ * 262.15 cap. `at_or_over_cap` means the generator must mark the excess with a
+ * date and start the 3-day move clock (see `satelliteMoveClockStatus`).
+ */
+export function evaluateSatelliteCap(
+  acuteClass: AcuteClass,
+  quantity: number | null,
+  unit: HazardousWasteVolumeUnit | null,
+): SatelliteCapResult {
+  if (quantity == null || unit == null || quantity < 0) {
+    return { status: 'unknown', capLabel: '—', normalizedQuantity: null, capValue: null }
+  }
+
+  if (isAcuteEquivalent(acuteClass)) {
+    if (isVolumeUnit(unit)) {
+      const gal = toGallons(quantity, unit)!
+      return {
+        status: gal >= SAA_ACUTE_LIQUID_GALLONS ? 'at_or_over_cap' : 'within_cap',
+        capLabel: '1 quart (liquid acute)',
+        normalizedQuantity: gal,
+        capValue: SAA_ACUTE_LIQUID_GALLONS,
+      }
+    }
+    const kg = toKilograms(quantity, unit)!
+    return {
+      status: kg >= SAA_ACUTE_SOLID_KG ? 'at_or_over_cap' : 'within_cap',
+      capLabel: '1 kg (solid acute)',
+      normalizedQuantity: kg,
+      capValue: SAA_ACUTE_SOLID_KG,
+    }
+  }
+
+  // Non-acute: the cap is volumetric (55 gallons). A mass unit can't be
+  // compared without a density, so report unknown.
+  if (!isVolumeUnit(unit)) {
+    return { status: 'unknown', capLabel: '55 gallons', normalizedQuantity: null, capValue: SAA_NON_ACUTE_GALLONS }
+  }
+  const gal = toGallons(quantity, unit)!
+  return {
+    status: gal >= SAA_NON_ACUTE_GALLONS ? 'at_or_over_cap' : 'within_cap',
+    capLabel: '55 gallons',
+    normalizedQuantity: gal,
+    capValue: SAA_NON_ACUTE_GALLONS,
+  }
+}
+
+/**
+ * The 3-consecutive-calendar-day clock that starts once a satellite container
+ * exceeds its cap (40 CFR 262.15(a)(6)): the excess must be dated and moved to
+ * a central accumulation area (or off site) within three days. `excessDatedAt`
+ * is the date the generator marked on the excess.
+ */
+export const SAA_MOVE_LIMIT_DAYS = 3
+
+export function satelliteMoveClockStatus(
+  excessDatedAt: Date | string | null | undefined,
+  now: Date | string,
+): ContainerAgeResult {
+  return ageStatusAgainstLimit(excessDatedAt, now, SAA_MOVE_LIMIT_DAYS, 1)
+}
+
+// ── On-site quantity caps ───────────────────────────────────────────────────
+//
+// Generator status is also bounded by how much waste is on site at once:
+//   - SQG:  may never exceed 6,000 kg of hazardous waste on site (40 CFR 262.16)
+//   - VSQG: may never exceed 1,000 kg (or 1 kg acute) on site (40 CFR 262.14)
+//   - LQG:  no on-site quantity cap (gated by 90-day time instead)
+//
+// We can only sum containers reported in mass units; volume-unit containers
+// need a density to convert and are surfaced as `unconvertibleCount` so the UI
+// can warn the total is incomplete rather than silently under-count.
+
+export const ON_SITE_CAP_KG: Record<RcraGeneratorCategory, number | null> = {
+  lqg:  null,
+  sqg:  6000,
+  vsqg: 1000,
+}
+
+export interface OnSiteCapResult {
+  totalKg: number
+  capKg: number | null
+  status: ContainerAgeStatus
+  /** Containers whose volume units couldn't be converted to mass. */
+  unconvertibleCount: number
+}
+
+/**
+ * Roll up the on-site mass of a set of containers and compare to the
+ * category cap. `warnFractionOfCap` (default 0.9) flips the status to
+ * `approaching`. Containers in volume units are counted as unconvertible.
+ */
+export function evaluateOnSiteQuantity(
+  containers: ReadonlyArray<Pick<HazardousWasteContainerRow, 'volume_quantity' | 'volume_unit' | 'status'>>,
+  category: RcraGeneratorCategory,
+  warnFractionOfCap = 0.9,
+): OnSiteCapResult {
+  const cap = ON_SITE_CAP_KG[category]
+  let totalKg = 0
+  let unconvertibleCount = 0
+
+  for (const c of containers) {
+    // Only waste physically on site counts; shipped/disposed does not.
+    if (c.status === 'in_shipment' || c.status === 'disposed') continue
+    if (c.volume_quantity == null || c.volume_unit == null) continue
+    const kg = toKilograms(c.volume_quantity, c.volume_unit)
+    if (kg == null) { unconvertibleCount++; continue }
+    totalKg += kg
+  }
+
+  if (cap == null) {
+    return { totalKg, capKg: null, status: 'not_time_limited', unconvertibleCount }
+  }
+  let status: ContainerAgeStatus
+  if (totalKg > cap) status = 'over_limit'
+  else if (totalKg >= cap * warnFractionOfCap) status = 'approaching'
+  else status = 'ok'
+  return { totalKg, capKg: cap, status, unconvertibleCount }
 }
