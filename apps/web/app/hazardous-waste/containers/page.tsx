@@ -5,11 +5,13 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { ArrowLeft, Loader2, Plus } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
+import { useFacility } from '@/components/FacilityProvider'
 import { supabase } from '@/lib/supabase'
 import {
   ageStatusForContainer,
   HAZARDOUS_WASTE_AREA_LABEL,
   HAZARDOUS_WASTE_CONTAINER_STATUSES,
+  parseFacilityProfile,
   type ContainerAgeStatus,
   type HazardousWasteContainerRow,
   type HazardousWasteContainerStatus,
@@ -49,6 +51,7 @@ const AGE_LABEL: Record<ContainerAgeStatus, string> = {
 
 export default function HazardousWasteContainersPage() {
   const { tenant } = useTenant()
+  const { facility } = useFacility()
   const search = useSearchParams()
   const streamId = search?.get('stream_id') ?? ''
 
@@ -83,15 +86,23 @@ export default function HazardousWasteContainersPage() {
 
   useEffect(() => { void load() }, [load])
 
+  // When a single facility is active, its generator profile governs the
+  // central-accumulation clock (40 CFR 262.13). In roll-up mode (no active
+  // facility) we fall back to each stream's own category.
+  const facilityProfile = useMemo(
+    () => (facility ? parseFacilityProfile(facility.settings) : null),
+    [facility],
+  )
+
   const enriched = useMemo(() => {
     if (!rows) return null
     return rows.map(c => {
       const ageStatus = c.stream
-        ? ageStatusForContainer(c, c.stream, now)
+        ? ageStatusForContainer(c, c.stream, now, facilityProfile)
         : { ageDays: null, limitDays: null, daysUntilLimit: null, status: 'unknown' as const }
       return { container: c, age: ageStatus }
     })
-  }, [rows, now])
+  }, [rows, now, facilityProfile])
 
   const overLimitCount = enriched?.filter(e => e.age.status === 'over_limit').length ?? 0
   const approachingCount = enriched?.filter(e => e.age.status === 'approaching').length ?? 0

@@ -263,6 +263,14 @@ export const HAZARDOUS_WASTE_DOCUMENT_PACKETS: HazardousWasteDocumentPacket[] = 
     caution: 'Do not present this as automatic CERS submission; public business API access is not the same as agency EDT exchange.',
   },
   {
+    id: 'ldr-notice',
+    title: 'Land Disposal Restriction notice / certification',
+    officialSource: '40 CFR 268.7(a)',
+    systemOutput: 'One-time LDR notice per restricted stream: EPA + California waste codes, generator EPA ID, manifest tracking number, and the LDR certification statement.',
+    submissionMode: 'pdf_record',
+    caution: 'The generator must send a certified notice to the receiving facility with the first shipment of each restricted stream and re-issue it when the waste or treatment standard changes. This packet is a preparation record.',
+  },
+  {
     id: 'inspection-binder',
     title: 'CUPA/DTSC inspection binder',
     officialSource: 'Tenant records generated from inspections, labels, determinations, training, shipments, and corrective actions',
@@ -817,13 +825,120 @@ export function validateHazardousWasteContainerInput(input: HazardousWasteContai
   return errors
 }
 
+// ── Facility generator profile ──────────────────────────────────────────────
+//
+// Generator category is a FACILITY-level determination — the total hazardous
+// waste a site generates in a calendar month across ALL streams (40 CFR
+// 262.13), not a property of one waste stream. The accumulation clock for a
+// central-accumulation container is governed by the *facility's* status.
+//
+// We store this profile on `facilities.settings.hazardous_waste` (the jsonb the
+// facilities table already carries for per-facility module config) rather than
+// adding columns to the shared platform table. Validation is at the API layer,
+// consistent with how the module treats waste codes (migration 140).
+//
+// The per-stream generator_category / jurisdiction / long_haul stay as a
+// fallback so existing data keeps working; `resolveGeneratorProfile` prefers
+// the facility profile when present.
+
+export const HAZARDOUS_WASTE_FACILITY_SETTINGS_KEY = 'hazardous_waste'
+
+export interface HazardousWasteFacilityProfile {
+  /** Facility-wide generator category. null = not yet determined. */
+  generator_category: RcraGeneratorCategory | null
+  /** Regulatory jurisdiction for the site. null = use the stream's. */
+  jurisdiction: WasteJurisdiction | null
+  /** EPA ID number (e.g. CAL000123456). */
+  epa_id_number: string | null
+  /** Default long-haul (>200 mi TSDF) flag for the site. */
+  long_haul_default: boolean
+}
+
+export const EMPTY_HAZARDOUS_WASTE_FACILITY_PROFILE: HazardousWasteFacilityProfile = {
+  generator_category: null,
+  jurisdiction:       null,
+  epa_id_number:      null,
+  long_haul_default:  false,
+}
+
+/**
+ * Read a facility profile out of a `facilities.settings` jsonb blob, tolerating
+ * missing/garbage values. Always returns a complete profile (empty defaults).
+ */
+export function parseFacilityProfile(
+  settings: Record<string, unknown> | null | undefined,
+): HazardousWasteFacilityProfile {
+  const raw = settings?.[HAZARDOUS_WASTE_FACILITY_SETTINGS_KEY]
+  if (!raw || typeof raw !== 'object') return { ...EMPTY_HAZARDOUS_WASTE_FACILITY_PROFILE }
+  const o = raw as Record<string, unknown>
+  const cat = o.generator_category
+  const jur = o.jurisdiction
+  return {
+    generator_category:
+      cat === 'lqg' || cat === 'sqg' || cat === 'vsqg' ? cat : null,
+    jurisdiction:
+      jur === 'federal' || jur === 'california' ? jur : null,
+    epa_id_number:
+      typeof o.epa_id_number === 'string' && o.epa_id_number.trim() ? o.epa_id_number.trim() : null,
+    long_haul_default: o.long_haul_default === true,
+  }
+}
+
+/** Validate a facility-profile input. Empty/unset values are allowed. */
+export function validateHazardousWasteFacilityProfile(
+  profile: HazardousWasteFacilityProfile,
+): FieldError[] {
+  const errors: FieldError[] = []
+  if (profile.generator_category != null &&
+      !(['lqg', 'sqg', 'vsqg'] as RcraGeneratorCategory[]).includes(profile.generator_category)) {
+    errors.push({ field: 'generator_category', message: 'Invalid generator category' })
+  }
+  if (profile.jurisdiction != null && !WASTE_JURISDICTIONS.includes(profile.jurisdiction)) {
+    errors.push({ field: 'jurisdiction', message: 'Invalid jurisdiction' })
+  }
+  if (profile.epa_id_number != null && profile.epa_id_number.length > 40) {
+    errors.push({ field: 'epa_id_number', message: 'EPA ID must be 40 characters or fewer' })
+  }
+  return errors
+}
+
+export interface ResolvedGeneratorProfile {
+  category: RcraGeneratorCategory
+  jurisdiction: WasteJurisdiction
+  longHaul: boolean
+  /** Where the category came from — for UI transparency. */
+  source: 'facility' | 'stream'
+}
+
+/**
+ * Resolve the governing generator category/jurisdiction/long-haul for a
+ * container's central-accumulation clock. The facility profile wins when it
+ * sets a value; otherwise we fall back to the stream's own fields.
+ */
+export function resolveGeneratorProfile(
+  facility: Partial<HazardousWasteFacilityProfile> | null | undefined,
+  stream: Pick<HazardousWasteStreamRow, 'generator_category' | 'long_haul'> & {
+    jurisdiction?: WasteJurisdiction
+  },
+): ResolvedGeneratorProfile {
+  const category = facility?.generator_category ?? stream.generator_category
+  const jurisdiction = facility?.jurisdiction ?? stream.jurisdiction ?? 'federal'
+  const longHaul = facility?.long_haul_default ?? stream.long_haul
+  return {
+    category,
+    jurisdiction,
+    longHaul,
+    source: facility?.generator_category != null ? 'facility' : 'stream',
+  }
+}
+
 /**
  * Compute the age status of a persisted container row using the clock that
  * actually governs its accumulation area. This is area-aware on purpose:
  * applying the generator-category clock (90/180/270) to every area is a
  * common but incorrect simplification — different areas have different rules.
  *
- *   central_accumulation → federal generator clock (stream category + long_haul)
+ *   central_accumulation → generator clock (facility profile, else stream)
  *   universal_waste      → 1-year limit (40 CFR 273.15 / 22 CCR 66273.15)
  *   satellite_accumulation → no time clock until the volume cap is exceeded
  *                            (40 CFR 262.15); the 55 gal / 1 qt / 1 kg limit is
@@ -835,6 +950,10 @@ export function validateHazardousWasteContainerInput(input: HazardousWasteContai
  * For the non-clock areas we still surface `ageDays` (informational) but
  * return `not_time_limited` so the UI never renders a false OVER-LIMIT or a
  * false OK against a clock that does not apply.
+ *
+ * `facility` is optional: pass the facility's generator profile to use the
+ * facility-level category (the regulatorily-correct source); omit it to fall
+ * back to the stream's own category.
  */
 export function ageStatusForContainer(
   container: Pick<HazardousWasteContainerRow, 'accumulation_started_at' | 'status' | 'area_type'>,
@@ -842,6 +961,7 @@ export function ageStatusForContainer(
     jurisdiction?: WasteJurisdiction
   },
   now: Date | string,
+  facility?: Partial<HazardousWasteFacilityProfile> | null,
 ): ContainerAgeResult {
   // Disposed and in-shipment containers no longer accumulate.
   if (container.status === 'disposed' || container.status === 'in_shipment') {
@@ -849,12 +969,14 @@ export function ageStatusForContainer(
   }
 
   switch (container.area_type) {
-    case 'central_accumulation':
+    case 'central_accumulation': {
+      const resolved = resolveGeneratorProfile(facility, stream)
       return containerAgeStatus(container.accumulation_started_at, now, {
-        category: stream.generator_category,
-        longHaul: stream.long_haul,
-        jurisdiction: stream.jurisdiction,
+        category: resolved.category,
+        longHaul: resolved.longHaul,
+        jurisdiction: resolved.jurisdiction,
       })
+    }
     case 'universal_waste':
       return universalWasteAgeStatus(container.accumulation_started_at, now)
     case 'satellite_accumulation':

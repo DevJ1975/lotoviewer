@@ -304,12 +304,12 @@ change needed beyond keeping the cross-module links live.
 | --- | --- | --- | --- | --- |
 | 1 | Area-aware accumulation clocks (UW 1-yr; satellite/used-oil not time-clocked) | 40 CFR 273.15, 262.15, 279 | **P0** | ✅ logic + UI |
 | 2 | California VSQG = SQG rules (jurisdiction dimension) | 22 CCR 66262.16 | **P1** | ✅ logic + schema + UI |
-| 3 | Facility/site profile owns generator category (+ derive from monthly qty) | 40 CFR 262.13 | **P1** | ⏳ deferred (see §3.2) |
+| 3 | Facility/site profile owns generator category | 40 CFR 262.13 | **P1** | ✅ facility profile + resolver + UI |
 | 4 | On-site quantity caps (SQG 6,000 kg / VSQG 1,000 kg / 1 kg acute) | 40 CFR 262.14, 262.16 | **P1** | ✅ logic (`evaluateOnSiteQuantity`) |
 | 5 | Satellite 3-day move clock once volume cap exceeded | 40 CFR 262.15(a)(6) | **P1** | ✅ logic (`evaluateSatelliteCap`, `satelliteMoveClockStatus`) |
 | 6 | Split EPA vs. California waste codes (+ catalog/validation) | 22 CCR 66262 / manifest | **P1** | ✅ logic (`wasteCodes.ts`, pattern-partition — no schema split) |
 | 7 | Structured acute / extremely-hazardous flag on streams | 40 CFR 262.15, 22 CCR | **P2** | ✅ schema + UI (`acute_class`) |
-| 8 | LDR determination + one-time notice tracking | 40 CFR 268.7 | **P2** | ✅ schema + UI (`ldr_*`); manifest notice ⏳ |
+| 8 | LDR determination + one-time notice tracking | 40 CFR 268.7 | **P2** | ✅ schema + UI + notice generator (`ldrNotice.ts`) |
 | 9 | LQG contingency plan + Quick Reference Guide record & deadline | 40 CFR 262.262 | **P2** | ◑ calendar entry; record table ⏳ |
 | 10 | RCRA personnel training annual obligation | 40 CFR 262.17(a)(7) | **P2** | ✅ calendar entry |
 | 11 | HAZWOPER applicability triage + 8-hr refresher deadline | 8 CCR 5192 | **P2** | ✅ logic (`hazwoper.ts`) + calendar |
@@ -320,21 +320,27 @@ change needed beyond keeping the cross-module links live.
 
 **Legend:** ✅ implemented · ◑ partially implemented · ⏳ deferred.
 
-The regulatory **logic** for every item is now implemented and unit-tested in
+The regulatory **logic** for every item is implemented and unit-tested in
 `@soteria/core`. What remains is product surface area, not compliance logic:
 
-- **§3.2 / #3 — facility-level generator category.** Deliberately deferred. The
-  correct home is the `facilities` table (migration 209), but moving
-  `generator_category` there changes the aging signature and every call site; it
-  is a focused refactor that deserves its own PR. The per-stream model still
-  functions, and the new jurisdiction field rides alongside it.
-- **#8 manifest LDR notice / #9 contingency-plan record table.** These are CRUD
-  + document-generation features; the calendar reminders and the `ldr_*` /
-  jurisdiction fields deliver the tracking value now.
-- **Field wiring of the new helpers.** `evaluateSatelliteCap`,
+- **§3.2 / #3 — facility-level generator category. ✅ Done.** The generator
+  profile (category, jurisdiction, EPA ID, long-haul default) now lives on the
+  facility via `facilities.settings.hazardous_waste`, with a `/hazardous-waste/
+  facility` editor and a `resolveGeneratorProfile` that the aging clock prefers
+  over the stream. Storing it on the facility's existing `settings` jsonb (vs.
+  new columns on the shared platform table) keeps the module's config self-
+  contained and validated at the API layer — consistent with migration 140. The
+  per-stream category remains a fallback so existing data keeps working.
+- **#8 LDR notice. ✅ Done.** `ldrNotice.ts` computes notice status and builds
+  the notice content (EPA + California codes, generator EPA ID, certification);
+  the stream detail page surfaces an outstanding-notice banner and a
+  "mark sent" action.
+- **#9 contingency-plan record table.** Still a CRUD feature; the calendar
+  reminder covers the deadline-tracking value now.
+- **Field wiring of the remaining helpers.** `evaluateSatelliteCap`,
   `evaluateOnSiteQuantity`, the HAZWOPER triage, and the spill decision aid are
   pure and tested but not yet surfaced on every screen (the containers page
-  consumes the area-aware + jurisdiction-aware aging today).
+  consumes the area-aware + jurisdiction-aware + facility-profile aging today).
 
 ---
 

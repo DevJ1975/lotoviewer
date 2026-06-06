@@ -5,12 +5,17 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
+import { useFacility } from '@/components/FacilityProvider'
 import { supabase } from '@/lib/supabase'
 import {
+  parseFacilityProfile,
   HAZARDOUS_WASTE_STREAM_STATUSES,
+  type AcuteClass,
   type HazardousWasteStreamRow,
   type HazardousWasteStreamStatus,
+  type WasteJurisdiction,
 } from '@soteria/core/hazardousWaste'
+import { buildLdrNotice, ldrNoticeStatus } from '@soteria/core/ldrNotice'
 
 const STATUS_LABEL: Record<HazardousWasteStreamStatus, string> = {
   draft:    'Draft',
@@ -21,12 +26,24 @@ const STATUS_LABEL: Record<HazardousWasteStreamStatus, string> = {
 const CATEGORY_LABEL: Record<HazardousWasteStreamRow['generator_category'], string> = {
   lqg:  'LQG — 90-day accumulation',
   sqg:  'SQG — 180-day accumulation',
-  vsqg: 'VSQG — no federal limit',
+  vsqg: 'VSQG',
+}
+
+const JURISDICTION_LABEL: Record<WasteJurisdiction, string> = {
+  federal:    'Federal (40 CFR)',
+  california: 'California (DTSC / 22 CCR)',
+}
+
+const ACUTE_LABEL: Record<AcuteClass, string> = {
+  none:                'Non-acute',
+  acute:               'Acute',
+  extremely_hazardous: 'Extremely hazardous (CA)',
 }
 
 export default function HazardousWasteStreamDetailPage() {
   const params = useParams<{ id: string }>()
   const { tenant } = useTenant()
+  const { facility } = useFacility()
   const [stream, setStream] = useState<HazardousWasteStreamRow | null>(null)
   const [error, setError]   = useState<string | null>(null)
   const [busy, setBusy]     = useState(false)
@@ -66,6 +83,30 @@ export default function HazardousWasteStreamDetailPage() {
     setStream(json.stream)
   }
 
+  async function markLdrSent() {
+    if (!tenant?.id || !stream) return
+    setBusy(true)
+    setError(null)
+    const { data: { session } } = await supabase.auth.getSession()
+    const headers: Record<string, string> = {
+      'x-active-tenant': tenant.id,
+      'content-type':    'application/json',
+    }
+    if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
+    const res = await fetch(`/api/hazardous-waste/streams/${stream.id}`, {
+      method:  'PATCH',
+      headers,
+      body:    JSON.stringify({
+        ldr_notice_sent: true,
+        ldr_notice_date: new Date().toISOString().slice(0, 10),
+      }),
+    })
+    const json = await res.json()
+    setBusy(false)
+    if (!res.ok) { setError(json.error ?? 'Failed to update'); return }
+    setStream(json.stream)
+  }
+
   if (error) {
     return (
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -97,9 +138,15 @@ export default function HazardousWasteStreamDetailPage() {
         <div className="flex flex-wrap gap-2 text-xs">
           <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5">{STATUS_LABEL[stream.status]}</span>
           <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5">{CATEGORY_LABEL[stream.generator_category]}</span>
+          <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5">{JURISDICTION_LABEL[stream.jurisdiction]}</span>
+          {stream.acute_class !== 'none' && (
+            <span className="rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 px-2 py-0.5">{ACUTE_LABEL[stream.acute_class]}</span>
+          )}
           {stream.long_haul && <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5">Long-haul</span>}
         </div>
       </header>
+
+      {stream.ldr_restricted && <LdrSection stream={stream} facility={facility} busy={busy} onMarkSent={markLdrSent} />}
 
       <section className="rounded-lg border border-slate-200 dark:border-slate-800 p-4 space-y-3">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Status</h2>
@@ -141,6 +188,75 @@ export default function HazardousWasteStreamDetailPage() {
         </Link>
       </div>
     </main>
+  )
+}
+
+function LdrSection({
+  stream, facility, busy, onMarkSent,
+}: {
+  stream: HazardousWasteStreamRow
+  facility: { name: string; settings: Record<string, unknown> } | null
+  busy: boolean
+  onMarkSent: () => void
+}) {
+  const status = ldrNoticeStatus(stream)
+  const epaId = facility ? parseFacilityProfile(facility.settings).epa_id_number : null
+  const notice = buildLdrNotice(
+    stream,
+    { generatorName: facility?.name ?? null, epaIdNumber: epaId },
+    status.sentDate ?? new Date().toISOString().slice(0, 10),
+  )
+
+  return (
+    <section
+      className={`rounded-lg border p-4 space-y-3 ${
+        status.outstanding
+          ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30'
+          : 'border-slate-200 dark:border-slate-800'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          Land Disposal Restriction notice <span className="font-normal text-slate-500">· 40 CFR 268.7</span>
+        </h2>
+        {status.outstanding ? (
+          <span className="text-xs font-semibold rounded-full bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100 px-2 py-0.5">
+            Notice outstanding
+          </span>
+        ) : (
+          <span className="text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200 px-2 py-0.5">
+            Notice sent{status.sentDate ? ` · ${status.sentDate}` : ''}
+          </span>
+        )}
+      </div>
+
+      <p className="text-xs text-slate-600 dark:text-slate-300">
+        Send this one-time notice/certification to the receiving facility with the first shipment of
+        this stream (and re-issue it if the waste or treatment standard changes). This is a preparation
+        record, not a substitute for the certified submission.
+      </p>
+
+      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+        <Detail label="Generator" value={notice.generatorName ?? '(set on the facility profile)'} />
+        <Detail label="EPA ID" value={notice.epaIdNumber ?? '(set on the facility profile)'} />
+        <Detail label="EPA waste codes" value={notice.epaWasteCodes.join(', ') || '(none on this stream)'} />
+        <Detail label="California codes" value={notice.californiaWasteCodes.join(', ') || '—'} />
+      </dl>
+
+      <p className="text-[11px] italic text-slate-500 dark:text-slate-400">{notice.certificationStatement}</p>
+
+      {status.outstanding && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onMarkSent}
+          className="inline-flex items-center gap-2 rounded-md bg-brand-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-navy/90 disabled:opacity-60"
+        >
+          {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          Mark LDR notice sent
+        </button>
+      )}
+    </section>
   )
 }
 
