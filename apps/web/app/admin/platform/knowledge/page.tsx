@@ -1,132 +1,124 @@
 'use client'
 
-import { useEffect, useState, type FormEvent } from 'react'
-import { Loader2, Upload, Trash2, FileText, AlertCircle, CheckCircle2, Globe, Building2 } from 'lucide-react'
-import { superadminFetch, superadminJson } from '@/lib/superadminFetch'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { Loader2, Upload, Trash2, FileText, AlertCircle, CheckCircle2, Sparkles } from 'lucide-react'
+import { useTenant } from '@/components/TenantProvider'
+import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import Dropzone from '@/components/ui/Dropzone'
 import { inferUploadHint } from '@/lib/policyUploadHints'
 
-// /superadmin/policies
+// /admin/platform/knowledge
 //
-// Knowledge-base management UI. Lets a superadmin:
-//   - upload company policies (per tenant) or regulatory docs (global)
-//   - browse the corpus by tenant or source type
-//   - delete a document (cascades to its chunks)
+// Tenant self-service knowledge base. Lets an org's own admin/owner upload
+// their company policies & procedures so the safety assistant can retrieve
+// and cite them. Everything is auto-scoped to the caller's tenant — no tenant
+// UUID, no source-type picker (always a company policy). The superadmin
+// equivalent (/superadmin/policies) additionally handles global regulations.
 //
-// PR2 ships the first cut. Re-embed on existing docs (when Voyage
-// updates a model) is a follow-up — operators can delete + re-upload
-// for now.
+// Upload is a two-step staged flow to dodge Vercel's 4.5MB request-body cap
+// and the superadmin-only RLS on the policy-uploads bucket:
+//   1. POST /api/admin/policies/upload-url → service-role signed upload token
+//      for a path under this tenant's prefix.
+//   2. Browser uploads the file via uploadToSignedUrl.
+//   3. POST /api/admin/policies { storage_path } → server validates the
+//      prefix, then runs the shared extract → chunk → embed pipeline.
 
 interface DocRow {
-  id:              string
-  tenant_id:       string | null
-  tenant_name:     string | null
-  source_type:     string
-  title:           string
-  jurisdiction:    string | null
-  effective_date:  string | null
-  source_url:      string | null
-  chunk_count:     number
-  created_at:      string
+  id:             string
+  title:          string
+  jurisdiction:   string | null
+  effective_date: string | null
+  source_url:     string | null
+  chunk_count:    number
+  created_at:     string
 }
 
-const SOURCE_TYPE_LABELS: Record<string, string> = {
-  regulation:    'OSHA / Federal Regulation',
-  state_reg:     'State Regulation',
-  dot:           'DOT (49 CFR)',
-  epa:           'EPA (40 CFR)',
-  rcra:          'RCRA / Hazardous Waste',
-  company_policy:'Company Policy',
-}
+export default function TenantKnowledgePage() {
+  const { tenant, loading: tenantLoading } = useTenant()
+  const { profile, loading: authLoading } = useAuth()
+  const canEdit = !!profile?.is_admin || !!profile?.is_superadmin
 
-export default function PoliciesPage() {
-  const [docs, setDocs]     = useState<DocRow[]>([])
-  const [loading, setLoading] = useState(true)
+  const [docs, setDocs]           = useState<DocRow[]>([])
+  const [loading, setLoading]     = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
 
-  // Upload form
-  const [file, setFile]               = useState<File | null>(null)
-  const [title, setTitle]             = useState('')
-  const [sourceType, setSourceType]   = useState<string>('company_policy')
-  const [tenantId, setTenantId]       = useState('')
+  const [file, setFile]                 = useState<File | null>(null)
+  const [title, setTitle]               = useState('')
   const [jurisdiction, setJurisdiction] = useState('')
-  const [effectiveDate, setEffective] = useState('')
-  const [sourceUrl, setSourceUrl]     = useState('')
-  const [uploading, setUploading]     = useState(false)
-  const [uploadError, setUploadError] = useState<string | null>(null)
-  const [uploadOk,    setUploadOk]    = useState<{ id: string; chunkCount: number; duplicate: boolean } | null>(null)
+  const [effectiveDate, setEffective]   = useState('')
+  const [sourceUrl, setSourceUrl]       = useState('')
+  const [uploading, setUploading]       = useState(false)
+  const [uploadError, setUploadError]   = useState<string | null>(null)
+  const [uploadOk, setUploadOk]         = useState<{ chunkCount: number; duplicate: boolean } | null>(null)
 
-  async function refresh() {
+  const authHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const headers: Record<string, string> = { 'x-active-tenant': tenant?.id ?? '' }
+    if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
+    return headers
+  }, [tenant])
+
+  const refresh = useCallback(async () => {
+    if (!tenant?.id) return
     setLoading(true); setLoadError(null)
     try {
-      const res = await superadminFetch('/api/superadmin/policies')
-      if (!res.ok) throw new Error(`Failed to load: ${res.status}`)
-      const j = await res.json()
+      const res = await fetch('/api/admin/policies', { headers: await authHeaders() })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error ?? `Failed to load (${res.status})`)
       setDocs((j.documents ?? []) as DocRow[])
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Failed to load')
     } finally {
       setLoading(false)
     }
-  }
-  useEffect(() => { void refresh() }, [])
+  }, [tenant, authHeaders])
+
+  useEffect(() => { if (canEdit) void refresh() }, [canEdit, refresh])
 
   async function onUpload(e: FormEvent) {
     e.preventDefault()
     setUploadError(null); setUploadOk(null)
     if (!file) { setUploadError('Pick a file first.'); return }
-    if (sourceType === 'company_policy' && !/^[0-9a-f-]{36}$/i.test(tenantId)) {
-      setUploadError('Tenant ID is required for a company policy. Paste the tenant UUID.')
-      return
-    }
     setUploading(true)
     try {
-      // Two-step upload to dodge Vercel's 4.5MB request body cap:
-      //   1. Upload the file directly to the policy-uploads Supabase
-      //      Storage bucket (private, superadmin-only RLS, 25MB cap).
-      //   2. POST a JSON body with the storage_path to the route. The
-      //      server downloads from storage as service-role and runs
-      //      the existing extract → chunk → embed pipeline.
-      // Storage bucket isn't size-limited at the Vercel ingress so
-      // 20MB OSHA / EPA / DOT regs go through fine.
-      const ext  = file.name.split('.').pop() ?? 'bin'
-      const path = `${crypto.randomUUID()}.${ext}`
-      const { error: upErr } = await supabase
-        .storage
+      const mime = file.type || 'application/octet-stream'
+
+      // 1. Get a signed upload URL scoped to this tenant's staging prefix.
+      const urlRes = await fetch('/api/admin/policies/upload-url', {
+        method:  'POST',
+        headers: { ...(await authHeaders()), 'content-type': 'application/json' },
+        body:    JSON.stringify({ mime }),
+      })
+      const urlJson = await urlRes.json().catch(() => ({}))
+      if (!urlRes.ok) throw new Error(urlJson.error ?? `Could not start upload (${urlRes.status})`)
+
+      // 2. Upload the bytes straight to storage via the signed token.
+      const { error: upErr } = await supabase.storage
         .from('policy-uploads')
-        .upload(path, file, {
-          contentType:  file.type || 'application/octet-stream',
-          upsert:       false,
-        })
+        .uploadToSignedUrl(urlJson.path, urlJson.token, file)
       if (upErr) throw new Error(`Upload to storage failed: ${upErr.message}`)
 
-      const res = await superadminFetch('/api/superadmin/policies/upload', {
+      // 3. Kick off ingestion. On failure, clean up the staged orphan.
+      const res = await fetch('/api/admin/policies', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...(await authHeaders()), 'content-type': 'application/json' },
         body: JSON.stringify({
-          storage_path:   path,
+          storage_path:   urlJson.path,
           title:          title || file.name,
-          source_type:    sourceType,
-          tenant_id:      tenantId.trim()      || null,
           jurisdiction:   jurisdiction.trim()  || undefined,
           effective_date: effectiveDate.trim() || undefined,
           source_url:     sourceUrl.trim()     || undefined,
-          mime:           file.type            || undefined,
+          mime,
         }),
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) {
-        // Server didn't accept the staged file — clean up the orphan
-        // so it doesn't sit in the bucket forever.
-        void supabase.storage.from('policy-uploads').remove([path])
+        void supabase.storage.from('policy-uploads').remove([urlJson.path])
         throw new Error(j.error ?? `Upload failed (${res.status})`)
       }
-      setUploadOk({ id: j.document_id, chunkCount: j.chunk_count, duplicate: !!j.duplicate })
-      // Dropzone's input resets itself on every change, so clearing
-      // the file state alone is enough — picking the same file again
-      // a moment later still fires onChange.
-      setFile(null)
+      setUploadOk({ chunkCount: j.chunk_count, duplicate: !!j.duplicate })
+      setFile(null); setTitle(''); setJurisdiction(''); setEffective(''); setSourceUrl('')
       void refresh()
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Upload failed')
@@ -135,24 +127,34 @@ export default function PoliciesPage() {
     }
   }
 
-  async function onDelete(id: string, title: string) {
-    if (!confirm(`Delete "${title}" and all its chunks? This cannot be undone.`)) return
-    const r = await superadminJson(`/api/superadmin/policies/${id}`, { method: 'DELETE' })
-    if (!r.ok) {
-      alert(r.error ?? 'Delete failed')
+  async function onDelete(id: string, docTitle: string) {
+    if (!confirm(`Delete "${docTitle}" and all its chunks? This cannot be undone.`)) return
+    const res = await fetch(`/api/admin/policies/${id}`, { method: 'DELETE', headers: await authHeaders() })
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}))
+      alert(j.error ?? 'Delete failed')
       return
     }
     setDocs(prev => prev.filter(d => d.id !== id))
   }
 
+  if (authLoading || tenantLoading) {
+    return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+  }
+  if (!canEdit) {
+    return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500">Admins only.</div>
+  }
+
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 space-y-8">
+    <div className="max-w-5xl mx-auto px-4 py-6 space-y-8">
       <header>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Policies &amp; Regulations</h1>
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          <Sparkles className="h-5 w-5" /> Assistant knowledge
+        </h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Knowledge base for the home-page assistant. Global documents are visible to every tenant; company policies are
-          scoped to the tenant they&apos;re uploaded under. The assistant retrieves the top-K matching chunks per query and
-          cites them in its replies.
+          Upload your company policies &amp; procedures so the safety assistant can cite them in its answers. Documents are
+          scoped to your organization and only visible to your members. The assistant retrieves the most relevant passages
+          per question and links back to the source.
         </p>
       </header>
 
@@ -168,45 +170,21 @@ export default function PoliciesPage() {
               file={file}
               onFileSelected={f => { setUploadOk(null); setUploadError(null); setFile(f) }}
               onValidationError={r => { setUploadOk(null); setUploadError(r); setFile(null) }}
-              inputId="policy-file"
-              helpText="Markdown, plain text, or PDF (≤25MB). PDF text is extracted via Claude."
+              inputId="knowledge-file"
+              helpText="Markdown, plain text, or PDF (≤25MB). PDF text is extracted automatically."
               disabled={uploading}
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+            <div className="sm:col-span-2">
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-200 mb-1">Title</label>
               <input
                 type="text"
                 value={title}
                 onChange={e => setTitle(e.target.value)}
-                placeholder={file?.name ?? 'e.g. Acme LOTO Procedure'}
+                placeholder={file?.name ?? 'e.g. Lockout/Tagout Procedure'}
                 className="w-full px-3 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-200 mb-1">Source type</label>
-              <select
-                value={sourceType}
-                onChange={e => setSourceType(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50"
-              >
-                {Object.entries(SOURCE_TYPE_LABELS).map(([v, label]) => (
-                  <option key={v} value={v}>{label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-200 mb-1">
-                Tenant ID {sourceType === 'company_policy' ? <span className="text-red-500">*</span> : <span className="text-slate-400">(optional)</span>}
-              </label>
-              <input
-                type="text"
-                value={tenantId}
-                onChange={e => setTenantId(e.target.value)}
-                placeholder={sourceType === 'company_policy' ? 'UUID required' : 'Leave blank for global'}
-                className="w-full px-3 py-2 text-sm font-mono rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50"
               />
             </div>
             <div>
@@ -215,7 +193,7 @@ export default function PoliciesPage() {
                 type="text"
                 value={jurisdiction}
                 onChange={e => setJurisdiction(e.target.value)}
-                placeholder="e.g. CA, federal"
+                placeholder="e.g. CA, site-wide"
                 className="w-full px-3 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50"
               />
             </div>
@@ -228,13 +206,13 @@ export default function PoliciesPage() {
                 className="w-full px-3 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50"
               />
             </div>
-            <div>
+            <div className="sm:col-span-2">
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-200 mb-1">Source URL (optional)</label>
               <input
                 type="url"
                 value={sourceUrl}
                 onChange={e => setSourceUrl(e.target.value)}
-                placeholder="https://www.osha.gov/laws-regs/regulations/standardnumber/1910/1910.147"
+                placeholder="https://intranet.example.com/policies/loto"
                 className="w-full px-3 py-2 text-sm rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50"
               />
             </div>
@@ -261,8 +239,8 @@ export default function PoliciesPage() {
               <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
               <p className="text-sm text-emerald-800 dark:text-emerald-200">
                 {uploadOk.duplicate
-                  ? `Document already existed (${uploadOk.chunkCount} chunks). No new ingest performed.`
-                  : `Uploaded and embedded. ${uploadOk.chunkCount} chunks indexed.`}
+                  ? `This document was already uploaded (${uploadOk.chunkCount} chunks). No new ingest performed.`
+                  : `Uploaded and indexed. ${uploadOk.chunkCount} passages are now searchable by the assistant.`}
               </p>
             </div>
           )}
@@ -274,7 +252,7 @@ export default function PoliciesPage() {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-brand-navy text-white text-sm font-medium hover:bg-brand-navy/90 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
-              {uploading ? 'Uploading & embedding…' : 'Upload'}
+              {uploading ? 'Uploading & indexing…' : 'Upload'}
             </button>
           </div>
         </form>
@@ -283,7 +261,7 @@ export default function PoliciesPage() {
       {/* List */}
       <section>
         <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3 flex items-center gap-2">
-          <FileText className="h-4 w-4" /> Documents ({docs.length})
+          <FileText className="h-4 w-4" /> Your documents ({docs.length})
         </h2>
         {loading && <p className="text-sm text-slate-500"><Loader2 className="inline h-4 w-4 animate-spin mr-1" /> Loading…</p>}
         {loadError && <p className="text-sm text-rose-600">{loadError}</p>}
@@ -296,9 +274,7 @@ export default function PoliciesPage() {
               <thead className="bg-slate-50 dark:bg-slate-800/50 text-xs text-slate-500 dark:text-slate-400">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Title</th>
-                  <th className="px-3 py-2 text-left font-medium">Scope</th>
-                  <th className="px-3 py-2 text-left font-medium">Type</th>
-                  <th className="px-3 py-2 text-right font-medium">Chunks</th>
+                  <th className="px-3 py-2 text-right font-medium">Passages</th>
                   <th className="px-3 py-2 text-left font-medium">Uploaded</th>
                   <th className="px-3 py-2"></th>
                 </tr>
@@ -309,20 +285,6 @@ export default function PoliciesPage() {
                     <td className="px-3 py-2 text-slate-800 dark:text-slate-200">
                       <div className="font-medium">{d.title}</div>
                       {d.jurisdiction && <div className="text-[11px] text-slate-500">{d.jurisdiction}</div>}
-                    </td>
-                    <td className="px-3 py-2">
-                      {d.tenant_id == null ? (
-                        <span className="inline-flex items-center gap-1 text-xs text-blue-700 dark:text-blue-300">
-                          <Globe className="h-3 w-3" /> Global
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-xs text-purple-700 dark:text-purple-300">
-                          <Building2 className="h-3 w-3" /> {d.tenant_name ?? d.tenant_id.slice(0, 8)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400">
-                      {SOURCE_TYPE_LABELS[d.source_type] ?? d.source_type}
                     </td>
                     <td className="px-3 py-2 text-right text-xs text-slate-600 dark:text-slate-400 tabular-nums">
                       {d.chunk_count}
@@ -348,7 +310,7 @@ export default function PoliciesPage() {
       </section>
 
       <p className="text-[11px] text-slate-400 text-center">
-        Embeddings via Voyage AI <code className="font-mono">voyage-3-large</code> (1024 dims). Search via pgvector HNSW.
+        Indexed with Voyage AI embeddings + pgvector search. Only your organization&apos;s members can see these documents.
       </p>
     </div>
   )
