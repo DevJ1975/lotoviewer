@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { parseReviewEquipmentParam } from '@/lib/reviewFocus'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 import ReviewClient from './_components/ReviewClient'
 
@@ -56,8 +57,16 @@ interface StagedPhotoRow {
 
 export default async function ReviewPage({
   params,
-}: { params: Promise<{ token: string }> }) {
+  searchParams,
+}: {
+  params:        Promise<{ token: string }>
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
   const { token } = await params
+  // /qr "Update photo" deep-links here as ?equipment=<id> to focus a single
+  // machine — the public link otherwise renders every active placard, which
+  // is too heavy for a phone.
+  const focusEquipmentId = parseReviewEquipmentParam((await searchParams)?.equipment)
 
   if (!TOKEN_RE.test(token)) notFound()
 
@@ -118,7 +127,29 @@ export default async function ReviewPage({
   let equipment: unknown[] = []
   let steps:     unknown[] = []
   let equipmentList: Equipment[] = []
-  if (link.is_public) {
+  if (link.is_public && focusEquipmentId) {
+    // Focused (deep-link) load — one machine only. Keeps the page tiny for a
+    // field worker who scanned a single placard, instead of shipping every
+    // placard's photos + energy-step text to their phone.
+    const [equipmentRes, stepsRes] = await Promise.all([
+      admin
+        .from('loto_equipment')
+        .select('*')
+        .eq('tenant_id', link.tenant_id)
+        .eq('decommissioned', false)
+        .eq('equipment_id', focusEquipmentId)
+        .limit(1),
+      admin
+        .from('loto_energy_steps')
+        .select('*')
+        .eq('tenant_id', link.tenant_id)
+        .eq('equipment_id', focusEquipmentId)
+        .order('step_number', { ascending: true }),
+    ])
+    equipment     = equipmentRes.data ?? []
+    steps         = stepsRes.data ?? []
+    equipmentList = equipment as Equipment[]
+  } else if (link.is_public) {
     // Tenant-wide load — every active equipment row. Sort by department
     // then equipment_id so the supervisor on the floor sees the rows
     // grouped how they walk.

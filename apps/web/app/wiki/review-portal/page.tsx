@@ -1,10 +1,17 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.2.1'
+const CURRENT_VERSION = '1.2.2'
 const LAST_UPDATED    = '2026-06-06'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.2.2',
+    date: '2026-06-06',
+    changes: [
+      'Fixed a mobile crash ("can’t open this page") when opening the public review link for a single machine from a placard’s "Update photo" deep-link. The public link otherwise renders every active placard in the tenant (hundreds of cards, all their photos + energy-step text), a payload large enough to exhaust memory on a phone. The deep-link now passes ?equipment=<id> and the portal loads only that one machine — the batch (no-param) view is unchanged.',
+    ],
+  },
   {
     version: '1.2.1',
     date: '2026-06-06',
