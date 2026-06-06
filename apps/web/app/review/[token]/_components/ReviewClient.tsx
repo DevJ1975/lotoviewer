@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type DragEvent } from 'react'
 import Image from 'next/image'
 import SignaturePad, { type SignaturePadRef } from '@/components/SignaturePad'
 import { compressImageInWorker, heicToJpeg, isHeic } from '@/lib/imageUtils'
+import { sanitizeId } from '@soteria/core/storagePaths'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 
 // Public reviewer client. Per-placard cards with notes + status; bottom
@@ -218,6 +219,22 @@ export default function ReviewClient({
       body:    JSON.stringify({ action: 'view-ack' }),
     }).catch(() => {})
   }, [isFirstView, token])
+
+  // Deep-link target highlight. When a worker arrives from a placard's /qr
+  // "Update photo" link (/review/<token>#eq-<id>), scroll that equipment's
+  // card into view and pulse a ring so they land on the right machine.
+  const [highlightAnchor, setHighlightAnchor] = useState<string | null>(null)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const anchor = window.location.hash.replace(/^#/, '')
+    if (!anchor.startsWith('eq-')) return
+    const el = document.getElementById(anchor)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setHighlightAnchor(anchor)
+    const t = setTimeout(() => setHighlightAnchor(null), 2600)
+    return () => clearTimeout(t)
+  }, [])
 
   // Per-placard local state. Keyed by equipment_id; undefined = not yet
   // touched, no row in the DB. status is required when saving notes.
@@ -469,7 +486,15 @@ export default function ReviewClient({
             const saving = savingByEqId[eq.equipment_id]
             const steps = stepsByEquipment[eq.equipment_id] ?? []
             return (
-              <article key={eq.equipment_id} className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+              <article
+                key={eq.equipment_id}
+                id={`eq-${sanitizeId(eq.equipment_id)}`}
+                className={`scroll-mt-4 bg-white rounded-xl p-4 space-y-3 border transition-shadow ${
+                  highlightAnchor === `eq-${sanitizeId(eq.equipment_id)}`
+                    ? 'border-brand-navy ring-2 ring-brand-navy/40'
+                    : 'border-slate-200'
+                }`}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="font-mono text-sm font-bold text-slate-900">{eq.equipment_id}</div>

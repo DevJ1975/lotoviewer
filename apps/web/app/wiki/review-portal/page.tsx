@@ -1,10 +1,17 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.2.0'
+const CURRENT_VERSION = '1.2.1'
 const LAST_UPDATED    = '2026-06-06'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.2.1',
+    date: '2026-06-06',
+    changes: [
+      'Deep-link from the public placard view. Scanning a placard QR (/qr/{qr_token}) now shows an "Update photo" button when the tenant has an active public review link; it opens /review/{token} anchored to that exact equipment card (which scrolls into view and pulses), so a field worker can jump straight from a single machine to its photo-replacement (staging) flow. The /qr view itself stays read-only.',
+    ],
+  },
   {
     version: '1.2.0',
     date: '2026-06-06',
