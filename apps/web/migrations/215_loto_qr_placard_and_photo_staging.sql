@@ -145,22 +145,36 @@ grant execute on function public.get_placard_by_qr(text, text, text) to anon, au
 -- ─────────────────────────────────────────────────────────────────────────
 
 -- Promote loto_review_photo_replacements from an applied-replacements log to
--- a staging table with an explicit lifecycle.
+-- a staging table with an explicit lifecycle. The status column is added in a
+-- guarded DO block so the one-time backfill below runs ONLY on the first
+-- apply — re-running this migration after reviewers have staged real pending
+-- rows must never sweep them to 'applied'.
 alter table public.loto_review_photo_replacements
-  add column if not exists status          text not null default 'pending'
-    check (status in ('pending', 'applied', 'rejected')),
   add column if not exists applied_at      timestamptz,
   add column if not exists applied_by      uuid,
   add column if not exists rejected_reason text;
 
--- Historic rows predate staging: the old RPC mutated loto_equipment in the
--- same call, so every existing row was already applied. Mark them so the
--- reconcile queue starts empty and the pending-unique index has nothing to
--- collide with.
-update public.loto_review_photo_replacements
-   set status     = 'applied',
-       applied_at = coalesce(applied_at, replaced_at)
- where status = 'pending';
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public'
+       and table_name   = 'loto_review_photo_replacements'
+       and column_name  = 'status'
+  ) then
+    alter table public.loto_review_photo_replacements
+      add column status text not null default 'pending'
+        check (status in ('pending', 'applied', 'rejected'));
+
+    -- Historic rows predate staging: the old RPC mutated loto_equipment in
+    -- the same call, so every existing row was already applied. Mark them so
+    -- the reconcile queue starts empty and the pending-unique index has no
+    -- historic duplicates to collide with. Guarded above → first-apply only.
+    update public.loto_review_photo_replacements
+       set status     = 'applied',
+           applied_at = coalesce(applied_at, replaced_at);
+  end if;
+end $$;
 
 -- One pending replacement per (review, equipment, slot). Applied/rejected
 -- rows are history and don't participate, so the index is partial.
@@ -415,11 +429,13 @@ $$;
 -- The staging + reconcile RPCs mutate equipment, so anon/authenticated must
 -- NOT call them directly — every call flows through a service-role API route
 -- that has already validated the review-link token (stage) or the tenant
--- admin session (apply/reject/reconcile).
-revoke all on function public.stage_loto_review_photo_replacement(uuid, text, text, text, text, text, text, text) from public;
-revoke all on function public.apply_staged_photo_replacement(uuid, uuid) from public;
-revoke all on function public.reject_staged_photo_replacement(uuid, uuid, text) from public;
-revoke all on function public.reconcile_review_link_photos(uuid, uuid) from public;
+-- admin session (apply/reject/reconcile). NOTE: Supabase's default privileges
+-- grant EXECUTE on new public functions directly to anon + authenticated, so
+-- revoking from PUBLIC alone is not enough — we must name anon + authenticated.
+revoke all on function public.stage_loto_review_photo_replacement(uuid, text, text, text, text, text, text, text) from public, anon, authenticated;
+revoke all on function public.apply_staged_photo_replacement(uuid, uuid) from public, anon, authenticated;
+revoke all on function public.reject_staged_photo_replacement(uuid, uuid, text) from public, anon, authenticated;
+revoke all on function public.reconcile_review_link_photos(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.stage_loto_review_photo_replacement(uuid, text, text, text, text, text, text, text) to service_role;
 grant execute on function public.apply_staged_photo_replacement(uuid, uuid) to service_role;
 grant execute on function public.reject_staged_photo_replacement(uuid, uuid, text) to service_role;
