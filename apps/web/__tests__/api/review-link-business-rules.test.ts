@@ -157,6 +157,26 @@ function jsonRequest(body: unknown, headers?: Record<string, string>): Request {
   })
 }
 
+// Build a multipart Request whose `formData()` resolves to the SAME FormData
+// object we constructed. Passing a FormData as the Request body forces undici
+// to serialize and re-parse it on `.formData()`, and the re-parsed File comes
+// from undici's realm — so `file instanceof File` (the global jsdom File the
+// route checks against) is false under vitest. In the real Next.js runtime
+// both the parsed file and the global File come from undici, so the check
+// passes. Returning the original FormData keeps the route's `instanceof File`
+// guard exercised against a genuine global-realm File.
+function multipartRequest(form: FormData, headers?: Record<string, string>): Request {
+  const req = new Request('http://localhost/api/review', {
+    method: 'POST',
+    headers: {
+      'content-type': 'multipart/form-data; boundary=----vitest',
+      ...headers,
+    },
+  })
+  Object.defineProperty(req, 'formData', { value: async () => form })
+  return req
+}
+
 describe('LOTO review-link business rules', () => {
   beforeEach(() => {
     resetMockState()
@@ -331,11 +351,10 @@ describe('LOTO review-link business rules', () => {
     form.set('reviewer_name', 'Floor supervisor')
     form.set('photo', new File([new Uint8Array([0xff, 0xd8, 0xff, 0x00])], 'photo.jpg', { type: 'image/jpeg' }))
 
-    const response = await publicReviewAction(new Request('http://localhost/api/review', {
-      method: 'POST',
-      headers: { 'x-forwarded-for': '203.0.113.10', 'user-agent': 'vitest' },
-      body: form,
-    }), ctx())
+    const response = await publicReviewAction(
+      multipartRequest(form, { 'x-forwarded-for': '203.0.113.10', 'user-agent': 'vitest' }),
+      ctx(),
+    )
 
     expect(response.status).toBe(400)
     expect(storageBucket.remove).toHaveBeenCalledTimes(1)
