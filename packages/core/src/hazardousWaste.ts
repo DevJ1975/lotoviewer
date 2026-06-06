@@ -387,7 +387,12 @@ export function isAreaOverdue(
  */
 export type RcraGeneratorCategory = 'lqg' | 'sqg' | 'vsqg'
 
-export type ContainerAgeStatus = 'unknown' | 'ok' | 'approaching' | 'over_limit'
+// `not_time_limited` is distinct from `unknown`: the container HAS a start
+// date, but its area type is not governed by a dated accumulation clock
+// (satellite accumulation below the volume cap, used oil, inspection-only).
+// `unknown` means "we can't compute the clock" (no/invalid/future date, or a
+// federal VSQG with no federal time limit).
+export type ContainerAgeStatus = 'unknown' | 'ok' | 'approaching' | 'over_limit' | 'not_time_limited'
 
 export interface ContainerAgeOptions {
   /** Generator category that determines the baseline limit. */
@@ -423,46 +428,87 @@ function baselineLimitDays(opts: ContainerAgeOptions): number | null {
 }
 
 /**
- * Compute the age status of a central-accumulation container.
+ * Core aging math shared by every accumulation clock. Given a start date and
+ * an explicit limit (in days), classify the container as ok / approaching /
+ * over_limit. A `null` limit means "no time clock applies" and yields
+ * `unknown` (the caller decides whether that is a federal-VSQG or some other
+ * no-limit case).
  *
- * Edge cases handled:
+ * Edge cases handled once, here, for all clocks:
  * - `startedAt` null/invalid → ageDays:null, status:'unknown'
  * - `startedAt` in the future (data-entry error) → ageDays:0, status:'unknown'
- * - `category === 'vsqg'` → limit:null, status:'unknown' (federal does not gate)
  * - DST/TZ → math is in UTC ms; status flips on day boundaries, not hours
  */
-export function containerAgeStatus(
+function ageStatusAgainstLimit(
   startedAt: Date | string | null | undefined,
   now: Date | string,
-  opts: ContainerAgeOptions,
+  limitDays: number | null,
+  warnDaysBeforeLimit = 14,
 ): ContainerAgeResult {
   const start = toDate(startedAt)
   const nowDate = toDate(now)
-  const limit = baselineLimitDays(opts)
 
   if (!start || !nowDate) {
-    return { ageDays: null, limitDays: limit, daysUntilLimit: null, status: 'unknown' }
+    return { ageDays: null, limitDays, daysUntilLimit: null, status: 'unknown' }
   }
 
   const diffMs = nowDate.getTime() - start.getTime()
   if (diffMs < 0) {
     // Future start date — almost always a data-entry mistake. Surface as
     // unknown so the UI prompts the user to correct it.
-    return { ageDays: 0, limitDays: limit, daysUntilLimit: null, status: 'unknown' }
+    return { ageDays: 0, limitDays, daysUntilLimit: null, status: 'unknown' }
   }
 
   const ageDays = Math.floor(diffMs / MS_PER_DAY)
-  if (limit == null) {
+  if (limitDays == null) {
     return { ageDays, limitDays: null, daysUntilLimit: null, status: 'unknown' }
   }
 
-  const daysUntilLimit = limit - ageDays
-  const warnWindow = Math.max(0, opts.warnDaysBeforeLimit ?? 14)
+  const daysUntilLimit = limitDays - ageDays
+  const warnWindow = Math.max(0, warnDaysBeforeLimit)
   let status: ContainerAgeStatus
-  if (ageDays > limit) status = 'over_limit'
+  if (ageDays > limitDays) status = 'over_limit'
   else if (daysUntilLimit <= warnWindow) status = 'approaching'
   else status = 'ok'
-  return { ageDays, limitDays: limit, daysUntilLimit, status }
+  return { ageDays, limitDays, daysUntilLimit, status }
+}
+
+/**
+ * Compute the age status of a CENTRAL-accumulation container against the
+ * federal generator-category clock (90 / 180 / 270 days). This is the right
+ * clock only for central accumulation areas — satellite, universal waste, and
+ * used oil are governed by different rules (see `ageStatusForContainer`).
+ *
+ * - `category === 'vsqg'` → limit:null, status:'unknown' (no FEDERAL time
+ *   limit; note California does not adopt the VSQG exemption — see the
+ *   hazardous-waste regulatory evaluation doc).
+ */
+export function containerAgeStatus(
+  startedAt: Date | string | null | undefined,
+  now: Date | string,
+  opts: ContainerAgeOptions,
+): ContainerAgeResult {
+  return ageStatusAgainstLimit(startedAt, now, baselineLimitDays(opts), opts.warnDaysBeforeLimit ?? 14)
+}
+
+/**
+ * Federal + California universal-waste accumulation limit: one year from the
+ * date the universal waste was generated or received (40 CFR 273.15 / 273.35;
+ * 22 CCR 66273.15 / 66273.35). Independent of the RCRA generator category.
+ */
+export const UNIVERSAL_WASTE_LIMIT_DAYS = 365
+
+/**
+ * Compute the age status of a universal-waste container against the 1-year
+ * accumulation limit. Defaults to a 30-day warning window because a yearly
+ * clock deserves more lead time than a 90-day drum.
+ */
+export function universalWasteAgeStatus(
+  startedAt: Date | string | null | undefined,
+  now: Date | string,
+  warnDaysBeforeLimit = 30,
+): ContainerAgeResult {
+  return ageStatusAgainstLimit(startedAt, now, UNIVERSAL_WASTE_LIMIT_DAYS, warnDaysBeforeLimit)
 }
 
 // ── Persisted records (migration 140) ────────────────────────────────────
@@ -622,12 +668,26 @@ export function validateHazardousWasteContainerInput(input: HazardousWasteContai
 }
 
 /**
- * Compute the age status of a persisted container row using its stream's
- * generator_category + long_haul. Wrapper around containerAgeStatus that
- * removes the join boilerplate at every call site.
+ * Compute the age status of a persisted container row using the clock that
+ * actually governs its accumulation area. This is area-aware on purpose:
+ * applying the generator-category clock (90/180/270) to every area is a
+ * common but incorrect simplification — different areas have different rules.
+ *
+ *   central_accumulation → federal generator clock (stream category + long_haul)
+ *   universal_waste      → 1-year limit (40 CFR 273.15 / 22 CCR 66273.15)
+ *   satellite_accumulation → no time clock until the volume cap is exceeded
+ *                            (40 CFR 262.15); the 55 gal / 1 qt / 1 kg limit is
+ *                            checked separately on the inspection checklist
+ *   used_oil             → managed under 40 CFR 279 / 22 CCR 66279, no
+ *                          dated accumulation clock
+ *   inspection_only      → not an accumulation point
+ *
+ * For the non-clock areas we still surface `ageDays` (informational) but
+ * return `not_time_limited` so the UI never renders a false OVER-LIMIT or a
+ * false OK against a clock that does not apply.
  */
 export function ageStatusForContainer(
-  container: Pick<HazardousWasteContainerRow, 'accumulation_started_at' | 'status'>,
+  container: Pick<HazardousWasteContainerRow, 'accumulation_started_at' | 'status' | 'area_type'>,
   stream: Pick<HazardousWasteStreamRow, 'generator_category' | 'long_haul'>,
   now: Date | string,
 ): ContainerAgeResult {
@@ -635,10 +695,28 @@ export function ageStatusForContainer(
   if (container.status === 'disposed' || container.status === 'in_shipment') {
     return { ageDays: null, limitDays: null, daysUntilLimit: null, status: 'unknown' }
   }
-  return containerAgeStatus(container.accumulation_started_at, now, {
-    category: stream.generator_category,
-    longHaul: stream.long_haul,
-  })
+
+  switch (container.area_type) {
+    case 'central_accumulation':
+      return containerAgeStatus(container.accumulation_started_at, now, {
+        category: stream.generator_category,
+        longHaul: stream.long_haul,
+      })
+    case 'universal_waste':
+      return universalWasteAgeStatus(container.accumulation_started_at, now)
+    case 'satellite_accumulation':
+    case 'used_oil':
+    case 'inspection_only':
+    default: {
+      const start = toDate(container.accumulation_started_at)
+      const nowDate = toDate(now)
+      const ageDays =
+        start && nowDate && nowDate.getTime() >= start.getTime()
+          ? Math.floor((nowDate.getTime() - start.getTime()) / MS_PER_DAY)
+          : null
+      return { ageDays, limitDays: null, daysUntilLimit: null, status: 'not_time_limited' }
+    }
+  }
 }
 
 /**

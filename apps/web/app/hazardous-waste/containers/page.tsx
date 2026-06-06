@@ -32,17 +32,19 @@ const STATUS_LABEL: Record<HazardousWasteContainerStatus, string> = {
 }
 
 const AGE_TONE: Record<ContainerAgeStatus, string> = {
-  ok:          'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
-  approaching: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
-  over_limit:  'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
-  unknown:     'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  ok:               'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
+  approaching:      'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
+  over_limit:       'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
+  unknown:          'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  not_time_limited: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
 }
 
 const AGE_LABEL: Record<ContainerAgeStatus, string> = {
-  ok:          'OK',
-  approaching: 'Approaching',
-  over_limit:  'OVER LIMIT',
-  unknown:     'No start date',
+  ok:               'OK',
+  approaching:      'Approaching',
+  over_limit:       'OVER LIMIT',
+  unknown:          'No start date',
+  not_time_limited: 'No time clock',
 }
 
 export default function HazardousWasteContainersPage() {
@@ -114,8 +116,9 @@ export default function HazardousWasteContainersPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Containers</h1>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Physical hazardous waste containers across accumulation areas. Age status is computed against
-            the stream&apos;s generator category.
+            Physical hazardous waste containers across accumulation areas. Age status uses each area&apos;s
+            regulatory clock — the generator category for central accumulation, the 1-year limit for
+            universal waste. Satellite and used-oil areas aren&apos;t on a dated accumulation clock.
           </p>
         </div>
         <Link

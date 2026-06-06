@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ageStatusForContainer,
   containerAgeStatus,
   createEmptyHazardousWasteFieldDraft,
   getChecksForArea,
   nextBiennialDueDate,
   summarizeHazardousWasteDraft,
+  universalWasteAgeStatus,
+  UNIVERSAL_WASTE_LIMIT_DAYS,
+  type HazardousWasteAreaType,
+  type HazardousWasteContainerRow,
+  type HazardousWasteStreamRow,
 } from '@soteria/core/hazardousWaste'
 
 describe('summarizeHazardousWasteDraft', () => {
@@ -121,6 +127,81 @@ describe('containerAgeStatus', () => {
     })
     // 40 days old, 50 days until limit; with 0-day warn window → ok.
     expect(r.status).toBe('ok')
+  })
+})
+
+describe('universalWasteAgeStatus', () => {
+  const now = new Date('2026-05-14T12:00:00Z')
+
+  it('uses a 1-year (365-day) limit', () => {
+    const r = universalWasteAgeStatus('2026-04-14T12:00:00Z', now)
+    expect(r.limitDays).toBe(UNIVERSAL_WASTE_LIMIT_DAYS)
+    expect(r.limitDays).toBe(365)
+    expect(r.status).toBe('ok')
+  })
+
+  it('flags over_limit past one year', () => {
+    const r = universalWasteAgeStatus('2025-05-01T12:00:00Z', now) // ~378 days
+    expect(r.ageDays).toBeGreaterThan(365)
+    expect(r.status).toBe('over_limit')
+  })
+
+  it('warns 30 days out by default', () => {
+    // 345 days old → 20 days until the 1-year limit, inside the 30-day window.
+    const start = new Date(now.getTime() - 345 * 86_400_000).toISOString()
+    const r = universalWasteAgeStatus(start, now)
+    expect(r.status).toBe('approaching')
+  })
+})
+
+describe('ageStatusForContainer (area-aware clocks)', () => {
+  const now = new Date('2026-05-14T12:00:00Z')
+  const lqgStream: Pick<HazardousWasteStreamRow, 'generator_category' | 'long_haul'> = {
+    generator_category: 'lqg',
+    long_haul: false,
+  }
+
+  // A 200-day-old container: over the 90-day central clock, but well under the
+  // 1-year universal-waste clock, and not on any clock for satellite/used oil.
+  const startedAt = new Date(now.getTime() - 200 * 86_400_000).toISOString()
+
+  function container(area_type: HazardousWasteAreaType): Pick<
+    HazardousWasteContainerRow,
+    'accumulation_started_at' | 'status' | 'area_type'
+  > {
+    return { accumulation_started_at: startedAt, status: 'open', area_type }
+  }
+
+  it('central accumulation uses the generator clock (200d → over the 90d LQG limit)', () => {
+    const r = ageStatusForContainer(container('central_accumulation'), lqgStream, now)
+    expect(r.limitDays).toBe(90)
+    expect(r.status).toBe('over_limit')
+  })
+
+  it('universal waste uses the 1-year clock (200d → still OK, not over the 90d clock)', () => {
+    const r = ageStatusForContainer(container('universal_waste'), lqgStream, now)
+    expect(r.limitDays).toBe(365)
+    expect(r.status).toBe('ok')
+  })
+
+  it('satellite accumulation is not on a dated clock (no false OVER LIMIT)', () => {
+    const r = ageStatusForContainer(container('satellite_accumulation'), lqgStream, now)
+    expect(r.status).toBe('not_time_limited')
+    expect(r.limitDays).toBeNull()
+    expect(r.ageDays).toBe(200) // still surfaced for context
+  })
+
+  it('used oil is not on a dated accumulation clock', () => {
+    const r = ageStatusForContainer(container('used_oil'), lqgStream, now)
+    expect(r.status).toBe('not_time_limited')
+    expect(r.limitDays).toBeNull()
+  })
+
+  it('disposed / in-shipment containers report unknown regardless of area', () => {
+    const disposed = { ...container('central_accumulation'), status: 'disposed' as const }
+    const r = ageStatusForContainer(disposed, lqgStream, now)
+    expect(r.status).toBe('unknown')
+    expect(r.ageDays).toBeNull()
   })
 })
 
