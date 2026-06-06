@@ -1,5 +1,6 @@
 import { headers } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
+import { sanitizeId } from '@soteria/core/storagePaths'
 import { parseAnnotations } from '@/lib/photoAnnotations'
 import QrPlacardPhoto from './_components/QrPlacardPhoto'
 import QrEnergySteps from './_components/QrEnergySteps'
@@ -39,6 +40,8 @@ interface Placard {
   iso_annotations: unknown
   verified:        boolean | null
   verified_date:   string | null
+  /** Active public review link token for this tenant, or null if none is live. */
+  review_link_token: string | null
   energy_steps:    EnergyStep[]
 }
 
@@ -112,6 +115,10 @@ export default async function QrPlacardPage({
           <QrEnergySteps steps={placard.energy_steps} />
         </section>
 
+        {placard.review_link_token ? (
+          <UpdatePhotoCta token={placard.review_link_token} equipmentId={placard.equipment_id} />
+        ) : null}
+
         <footer className="pt-1 pb-6 text-center text-[11px] text-slate-400">
           Read-only placard view · Lock out, tag out, verify zero energy before service.
         </footer>
@@ -134,6 +141,34 @@ function VerifiedBadge({
     <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-400/20 px-2.5 py-1 text-xs font-semibold text-amber-100">
       Unverified
     </span>
+  )
+}
+
+function UpdatePhotoCta({
+  token, equipmentId,
+}: { token: string; equipmentId: string }) {
+  // Deep-link into the tenant's public review portal, anchored to this
+  // equipment's card. The reviewer replaces the photo there; it stages as
+  // "pending reconcile" and an admin applies it. No editing happens on this
+  // read-only placard view itself.
+  const href = `/review/${token}#eq-${sanitizeId(equipmentId)}`
+  return (
+    <a
+      href={href}
+      className="block rounded-2xl border border-brand-navy/20 bg-brand-navy/[0.04] dark:border-white/10 dark:bg-white/[0.04] p-4 transition-colors hover:bg-brand-navy/[0.08] dark:hover:bg-white/[0.08]"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-bold text-brand-navy dark:text-white">Photo out of date?</div>
+          <div className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+            Submit a replacement for this placard — your admin reviews it before it goes live.
+          </div>
+        </div>
+        <span className="shrink-0 rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white">
+          Update photo →
+        </span>
+      </div>
+    </a>
   )
 }
 
