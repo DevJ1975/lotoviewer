@@ -336,7 +336,7 @@ describe('LOTO review-link business rules', () => {
       },
       error: null,
     })
-    queue('rpc:apply_loto_review_photo_replacement', {
+    queue('rpc:stage_loto_review_photo_replacement', {
       data: null,
       error: { message: 'equipment not in this review batch' },
     })
@@ -344,12 +344,23 @@ describe('LOTO review-link business rules', () => {
     storageBucket.getPublicUrl.mockReturnValue({ data: { publicUrl: 'https://cdn.example.com/photo.jpg' } })
     storageBucket.remove.mockResolvedValue({ data: [], error: null })
 
+    // In vitest's jsdom environment, `req.formData()` is powered by undici
+    // and returns File objects from Node's internal realm — a different
+    // prototype chain than jsdom's global `File`. The route guards the photo
+    // field with `photo instanceof File`, which uses the jsdom global, so
+    // the undici-realm File silently fails the check and the route returns
+    // 400 "photo file required" before ever reaching the RPC.
+    //
+    // Fix: supply a FormData that already holds a jsdom-realm File, and
+    // override `formData()` on the Request so the route reads from it
+    // directly instead of letting undici re-parse the multipart body.
+    const photo = new File([new Uint8Array([0xff, 0xd8, 0xff, 0x00])], 'photo.jpg', { type: 'image/jpeg' })
     const form = new FormData()
     form.set('action', 'replace-photo')
     form.set('equipment_id', 'EQ-404')
     form.set('slot', 'EQUIP')
     form.set('reviewer_name', 'Floor supervisor')
-    form.set('photo', new File([new Uint8Array([0xff, 0xd8, 0xff, 0x00])], 'photo.jpg', { type: 'image/jpeg' }))
+    form.set('photo', photo)
 
     const response = await publicReviewAction(
       multipartRequest(form, { 'x-forwarded-for': '203.0.113.10', 'user-agent': 'vitest' }),
@@ -357,14 +368,18 @@ describe('LOTO review-link business rules', () => {
     )
 
     expect(response.status).toBe(400)
+    // The staged object is cleaned up when staging fails.
     expect(storageBucket.remove).toHaveBeenCalledTimes(1)
     expect(captured.rpcCalls[0]).toMatchObject({
-      name: 'apply_loto_review_photo_replacement',
+      name: 'stage_loto_review_photo_replacement',
       args: {
         p_review_link_id: LINK_ID,
         p_equipment_id: 'EQ-404',
         p_slot: 'EQUIP',
         p_new_photo_url: 'https://cdn.example.com/photo.jpg',
+        // Parked in the staging area, not the live equipmentPhotoPath.
+        p_storage_path: expect.stringMatching(new RegExp(`^staging/${LINK_ID}/EQ-404/EQUIP-\\d+\\.jpg$`)),
+        p_replaced_by_name: 'Floor supervisor',
         p_ip: '203.0.113.10',
         p_user_agent: 'vitest',
       },

@@ -27,6 +27,22 @@ export function equipmentPhotoPath(
   return `${tenantId}/${id}/${id}_${slot}_${timestamp}.jpg`
 }
 
+// Staged reviewer photo replacement (public review portal). The reviewer's
+// upload is parked here — NOT at the live equipmentPhotoPath — until an
+// admin reconciles it into loto_equipment. Keyed by review link so a
+// 30-day cleanup cron can sweep staging/ objects with no pending/applied
+// row. Service-role uploads only, so the tenant-uuid-first convention
+// (migration 033 RLS) does not apply to this prefix.
+//   loto-photos/staging/<review_link_id>/<sanitized_id>/<EQUIP|ISO>-<ts>.jpg
+export function stagingReviewPhotoPath(
+  reviewLinkId: string,
+  equipmentId: string,
+  slot: PhotoSlot,
+  timestamp: number = Date.now(),
+): string {
+  return `staging/${reviewLinkId}/${sanitizeId(equipmentId)}/${slot}-${timestamp}.jpg`
+}
+
 // Generated placard PDF — one per equipment, overwritten on regenerate.
 //   loto-photos/<tenant_uuid>/<sanitized_id>/<sanitized_id>_placard.pdf
 export function placardPdfPath(tenantId: string, equipmentId: string): string {
