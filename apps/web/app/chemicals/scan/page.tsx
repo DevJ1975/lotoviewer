@@ -52,10 +52,13 @@ export default function ChemicalScanPage() {
 
       // QR codes on labels encode an absolute URL to the chemical detail
       // page; if it looks like a URL with /chemicals/<uuid>, hop straight
-      // there. Otherwise treat it as an inventory barcode.
+      // there. In Emergency mode, jump to the chemical's emergency view so
+      // the toggle behaves the same for chemical QRs as for container codes.
+      // Otherwise treat it as an inventory barcode.
       const productMatch = rawCode.match(/\/chemicals\/([0-9a-f-]{36})/i)
       if (productMatch) {
-        router.push(`/chemicals/${productMatch[1]}`)
+        const productId = productMatch[1]
+        router.push(emergency ? `/chemicals/${productId}/emergency` : `/chemicals/${productId}`)
         return
       }
 
@@ -162,7 +165,7 @@ export default function ChemicalScanPage() {
         <span className="text-sm">
           <span className="font-semibold text-slate-800 dark:text-slate-200">Emergency mode</span>
           <span className="block text-xs text-slate-500 dark:text-slate-400">
-            Scanned containers open straight to first aid &amp; spill response.
+            Scanned containers and chemical QR codes open straight to first aid &amp; spill response.
           </span>
         </span>
       </label>

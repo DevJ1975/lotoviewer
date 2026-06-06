@@ -38,12 +38,24 @@ type CodedItem = { code: string }
 
 function codeSet(items: ReadonlyArray<CodedItem> | null | undefined): Set<string> {
   const out = new Set<string>()
-  for (const item of items ?? []) {
+  // parsed_payload is jsonb the /diff route hands us straight from the DB and
+  // casts to ParsedSdsPayload without proof. A coded list persisted by an
+  // older parse schema (or hand-edited) could be a non-array; iterating it
+  // would throw and 500 the whole diff. Treat anything non-array as empty.
+  if (!Array.isArray(items)) return out
+  for (const item of items) {
     if (item && typeof item.code === 'string' && item.code.trim() !== '') {
       out.add(item.code.trim())
     }
   }
   return out
+}
+
+// Coerce a possibly-malformed jsonb value to a string[] for the pictogram
+// lists, which are bare codes rather than {code} objects. Same trust-boundary
+// reasoning as codeSet: a non-array persisted value must not throw.
+function pictogramCodes(value: readonly string[] | null | undefined): string[] {
+  return Array.isArray(value) ? value : []
 }
 
 // Diff two code-sets into added/removed SdsFieldDiff rows. Codes are sorted
@@ -123,8 +135,8 @@ export function diffSdsPayloads(
   // 2. GHS pictograms — pictograms aren't {code,text}; map to that shape.
   out.push(...diffCodeSets(
     'ghs_pictograms', 'GHS pictograms',
-    codeSet((prev?.ghs_pictograms ?? []).map(code => ({ code }))),
-    codeSet((next.ghs_pictograms ?? []).map(code => ({ code }))),
+    codeSet(pictogramCodes(prev?.ghs_pictograms).map(code => ({ code }))),
+    codeSet(pictogramCodes(next.ghs_pictograms).map(code => ({ code }))),
   ))
 
   // 3. Hazard statements (H-codes), then 4. Precautionary statements (P-codes).

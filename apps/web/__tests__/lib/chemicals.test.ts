@@ -3,6 +3,8 @@ import {
   isValidCas,
   isValidHazardCode,
   isValidPrecautionaryCode,
+  collectGhsCodeWarnings,
+  dialableTelHref,
   validateProductInput,
   chemicalSdsStoragePath,
   parseToProductFields,
@@ -163,6 +165,50 @@ describe('isValidPrecautionaryCode', () => {
     '',
   ])('rejects junk precautionary code %s', code => {
     expect(isValidPrecautionaryCode(code)).toBe(false)
+  })
+})
+
+describe('collectGhsCodeWarnings', () => {
+  it('returns no warnings when every code is recognized', () => {
+    expect(collectGhsCodeWarnings({
+      hazard_statements:        [{ code: 'H225', text: '' }, { code: 'H315+H319', text: '' }],
+      precautionary_statements: [{ code: 'P210', text: '' }],
+    })).toEqual([])
+  })
+
+  it('flags unrecognized hazard and precautionary codes without blocking', () => {
+    const warnings = collectGhsCodeWarnings({
+      hazard_statements:        [{ code: 'H225', text: '' }, { code: 'H3l5', text: '' }],
+      precautionary_statements: [{ code: 'P999', text: '' }],
+    })
+    expect(warnings).toEqual([
+      { field: 'hazard_statements', code: 'H3l5', message: 'Unrecognized GHS hazard code "H3l5".' },
+      { field: 'precautionary_statements', code: 'P999', message: 'Unrecognized GHS precautionary code "P999".' },
+    ])
+  })
+
+  it('ignores blank codes and missing fields', () => {
+    expect(collectGhsCodeWarnings({ hazard_statements: [{ code: '  ', text: '' }] })).toEqual([])
+    expect(collectGhsCodeWarnings({})).toEqual([])
+  })
+})
+
+describe('dialableTelHref', () => {
+  it.each([
+    ['+1 (800) 555-0199', 'tel:+18005550199'],
+    ['800-555-0199',      'tel:8005550199'],
+    ['8005550199',        'tel:8005550199'],
+  ])('builds a clean tel: href for %s', (input, expected) => {
+    expect(dialableTelHref(input)).toBe(expected)
+  })
+
+  it.each([
+    'See section 1', // free-text junk → tel:1 if naively dialed
+    'N/A',
+    '',
+    '55-0199',       // 6 digits, below the 7-digit plausible-phone floor
+  ])('returns null for non-dialable value %s', value => {
+    expect(dialableTelHref(value)).toBeNull()
   })
 })
 

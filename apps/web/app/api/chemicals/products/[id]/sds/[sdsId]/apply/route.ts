@@ -3,7 +3,10 @@ import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
   parseToProductFields,
+  collectGhsCodeWarnings,
   type ParsedSdsPayload,
+  type ParsedSdsHazardStatement,
+  type ParsedSdsPrecautionaryStatement,
 } from '@soteria/core/chemicals'
 
 // POST   /api/chemicals/products/[id]/sds/[sdsId]/apply
@@ -97,6 +100,14 @@ export async function POST(req: Request, ctx: Ctx) {
       return NextResponse.json({ error: 'No applicable fields selected.' }, { status: 400 })
     }
 
+    // Non-blocking: a human approved this parse, so we write it even if a GHS
+    // code looks off (an OCR slip shouldn't block an otherwise-good sheet).
+    // We surface unrecognized codes for the reviewer to re-confirm afterward.
+    const warnings = collectGhsCodeWarnings({
+      hazard_statements:        update.hazard_statements as ParsedSdsHazardStatement[] | undefined,
+      precautionary_statements: update.precautionary_statements as ParsedSdsPrecautionaryStatement[] | undefined,
+    })
+
     const { data: product, error: pErr } = await admin
       .from('chemical_products')
       .update(update)
@@ -117,6 +128,7 @@ export async function POST(req: Request, ctx: Ctx) {
       product,
       applied:       Object.keys(update).filter(k => k !== 'updated_by'),
       applied_count: appliedCount,
+      warnings,
     })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })

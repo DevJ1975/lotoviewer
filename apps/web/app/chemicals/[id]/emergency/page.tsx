@@ -6,37 +6,22 @@ import Link from 'next/link'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
-import { EmergencyView } from '@/app/chemicals/_components/EmergencyView'
-import type {
-  ParsedSdsFirstAid,
-  ParsedSdsSpillCleanup,
-} from '@soteria/core/chemicals'
+import { EmergencyView, type EmergencyProduct } from '@/app/chemicals/_components/EmergencyView'
 
-interface EmergencyItem {
-  id:      string
-  barcode: string
-  status:  string
-  chemical_products: {
-    id:                string
-    name:              string
-    manufacturer:      string | null
-    ghs_signal_word:   string | null
-    ghs_pictograms:    string[] | null
-    hazard_statements: { code: string; text: string }[] | null
-    ppe_required:      string[] | null
-    first_aid:         ParsedSdsFirstAid | null
-    spill_cleanup:     ParsedSdsSpillCleanup | null
-    emergency_phone:   string | null
-  } | null
-  chemical_locations: { name: string; path: string | null } | null
+// Chemical-scoped emergency view. A label QR that encodes the chemical detail
+// URL resolves here (not to a specific container) when the scanner is in
+// Emergency mode — see /chemicals/scan. All emergency content is product-level,
+// so this reuses the same EmergencyView as the container view.
+interface EmergencyProductRow extends EmergencyProduct {
+  id: string
 }
 
-export default function ChemicalEmergencyPage() {
+export default function ChemicalProductEmergencyPage() {
   const params = useParams<{ id: string }>()
   const id     = params?.id
   const { tenant } = useTenant()
 
-  const [item,    setItem]    = useState<EmergencyItem | null>(null)
+  const [product, setProduct] = useState<EmergencyProductRow | null>(null)
   const [error,   setError]   = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -49,22 +34,20 @@ export default function ChemicalEmergencyPage() {
       const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
 
-      const res  = await fetch(`/api/chemicals/inventory/${id}/emergency`, { headers })
+      const res  = await fetch(`/api/chemicals/products/${id}`, { headers })
       const body = await res.json()
       if (!res.ok) {
         setError(body.error ?? `HTTP ${res.status}`)
-        setItem(null)
+        setProduct(null)
         return
       }
-      setItem(body.item)
+      setProduct(body.product)
     } finally {
       setLoading(false)
     }
   }, [tenant, id])
 
   useEffect(() => { void load() }, [load])
-
-  const product = item?.chemical_products ?? null
 
   if (loading) {
     return (
@@ -73,14 +56,14 @@ export default function ChemicalEmergencyPage() {
       </div>
     )
   }
-  if (error || !item || !product) {
+  if (error || !product) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-12">
         <Link href="/chemicals/scan" className="inline-flex items-center gap-1 text-sm text-indigo-600 hover:underline mb-4">
           <ArrowLeft className="w-4 h-4" /> Back to scan
         </Link>
         <div className="rounded border border-rose-300 bg-rose-50 dark:bg-rose-950/30 dark:border-rose-800 px-4 py-3 text-sm text-rose-800 dark:text-rose-200">
-          {error ?? 'Container not found.'}
+          {error ?? 'Chemical not found.'}
         </div>
       </div>
     )
@@ -90,10 +73,9 @@ export default function ChemicalEmergencyPage() {
     <EmergencyView
       product={product}
       footer={
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-sm">
-          <span className="font-mono text-slate-400">{item.barcode}</span>
-          <Link href={`/chemicals/inventory/${item.id}`} className="text-indigo-600 hover:underline">
-            Full container details →
+        <div className="flex justify-end pt-1 text-sm">
+          <Link href={`/chemicals/${product.id}`} className="text-indigo-600 hover:underline">
+            Full chemical details →
           </Link>
         </div>
       }

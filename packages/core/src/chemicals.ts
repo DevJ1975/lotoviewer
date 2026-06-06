@@ -148,6 +148,62 @@ export function isValidPrecautionaryCode(code: string): boolean {
   return code.split('+').every(seg => isValidPrecautionarySegment(seg.trim()))
 }
 
+/**
+ * A GHS code written onto a product that isn't a recognized statement —
+ * surfaced as a NON-BLOCKING warning. Unlike validateProductInput (which
+ * rejects), this lets a human-approved SDS through while flagging codes worth
+ * a second look (e.g. an OCR slip "H3l5" for "H315").
+ */
+export interface GhsCodeWarning {
+  field:   'hazard_statements' | 'precautionary_statements'
+  code:    string
+  message: string
+}
+
+/**
+ * Collect non-blocking warnings for unrecognized GHS codes among the given
+ * product fields. Empty/blank codes are ignored — they're dropped elsewhere
+ * and aren't worth a reviewer's attention.
+ */
+export function collectGhsCodeWarnings(fields: {
+  hazard_statements?:        readonly HazardStatement[] | null
+  precautionary_statements?: readonly PrecautionaryStatement[] | null
+}): GhsCodeWarning[] {
+  const warnings: GhsCodeWarning[] = []
+  for (const h of fields.hazard_statements ?? []) {
+    const code = h.code?.trim()
+    if (code && !isValidHazardCode(code)) {
+      warnings.push({ field: 'hazard_statements', code, message: `Unrecognized GHS hazard code "${code}".` })
+    }
+  }
+  for (const p of fields.precautionary_statements ?? []) {
+    const code = p.code?.trim()
+    if (code && !isValidPrecautionaryCode(code)) {
+      warnings.push({ field: 'precautionary_statements', code, message: `Unrecognized GHS precautionary code "${code}".` })
+    }
+  }
+  return warnings
+}
+
+// SDS §1 emergency-contact values are free text and routinely hold non-dial
+// junk ("See section 1", "N/A", "Contact supplier", blanks). A tel: link for
+// those would render a confident call button that dials garbage (e.g.
+// "See section 1" → tel:1) — dangerous in an incident. Treat a value as
+// dialable only when it carries enough digits to be a real phone number.
+const MIN_PHONE_DIGITS = 7
+
+/**
+ * Build a `tel:` href from a free-text phone string, or null when the value
+ * isn't a plausible phone number. A leading '+' (international dialing) is
+ * preserved; all other non-digit characters are dropped.
+ */
+export function dialableTelHref(phone: string): string | null {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length < MIN_PHONE_DIGITS) return null
+  const plus = phone.trim().startsWith('+') ? '+' : ''
+  return `tel:${plus}${digits}`
+}
+
 export interface ProductInputErrors {
   field:   keyof ChemicalProductInput | 'cas_numbers' | 'ghs_pictograms'
          | 'hazard_statements' | 'precautionary_statements'

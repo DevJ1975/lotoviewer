@@ -224,6 +224,23 @@ describe('diffSdsPayloads', () => {
     const next = basePayload({ ghs_pictograms: ['GHS02', 'GHS07'] })
     expect(diffSdsPayloads(prev, next).filter(d => d.field === 'ghs_pictograms')).toEqual([])
   })
+
+  it('tolerates malformed jsonb coded lists without throwing', () => {
+    // parsed_payload is cast from DB jsonb without validation; a legacy or
+    // hand-edited row could carry a non-array where a coded list is expected.
+    // The diff must degrade to "empty list", not throw and 500 the route.
+    const malformed = {
+      ...basePayload(),
+      ghs_pictograms:           'GHS02',        // string, not array
+      hazard_statements:        { code: 'H225' }, // object, not array
+      precautionary_statements: null,
+    } as unknown as ParsedSdsPayload
+    expect(() => diffSdsPayloads(malformed, basePayload())).not.toThrow()
+    expect(() => diffSdsPayloads(basePayload(), malformed)).not.toThrow()
+    // Treated as empty on both sides ⇒ no spurious coded-list diffs.
+    const coded = new Set(['ghs_pictograms', 'hazard_statements', 'precautionary_statements'])
+    expect(diffSdsPayloads(malformed, malformed).filter(d => coded.has(d.field))).toEqual([])
+  })
 })
 
 describe('summarizeDiff', () => {
