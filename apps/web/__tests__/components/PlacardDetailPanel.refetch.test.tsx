@@ -58,10 +58,11 @@ vi.mock('next/link', () => ({
     <a href={href}>{children}</a>,
 }))
 
-// Provide a stable non-null tenantId so the effect's guard condition
-// `if (!equipmentId || !tenantId)` does not short-circuit and skip fetches.
+// The panel scopes its fetches to the active tenant; without a tenantId the
+// effect early-returns before touching Supabase. Supply a stable id so the
+// re-fetch invariants under test (keyed on equipment_id) are actually exercised.
 vi.mock('@/components/TenantProvider', () => ({
-  useTenant: () => ({ tenantId: 'tenant-test-01' }),
+  useTenant: () => ({ tenantId: '00000000-0000-0000-0000-0000000aabbb' }),
 }))
 
 function makeEquipment(overrides: Partial<Equipment> = {}): Equipment {

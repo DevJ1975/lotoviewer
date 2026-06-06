@@ -55,6 +55,7 @@ describe('EquipmentTable', () => {
 
     it('shows correct item count — plural', () => {
       render(<EquipmentTable equipment={sampleData} />)
+      // Count renders in the placard treatment: zero-padded, uppercased.
       expect(screen.getByText('004 ITEMS')).toBeInTheDocument()
     })
 

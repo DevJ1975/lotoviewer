@@ -7,10 +7,6 @@ import type { Equipment } from '@soteria/core/types'
 
 vi.mock('@/lib/supabase', () => ({ supabase: { from: vi.fn() } }))
 
-// The page reads tenantId from TenantProvider. Without a real auth + DB
-// bootstrap the context defaults to { tenantId: null, loading: true },
-// which keeps the page in the loading spinner forever. Stub it out so
-// tests see a resolved tenant immediately.
 vi.mock('@/components/TenantProvider', () => ({
   useTenant: () => ({ tenantId: 'tenant-1', loading: false }),
 }))
@@ -36,9 +32,6 @@ function makeEquipment(overrides: Partial<Equipment> = {}): Equipment {
 }
 
 function makeChain(data: Equipment[]) {
-  // loadPrintableEquipment: .select('*').eq('tenant_id', …).not(…).order(…)
-  // Each builder method must return the same chainable object so the full
-  // fluent call sequence resolves to the single thenable at the bottom.
   const chain: Record<string, unknown> = {
     then: (resolve?: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
       Promise.resolve({ data, error: null }).then(resolve, reject),

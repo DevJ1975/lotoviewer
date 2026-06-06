@@ -6,6 +6,10 @@ import type { Equipment } from '@soteria/core/types'
 
 vi.mock('@/lib/supabase', () => ({ supabase: { from: vi.fn() } }))
 
+vi.mock('@/components/TenantProvider', () => ({
+  useTenant: () => ({ tenantId: 'tenant-1', loading: false }),
+}))
+
 vi.mock('next/navigation', () => ({
   useParams: vi.fn().mockReturnValue({ dept: 'Mechanical' }),
 }))

@@ -32,40 +32,33 @@ function setupStorageMock(uploadError: Error | null = null) {
   return bucket
 }
 
+// The pipeline filters every query by BOTH tenant_id and equipment_id, so
+// each SELECT/UPDATE chains two `.eq()` calls before terminating. The mock
+// must mirror that: the first `.eq()` returns a builder that also exposes
+// `.eq()`, and only the second `.eq()` resolves (UPDATE) or exposes
+// `.single()` (SELECT).
+function selectChain(data: unknown, error: Error | null) {
+  const terminal = { single: vi.fn().mockResolvedValue({ data, error }) }
+  return { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue(terminal) }) }) }
+}
+
+function updateChain(error: Error | null) {
+  return { update: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error }) }) }) }
+}
+
 function setupDbMock(selectError: Error | null = null, updateError: Error | null = null) {
-  // The uploadPhotoForEquipment pipeline makes three DB round-trips, each
-  // with TWO .eq() calls (one for tenant_id, one for equipment_id):
-  //   1. SELECT equip_photo_url, iso_photo_url, needs_equip_photo, needs_iso_photo
-  //   2. UPDATE { url field, has field, photo_status, updated_at }
-  //   3. Reconcile SELECT (same columns + photo_status)
-  //   4. (conditional) Reconcile UPDATE — only when photo_status drifted
-  const makeSelectChain = (data: unknown, error: Error | null) => {
-    const innerEq = vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data, error }) })
-    const outerEq = vi.fn().mockReturnValue({ eq: innerEq })
-    return { select: vi.fn().mockReturnValue({ eq: outerEq }) }
-  }
-
-  const makeUpdateChain = (error: Error | null) => {
-    const innerEq = vi.fn().mockResolvedValue({ error })
-    const outerEq = vi.fn().mockReturnValue({ eq: innerEq })
-    return { update: vi.fn().mockReturnValue({ eq: outerEq }) }
-  }
-
   vi.mocked(supabase.from)
-    // 1. Initial SELECT for current URLs (needs_* columns required by computePhotoStatusFromUrls)
-    .mockImplementationOnce(() => makeSelectChain(
-      selectError ? null : { equip_photo_url: null, iso_photo_url: null, needs_equip_photo: true, needs_iso_photo: true },
+    // 1. Initial SELECT for current URLs
+    .mockImplementationOnce(() => selectChain(
+      selectError ? null : { equip_photo_url: null, iso_photo_url: null },
       selectError,
     ) as unknown as ReturnType<typeof supabase.from>)
     // 2. UPDATE with new URL + status
-    .mockImplementationOnce(() => makeUpdateChain(updateError) as unknown as ReturnType<typeof supabase.from>)
-    // 3. Reconcile SELECT after patch (photo_status matches computed value → no extra write)
+    .mockImplementationOnce(() => updateChain(updateError) as unknown as ReturnType<typeof supabase.from>)
+    // 3. Reconcile SELECT after patch (returns matching state so no extra write)
     .mockImplementation(() => ({
-      ...makeSelectChain(
-        { equip_photo_url: null, iso_photo_url: null, photo_status: 'missing', needs_equip_photo: true, needs_iso_photo: true },
-        null,
-      ),
-      ...makeUpdateChain(null),
+      ...selectChain({ equip_photo_url: null, iso_photo_url: null, photo_status: 'missing' }, null),
+      ...updateChain(null),
     } as unknown as ReturnType<typeof supabase.from>))
 }
 

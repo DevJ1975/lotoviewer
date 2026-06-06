@@ -7,7 +7,6 @@ import type { Equipment } from '@soteria/core/types'
 vi.mock('next/navigation', () => ({
   useRouter:       () => ({ replace: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
-  usePathname:     () => '/loto',
 }))
 
 vi.mock('@/lib/supabase', () => ({
@@ -18,26 +17,8 @@ vi.mock('@/lib/supabase', () => ({
   },
 }))
 
-// The loto dashboard reads tenantId from TenantProvider and waits for it
-// before issuing the supabase query. Without this mock the context default
-// has loading=true / tenantId=null, which keeps the skeleton up forever.
 vi.mock('@/components/TenantProvider', () => ({
   useTenant: () => ({ tenantId: 'tenant-1', loading: false }),
-}))
-
-// SessionProvider is consumed via useSession inside the dashboard for
-// "recently visited" tracking. The context default no-ops are sufficient
-// here; we mock the module so the real provider's sessionStorage reads
-// don't interfere with the test environment.
-vi.mock('@/components/SessionProvider', () => ({
-  useSession: () => ({
-    recents:     [],
-    flags:       new Set(),
-    recordVisit: vi.fn(),
-    toggleFlag:  vi.fn(),
-    isFlagged:   () => false,
-    clearFlags:  vi.fn(),
-  }),
 }))
 
 function makeChain(data: Equipment[]) {
@@ -96,10 +77,8 @@ describe('HomePage dashboard', () => {
 
   it('lists all departments in the sidebar', async () => {
     render(<HomePage />)
-    // Both department names appear at least once (in the sidebar row).
-    // Using getAllByText because the department name may also appear in the
-    // detail panel (e.g. the placard label), so getByText would throw on
-    // multiple matches.
+    // Each department name appears both in the sidebar and as a group header
+    // in the equipment list, so assert on presence (>= 1) rather than uniqueness.
     await waitFor(() => expect(screen.getAllByText('Alpha').length).toBeGreaterThanOrEqual(1))
     expect(screen.getAllByText('Beta').length).toBeGreaterThanOrEqual(1)
   })
