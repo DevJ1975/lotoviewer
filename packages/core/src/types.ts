@@ -45,6 +45,11 @@ export interface Equipment {
   // should look like.
   manufacturer?:             string | null
   model?:                    string | null
+  // Opaque 16-hex token backing the public read-only placard route
+  // /qr/{qr_token} (migration 106; NOT NULL + unique in the DB). Optional
+  // here so existing Equipment literals/fixtures don't need to set it; it's
+  // always present at runtime.
+  qr_token?:                 string | null
   // Supervisor review flag (migration 189). A public-link reviewer or
   // admin marks equipment for closer admin follow-up; the admin queue
   // surface drains these. NULL on every row that's never been flagged.
