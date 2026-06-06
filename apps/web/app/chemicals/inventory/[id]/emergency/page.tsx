@@ -33,11 +33,22 @@ interface EmergencyItem {
   chemical_locations: { name: string; path: string | null } | null
 }
 
-// Strip everything except digits and a leading + so the tel: href dials
-// cleanly regardless of how the SDS formatted the number.
-function telHref(phone: string): string {
-  const cleaned = phone.replace(/[^\d+]/g, '')
-  return `tel:${cleaned}`
+// SDS §1 emergency-contact values are free text and routinely hold non-dial
+// junk ("See section 1", "N/A", "Contact supplier", blanks). Returning a
+// tel: link for those would render a confident red call button that dials
+// garbage (e.g. "See section 1" → tel:1) — dangerous in an actual incident.
+// So only treat a value as dialable when it carries enough digits to be a
+// real phone number; otherwise return null and fall back to the
+// "no number on file" notice.
+const MIN_PHONE_DIGITS = 7
+
+function telHref(phone: string): string | null {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length < MIN_PHONE_DIGITS) return null
+  // Preserve a leading + (international dialing) but drop spaces, dashes,
+  // and parens so the dialer gets a clean number.
+  const plus = phone.trim().startsWith('+') ? '+' : ''
+  return `tel:${plus}${digits}`
 }
 
 export default function ChemicalEmergencyPage() {
@@ -76,6 +87,10 @@ export default function ChemicalEmergencyPage() {
   const product   = item?.chemical_products ?? null
   const firstAid  = useMemo(() => firstAidEntries(product?.first_aid), [product])
   const spill     = useMemo(() => spillCleanupEntries(product?.spill_cleanup), [product])
+  const callHref  = useMemo(
+    () => (product?.emergency_phone ? telHref(product.emergency_phone) : null),
+    [product],
+  )
 
   if (loading) {
     return (
@@ -99,10 +114,11 @@ export default function ChemicalEmergencyPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-5 space-y-4">
-      {/* Tap-to-call: the single most time-critical action, pinned to the top. */}
-      {product.emergency_phone ? (
+      {/* Tap-to-call: the single most time-critical action, pinned to the top.
+          Only shown when the SDS value is actually dialable (see telHref). */}
+      {callHref ? (
         <a
-          href={telHref(product.emergency_phone)}
+          href={callHref}
           className="flex items-center justify-center gap-3 w-full rounded-xl bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-xl font-bold py-5 shadow-lg"
         >
           <Phone className="w-7 h-7" />

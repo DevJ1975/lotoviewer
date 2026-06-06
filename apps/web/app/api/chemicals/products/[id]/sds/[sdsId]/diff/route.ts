@@ -36,7 +36,7 @@ export async function GET(req: Request, ctx: Ctx) {
     // product and have a parsed payload to compare.
     const { data: target, error: tErr } = await admin
       .from('chemical_sds_documents')
-      .select('id, parsed_payload, product_id, tenant_id')
+      .select('id, parsed_payload, product_id, tenant_id, created_at')
       .eq('id', sdsId)
       .eq('tenant_id', tenantId)
       .eq('product_id', productId)
@@ -47,9 +47,12 @@ export async function GET(req: Request, ctx: Ctx) {
       return NextResponse.json({ error: 'SDS has not been parsed yet.' }, { status: 409 })
     }
 
-    // The baseline: the most recent OTHER revision that a human already
-    // approved. Newest first by published revision_date, then by upload
-    // time as a tiebreak for revisions that share (or omit) a date.
+    // The baseline: the most recent approved revision that was uploaded
+    // BEFORE the target. The `.lt('created_at', …)` is load-bearing — without
+    // it the query could pick a NEWER approved revision (e.g. when an older
+    // sheet is re-reviewed), inverting the "before → after" delta. Upload
+    // time (created_at, always present) is the precedence axis; we then take
+    // the newest published revision_date among those older uploads.
     const { data: priors, error: pErr } = await admin
       .from('chemical_sds_documents')
       .select('id, parsed_payload, revision_date, created_at')
@@ -58,6 +61,7 @@ export async function GET(req: Request, ctx: Ctx) {
       .eq('parse_review_status', 'approved')
       .neq('id', sdsId)
       .not('parsed_payload', 'is', null)
+      .lt('created_at', target.created_at)
       .order('revision_date', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
       .limit(1)

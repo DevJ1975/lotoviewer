@@ -102,42 +102,50 @@ export function isValidCas(value: string): boolean {
   return sum % 10 === checkDigit
 }
 
-// GHS code validators. The format is fixed (a letter + three digits) but
-// not every numeric combination is an assigned statement; we range-check
-// against the GHS-published blocks so typos like H999 or P000 are caught
-// without hard-coding the full enumerated list (which the SDS standard
-// revises periodically).
-const HAZARD_CODE_RE = /^H(\d{3})$/
+// GHS code validators. Beyond the simple "H225"/"P210" shape, real SDSs
+// (and the SDS parser, which is told to copy codes verbatim) carry:
+//   - combined statements joined with '+':  "H315+H319", "P305+P351+P338"
+//   - EU-specific hazards:                   "EUH066", "EUH208"
+//   - route-of-exposure suffixes:            "H350i", "H360FD"
+// So we validate the GRAMMAR (prefix + three digits + optional 1–2 letter
+// suffix), splitting combined codes on '+' and checking each segment, rather
+// than enumerating the full GHS list (which the standard revises). Standard
+// H-codes are additionally range-checked against the published blocks; EUH
+// codes carry their own numbering, so only their shape is validated.
+const HAZARD_CODE_RE = /^(EU)?H(\d{3})[A-Za-z]{0,2}$/
 const PRECAUTIONARY_CODE_RE = /^P(\d{3})$/
 
-/**
- * Validate a GHS hazard statement code (e.g. "H225").
- *
- * GHS groups hazard codes into three blocks by number:
- *   - physical hazards:      H200–H290
- *   - health hazards:        H300–H373
- *   - environmental hazards: H400–H420
- * A pragmatic range check per block is enough to reject junk while
- * tolerating future additions inside an existing block.
- */
-export function isValidHazardCode(code: string): boolean {
+function isValidHazardSegment(code: string): boolean {
   const m = HAZARD_CODE_RE.exec(code)
   if (!m) return false
-  const n = Number(m[1])
-  return (n >= 200 && n <= 290)
-      || (n >= 300 && n <= 373)
-      || (n >= 400 && n <= 420)
+  if (m[1] === 'EU') return true // EUH0xx — EU-specific, own numbering
+  const n = Number(m[2])
+  return (n >= 200 && n <= 290)  // physical hazards
+      || (n >= 300 && n <= 373)  // health hazards
+      || (n >= 400 && n <= 420)  // environmental hazards
 }
 
-/**
- * Validate a GHS precautionary statement code (e.g. "P210").
- * Precautionary codes span a single contiguous block, P101–P501.
- */
-export function isValidPrecautionaryCode(code: string): boolean {
+function isValidPrecautionarySegment(code: string): boolean {
   const m = PRECAUTIONARY_CODE_RE.exec(code)
   if (!m) return false
   const n = Number(m[1])
   return n >= 101 && n <= 501
+}
+
+/**
+ * Validate a GHS hazard statement code (e.g. "H225", "H315+H319", "EUH066",
+ * "H350i"). Combined codes are valid only if every '+'-joined segment is.
+ */
+export function isValidHazardCode(code: string): boolean {
+  return code.split('+').every(seg => isValidHazardSegment(seg.trim()))
+}
+
+/**
+ * Validate a GHS precautionary statement code (e.g. "P210",
+ * "P305+P351+P338"). Each '+'-joined segment must be a P-code in P101–P501.
+ */
+export function isValidPrecautionaryCode(code: string): boolean {
+  return code.split('+').every(seg => isValidPrecautionarySegment(seg.trim()))
 }
 
 export interface ProductInputErrors {
