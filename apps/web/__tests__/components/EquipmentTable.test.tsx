@@ -55,14 +55,14 @@ describe('EquipmentTable', () => {
 
     it('shows correct item count — plural', () => {
       render(<EquipmentTable equipment={sampleData} />)
-      expect(screen.getByText('4 items')).toBeInTheDocument()
+      expect(screen.getByText('004 ITEMS')).toBeInTheDocument()
     })
 
     it('shows singular "item" count for one result', async () => {
       const user = userEvent.setup()
       render(<EquipmentTable equipment={sampleData} />)
       await user.type(screen.getByPlaceholderText(/search/i), 'EQ-001')
-      expect(screen.getByText('1 item')).toBeInTheDocument()
+      expect(screen.getByText('001 ITEM')).toBeInTheDocument()
     })
 
     it('shows "No equipment found." when nothing matches', async () => {
@@ -70,7 +70,7 @@ describe('EquipmentTable', () => {
       render(<EquipmentTable equipment={sampleData} />)
       await user.type(screen.getByPlaceholderText(/search/i), 'ZZZZZ')
       expect(screen.getByText('No equipment found.')).toBeInTheDocument()
-      expect(screen.getByText('0 items')).toBeInTheDocument()
+      expect(screen.getByText('000 ITEMS')).toBeInTheDocument()
     })
 
     it('shows "View PDF" link when placard_url is present', () => {
@@ -152,7 +152,7 @@ describe('EquipmentTable', () => {
       render(<EquipmentTable equipment={sampleData} />)
       await user.click(screen.getByRole('button', { name: 'Missing' }))
       await user.click(screen.getByRole('button', { name: 'All' }))
-      expect(screen.getByText('4 items')).toBeInTheDocument()
+      expect(screen.getByText('004 ITEMS')).toBeInTheDocument()
     })
   })
 

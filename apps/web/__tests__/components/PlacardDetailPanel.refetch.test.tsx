@@ -58,6 +58,12 @@ vi.mock('next/link', () => ({
     <a href={href}>{children}</a>,
 }))
 
+// Provide a stable non-null tenantId so the effect's guard condition
+// `if (!equipmentId || !tenantId)` does not short-circuit and skip fetches.
+vi.mock('@/components/TenantProvider', () => ({
+  useTenant: () => ({ tenantId: 'tenant-test-01' }),
+}))
+
 function makeEquipment(overrides: Partial<Equipment> = {}): Equipment {
   return {
     equipment_id: 'EQ-001',

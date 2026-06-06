@@ -6,6 +6,12 @@ import type { LotoReview } from '@soteria/core/types'
 
 vi.mock('@/lib/supabase', () => ({ supabase: { from: vi.fn() } }))
 
+// useReviews now requires tenantId from useTenant(). Provide a stable
+// demo tenant so the hook doesn't short-circuit with "No active tenant".
+vi.mock('@/components/TenantProvider', () => ({
+  useTenant: () => ({ tenantId: '00000000-0000-0000-0000-0000000aabbb' }),
+}))
+
 const BASE_REVIEW: LotoReview = {
   id: 'r1', department: 'Electrical', reviewer_name: 'Jane Smith',
   reviewer_email: 'jane@example.com', signed_at: '2025-01-01T10:00:00Z',
@@ -13,6 +19,11 @@ const BASE_REVIEW: LotoReview = {
 }
 
 function makeFetchChain(data: LotoReview[] | null, error: Error | null = null) {
+  // The hook builds: .from('loto_reviews').select('*')
+  //   .eq('tenant_id', tenantId).eq('department', department)
+  //   .order('created_at', { ascending: false }).limit(10)
+  // All methods must return the same chain so chaining works regardless
+  // of call order.
   const chain: Record<string, unknown> = {}
   chain.select = vi.fn().mockReturnValue(chain)
   chain.eq     = vi.fn().mockReturnValue(chain)
