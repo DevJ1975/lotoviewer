@@ -102,10 +102,27 @@ describe('Regression #104 — admin URL renames + 301 redirects', () => {
   })
 
   it('tile redirects carry :path* wildcards on both sides (preserves deep links)', () => {
+    // Normal case: legacy `/admin/<slug>/:path*` → new `/admin/<section>/<slug>/:path*`
+    // so a deep link like /admin/members/3 lands on /admin/people/members/3.
+    //
+    // Exemption: when the NEW canonical href lives *under* the legacy path
+    // (Risk Intelligence: /admin/insights → /admin/insights/risk-intelligence),
+    // a `/:path*` source would (a) clobber the live sibling pages under
+    // /admin/insights (scorecard, ai-usage, …) and (b) infinitely re-match its
+    // own destination (ERR_TOO_MANY_REDIRECTS). Those redirects intentionally
+    // map the bare legacy path exactly, with NO wildcard. See getAdminRedirects.
     const tileRedirects = getAdminRedirects().filter(r => r.destination !== '/admin')
     for (const r of tileRedirects) {
-      expect(r.source.endsWith('/:path*')).toBe(true)
-      expect(r.destination.endsWith('/:path*')).toBe(true)
+      const nested = r.destination.startsWith(`${r.source}/`)
+      if (nested) {
+        // Bare-path redirect only — no wildcard on either side, or the rule
+        // would greedily re-match its own destination and loop.
+        expect(r.source.endsWith('/:path*')).toBe(false)
+        expect(r.destination.endsWith('/:path*')).toBe(false)
+      } else {
+        expect(r.source.endsWith('/:path*')).toBe(true)
+        expect(r.destination.endsWith('/:path*')).toBe(true)
+      }
     }
   })
 })

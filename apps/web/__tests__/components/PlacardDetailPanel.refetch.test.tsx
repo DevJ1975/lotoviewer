@@ -58,6 +58,13 @@ vi.mock('next/link', () => ({
     <a href={href}>{children}</a>,
 }))
 
+// The panel scopes its fetches to the active tenant; without a tenantId the
+// effect early-returns before touching Supabase. Supply a stable id so the
+// re-fetch invariants under test (keyed on equipment_id) are actually exercised.
+vi.mock('@/components/TenantProvider', () => ({
+  useTenant: () => ({ tenantId: '00000000-0000-0000-0000-0000000aabbb' }),
+}))
+
 function makeEquipment(overrides: Partial<Equipment> = {}): Equipment {
   return {
     equipment_id: 'EQ-001',
