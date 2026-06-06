@@ -42,6 +42,10 @@ export const MODEL_BY_SURFACE = {
   // is worth the extra cost — and every parse runs through a human
   // review queue before fields land on the product.
   'parse-sds':                        SONNET,
+  // SDS discovery: web-search to locate a manufacturer SDS PDF, then a
+  // structured-output pass to normalize candidates. Sonnet — the search
+  // reasoning is the same class as parse-sds, and web_search is supported.
+  'discover-sds':                     SONNET,
   // Cross-module assistant on the home page. Tool-use heavy, must
   // reason across LOTO + confined-spaces + chemicals + incidents +
   // uploaded company policies. Sonnet for the chat itself.
