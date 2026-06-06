@@ -120,15 +120,24 @@ describe('isValidCas', () => {
 })
 
 describe('isValidHazardCode', () => {
-  it.each(['H225', 'H319', 'H400'])('accepts in-range hazard code %s', code => {
+  it.each([
+    'H225', 'H319', 'H400',
+    'H315+H319',       // combined statement
+    'H300+H310+H330',  // triple-combined
+    'EUH066', 'EUH208', // EU-specific hazards
+    'H350i', 'H360FD',  // route-of-exposure suffixes
+  ])('accepts real hazard code %s', code => {
     expect(isValidHazardCode(code)).toBe(true)
   })
 
   it.each([
-    'H999',  // no GHS block covers 999
-    'X100',  // wrong prefix
-    'H22',   // too few digits
-    'H2255', // too many digits
+    'H999',       // no GHS block covers 999
+    'X100',       // wrong prefix
+    'H22',        // too few digits
+    'H2255',      // too many digits
+    'H315+X319',  // one segment is junk
+    'H315+',      // trailing combiner
+    'EUH22',      // EU code, too few digits
     '',
   ])('rejects junk hazard code %s', code => {
     expect(isValidHazardCode(code)).toBe(false)
@@ -136,15 +145,21 @@ describe('isValidHazardCode', () => {
 })
 
 describe('isValidPrecautionaryCode', () => {
-  it.each(['P210', 'P501'])('accepts in-range precautionary code %s', code => {
+  it.each([
+    'P210', 'P501',
+    'P305+P351+P338', // combined precautionary statement
+    'P301+P310',
+  ])('accepts real precautionary code %s', code => {
     expect(isValidPrecautionaryCode(code)).toBe(true)
   })
 
   it.each([
-    'P000',  // below the P101 floor
-    'P999',  // above the P501 ceiling
-    'X100',  // wrong prefix
-    'P21',   // too few digits
+    'P000',       // below the P101 floor
+    'P999',       // above the P501 ceiling
+    'X100',       // wrong prefix
+    'P21',        // too few digits
+    'P305+P999',  // one segment out of range
+    'EUH066',     // not a precautionary code
     '',
   ])('rejects junk precautionary code %s', code => {
     expect(isValidPrecautionaryCode(code)).toBe(false)

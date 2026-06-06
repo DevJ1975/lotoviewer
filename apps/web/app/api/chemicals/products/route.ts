@@ -54,7 +54,11 @@ export async function GET(req: Request) {
     if (!includeArchived) q = q.is('archived_at', null)
 
     if (search) {
-      const safe = search.replace(/[,()]/g, ' ').trim()
+      // Strip characters that have special meaning to PostgREST's filter
+      // grammar: commas/parens delimit .or() clauses, and '*' is PostgREST's
+      // wildcard alias for '%' in (i)like — leaving any of them in lets a
+      // search term break out of its clause or act as an unintended wildcard.
+      const safe = search.replace(/[,()*]/g, ' ').trim()
       if (safe) {
         // ilike on name + manufacturer + product_code + synonyms so a
         // worker can find a product by an alternate name ("propan-2-one"
@@ -62,7 +66,11 @@ export async function GET(req: Request) {
         // synonyms text[] (migration 214) — PostgREST's .or() only filters
         // real columns, not SQL expressions, and the matching trigram
         // index lives on that column too.
-        const escaped = safe.replace(/[%_]/g, m => `\\${m}`)
+        //
+        // Escape LIKE specials so the term matches literally. Backslash is
+        // the escape char itself and MUST be in the class so a literal '\'
+        // becomes '\\' rather than escaping the next character.
+        const escaped = safe.replace(/[\\%_]/g, m => `\\${m}`)
         q = q.or([
           `name.ilike.%${escaped}%`,
           `manufacturer.ilike.%${escaped}%`,
