@@ -26,6 +26,7 @@ export type AiSurface =
   | 'generate-confined-space-hazards'
   | 'classify-recordability'
   | 'parse-sds'
+  | 'discover-sds'
   | 'assistant-chat'
   | 'assistant-scan-photo'
   | 'assistant-hazards'
@@ -52,6 +53,10 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   'generate-confined-space-hazards':  { perHour: 20, perDay: 100 },
   'classify-recordability':           { perHour: 30, perDay: 200 },
   'parse-sds':                        { perHour: 30, perDay: 200 },
+  // SDS discovery runs a multi-round web_search loop plus a normalize
+  // call — expensive, and a rare onboarding/"can't find the URL" action.
+  // Cap aggressively.
+  'discover-sds':                     { perHour: 15, perDay: 60 },
   // Home-page assistant — conversational, expected to be the
   // highest-volume AI surface once it lands.
   'assistant-chat':                   { perHour: 60, perDay: 400 },

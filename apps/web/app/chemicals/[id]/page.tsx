@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Download, ExternalLink, FileText, Loader2, RefreshCw, Sparkles } from 'lucide-react'
+import { ArrowLeft, Download, ExternalLink, FileText, Loader2, RefreshCw, Search, Sparkles } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import Dropzone from '@/components/ui/Dropzone'
@@ -12,6 +12,9 @@ import PrintLabelPanel from './_components/PrintLabelPanel'
 import ContainersPanel from './_components/ContainersPanel'
 import JhaUsagePanel from './_components/JhaUsagePanel'
 import TrainingRequirementsPanel from './_components/TrainingRequirementsPanel'
+import SdsFacsimileViewer from './_components/SdsFacsimileViewer'
+import SdsCandidatePicker from './_components/SdsCandidatePicker'
+import { type SdsCandidate } from '@/lib/ai/discoverSds'
 
 interface Product {
   id:                string
@@ -70,6 +73,10 @@ export default function ChemicalDetailPage() {
   const [checkingDrift, setCheckingDrift] = useState(false)
   const [driftMessage, setDriftMessage] = useState<string | null>(null)
   const [revisionDate, setRevisionDate] = useState('')
+  const [facsimileSdsId, setFacsimileSdsId] = useState<string | null>(null)
+  const [discovering, setDiscovering] = useState(false)
+  const [candidates, setCandidates] = useState<SdsCandidate[] | null>(null)
+  const [fetchingUrl, setFetchingUrl] = useState<string | null>(null)
 
   const buildHeaders = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
@@ -164,6 +171,42 @@ export default function ChemicalDetailPage() {
       router.push('/chemicals/review')
     } finally {
       setParsingId(null)
+    }
+  }
+
+  async function findSdsOnline() {
+    if (!id) return
+    setDiscovering(true)
+    setError(null)
+    setCandidates(null)
+    try {
+      const headers = await buildHeaders()
+      const res  = await fetch(`/api/chemicals/products/${id}/sds/discover`, { method: 'POST', headers })
+      const body = await res.json()
+      if (!res.ok) { setError(body.error ?? `HTTP ${res.status}`); return }
+      setCandidates(body.candidates ?? [])
+    } finally {
+      setDiscovering(false)
+    }
+  }
+
+  async function confirmFetch(url: string) {
+    if (!id) return
+    setFetchingUrl(url)
+    setError(null)
+    try {
+      const headers = await buildHeaders()
+      const res  = await fetch(`/api/chemicals/products/${id}/sds/fetch`, {
+        method:  'POST',
+        headers: { ...headers, 'content-type': 'application/json' },
+        body:    JSON.stringify({ url }),
+      })
+      const body = await res.json()
+      if (!res.ok) { setError(body.error ?? `HTTP ${res.status}`); return }
+      setCandidates(null)
+      await load()
+    } finally {
+      setFetchingUrl(null)
     }
   }
 
@@ -327,6 +370,15 @@ export default function ChemicalDetailPage() {
             <FileText className="w-4 h-4" /> Safety Data Sheets
           </h2>
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => void findSdsOnline()}
+              disabled={discovering}
+              className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline disabled:opacity-60"
+              title="Use AI web search to find this product's SDS online"
+            >
+              {discovering ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
+              {discovering ? 'Searching…' : 'Find SDS online'}
+            </button>
             {product.sds_source_url && (
               <>
                 <a
@@ -356,6 +408,15 @@ export default function ChemicalDetailPage() {
           <div className="mb-3 rounded border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/20 px-3 py-2 text-sm text-indigo-800 dark:text-indigo-300">
             {driftMessage}
           </div>
+        )}
+
+        {candidates !== null && (
+          <SdsCandidatePicker
+            candidates={candidates}
+            busyUrl={fetchingUrl}
+            onConfirm={url => void confirmFetch(url)}
+            onDismiss={() => setCandidates(null)}
+          />
         )}
 
         <div className="block mb-3">
@@ -434,6 +495,15 @@ export default function ChemicalDetailPage() {
                   >
                     <Download className="w-3 h-3" /> View
                   </button>
+                  {rev.parse_review_status === 'approved' && rev.parse_model && (
+                    <button
+                      onClick={() => setFacsimileSdsId(rev.id)}
+                      className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline"
+                      title="View a reformatted, standardized copy of this SDS (not the original)"
+                    >
+                      <FileText className="w-3 h-3" /> Facsimile
+                    </button>
+                  )}
                 </li>
               )
             })}
@@ -445,6 +515,15 @@ export default function ChemicalDetailPage() {
         <Card title="Notes">
           <p className="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">{product.notes}</p>
         </Card>
+      )}
+
+      {facsimileSdsId && (
+        <SdsFacsimileViewer
+          productId={product.id}
+          sdsId={facsimileSdsId}
+          buildHeaders={buildHeaders}
+          onClose={() => setFacsimileSdsId(null)}
+        />
       )}
     </div>
   )
