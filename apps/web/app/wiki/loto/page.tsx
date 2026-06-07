@@ -1,10 +1,20 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.1.0'
-const LAST_UPDATED    = '2026-05-15'
+const CURRENT_VERSION = '1.1.1'
+const LAST_UPDATED    = '2026-06-07'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.1',
+    date:    '2026-06-07',
+    changes: [
+      'The placard verification badge now reads "Needs COI review" in red ' +
+      '(previously a green "Verified" check) on the equipment detail header, ' +
+      'the dashboard equipment list, and the public QR placard view — it ' +
+      'flags that a Certificate of Insurance review is still outstanding.',
+    ],
+  },
   {
     version: '1.1.0',
     date:    '2026-05-15',
