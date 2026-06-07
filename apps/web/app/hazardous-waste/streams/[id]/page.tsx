@@ -16,6 +16,7 @@ import {
   type WasteJurisdiction,
 } from '@soteria/core/hazardousWaste'
 import { buildLdrNotice, ldrNoticeStatus } from '@soteria/core/ldrNotice'
+import { partitionWasteCodes } from '@soteria/core/wasteCodes'
 
 const STATUS_LABEL: Record<HazardousWasteStreamStatus, string> = {
   draft:    'Draft',
@@ -173,7 +174,7 @@ export default function HazardousWasteStreamDetailPage() {
         {stream.description && <Detail label="Description" value={stream.description} wide />}
         {stream.physical_state && <Detail label="Physical state" value={stream.physical_state} />}
         {stream.hazards.length > 0 && <Detail label="Hazards" value={stream.hazards.join(', ')} />}
-        {stream.waste_codes.length > 0 && <Detail label="Waste codes" value={stream.waste_codes.join(', ')} />}
+        {stream.waste_codes.length > 0 && <WasteCodesDetail codes={stream.waste_codes} />}
         {stream.determination_basis && <Detail label="Determination basis" value={stream.determination_basis} wide />}
         {stream.review_due_date && <Detail label="Review due" value={stream.review_due_date} />}
         {stream.notes && <Detail label="Notes" value={stream.notes} wide />}
@@ -257,6 +258,28 @@ function LdrSection({
         </button>
       )}
     </section>
+  )
+}
+
+function WasteCodesDetail({ codes }: { codes: string[] }) {
+  const { epa, california, unknown } = partitionWasteCodes(codes)
+  const chip = (code: string, tone: string) => (
+    <span key={code} className={`rounded px-1.5 py-0.5 text-xs font-semibold ${tone}`}>{code}</span>
+  )
+  return (
+    <div className="sm:col-span-2">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Waste codes</dt>
+      <dd className="mt-1 flex flex-wrap gap-1.5">
+        {epa.map(c => chip(c, 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200'))}
+        {california.map(c => chip(c, 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'))}
+        {unknown.map(c => chip(c, 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'))}
+      </dd>
+      <dd className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+        <span className="text-sky-700 dark:text-sky-300">EPA</span> ·{' '}
+        <span className="text-emerald-700 dark:text-emerald-300">California</span>
+        {unknown.length > 0 && <> · <span className="text-slate-500">unrecognized</span></>}
+      </dd>
+    </div>
   )
 }
 

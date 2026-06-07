@@ -9,6 +9,8 @@ import { useFacility } from '@/components/FacilityProvider'
 import { supabase } from '@/lib/supabase'
 import {
   ageStatusForContainer,
+  evaluateOnSiteQuantity,
+  evaluateSatelliteCap,
   HAZARDOUS_WASTE_AREA_LABEL,
   HAZARDOUS_WASTE_CONTAINER_STATUSES,
   parseFacilityProfile,
@@ -16,6 +18,7 @@ import {
   type HazardousWasteContainerRow,
   type HazardousWasteContainerStatus,
   type HazardousWasteStreamRow,
+  type SatelliteCapResult,
 } from '@soteria/core/hazardousWaste'
 
 // Container list — surfaces accumulation aging using the containerAgeStatus
@@ -100,12 +103,29 @@ export default function HazardousWasteContainersPage() {
       const ageStatus = c.stream
         ? ageStatusForContainer(c, c.stream, now, facilityProfile)
         : { ageDays: null, limitDays: null, daysUntilLimit: null, status: 'unknown' as const }
-      return { container: c, age: ageStatus }
+      // Satellite accumulation has no time clock; its control is the volume cap
+      // (40 CFR 262.15). Surface the cap status on satellite containers.
+      const satelliteCap: SatelliteCapResult | null =
+        c.area_type === 'satellite_accumulation' && c.stream
+          ? evaluateSatelliteCap(c.stream.acute_class, c.volume_quantity, c.volume_unit)
+          : null
+      return { container: c, age: ageStatus, satelliteCap }
     })
   }, [rows, now, facilityProfile])
 
   const overLimitCount = enriched?.filter(e => e.age.status === 'over_limit').length ?? 0
   const approachingCount = enriched?.filter(e => e.age.status === 'approaching').length ?? 0
+  const saaOverCount = enriched?.filter(e => e.satelliteCap?.status === 'at_or_over_cap').length ?? 0
+
+  // Facility-wide on-site quantity roll-up (SQG 6,000 kg / VSQG 1,000 kg,
+  // 40 CFR 262.14/262.16). Only meaningful over the full, unfiltered set for a
+  // single facility, so we show it only in the "All / no stream filter" view.
+  const onSite = useMemo(() => {
+    if (!rows || filter !== 'all' || streamId) return null
+    const category = facilityProfile?.generator_category ?? null
+    const result = evaluateOnSiteQuantity(rows, category ?? 'lqg')
+    return { result, category }
+  }, [rows, filter, streamId, facilityProfile])
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
@@ -140,7 +160,7 @@ export default function HazardousWasteContainersPage() {
         </Link>
       </header>
 
-      {(overLimitCount > 0 || approachingCount > 0) && (
+      {(overLimitCount > 0 || approachingCount > 0 || saaOverCount > 0) && (
         <div className="flex flex-wrap gap-2">
           {overLimitCount > 0 && (
             <span className={`px-3 py-1 rounded-md text-xs font-semibold ${AGE_TONE.over_limit}`}>
@@ -152,8 +172,15 @@ export default function HazardousWasteContainersPage() {
               {approachingCount} approaching
             </span>
           )}
+          {saaOverCount > 0 && (
+            <span className={`px-3 py-1 rounded-md text-xs font-semibold ${AGE_TONE.over_limit}`}>
+              {saaOverCount} over satellite cap
+            </span>
+          )}
         </div>
       )}
+
+      {onSite && <OnSiteRollup result={onSite.result} category={onSite.category} />}
 
       <div className="flex flex-wrap gap-2 text-xs">
         {(['all', ...HAZARDOUS_WASTE_CONTAINER_STATUSES] as const).map(value => (
@@ -190,7 +217,7 @@ export default function HazardousWasteContainersPage() {
 
       {enriched && enriched.length > 0 && (
         <ul className="space-y-2">
-          {enriched.map(({ container, age }) => (
+          {enriched.map(({ container, age, satelliteCap }) => (
             <li key={container.id}
                 className="rounded-lg border border-slate-200 dark:border-slate-800 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -206,15 +233,24 @@ export default function HazardousWasteContainersPage() {
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
-                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${AGE_TONE[age.status]}`}>
-                    {AGE_LABEL[age.status]}
-                    {age.ageDays != null ? ` · ${age.ageDays}d` : ''}
-                    {age.limitDays != null && age.daysUntilLimit != null
-                      ? age.daysUntilLimit >= 0
-                        ? ` · ${age.daysUntilLimit}d left`
-                        : ` · ${Math.abs(age.daysUntilLimit)}d over`
-                      : ''}
-                  </span>
+                  {satelliteCap?.status === 'at_or_over_cap' ? (
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${AGE_TONE.over_limit}`}
+                      title={`Exceeds the ${satelliteCap.capLabel} satellite cap — date the excess and move it within 3 calendar days (40 CFR 262.15)`}
+                    >
+                      SAA CAP · move ≤3d
+                    </span>
+                  ) : (
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${AGE_TONE[age.status]}`}>
+                      {AGE_LABEL[age.status]}
+                      {age.ageDays != null ? ` · ${age.ageDays}d` : ''}
+                      {age.limitDays != null && age.daysUntilLimit != null
+                        ? age.daysUntilLimit >= 0
+                          ? ` · ${age.daysUntilLimit}d left`
+                          : ` · ${Math.abs(age.daysUntilLimit)}d over`
+                        : ''}
+                    </span>
+                  )}
                   <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
                     {STATUS_LABEL[container.status]}
                   </span>
@@ -245,5 +281,34 @@ export default function HazardousWasteContainersPage() {
         </ul>
       )}
     </main>
+  )
+}
+
+function OnSiteRollup({
+  result, category,
+}: {
+  result: ReturnType<typeof evaluateOnSiteQuantity>
+  category: HazardousWasteStreamRow['generator_category'] | null
+}) {
+  const kg = Math.round(result.totalKg).toLocaleString()
+  const tone = AGE_TONE[result.status]
+  const unconvertible = result.unconvertibleCount > 0
+    ? ` · ${result.unconvertibleCount} in volume units not counted`
+    : ''
+
+  let body: string
+  if (category == null) {
+    body = `${kg} kg on site. Set the facility generator category to track the on-site quantity limit.`
+  } else if (result.capKg == null) {
+    body = `${kg} kg on site. LQG has no on-site quantity cap (gated by the 90-day clock).`
+  } else {
+    const pct = Math.round((result.totalKg / result.capKg) * 100)
+    body = `${kg} kg of ${result.capKg.toLocaleString()} kg on-site limit (${pct}%) — ${category.toUpperCase()}, 40 CFR 262.${category === 'vsqg' ? '14' : '16'}.`
+  }
+
+  return (
+    <div className={`rounded-md px-3 py-2 text-xs font-medium ${tone}`}>
+      <span className="font-semibold">On-site total: </span>{body}{unconvertible}
+    </div>
   )
 }
