@@ -98,7 +98,7 @@ export default async function QrPlacardPage({
                 {placard.department}
               </span>
             ) : null}
-            <VerifiedBadge verified={placard.verified} verifiedDate={placard.verified_date} />
+            <VerifiedBadge verified={placard.verified} />
           </div>
         </header>
 
@@ -128,12 +128,12 @@ export default async function QrPlacardPage({
 }
 
 function VerifiedBadge({
-  verified, verifiedDate,
-}: { verified: boolean | null; verifiedDate: string | null }) {
+  verified,
+}: { verified: boolean | null }) {
   if (verified) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-400/20 px-2.5 py-1 text-xs font-semibold text-emerald-100">
-        ✓ Verified{verifiedDate ? ` · ${formatDate(verifiedDate)}` : ''}
+      <span className="inline-flex items-center gap-1.5 rounded-md bg-rose-400/20 px-2.5 py-1 text-xs font-semibold text-rose-100">
+        Needs COI review
       </span>
     )
   }
@@ -188,10 +188,4 @@ function NotFound() {
       </div>
     </main>
   )
-}
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  } catch { return iso }
 }

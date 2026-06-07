@@ -315,7 +315,7 @@ const EquipmentRow = memo(function EquipmentRow({ eq, status, isSelected, isFlag
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="placard-numeric text-sm font-bold text-brand-navy dark:text-brand-yellow truncate">{eq.equipment_id}</span>
-              {eq.verified && <span className="text-emerald-500 text-xs" title="Verified">✓</span>}
+              {eq.verified && <span className="text-rose-600 dark:text-rose-400 text-[11px] font-semibold whitespace-nowrap">Needs COI review</span>}
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{shortName(eq.description)}</div>
           </div>

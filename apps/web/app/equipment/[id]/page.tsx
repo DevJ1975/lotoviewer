@@ -171,7 +171,7 @@ function EquipmentDetail() {
           <div className="hidden sm:block text-slate-300">|</div>
           <div className="flex items-center gap-2">
             <h1 className="font-mono text-base font-bold text-slate-900 dark:text-slate-100">{equipment.equipment_id}</h1>
-            {equipment.verified && <span className="text-emerald-500 text-sm" title="Verified">✓</span>}
+            {equipment.verified && <span className="text-rose-600 dark:text-rose-400 text-sm font-semibold whitespace-nowrap">Needs COI review</span>}
           </div>
         </div>
 
