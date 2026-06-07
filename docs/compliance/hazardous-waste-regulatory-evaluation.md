@@ -310,7 +310,7 @@ change needed beyond keeping the cross-module links live.
 | 6 | Split EPA vs. California waste codes (+ catalog/validation) | 22 CCR 66262 / manifest | **P1** | ✅ logic + UI (`wasteCodes.ts`, badged on stream detail) |
 | 7 | Structured acute / extremely-hazardous flag on streams | 40 CFR 262.15, 22 CCR | **P2** | ✅ schema + UI (`acute_class`) |
 | 8 | LDR determination + one-time notice tracking | 40 CFR 268.7 | **P2** | ✅ schema + UI + notice generator (`ldrNotice.ts`) |
-| 9 | LQG contingency plan + Quick Reference Guide record & deadline | 40 CFR 262.262 | **P2** | ◑ calendar entry; record table ⏳ |
+| 9 | LQG contingency plan + Quick Reference Guide record & deadline | 40 CFR 262.262 | **P2** | ✅ record + QRG re-submission tracking + UI |
 | 10 | RCRA personnel training annual obligation | 40 CFR 262.17(a)(7) | **P2** | ✅ calendar entry |
 | 11 | HAZWOPER applicability triage + 8-hr refresher deadline | 8 CCR 5192 | **P2** | ✅ logic + UI (worker-protection page) + calendar |
 | 12 | Incidental-vs-emergency spill decision aid | 8 CCR 5192(q) | **P2** | ✅ logic + UI (worker-protection page) |
@@ -335,8 +335,12 @@ The regulatory **logic** for every item is implemented and unit-tested in
   the notice content (EPA + California codes, generator EPA ID, certification);
   the stream detail page surfaces an outstanding-notice banner and a
   "mark sent" action.
-- **#9 contingency-plan record table.** Still a CRUD feature; the calendar
-  reminder covers the deadline-tracking value now.
+- **#9 contingency-plan record. ✅ Done.** A per-facility
+  `hazardous_waste_contingency_plans` record (migration 219) captures emergency
+  coordinators, equipment, evacuation plan, and max waste on site; the QRG
+  re-submission signal fires when the plan is amended after the last submission
+  (262.262). The `/hazardous-waste/contingency-plan` editor renders the status
+  banner, a "mark QRG submitted" action, and a Quick Reference Guide preview.
 - **Field wiring.** The containers page surfaces the area-/jurisdiction-/
   facility-aware aging, the on-site quantity roll-up (#4), and the satellite cap
   (#5); the stream detail badges waste codes by system (#6); a
