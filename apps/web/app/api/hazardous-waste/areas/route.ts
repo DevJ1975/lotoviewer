@@ -32,7 +32,7 @@ export async function GET(req: Request) {
   try {
     let q = gate.authedClient
       .from('hazardous_waste_areas')
-      .select('id, tenant_id, name, area_type, location_notes, weekly_cadence_days, archived_at, created_at, updated_at, created_by, updated_by')
+      .select('id, tenant_id, name, area_type, location_notes, weekly_cadence_days, photo_urls, archived_at, created_at, updated_at, created_by, updated_by')
       .eq('tenant_id', gate.tenantId)
       .order('name', { ascending: true })
     if (!includeArchived) q = q.is('archived_at', null)

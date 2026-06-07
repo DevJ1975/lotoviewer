@@ -332,6 +332,7 @@ export interface HazardousWasteAreaRow {
   area_type:            HazardousWasteAreaType
   location_notes:       string | null
   weekly_cadence_days:  number
+  photo_urls:           string[]
   archived_at:          string | null
   created_at:           string
   updated_at:           string
