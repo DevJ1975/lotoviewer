@@ -14,6 +14,7 @@ import {
   Loader2,
   MapPin,
   Plus,
+  ShieldAlert,
 } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
@@ -137,6 +138,13 @@ export default function HazardousWastePage() {
           >
             <Building2 className="h-4 w-4" />
             Facility profile
+          </Link>
+          <Link
+            href="/hazardous-waste/worker-protection"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <ShieldAlert className="h-4 w-4" />
+            Worker protection
           </Link>
           <Link
             href="/hazardous-waste/inspections/new"

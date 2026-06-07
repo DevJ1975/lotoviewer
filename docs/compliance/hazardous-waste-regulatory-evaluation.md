@@ -312,9 +312,9 @@ change needed beyond keeping the cross-module links live.
 | 8 | LDR determination + one-time notice tracking | 40 CFR 268.7 | **P2** | ✅ schema + UI + notice generator (`ldrNotice.ts`) |
 | 9 | LQG contingency plan + Quick Reference Guide record & deadline | 40 CFR 262.262 | **P2** | ◑ calendar entry; record table ⏳ |
 | 10 | RCRA personnel training annual obligation | 40 CFR 262.17(a)(7) | **P2** | ✅ calendar entry |
-| 11 | HAZWOPER applicability triage + 8-hr refresher deadline | 8 CCR 5192 | **P2** | ✅ logic (`hazwoper.ts`) + calendar |
-| 12 | Incidental-vs-emergency spill decision aid | 8 CCR 5192(q) | **P2** | ✅ logic (`classifyRelease`) |
-| 13 | California universal-waste sub-categories (e-waste/CRT/aerosol/PV) | 22 CCR 66273.1 | **P2** | ✅ catalog (`universalWasteCategories`) |
+| 11 | HAZWOPER applicability triage + 8-hr refresher deadline | 8 CCR 5192 | **P2** | ✅ logic + UI (worker-protection page) + calendar |
+| 12 | Incidental-vs-emergency spill decision aid | 8 CCR 5192(q) | **P2** | ✅ logic + UI (worker-protection page) |
+| 13 | California universal-waste sub-categories (e-waste/CRT/aerosol/PV) | 22 CCR 66273.1 | **P2** | ✅ catalog + UI reference (stored field on areas ⏳) |
 | 14 | California EPA-ID verification / fee calendar mapping | DTSC | **P2** | ✅ calendar entry |
 | 15 | California used-oil management notes | 22 CCR 66279 | **P3** | ◑ calendar/manual note |
 
@@ -337,14 +337,15 @@ The regulatory **logic** for every item is implemented and unit-tested in
   "mark sent" action.
 - **#9 contingency-plan record table.** Still a CRUD feature; the calendar
   reminder covers the deadline-tracking value now.
-- **Field wiring of the remaining helpers.** The containers page now surfaces
-  the area-aware + jurisdiction-aware + facility-profile aging, the on-site
-  quantity roll-up (#4), and the satellite cap (#5); the stream detail badges
-  waste codes by system (#6). Still pure-and-tested-but-unsurfaced: the HAZWOPER
-  triage (#11) and the incidental-vs-emergency spill aid (#12) — both want a
-  home in the training/incident flows — and the universal-waste sub-category
-  catalog (#13), which needs a field on areas/streams. The satellite **live
-  3-day countdown** (#5) needs an excess-dated-at field to compute against.
+- **Field wiring.** The containers page surfaces the area-/jurisdiction-/
+  facility-aware aging, the on-site quantity roll-up (#4), and the satellite cap
+  (#5); the stream detail badges waste codes by system (#6); a
+  `/hazardous-waste/worker-protection` page surfaces the HAZWOPER triage (#11),
+  the incidental-vs-emergency spill aid (#12), and the jurisdiction-aware
+  universal-waste category reference (#13). Remaining: a **stored** UW
+  sub-category field on areas/streams (#13), the satellite **live 3-day
+  countdown** (#5, needs an excess-dated-at field), and a deeper home for the
+  Cal/OSHA aids inside the training/incident modules.
 
 ---
 
