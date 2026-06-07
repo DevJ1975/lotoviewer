@@ -305,9 +305,9 @@ change needed beyond keeping the cross-module links live.
 | 1 | Area-aware accumulation clocks (UW 1-yr; satellite/used-oil not time-clocked) | 40 CFR 273.15, 262.15, 279 | **P0** | ✅ logic + UI |
 | 2 | California VSQG = SQG rules (jurisdiction dimension) | 22 CCR 66262.16 | **P1** | ✅ logic + schema + UI |
 | 3 | Facility/site profile owns generator category | 40 CFR 262.13 | **P1** | ✅ facility profile + resolver + UI |
-| 4 | On-site quantity caps (SQG 6,000 kg / VSQG 1,000 kg / 1 kg acute) | 40 CFR 262.14, 262.16 | **P1** | ✅ logic (`evaluateOnSiteQuantity`) |
-| 5 | Satellite 3-day move clock once volume cap exceeded | 40 CFR 262.15(a)(6) | **P1** | ✅ logic (`evaluateSatelliteCap`, `satelliteMoveClockStatus`) |
-| 6 | Split EPA vs. California waste codes (+ catalog/validation) | 22 CCR 66262 / manifest | **P1** | ✅ logic (`wasteCodes.ts`, pattern-partition — no schema split) |
+| 4 | On-site quantity caps (SQG 6,000 kg / VSQG 1,000 kg / 1 kg acute) | 40 CFR 262.14, 262.16 | **P1** | ✅ logic + UI (`evaluateOnSiteQuantity`) |
+| 5 | Satellite 3-day move clock once volume cap exceeded | 40 CFR 262.15(a)(6) | **P1** | ✅ logic + UI (`evaluateSatelliteCap`; live 3-day countdown needs an excess-date field) |
+| 6 | Split EPA vs. California waste codes (+ catalog/validation) | 22 CCR 66262 / manifest | **P1** | ✅ logic + UI (`wasteCodes.ts`, badged on stream detail) |
 | 7 | Structured acute / extremely-hazardous flag on streams | 40 CFR 262.15, 22 CCR | **P2** | ✅ schema + UI (`acute_class`) |
 | 8 | LDR determination + one-time notice tracking | 40 CFR 268.7 | **P2** | ✅ schema + UI + notice generator (`ldrNotice.ts`) |
 | 9 | LQG contingency plan + Quick Reference Guide record & deadline | 40 CFR 262.262 | **P2** | ◑ calendar entry; record table ⏳ |
@@ -337,10 +337,14 @@ The regulatory **logic** for every item is implemented and unit-tested in
   "mark sent" action.
 - **#9 contingency-plan record table.** Still a CRUD feature; the calendar
   reminder covers the deadline-tracking value now.
-- **Field wiring of the remaining helpers.** `evaluateSatelliteCap`,
-  `evaluateOnSiteQuantity`, the HAZWOPER triage, and the spill decision aid are
-  pure and tested but not yet surfaced on every screen (the containers page
-  consumes the area-aware + jurisdiction-aware + facility-profile aging today).
+- **Field wiring of the remaining helpers.** The containers page now surfaces
+  the area-aware + jurisdiction-aware + facility-profile aging, the on-site
+  quantity roll-up (#4), and the satellite cap (#5); the stream detail badges
+  waste codes by system (#6). Still pure-and-tested-but-unsurfaced: the HAZWOPER
+  triage (#11) and the incidental-vs-emergency spill aid (#12) — both want a
+  home in the training/incident flows — and the universal-waste sub-category
+  catalog (#13), which needs a field on areas/streams. The satellite **live
+  3-day countdown** (#5) needs an excess-dated-at field to compute against.
 
 ---
 
