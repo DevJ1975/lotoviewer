@@ -175,6 +175,8 @@ describe('getChildren', () => {
       'loto-import',
       'loto-decommission',
       'loto-review-portal',
+      'loto-group-permits',
+      'loto-manual',
     ])
   })
 

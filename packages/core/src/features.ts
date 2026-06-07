@@ -173,6 +173,26 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
     internal:    true,
   },
+  {
+    id:          'loto-group-permits',
+    name:        'Group Permits',
+    description: 'Group lockout/tagout permits (§1910.147(f)(3))',
+    href:        '/loto/group-permits',
+    category:    'safety',
+    parent:      'loto',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'loto-manual',
+    name:        'LOTO Manual',
+    description: 'Lockout/Tagout user manual and procedures',
+    href:        '/loto/manual',
+    category:    'safety',
+    parent:      'loto',
+    enabled:     true,
+    comingSoon:  false,
+  },
 
   // ── Equipment Readiness module ──────────────────────────────────────────
   {
