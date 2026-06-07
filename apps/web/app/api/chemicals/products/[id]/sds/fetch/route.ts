@@ -14,9 +14,12 @@ import { fetchSdsPdf, type FetchOutcome } from '@/lib/chemicalSdsFetch'
 //   - bytes come from fetchSdsPdf({ allowAnyHost: true }) — the host allowlist
 //     is relaxed only because a person already chose this URL; every other
 //     SSRF guard (https, private-IP, size/timeout, content-type) still applies.
-//   - we DON'T flip active_sds_id. The fetched PDF is unparsed and unreviewed;
-//     it becomes active only after the user runs Parse and approves it. We do
-//     record sds_source_url so the drift monitor can watch it going forward.
+//   - it becomes the active SDS on file, mirroring the upload route (newest
+//     revision wins; the prior active is superseded). The fetched PDF is the
+//     manufacturer original, so it is correct as the document of record — the
+//     facsimile's separate "approved parse" gate governs the regenerated view,
+//     not which original PDF is on file. We also record sds_source_url so the
+//     drift monitor can watch the source going forward.
 //
 // parse_review_status is 'approved' here only in the sense of "no AI parse to
 // review yet" (same as a manual upload); it flips to 'pending' when the user
@@ -71,7 +74,7 @@ export async function POST(req: Request, ctx: Ctx) {
     const admin = supabaseAdmin()
     const { data: product, error: pErr } = await admin
       .from('chemical_products')
-      .select('id')
+      .select('id, active_sds_id')
       .eq('id', productId)
       .eq('tenant_id', tenantId)
       .maybeSingle()
@@ -144,11 +147,23 @@ export async function POST(req: Request, ctx: Ctx) {
       return NextResponse.json({ error: insErr.message }, { status: 500 })
     }
 
+    // Activate the fetched original as the SDS on file, mirroring the upload
+    // route: the newest revision becomes active and the prior active one is
+    // superseded (never deleted — 1910.1020 retention).
+    if (product.active_sds_id && product.active_sds_id !== sds.id) {
+      await admin.from('chemical_sds_documents')
+        .update({
+          superseded_by:     sds.id,
+          superseded_at:     new Date().toISOString(),
+          superseded_reason: 'Replaced by SDS fetched from the web',
+        })
+        .eq('id', product.active_sds_id).eq('tenant_id', tenantId)
+    }
     await admin.from('chemical_products')
-      .update({ sds_source_url: result.finalUrl ?? url, updated_by: userId })
+      .update({ active_sds_id: sds.id, sds_source_url: result.finalUrl ?? url, updated_by: userId })
       .eq('id', productId).eq('tenant_id', tenantId)
 
-    return NextResponse.json({ sds }, { status: 201 })
+    return NextResponse.json({ sds, activated: true }, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }

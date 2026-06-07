@@ -167,4 +167,15 @@ describe('buildSdsFacsimile — boundaries', () => {
     // All 16 sections still present.
     expect(model.sections).toHaveLength(16)
   })
+
+  it('uses the code as the value for a statement with no text, and "—" as the label for one with no code', () => {
+    const payload = {
+      ...fullPayload(),
+      hazard_statements: [{ code: 'H225', text: '' }, { code: '', text: 'orphan text' }],
+    }
+    const model = buildSdsFacsimile(payload, META)
+    const s2 = byNumber(model, 2).fields
+    expect(s2.find(f => f.label === 'H225')?.value).toBe('H225')
+    expect(s2.find(f => f.label === '—')?.value).toBe('orphan text')
+  })
 })

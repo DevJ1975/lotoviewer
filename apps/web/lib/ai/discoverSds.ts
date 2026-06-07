@@ -168,12 +168,15 @@ export async function normalizeCandidates(
     : []
 
   const candidates: SdsCandidate[] = []
+  const seen = new Set<string>()
   for (const r of rows) {
     if (!r || typeof r !== 'object') continue
     const row = r as Record<string, unknown>
     // Boundary validation: drop anything without a real https URL — the model
     // is told not to invent links, but we never trust that on its own.
     if (!isHttpsUrl(row.url)) continue
+    if (seen.has(row.url)) continue   // the model can list the same PDF twice
+    seen.add(row.url)
     const confidence = row.confidence === 'high' || row.confidence === 'medium' || row.confidence === 'low'
       ? row.confidence : 'low'
     candidates.push({

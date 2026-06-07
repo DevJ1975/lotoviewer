@@ -57,6 +57,17 @@ describe('normalizeCandidates', () => {
     expect(candidates[1].confidence).toBe('low') // 'weird' coerced
   })
 
+  it('dedupes repeated URLs the model may list twice (first occurrence wins)', async () => {
+    const payload = { candidates: [
+      { url: 'https://ok.com/sds.pdf', title: 'A',     manufacturer: '', product_name: '', revision_date: null, confidence: 'high', reasons: '' },
+      { url: 'https://ok.com/sds.pdf', title: 'A dup', manufacturer: '', product_name: '', revision_date: null, confidence: 'low',  reasons: '' },
+    ] }
+    const create = vi.fn().mockResolvedValue(textMsg(JSON.stringify(payload), 'end_turn'))
+    const { candidates } = await normalizeCandidates(clientWith(create), 'prose')
+    expect(candidates).toHaveLength(1)
+    expect(candidates[0].title).toBe('A')
+  })
+
   it('returns [] without calling the model when there is no prose', async () => {
     const create = vi.fn()
     const { candidates } = await normalizeCandidates(clientWith(create), '   ')

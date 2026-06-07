@@ -242,3 +242,18 @@ Kept here so nothing leaks out of the plan.
 - Cross-link by ID from commit messages and PRs ("unblocks D1.1").
 - Strike out a row (`~~D…~~`) when complete; don't delete — keep
   the audit trail.
+
+## SDS persistence helper (from PR #197 audit, 2026-06)
+
+`apps/web/app/api/chemicals/products/[id]/sds/route.ts` (upload),
+`apps/web/app/api/chemicals/products/[id]/sds/fetch/route.ts` (discovery), and
+`apps/web/lib/chemicalSdsDrift.ts` (drift) each repeat the same dance: upload
+bytes to the `chemical-sds` bucket with a filename-conflict retry, insert a
+`chemical_sds_documents` row, then supersede the prior active doc and set
+`chemical_products.active_sds_id`. That is the rule-of-three threshold for
+extracting a shared `persistSdsRevision(...)` helper.
+
+Deferred from the audit because two of the three call sites (upload, drift) are
+already shipped and tested; rewiring them is a real-behavior change with
+regression surface that exceeds an audit pass. Do it as its own focused PR with
+the upload/drift tests green before and after.
