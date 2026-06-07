@@ -295,6 +295,9 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       tile('insights', 'history-import',     null,
         FileUp, 'Historical import',
         'Upload prior-year OSHA 300A logs — AI extracts the numbers for your review, then fills the year-over-year scorecard.'),
+      tile('insights', 'connectors',         null,
+        Cable, 'Data connectors',
+        'Pull historical EHS metrics from external systems (Intelex) into the year-over-year scorecard.'),
     ],
   },
   {
