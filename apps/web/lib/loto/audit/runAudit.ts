@@ -11,17 +11,20 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type Anthropic from '@anthropic-ai/sdk'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
+import { validateProcedure } from '@soteria/core/lotoProcedureValidation'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getAnthropic } from '@/lib/ai/client'
 import { checkTenantBudget, checkAiRateLimit, logAiInvocation } from '@/lib/ai/rateLimit'
 import type { AiSurface } from '@/lib/ai/rateLimit'
 import { runFpeAgent } from './agents/fpe'
 import { runDsAgent } from './agents/ds'
-import { runEhsAgent } from './agents/ehs'
+import { runEhsAgent, runEhsCorrection } from './agents/ehs'
 import { runAuthorAgent } from './agents/author'
+import { runRegulatorMachineReview, runRegulatorProgramReview } from './agents/regulator'
 import { buildPlaceholderPhoto } from './placeholderPhoto'
 import { findExistingIsoPhoto } from './storagePhotoSearch'
-import type { AuditSeverity, AuthorResult, DsResult, EhsResult, FpeResult } from './schemas'
+import { describeRunAggregate, type RunAggregate } from './prompts'
+import type { AuditSeverity, AuthorResult, DsResult, EhsResult, FpeResult, RegulatorMachineResult } from './schemas'
 
 export interface RunAuditScope {
   department?:    string
@@ -89,6 +92,311 @@ export async function runAudit(opts: RunAuditOptions): Promise<RunAuditSummary> 
     .eq('id', opts.runId)
 
   return { total: equipment.length, processed, failed }
+}
+
+// ── Cal/OSHA Regulator phase (post-audit, pre-human-review) ──────────────────
+// Runs AFTER runAudit, over the same scope. Per audited machine a CSHO persona
+// re-reviews the internal FPE/DS/EHS record and concurs or dissents; a material
+// dissent drives an EHS CORRECTION → (if it now fails) a re-author → a SURGICAL
+// re-emit of only the ehs_finding / procedure_draft rows. It NEVER re-runs the
+// photo search and NEVER touches step_confidence / placeholder_photo rows — that
+// is the audit's job and must not repeat. Finally it runs a program-level review
+// over the run aggregate. Everything stays staged for the human review gate.
+//
+// Resumable: a machine whose regulator_payload is already set is skipped, and
+// regulator_payload is written LAST (after the correction + re-emit) so a
+// mid-phase reclaim re-runs that machine cleanly rather than leaving a critique
+// with no corresponding re-emit.
+
+export interface RunRegulatorSummary { reviewed: number; corrected: number }
+
+export async function runRegulatorPhase(opts: RunAuditOptions): Promise<RunRegulatorSummary> {
+  const admin  = supabaseAdmin()
+  const client = await getAnthropic(opts.tenantId, { timeoutMs: 120_000 })
+
+  const budget = await checkTenantBudget({ tenantId: opts.tenantId, userId: opts.userId ?? 'audit-engine', surface: 'loto-audit-regulator' })
+  if (!budget.ok) throw new Error(budget.message)
+
+  const equipment = await loadEquipment(admin, opts.tenantId, opts.scope)
+
+  let reviewed  = 0
+  let corrected = 0
+  const concurrency = Math.max(1, opts.concurrency ?? DEFAULT_CONCURRENCY)
+
+  await mapWithConcurrency(equipment, concurrency, async (eq) => {
+    const did = await reviewEquipment(admin, client, opts, eq)
+    if (did === 'skipped') return
+    reviewed += 1
+    if (did === 'corrected') corrected += 1
+  })
+
+  // Program-level review over the whole run aggregate. Best-effort: a failed
+  // program review must not lose the per-machine critiques already stored.
+  try {
+    const aggregate = await buildRunAggregate(admin, opts)
+    const program = await callAgent(opts, 'loto-audit-regulator', () => runRegulatorProgramReview(client, describeRunAggregate(aggregate)))
+    await admin.from('loto_audit_runs').update({ regulator_report: program.result }).eq('id', opts.runId)
+  } catch (err) {
+    await admin.from('loto_audit_runs')
+      .update({ regulator_report: { error: err instanceof Error ? err.message.slice(0, 500) : 'program review failed' } })
+      .eq('id', opts.runId)
+  }
+
+  return { reviewed, corrected }
+}
+
+type ReviewOutcome = 'skipped' | 'reviewed' | 'corrected'
+
+async function reviewEquipment(
+  admin: SupabaseClient,
+  client: Anthropic,
+  opts: RunAuditOptions,
+  eq: Equipment,
+): Promise<ReviewOutcome> {
+  // Resume guard + scope: only machines the audit finished (agent_phase
+  // 'ehs_done'), and skip any already reviewed (regulator_payload present).
+  const { data: row } = await admin
+    .from('loto_audit_equipment_results')
+    .select('agent_phase, regulator_payload, raw_payload, ehs_pass, ehs_citations, ehs_recommendations, ehs_notes')
+    .eq('run_id', opts.runId)
+    .eq('equipment_id', eq.equipment_id)
+    .maybeSingle<AuditResultRow>()
+  if (!row || row.agent_phase !== 'ehs_done' || row.regulator_payload != null) return 'skipped'
+
+  const raw = (row.raw_payload ?? {}) as { fpe?: FpeResult; ds?: DsResult; ehs?: EhsResult }
+  if (!raw.fpe || !raw.ds) return 'skipped' // can't re-review without the stored verdicts
+  const fpe = raw.fpe
+  const ds  = raw.ds
+  // Prefer the stored raw EHS; fall back to the result columns if raw.ehs is absent.
+  const ehs: EhsResult = raw.ehs ?? {
+    pass:            row.ehs_pass ?? false,
+    citations:       (row.ehs_citations ?? []) as EhsResult['citations'],
+    recommendations: (row.ehs_recommendations ?? []) as string[],
+    notes:           row.ehs_notes ?? '',
+  }
+
+  const steps = await loadSteps(admin, opts.tenantId, eq.equipment_id)
+  // Recompute the missing OSHA phases from the live steps with the same shared
+  // validator the DS agent used, so the EHS correction's hard-gate floor (a
+  // missing verify_zero_energy ⇒ pass=false) matches the original audit exactly.
+  const missingPhases = validateProcedure(
+    steps.map(s => ({ step_type: s.step_type, sequence_order: s.sequence_order })),
+  ).missing
+
+  const regulator = await callAgent(opts, 'loto-audit-regulator', () =>
+    runRegulatorMachineReview(client, eq, steps, fpe, ds, ehs))
+
+  const material =
+    regulator.result.concurs_with_ehs === false ||
+    regulator.result.additional_citations.length > 0 ||
+    regulator.result.severity_escalations.length > 0 ||
+    regulator.result.procedure_deficiencies.length > 0
+
+  let outcome: ReviewOutcome = 'reviewed'
+  if (material) {
+    // (a) Correct the EHS assessment, folding in the regulator's critique.
+    const corrected = await callAgent(opts, 'loto-audit-ehs', () =>
+      runEhsCorrection(client, eq, steps, ehs, regulator.result, missingPhases))
+    await upsertResult(admin, opts, eq.equipment_id, {
+      ehs_pass:            corrected.result.pass,
+      ehs_citations:       corrected.result.citations,
+      ehs_recommendations: corrected.result.recommendations,
+      ehs_notes:           corrected.result.notes,
+      raw_payload:         { ...raw, ehs: corrected.result },
+    })
+
+    // (b) Re-author ONLY if the corrected verdict still fails the gate.
+    const reauthored = corrected.result.pass === false
+      ? await callAgent(opts, 'loto-audit-author', () =>
+          runAuthorAgent(client, eq, steps, corrected.result.citations, corrected.result.recommendations, ds.notes, missingPhases))
+      : null
+
+    // (c) Surgical re-emit of the corrected findings + (maybe) the new draft.
+    await reemitFindingsAndDraft(admin, opts, eq, steps, corrected.result, reauthored?.result ?? null)
+    outcome = 'corrected'
+  }
+
+  // Store the critique LAST so a mid-phase reclaim re-runs the whole correction
+  // cleanly rather than skipping on a half-applied state. agent_phase is left at
+  // 'ehs_done' — regulator_payload presence is the regulator resume marker.
+  await upsertResult(admin, opts, eq.equipment_id, {
+    regulator_payload: regulator.result,
+    regulator_concurs: regulator.result.concurs_with_ehs,
+  })
+
+  return outcome
+}
+
+// SURGICAL re-emit: replace ONLY the pending ehs_finding + procedure_draft rows
+// for this machine in this run, leaving step_confidence + placeholder_photo
+// rows (and the already-done photo search) untouched. Mirrors emitChanges'
+// insert shape exactly.
+async function reemitFindingsAndDraft(
+  admin: SupabaseClient,
+  opts: RunAuditOptions,
+  eq: Equipment,
+  steps: LotoEnergyStep[],
+  ehs: EhsResult,
+  author: AuthorResult | null,
+): Promise<void> {
+  const changes: PendingChange[] = []
+
+  // Corrected EHS citations as findings (one row each).
+  for (const c of ehs.citations) {
+    changes.push({
+      change_kind:   'ehs_finding',
+      target_table:  'loto_equipment',
+      target_row_pk: null,
+      target_column: null,
+      old_value:     null,
+      new_value:     c,
+      agent:         'EHS',
+      rationale:     c.text,
+      severity:      c.severity,
+    })
+  }
+
+  // The re-authored corrected procedure, if the corrected gate still failed.
+  if (author) {
+    changes.push({
+      change_kind:   'procedure_draft',
+      target_table:  'loto_energy_steps',
+      target_row_pk: null,
+      target_column: null,
+      old_value:     steps.map(projectStepForDraft),
+      new_value:     { steps: author.steps, summary: author.summary },
+      agent:         'SSD',
+      rationale:     'Re-drafted corrected procedure after Cal/OSHA regulator review.',
+      severity:      'high',
+    })
+  }
+
+  // Delete only the two re-emittable kinds; never touch step_confidence /
+  // placeholder_photo (or the photo search behind them).
+  await admin.from('loto_audit_changes')
+    .delete()
+    .eq('run_id', opts.runId)
+    .eq('equipment_id', eq.equipment_id)
+    .eq('status', 'pending')
+    .in('change_kind', ['ehs_finding', 'procedure_draft'])
+
+  if (changes.length === 0) return
+  await admin.from('loto_audit_changes').insert(
+    changes.map(c => ({
+      run_id:              opts.runId,
+      tenant_id:           opts.tenantId,
+      equipment_id:        eq.equipment_id,
+      change_kind:         c.change_kind,
+      target_table:        c.target_table,
+      target_row_pk:       c.target_row_pk,
+      target_column:       c.target_column,
+      old_value:           c.old_value,
+      new_value:           c.new_value,
+      agent:               c.agent,
+      rationale:           c.rationale,
+      severity:            c.severity,
+      status:              'pending',
+      staged_storage_path: null,
+      staged_photo_url:    null,
+    })),
+  )
+}
+
+// ── Regulator-phase helpers ──────────────────────────────────────────────────
+
+interface AuditResultRow {
+  agent_phase:         string
+  regulator_payload:   RegulatorMachineResult | null
+  raw_payload:         unknown
+  ehs_pass:            boolean | null
+  ehs_citations:       unknown
+  ehs_recommendations: unknown
+  ehs_notes:           string | null
+}
+
+async function loadSteps(admin: SupabaseClient, tenantId: string, equipmentId: string): Promise<LotoEnergyStep[]> {
+  const { data } = await admin
+    .from('loto_energy_steps')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('equipment_id', equipmentId)
+    .order('sequence_order', { ascending: true })
+    .order('step_number', { ascending: true })
+  return (data ?? []) as LotoEnergyStep[]
+}
+
+// The procedure-draft `old_value` projection — the current step set the reviewer
+// diffs against. Identical to emitChanges' projection so a re-emitted draft reads
+// the same as a first-pass one (including the Spanish so the ES before→after shows).
+function projectStepForDraft(s: LotoEnergyStep) {
+  return {
+    energy_type:               s.energy_type,
+    step_type:                 s.step_type,
+    tag_description:           s.tag_description,
+    isolation_procedure:       s.isolation_procedure,
+    method_of_verification:    s.method_of_verification,
+    tag_description_es:        s.tag_description_es,
+    isolation_procedure_es:    s.isolation_procedure_es,
+    method_of_verification_es: s.method_of_verification_es,
+  }
+}
+
+// Build the run aggregate the program-level review summarizes: pass/fail counts,
+// top recurring citation codes, # placeholder-photo changes, # machines missing
+// a zero-energy verification (from ds_consistency.missing_phases), departments.
+async function buildRunAggregate(admin: SupabaseClient, opts: RunAuditOptions): Promise<RunAggregate> {
+  const [{ data: results }, { data: changes }] = await Promise.all([
+    admin.from('loto_audit_equipment_results')
+      .select('equipment_id, ehs_pass, ehs_citations, ds_consistency')
+      .eq('run_id', opts.runId).eq('agent_phase', 'ehs_done'),
+    admin.from('loto_audit_changes')
+      .select('change_kind')
+      .eq('run_id', opts.runId),
+  ])
+
+  const rows = (results ?? []) as Array<{
+    equipment_id: string
+    ehs_pass: boolean | null
+    ehs_citations: unknown
+    ds_consistency: { missing_phases?: unknown } | null
+  }>
+
+  let ehsPass = 0
+  let ehsFail = 0
+  let missingVerifyZero = 0
+  const codeCounts = new Map<string, number>()
+  for (const r of rows) {
+    if (r.ehs_pass === true) ehsPass += 1
+    else if (r.ehs_pass === false) ehsFail += 1
+    const missing = Array.isArray(r.ds_consistency?.missing_phases) ? r.ds_consistency!.missing_phases as unknown[] : []
+    if (missing.includes('verify_zero_energy')) missingVerifyZero += 1
+    for (const c of Array.isArray(r.ehs_citations) ? r.ehs_citations as Array<{ code?: unknown }> : []) {
+      const code = typeof c?.code === 'string' ? c.code : null
+      if (code) codeCounts.set(code, (codeCounts.get(code) ?? 0) + 1)
+    }
+  }
+
+  const placeholderPhotos = ((changes ?? []) as Array<{ change_kind: string }>)
+    .filter(c => c.change_kind === 'placeholder_photo').length
+
+  // Departments come from the in-scope equipment list, not the results, so a
+  // machine that errored still counts toward its department's footprint.
+  const equipment = await loadEquipment(admin, opts.tenantId, opts.scope)
+  const deptCounts = new Map<string, number>()
+  for (const e of equipment) {
+    const dept = e.department || '(none)'
+    deptCounts.set(dept, (deptCounts.get(dept) ?? 0) + 1)
+  }
+
+  const topCitationCodes = [...codeCounts.entries()]
+    .map(([code, count]) => ({ code, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10)
+  const departments = [...deptCounts.entries()]
+    .map(([department, count]) => ({ department, count }))
+    .sort((a, b) => b.count - a.count)
+
+  return { total: rows.length, ehsPass, ehsFail, missingVerifyZero, placeholderPhotos, topCitationCodes, departments }
 }
 
 // ── Per-equipment pipeline ──────────────────────────────────────────────────
@@ -305,17 +613,7 @@ async function emitChanges(
       target_table:  'loto_energy_steps',
       target_row_pk: null,
       target_column: null,
-      old_value:     steps.map(s => ({
-        energy_type:               s.energy_type,
-        step_type:                 s.step_type,
-        tag_description:           s.tag_description,
-        isolation_procedure:       s.isolation_procedure,
-        method_of_verification:    s.method_of_verification,
-        // Carry the Spanish so the reviewer sees the ES before→after too.
-        tag_description_es:        s.tag_description_es,
-        isolation_procedure_es:    s.isolation_procedure_es,
-        method_of_verification_es: s.method_of_verification_es,
-      })),
+      old_value:     steps.map(projectStepForDraft),
       new_value:     { steps: author.steps, summary: author.summary },
       agent:         'SSD',
       rationale:     'Drafted corrected procedure for safety-professional review.',

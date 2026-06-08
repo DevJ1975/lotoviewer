@@ -8,7 +8,7 @@
 
 import { ENERGY_CODES } from '@soteria/core/energyCodes'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
-import type { EhsCitation } from './schemas'
+import type { DsResult, EhsCitation, EhsResult, FpeResult } from './schemas'
 
 const ENERGY_CODE_TABLE = ENERGY_CODES
   .map(c => `  ${c.code} = ${c.labelEn}`)
@@ -132,5 +132,116 @@ export function describeFindings(citations: EhsCitation[], recommendations: stri
     citationLines,
     'EHS recommended fixes:',
     recommendationLines,
+  ].join('\n')
+}
+
+// ── Cal/OSHA Regulator (post-audit review) ──────────────────────────────────
+// A veteran Cal/OSHA compliance officer (CSHO) re-reviews the internal audit
+// adversarially. Two surfaces: a per-machine dissent/concurrence and an
+// end-to-end program audit. The persona is citation-driven on purpose — the
+// internal EHS gate can be charitable; the regulator is the skeptical second
+// reader who decides whether a finding would survive an actual inspection.
+
+export const REGULATOR_SYSTEM = `You are a veteran Cal/OSHA compliance officer (CSHO) specializing in the Control of Hazardous Energy — California Code of Regulations Title 8 §3314, 29 CFR 1910.147, and ANSI/ASSP Z244.1. You are adversarial and citation-driven: you re-review an INTERNAL EHS audit of ONE machine and decide whether its conclusions would survive a real inspection.
+
+You are given the equipment record, its energy steps, and the three internal agents' verdicts (Food-Production-Engineer photo verdicts, Data-Scientist consistency findings, and the EHS Specialist's pass/fail + citations + recommendations).
+
+Your job:
+1. CONCUR or DISSENT with the internal EHS pass/fail verdict. Set concurs_with_ehs explicitly — true to back the internal call, false when an inspector would reach a different conclusion. A machine the internal review passed but that you would cite is a DISSENT.
+2. Add citations the internal review missed (additional_citations), each with the specific regulatory code an inspector would write on the citation.
+3. Escalate (or lower) the severity of existing findings where the internal grade understates the hazard (severity_escalations), with the regulatory reason.
+4. List the specific procedure deficiencies an inspector would write up (procedure_deficiencies). The single most-cited deficiency in this program is a MISSING ZERO-ENERGY VERIFICATION ("tryout") before work begins — call it out wherever the verification step is absent, generic ("verify de-energized"), or unverifiable.
+5. Write a short inspector_narrative as it would read in an inspection report.
+
+Be specific and cite the regulation. Do not invent compliance that the record does not show. Return JSON only.`
+
+export const REGULATOR_PROGRAM_SYSTEM = `You are a veteran Cal/OSHA compliance officer (CSHO) conducting an END-TO-END audit of a facility's written Control of Hazardous Energy program under California Code of Regulations Title 8 §3314, 29 CFR 1910.147, and ANSI/ASSP Z244.1. You work from an aggregate summary of an automated audit across the facility's equipment.
+
+Evaluate EACH of these §3314 program elements as compliant, deficient, or not_evaluable, with the governing citation for each:
+- Written energy-control program (the documented procedure exists and is specific).
+- Machine-specific procedures (each machine has its own, not a generic template).
+- Periodic / annual inspection of the procedures.
+- Employee training and retraining.
+- Energy-isolating device adequacy (capable of being locked out).
+- Group lockout.
+- Shift / personnel change.
+- Outside contractor coordination.
+- Locks / tags / hardware provided by the employer.
+Mark an element not_evaluable when the aggregate data cannot speak to it (e.g. training records are out of scope) — do not fabricate a compliant finding from absence of evidence.
+
+Then identify systemic patterns that recur across machines (systemic_findings) with the number of machines affected, a severity, the citation, and a recommended action. Finally give an ordered top_priorities list, most urgent first.
+
+Be specific and cite the regulation. Return JSON only.`
+
+// Renders ONE machine's record + the three agents' verdicts for the regulator's
+// per-machine review. Reuses describeEquipment/describeSteps so the inspector
+// reads the same machine description the internal agents did, then layers the
+// FPE/DS/EHS conclusions the regulator is re-reviewing.
+export function describeRegulatorInputs(
+  eq: Parameters<typeof describeEquipment>[0],
+  steps: Parameters<typeof describeSteps>[0],
+  fpe: FpeResult,
+  ds: DsResult,
+  ehs: EhsResult,
+): string {
+  const citationLines = ehs.citations.length > 0
+    ? ehs.citations.map((c, i) => `  ${i + 1}. [${c.severity}] ${c.code}: ${c.text}`).join('\n')
+    : '  (none cited)'
+  const recommendationLines = ehs.recommendations.length > 0
+    ? ehs.recommendations.map((r, i) => `  ${i + 1}. ${r}`).join('\n')
+    : '  (none)'
+  return [
+    describeEquipment(eq),
+    '',
+    'Energy steps:',
+    describeSteps(steps),
+    '',
+    'Internal Food-Production-Engineer photo verdicts:',
+    `  Equipment photo: ${fpe.equip_photo.verdict} (confidence ${fpe.equip_photo.confidence})`,
+    `  Isolation photo: ${fpe.iso_photo.verdict} (confidence ${fpe.iso_photo.confidence}); shows_isolation_point=${fpe.iso_photo.shows_isolation_point}; consistent_with_energy_steps=${fpe.iso_photo.consistent_with_energy_steps}`,
+    '',
+    'Internal Data-Scientist consistency:',
+    `  equipment_confidence=${ds.equipment_confidence}; low_confidence_iso=${ds.low_confidence_iso}`,
+    `  notes: ${ds.notes || '(none)'}`,
+    '',
+    `Internal EHS verdict: ${ehs.pass ? 'PASS' : 'FAIL'}`,
+    'Internal EHS citations:',
+    citationLines,
+    'Internal EHS recommendations:',
+    recommendationLines,
+  ].join('\n')
+}
+
+// The shape describeRunAggregate renders. Computed by the engine from the run's
+// equipment_results + changes; kept as a plain DTO so the prompt builder stays a
+// pure function of its input (easy to unit-test, no DB coupling).
+export interface RunAggregate {
+  total:                 number
+  ehsPass:               number
+  ehsFail:               number
+  missingVerifyZero:     number
+  placeholderPhotos:     number
+  topCitationCodes:      { code: string; count: number }[]
+  departments:           { department: string; count: number }[]
+}
+
+// Compact text summary of the run aggregate for the program-level review. Kept
+// terse so the program prompt stays cheap even on a 500-machine run.
+export function describeRunAggregate(agg: RunAggregate): string {
+  const codeLines = agg.topCitationCodes.length > 0
+    ? agg.topCitationCodes.map(c => `  ${c.code} — ${c.count}`).join('\n')
+    : '  (none)'
+  const deptLines = agg.departments.length > 0
+    ? agg.departments.map(d => `  ${d.department} — ${d.count}`).join('\n')
+    : '  (none)'
+  return [
+    `Equipment audited: ${agg.total}`,
+    `EHS pass: ${agg.ehsPass}; EHS fail: ${agg.ehsFail}`,
+    `Machines missing a zero-energy verification step: ${agg.missingVerifyZero}`,
+    `Isolation points relying on a placeholder/reference photo: ${agg.placeholderPhotos}`,
+    'Most recurring citation codes (code — # machines):',
+    codeLines,
+    'Departments in scope (department — # machines):',
+    deptLines,
   ].join('\n')
 }

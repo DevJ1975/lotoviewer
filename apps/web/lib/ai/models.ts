@@ -91,6 +91,12 @@ export const MODEL_BY_SURFACE = {
   //   staged for a qualified safety professional to review/sign — never applied
   //   automatically.
   'loto-audit-author':                SONNET,
+  // loto-audit-regulator: veteran Cal/OSHA compliance officer (CSHO) who
+  //   adversarially re-reviews the internal EHS audit (per machine) and audits
+  //   the program end-to-end. Same Cal/OSHA-citation reasoning class as
+  //   loto-audit-ehs — Sonnet. Critique is staged for the human review gate;
+  //   it never writes live data.
+  'loto-audit-regulator':             SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

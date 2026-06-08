@@ -256,6 +256,130 @@ export const AUTHOR_SCHEMA = {
   additionalProperties: false,
 } as const
 
+// ── Cal/OSHA Regulator (post-audit review) ──────────────────────────────────
+// A veteran Cal/OSHA compliance officer (CSHO) re-reviews the internal EHS
+// verdict adversarially — concurring or dissenting — and an end-to-end program
+// audit over the whole run. Like every other agent it NEVER writes live data:
+// its critique is staged for the existing human review gate, and its corrections
+// flow back through the EHS-correction → re-emit path.
+
+export interface RegulatorMachineResult {
+  // The inspector's stance on the internal EHS pass/fail. Made explicit (not
+  // inferred from the citation list) so a dissent is unambiguous.
+  concurs_with_ehs:       boolean
+  additional_citations:   EhsCitation[]
+  severity_escalations:   { code: string; from: AuditSeverity; to: AuditSeverity; reason: string }[]
+  procedure_deficiencies: string[]
+  inspector_narrative:    string
+}
+
+export const REGULATOR_MACHINE_SCHEMA = {
+  type: 'object',
+  properties: {
+    concurs_with_ehs: { type: 'boolean', description: 'True to CONCUR with the internal EHS pass/fail verdict; false to DISSENT.' },
+    additional_citations: {
+      type: 'array',
+      description: 'Citations an inspector would write up that the internal EHS review missed.',
+      items: {
+        type: 'object',
+        properties: {
+          code:     { type: 'string', description: 'e.g. "Cal/OSHA T8 §3314(g)(2)" or "29 CFR 1910.147(c)(4)(ii)".' },
+          text:     { type: 'string' },
+          severity: { type: 'string', enum: ['info', 'low', 'medium', 'high', 'critical'] },
+        },
+        required: ['code', 'text', 'severity'],
+        additionalProperties: false,
+      },
+    },
+    severity_escalations: {
+      type: 'array',
+      description: 'Existing findings whose severity the inspector would raise (or lower), with the regulatory reason.',
+      items: {
+        type: 'object',
+        properties: {
+          code:   { type: 'string', description: 'The citation code whose severity is being changed.' },
+          from:   { type: 'string', enum: ['info', 'low', 'medium', 'high', 'critical'] },
+          to:     { type: 'string', enum: ['info', 'low', 'medium', 'high', 'critical'] },
+          reason: { type: 'string' },
+        },
+        required: ['code', 'from', 'to', 'reason'],
+        additionalProperties: false,
+      },
+    },
+    procedure_deficiencies: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Specific procedure deficiencies an inspector would cite (e.g. a missing zero-energy verification).',
+    },
+    inspector_narrative: { type: 'string', description: 'The CSHO’s narrative finding for this machine, as it would read in an inspection report.' },
+  },
+  required: ['concurs_with_ehs', 'additional_citations', 'severity_escalations', 'procedure_deficiencies', 'inspector_narrative'],
+  additionalProperties: false,
+} as const
+
+// Program-level audit over the whole run aggregate. Evaluates the §3314 program
+// elements, surfaces systemic patterns, and orders the top priorities.
+export type RegulatorElementStatus = 'compliant' | 'deficient' | 'not_evaluable'
+
+export interface RegulatorProgramResult {
+  executive_summary: string
+  program_elements: {
+    element:  string
+    status:   RegulatorElementStatus
+    finding:  string
+    citation: string
+  }[]
+  systemic_findings: {
+    pattern:            string
+    affected_count:     number
+    severity:           AuditSeverity
+    citation:           string
+    recommended_action: string
+  }[]
+  top_priorities: string[]
+}
+
+export const REGULATOR_PROGRAM_SCHEMA = {
+  type: 'object',
+  properties: {
+    executive_summary: { type: 'string', description: 'One-paragraph executive summary of the LOTO program’s compliance posture.' },
+    program_elements: {
+      type: 'array',
+      description: 'Each §3314 / 1910.147 program element evaluated for the whole program.',
+      items: {
+        type: 'object',
+        properties: {
+          element:  { type: 'string', description: 'The program element evaluated (e.g. "Periodic/annual inspection").' },
+          status:   { type: 'string', enum: ['compliant', 'deficient', 'not_evaluable'] },
+          finding:  { type: 'string' },
+          citation: { type: 'string', description: 'The governing regulation for this element.' },
+        },
+        required: ['element', 'status', 'finding', 'citation'],
+        additionalProperties: false,
+      },
+    },
+    systemic_findings: {
+      type: 'array',
+      description: 'Patterns that recur across machines, with how many are affected.',
+      items: {
+        type: 'object',
+        properties: {
+          pattern:            { type: 'string' },
+          affected_count:     { type: 'integer', description: 'Number of machines exhibiting the pattern.' },
+          severity:           { type: 'string', enum: ['info', 'low', 'medium', 'high', 'critical'] },
+          citation:           { type: 'string' },
+          recommended_action: { type: 'string' },
+        },
+        required: ['pattern', 'affected_count', 'severity', 'citation', 'recommended_action'],
+        additionalProperties: false,
+      },
+    },
+    top_priorities: { type: 'array', items: { type: 'string' }, description: 'Ordered, most-urgent-first corrective priorities for the program.' },
+  },
+  required: ['executive_summary', 'program_elements', 'systemic_findings', 'top_priorities'],
+  additionalProperties: false,
+} as const
+
 // ── DB-row DTOs (mirror migrations 218/219) ─────────────────────────────────
 
 export type AuditRunStatus =
