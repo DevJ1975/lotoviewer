@@ -42,7 +42,10 @@ const DEFAULT_CONCURRENCY = 3
 
 export async function runAudit(opts: RunAuditOptions): Promise<RunAuditSummary> {
   const admin  = supabaseAdmin()
-  const client = await getAnthropic(opts.tenantId)
+  // Audit agents (especially EHS, which emits citations + recommendations) can
+  // exceed the shared client's 30s default; give them a generous timeout. The
+  // engine runs via after() comfortably inside the route's maxDuration.
+  const client = await getAnthropic(opts.tenantId, { timeoutMs: 120_000 })
 
   // Tenant kill-switch / budget. One upfront check — a per-equipment check
   // across hundreds of rows would hammer the budget query; per-call rate limits
