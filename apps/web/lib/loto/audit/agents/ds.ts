@@ -45,10 +45,12 @@ export async function runDsAgent(
     'Assess each step (by its id), the equipment overall, and low_confidence_iso. Reply with JSON only.',
   ].join('\n')
 
+  // No extended thinking: it pushed these structured calls past the shared
+  // client's 30s timeout. The prompt + schema carry the reasoning, and the
+  // EHS safety gate is enforced deterministically in TS regardless.
   const response = await client.messages.create({
     model:      MODEL,
     max_tokens: 4000,
-    thinking:   { type: 'adaptive' },
     system:     [{ type: 'text', text: DS_SYSTEM, cache_control: { type: 'ephemeral' } }],
     messages:   [{ role: 'user', content: userText }],
     output_config: { format: { type: 'json_schema', schema: DS_SCHEMA } },
