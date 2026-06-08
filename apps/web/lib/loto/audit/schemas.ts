@@ -59,6 +59,29 @@ export const FPE_SCHEMA = {
   additionalProperties: false,
 } as const
 
+// ── Storage photo search (re-uses the FPE vision pass) ──────────────────────
+// Verdict for ONE stored candidate image when searching the tenant's own
+// `loto-photos` folder for a real isolation photo before the web placeholder.
+// Single-image, single-question — narrower than FpeResult, which judges two
+// photos at once.
+
+export interface IsoMatchResult {
+  is_isolation_point: boolean
+  confidence:         AuditConfidence
+  notes:              string
+}
+
+export const ISO_MATCH_SCHEMA = {
+  type: 'object',
+  properties: {
+    is_isolation_point: { type: 'boolean', description: 'True only if the image clearly shows a real energy-isolation / lockout point plausibly belonging to this equipment.' },
+    confidence:         { type: 'string', enum: ['high', 'medium', 'low'] },
+    notes:              { type: 'string', description: 'One factual sentence on what the image shows.' },
+  },
+  required: ['is_isolation_point', 'confidence', 'notes'],
+  additionalProperties: false,
+} as const
+
 // ── Agent 2: Data-Scientist (consistency) ───────────────────────────────────
 
 export interface DsStepAssessment {

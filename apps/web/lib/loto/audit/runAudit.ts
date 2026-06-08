@@ -19,6 +19,7 @@ import { runFpeAgent } from './agents/fpe'
 import { runDsAgent } from './agents/ds'
 import { runEhsAgent } from './agents/ehs'
 import { buildPlaceholderPhoto } from './placeholderPhoto'
+import { findExistingIsoPhoto } from './storagePhotoSearch'
 import type { AuditSeverity, DsResult, EhsResult, FpeResult } from './schemas'
 
 export interface RunAuditScope {
@@ -213,8 +214,28 @@ async function emitChanges(
     fpe.iso_photo.verdict === 'mismatch' ||
     fpe.iso_photo.verdict === 'low_confidence'
   if (isoUnverified) {
-    const placeholder = await buildPlaceholderPhoto(client, admin, opts.tenantId, eq)
-    if (placeholder) {
+    // Prefer a REAL in-house photo over an internet placeholder. ISO photos are
+    // often cross-wired between machines, so a correct shot of this isolation
+    // point frequently already lives in the tenant's own storage. A vision-
+    // verified match lands as a verified field photo (no watermark); only if
+    // none is found do we fall back to the watermarked web placeholder.
+    const existing = await findExistingIsoPhoto(client, admin, opts.tenantId, eq, steps)
+    const placeholder = existing ? null : await buildPlaceholderPhoto(client, admin, opts.tenantId, eq)
+    if (existing) {
+      changes.push({
+        change_kind:         'placeholder_photo',
+        target_table:        'loto_equipment',
+        target_row_pk:       eq.equipment_id,
+        target_column:       'iso_photo_url',
+        old_value:           eq.iso_photo_url ?? null,
+        new_value:           { photo_url: existing.photoUrl, provenance: 'field', is_placeholder: false, source: 'storage' },
+        agent:               'FPE',
+        rationale:           'Matched an existing in-house photo that shows the real isolation point; proposing it as the ISO photo (no watermark).',
+        severity:            'high',
+        staged_storage_path: existing.storagePath,
+        staged_photo_url:    existing.photoUrl,
+      })
+    } else if (placeholder) {
       changes.push({
         change_kind:         'placeholder_photo',
         target_table:        'loto_equipment',

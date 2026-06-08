@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // ── Hoisted mocks ────────────────────────────────────────────────────────────
 const {
   runFpeAgentMock, runDsAgentMock, runEhsAgentMock,
-  buildPlaceholderPhotoMock,
+  buildPlaceholderPhotoMock, findExistingIsoPhotoMock,
   getAnthropicMock,
   checkTenantBudgetMock, checkAiRateLimitMock, logAiInvocationMock,
   supabaseState,
@@ -45,6 +45,7 @@ const {
     runDsAgentMock: vi.fn(),
     runEhsAgentMock: vi.fn(),
     buildPlaceholderPhotoMock: vi.fn(),
+    findExistingIsoPhotoMock: vi.fn(),
     getAnthropicMock: vi.fn(async (..._a: unknown[]) => ({ messages: { create: vi.fn() } })),
     checkTenantBudgetMock: vi.fn(async (..._a: unknown[]) => ({ ok: true })),
     checkAiRateLimitMock: vi.fn(async (..._a: unknown[]) => ({ ok: true })),
@@ -64,6 +65,9 @@ vi.mock('@/lib/loto/audit/agents/ehs', () => ({
 }))
 vi.mock('@/lib/loto/audit/placeholderPhoto', () => ({
   buildPlaceholderPhoto: (...a: unknown[]) => buildPlaceholderPhotoMock(...a),
+}))
+vi.mock('@/lib/loto/audit/storagePhotoSearch', () => ({
+  findExistingIsoPhoto: (...a: unknown[]) => findExistingIsoPhotoMock(...a),
 }))
 vi.mock('@/lib/ai/client', () => ({
   getAnthropic: (...a: unknown[]) => getAnthropicMock(...a),
@@ -177,12 +181,17 @@ beforeEach(() => {
   runDsAgentMock.mockReset()
   runEhsAgentMock.mockReset()
   buildPlaceholderPhotoMock.mockReset()
+  findExistingIsoPhotoMock.mockReset()
   getAnthropicMock.mockClear()
   checkTenantBudgetMock.mockClear()
   checkAiRateLimitMock.mockClear()
   logAiInvocationMock.mockClear()
   checkTenantBudgetMock.mockResolvedValue({ ok: true })
   checkAiRateLimitMock.mockResolvedValue({ ok: true })
+  // Default: no in-house photo matches, so the existing tests exercise the
+  // web-placeholder fallback exactly as before. The storage-first test below
+  // overrides this to return a match.
+  findExistingIsoPhotoMock.mockResolvedValue(null)
 })
 
 describe('runAudit — resumability', () => {
@@ -218,6 +227,36 @@ describe('runAudit — resumability', () => {
 })
 
 describe('runAudit — low-confidence ISO routing', () => {
+  it('proposes an in-house storage match (provenance=field) before any web placeholder', async () => {
+    supabaseState.equipment = [equipment('EQ-MATCH')]
+    runFpeAgentMock.mockResolvedValue(fpeOutput('mismatch'))
+    runDsAgentMock.mockResolvedValue(dsOutput(true)) // ISO unverified ⇒ search storage first
+    runEhsAgentMock.mockResolvedValue(ehsOutput())
+    findExistingIsoPhotoMock.mockResolvedValue({
+      photoUrl: 'https://cdn.example/loto-photos/tenant-1/EQ-MATCH/EQ-MATCH_ISO_good.jpg',
+      storagePath: 'tenant-1/EQ-MATCH/EQ-MATCH_ISO_good.jpg',
+    })
+
+    await runAudit({ tenantId: TENANT_ID, runId: RUN_ID, userId: 'u1', scope: {}, concurrency: 1 })
+
+    const changeInsert = supabaseState.inserts.find(i => i.table === 'loto_audit_changes')
+    expect(changeInsert).toBeDefined()
+    const rows = changeInsert!.payload as Array<{
+      change_kind: string
+      staged_photo_url?: string | null
+      new_value?: { provenance?: string; is_placeholder?: boolean; source?: string }
+    }>
+    const match = rows.find(r => r.change_kind === 'placeholder_photo')
+    expect(match).toBeDefined()
+    expect(match!.staged_photo_url).toBe('https://cdn.example/loto-photos/tenant-1/EQ-MATCH/EQ-MATCH_ISO_good.jpg')
+    // The real-photo signal the apply RPC keys on: field provenance, NOT a placeholder.
+    expect(match!.new_value?.provenance).toBe('field')
+    expect(match!.new_value?.is_placeholder).toBe(false)
+    expect(match!.new_value?.source).toBe('storage')
+    // A real match means the watermarked-internet fallback must never run.
+    expect(buildPlaceholderPhotoMock).not.toHaveBeenCalled()
+  })
+
   it('emits a placeholder_photo change when buildPlaceholderPhoto succeeds', async () => {
     supabaseState.equipment = [equipment('EQ-LC')]
     runFpeAgentMock.mockResolvedValue(fpeOutput('match'))
