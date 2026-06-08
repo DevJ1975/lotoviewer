@@ -59,15 +59,19 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const admin = supabaseAdmin()
 
   const [{ data: run }, { data: changes }, { data: results }] = await Promise.all([
+    // regulator_report carries the Cal/OSHA inspector's program-level review the
+    // reviewer reads before approving.
     admin.from('loto_audit_runs')
-      .select('id, status, scope, total_equipment, processed_equipment, started_at, finished_at')
+      .select('id, status, scope, total_equipment, processed_equipment, started_at, finished_at, regulator_report')
       .eq('id', link.audit_run_id).maybeSingle(),
     admin.from('loto_audit_changes')
       .select('id, equipment_id, change_kind, target_table, target_column, old_value, new_value, agent, rationale, severity, status, staged_photo_url, decided_by, decided_at, decided_note')
       .eq('run_id', link.audit_run_id)
       .order('equipment_id', { ascending: true }).order('created_at', { ascending: true }),
+    // regulator_payload (per-machine inspector narrative) + regulator_concurs
+    // (the "sharpened" badge) ride alongside the EHS verdict.
     admin.from('loto_audit_equipment_results')
-      .select('equipment_id, iso_photo_verdict, equip_photo_verdict, ds_equipment_confidence, ehs_pass, ehs_notes')
+      .select('equipment_id, iso_photo_verdict, equip_photo_verdict, ds_equipment_confidence, ehs_pass, ehs_notes, regulator_payload, regulator_concurs')
       .eq('run_id', link.audit_run_id).order('equipment_id', { ascending: true }),
   ])
 
@@ -76,6 +80,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     run: run ?? null,
     changes: changes ?? [],
     results: results ?? [],
+    regulator_report: run?.regulator_report ?? null,
   })
 }
 

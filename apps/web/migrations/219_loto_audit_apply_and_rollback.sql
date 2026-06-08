@@ -208,13 +208,17 @@ begin
      where equipment_id = v.equipment_id and tenant_id = v.tenant_id;
 
   elsif v.change_kind = 'placeholder_photo' then
-    -- Attach the staged watermarked reference image to the ISO slot. Forces
-    -- placard re-render; the 217 trigger guarantees this can never be verified.
+    -- Attach the staged ISO image. Two sources land here: the watermarked web
+    -- reference (defaults: reference_placeholder + is_placeholder=true, which
+    -- the 217 trigger guarantees can never read as verified) AND a vision-
+    -- verified match from the tenant's OWN storage, which carries
+    -- provenance='field'/is_placeholder=false in new_value so it applies as a
+    -- real field photo. Defaults preserve the original web-placeholder behavior.
     update public.loto_equipment
        set iso_photo_url                   = coalesce(v.staged_photo_url, v.new_value ->> 'photo_url'),
            has_iso_photo                   = true,
-           iso_photo_provenance            = 'reference_placeholder',
-           iso_photo_is_placeholder        = true,
+           iso_photo_provenance            = coalesce(v.new_value ->> 'provenance', 'reference_placeholder'),
+           iso_photo_is_placeholder        = coalesce((v.new_value ->> 'is_placeholder')::boolean, true),
            iso_photo_placeholder_source_url = v.new_value ->> 'source_url',
            placard_url                     = null,
            updated_at                      = now()

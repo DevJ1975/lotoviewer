@@ -1,10 +1,17 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.3.0'
+const CURRENT_VERSION = '1.4.0'
 const LAST_UPDATED    = '2026-06-08'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.4.0',
+    date: '2026-06-08',
+    changes: [
+      'Cal/OSHA Inspector’s Report on the audit review link. After the multi-agent audit runs, a fifth agent — a veteran Cal/OSHA compliance officer (CSHO) — adversarially re-reviews every machine and the program as a whole BEFORE you review it. The audit review surface now opens with that program-level report (an §3314 program-element checklist, systemic patterns with affected counts, and ordered top priorities), and each machine carries the inspector’s narrative plus a "Regulator sharpened" badge wherever the regulator dissented from the internal EHS verdict and drove a correction. Corrected procedures are drafted bilingually (EN/ES) and, like every audit change, stay staged until you approve them.',
+    ],
+  },
   {
     version: '1.3.0',
     date: '2026-06-08',
@@ -108,6 +115,18 @@ export default function WikiReviewPortalPage() {
               old→new diff per change — and lets a reviewer approve or reject each
               one. No change touches the live placard until it is approved here{' '}
               <em>and</em> an admin applies it (snapshot-first, with rollback).</>,
+          },
+          {
+            q: 'What is the Cal/OSHA Inspector\'s Report at the top of the audit review?',
+            a: <>After the audit runs, a fifth agent — a veteran Cal/OSHA
+              compliance officer — re-reviews every machine and the whole
+              program adversarially, <em>before</em> you do. Its program-level
+              report (an §3314 program-element checklist, systemic patterns, and
+              ordered priorities) heads the review surface, and individual
+              machines show its inspector narrative plus a <strong>Regulator
+              sharpened</strong> badge wherever it dissented from the internal
+              EHS verdict and drove a correction. It is advisory — every fix it
+              prompts is still staged for your approval.</>,
           },
           {
             q: 'How long is the link valid?',

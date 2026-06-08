@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { LotoAuditChange } from '@/lib/loto/audit/schemas'
 import AuditSummaryHeader, { type AuditResult } from './AuditSummaryHeader'
 import ChangeDiffCard from './ChangeDiffCard'
+import { RegulatorReportSection, MachineRegulatorNote } from './RegulatorReport'
 
 // Public audit-review client. Mirrors app/review/[token]'s ReviewClient: the URL
 // token is the only auth, every call hits /api/review/audit/[token]. Flow:
@@ -19,9 +20,12 @@ import ChangeDiffCard from './ChangeDiffCard'
 type Decision = 'approved' | 'rejected'
 
 interface LoadState {
-  signedOffAt: string | null
-  changes:     LotoAuditChange[]
-  results:     AuditResult[]
+  signedOffAt:     string | null
+  changes:         LotoAuditChange[]
+  results:         AuditResult[]
+  // The Cal/OSHA inspector's program-level report (jsonb; unknown-typed —
+  // RegulatorReportSection narrows it). Null on pre-regulator runs.
+  regulatorReport: unknown
 }
 
 export default function AuditReviewClient({ token }: { token: string }) {
@@ -43,9 +47,10 @@ export default function AuditReviewClient({ token }: { token: string }) {
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
       setState({
-        signedOffAt: body.signed_off_at ?? null,
-        changes:     (body.changes ?? []) as LotoAuditChange[],
-        results:     (body.results ?? []) as AuditResult[],
+        signedOffAt:     body.signed_off_at ?? null,
+        changes:         (body.changes ?? []) as LotoAuditChange[],
+        results:         (body.results ?? []) as AuditResult[],
+        regulatorReport: body.regulator_report ?? null,
       })
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Could not load this review.')
@@ -99,6 +104,13 @@ export default function AuditReviewClient({ token }: { token: string }) {
   const changesByEquipment = useMemo(
     () => groupByEquipment(state?.changes ?? []),
     [state?.changes],
+  )
+
+  // Per-machine result lookup so each machine's card can show the inspector's
+  // narrative + the "Regulator sharpened" badge next to its changes.
+  const resultByEquipment = useMemo(
+    () => new Map((state?.results ?? []).map(r => [r.equipment_id, r])),
+    [state?.results],
   )
 
   const undecided = useMemo(
@@ -160,6 +172,8 @@ export default function AuditReviewClient({ token }: { token: string }) {
       <div className="mx-auto max-w-3xl space-y-5">
         <AuditSummaryHeader tenantName={tenantName} changes={state.changes} results={state.results} />
 
+        <RegulatorReportSection report={state.regulatorReport} />
+
         {readOnly && (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center">
             <div className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
@@ -187,7 +201,11 @@ export default function AuditReviewClient({ token }: { token: string }) {
                 <span className="font-mono text-sm font-bold text-slate-900">{equipmentId}</span>
                 <span className="text-xs text-slate-500">{rows.length} change{rows.length === 1 ? '' : 's'}</span>
               </div>
-              <div className="space-y-3">
+              <MachineRegulatorNote
+                payload={resultByEquipment.get(equipmentId)?.regulator_payload ?? null}
+                concurs={resultByEquipment.get(equipmentId)?.regulator_concurs ?? null}
+              />
+              <div className="mt-3 space-y-3">
                 {rows.map(change => (
                   <ChangeDiffCard
                     key={change.id}

@@ -1,4 +1,4 @@
-import type { AuditSeverity, LotoAuditChange } from '@/lib/loto/audit/schemas'
+import type { AuditSeverity, LotoAuditChange, RegulatorMachineResult } from '@/lib/loto/audit/schemas'
 import {
   SEVERITY_BADGE,
 } from '@/app/admin/loto/audit/_lib/changeDisplay'
@@ -14,6 +14,10 @@ export interface AuditResult {
   ds_equipment_confidence: string | null
   ehs_pass:                boolean | null
   ehs_notes:               string | null
+  // Cal/OSHA regulator review (migration 221). Present once the regulator phase
+  // has run; null on runs that predate it or machines it hasn't reached.
+  regulator_payload:       RegulatorMachineResult | null
+  regulator_concurs:       boolean | null
 }
 
 const SEVERITY_ORDER: AuditSeverity[] = ['critical', 'high', 'medium', 'low', 'info']
