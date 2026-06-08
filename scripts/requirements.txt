@@ -1,0 +1,4 @@
+# Dependencies for scripts/osha_1910_ingest.py (the OSHA 29 CFR 1910 RAG ingester).
+# Install into a venv:  python -m venv .venv && . .venv/bin/activate && pip install -r scripts/requirements.txt
+lxml>=5.2
+requests>=2.31

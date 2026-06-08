@@ -76,6 +76,10 @@
     {
       "path": "/api/cron/fleet-document-expiry-reminders",
       "schedule": "45 12 * * *"
+    },
+    {
+      "path": "/api/cron/check-regulation-updates",
+      "schedule": "0 8 1 */2 *"
     }
   ]
 }
