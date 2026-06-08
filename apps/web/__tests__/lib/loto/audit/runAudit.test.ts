@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Hoisted mocks ────────────────────────────────────────────────────────────
 const {
-  runFpeAgentMock, runDsAgentMock, runEhsAgentMock,
+  runFpeAgentMock, runDsAgentMock, runEhsAgentMock, runAuthorAgentMock,
   buildPlaceholderPhotoMock, findExistingIsoPhotoMock,
   getAnthropicMock,
   checkTenantBudgetMock, checkAiRateLimitMock, logAiInvocationMock,
@@ -44,6 +44,7 @@ const {
     runFpeAgentMock: vi.fn(),
     runDsAgentMock: vi.fn(),
     runEhsAgentMock: vi.fn(),
+    runAuthorAgentMock: vi.fn(),
     buildPlaceholderPhotoMock: vi.fn(),
     findExistingIsoPhotoMock: vi.fn(),
     getAnthropicMock: vi.fn(async (..._a: unknown[]) => ({ messages: { create: vi.fn() } })),
@@ -62,6 +63,9 @@ vi.mock('@/lib/loto/audit/agents/ds', () => ({
 }))
 vi.mock('@/lib/loto/audit/agents/ehs', () => ({
   runEhsAgent: (...a: unknown[]) => runEhsAgentMock(...a),
+}))
+vi.mock('@/lib/loto/audit/agents/author', () => ({
+  runAuthorAgent: (...a: unknown[]) => runAuthorAgentMock(...a),
 }))
 vi.mock('@/lib/loto/audit/placeholderPhoto', () => ({
   buildPlaceholderPhoto: (...a: unknown[]) => buildPlaceholderPhotoMock(...a),
@@ -130,7 +134,7 @@ vi.mock('@/lib/supabaseAdmin', () => {
 })
 
 import { runAudit } from '@/lib/loto/audit/runAudit'
-import type { DsResult, EhsResult, FpeResult } from '@/lib/loto/audit/schemas'
+import type { AuthorResult, DsResult, EhsResult, FpeResult } from '@/lib/loto/audit/schemas'
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 const RUN_ID = 'run-1'
@@ -170,9 +174,39 @@ function dsOutput(lowConfidenceIso: boolean) {
   return { result, usage: null, model: 'm-ds', missingPhases: [] }
 }
 
-function ehsOutput(): { result: EhsResult; usage: null; model: string } {
-  const result: EhsResult = { pass: true, citations: [], recommendations: [], notes: '' }
+function ehsOutput(pass = true): { result: EhsResult; usage: null; model: string } {
+  const result: EhsResult = {
+    pass,
+    citations: pass ? [] : [{ code: '29 CFR 1910.147(c)(4)(ii)', text: 'No tryout step.', severity: 'critical' }],
+    recommendations: pass ? [] : ['Add a verify_zero_energy step.'],
+    notes: '',
+  }
   return { result, usage: null, model: 'm-ehs' }
+}
+
+function authorOutput(): { result: AuthorResult; usage: null; model: string } {
+  const result: AuthorResult = {
+    steps: [
+      {
+        energy_type: 'E', step_type: 'isolate',
+        tag_description: '[VERIFY ON SITE: main disconnect ID]',
+        isolation_procedure: 'Open and lock the disconnect.',
+        method_of_verification: 'Meter for zero voltage.',
+        tag_description_es: '[VERIFY ON SITE: main disconnect ID]',
+        isolation_procedure_es: 'Abra y bloquee el desconectador.',
+        method_of_verification_es: 'Mida cero voltaje.',
+      },
+      {
+        energy_type: 'E', step_type: 'verify_zero_energy',
+        tag_description: 'Motor leads', isolation_procedure: 'N/A',
+        method_of_verification: 'Attempt restart; confirm no motion.',
+        tag_description_es: 'Conductores del motor', isolation_procedure_es: 'N/A',
+        method_of_verification_es: 'Intente reiniciar; confirme que no haya movimiento.',
+      },
+    ],
+    summary: 'Added the missing zero-energy verification step.',
+  }
+  return { result, usage: null, model: 'm-author' }
 }
 
 beforeEach(() => {
@@ -180,6 +214,7 @@ beforeEach(() => {
   runFpeAgentMock.mockReset()
   runDsAgentMock.mockReset()
   runEhsAgentMock.mockReset()
+  runAuthorAgentMock.mockReset()
   buildPlaceholderPhotoMock.mockReset()
   findExistingIsoPhotoMock.mockReset()
   getAnthropicMock.mockClear()
@@ -308,5 +343,56 @@ describe('runAudit — low-confidence ISO routing', () => {
     await runAudit({ tenantId: TENANT_ID, runId: RUN_ID, userId: 'u1', scope: {}, concurrency: 1 })
 
     expect(buildPlaceholderPhotoMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('runAudit — procedure_draft (Author agent)', () => {
+  it('drafts a procedure_draft change carrying the corrected steps when EHS fails', async () => {
+    supabaseState.equipment = [equipment('EQ-FAIL')]
+    runFpeAgentMock.mockResolvedValue(fpeOutput('match'))
+    runDsAgentMock.mockResolvedValue(dsOutput(false))
+    runEhsAgentMock.mockResolvedValue(ehsOutput(false)) // gate FAILS ⇒ author runs
+    runAuthorAgentMock.mockResolvedValue(authorOutput())
+
+    await runAudit({ tenantId: TENANT_ID, runId: RUN_ID, userId: 'u1', scope: {}, concurrency: 1 })
+
+    // The author agent was invoked exactly once for the failing machine.
+    expect(runAuthorAgentMock).toHaveBeenCalledTimes(1)
+
+    const changeInsert = supabaseState.inserts.find(i => i.table === 'loto_audit_changes')
+    expect(changeInsert).toBeDefined()
+    const rows = changeInsert!.payload as Array<{
+      change_kind: string
+      agent: string
+      severity: string
+      new_value?: { steps?: unknown[]; summary?: string }
+    }>
+    const draft = rows.find(r => r.change_kind === 'procedure_draft')
+    expect(draft).toBeDefined()
+    // The corrected step set rides in new_value.steps.
+    expect(Array.isArray(draft!.new_value?.steps)).toBe(true)
+    expect(draft!.new_value!.steps).toHaveLength(2)
+    expect(draft!.new_value?.summary).toMatch(/verification/i)
+    // Staged under the existing 'SSD' agent value (no new agent CHECK), high severity.
+    expect(draft!.agent).toBe('SSD')
+    expect(draft!.severity).toBe('high')
+  })
+
+  it('does NOT draft a procedure (or call the author) when EHS passes', async () => {
+    supabaseState.equipment = [equipment('EQ-PASS')]
+    runFpeAgentMock.mockResolvedValue(fpeOutput('match'))
+    runDsAgentMock.mockResolvedValue(dsOutput(false))
+    runEhsAgentMock.mockResolvedValue(ehsOutput(true)) // gate PASSES ⇒ no author
+    runAuthorAgentMock.mockResolvedValue(authorOutput())
+
+    await runAudit({ tenantId: TENANT_ID, runId: RUN_ID, userId: 'u1', scope: {}, concurrency: 1 })
+
+    // Cost guard: the author must not run for a compliant machine.
+    expect(runAuthorAgentMock).not.toHaveBeenCalled()
+    // And no procedure_draft change is staged (a passing machine may emit no
+    // changes at all, so guard against an undefined insert).
+    const changeInsert = supabaseState.inserts.find(i => i.table === 'loto_audit_changes')
+    const rows = (changeInsert?.payload ?? []) as Array<{ change_kind: string }>
+    expect(rows.some(r => r.change_kind === 'procedure_draft')).toBe(false)
   })
 })

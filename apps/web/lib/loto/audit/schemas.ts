@@ -165,6 +165,97 @@ export const EHS_SCHEMA = {
   additionalProperties: false,
 } as const
 
+// ── Author agent: corrected-procedure drafter ───────────────────────────────
+// Drafts a corrected, machine-specific energy-control procedure for a non-
+// compliant machine. It is NEVER the authority — every draft is staged as a
+// `procedure_draft` change for a qualified safety professional to review, edit,
+// and sign through the audit review link before it can touch live steps.
+//
+// energy_type is intentionally NOT enum-constrained: the canonical code set
+// (packages/core/energyCodes.ts) is broad and evolves, and the prompt feeds the
+// model the live table — an enum here would silently drift. step_type IS
+// constrained to the five OSHA phases the placard + validateProcedure key on.
+
+export type AuthorStepType = 'shutdown' | 'isolate' | 'release_stored_energy' | 'lockout' | 'verify_zero_energy'
+
+export interface AuthorStep {
+  energy_type:               string
+  step_type:                 AuthorStepType
+  tag_description:           string
+  isolation_procedure:       string
+  method_of_verification:    string
+  // Spanish parity: every placard renders bilingually (EN/ES), so a corrected
+  // draft MUST carry the matching Spanish text — otherwise the ES side of the
+  // placard would blank out when the draft is applied. These are faithful
+  // translations of the EN fields above, keeping the literal "[VERIFY ON SITE:
+  // …]" marker token (in English) so unverified items stay detectable in both
+  // languages.
+  tag_description_es:        string
+  isolation_procedure_es:    string
+  method_of_verification_es: string
+}
+
+export interface AuthorResult {
+  steps:   AuthorStep[]
+  summary: string
+}
+
+export const AUTHOR_SCHEMA = {
+  type: 'object',
+  properties: {
+    steps: {
+      type: 'array',
+      description: 'The corrected procedure: one step per independent energy source, ordered shutdown → isolate → release stored energy → lockout → verify zero energy. At least one step is required.',
+      items: {
+        type: 'object',
+        properties: {
+          energy_type: {
+            type: 'string',
+            description: 'Energy-source code from the facility table provided in the prompt (e.g. E, P, H, T). Use the code that best fits the source; do not invent codes.',
+          },
+          step_type: {
+            type: 'string',
+            enum: ['shutdown', 'isolate', 'release_stored_energy', 'lockout', 'verify_zero_energy'],
+            description: 'Which OSHA energy-control phase this step belongs to.',
+          },
+          tag_description: {
+            type: 'string',
+            description: 'The specific energy source and its physical location. When the exact site identifier (disconnect/panel/breaker ID, valve tag, gauge ID, location) is NOT derivable from the given data, emit a literal "[VERIFY ON SITE: <what to confirm>]" placeholder — never fabricate an identifier.',
+          },
+          isolation_procedure: {
+            type: 'string',
+            description: 'Physical isolation action, lock/tag attachment point, and any stored-energy bleed/release. Use the same "[VERIFY ON SITE: <...>]" placeholder for any unknown site-specific detail.',
+          },
+          method_of_verification: {
+            type: 'string',
+            description: 'Concrete zero-energy test performed before work begins (meter reading, attempted start, gauge check, blocking-pin confirmation). Use "[VERIFY ON SITE: <...>]" for any unknown detail.',
+          },
+          tag_description_es: {
+            type: 'string',
+            description: 'Professional Spanish (es-MX) translation of tag_description, matching the register of the existing bilingual placards. Mirror any "[VERIFY ON SITE: <...>]" marker verbatim — keep that English token so unverified items stay detectable in both languages.',
+          },
+          isolation_procedure_es: {
+            type: 'string',
+            description: 'Spanish (es-MX) translation of isolation_procedure, carrying the same "[VERIFY ON SITE: <...>]" markers as the English field.',
+          },
+          method_of_verification_es: {
+            type: 'string',
+            description: 'Spanish (es-MX) translation of method_of_verification, carrying the same "[VERIFY ON SITE: <...>]" markers as the English field.',
+          },
+        },
+        required: ['energy_type', 'step_type', 'tag_description', 'isolation_procedure', 'method_of_verification', 'tag_description_es', 'isolation_procedure_es', 'method_of_verification_es'],
+        additionalProperties: false,
+      },
+    },
+    summary: {
+      type: 'string',
+      description: 'One short paragraph for the reviewing safety professional: what was corrected versus the deficient procedure and which items still need on-site verification.',
+    },
+  },
+  required: ['steps', 'summary'],
+  additionalProperties: false,
+} as const
+
 // ── DB-row DTOs (mirror migrations 218/219) ─────────────────────────────────
 
 export type AuditRunStatus =
@@ -175,6 +266,10 @@ export type AuditAgentPhase = 'pending' | 'fpe_done' | 'ds_done' | 'ehs_done' | 
 export type AuditChangeKind =
   | 'step_field_edit' | 'step_confidence' | 'equipment_field_edit'
   | 'photo_provenance' | 'placeholder_photo' | 'ehs_finding'
+  // Full corrected procedure drafted by the Author agent (migration 220).
+  // new_value carries the complete replacement step set + a reviewer summary;
+  // applying it replaces the machine's loto_energy_steps. Never auto-applied.
+  | 'procedure_draft'
 
 export type AuditChangeStatus = 'pending' | 'approved' | 'rejected' | 'applied' | 'superseded'
 

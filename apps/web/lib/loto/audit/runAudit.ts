@@ -18,9 +18,10 @@ import type { AiSurface } from '@/lib/ai/rateLimit'
 import { runFpeAgent } from './agents/fpe'
 import { runDsAgent } from './agents/ds'
 import { runEhsAgent } from './agents/ehs'
+import { runAuthorAgent } from './agents/author'
 import { buildPlaceholderPhoto } from './placeholderPhoto'
 import { findExistingIsoPhoto } from './storagePhotoSearch'
-import type { AuditSeverity, DsResult, EhsResult, FpeResult } from './schemas'
+import type { AuditSeverity, AuthorResult, DsResult, EhsResult, FpeResult } from './schemas'
 
 export interface RunAuditScope {
   department?:    string
@@ -144,11 +145,20 @@ async function processEquipment(
   // 3. EHS (Cal/OSHA gate)
   const ehs = await callAgent(opts, 'loto-audit-ehs', () => runEhsAgent(client, eq, steps, ds.result, fpe.result, ds.missingPhases))
 
+  // 4. Author — ONLY for machines that failed the gate. Drafts a corrected
+  // procedure for a qualified safety professional to review/sign; it is staged,
+  // never applied. Guarded on ehs_pass===false so a compliant machine never
+  // burns an authoring call.
+  const authored = ehs.result.pass === false
+    ? await callAgent(opts, 'loto-audit-author', () =>
+        runAuthorAgent(client, eq, steps, ehs.result.citations, ehs.result.recommendations, ds.result.notes, ds.missingPhases))
+    : null
+
   // Emit the staged change-set BEFORE marking the equipment 'ehs_done'. If a
   // serverless reclaim hits mid-emit, the row stays at 'ds_done' and a resume
   // re-runs it cleanly — rather than 'ehs_done' with no changes, which the
   // resume guard below would skip, silently losing that machine's findings.
-  await emitChanges(admin, client, opts, eq, steps, fpe.result, ds.result, ehs.result)
+  await emitChanges(admin, client, opts, eq, steps, fpe.result, ds.result, ehs.result, authored?.result ?? null)
 
   await upsertResult(admin, opts, eq.equipment_id, {
     ehs_pass:            ehs.result.pass,
@@ -185,6 +195,7 @@ async function emitChanges(
   fpe: FpeResult,
   ds: DsResult,
   ehs: EhsResult,
+  author: AuthorResult | null,
 ): Promise<void> {
   const changes: PendingChange[] = []
 
@@ -278,6 +289,37 @@ async function emitChanges(
       agent:         'EHS',
       rationale:     c.text,
       severity:      c.severity,
+    })
+  }
+
+  // (d) Author's corrected procedure (only present when the EHS gate failed).
+  // One staged change carrying the full replacement step set; applying it
+  // replaces the machine's loto_energy_steps (migration 220). target_row_pk is
+  // null because the whole procedure is replaced, not one row. agent 'SSD' is
+  // the existing allowed value for the systems/author role — no new agent CHECK.
+  // This is a DRAFT for the safety professional: the review gate is the only
+  // path to a live write.
+  if (author) {
+    changes.push({
+      change_kind:   'procedure_draft',
+      target_table:  'loto_energy_steps',
+      target_row_pk: null,
+      target_column: null,
+      old_value:     steps.map(s => ({
+        energy_type:               s.energy_type,
+        step_type:                 s.step_type,
+        tag_description:           s.tag_description,
+        isolation_procedure:       s.isolation_procedure,
+        method_of_verification:    s.method_of_verification,
+        // Carry the Spanish so the reviewer sees the ES before→after too.
+        tag_description_es:        s.tag_description_es,
+        isolation_procedure_es:    s.isolation_procedure_es,
+        method_of_verification_es: s.method_of_verification_es,
+      })),
+      new_value:     { steps: author.steps, summary: author.summary },
+      agent:         'SSD',
+      rationale:     'Drafted corrected procedure for safety-professional review.',
+      severity:      'high',
     })
   }
 

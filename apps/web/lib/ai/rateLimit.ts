@@ -37,6 +37,7 @@ export type AiSurface =
   | 'loto-audit-fpe'
   | 'loto-audit-ds'
   | 'loto-audit-ehs'
+  | 'loto-audit-author'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
@@ -84,6 +85,10 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   'loto-audit-fpe':                   { perHour: 600, perDay: 4000 },
   'loto-audit-ds':                    { perHour: 600, perDay: 4000 },
   'loto-audit-ehs':                   { perHour: 600, perDay: 4000 },
+  // Author only fires for the subset of machines that FAIL the EHS gate, so its
+  // volume is a fraction of the other surfaces — but it rides the same bursty
+  // full-run fan-out, so it gets the same generous caps.
+  'loto-audit-author':                { perHour: 600, perDay: 4000 },
 }
 
 interface CheckArgs {

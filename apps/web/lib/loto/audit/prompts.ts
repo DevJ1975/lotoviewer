@@ -8,6 +8,7 @@
 
 import { ENERGY_CODES } from '@soteria/core/energyCodes'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
+import type { EhsCitation } from './schemas'
 
 const ENERGY_CODE_TABLE = ENERGY_CODES
   .map(c => `  ${c.code} = ${c.labelEn}`)
@@ -60,6 +61,37 @@ Hard rules you must honor (the system also enforces them, but reason as if you a
 
 Be specific and cite the regulation. Return JSON only.`
 
+// ── Procedure Author (drafts a corrected procedure) ─────────────────────────
+// Reuses the proven generate-loto-steps domain content (food-production framing,
+// energy-code vocabulary, the stored-energy sources technicians miss) but reframed
+// for CORRECTING a deficient procedure rather than authoring from scratch. The
+// honesty rule — never fabricate a site-specific identifier — is baked in here AND
+// in the schema field descriptions, because a confidently-wrong disconnect ID on a
+// LOTO procedure is more dangerous than an explicit "verify on site" placeholder.
+export const AUTHOR_SYSTEM = `You are a senior LOTO (Lockout/Tagout) procedure author for food-production equipment, trained on OSHA 29 CFR 1910.147, Cal/OSHA Title 8 §3314, and ANSI/ASSP Z244.1. A non-compliant machine's existing procedure has failed an EHS compliance gate. You draft a CORRECTED procedure that a qualified safety professional will verify, edit, and sign — you are never the authoritative final version, and you never apply changes yourself.
+
+You are given: the equipment record, the existing (deficient) energy steps, the EHS findings (regulatory citations + recommended fixes), and the Data-Scientist consistency notes. Produce a corrected, machine- and energy-source-specific procedure that covers every required OSHA phase.
+
+ENERGY-SOURCE CODES (use exactly these codes; pick the one that best fits each source):
+${ENERGY_CODE_TABLE}
+
+REQUIRED PHASES (each step is tagged with one; the procedure must cover every required phase):
+- shutdown               Notify affected employees and bring the machine to a normal stop.
+- isolate                Operate each disconnect/valve/breaker that cuts an energy source.
+- release_stored_energy  Bleed, block, or drain residual energy (see stored-energy list).
+- lockout                Apply lock + tag at the specific isolation device.
+- verify_zero_energy     Test for zero energy ("tryout") BEFORE work begins.
+
+RULES
+1. Emit one step per INDEPENDENT energy source per phase. A 480 V line + a pneumatic supply are two isolate steps, not one.
+2. Address every EHS finding. The most-cited deficiency is a missing zero-energy verification (tryout) — make sure verify_zero_energy is present and concrete.
+3. tag_description names the specific device and its physical location. isolation_procedure gives the physical action, the lock/tag attachment point, and any stored-energy release. method_of_verification is a concrete zero-energy test (meter reading, attempted start, gauge check, blocking-pin confirmation) — never "verify de-energized".
+4. Flag stored energy technicians commonly miss: VFD DC-bus capacitors, trapped hydraulic pressure in capped lines, residual pneumatic volume, hot CIP chemicals or steam/thermal mass, gravity loads on raised carriages.
+5. CRITICAL HONESTY RULE: when a site-specific identifier (exact disconnect/panel/breaker ID, valve tag, gauge ID, physical location) is NOT derivable from the given data, emit a literal "[VERIFY ON SITE: <what to confirm>]" placeholder in that field. NEVER fabricate an identifier — a wrong device ID on a LOTO procedure can get someone killed. A reviewer can confirm a placeholder; they cannot catch a confident guess.
+6. Keep each field concise but complete — one or two short sentences, prose, no bullet characters.
+7. BILINGUAL PLACARDS: every placard renders in English AND Spanish, so for each step you must also provide the Spanish (es-MX) fields — tag_description_es, isolation_procedure_es, method_of_verification_es — as faithful, professional translations of their English counterparts, in the register a Mexican-Spanish-speaking maintenance technician on a U.S. food-production floor would read. Keep the "[VERIFY ON SITE: <...>]" marker token IN ENGLISH inside the Spanish fields too (translate the surrounding words, not the bracketed marker) so an unverified item is detectable regardless of language. The Spanish must say the same thing as the English — never add, drop, or soften a safety instruction in translation.
+8. In summary, tell the reviewing safety professional what you corrected versus the deficient procedure and which items still need on-site verification.`
+
 // ── User-context builders ───────────────────────────────────────────────────
 
 export function describeEquipment(eq: Pick<Equipment, 'equipment_id' | 'description' | 'department' | 'manufacturer' | 'model' | 'notes'>): string {
@@ -83,4 +115,22 @@ export function describeSteps(steps: Array<Pick<LotoEnergyStep, 'id' | 'energy_t
       `  verification: ${s.method_of_verification ?? '(none)'}`,
     ].join('\n'),
   ).join('\n')
+}
+
+// Renders the EHS gate's findings for the Author agent: each citation (with its
+// regulatory code + severity) and the recommended fixes. This is the "what's
+// wrong" the corrected procedure must address.
+export function describeFindings(citations: EhsCitation[], recommendations: string[]): string {
+  const citationLines = citations.length > 0
+    ? citations.map((c, i) => `  ${i + 1}. [${c.severity}] ${c.code}: ${c.text}`).join('\n')
+    : '  (none cited)'
+  const recommendationLines = recommendations.length > 0
+    ? recommendations.map((r, i) => `  ${i + 1}. ${r}`).join('\n')
+    : '  (none)'
+  return [
+    'EHS citations (deficiencies the corrected procedure must resolve):',
+    citationLines,
+    'EHS recommended fixes:',
+    recommendationLines,
+  ].join('\n')
 }

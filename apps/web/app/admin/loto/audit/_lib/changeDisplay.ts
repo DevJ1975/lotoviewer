@@ -12,6 +12,7 @@ export const CHANGE_KIND_LABEL: Record<AuditChangeKind, string> = {
   photo_provenance:     'Photo provenance',
   placeholder_photo:    'Reference photo',
   ehs_finding:          'EHS finding',
+  procedure_draft:      'Drafted procedure',
 }
 
 export const AGENT_LABEL: Record<LotoAuditChange['agent'], string> = {

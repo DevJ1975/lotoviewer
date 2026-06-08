@@ -85,6 +85,12 @@ export const MODEL_BY_SURFACE = {
   // loto-audit-ehs: Senior EHS Specialist gate. Cites Cal/OSHA T8 §3314 +
   //   1910.147 + Z244.1 over RAG — same class as assistant-hazards. Sonnet.
   'loto-audit-ehs':                   SONNET,
+  // loto-audit-author: drafts a CORRECTED energy-control procedure for a machine
+  //   the EHS gate failed. Same reasoning + structured-output class as
+  //   generate-loto-steps (whose proven prompt it reuses). Sonnet. The draft is
+  //   staged for a qualified safety professional to review/sign — never applied
+  //   automatically.
+  'loto-audit-author':                SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE
