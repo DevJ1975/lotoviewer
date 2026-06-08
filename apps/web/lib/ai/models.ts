@@ -4,6 +4,7 @@
 //
 //   - SONNET = 'claude-sonnet-4-6'   (NOT claude-sonnet-4-6-20250930)
 //   - HAIKU  = 'claude-haiku-4-5'    (NOT claude-haiku-4-5-20251001)
+//   - OPUS   = 'claude-opus-4-8'     (NOT claude-opus-4-8-<date>)
 //
 // The alias auto-rolls forward within a model's lifecycle (e.g.
 // Anthropic ships claude-sonnet-4-6-20260101 and the alias starts
@@ -18,13 +19,18 @@
 // review burden. validate-photo (the per-upload subject check),
 // plus the image-content blocks in the two generation routes, are
 // gone. Sonnet 4.6 stays on the chat + structured-output surfaces.
-// Haiku is kept available in this module in case a future
-// lightweight text-only surface wants it.
+//
+// The multi-agent LOTO audit uses cost-tiered ("barbell") routing: its
+// high-volume perception + consistency passes (FPE vision, DS) run on
+// Haiku, while the safety-critical Cal/OSHA gate (EHS) and the
+// adversarial regulator review run on Opus — strongest reasoning where a
+// wrong call is most costly. See the audit block in MODEL_BY_SURFACE.
 
 export const SONNET = 'claude-sonnet-4-6' as const
 export const HAIKU  = 'claude-haiku-4-5'  as const
+export const OPUS   = 'claude-opus-4-8'   as const
 
-export type ModelId = typeof SONNET | typeof HAIKU
+export type ModelId = typeof SONNET | typeof HAIKU | typeof OPUS
 
 /**
  * Surface → model selection. Single point of override if a surface
@@ -65,38 +71,42 @@ export const MODEL_BY_SURFACE = {
   // right cost/accuracy trade. Admin always reviews before any
   // mutation; the model never auto-edits severity_actual.
   'predict-incident-escalation':      HAIKU,
-  // ── Multi-agent LOTO audit (FPE / DS / EHS) ───────────────────────────────
-  // These DELIBERATELY reintroduce vision + structured reasoning over photos,
-  // which the comment at the top of this file notes was removed as a per-upload
-  // gate. The difference: this is an OFFLINE AUDIT pass over already-stored
-  // photos whose every proposed fix is surfaced through a human-approval review
-  // link before it touches the SaaS — so it does NOT reintroduce the
-  // latency/cost-on-every-upload that drove the original removal.
+  // ── Multi-agent LOTO audit (FPE / DS / EHS / Author / Regulator) ──────────
+  // An OFFLINE audit pass over already-stored photos + procedures whose every
+  // proposed fix is surfaced through a human-approval review link before it
+  // touches live data — so it does NOT reintroduce the latency/cost-on-every-
+  // upload that drove the original per-upload photo gate's removal.
   //
-  // loto-audit-fpe: Food-Production-Engineer vision agent. Sonnet for the same
-  //   reason assistant-scan-photo uses it — OCR/robustness on degraded
-  //   industrial photos is what makes the equipment/isolation-point judgement
-  //   trustworthy.
-  'loto-audit-fpe':                   SONNET,
-  // loto-audit-ds: Data-Scientist consistency agent. Must reconcile equipment
-  //   description ↔ energy codes ↔ steps ↔ OSHA phases ↔ FPE verdicts — same
-  //   reasoning class as parse-sds. Sonnet.
-  'loto-audit-ds':                    SONNET,
+  // Cost-tiered ("barbell") routing for this high-fan-out sweep: the two
+  // high-volume perception/consistency passes run on Haiku; the safety-critical
+  // Cal/OSHA judgement runs on Opus. The bulk of the calls get ~3x cheaper while
+  // the gate gets the strongest reasoning where a wrong call is most costly.
+  //
+  // loto-audit-fpe: Food-Production-Engineer vision agent — judges the equipment
+  //   + isolation photos. Haiku 4.5 (vision-capable). Once per machine on image-
+  //   heavy input, so it dominates token spend; the conservative downstream hard
+  //   gate (placeholder/missing/mismatch ⇒ fail) plus human review bound the risk
+  //   of a cheaper photo read.
+  'loto-audit-fpe':                   HAIKU,
+  // loto-audit-ds: Data-Scientist consistency agent. Reconciles description ↔
+  //   energy codes ↔ steps ↔ OSHA phases ↔ FPE verdicts — structured, text-only,
+  //   high volume. Haiku.
+  'loto-audit-ds':                    HAIKU,
   // loto-audit-ehs: Senior EHS Specialist gate. Cites Cal/OSHA T8 §3314 +
-  //   1910.147 + Z244.1 over RAG — same class as assistant-hazards. Sonnet.
-  'loto-audit-ehs':                   SONNET,
-  // loto-audit-author: drafts a CORRECTED energy-control procedure for a machine
-  //   the EHS gate failed. Same reasoning + structured-output class as
-  //   generate-loto-steps (whose proven prompt it reuses). Sonnet. The draft is
-  //   staged for a qualified safety professional to review/sign — never applied
-  //   automatically.
+  //   1910.147 + Z244.1 and holds pass/fail authority — the safety-critical
+  //   decision. Opus 4.8 for the strongest compliance reasoning.
+  'loto-audit-ehs':                   OPUS,
+  // loto-audit-author: drafts a CORRECTED, bilingual energy-control procedure for
+  //   a machine the gate failed. Reuses the proven generate-loto-steps prompt and
+  //   stays on Sonnet — draft quality matters (a reviewer reads every one) but it
+  //   is never applied automatically, and its long output makes Opus costly here.
+  //   Bump to OPUS if top-tier draft prose is worth the spend.
   'loto-audit-author':                SONNET,
-  // loto-audit-regulator: veteran Cal/OSHA compliance officer (CSHO) who
-  //   adversarially re-reviews the internal EHS audit (per machine) and audits
-  //   the program end-to-end. Same Cal/OSHA-citation reasoning class as
-  //   loto-audit-ehs — Sonnet. Critique is staged for the human review gate;
-  //   it never writes live data.
-  'loto-audit-regulator':             SONNET,
+  // loto-audit-regulator: veteran Cal/OSHA CSHO who adversarially re-reviews the
+  //   EHS audit per machine and audits the program end-to-end, driving EHS
+  //   corrections. Same safety-critical class as the gate — Opus 4.8. Critique is
+  //   staged for the human review gate; it never writes live data.
+  'loto-audit-regulator':             OPUS,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

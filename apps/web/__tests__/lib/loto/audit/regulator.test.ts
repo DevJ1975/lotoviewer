@@ -114,7 +114,7 @@ describe('runRegulatorMachineReview — response parsing', () => {
   it('parses the dissent, additional citations, escalations, and narrative', async () => {
     const { result, model } = await runRegulatorMachineReview(client, EQUIPMENT, [step('s1', 'x')], fpe(), ds(), ehs())
 
-    expect(model).toBe('claude-sonnet-4-6')
+    expect(model).toBe('claude-opus-4-8')
     expect(result.concurs_with_ehs).toBe(false)
     expect(result.additional_citations).toHaveLength(1)
     expect(result.severity_escalations[0]!.to).toBe('critical')
