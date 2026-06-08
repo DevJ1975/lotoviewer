@@ -43,13 +43,20 @@ export class AnthropicNotConfiguredError extends Error {
  *   - AnthropicNotConfiguredError — neither tenant nor env has a key.
  *
  * Routes catch these and return 502/500 with a clear operator message.
+ *
+ * `opts.timeoutMs` overrides the default 30s request timeout — needed by
+ * surfaces whose structured output runs long (e.g. the multi-agent audit's
+ * EHS citations). Bounded by the caller's function maxDuration.
  */
-export async function getAnthropic(tenantId: string | null): Promise<Anthropic> {
+export async function getAnthropic(
+  tenantId: string | null,
+  opts?: { timeoutMs?: number },
+): Promise<Anthropic> {
   const apiKey = await getTenantApiKey(tenantId)
   if (!apiKey) throw new AnthropicNotConfiguredError()
   return new Anthropic({
     apiKey,
-    timeout: DEFAULT_TIMEOUT_MS,
+    timeout: opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     maxRetries: DEFAULT_MAX_RETRIES,
   })
 }

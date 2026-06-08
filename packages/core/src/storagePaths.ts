@@ -43,6 +43,21 @@ export function stagingReviewPhotoPath(
   return `staging/${reviewLinkId}/${sanitizeId(equipmentId)}/${slot}-${timestamp}.jpg`
 }
 
+// Watermarked manufacturer/reference ISO placeholder image (migration 217 +
+// the multi-agent audit). Attached to the ISO slot when the real isolation
+// point can't be confirmed. Tenant-uuid-first so the migration 033 RLS gates
+// writes; the _PLACEHOLDER_ infix makes it obvious in the bucket that this is
+// NOT a verified field photo.
+//   loto-photos/<tenant_uuid>/<sanitized_id>/<sanitized_id>_ISO_PLACEHOLDER_<ts>.jpg
+export function placeholderIsoPhotoPath(
+  tenantId: string,
+  equipmentId: string,
+  timestamp: number = Date.now(),
+): string {
+  const id = sanitizeId(equipmentId)
+  return `${tenantId}/${id}/${id}_ISO_PLACEHOLDER_${timestamp}.jpg`
+}
+
 // Generated placard PDF — one per equipment, overwritten on regenerate.
 //   loto-photos/<tenant_uuid>/<sanitized_id>/<sanitized_id>_placard.pdf
 export function placardPdfPath(tenantId: string, equipmentId: string): string {

@@ -65,6 +65,26 @@ export const MODEL_BY_SURFACE = {
   // right cost/accuracy trade. Admin always reviews before any
   // mutation; the model never auto-edits severity_actual.
   'predict-incident-escalation':      HAIKU,
+  // ── Multi-agent LOTO audit (FPE / DS / EHS) ───────────────────────────────
+  // These DELIBERATELY reintroduce vision + structured reasoning over photos,
+  // which the comment at the top of this file notes was removed as a per-upload
+  // gate. The difference: this is an OFFLINE AUDIT pass over already-stored
+  // photos whose every proposed fix is surfaced through a human-approval review
+  // link before it touches the SaaS — so it does NOT reintroduce the
+  // latency/cost-on-every-upload that drove the original removal.
+  //
+  // loto-audit-fpe: Food-Production-Engineer vision agent. Sonnet for the same
+  //   reason assistant-scan-photo uses it — OCR/robustness on degraded
+  //   industrial photos is what makes the equipment/isolation-point judgement
+  //   trustworthy.
+  'loto-audit-fpe':                   SONNET,
+  // loto-audit-ds: Data-Scientist consistency agent. Must reconcile equipment
+  //   description ↔ energy codes ↔ steps ↔ OSHA phases ↔ FPE verdicts — same
+  //   reasoning class as parse-sds. Sonnet.
+  'loto-audit-ds':                    SONNET,
+  // loto-audit-ehs: Senior EHS Specialist gate. Cites Cal/OSHA T8 §3314 +
+  //   1910.147 + Z244.1 over RAG — same class as assistant-hazards. Sonnet.
+  'loto-audit-ehs':                   SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

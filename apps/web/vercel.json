@@ -76,6 +76,10 @@
     {
       "path": "/api/cron/fleet-document-expiry-reminders",
       "schedule": "45 12 * * *"
+    },
+    {
+      "path": "/api/cron/loto-audit-resume",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
