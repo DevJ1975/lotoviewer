@@ -51,6 +51,7 @@ export default function AuditListPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [department, setDepartment] = useState('')
   const [limit, setLimit]       = useState('')
+  const [equipmentIds, setEquipmentIds] = useState('')
   const [starting, setStarting] = useState(false)
 
   const load = useCallback(async () => {
@@ -77,12 +78,16 @@ export default function AuditListPage() {
     try {
       const headers = await authHeaders(tenantId)
       const parsedLimit = Number.parseInt(limit, 10)
+      // Accept comma- OR whitespace/newline-separated ids so a pasted list
+      // (e.g. the audit's worst-offenders) works however it's formatted.
+      const ids = equipmentIds.split(/[\s,]+/).map(s => s.trim()).filter(Boolean)
       const res = await fetch('/api/admin/loto/audit', {
         method:  'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          department: department.trim() || undefined,
-          limit:      Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : undefined,
+          department:    department.trim() || undefined,
+          limit:         Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : undefined,
+          equipment_ids: ids.length > 0 ? ids : undefined,
         }),
       })
       const body = await res.json()
@@ -90,6 +95,7 @@ export default function AuditListPage() {
       toast.success('Audit started — the agents are working through your equipment.')
       setDepartment('')
       setLimit('')
+      setEquipmentIds('')
       await load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not start the audit.')
@@ -128,9 +134,19 @@ export default function AuditListPage() {
       <section className="mb-6 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Start an audit</h2>
         <p className="mt-0.5 text-xs text-slate-500">
-          Leave both fields blank to sweep every active piece of equipment, or scope it to one department / a smaller batch.
+          Leave all fields blank to sweep every active piece of equipment, or scope it to a department, a batch limit, or a specific list of equipment IDs.
         </p>
-        <div className="mt-4 flex flex-wrap items-end gap-3">
+        <label className="mt-4 block">
+          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Equipment IDs <span className="font-normal text-slate-400">(optional — comma or space separated; takes precedence over department)</span></span>
+          <textarea
+            value={equipmentIds}
+            onChange={e => setEquipmentIds(e.target.value)}
+            rows={2}
+            placeholder="e.g. BGGN-036, SKT1-280, 302-MX-1"
+            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-navy/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+          />
+        </label>
+        <div className="mt-3 flex flex-wrap items-end gap-3">
           <label className="block">
             <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Department <span className="font-normal text-slate-400">(optional)</span></span>
             <input

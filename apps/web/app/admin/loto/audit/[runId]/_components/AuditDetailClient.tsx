@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Check,
   Copy,
+  Gavel,
   History,
   Link as LinkIcon,
   Loader2,
@@ -107,6 +108,7 @@ export default function AuditDetailClient({ runId }: { runId: string }) {
   const [minting, setMinting]   = useState(false)
   const [applying, setApplying] = useState(false)
   const [applyOpen, setApplyOpen] = useState(false)
+  const [regulating, setRegulating] = useState(false)
 
   const [rollbackTarget, setRollbackTarget] = useState<Snapshot | null>(null)
   const [rollbackPhrase, setRollbackPhrase] = useState('')
@@ -182,6 +184,22 @@ export default function AuditDetailClient({ runId }: { runId: string }) {
       toast.error(err instanceof Error ? err.message : 'Could not mint the review link.')
     } finally {
       setMinting(false)
+    }
+  }
+
+  async function runRegulator() {
+    if (!tenantId) return
+    setRegulating(true)
+    try {
+      const headers = await authHeaders(tenantId)
+      const res = await fetch(`/api/admin/loto/audit/${runId}/regulator`, { method: 'POST', headers })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
+      toast.success('Cal/OSHA Regulator review started. It re-audits each machine, drives EHS corrections, and writes the Inspector’s Report. This runs in the background — reopen the reviewer link in a few minutes.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not start the regulator review.')
+    } finally {
+      setRegulating(false)
     }
   }
 
@@ -285,6 +303,26 @@ export default function AuditDetailClient({ runId }: { runId: string }) {
           {run?.error && (
             <p className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-900 dark:bg-rose-950/30 dark:text-rose-100">{run.error}</p>
           )}
+
+          {/* ── Cal/OSHA Regulator review (after the audit, before reviewer sign-off) ── */}
+          <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Cal/OSHA Regulator review</h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              A veteran Cal/OSHA compliance officer re-audits every machine and the program end-to-end, sharpens the EHS findings and the drafted procedures, and writes the Inspector&apos;s Report shown atop the reviewer link. Run this once the audit above has finished processing — before you mint or open the reviewer link.
+            </p>
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => void runRegulator()}
+                disabled={regulating || run?.status === 'running'}
+                title={run?.status === 'running' ? 'Wait for the audit to finish processing first.' : undefined}
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                {regulating ? <Loader2 className="size-4 animate-spin" /> : <Gavel className="size-4" />}
+                Run Cal/OSHA Regulator review
+              </button>
+            </div>
+          </section>
 
           {/* ── Reviewer link + apply ─────────────────────────────────── */}
           <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
