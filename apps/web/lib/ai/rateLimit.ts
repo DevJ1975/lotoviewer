@@ -34,6 +34,9 @@ export type AiSurface =
   | 'classify-near-miss'
   | 'superadmin-daily-report'
   | 'predict-incident-escalation'
+  | 'loto-audit-fpe'
+  | 'loto-audit-ds'
+  | 'loto-audit-ehs'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
@@ -75,6 +78,12 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   // typically run it once per incident triage. Capped conservatively
   // to keep cost predictable on a bursty intake day.
   'predict-incident-escalation':      { perHour: 30, perDay: 150 },
+  // Multi-agent audit surfaces. A full Snak King run is ~500 equipment, one
+  // call per surface each, run as a bursty batch from the audit engine. Caps
+  // sit above a single full run but well below an abuse loop.
+  'loto-audit-fpe':                   { perHour: 600, perDay: 4000 },
+  'loto-audit-ds':                    { perHour: 600, perDay: 4000 },
+  'loto-audit-ehs':                   { perHour: 600, perDay: 4000 },
 }
 
 interface CheckArgs {
