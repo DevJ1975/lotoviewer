@@ -471,10 +471,32 @@ def _record_snapshot_sql(snapshot_date: str) -> str:
     )
 
 
+def _prune_sql(docs: list[Document]) -> str:
+    # Delete any Part 1910 section we ingested before but eCFR no longer carries
+    # (a repealed/removed section). Scoped to the part's deep-link prefix and to
+    # the set we just fetched, so it can't touch other corpora. Guarded by the
+    # caller against an empty doc set (an empty NOT IN () would delete everything).
+    urls = ",\n    ".join(sql_str(d.source_url) for d in docs)
+    return (
+        "-- Prune Part 1910 sections no longer present in eCFR (removed/repealed).\n"
+        "-- Apply AFTER all batch-*.sql, BEFORE record-snapshot.sql.\n"
+        "begin;\n"
+        "delete from public.knowledge_documents\n"
+        " where tenant_id is null\n"
+        "   and source_type = 'regulation'\n"
+        f"   and source_url like {sql_str(ECFR_BASE + '/%')}\n"
+        "   and source_url not in (\n"
+        f"    {urls}\n"
+        "   );\n"
+        "commit;\n"
+    )
+
+
 def emit_sql(docs: list[Document], out_dir: Path, batch_chunks: int, snapshot_date: str) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     for stale in out_dir.glob("batch-*.sql"):
         stale.unlink()
+    (out_dir / "prune.sql").unlink(missing_ok=True)
     (out_dir / "record-snapshot.sql").unlink(missing_ok=True)
 
     written: list[Path] = []
@@ -504,6 +526,11 @@ def emit_sql(docs: list[Document], out_dir: Path, batch_chunks: int, snapshot_da
         if batch_count >= batch_chunks:
             flush_batch()
     flush_batch()
+
+    if docs:  # empty set would make NOT IN () delete the whole part — skip
+        prune = out_dir / "prune.sql"
+        prune.write_text(_prune_sql(docs), encoding="utf-8")
+        written.append(prune)
 
     record = out_dir / "record-snapshot.sql"
     record.write_text(_record_snapshot_sql(snapshot_date), encoding="utf-8")

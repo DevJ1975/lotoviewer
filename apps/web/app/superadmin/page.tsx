@@ -9,6 +9,7 @@ import {
   BookOpenCheck,
   Building2,
   Calendar,
+  CalendarClock,
   Database,
   FileCode2,
   Heart,
@@ -69,6 +70,12 @@ const SECTIONS: Array<{ title: string; description: string; tiles: Tile[] }> = [
         icon: Heart,
         title: 'Tenant health',
         desc: 'Per-tenant row counts, last activity, AI spend, and open tickets at a glance.',
+      },
+      {
+        href: '/superadmin/regulations',
+        icon: CalendarClock,
+        title: 'Regulation freshness',
+        desc: 'Whether the assistant\'s OSHA RAG corpus is behind the latest eCFR amendment.',
       },
       {
         href: '/superadmin/support',

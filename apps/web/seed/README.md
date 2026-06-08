@@ -32,9 +32,12 @@ VOYAGE_API_KEY=... python scripts/osha_1910_ingest.py all --date 2026-05-07
 ```
 
 Then apply the generated SQL to Supabase (Supabase SQL editor / `psql` / the
-Supabase MCP `execute_sql` tool), **in order**: every `batch-NNN.sql`, then
-`record-snapshot.sql` last (it stamps the snapshot date the freshness cron
-compares against — see migration `217_regulation_update_checks.sql`).
+Supabase MCP `execute_sql` tool), **in order**:
+
+1. every `batch-NNN.sql` (upserts each current section),
+2. `prune.sql` (deletes any 1910 section eCFR no longer carries),
+3. `record-snapshot.sql` last (stamps the snapshot date the freshness cron
+   compares against — see migration `217_regulation_update_checks.sql`).
 
 Each batch is idempotent: it deletes a section's prior global row by its eCFR
 deep-link `source_url` (cascading its chunks) before re-inserting, so re-running

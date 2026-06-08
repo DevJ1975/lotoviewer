@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { withCronLogging } from '@/lib/cronInstrumentation'
 import { sendRegulationUpdateAlert } from '@/lib/email/sendRegulationUpdateAlert'
+import { pickLatestAmendment, computeNeedsUpdate, type EcfrVersion } from '@/lib/regulationFreshness'
 
 // Regulation-freshness cron (~every 60 days; scheduled bi-monthly in vercel.json).
 //
@@ -62,7 +63,7 @@ interface CheckRow {
 }
 
 interface EcfrVersionsResponse {
-  content_versions?: Array<{ amendment_date?: string; date?: string; part?: string }>
+  content_versions?: EcfrVersion[]
 }
 
 // Newest amendment date eCFR reports for a CFR title+part, as an ISO date string.
@@ -78,12 +79,7 @@ async function fetchLatestAmendment(title: string, part: string): Promise<string
     })
     if (!resp.ok) return null
     const json = (await resp.json()) as EcfrVersionsResponse
-    const dates = (json.content_versions ?? [])
-      .filter(v => !part || !v.part || v.part === part)
-      .map(v => v.amendment_date ?? v.date)
-      .filter((d): d is string => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d))
-    if (dates.length === 0) return null
-    return dates.sort().at(-1)!  // ISO dates sort lexicographically
+    return pickLatestAmendment(json.content_versions ?? [], part)
   } catch {
     return null
   } finally {
@@ -123,7 +119,7 @@ async function runCron(): Promise<NextResponse> {
       continue
     }
 
-    const needsUpdate = !row.ingested_snapshot || latest > row.ingested_snapshot
+    const needsUpdate = computeNeedsUpdate(latest, row.ingested_snapshot)
     if (needsUpdate) counts.outdated += 1
 
     // Throttle re-notification so manual re-triggers don't spam the operator.
