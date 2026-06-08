@@ -232,9 +232,12 @@ begin
      set status = 'applied', applied_at = now(), apply_error = null
    where id = p_change_id;
 
-  insert into public.loto_hygiene_log (tenant_id, equipment_id, action, section, reason, detail)
+  -- facility_id is set explicitly (null) so its DEFAULT active_facility_id()
+  -- does not fire: that helper parses request.headers, which only exists in a
+  -- PostgREST request — naming the column keeps this RPC context-independent.
+  insert into public.loto_hygiene_log (tenant_id, facility_id, equipment_id, action, section, reason, detail)
   values (
-    v.tenant_id, v.equipment_id, 'audit_change_applied', 'audit',
+    v.tenant_id, null, v.equipment_id, 'audit_change_applied', 'audit',
     'Audit change applied: ' || v.change_kind,
     jsonb_build_object(
       'change_id',    v.id,
@@ -372,9 +375,10 @@ begin
     v_st_count := v_st_count + 1;
   end loop;
 
-  insert into public.loto_hygiene_log (tenant_id, equipment_id, action, section, reason, detail)
+  -- facility_id set explicitly (null) — see note in apply_audit_change.
+  insert into public.loto_hygiene_log (tenant_id, facility_id, equipment_id, action, section, reason, detail)
   values (
-    v_tenant, null, 'snapshot', 'audit',
+    v_tenant, null, null, 'snapshot', 'audit',
     'Emergency rollback: restored audit snapshot',
     jsonb_build_object('snapshot_id', p_snapshot_id, 'restored_by', p_restored_by,
                        'equipment_restored', v_eq_count, 'steps_restored', v_st_count)
