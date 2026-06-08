@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -60,8 +60,12 @@ export async function POST(req: Request) {
       .from('loto_audit_runs').select('id, scope').eq('id', body.resume_run_id).eq('tenant_id', gate.tenantId).maybeSingle()
     if (!existing) return NextResponse.json({ error: 'Run not found' }, { status: 404 })
     await admin.from('loto_audit_runs').update({ status: 'running', error: null, finished_at: null }).eq('id', existing.id)
-    void runAudit({ tenantId: gate.tenantId, runId: existing.id, userId: gate.userId, scope: (existing.scope ?? {}) as RunAuditScope })
-      .catch(err => Sentry.captureException(err, { tags: { route: 'admin/loto/audit/POST', stage: 'resume' }, extra: { runId: existing.id } }))
+    // after() keeps the serverless function alive to run the engine AFTER the
+    // 202 is sent. A bare promise would be frozen the moment we return on
+    // Vercel — the work would never run. Bounded by the route's maxDuration;
+    // larger sweeps lean on the engine's resumability (re-POST resume_run_id).
+    after(() => runAudit({ tenantId: gate.tenantId, runId: existing.id, userId: gate.userId, scope: (existing.scope ?? {}) as RunAuditScope })
+      .catch(err => Sentry.captureException(err, { tags: { route: 'admin/loto/audit/POST', stage: 'resume' }, extra: { runId: existing.id } })))
     return NextResponse.json({ run_id: existing.id, status: 'running', resumed: true }, { status: 202 })
   }
 
@@ -84,10 +88,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error?.message ?? 'Failed to create run' }, { status: 500 })
   }
 
-  // Fire-and-forget: the engine persists progress per equipment, so a reclaimed
-  // invocation leaves resumable state rather than a corrupt run.
-  void runAudit({ tenantId: gate.tenantId, runId: run.id, userId: gate.userId, scope })
-    .catch(err => Sentry.captureException(err, { tags: { route: 'admin/loto/audit/POST', stage: 'runAudit' }, extra: { runId: run.id } }))
+  // after() runs the engine after the 202 is sent while keeping the function
+  // alive (a bare promise is frozen on return on Vercel — the work never runs).
+  // The engine persists progress per equipment, so a reclaimed invocation
+  // leaves resumable state rather than a corrupt run.
+  after(() => runAudit({ tenantId: gate.tenantId, runId: run.id, userId: gate.userId, scope })
+    .catch(err => Sentry.captureException(err, { tags: { route: 'admin/loto/audit/POST', stage: 'runAudit' }, extra: { runId: run.id } })))
 
   return NextResponse.json({ run_id: run.id, status: 'running' }, { status: 202 })
 }
