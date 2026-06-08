@@ -142,6 +142,13 @@ async function processEquipment(
 
   // 3. EHS (Cal/OSHA gate)
   const ehs = await callAgent(opts, 'loto-audit-ehs', () => runEhsAgent(client, eq, steps, ds.result, fpe.result, ds.missingPhases))
+
+  // Emit the staged change-set BEFORE marking the equipment 'ehs_done'. If a
+  // serverless reclaim hits mid-emit, the row stays at 'ds_done' and a resume
+  // re-runs it cleanly — rather than 'ehs_done' with no changes, which the
+  // resume guard below would skip, silently losing that machine's findings.
+  await emitChanges(admin, client, opts, eq, steps, fpe.result, ds.result, ehs.result)
+
   await upsertResult(admin, opts, eq.equipment_id, {
     ehs_pass:            ehs.result.pass,
     ehs_citations:       ehs.result.citations,
@@ -150,9 +157,6 @@ async function processEquipment(
     agent_phase:         'ehs_done',
     raw_payload:         { fpe: fpe.result, ds: ds.result, ehs: ehs.result },
   })
-
-  // Assemble this equipment's staged change-set (replaces any prior pending).
-  await emitChanges(admin, client, opts, eq, steps, fpe.result, ds.result, ehs.result)
 }
 
 // ── Change emission ─────────────────────────────────────────────────────────

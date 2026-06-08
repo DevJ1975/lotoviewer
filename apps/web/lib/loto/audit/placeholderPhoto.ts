@@ -18,7 +18,7 @@ import { placeholderIsoPhotoPath } from '@soteria/core/storagePaths'
 const BUCKET = 'loto-photos'
 const WATERMARK_TEXT = 'REFERENCE ONLY — NOT A VERIFIED ISOLATION POINT'
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024
-const MAX_CONTINUATIONS = 3
+const MAX_CONTINUATIONS = 1
 
 export interface PlaceholderResult {
   storagePath: string
@@ -49,8 +49,8 @@ async function findReferenceImageUrl(
       max_tokens: 1024,
       messages,
       tools: [
-        { type: 'web_search_20260209', name: 'web_search', max_uses: 4 },
-        { type: 'web_fetch_20260209',  name: 'web_fetch',  max_uses: 4 },
+        { type: 'web_search_20260209', name: 'web_search', max_uses: 2 },
+        { type: 'web_fetch_20260209',  name: 'web_fetch',  max_uses: 2 },
       ],
     })
     if (response.stop_reason !== 'pause_turn') break
@@ -107,6 +107,13 @@ export async function buildPlaceholderPhoto(
   equipment: Equipment,
 ): Promise<PlaceholderResult | null> {
   try {
+    // Without a manufacturer or model there's no real product identifier to
+    // search by — a web search on a free-text description virtually never
+    // returns a usable direct image URL, and the call is slow enough to eat
+    // the serverless window. Skip straight to the "capture a real photo"
+    // finding in that case.
+    if (!equipment.manufacturer && !equipment.model) return null
+
     const sourceUrl = await findReferenceImageUrl(client, equipment)
     if (!sourceUrl) return null
 
