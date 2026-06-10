@@ -1,18 +1,11 @@
-// EVASION TESTS — Fable 5 audit (gate-bypass findings A-C1, A-C2, A-H7).
+// EVASION REGRESSION GUARDS — Fable 5 audit (gate-bypass findings A-C1, A-C2,
+// A-H7), closed by the safetySignals helper + the runEhsCorrection contract.
 //
-// Each test encodes the SAFE contract that the CURRENT engine VIOLATES: a
-// placeholder / self-contradictory / citation-dropped isolation photo can still
-// earn pass=true. Because today's code is unsafe, each test uses `it.fails()` —
-// it stays GREEN while the hole is open (the assertion `pass === false` genuinely
-// fails, and `it.fails` expects that failure) and turns RED the moment someone
-// closes the hole. That red is the cue: delete `.fails` so the plain
-// `expect(pass).toBe(false)` becomes the permanent regression guard.
-//
-// These are executable tripwires that prove each bypass exists, not happy-path
-// coverage. Run with `expect().toBe(false)` un-wrapped to see the live bypass.
-//
-// The companion suite ehsCorrection.test.ts:95-108 currently asserts the *unsafe*
-// outcome (pass=true) as if it were correct; A-C1 below is its safe inverse.
+// Each test encodes the SAFE contract these holes used to violate: a
+// placeholder / self-contradictory / citation-dropped isolation photo could earn
+// pass=true. They were first landed as `it.fails()` tripwires proving the holes
+// existed; the fix flipped them red, and they now stand as plain assertions so
+// any regression re-opens them loudly.
 //
 // Mock shape mirrors ehsGate.test.ts: the Anthropic client returns whatever JSON
 // the test queued, and we assert the deterministic TS gate — the thing a worker's
@@ -22,6 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type Anthropic from '@anthropic-ai/sdk'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 import { runEhsAgent, runEhsCorrection } from '@/lib/loto/audit/agents/ehs'
+import { isIsolationUnverified } from '@/lib/loto/audit/safetySignals'
 import type { DsResult, EhsResult, FpeResult, RegulatorMachineResult } from '@/lib/loto/audit/schemas'
 
 let modelResult: EhsResult
@@ -56,31 +50,34 @@ beforeEach(() => {
   modelResult = { pass: true, citations: [], recommendations: [], notes: '' }
 })
 
-describe('EVASION — the EHS gate can be bypassed (Fable 5 audit)', () => {
-  // A-C2: the gate never reads loto_equipment.iso_photo_is_placeholder, so an
-  // already-applied watermarked placeholder is re-judged "verified" by the model.
-  it.fails('[A-C2] a known placeholder ISO photo on file must NOT pass the gate', async () => {
+describe('EVASION GUARDS — the EHS gate cannot be bypassed (Fable 5 audit)', () => {
+  // A-C2: the gate must read loto_equipment's own placeholder flags, so an
+  // already-applied watermarked placeholder is never re-judged "verified" by a
+  // fresh vision call on the next run.
+  it('[A-C2] a known placeholder ISO photo on file does NOT pass the gate', async () => {
     const eq = equipment({ iso_photo_is_placeholder: true, iso_photo_provenance: 'reference_placeholder' })
     const { result } = await runEhsAgent(client, eq, STEPS, cleanDs(), cleanFpe(), [])
-    expect(result.pass).toBe(false) // SAFE contract. Current code returns true.
+    expect(result.pass).toBe(false)
+    expect(result.citations.some(c => /isolation point|placeholder|photo/i.test(`${c.code} ${c.text}`))).toBe(true)
   })
 
   // A-H7: a self-contradictory FPE verdict (match, but shows_isolation_point=false)
-  // is accepted as a match — a false positive is invisible to every downstream defense.
-  it.fails('[A-H7] a "match" that does not actually show the isolation point must NOT pass', async () => {
+  // is not a match — "verified" requires the sub-flags to agree with the verdict.
+  it('[A-H7] a "match" that does not actually show the isolation point does NOT pass', async () => {
     const fpe = cleanFpe()
     fpe.iso_photo.verdict = 'match'
     fpe.iso_photo.shows_isolation_point = false
     fpe.iso_photo.consistent_with_energy_steps = false
     const { result } = await runEhsAgent(client, equipment(), STEPS, cleanDs(), fpe, [])
-    expect(result.pass).toBe(false) // SAFE contract. Current code returns true.
+    expect(result.pass).toBe(false)
   })
 
-  // A-C1: the regulator-driven correction recomputes the isolation-photo floor
-  // from the correction MODEL's returned citations; if it drops the photo citation
-  // while dissenting on an unrelated point, pass flips to true and the re-emit
-  // then deletes the pending photo finding.
-  it.fails('[A-C1] a correction that drops the ISO-photo finding must NOT clear the floor', async () => {
+  // A-C1: the regulator-driven correction takes the isolation floor as a
+  // DETERMINISTIC boolean from the caller (computed from the stored FPE/DS
+  // verdicts — the photos didn't change), and unions the prior citations in
+  // code. A correction model that "resolves" everything and drops the photo
+  // citation can no longer clear the floor.
+  it('[A-C1] a correction that drops the ISO-photo finding does NOT clear the floor', async () => {
     const priorEhs: EhsResult = {
       pass: false,
       citations: [{ code: 'Cal/OSHA T8 §3314(g)(4)', text: 'Isolation point is unverified (placeholder photo).', severity: 'high' }],
@@ -92,9 +89,47 @@ describe('EVASION — the EHS gate can be bypassed (Fable 5 audit)', () => {
       additional_citations: [{ code: '8 CCR §3203', text: 'IIPP training records incomplete.', severity: 'medium' }],
       severity_escalations: [], procedure_deficiencies: [], inspector_narrative: 'Training gap.',
     }
+    // The stored verdicts behind the prior citation: the ISO photo was a mismatch.
+    const storedFpe = cleanFpe()
+    storedFpe.iso_photo.verdict = 'mismatch'
     // Correction model "resolves" everything and drops the photo citation.
     modelResult = { pass: true, citations: [], recommendations: [], notes: 'Corrected.' }
-    const { result } = await runEhsCorrection(client, equipment(), STEPS, priorEhs, regulator, [])
-    expect(result.pass).toBe(false) // SAFE contract. Current code returns true.
+
+    const { result } = await runEhsCorrection(
+      client, equipment(), STEPS, priorEhs, regulator, [],
+      isIsolationUnverified(equipment(), storedFpe, cleanDs()),
+    )
+
+    expect(result.pass).toBe(false)
+    // The dropped prior citation is restored by the in-code union.
+    expect(result.citations.some(c => c.code === 'Cal/OSHA T8 §3314(g)(4)')).toBe(true)
+  })
+})
+
+describe('isIsolationUnverified — the single deterministic signal', () => {
+  it('treats a clean, agreeing high-confidence match as verified', () => {
+    expect(isIsolationUnverified(equipment(), cleanFpe(), cleanDs())).toBe(false)
+  })
+
+  it.each([
+    ['placeholder flag on the row', { iso_photo_is_placeholder: true }],
+    ['reference_placeholder provenance', { iso_photo_provenance: 'reference_placeholder' }],
+  ])('reads %s as unverified regardless of clean verdicts', (_label, extra) => {
+    expect(isIsolationUnverified(equipment(extra), cleanFpe(), cleanDs())).toBe(true)
+  })
+
+  it.each(['missing', 'mismatch', 'low_confidence'] as const)(
+    'reads a %s verdict as unverified',
+    (verdict) => {
+      const fpe = cleanFpe()
+      fpe.iso_photo.verdict = verdict
+      expect(isIsolationUnverified(equipment(), fpe, cleanDs())).toBe(true)
+    },
+  )
+
+  it('reads a DS low_confidence_iso flag as unverified', () => {
+    const ds = cleanDs()
+    ds.low_confidence_iso = true
+    expect(isIsolationUnverified(equipment(), cleanFpe(), ds)).toBe(true)
   })
 })
