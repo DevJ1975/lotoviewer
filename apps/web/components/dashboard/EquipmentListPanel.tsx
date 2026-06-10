@@ -144,6 +144,7 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
           <button
             type="button"
             onClick={() => setSort(s => s === 'id' ? 'status' : 'id')}
+            aria-label={sort === 'id' ? 'Sorted by ID. Activate to sort by status' : 'Sorted by status. Activate to sort by ID'}
             className="placard-label rounded-sm px-3 py-1.5 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors"
             title="Toggle sort order"
           >
@@ -156,6 +157,7 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by ID, description, or department…"
+          aria-label="Search equipment by ID, description, or department"
           className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
         />
 
@@ -165,6 +167,7 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
               key={b.value}
               type="button"
               onClick={() => setFilter(b.value)}
+              aria-pressed={filter === b.value}
               className={`placard-label shrink-0 px-3 py-1.5 rounded-sm border transition-colors ${
                 filter === b.value
                   ? 'bg-brand-navy text-white border-brand-navy'
@@ -251,8 +254,10 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
 function StatusDot({ status }: { status: PhotoStatus }) {
   // Square dots read more as a status LED on a control panel than the
   // generic round dots that ship with every B2B template.
+  // aria-hidden: the StatusPill beside it carries the same state as text, and
+  // aria-label on a bare <span> is unreliable — when honored it double-announces.
   const cls = status === 'complete' ? 'bg-emerald-500' : status === 'partial' ? 'bg-amber-400' : 'bg-rose-500'
-  return <span className={`w-2.5 h-2.5 rounded-sm ${cls} shrink-0`} aria-label={status} />
+  return <span className={`w-2.5 h-2.5 rounded-sm ${cls} shrink-0`} aria-hidden="true" />
 }
 
 function StatusPill({ status }: { status: PhotoStatus }) {
@@ -315,7 +320,12 @@ const EquipmentRow = memo(function EquipmentRow({ eq, status, isSelected, isFlag
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="placard-numeric text-sm font-bold text-brand-navy dark:text-brand-yellow truncate">{eq.equipment_id}</span>
-              {eq.verified && <span className="text-emerald-500 text-xs" title="Verified">✓</span>}
+              {eq.verified && (
+                <>
+                  <span className="text-emerald-500 text-xs" title="Verified" aria-hidden="true">✓</span>
+                  <span className="sr-only">Verified</span>
+                </>
+              )}
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{shortName(eq.description)}</div>
           </div>

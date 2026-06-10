@@ -95,7 +95,14 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
             {pct.toString().padStart(3, '0')}%
           </span>
         </div>
-        <div className="relative h-2 rounded-sm bg-slate-100 dark:bg-slate-800 overflow-hidden">
+        <div
+          role="progressbar"
+          aria-valuenow={pct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Overall photo completion"
+          className="relative h-2 rounded-sm bg-slate-100 dark:bg-slate-800 overflow-hidden"
+        >
           <div
             className={`h-full transition-all ${pct === 100 ? 'bg-emerald-500' : 'bg-brand-navy'}`}
             style={{ width: `${pct}%` }}
@@ -114,6 +121,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
         <button
           type="button"
           onClick={() => onSelectDept(null)}
+          aria-current={selectedDept === null ? 'true' : undefined}
           className={`relative w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors ${
             selectedDept === null
               ? 'bg-brand-yellow/10 dark:bg-brand-yellow/5'
@@ -138,6 +146,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
               key={d.name}
               type="button"
               onClick={() => onSelectDept(d.name)}
+              aria-current={active ? 'true' : undefined}
               className={`relative w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors ${
                 active
                   ? 'bg-brand-yellow/10 dark:bg-brand-yellow/5'
@@ -153,7 +162,11 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
                   {d.complete.toString().padStart(2, '0')}/{d.total.toString().padStart(2, '0')}
                 </span>
               </div>
-              <div className="h-1.5 rounded-sm bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              {/* aria-hidden, not role="progressbar": this track sits INSIDE the
+                  dept <button>, so a named progressbar would be folded into the
+                  button's accessible name as noise — the 08/12 text above
+                  already announces the same data. */}
+              <div aria-hidden="true" className="h-1.5 rounded-sm bg-slate-100 dark:bg-slate-800 overflow-hidden">
                 <div
                   className={`h-full transition-all ${d.pct === 100 ? 'bg-emerald-500' : 'bg-brand-navy'}`}
                   style={{ width: `${d.pct}%` }}
@@ -176,6 +189,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
                     <button
                       type="button"
                       onClick={() => onSelectEquip(eq.equipment_id)}
+                      aria-current={active ? 'true' : undefined}
                       className={`relative w-full text-left px-4 py-2 border-b border-slate-100 dark:border-slate-800 transition-colors ${
                         active
                           ? 'bg-brand-yellow/10 dark:bg-brand-yellow/5'
@@ -186,7 +200,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
                         <span aria-hidden="true" className="absolute left-0 top-1 bottom-1 w-1 rounded-r-sm bg-brand-yellow" />
                       )}
                       <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-sm ${statusDotClass(computePhotoStatusFromEquipment(eq))} shrink-0`} />
+                        <span aria-hidden="true" className={`w-2 h-2 rounded-sm ${statusDotClass(computePhotoStatusFromEquipment(eq))} shrink-0`} />
                         <div className="min-w-0 flex-1">
                           <p className="placard-numeric text-xs font-bold text-brand-navy dark:text-brand-yellow truncate">{eq.equipment_id}</p>
                           <p className="text-[11px] text-slate-500 dark:text-slate-500 truncate">{shortName(eq.description)}</p>

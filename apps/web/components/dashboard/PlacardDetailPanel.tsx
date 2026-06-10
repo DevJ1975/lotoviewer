@@ -87,7 +87,7 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
 
   if (!equipment) {
     return (
-      <aside className="shrink-0 w-full lg:w-[520px] bg-slate-100 dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex items-center justify-center">
+      <aside aria-label="Placard preview" className="shrink-0 w-full lg:w-[520px] bg-slate-100 dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex items-center justify-center">
         <div className="text-center px-6 max-w-xs">
           <span className="placard-label-lg text-slate-500 dark:text-slate-500">Standby</span>
           <p className="stencil-title text-base text-slate-700 dark:text-slate-300 mt-2">No item selected</p>
@@ -108,7 +108,7 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
   const href = `/equipment/${encodeURIComponent(equipment.equipment_id)}?from=${encodeURIComponent(back)}`
 
   return (
-    <aside className="shrink-0 w-full lg:w-[520px] bg-slate-100 dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex flex-col">
+    <aside aria-label="Placard preview" className="shrink-0 w-full lg:w-[520px] bg-slate-100 dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex flex-col">
       {/* Header reads like a real placard banner — hazard-yellow rail
           on the left, stencil ID, monospaced placard ID echoes the
           register's row treatment. */}
