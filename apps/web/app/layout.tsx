@@ -35,8 +35,12 @@ export const metadata: Metadata = {
 // themeColor is managed via the viewport export (moved out of metadata in Next.js 14).
 // viewportFit=cover lets env(safe-area-inset-*) return real values on notched
 // iPhones/PWAs so we can pad the header/footer around the notch + home bar.
+// themeColor paints the OS status bar / PWA title bar — the surface that abuts
+// the app header. It must match the header's steel-deep (#0E1A2E, AppChrome)
+// so the chrome reads as one piece; the old #1B3A6B was the pre-Spectrum navy,
+// which now matches neither the header nor the brand token.
 export const viewport: Viewport = {
-  themeColor: '#1B3A6B',
+  themeColor: '#0E1A2E',
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
