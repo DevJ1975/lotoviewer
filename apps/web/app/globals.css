@@ -53,7 +53,11 @@
   --color-concrete-300: #97A4B3;
   --color-hazard-yellow:  #F5C400;
   --color-hazard-amber:   #F59E0B;
-  --color-caution-orange: #EA580C;
+  /* WCAG AA fix: the sole consumer (.safety-tag-caution) sets white 11px/800
+     text on this token. The previous #EA580C measured ~3.6:1 against white —
+     under AA's 4.5:1 for normal-size text. #C2410C measures ~5.2:1 and stays
+     in the OSHA caution-orange family. */
+  --color-caution-orange: #C2410C;
   --color-danger-red:     #C8102E;
   --color-cleared-green:  #15803D;
   --color-info-blue:      #1D4ED8;
