@@ -40,6 +40,9 @@ export interface StrikeStudioModuleRow {
     published_at: string | null
     duration_seconds: number | null
     passing_score: number
+    video_provider: string | null
+    video_ready: boolean
+    video_path: string | null
   } | null
 }
 
@@ -89,6 +92,9 @@ interface VersionRow {
   published_at: string | null
   duration_seconds: number | null
   passing_score: number
+  video_provider: string | null
+  video_ready: boolean
+  video_path: string | null
 }
 
 interface RequestRow {
@@ -123,7 +129,7 @@ export async function GET(req: Request) {
       .limit(300),
     admin
       .from('strike_module_versions')
-      .select('id, module_id, version_number, status, published_at, duration_seconds, passing_score')
+      .select('id, module_id, version_number, status, published_at, duration_seconds, passing_score, video_provider, video_ready, video_path')
       .order('version_number', { ascending: false }),
     admin
       .from('strike_studio_requests')
@@ -161,6 +167,9 @@ export async function GET(req: Request) {
         published_at: latest.published_at,
         duration_seconds: latest.duration_seconds,
         passing_score: latest.passing_score,
+        video_provider: latest.video_provider,
+        video_ready: latest.video_ready,
+        video_path: latest.video_path,
       } : null,
     } satisfies StrikeStudioModuleRow
   })

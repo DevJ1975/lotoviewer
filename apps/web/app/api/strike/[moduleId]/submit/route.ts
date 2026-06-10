@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
+import { checkMemoryRateLimit } from '@/lib/rateLimit/memory'
+import { loadPublishedStrikeVersion } from '@/lib/strike/moduleAccess'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
   isStrikeAssignmentApplicable,
@@ -8,6 +10,7 @@ import {
   type StrikeAssignmentTargetType,
   type StrikeQuestionType,
 } from '@soteria/core/strike'
+import { resolveStrikeVideo } from '@soteria/core/strikeMedia'
 
 export const runtime = 'nodejs'
 
@@ -17,6 +20,16 @@ interface SubmitBody {
   module_version_id?: unknown
   assignment_id?: unknown
   answers?: unknown
+  watch?: unknown
+}
+
+// Self-reported playback progress from the learner's player. Recorded as
+// evidence and enforced against the tenant's require_watch_percent knob;
+// it is client-claimed, so it deters skipping rather than proving viewing.
+interface WatchProgress {
+  percent_watched: number
+  max_position_seconds: number | null
+  duration_seconds: number | null
 }
 
 interface RouteContext {
@@ -30,6 +43,14 @@ export async function POST(req: Request, ctx: RouteContext) {
   const { moduleId } = await ctx.params
   if (!UUID_RE.test(moduleId)) return NextResponse.json({ error: 'Invalid module id' }, { status: 400 })
 
+  const limit = checkMemoryRateLimit(`strike-submit:${gate.tenantId}:${gate.userId}`, 10, 60_000)
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: 'Too many submissions. Try again in a minute.' },
+      { status: 429, headers: { 'retry-after': String(limit.retryAfterSec ?? 60) } },
+    )
+  }
+
   let body: SubmitBody
   try { body = await req.json() as SubmitBody }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
@@ -41,37 +62,40 @@ export async function POST(req: Request, ctx: RouteContext) {
     ? body.assignment_id
     : null
   const answersByQuestionId = isAnswerMap(body.answers) ? body.answers : {}
+  const watch = parseWatchProgress(body.watch)
 
   try {
     const admin = supabaseAdmin()
 
-    const { data: moduleRow, error: moduleErr } = await admin
-      .from('strike_modules')
-      .select('id,tenant_id,library_scope,status')
-      .eq('id', moduleId)
-      .maybeSingle()
-    if (moduleErr) throw new Error(moduleErr.message)
-    if (!moduleRow || moduleRow.status !== 'published') {
-      return NextResponse.json({ error: 'Module not found' }, { status: 404 })
-    }
-    if (
-      moduleRow.library_scope === 'tenant'
-      && moduleRow.tenant_id !== gate.tenantId
-      && gate.role !== 'superadmin'
-    ) {
-      return NextResponse.json({ error: 'Module not found' }, { status: 404 })
+    const lookup = await loadPublishedStrikeVersion(admin, {
+      moduleId,
+      moduleVersionId,
+      tenantId: gate.tenantId,
+      role: gate.role,
+    })
+    if (!lookup.ok) return NextResponse.json({ error: lookup.message }, { status: lookup.status })
+    const { version } = lookup
+
+    if (version.retake_limit != null) {
+      const { count, error: attemptCountErr } = await admin
+        .from('strike_attempts')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', gate.userId)
+        .eq('module_version_id', moduleVersionId)
+        .not('submitted_at', 'is', null)
+      if (attemptCountErr) throw new Error(attemptCountErr.message)
+      // Count-then-insert race accepted: this is a pacing limit, not a
+      // security boundary, and concurrent submits from one learner are rare.
+      if ((count ?? 0) >= version.retake_limit) {
+        return NextResponse.json(
+          { error: 'Retake limit reached for this module version.' },
+          { status: 409 },
+        )
+      }
     }
 
-    const { data: version, error: versionErr } = await admin
-      .from('strike_module_versions')
-      .select('id,module_id,tenant_id,library_scope,status,passing_score')
-      .eq('id', moduleVersionId)
-      .eq('module_id', moduleId)
-      .maybeSingle()
-    if (versionErr) throw new Error(versionErr.message)
-    if (!version || version.status !== 'published') {
-      return NextResponse.json({ error: 'Published version not found' }, { status: 404 })
-    }
+    const watchGate = await checkWatchRequirement(admin, gate.tenantId, version, watch)
+    if (!watchGate.ok) return NextResponse.json({ error: watchGate.message }, { status: 422 })
 
     if (assignmentId) {
       const { data: assignment, error: assignmentErr } = await admin
@@ -155,6 +179,7 @@ export async function POST(req: Request, ctx: RouteContext) {
         client_context: {
           mode: 'learner_player',
           missed_question_ids: score.missedQuestionIds,
+          ...(watch ? { watch, watch_evidence: 'client_claimed' } : {}),
         },
       })
       .select('id')
@@ -179,6 +204,7 @@ export async function POST(req: Request, ctx: RouteContext) {
             mode: 'quiz',
             earned_points: score.earnedPoints,
             possible_points: score.possiblePoints,
+            ...(watch ? { watch, watch_evidence: 'client_claimed' } : {}),
           },
         })
       if (completionErr) throw new Error(completionErr.message)
@@ -186,10 +212,55 @@ export async function POST(req: Request, ctx: RouteContext) {
 
     return NextResponse.json({ attempt_id: attempt.id, ...score }, { status: 201 })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
     Sentry.captureException(e, { tags: { route: 'strike/submit' } })
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 })
   }
+}
+
+async function checkWatchRequirement(
+  admin: ReturnType<typeof supabaseAdmin>,
+  tenantId: string,
+  version: { video_provider: string | null; video_external_id: string | null; video_path: string | null },
+  watch: WatchProgress | null,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  // Modules without a playable video have nothing to watch.
+  const source = resolveStrikeVideo(version)
+  if (source.kind !== 'storage' && source.kind !== 'stream') return { ok: true }
+
+  const { data: settings, error } = await admin
+    .from('strike_tenant_settings')
+    .select('require_watch_percent')
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+
+  const required = settings?.require_watch_percent
+  if (typeof required !== 'number' || required <= 0) return { ok: true }
+
+  if (!watch || watch.percent_watched < required) {
+    return { ok: false, message: `Watch at least ${required}% of the video before submitting the quiz.` }
+  }
+  return { ok: true }
+}
+
+function parseWatchProgress(value: unknown): WatchProgress | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const percent = toFiniteNumber(record.percent_watched)
+  if (percent === null) return null
+  return {
+    percent_watched: Math.min(100, Math.max(0, Math.round(percent))),
+    max_position_seconds: clampNonNegative(toFiniteNumber(record.max_position_seconds)),
+    duration_seconds: clampNonNegative(toFiniteNumber(record.duration_seconds)),
+  }
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function clampNonNegative(value: number | null): number | null {
+  return value === null ? null : Math.max(0, Math.round(value))
 }
 
 function isAnswerMap(value: unknown): value is Record<string, string[] | string | boolean> {
