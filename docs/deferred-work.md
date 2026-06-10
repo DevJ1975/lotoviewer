@@ -220,7 +220,10 @@ Kept here so nothing leaks out of the plan.
 - **Unblocks**: Removing "manual reset" instructions from the LOTO
   Devices runbook.
 
-### D3.4 — Web `loto_steps` typo (parallel to mobile fix)
+### ~~D3.4 — Web `loto_steps` typo (parallel to mobile fix)~~ — RESOLVED
+- **Resolution**: Fixed in commit 657bb10 ("fix(review): query
+  loto_energy_steps in public review portal"); verified gone in the
+  2026-06-10 audit (`grep loto_steps` finds no remaining hits).
 - **Status**: Surfaced in 2026-05-09 mobile devjr audit (mobile side
   fixed in same audit).
 - **Surface**: [apps/web/app/review/[token]/page.tsx:82](../apps/web/app/review/[token]/page.tsx#L82). Queries
@@ -235,6 +238,48 @@ Kept here so nothing leaks out of the plan.
 - **Fix**: One-character change. Should be a separate PR scoped to
   the web review portal so the diff isolates the public-facing
   surface.
+
+## Phase 4 — 2026-06-10 full-SaaS audit (open)
+
+### D4.1 — SCIM token + witness-statement token expiry
+- **Status**: Surfaced in the 2026-06-10 auth audit (low risk).
+- **Surface**: SCIM tokens (`/api/scim/v2/*`) are gated only by a
+  SHA-256 hash lookup + `revoked_at`; they never auto-expire.
+  Witness-statement tokens carry `token_expires_at` but rotation is
+  manual.
+- **Fix**: Add an `expires_at` check to the SCIM token gate (with a
+  long default, e.g. 1 year) and an admin "rotate token" action.
+  Touches live tenant integrations — needs user signoff + a
+  coordinated rotation window before shipping.
+
+### D4.2 — Per-cron secrets for audit-trail granularity
+- **Status**: Surfaced in the 2026-06-10 auth audit (low risk).
+- **Surface**: All 21 `/api/cron/*` routes share one `CRON_SECRET`
+  (constant-time compared — the comparison itself is sound).
+- **Fix**: Optional hardening — derive per-route secrets
+  (HMAC(CRON_SECRET, path)) so a leaked value can be traced and
+  revoked per route. Only worth doing alongside a secret-rotation
+  runbook.
+
+### D4.3 — ESLint debt: 152 pre-existing problems (83 errors)
+- **Status**: Measured in the 2026-06-10 audit; identical count
+  before and after the audit's changes. Lint is not CI-gated, so
+  the debt accrues silently.
+- **Surface**: Mostly `no-unused-vars` warnings in test mocks plus
+  `no-this-alias` / hook-reassignment errors in test helpers.
+- **Fix**: A dedicated lint-repair pass, then add `npm run lint` to
+  `repo-health.yml` so the count can't regress.
+
+### D4.4 — Mobile app has no test suite
+- **Status**: Confirmed in the 2026-06-10 audit — zero test files
+  under `apps/mobile`. This audit's mobile fix (equipment screens
+  crashed on a core query-signature change) is exactly the class of
+  regression a smoke suite would have caught; web tsc/vitest never
+  see mobile screens.
+- **Fix**: Start with `tsc --noEmit` for `apps/mobile` in
+  `repo-health.yml` (free, would have caught this regression),
+  then add component tests for the Tier-1 screens as parity work
+  lands (see docs/mobile-parity-plan.md).
 
 ## Conventions
 
