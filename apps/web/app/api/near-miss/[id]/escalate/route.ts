@@ -4,6 +4,7 @@ import { requireTenantAdmin } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { deriveInherentScore, type NearMissRow } from '@soteria/core/nearMiss'
 import { normalizeHierarchyLevel } from '@soteria/core/hazardControls'
+import { RISK_ACTIVITY_TYPES, RISK_EXPOSURE_FREQUENCIES } from '@soteria/core/risk'
 
 // POST /api/near-miss/[id]/escalate
 // Atomically (best-effort) creates a `risks` register entry from a
@@ -34,8 +35,9 @@ import { normalizeHierarchyLevel } from '@soteria/core/hazardControls'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-const VALID_ACTIVITY_TYPES  = ['routine', 'non_routine', 'emergency'] as const
-const VALID_EXPOSURE_FREQS  = ['continuous', 'daily', 'weekly', 'monthly', 'rare'] as const
+// Canonical risk-register enums live in @soteria/core.
+const VALID_ACTIVITY_TYPES  = RISK_ACTIVITY_TYPES
+const VALID_EXPOSURE_FREQS  = RISK_EXPOSURE_FREQUENCIES
 
 // risk_controls' check constraint uses the long form. We accept either
 // short or long on input — the helper imported below normalises both

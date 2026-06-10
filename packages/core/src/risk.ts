@@ -32,7 +32,8 @@ export type Likelihood = 1 | 2 | 3 | 4 | 5
 // Bands (PDD §4.5)
 // ──────────────────────────────────────────────────────────────────────────
 
-export type Band = 'low' | 'moderate' | 'high' | 'extreme'
+export const RISK_BANDS = ['low', 'moderate', 'high', 'extreme'] as const
+export type Band = (typeof RISK_BANDS)[number]
 
 // 4-band is the recommended ISO-45001-defensible scheme (PDD §4.5).
 // 3-band collapses high+extreme into a single 'high' tier — kept as
@@ -40,6 +41,16 @@ export type Band = 'low' | 'moderate' | 'high' | 'extreme'
 // the 4-band value; this module collapses on read when the tenant
 // has 3-band selected.
 export type BandScheme = '4-band' | '3-band'
+
+// ──────────────────────────────────────────────────────────────────────────
+// Risk register enums (risks table check constraints)
+// ──────────────────────────────────────────────────────────────────────────
+
+export const RISK_ACTIVITY_TYPES = ['routine', 'non_routine', 'emergency'] as const
+export type RiskActivityType = (typeof RISK_ACTIVITY_TYPES)[number]
+
+export const RISK_EXPOSURE_FREQUENCIES = ['continuous', 'daily', 'weekly', 'monthly', 'rare'] as const
+export type RiskExposureFrequency = (typeof RISK_EXPOSURE_FREQUENCIES)[number]
 
 // ──────────────────────────────────────────────────────────────────────────
 // Hierarchy of Controls (ISO 45001 8.1.2)

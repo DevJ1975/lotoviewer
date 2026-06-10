@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { SORT_DIRS } from '@/lib/listParams'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
@@ -17,7 +18,7 @@ import {
 //                                   then POSTs /[id]/sds with the file).
 
 const VALID_SORTS = ['name', 'manufacturer', 'sds_revision_date', 'created_at'] as const
-const VALID_DIRS  = ['asc', 'desc'] as const
+const VALID_DIRS  = SORT_DIRS
 
 function pickArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []

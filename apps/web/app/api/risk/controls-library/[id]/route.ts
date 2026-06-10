@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { HIERARCHY_ORDER } from '@soteria/core/risk'
 
 // PATCH /api/risk/controls-library/[id]
 // DELETE /api/risk/controls-library/[id]
@@ -12,7 +13,9 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 // referenced by any risk_controls row.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const VALID_HIERARCHY_LEVELS = ['elimination','substitution','engineering','administrative','ppe']
+// Canonical hierarchy levels live in @soteria/core; widened to plain
+// strings for body validation.
+const VALID_HIERARCHY_LEVELS: readonly string[] = HIERARCHY_ORDER
 
 interface PatchBody {
   name?:                  unknown

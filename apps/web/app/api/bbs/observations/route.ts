@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { SORT_DIRS } from '@/lib/listParams'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
@@ -19,7 +20,7 @@ import {
 //                               which validates the QR token instead.
 
 const VALID_SORTS = ['created_at', 'observed_at', 'risk_score', 'report_number'] as const
-const VALID_DIRS  = ['asc', 'desc'] as const
+const VALID_DIRS  = SORT_DIRS
 
 export async function GET(req: Request) {
   const gate = await requireTenantMember(req)

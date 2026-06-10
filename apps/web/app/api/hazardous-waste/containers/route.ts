@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
+  HAZARDOUS_WASTE_AREA_TYPES,
   HAZARDOUS_WASTE_CONTAINER_STATUSES,
   HAZARDOUS_WASTE_VOLUME_UNITS,
   validateHazardousWasteContainerInput,
@@ -17,10 +18,7 @@ import {
 //                                            second round-trip.
 // POST /api/hazardous-waste/containers      Create a container row.
 
-const AREA_TYPES: HazardousWasteAreaType[] = [
-  'satellite_accumulation', 'central_accumulation',
-  'universal_waste', 'used_oil', 'inspection_only',
-]
+const AREA_TYPES = HAZARDOUS_WASTE_AREA_TYPES
 
 function trimOrNull(value: unknown, max?: number): string | null {
   if (typeof value !== 'string') return null

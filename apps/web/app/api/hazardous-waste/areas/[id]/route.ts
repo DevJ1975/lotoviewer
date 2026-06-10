@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import type { HazardousWasteAreaType } from '@soteria/core/hazardousWaste'
+import { HAZARDOUS_WASTE_AREA_TYPES } from '@soteria/core/hazardousWaste'
 
 // /api/hazardous-waste/areas/[id]
 //   PATCH  — rename, retype, retune cadence, or archive (set
@@ -12,13 +12,7 @@ import type { HazardousWasteAreaType } from '@soteria/core/hazardousWaste'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-const AREA_TYPES: ReadonlyArray<HazardousWasteAreaType> = [
-  'satellite_accumulation',
-  'central_accumulation',
-  'universal_waste',
-  'used_oil',
-  'inspection_only',
-]
+const AREA_TYPES = HAZARDOUS_WASTE_AREA_TYPES
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const gate = await requireTenantAdmin(req)

@@ -9,9 +9,13 @@ describe('adminCatalog', () => {
     }
   })
 
-  it('uses unique slugs across every section', () => {
-    const slugs = getAllAdminTiles().map(t => t.slug)
-    expect(new Set(slugs).size).toBe(slugs.length)
+  it('uses unique slugs within each section (tile identity is section + slug)', () => {
+    // Slugs may repeat across sections — loto/audit and evidence/audit
+    // both exist — because the URL is /admin/<section>/<slug>.
+    for (const section of ADMIN_SECTIONS) {
+      const slugs = section.tiles.map(t => t.slug)
+      expect(new Set(slugs).size, `section ${section.id} has duplicate slugs`).toBe(slugs.length)
+    }
   })
 
   it('uses unique hrefs across every section', () => {
@@ -107,11 +111,16 @@ describe('adminCatalog', () => {
     // counted as an admin tile by the nav-sync gate.
     expect(SETTINGS_NOTIFICATIONS_TILE.slug).toBe('settings-notifications')
     expect(SETTINGS_NOTIFICATIONS_TILE.href.startsWith('/admin/')).toBe(false)
-    expect(getAdminTile('settings-notifications')).toBeUndefined()
+    expect(getAdminTile('settings', 'settings-notifications')).toBeUndefined()
   })
 
-  it('resolves slugs to tiles via getAdminTile', () => {
-    const tile = getAdminTile('members')
+  it('resolves a section + slug pair to a tile via getAdminTile', () => {
+    const tile = getAdminTile('people', 'members')
     expect(tile?.title).toBe('Members')
+  })
+
+  it('resolves both tiles that share the audit slug to their own sections', () => {
+    expect(getAdminTile('loto', 'audit')?.title).toBe('Multi-agent audit')
+    expect(getAdminTile('evidence', 'audit')?.title).toBe('Audit log')
   })
 })

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember, requireTenantAdmin } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { loadRiskDetail } from '@soteria/core/queries/risks'
+import { RISK_STATUSES, loadRiskDetail } from '@soteria/core/queries/risks'
 
 // GET    /api/risk/[id]   — risk + controls + reviews + audit timeline
 // PATCH  /api/risk/[id]   — update mutable fields (admin/owner only)
@@ -18,9 +18,9 @@ import { loadRiskDetail } from '@soteria/core/queries/risks'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-const VALID_STATUSES = [
-  'open','in_review','controls_in_progress','monitoring','closed','accepted_exception',
-]
+// Canonical status list lives in @soteria/core next to RiskStatus;
+// widened to plain strings for body validation.
+const VALID_STATUSES: readonly string[] = RISK_STATUSES
 
 // ─── GET ───────────────────────────────────────────────────────────────────
 

@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nextjs'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { type JhaHazard, type JhaRow, type JhaSeverity } from '@soteria/core/jha'
+import { RISK_ACTIVITY_TYPES, RISK_EXPOSURE_FREQUENCIES } from '@soteria/core/risk'
 
 // POST /api/jha/[id]/hazards/[hazardId]/escalate
 // Promotes a JHA hazard into a risks register entry with a soft
@@ -25,8 +26,9 @@ import { type JhaHazard, type JhaRow, type JhaSeverity } from '@soteria/core/jha
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-const VALID_ACTIVITY_TYPES = ['routine', 'non_routine', 'emergency'] as const
-const VALID_EXPOSURE_FREQS = ['continuous', 'daily', 'weekly', 'monthly', 'rare'] as const
+// Canonical risk-register enums live in @soteria/core.
+const VALID_ACTIVITY_TYPES = RISK_ACTIVITY_TYPES
+const VALID_EXPOSURE_FREQS = RISK_EXPOSURE_FREQUENCIES
 
 const SEVERITY_TO_INHERENT: Record<JhaSeverity, 1 | 2 | 3 | 4 | 5> = {
   low: 2, moderate: 3, high: 4, extreme: 5,

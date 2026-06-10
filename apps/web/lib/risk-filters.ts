@@ -7,8 +7,8 @@
 // down" handler can hand its filters to /risk/list?... without
 // either side reinventing the param shape.
 
-import type { Band } from '@soteria/core/risk'
-import type { HazardCategory, RiskStatus, RiskListFilters } from '@soteria/core/queries/risks'
+import { RISK_BANDS, type Band } from '@soteria/core/risk'
+import { HAZARD_CATEGORIES, RISK_STATUSES, type HazardCategory, type RiskStatus, type RiskListFilters } from '@soteria/core/queries/risks'
 
 export interface RiskFilterState {
   status:          RiskStatus[]
@@ -23,9 +23,11 @@ export interface RiskFilterState {
   offset:          number
 }
 
-const VALID_STATUSES: RiskStatus[] = ['open','in_review','controls_in_progress','monitoring','closed','accepted_exception']
-const VALID_BANDS:    Band[]       = ['low','moderate','high','extreme']
-const VALID_CATS:     HazardCategory[] = ['physical','chemical','biological','mechanical','electrical','ergonomic','psychosocial','environmental','radiological']
+// Canonical value lists come from @soteria/core so this parser can
+// never drift from the types it narrows to.
+const VALID_STATUSES: ReadonlyArray<RiskStatus>     = RISK_STATUSES
+const VALID_BANDS:    ReadonlyArray<Band>           = RISK_BANDS
+const VALID_CATS:     ReadonlyArray<HazardCategory> = HAZARD_CATEGORIES
 const VALID_SORTS = ['created_at','residual_score','inherent_score','next_review_date','risk_number'] as const
 
 export function parseRiskFilters(search: URLSearchParams | null): RiskFilterState {
