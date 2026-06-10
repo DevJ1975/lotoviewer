@@ -454,7 +454,7 @@ def _document_sql(doc: Document) -> str:
 def _record_snapshot_sql(snapshot_date: str) -> str:
     # Closes the loop with /api/cron/check-regulation-updates: after the corpus is
     # applied, mark the snapshot it reflects so the freshness cron compares eCFR's
-    # latest amendment against THIS date. No-op (0 rows) if migration 217 hasn't run.
+    # latest amendment against THIS date. No-op (0 rows) if migration 222 hasn't run.
     d = sql_str(snapshot_date)
     return (
         "-- Record the eCFR snapshot this corpus reflects (apply LAST, after the batches).\n"

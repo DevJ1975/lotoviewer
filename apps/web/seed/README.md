@@ -37,7 +37,7 @@ Supabase MCP `execute_sql` tool), **in order**:
 1. every `batch-NNN.sql` (upserts each current section),
 2. `prune.sql` (deletes any 1910 section eCFR no longer carries),
 3. `record-snapshot.sql` last (stamps the snapshot date the freshness cron
-   compares against — see migration `217_regulation_update_checks.sql`).
+   compares against — see migration `222_regulation_update_checks.sql`).
 
 Each batch is idempotent: it deletes a section's prior global row by its eCFR
 deep-link `source_url` (cascading its chunks) before re-inserting, so re-running
@@ -57,11 +57,12 @@ function-timeout); re-running the tool above is the deliberate operator step.
 
 ## Other ship-with-the-product regulations — `seed-regulations` endpoint
 
-Smaller markdown corpora (e.g. a future CalOSHA crawl) go through
-`/api/superadmin/knowledge/seed-regulations`: drop a markdown file in this
-directory, add an entry to the `MANIFEST` array in that route, and POST the
-endpoint (idempotent). The MANIFEST is currently empty — Part 1910 moved to the
-Python ingester above, and the partial OCR'd HazCom seed it superseded was removed.
+Smaller markdown corpora that aren't on the federal eCFR (e.g. Cal/OSHA Title 8)
+go through `/api/superadmin/knowledge/seed-regulations`: drop a markdown file in
+this directory, add an entry to the `MANIFEST` array in that route, and POST the
+endpoint (idempotent). Federal OSHA Part 1910 is no longer in this manifest — it
+moved to the Python ingester above, and the partial OCR'd HazCom seed it
+superseded was removed.
 
 ```bash
 curl -X POST -H "Authorization: Bearer <CRON_SECRET or INTERNAL_PUSH_SECRET>" \

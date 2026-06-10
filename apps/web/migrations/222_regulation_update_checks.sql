@@ -1,4 +1,4 @@
--- Migration 217: regulation_update_checks — state for the regulation freshness cron.
+-- Migration 222: regulation_update_checks — state for the regulation freshness cron.
 --
 -- The assistant's RAG corpus includes Federal OSHA 29 CFR Part 1910, ingested
 -- offline via scripts/osha_1910_ingest.py (eCFR is too large + Voyage too slow to

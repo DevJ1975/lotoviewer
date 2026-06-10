@@ -34,6 +34,11 @@ export type AiSurface =
   | 'classify-near-miss'
   | 'superadmin-daily-report'
   | 'predict-incident-escalation'
+  | 'loto-audit-fpe'
+  | 'loto-audit-ds'
+  | 'loto-audit-ehs'
+  | 'loto-audit-author'
+  | 'loto-audit-regulator'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
@@ -75,6 +80,20 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   // typically run it once per incident triage. Capped conservatively
   // to keep cost predictable on a bursty intake day.
   'predict-incident-escalation':      { perHour: 30, perDay: 150 },
+  // Multi-agent audit surfaces. A full Snak King run is ~500 equipment, one
+  // call per surface each, run as a bursty batch from the audit engine. Caps
+  // sit above a single full run but well below an abuse loop.
+  'loto-audit-fpe':                   { perHour: 600, perDay: 4000 },
+  'loto-audit-ds':                    { perHour: 600, perDay: 4000 },
+  'loto-audit-ehs':                   { perHour: 600, perDay: 4000 },
+  // Author only fires for the subset of machines that FAIL the EHS gate, so its
+  // volume is a fraction of the other surfaces — but it rides the same bursty
+  // full-run fan-out, so it gets the same generous caps.
+  'loto-audit-author':                { perHour: 600, perDay: 4000 },
+  // Regulator runs once per audited machine in a post-audit pass (plus one
+  // program-level call per run), so it rides the same bursty full-run fan-out as
+  // the other audit surfaces — same generous caps.
+  'loto-audit-regulator':             { perHour: 600, perDay: 4000 },
 }
 
 interface CheckArgs {

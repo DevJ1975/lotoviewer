@@ -134,7 +134,7 @@ export default function RegulationFreshnessPage() {
       {!loading && rows && (
         rows.length === 0 ? (
           <div className="p-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-center text-sm text-slate-500 dark:text-slate-400">
-            No tracked regulations. Apply migration <code>217_regulation_update_checks.sql</code>.
+            No tracked regulations. Apply migration <code>222_regulation_update_checks.sql</code>.
           </div>
         ) : (
           <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
