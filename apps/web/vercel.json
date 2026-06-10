@@ -78,6 +78,10 @@
       "schedule": "45 12 * * *"
     },
     {
+      "path": "/api/cron/check-regulation-updates",
+      "schedule": "0 8 1 */2 *"
+    },
+    {
       "path": "/api/cron/loto-audit-resume",
       "schedule": "*/5 * * * *"
     }
