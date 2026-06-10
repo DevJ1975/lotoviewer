@@ -10,6 +10,8 @@ app at `/superadmin/release-notes`.
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-06-10
+
 ### Added
 - **Public QR placard view** (`/qr/{qr_token}`) — scanning a printed placard QR
   opens a read-only, no-login view of that machine's isolation photo (with
@@ -33,6 +35,15 @@ app at `/superadmin/release-notes`.
 - Version-control scheme: `check:version` drift guard, this changelog, and the
   versioning runbook.
 
+### Fixed
+- **Mobile equipment screens crashed on open** — the equipment list and detail
+  screens called core queries without the now-required explicit `tenantId`,
+  crashing for every signed-in user. Both screens pass the active tenant again.
+- **LOTO register accessibility + field-iPad usability** — register rows are
+  real buttons, the review flag works on touch, a skip-to-content link is the
+  first Tab stop, caution-orange tags meet WCAG AA contrast, and the placard
+  panel opens as a slide-over sheet on narrow screens.
+
 ### Notes
 - **Planned — LOTO verification-packet report generator.** The printed packet's
   per-placard QR codes were repointed to the new `/qr/{qr_token}` convention
@@ -47,5 +58,6 @@ Baseline release. Earlier history is tracked in git and in the in-app release
 notes (`/superadmin/release-notes`); this changelog starts the forward record
 from 1.9.0.
 
-[Unreleased]: https://github.com/devj1975/lotoviewer/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/devj1975/lotoviewer/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/devj1975/lotoviewer/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/devj1975/lotoviewer/releases/tag/v1.9.0
