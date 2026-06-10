@@ -141,6 +141,33 @@ describe('POST /api/admin/loto/audit/[runId]/apply — snapshot-before-apply', (
   })
 })
 
+// EVASION — Fable 5 audit finding B-C2 (no server-side sign-off gate).
+//
+// The route's ONLY check on the run is that it EXISTS (apply/route.ts:29-31). It
+// never verifies the run is `awaiting_review`/`partially_applied`, nor that the
+// bound review link was signed off. The sole "is this approved?" gate is the
+// client `canApply` button — trivially bypassed by POSTing to this route
+// directly. A run still `in_progress` (no human has reviewed anything) therefore
+// snapshots and applies its changes to the live LOTO tables.
+//
+// SAFE contract: a run that is not in an apply-eligible state must be rejected
+// with a 4xx BEFORE any snapshot or apply RPC runs. `it.fails()` documents the
+// open hole; it turns RED — delete `.fails` — once the status/sign-off check
+// lands (ideally enforced inside apply_approved_audit_changes, per the plan).
+describe('EVASION [B-C2] — apply must require an approved/signed-off run', () => {
+  it.fails('rejects a run that is not awaiting_review, before snapshot or apply', async () => {
+    // The run exists but no review has happened — it is still being built.
+    state.runRow = { data: { id: 'run-1', status: 'in_progress' } }
+    rpcResults.set('capture_audit_snapshot', { data: 'snap-1', error: null })
+    rpcResults.set('apply_approved_audit_changes', { data: 5, error: null })
+
+    const res = await POST(req(), ctx())
+
+    expect(res.status).toBeGreaterThanOrEqual(400) // SAFE contract. Current code returns 200.
+    expect(rpcCalls).toHaveLength(0) // No snapshot, no apply on an unreviewed run.
+  })
+})
+
 describe('POST /api/admin/loto/audit/[runId]/apply — placard regeneration', () => {
   beforeEach(() => {
     rpcResults.set('capture_audit_snapshot', { data: 'snap-1', error: null })

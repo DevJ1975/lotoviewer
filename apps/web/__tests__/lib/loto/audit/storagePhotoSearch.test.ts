@@ -148,6 +148,43 @@ describe('findExistingIsoPhoto — excludes the current iso photo', () => {
   })
 })
 
+// EVASION — Fable 5 audit finding A-C3 (placeholder laundering).
+//
+// The candidate filter is `.endsWith('.jpg')` + "not the current iso photo". A
+// watermarked placeholder written by a prior run lives in the SAME folder and is
+// also a `.jpg` whose basename is NOT the current iso — so it is a candidate. If
+// one Haiku vision call rates it a high-confidence isolation point, this function
+// returns it as a field photo (no placeholder flag, provenance='field'), the 217
+// trigger never fires, and a stand-in image laund­ers into a "verified" record.
+//
+// SAFE contract: a basename matching the `_ISO_PLACEHOLDER_` convention
+// (storagePaths.placeholderIsoPhotoPath) must be excluded from candidates, no
+// matter what the vision model says. `it.fails()` documents the open hole; it
+// turns RED — delete `.fails` — the moment the exclusion lands.
+describe('EVASION [A-C3] — a leftover placeholder must not launder into a field photo', () => {
+  it.fails('never proposes an _ISO_PLACEHOLDER_ object even when the model rates it a match', async () => {
+    // Folder holds only the known-bad iso (excluded) and a prior placeholder.
+    const { admin } = makeAdmin({
+      list: () => ({
+        data: [
+          { name: 'EQ-001_ISO_bad.jpg' },
+          { name: 'EQ-001_ISO_PLACEHOLDER_1700000000000.jpg' },
+        ],
+        error: null,
+      }),
+    })
+    // A maximally generous model: every image is a high-confidence isolation point.
+    const create = vi.fn(async () => visionVerdict(MATCH))
+    const client = { messages: { create } } as unknown as Anthropic
+    // No equip photo, so the placeholder is the only candidate left.
+    const eq = { ...EQUIPMENT, equip_photo_url: null } as Equipment
+
+    const result = await findExistingIsoPhoto(client, admin, TENANT, eq, STEPS)
+
+    expect(result).toBeNull() // SAFE contract. Current code returns the placeholder.
+  })
+})
+
 describe('findExistingIsoPhoto — degrades to null on error', () => {
   it('returns null when the storage list call errors', async () => {
     const { admin } = makeAdmin({ list: () => ({ data: null, error: { message: 'boom' } }) })
