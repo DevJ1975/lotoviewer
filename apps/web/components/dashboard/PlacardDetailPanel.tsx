@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import PlacardView from '@/components/placard/PlacardView'
+import OpsSpinner from '@/components/OpsSpinner'
 import Toast from '@/components/Toast'
 import { useToast } from '@/hooks/useToast'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
@@ -130,7 +131,9 @@ export default function PlacardDetailPanel({ equipment, onPhotoSaved }: Props) {
 
       <div className="flex-1 overflow-y-auto p-3">
         {loading ? (
-          <div className="flex items-center justify-center h-40 text-slate-400 dark:text-slate-500 text-sm">Loading…</div>
+          <div className="flex items-center justify-center h-40">
+            <OpsSpinner size="md" label="Loading placard" />
+          </div>
         ) : (
           <PlacardView
             equipment={fullEquipment ?? equipment}

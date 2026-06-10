@@ -1,7 +1,9 @@
 'use client'
 
 import { memo, useCallback, useMemo, useState, type MouseEvent } from 'react'
+import { FilterX } from 'lucide-react'
 import type { Equipment } from '@soteria/core/types'
+import { EmptyState } from '@/components/EmptyState'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useUploadQueue } from '@/components/UploadQueueProvider'
 import { useSession } from '@/components/SessionProvider'
@@ -213,9 +215,24 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-center h-48 text-slate-400 dark:text-slate-500 text-sm">
-              No equipment matches your filters.
-            </div>
+            // Clear Filters resets panel-owned state only. `dept` stays: it is
+            // URL navigation state owned by the sidebar, and clearing it would
+            // teleport the user out of the department they chose.
+            <EmptyState
+              icon={FilterX}
+              eyebrow="No Match"
+              title="No equipment matches your filters"
+              description="Try a different search term, or clear the search and status filters."
+              action={
+                <button
+                  type="button"
+                  onClick={() => { setSearch(''); setFilter('all') }}
+                  className="placard-label rounded-sm px-3 py-1.5 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Clear Filters
+                </button>
+              }
+            />
           )
         ) : (
           grouped.map(group => (
