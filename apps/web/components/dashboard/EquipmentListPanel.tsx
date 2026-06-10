@@ -309,26 +309,41 @@ const EquipmentRow = memo(function EquipmentRow({ eq, status, isSelected, isFlag
   const photoCount = (eq.equip_photo_url?.trim() ? 1 : 0) + (eq.iso_photo_url?.trim() ? 1 : 0)
   const handleClick = () => onSelect(eq.equipment_id)
   const handleContext = (e: MouseEvent) => { e.preventDefault(); onToggleFlag(eq.equipment_id) }
-  const handleFlagClick = (e: MouseEvent) => { e.stopPropagation(); onToggleFlag(eq.equipment_id) }
+  const handleFlagClick = () => onToggleFlag(eq.equipment_id)
   // content-visibility skips layout+paint for off-screen rows — near-virtualization
   // without a dep. intrinsic-size matches the row's rendered height (~68px) so
   // the scrollbar stays correct.
+  //
+  // Structure: the row is a real <button> (Tab/Enter/Space + SR operable); the
+  // flag is its SIBLING, absolutely positioned over right padding the row
+  // reserves for it — nesting it would be invalid HTML (button-in-button).
+  // `group` sits on the <li> so hovering anywhere on the row — flag included —
+  // drives both the row highlight and the flag reveal, and onContextMenu sits
+  // here so right-click toggles the flag from anywhere on the row, as before.
+  // The focus ring is INSET because content-visibility implies paint
+  // containment on the <li>: an outward ring would be clipped at its bounds.
   return (
-    <li style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 68px' }}>
-      <div
+    <li
+      className="relative group"
+      style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 68px' }}
+      onContextMenu={handleContext}
+    >
+      <button
+        type="button"
         onClick={handleClick}
-        onContextMenu={handleContext}
-        className={`relative w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors cursor-pointer group ${
+        aria-current={isSelected ? 'true' : undefined}
+        className={`w-full text-left cursor-pointer pl-4 pr-12 pointer-coarse:pr-16 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-navy dark:focus-visible:ring-brand-yellow ${
           isSelected
             ? 'bg-brand-yellow/10 dark:bg-brand-yellow/5'
             : isFlagged
-              ? 'bg-orange-50/60 hover:bg-orange-50'
-              : 'bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-900/40'
+              ? 'bg-orange-50/60 group-hover:bg-orange-50'
+              : 'bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-900/40'
         }`}
       >
         {/* Selection rail — same hazard-yellow vocabulary used by the
             sidebar and page headers, so the active row reads as
-            "currently locked out" instead of a faint shadcn highlight. */}
+            "currently locked out" instead of a faint shadcn highlight.
+            Anchors to the relative <li>. */}
         {isSelected && (
           <span aria-hidden="true" className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-sm bg-brand-yellow" />
         )}
@@ -356,22 +371,28 @@ const EquipmentRow = memo(function EquipmentRow({ eq, status, isSelected, isFlag
               {photoCount}/2
             </span>
             <StatusPill status={status} />
-            <button
-              type="button"
-              onClick={handleFlagClick}
-              aria-label={isFlagged ? 'Unflag' : 'Flag for follow-up'}
-              title={isFlagged ? 'Unflag' : 'Flag for follow-up'}
-              className={`text-[10px] font-black uppercase tracking-wider w-6 h-6 flex items-center justify-center rounded-sm transition-all ${
-                isFlagged
-                  ? 'bg-orange-500 text-white opacity-100'
-                  : 'border border-slate-300 dark:border-slate-700 text-slate-400 opacity-0 group-hover:opacity-100 hover:text-orange-500 hover:border-orange-300'
-              }`}
-            >
-              !
-            </button>
           </div>
         </div>
-      </div>
+      </button>
+
+      {/* Flag — desktop keeps the 24px hover-reveal; coarse pointers (iPad,
+          gloved hands) get it always visible at 44px, since there is no hover
+          to reveal it with. focus-visible:opacity-100 so the tabbable control
+          is never an invisible focus stop. */}
+      <button
+        type="button"
+        onClick={handleFlagClick}
+        aria-pressed={isFlagged}
+        aria-label={isFlagged ? `Unflag ${eq.equipment_id}` : `Flag ${eq.equipment_id} for follow-up`}
+        title={isFlagged ? 'Unflag' : 'Flag for follow-up'}
+        className={`absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 pointer-coarse:w-11 pointer-coarse:h-11 pointer-coarse:right-1.5 flex items-center justify-center rounded-sm text-[10px] font-black uppercase tracking-wider transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy dark:focus-visible:ring-brand-yellow ${
+          isFlagged
+            ? 'bg-orange-500 text-white'
+            : 'border border-slate-300 dark:border-slate-700 text-slate-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100 hover:text-orange-500 hover:border-orange-300'
+        }`}
+      >
+        !
+      </button>
     </li>
   )
 })
