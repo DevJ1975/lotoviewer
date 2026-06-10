@@ -223,6 +223,13 @@ function HomeDashboard() {
     setUrlState({ eq: id })
   }, [cancelPendingAdvance, recordVisit, setUrlState])
 
+  // Below lg the detail panel presents as a slide-over sheet; closing it just
+  // clears the selection (buildLotoUrl deletes the param on null, dept stays).
+  const handleCloseDetail = useCallback(() => {
+    cancelPendingAdvance()
+    setUrlState({ eq: null })
+  }, [cancelPendingAdvance, setUrlState])
+
   const handleEquipmentAdded = useCallback((row: Equipment) => {
     setEquipment(prev =>
       [...prev, row].sort((a, b) => a.equipment_id.localeCompare(b.equipment_id)),
@@ -308,7 +315,7 @@ function HomeDashboard() {
           onSelectEquip={handleSelectEquip}
           decommissioned={decommissioned}
         />
-        <PlacardDetailPanel equipment={selectedEquipment} onPhotoSaved={handlePhotoSaved} />
+        <PlacardDetailPanel equipment={selectedEquipment} onPhotoSaved={handlePhotoSaved} onClose={handleCloseDetail} />
       </div>
 
       <BatchPrintModal

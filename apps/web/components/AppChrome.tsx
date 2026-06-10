@@ -90,6 +90,15 @@ export default function AppChrome({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider open={drawerOpen} onOpenChange={setDrawerOpen}>
+      {/* First Tab stop for keyboard/switch users — jumps past the chrome
+          straight to the page content. Visually hidden until focused;
+          focus:z-50 clears the sticky z-40 header. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 placard-label focus:bg-brand-navy focus:text-white focus:px-4 focus:py-3 focus:rounded-sm"
+      >
+        Skip to content
+      </a>
       <header
         className={`sticky top-0 z-40 border-b border-[#0a1322]/80 bg-[#0E1A2E] text-white steel-scanlines motion-reactive ${
           scrolled ? 'shadow-[0_12px_28px_rgba(2,8,23,0.34)]' : 'shadow-[0_1px_0_rgba(255,255,255,0.04)]'
@@ -166,7 +175,10 @@ export default function AppChrome({ children }: { children: ReactNode }) {
       <SuperadminImpersonationBanner />
       <ReleaseNotesBanner />
       <StorageQuotaBanner />
-      <main className="ops-shell min-h-[calc(100vh-12rem)]">{children}</main>
+      {/* tabIndex={-1} lets the skip-link anchor move focus here reliably;
+          outline-none because programmatic focus on the landmark itself
+          should not paint a ring. */}
+      <main id="main-content" tabIndex={-1} className="ops-shell min-h-[calc(100vh-12rem)] outline-none">{children}</main>
       <InstallPrompt />
       <UpdateBanner />
       <UnloadGuard />
