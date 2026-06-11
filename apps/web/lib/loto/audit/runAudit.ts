@@ -23,6 +23,7 @@ import { runAuthorAgent } from './agents/author'
 import { runRegulatorMachineReview, runRegulatorProgramReview } from './agents/regulator'
 import { buildPlaceholderPhoto } from './placeholderPhoto'
 import { findExistingIsoPhoto } from './storagePhotoSearch'
+import { isIsolationUnverified } from './safetySignals'
 import { describeRunAggregate, type RunAggregate } from './prompts'
 import type { AuditSeverity, AuthorResult, DsResult, EhsResult, FpeResult, RegulatorMachineResult } from './schemas'
 
@@ -194,9 +195,12 @@ async function reviewEquipment(
 
   let outcome: ReviewOutcome = 'reviewed'
   if (material) {
-    // (a) Correct the EHS assessment, folding in the regulator's critique.
+    // (a) Correct the EHS assessment, folding in the regulator's critique. The
+    // isolation floor is the deterministic signal recomputed from the STORED
+    // verdicts + the live equipment row — the photos didn't change since the
+    // audit, and the floor must never come from the correction model's text.
     const corrected = await callAgent(opts, 'loto-audit-ehs', () =>
-      runEhsCorrection(client, eq, steps, ehs, regulator.result, missingPhases))
+      runEhsCorrection(client, eq, steps, ehs, regulator.result, missingPhases, isIsolationUnverified(eq, fpe, ds)))
     await upsertResult(admin, opts, eq.equipment_id, {
       ehs_pass:            corrected.result.pass,
       ehs_citations:       corrected.result.citations,
@@ -526,12 +530,10 @@ async function emitChanges(
     })
   }
 
-  // (b) Placeholder ISO photo when the isolation point is low-confidence.
-  const isoUnverified =
-    ds.low_confidence_iso ||
-    fpe.iso_photo.verdict === 'missing' ||
-    fpe.iso_photo.verdict === 'mismatch' ||
-    fpe.iso_photo.verdict === 'low_confidence'
+  // (b) Placeholder ISO photo when the isolation point is unverified — the
+  // SAME deterministic signal the EHS gate uses, so the emitter can never
+  // disagree with the gate about whether this machine's ISO needs help.
+  const isoUnverified = isIsolationUnverified(eq, fpe, ds)
   if (isoUnverified) {
     // Prefer a REAL in-house photo over an internet placeholder. ISO photos are
     // often cross-wired between machines, so a correct shot of this isolation

@@ -18,7 +18,12 @@ export const runtime     = 'nodejs'
 export const maxDuration = 300
 
 // Applied changes of these kinds alter the printed placard and need a re-render.
-const PLACARD_AFFECTING = new Set(['placeholder_photo', 'equipment_field_edit', 'step_field_edit'])
+// procedure_draft replaces the machine's entire step set — every printed line.
+const PLACARD_AFFECTING = new Set(['placeholder_photo', 'equipment_field_edit', 'step_field_edit', 'procedure_draft'])
+
+// Only a run whose change-set has been through human review may be applied.
+// partially_applied is re-eligible so an errored apply can be retried.
+const APPLY_ELIGIBLE = new Set(['awaiting_review', 'partially_applied'])
 
 export async function POST(req: Request, ctx: { params: Promise<{ runId: string }> }) {
   const gate = await requireTenantAdmin(req)
@@ -29,6 +34,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
   const { data: run } = await admin
     .from('loto_audit_runs').select('id, status').eq('id', runId).eq('tenant_id', gate.tenantId).maybeSingle()
   if (!run) return NextResponse.json({ error: 'Run not found' }, { status: 404 })
+  // Server-side review gate: an unreviewed run must never reach the snapshot or
+  // apply RPCs, no matter what a client button allowed. The apply RPC itself
+  // additionally proves the reviewer sign-off (migration 222).
+  if (!APPLY_ELIGIBLE.has(run.status as string)) {
+    return NextResponse.json(
+      { error: `Run is '${run.status}' — only a reviewed run (awaiting_review / partially_applied) can be applied` },
+      { status: 409 },
+    )
+  }
 
   // 1. Snapshot FIRST (rollback save point). If this fails, apply nothing.
   const { data: snapshotId, error: snapErr } = await admin.rpc('capture_audit_snapshot', {
