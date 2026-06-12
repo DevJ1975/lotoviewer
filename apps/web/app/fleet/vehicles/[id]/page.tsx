@@ -2,6 +2,7 @@
 
 import { use, useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { Truck, Loader2, Pencil, Trash2, Upload, ShieldAlert, FileText, FlaskConical, Siren, X, ClipboardCheck, Check } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
@@ -184,8 +185,10 @@ function PhotoCard({ photoUrl, canEdit, onUpload }: { photoUrl: string | null; c
   const [busy, setBusy] = useState(false)
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800">
-        {photoUrl ? <img src={photoUrl} alt="Vehicle" className="h-full w-full object-cover" /> : <Truck className="h-10 w-10 text-slate-300" />}
+      <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800">
+        {photoUrl
+          ? <Image src={photoUrl} alt="Vehicle" fill sizes="(max-width: 768px) 100vw, 400px" className="object-cover" unoptimized={photoUrl.startsWith('blob:')} />
+          : <Truck className="h-10 w-10 text-slate-300" />}
       </div>
       {canEdit && (
         <>
