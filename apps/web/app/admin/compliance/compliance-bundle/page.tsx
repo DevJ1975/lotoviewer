@@ -6,7 +6,6 @@ import { ArrowLeft, Download, FileArchive, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
-import { generateCompliancePdfBundle } from '@/lib/pdfBundle'
 import { loadPermitsInWindow }      from '@/lib/queries/confinedSpacePermits'
 import { loadHotWorkPermitsInWindow } from '@/lib/queries/hotWorkPermits'
 import { loadConfinedSpacesByIds }  from '@/lib/queries/confinedSpaces'
@@ -134,6 +133,10 @@ export default function CompliancePage() {
         .order('signed_at', { ascending: true })
 
       const origin = typeof window !== 'undefined' ? window.location.origin : undefined
+      // Lazy-load pdf-lib (~200KB gz) only when the user actually generates a
+      // bundle, so it stays out of this admin page's first-load JS. Mirrors the
+      // lazy-load convention in PlacardPdfPreview.tsx.
+      const { generateCompliancePdfBundle } = await import('@/lib/pdfBundle')
       const bytes = await generateCompliancePdfBundle({
         startDate:      start,
         endDate:        end,
