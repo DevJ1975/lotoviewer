@@ -1,4 +1,7 @@
--- Migration 222: LOTO audit — enforce "no approval ⇒ no write" IN THE DATABASE.
+-- Migration 225: LOTO audit — enforce "no approval ⇒ no write" IN THE DATABASE.
+-- (Renamed from 222 to resolve a prefix collision with 222_regulation_update_checks.sql
+--  from PR #204; already applied to prod as version 20260610023440, so the file
+--  prefix is cosmetic — prod tracks applied migrations by timestamped version.)
 --
 -- A Fable 5 security audit of the audit system found the safety contract was
 -- enforced in comments and client-side buttons, not the database:
