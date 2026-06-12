@@ -42,7 +42,37 @@ interface GateOptions {
   requireRole?: 'member' | 'admin'
 }
 
-async function gate(req: Request, opts: GateOptions = {}): Promise<TenantGate> {
+// One-row context returned by the get_gate_context RPC: the caller's
+// superadmin flag, their role on the active tenant (null when not a member),
+// and the tenant's module context (null when the tenant row is absent).
+interface GateContextRow {
+  is_superadmin:      boolean
+  role:               'owner' | 'admin' | 'member' | 'viewer' | null
+  tenant_exists:      boolean
+  tenant_name:        string | null
+  tenant_modules:     Record<string, boolean> | null
+  tenant_settings:    Record<string, unknown> | null
+  tenant_disabled_at: string | null
+}
+
+// Resolved request identity plus the one-shot gate context. Shared by the
+// member/admin gates and the module gate so the auth decision lives in one
+// place and every gate makes a single get_gate_context round-trip.
+type GateCore =
+  | { ok: false; status: number; message: string }
+  | {
+      ok: true
+      user: { id: string; email?: string }
+      tenantId: string
+      facilityId: string | null
+      role: 'owner' | 'admin' | 'member' | 'viewer' | 'superadmin'
+      token: string
+      url: string
+      anon: string
+      ctx: GateContextRow | undefined
+    }
+
+async function gateCore(req: Request, opts: GateOptions = {}): Promise<GateCore> {
   const authHeader = req.headers.get('authorization')
   if (!authHeader?.startsWith('Bearer ')) {
     return { ok: false, status: 401, message: 'Missing bearer token' }
@@ -71,34 +101,45 @@ async function gate(req: Request, opts: GateOptions = {}): Promise<TenantGate> {
   const rawFacility = req.headers.get('x-active-facility')?.trim() ?? ''
   const facilityId  = UUID_RE.test(rawFacility) ? rawFacility : null
 
-  const admin = supabaseAdmin()
+  // One round-trip for the superadmin flag (profiles), this user's role on
+  // the tenant (tenant_memberships) and the tenant's module context
+  // (tenants). The module context is only consumed by module gates, but it
+  // is a single-row PK join — cheap — and it spares those gates a second
+  // sequential round-trip.
+  const { data: ctxRows, error: ctxErr } = await supabaseAdmin().rpc('get_gate_context', {
+    p_user:   user.id,
+    p_tenant: tenantId,
+  })
+  if (ctxErr) return { ok: false, status: 500, message: ctxErr.message }
+  const ctx = ((ctxRows ?? []) as GateContextRow[])[0]
 
-  // Superadmin shortcut (DB flag + env allowlist) and the tenant-membership
-  // role check are independent — fire both in parallel so a non-superadmin
-  // (the common case) pays one round-trip instead of two. A superadmin pays
-  // for a membership query it won't use, but superadmins are rare.
-  const [{ data: profile }, { data: membership }] = await Promise.all([
-    admin.from('profiles').select('is_superadmin').eq('id', user.id).maybeSingle(),
-    admin.from('tenant_memberships').select('role').eq('user_id', user.id).eq('tenant_id', tenantId).maybeSingle(),
-  ])
+  // Superadmin requires BOTH the DB flag and the env allowlist; the allowlist
+  // half stays here because it depends on SUPERADMIN_EMAILS and the
+  // auth-server email, not the database.
   const allow = (process.env.SUPERADMIN_EMAILS ?? '')
     .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
-  const isSuperadmin = !!profile?.is_superadmin && !!user.email && allow.includes(user.email.toLowerCase())
+  const isSuperadmin = !!ctx?.is_superadmin && !!user.email && allow.includes(user.email.toLowerCase())
 
+  let role: 'owner' | 'admin' | 'member' | 'viewer' | 'superadmin'
   if (isSuperadmin) {
-    return makeOk(user, tenantId, facilityId, 'superadmin', token, url, anon)
+    role = 'superadmin'
+  } else {
+    if (!ctx?.role) {
+      return { ok: false, status: 403, message: 'Not a member of this tenant' }
+    }
+    role = ctx.role
+    if (opts.requireRole === 'admin' && !['owner', 'admin'].includes(role)) {
+      return { ok: false, status: 403, message: 'Tenant admin or owner required' }
+    }
   }
 
-  if (!membership) {
-    return { ok: false, status: 403, message: 'Not a member of this tenant' }
-  }
+  return { ok: true, user, tenantId, facilityId, role, token, url, anon, ctx }
+}
 
-  const role = membership.role as 'owner' | 'admin' | 'member' | 'viewer'
-  if (opts.requireRole === 'admin' && !['owner', 'admin'].includes(role)) {
-    return { ok: false, status: 403, message: 'Tenant admin or owner required' }
-  }
-
-  return makeOk(user, tenantId, facilityId, role, token, url, anon)
+async function gate(req: Request, opts: GateOptions = {}): Promise<TenantGate> {
+  const core = await gateCore(req, opts)
+  if (!core.ok) return core
+  return makeOk(core.user, core.tenantId, core.facilityId, core.role, core.token, core.url, core.anon)
 }
 
 function makeOk(
@@ -109,7 +150,7 @@ function makeOk(
   token: string,
   url: string,
   anon: string,
-): TenantGate {
+): Extract<TenantGate, { ok: true }> {
   // Authenticated client carrying the user's JWT — RLS sees the
   // user, the active-tenant header, and (when set) the active-facility
   // header, scoping everything. Forwarding x-active-facility also lets the
@@ -137,29 +178,26 @@ export function requireTenantAdmin(req: Request) {
 }
 
 export async function requireTenantModuleMember(req: Request, moduleId: string): Promise<TenantModuleGate> {
-  const member = await requireTenantMember(req)
-  if (!member.ok) return member
+  const core = await gateCore(req, { requireRole: 'member' })
+  if (!core.ok) return core
 
-  const { data: tenant, error } = await supabaseAdmin()
-    .from('tenants')
-    .select('name, modules, settings, disabled_at')
-    .eq('id', member.tenantId)
-    .maybeSingle()
-
-  if (error) return { ok: false, status: 500, message: error.message }
-  if (!tenant || tenant.disabled_at) {
+  // gateCore already fetched the tenant's module context in the same
+  // round-trip. A missing or disabled tenant, or a module the tenant hasn't
+  // enabled, all read as "module not enabled".
+  const ctx = core.ctx
+  if (!ctx?.tenant_exists || ctx.tenant_disabled_at) {
     return { ok: false, status: 403, message: 'Module is not enabled for this tenant' }
   }
-
-  const modules = (tenant.modules ?? null) as Record<string, boolean> | null
+  const modules = ctx.tenant_modules ?? null
   if (!isModuleVisible(moduleId, modules)) {
     return { ok: false, status: 403, message: 'Module is not enabled for this tenant' }
   }
 
+  const base = makeOk(core.user, core.tenantId, core.facilityId, core.role, core.token, core.url, core.anon)
   return {
-    ...member,
-    tenantName:     typeof tenant.name === 'string' ? tenant.name : null,
+    ...base,
+    tenantName:     ctx.tenant_name,
     tenantModules:  modules,
-    tenantSettings: (tenant.settings ?? null) as Record<string, unknown> | null,
+    tenantSettings: ctx.tenant_settings ?? null,
   }
 }

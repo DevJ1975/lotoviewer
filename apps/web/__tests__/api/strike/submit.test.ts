@@ -57,6 +57,7 @@ vi.mock('@supabase/supabase-js', () => ({
 vi.mock('@/lib/supabaseAdmin', () => ({
   supabaseAdmin: () => ({
     from: (t: string) => tableProxy(t),
+    rpc: async (name: string) => queues.get(`rpc:${name}`)?.shift() ?? { data: null, error: null },
   }),
 }))
 
@@ -88,8 +89,19 @@ function req(body: unknown, opts: { auth?: boolean } = {}) {
 function ctx() { return { params: Promise.resolve({ moduleId: MODULE_ID }) } }
 
 function queueGate() {
-  queue('profiles', { data: { is_superadmin: false } })
-  queue('tenant_memberships', { data: { role: 'member' } })
+  // The gate now resolves superadmin flag + tenant role + tenant context in
+  // one get_gate_context RPC call; return its single-row result.
+  queue('rpc:get_gate_context', {
+    data: [{
+      is_superadmin: false,
+      role: 'member',
+      tenant_exists: true,
+      tenant_name: 'Test Tenant',
+      tenant_modules: {},
+      tenant_settings: {},
+      tenant_disabled_at: null,
+    }],
+  })
 }
 
 function queueModuleAndVersion(versionOverrides: Record<string, unknown> = {}) {

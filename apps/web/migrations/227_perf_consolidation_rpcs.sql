@@ -60,4 +60,58 @@ revoke all on function public.chat_unread_counts(uuid, uuid) from anon;
 revoke all on function public.chat_unread_counts(uuid, uuid) from authenticated;
 grant execute on function public.chat_unread_counts(uuid, uuid) to service_role;
 
+-- ────────────────────────────────────────────────────────────────────
+-- 2. get_gate_context() — one-row auth/tenant context for the API gate.
+-- ────────────────────────────────────────────────────────────────────
+-- The tenant auth gate (lib/auth/tenantGate.ts) needs, per request: the
+-- caller's superadmin flag (profiles), their role on the active tenant
+-- (tenant_memberships) and — for module-scoped gates — the tenant's
+-- name/modules/settings/disabled_at (tenants). The module gate fetched
+-- these as two sequential round-trips (membership, then tenant); this
+-- returns all of it in one row so the gate makes a single call.
+--
+-- Always returns exactly one row (left joins off the user parameter), so
+-- the caller reads fields without a length check: role is null when the
+-- user is not a member of p_tenant, and tenant_exists is false when
+-- p_tenant has no tenants row (e.g. a superadmin passing an unknown id).
+-- The env-allowlist half of the superadmin check stays in TypeScript — it
+-- depends on SUPERADMIN_EMAILS and the auth-server email, not the DB.
+
+create or replace function public.get_gate_context(
+  p_user   uuid,
+  p_tenant uuid
+)
+returns table (
+  is_superadmin      boolean,
+  role               text,
+  tenant_exists      boolean,
+  tenant_name        text,
+  tenant_modules     jsonb,
+  tenant_settings    jsonb,
+  tenant_disabled_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, extensions
+as $$
+  select
+    coalesce(p.is_superadmin, false) as is_superadmin,
+    m.role                           as role,
+    (t.id is not null)               as tenant_exists,
+    t.name                           as tenant_name,
+    t.modules                        as tenant_modules,
+    t.settings                       as tenant_settings,
+    t.disabled_at                    as tenant_disabled_at
+  from (select p_user as uid) base
+  left join public.profiles p           on p.id = base.uid
+  left join public.tenant_memberships m on m.user_id = base.uid and m.tenant_id = p_tenant
+  left join public.tenants t            on t.id = p_tenant;
+$$;
+
+revoke all on function public.get_gate_context(uuid, uuid) from public;
+revoke all on function public.get_gate_context(uuid, uuid) from anon;
+revoke all on function public.get_gate_context(uuid, uuid) from authenticated;
+grant execute on function public.get_gate_context(uuid, uuid) to service_role;
+
 commit;
