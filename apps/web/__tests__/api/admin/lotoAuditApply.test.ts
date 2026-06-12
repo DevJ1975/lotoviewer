@@ -44,6 +44,10 @@ vi.mock('@/lib/auth/tenantGate', () => ({
 vi.mock('@/lib/loto/regeneratePlacard', () => ({
   regenerateAndUploadPlacard: (admin: unknown, tenantId: string, equipmentId: string) =>
     regenerateAndUploadPlacardMock(admin, tenantId, equipmentId),
+  // The apply route hoists the tenant logo load out of the per-placard loop
+  // (one fetch per run). This mock only needs to supply a pass-through value;
+  // regeneration itself is asserted via regenerateAndUploadPlacardMock.
+  loadTenantLogoPng: async () => null,
 }))
 
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }))
