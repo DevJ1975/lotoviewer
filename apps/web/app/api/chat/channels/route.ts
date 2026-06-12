@@ -110,34 +110,21 @@ export async function GET(req: Request) {
       }
     }
 
-    // 5. Unread counts. For each channel, count messages whose id is
-    // greater than the caller's last_read_message_id. We use created_at
-    // (timestamps are monotonic per channel in practice) instead of
-    // a sequence number because it's cheaper.
+    // 5. Unread counts. One set-based round-trip (chat_unread_counts)
+    // replaces the prior per-channel count loop; map the result by
+    // channel_id. Channels the caller has left/archived aren't in
+    // `channels`, so any tallies for them are simply ignored.
     const memByChannel = new Map<string, MemberRow>()
     for (const m of memRows) memByChannel.set(m.channel_id, m)
+    const { data: unreadRows, error: unreadErr } = await admin.rpc('chat_unread_counts', {
+      p_user:   gate.userId,
+      p_tenant: gate.tenantId,
+    })
+    if (unreadErr) throw new Error(unreadErr.message)
     const unreadByChannel = new Map<string, number>()
-    await Promise.all(channels.map(async ch => {
-      const me = memByChannel.get(ch.id)
-      let q = admin
-        .from('chat_messages')
-        .select('id, created_at', { count: 'exact', head: true })
-        .eq('channel_id', ch.id)
-        .eq('tenant_id', gate.tenantId)
-        .is('deleted_at', null)
-        .neq('author_user_id', gate.userId)
-      if (me?.last_read_message_id) {
-        // Resolve the last-read message's created_at and count newer.
-        const { data: lastRead } = await admin
-          .from('chat_messages')
-          .select('created_at')
-          .eq('id', me.last_read_message_id)
-          .maybeSingle()
-        if (lastRead?.created_at) q = q.gt('created_at', lastRead.created_at)
-      }
-      const { count } = await q
-      unreadByChannel.set(ch.id, count ?? 0)
-    }))
+    for (const r of (unreadRows ?? []) as Array<{ channel_id: string; unread_count: number }>) {
+      unreadByChannel.set(r.channel_id, r.unread_count ?? 0)
+    }
 
     const out = channels.map(ch => {
       const memList   = membersByChannel.get(ch.id) ?? []
