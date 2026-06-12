@@ -1,10 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { Bot, Maximize2, ChevronDown, ChevronUp } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
-import { dailyQuote, timeOfDayGreeting } from '@/components/Greeting'
 import AssistantChat from '@/components/assistant/AssistantChat'
 import { Hero } from './Hero'
 import MultiModuleDashboard from './MultiModuleDashboard'
@@ -24,33 +23,15 @@ const SUGGESTIONS = [
   'Take me to the confined-space status board.',
 ]
 
-const CLOCK_TICK_MS = 1000
-
 export default function AgentHome() {
   const { profile, email } = useAuth()
   const firstName = (profile?.full_name?.trim().split(/\s+/)[0]) || (email?.split('@')[0]) || 'there'
   const [showDashboard, setShowDashboard] = useState(true)
 
-  // Live clock drives the hero (greeting + time), one interval for the page.
-  const [now, setNow] = useState<Date>(() => new Date())
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), CLOCK_TICK_MS)
-    return () => clearInterval(id)
-  }, [])
-
-  const greeting = useMemo(() => timeOfDayGreeting(now), [now])
-  const quoteDateKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`
-  const quote = useMemo(() => {
-    const [year, month, day] = quoteDateKey.split('-').map(Number)
-    return dailyQuote(new Date(year!, month!, day!)).text
-  }, [quoteDateKey])
-  const dateLabel = useMemo(() => now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }), [now])
-  const timeLabel = useMemo(() => now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }), [now])
-
   return (
     <div className="animate-panel-in">
       <div className="mx-auto max-w-7xl space-y-5 px-4 pt-6 sm:px-6 lg:px-8">
-        <Hero greeting={greeting} firstName={firstName} dateLabel={dateLabel} timeLabel={timeLabel} quote={quote} />
+        <Hero firstName={firstName} />
 
         <section>
           <div className="mb-3 flex items-center justify-between gap-3">

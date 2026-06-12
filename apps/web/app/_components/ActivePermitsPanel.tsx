@@ -3,12 +3,15 @@
 import Link from 'next/link'
 import type { ActivePermitSummary } from '@soteria/core/homeMetrics'
 import { permitCountdown, type CountdownTone } from '@soteria/core/permitStatus'
+import { useNow } from '@/hooks/useNow'
 
-// Live list of active confined-space permits with a countdown timer per
-// row. `now` is passed in from the parent's 1Hz tick so all rows share
-// one timer source — no per-row setInterval cost.
+// Live list of active confined-space permits with a countdown timer per row.
+// The panel owns one 1Hz tick (useNow) that all rows share — so the
+// countdowns re-render here without forcing the rest of the home page to
+// re-render every second, and without a per-row setInterval cost.
 
-export function ActivePermitsPanel({ permits, now }: { permits: ActivePermitSummary[] | null; now: Date }) {
+export function ActivePermitsPanel({ permits }: { permits: ActivePermitSummary[] | null }) {
+  const now = useNow(1000)
   const count = permits?.length ?? 0
   return (
     <section className="placard-surface placard-corner-mark p-4 space-y-3">
