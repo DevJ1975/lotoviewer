@@ -73,13 +73,14 @@ async function gate(req: Request, opts: GateOptions = {}): Promise<TenantGate> {
 
   const admin = supabaseAdmin()
 
-  // Superadmin shortcut: DB flag + env allowlist (same posture as
-  // /api/admin/review-links).
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('is_superadmin')
-    .eq('id', user.id)
-    .maybeSingle()
+  // Superadmin shortcut (DB flag + env allowlist) and the tenant-membership
+  // role check are independent — fire both in parallel so a non-superadmin
+  // (the common case) pays one round-trip instead of two. A superadmin pays
+  // for a membership query it won't use, but superadmins are rare.
+  const [{ data: profile }, { data: membership }] = await Promise.all([
+    admin.from('profiles').select('is_superadmin').eq('id', user.id).maybeSingle(),
+    admin.from('tenant_memberships').select('role').eq('user_id', user.id).eq('tenant_id', tenantId).maybeSingle(),
+  ])
   const allow = (process.env.SUPERADMIN_EMAILS ?? '')
     .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
   const isSuperadmin = !!profile?.is_superadmin && !!user.email && allow.includes(user.email.toLowerCase())
@@ -88,12 +89,6 @@ async function gate(req: Request, opts: GateOptions = {}): Promise<TenantGate> {
     return makeOk(user, tenantId, facilityId, 'superadmin', token, url, anon)
   }
 
-  const { data: membership } = await admin
-    .from('tenant_memberships')
-    .select('role')
-    .eq('user_id',   user.id)
-    .eq('tenant_id', tenantId)
-    .maybeSingle()
   if (!membership) {
     return { ok: false, status: 403, message: 'Not a member of this tenant' }
   }

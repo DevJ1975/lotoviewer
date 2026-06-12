@@ -69,6 +69,11 @@ export async function regenerateAndUploadPlacard(
   admin: SupabaseClient,
   tenantId:   string,
   equipmentId: string,
+  // Optional pre-loaded logo. Callers that regenerate many placards in a loop
+  // (the audit apply route) load it once and pass it, so the tenants-select +
+  // logo fetch + sharp re-encode isn't repeated per machine. Omit to load it
+  // lazily as before.
+  tenantLogoPng?: Uint8Array | null,
 ): Promise<RegenerateResult> {
   const [eqRes, stepsRes] = await Promise.all([
     admin.from('loto_equipment')
@@ -90,8 +95,8 @@ export async function regenerateAndUploadPlacard(
   const equipment = eqRes.data
   const steps     = (stepsRes.data ?? []) as LotoEnergyStep[]
 
-  const tenantLogoPng = await loadTenantLogoPng(admin, tenantId)
-  const bytes = await generatePlacardPdf({ equipment, steps, tenantLogoPng })
+  const logo = tenantLogoPng !== undefined ? tenantLogoPng : await loadTenantLogoPng(admin, tenantId)
+  const bytes = await generatePlacardPdf({ equipment, steps, tenantLogoPng: logo })
   const path  = placardPdfPath(tenantId, equipmentId)
 
   const bucket = admin.storage.from(BUCKET)

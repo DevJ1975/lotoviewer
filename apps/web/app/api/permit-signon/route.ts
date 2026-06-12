@@ -86,7 +86,13 @@ function statusFor(p: ConfinedSpacePermit): LookupResponse['permit']['status'] {
   return 'active'
 }
 
-async function loadPermitByToken(token: string): Promise<ConfinedSpacePermit | null> {
+// The DB row always carries tenant_id (NOT NULL on this multi-tenant table);
+// the shared ConfinedSpacePermit type just doesn't model it. Track it locally
+// so the tenant-scoped training queries below are type-safe without touching
+// the shared type (and its test fixtures).
+type PermitRow = ConfinedSpacePermit & { tenant_id: string }
+
+async function loadPermitByToken(token: string): Promise<PermitRow | null> {
   const admin = supabaseAdmin()
   const { data, error } = await admin
     .from('loto_confined_space_permits')
@@ -98,10 +104,10 @@ async function loadPermitByToken(token: string): Promise<ConfinedSpacePermit | n
     if ('code' in error && (error as { code?: string }).code === 'PGRST116') return null
     throw new Error(error.message)
   }
-  return data as ConfinedSpacePermit
+  return data as PermitRow
 }
 
-async function loadRoster(permit: ConfinedSpacePermit): Promise<RosterEntry[]> {
+async function loadRoster(permit: PermitRow): Promise<RosterEntry[]> {
   const admin = supabaseAdmin()
   // Open entries (exited_at is null) — the page renders these as
   // "currently inside" so the worker doesn't double-tap sign-in.
@@ -122,6 +128,11 @@ async function loadRoster(permit: ConfinedSpacePermit): Promise<RosterEntry[]> {
   const { data: trainingRows, error: trainingErr } = await admin
     .from('loto_training_records')
     .select('*')
+    // Scope to this permit's tenant. Service role bypasses RLS, so without
+    // this the public QR endpoint fetched EVERY tenant's training records on
+    // every scan. Filter by tenant, not by name — validateTraining does
+    // case/whitespace-tolerant name matching that an exact .in() would break.
+    .eq('tenant_id', permit.tenant_id)
   // Pre-migration-017 the table doesn't exist. Treat "table missing" as
   // "no records on file" rather than failing — the gate behaves the same
   // way the in-app permit detail page does (every worker shows as
@@ -231,6 +242,7 @@ async function handleSignIn(token: string, name: string): Promise<NextResponse> 
   const { data: trainingRows, error: trainingErr } = await admin
     .from('loto_training_records')
     .select('*')
+    .eq('tenant_id', permit.tenant_id)   // tenant-scope: avoid a platform-wide read on this public endpoint
   if (!trainingErr && trainingRows && trainingRows.length > 0) {
     const issues = validateTraining({
       entrants:   [trimmed],
