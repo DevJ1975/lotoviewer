@@ -21,14 +21,15 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
   const gate = await requireTenantMember(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
-  const { itemId } = await ctx.params
-  if (!UUID_RE.test(itemId)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
+  const { projectId, itemId } = await ctx.params
+  if (!UUID_RE.test(projectId) || !UUID_RE.test(itemId)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
 
   try {
     const { data: item, error: itemErr } = await gate.authedClient
       .from('em385_register_items')
       .select('*')
       .eq('id', itemId)
+      .eq('project_id', projectId)
       .eq('tenant_id', gate.tenantId)
       .maybeSingle()
     if (itemErr) throw new Error(itemErr.message)
@@ -62,8 +63,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ projectId: st
   const gate = await requireTenantAdmin(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
-  const { itemId } = await ctx.params
-  if (!UUID_RE.test(itemId)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
+  const { projectId, itemId } = await ctx.params
+  if (!UUID_RE.test(projectId) || !UUID_RE.test(itemId)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
 
   let body: Record<string, unknown>
   try { body = await req.json() }
@@ -113,6 +114,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ projectId: st
       .from('em385_register_items')
       .select('not_applicable_justification')
       .eq('id', itemId)
+      .eq('project_id', projectId)
       .eq('tenant_id', gate.tenantId)
       .maybeSingle()
     if (!existing?.not_applicable_justification) {
@@ -128,6 +130,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ projectId: st
       .from('em385_register_items')
       .update(update)
       .eq('id', itemId)
+      .eq('project_id', projectId)
       .eq('tenant_id', gate.tenantId)
       .select('*')
       .maybeSingle()
