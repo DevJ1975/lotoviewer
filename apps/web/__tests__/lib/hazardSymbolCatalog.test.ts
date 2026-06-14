@@ -17,10 +17,10 @@ import {
 } from '@soteria/core/hazardSymbols'
 
 // Guards the code-vs-seed contract: these cardinalities and shapes must
-// match the seeded reference catalogs (migrations 227-229). A mismatch
+// match the seeded reference catalogs (migrations 232-234). A mismatch
 // means the database and the renderers have drifted.
 
-describe('GHS pictogram catalog (migration 227)', () => {
+describe('GHS pictogram catalog (migration 232)', () => {
   it('has detail for all nine canonical pictograms', () => {
     expect(GHS_PICTOGRAMS.length).toBe(9)
     expect(Object.keys(GHS_PICTOGRAM_DETAIL).length).toBe(9)
@@ -45,7 +45,7 @@ describe('GHS pictogram catalog (migration 227)', () => {
   })
 })
 
-describe('DOT hazard-class catalog (migration 228)', () => {
+describe('DOT hazard-class catalog (migration 233)', () => {
   it('catalogs the 20 canonical classes/divisions', () => {
     expect(DOT_HAZARD_CLASSES.length).toBe(20)
     expect(Object.keys(DOT_HAZARD_CLASS_META).length).toBe(20)
@@ -79,7 +79,7 @@ describe('DOT hazard-class catalog (migration 228)', () => {
   })
 })
 
-describe('NFPA 704 legend (migration 229)', () => {
+describe('NFPA 704 legend (migration 234)', () => {
   it('covers four quadrants with exact render hexes', () => {
     expect(NFPA_CATEGORIES).toEqual(['health', 'flammability', 'instability', 'special'])
     for (const category of NFPA_CATEGORIES) {

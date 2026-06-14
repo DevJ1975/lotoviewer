@@ -7,13 +7,13 @@
 // cover, plus a11y detail for the GHS set.
 //
 // Everything here mirrors the seeded reference catalogs
-// (migrations 227-229) so a parity test can assert the database and the
+// (migrations 232-234) so a parity test can assert the database and the
 // code never drift. Stays pure TypeScript (no deps) so packages/core
 // remains importable from the web app, the Expo shell, and tests.
 
 import type { GhsPictogram, GhsSignalWord } from './chemicals'
 
-// ── GHS a11y / catalog detail (mirrors migration 227) ─────────────────────
+// ── GHS a11y / catalog detail (mirrors migration 232) ─────────────────────
 // The hazard-class summary, depicted symbol, and canonical artwork path
 // for each pictogram. Lets a component render an honest alt/title and
 // resolve the SVG without a database round-trip. `name` stays in
@@ -42,7 +42,7 @@ export const GHS_PICTOGRAM_DETAIL: Record<GhsPictogram, GhsPictogramDetail> = {
   GHS09: { symbolDescription: 'Environment',          hazardClassSummary: 'Hazardous to the aquatic environment: acute cat. 1; chronic cat. 1-2',             defaultSignalWord: 'warning', imagePath: '/ghs/GHS09.svg' },
 }
 
-// ── DOT / UN transport hazard classes (mirrors migration 228) ─────────────
+// ── DOT / UN transport hazard classes (mirrors migration 233) ─────────────
 
 export const DOT_HAZARD_CLASSES = [
   '1.1', '1.2', '1.3', '1.4', '1.5', '1.6',
@@ -95,7 +95,7 @@ export const DOT_HAZARD_CLASS_META: Record<DotHazardClass, DotHazardClassMeta> =
 export const DOT_PACKING_GROUPS = ['I', 'II', 'III'] as const
 export type DotPackingGroup = typeof DOT_PACKING_GROUPS[number]
 
-// ── NFPA 704 fire diamond (mirrors migration 229) ─────────────────────────
+// ── NFPA 704 fire diamond (mirrors migration 234) ─────────────────────────
 
 export const NFPA_CATEGORIES = ['health', 'flammability', 'instability', 'special'] as const
 export type NfpaCategory = typeof NFPA_CATEGORIES[number]
