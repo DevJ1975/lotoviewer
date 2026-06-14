@@ -43,7 +43,10 @@ export async function GET(req: Request) {
       .from('hazardous_waste_containers')
       .select(
         // Inline the only stream columns the UI needs for aging + display.
-        '*, stream:stream_id (id, name, generator_category, long_haul, waste_codes)',
+        `*, stream:stream_id (
+          id, name, generator_category, long_haul, waste_codes,
+          ghs_pictograms, ghs_signal_word, dot_un_number, dot_hazard_class, dot_packing_group
+        )`,
         { count: 'exact' },
       )
       .eq('tenant_id', gate.tenantId)
@@ -125,7 +128,10 @@ export async function POST(req: Request) {
         updated_by: gate.userId,
         ...input,
       })
-      .select('*, stream:stream_id (id, name, generator_category, long_haul, waste_codes)')
+      .select(`*, stream:stream_id (
+          id, name, generator_category, long_haul, waste_codes,
+          ghs_pictograms, ghs_signal_word, dot_un_number, dot_hazard_class, dot_packing_group
+        )`)
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ container: data }, { status: 201 })
