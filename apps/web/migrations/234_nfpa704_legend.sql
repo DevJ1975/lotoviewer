@@ -37,9 +37,15 @@ create table if not exists public.nfpa704_legend (
   updated_at      timestamptz not null default now(),
   -- A colored quadrant carries a rating; the white quadrant carries a
   -- symbol. Exactly one of (rating, special_symbol) is populated.
-  check ((rating is null) <> (special_symbol is null)),
-  primary key (category, coalesce(rating, -1), coalesce(special_symbol, ''))
+  check ((rating is null) <> (special_symbol is null))
 );
+
+-- Natural key as a unique INDEX — a PRIMARY KEY cannot use expressions, and
+-- rating/special_symbol are intentionally nullable (exactly one is set per
+-- row). The coalesce sentinels keep each (category, rating | special_symbol)
+-- row unique and give the ON CONFLICT below an index to target.
+create unique index if not exists nfpa704_legend_key
+  on public.nfpa704_legend (category, coalesce(rating, -1), coalesce(special_symbol, ''));
 
 comment on table public.nfpa704_legend is
   'NFPA 704 fire-diamond legend (quadrant x rating / special symbol -> meaning). System-wide reference for tooltips and reports.';
