@@ -105,10 +105,8 @@ function queueModuleAndVersion(versionOverrides: Record<string, unknown> = {}) {
       status: 'published',
       passing_score: 80,
       retake_limit: null,
-      video_provider: 'storage',
-      video_external_id: null,
-      video_path: 'global/loto/refresher.mp4',
-      captions_path: null,
+      video_external_id: '123456789',
+      video_meta: { vimeo_hash: 'abcdef0123' },
       ...versionOverrides,
     },
   })
@@ -185,7 +183,7 @@ describe('POST /api/strike/[moduleId]/submit', () => {
 
   it('skips the watch gate when the module has no video', async () => {
     queueGate()
-    queueModuleAndVersion({ video_path: null })
+    queueModuleAndVersion({ video_external_id: null })
     queue('strike_attempts', { data: { id: 'attempt-1' } })
     const res = await submitStrikeQuiz(req(baseBody()), ctx())
     expect(res.status).toBe(201)
