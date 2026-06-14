@@ -220,12 +220,12 @@ export async function POST(req: Request, ctx: RouteContext) {
 async function checkWatchRequirement(
   admin: ReturnType<typeof supabaseAdmin>,
   tenantId: string,
-  version: { video_provider: string | null; video_external_id: string | null; video_path: string | null },
+  version: { video_external_id: string | null; video_meta: Record<string, unknown> | null },
   watch: WatchProgress | null,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   // Modules without a playable video have nothing to watch.
   const source = resolveStrikeVideo(version)
-  if (source.kind !== 'storage' && source.kind !== 'stream') return { ok: true }
+  if (source.kind !== 'vimeo') return { ok: true }
 
   const { data: settings, error } = await admin
     .from('strike_tenant_settings')

@@ -8,7 +8,7 @@
 // *which* of those a contract has, their status, ownership, and currency — it
 // does not generate the documents themselves.
 //
-// Authoritative shapes live in the DB (migrations 225–229). The types here are
+// Authoritative shapes live in the DB (migrations 227–231). The types here are
 // the read-side contract used by API routes and UI code; keep them in sync with
 // the schema in the same commit.
 
@@ -72,7 +72,7 @@ export type Em385ProjectStatus = typeof EM385_PROJECT_STATUSES[number]
 // Row shapes
 // ──────────────────────────────────────────────────────────────────────────
 
-// A row in the GLOBAL requirements catalog (migration 225/226). Not
+// A row in the GLOBAL requirements catalog (migration 227/228). Not
 // tenant-scoped — it is the authoritative "what EM-385 says you must keep,"
 // tagged by edition. Read-only to tenants.
 export interface Em385RequirementRow {

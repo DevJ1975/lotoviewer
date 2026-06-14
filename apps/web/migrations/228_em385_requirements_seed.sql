@@ -1,4 +1,4 @@
--- Migration 226: EM-385 Compliance — requirements catalog seed (both editions).
+-- Migration 228: EM-385 Compliance — requirements catalog seed (both editions).
 --
 -- Seeds public.em385_requirements with the documents and records EM 385-1-1
 -- expects a contract to keep, across all eight families. The same requirement

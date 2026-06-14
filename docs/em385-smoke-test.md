@@ -6,7 +6,7 @@ real auth, RLS across tenants, storage uploads, and the linked-module deep links
 
 **Prereqts:** a tenant with the `em385` module enabled, one **admin** user and one
 **member** (read-only) user, and a second tenant for the isolation check. Migrations
-225–230 applied to the target DB.
+227–231 applied to the target DB.
 
 ## 1. Module gate & navigation
 - [ ] `em385` appears in the nav for a member of a tenant with the module enabled.

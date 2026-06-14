@@ -17,7 +17,7 @@ the reserved names/numbers below.**
 | Kind | Reserved |
 |---|---|
 | **DB tables** | `em385_requirements`, `em385_projects`, `em385_register_items`, `em385_document_files` (+ `em385_project_number_sequences`, `em385_register_item_audit_log`) |
-| **Migration numbers** | `225`–`229` (EM-385) **and** `230` (see migration note). Next free = **231**. |
+| **Migration numbers** | `227`–`231` (EM-385). Next free = **232**. |
 | **UI routes** | `/em385`, `/em385/new`, `/em385/[projectId]`, `/em385/[projectId]/items/[itemId]` |
 | **API routes** | everything under `/api/em385/**` |
 | **core modules** | `packages/core/src/em385.ts`, `em385Metrics.ts`, `em385Seeding.ts` (re-exported from `index.ts`) |
@@ -27,29 +27,26 @@ the reserved names/numbers below.**
 
 ## ⚠️ Migration-numbering note (important)
 
-`main` shipped with a **pre-existing duplicate `222` prefix** (`222_loto_audit_enforce_review_gate.sql`
-and `222_regulation_update_checks.sql`), which fails the `scripts/check-migration-numbers.mjs` guard
-(run by the `Repo health` CI workflow **and** Vercel's prebuild) and blocked *all* PRs against main.
-
-Resolved on this branch by renaming **`222_regulation_update_checks.sql` → `230_regulation_update_checks.sql`**
-(pure rename, no content change; the migration is `create ... if not exists`, so re-applying under the
-new name is safe).
+This branch originally carried `225`–`229` for EM-385, but `main` advanced (PR #213) and took `225`
+(`225_strike_vimeo_only.sql`) and `226` (`226_regulation_update_checks.sql`, main's own `222→226`
+fix). To keep prefixes unique on merge, the EM-385 block was **shifted to `227`–`231`** (relative
+order preserved). The original `222` duplicate is resolved on `main` (→ `226`); this branch no longer
+renames it.
 
 **Consequences for you:**
-- `230` is now the regulation-update-checks migration. **The next free prefix is `231`.**
-- Run `node scripts/check-migration-numbers.mjs` (or `npm run check:repo`) before pushing any migration.
-- If you branched from `main` *before* this lands, you still carry the `222` collision — rebase onto
-  this branch (or onto `main` after #214 merges) or you'll hit the same red CI.
+- EM-385 owns `227`–`231`. **The next free prefix is `232`** — confirm with `npm run migration:next`.
+- Run `node scripts/check-migration-numbers.mjs` (or `npm run check:repo`) before pushing any migration,
+  and rebase onto the latest `main` first: the guard only catches a collision once both numbers exist
+  in the same tree (see `docs/runbooks/versioning.md` §4).
 
 ## Files added / changed (28 files)
 
 **Migrations** (`apps/web/migrations/`)
-- `225_em385_requirements_catalog.sql` — global, non-tenant catalog (read-only to tenants)
-- `226_em385_requirements_seed.sql` — seeds the catalog for the 2024 + 2014 editions
-- `227_em385_projects.sql` — tenant-scoped USACE contract entity (+ number-sequence trigger + audit)
-- `228_em385_register_items.sql` — per-project instantiation of catalog items (+ status audit trio)
-- `229_em385_document_files.sql` — evidence-file metadata (SHA-256 hash pattern)
-- `230_regulation_update_checks.sql` — **renamed** from `222_*` (see note above)
+- `227_em385_requirements_catalog.sql` — global, non-tenant catalog (read-only to tenants)
+- `228_em385_requirements_seed.sql` — seeds the catalog for the 2024 + 2014 editions
+- `229_em385_projects.sql` — tenant-scoped USACE contract entity (+ number-sequence trigger + audit)
+- `230_em385_register_items.sql` — per-project instantiation of catalog items (+ status audit trio)
+- `231_em385_document_files.sql` — evidence-file metadata (SHA-256 hash pattern)
 - `seed_module_manuals.sql` — added the `em385` module-manual row
 
 **core** (`packages/core/src/`)

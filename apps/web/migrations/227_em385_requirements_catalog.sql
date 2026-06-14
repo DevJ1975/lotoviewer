@@ -1,10 +1,10 @@
--- Migration 225: EM-385 Compliance — requirements catalog (global reference).
+-- Migration 227: EM-385 Compliance — requirements catalog (global reference).
 --
 -- EM 385-1-1 is the USACE Safety and Occupational Health Requirements Manual.
 -- This table is the authoritative list of the documents and records a contract
 -- must keep, tagged by manual edition (2024 / 2014) and by record family. It is
--- NOT tenant-scoped: it is a shared code list, seeded by migration 226 and read
--- by every tenant. A project's register (migration 228) is instantiated from
+-- NOT tenant-scoped: it is a shared code list, seeded by migration 228 and read
+-- by every tenant. A project's register (migration 230) is instantiated from
 -- these rows.
 --
 -- RLS posture (the one place this module breaks the tenant-scope mold): the
@@ -62,7 +62,7 @@ create index if not exists idx_em385_requirements_default
 alter table public.em385_requirements enable row level security;
 
 -- Global reference table: any authenticated user may read it; nobody writes it
--- through PostgREST (migration 226 / service role only).
+-- through PostgREST (migration 228 / service role only).
 drop policy if exists em385_requirements_read on public.em385_requirements;
 create policy em385_requirements_read on public.em385_requirements
   for select to authenticated

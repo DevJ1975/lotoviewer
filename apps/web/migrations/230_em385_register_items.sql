@@ -1,7 +1,7 @@
--- Migration 228: EM-385 Compliance — register items + status audit log.
+-- Migration 230: EM-385 Compliance — register items + status audit log.
 --
 -- One row per tracked requirement on a project. Seeded from the catalog
--- (migration 226) at project creation; custom items (requirement_id NULL) can
+-- (migration 228) at project creation; custom items (requirement_id NULL) can
 -- be added later. Status changes are the auditable event, so this table gets a
 -- dedicated append-only audit log with the same three-layer enforcement as
 -- near_misses (migration 042): REVOKE + immutable trigger + SECURITY DEFINER
