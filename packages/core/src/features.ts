@@ -990,6 +990,40 @@ export const FEATURES: FeatureDef[] = [
     color:       'teal',
   },
 
+  // ── EM-385 Compliance module ────────────────────────────────────────────
+  // USACE EM 385-1-1 is document-and-records work: per contract, a contractor
+  // must produce and keep current an Accident Prevention Plan, Activity Hazard
+  // Analyses, a list of site-specific written programs, forms (ENG 3394, OSHA
+  // 300/300A), training/certifications, competent-person designations,
+  // inspections, permits, and exposure/medical records. This module is a
+  // register & tracker: it seeds a per-contract checklist from the EM-385
+  // requirements catalog and tracks each item's status, owner, dates, version,
+  // and evidence files — linking to LOTO / confined-space / incident / JHA
+  // records as the system-of-record rather than duplicating them. The "New
+  // Contract" route is reached from the module home, not the drawer.
+  {
+    id:          'em385',
+    name:        'EM-385 Compliance',
+    description: 'USACE EM 385-1-1 document & records register, tracked per contract',
+    href:        '/em385',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'FileArchive',
+    color:       'indigo',
+  },
+  {
+    id:          'em385-new',
+    name:        'New Contract',
+    description: 'Register a USACE contract and seed its EM-385 requirements',
+    href:        '/em385/new',
+    category:    'safety',
+    parent:      'em385',
+    enabled:     true,
+    comingSoon:  false,
+    internal:    true,
+  },
+
   // ── Fleet Safety & Journey Management module ────────────────────────────
   // Vehicle + driver registers with comprehensive DOT data, hazmat placards,
   // and scanned documents; ties road incidents into the Incident module and

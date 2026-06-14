@@ -49,6 +49,9 @@ export * from './risk'
 export * from './riskMetrics'
 export * from './nearMiss'
 export * from './nearMissMetrics'
+export * from './em385'
+export * from './em385Metrics'
+export * from './em385Seeding'
 export * from './bbs'
 // bbsMetrics exports a `selectActive` that collides with the same
 // name in nearMissMetrics. Re-export everything else by name and
