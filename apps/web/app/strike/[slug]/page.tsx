@@ -24,8 +24,6 @@ interface VersionRow {
   id: string
   module_id: string
   version_number: number
-  video_path: string | null
-  captions_path: string | null
   transcript: string | null
   duration_seconds: number | null
   passing_score: number
@@ -55,9 +53,8 @@ interface SubmitResult {
 }
 
 interface MediaSource {
-  provider: 'storage' | 'cloudflare' | null
+  provider: 'vimeo' | null
   url: string | null
-  captions_url: string | null
 }
 
 type MediaRequestResult =
@@ -149,7 +146,7 @@ export default function StrikeModulePage() {
 
       const { data: versions, error: versionErr } = await supabase
         .from('strike_module_versions')
-        .select('id,module_id,version_number,video_path,captions_path,transcript,duration_seconds,passing_score')
+        .select('id,module_id,version_number,transcript,duration_seconds,passing_score')
         .eq('module_id', nextModule.id)
         .eq('status', 'published')
         .order('version_number', { ascending: false })
@@ -293,24 +290,11 @@ export default function StrikeModulePage() {
       )}
 
       <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
-        {media?.url && media.provider ? (
+        {media?.url ? (
           <StrikeVideoPlayer
             src={media.url}
-            provider={media.provider}
-            captionsSrc={media.captions_url}
             watermarkText={email ?? 'SoteriaField viewer'}
             onProgress={progress => { watchProgressRef.current = progress }}
-            onExpired={() => {
-              if (!module || !version || !tenant?.id) return
-              void requestPlaybackUrl(module.id, version.id, tenant.id).then(mediaResult => {
-                if (mediaResult.ok) {
-                  setMedia(mediaResult.media)
-                } else {
-                  setMedia(null)
-                  setVideoNotice(mediaResult.notice)
-                }
-              })
-            }}
           />
         ) : (
           <div className="flex aspect-video items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-400">
