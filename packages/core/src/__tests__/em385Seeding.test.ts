@@ -30,4 +30,18 @@ describe('planRegisterSeed', () => {
   it('returns nothing for an empty catalog', () => {
     expect(planRegisterSeed([], { projectId: 'p1', tenantId: 't1', edition: '2024' })).toEqual([])
   })
+
+  it('is pure — re-seeding the same inputs yields an equal plan', () => {
+    const args = { projectId: 'p1', tenantId: 't1', edition: '2024' as const }
+    expect(planRegisterSeed(CATALOG, args)).toEqual(planRegisterSeed(CATALOG, args))
+  })
+
+  it('passes duplicate requirement ids straight through (the DB unique index dedupes on re-seed)', () => {
+    const dupes: Em385CatalogEntry[] = [
+      { id: 'r1', edition: '2024', category: 'app_plan', title: 'APP', default_required: true },
+      { id: 'r1', edition: '2024', category: 'app_plan', title: 'APP', default_required: true },
+    ]
+    expect(planRegisterSeed(dupes, { projectId: 'p1', tenantId: 't1', edition: '2024' })
+      .map(s => s.requirement_id)).toEqual(['r1', 'r1'])
+  })
 })

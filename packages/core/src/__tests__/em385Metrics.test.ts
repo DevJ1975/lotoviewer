@@ -66,4 +66,19 @@ describe('computeEm385Metrics', () => {
     expect(m.percentAccepted).toBe(0)
     expect(m.overdue).toBe(0)
   })
+
+  it('a single accepted item is 100% ready; a single other status is 0%', () => {
+    expect(computeEm385Metrics([item({ status: 'accepted' })]).percentAccepted).toBe(100)
+    expect(computeEm385Metrics([item({ status: 'submitted' })]).percentAccepted).toBe(0)
+  })
+
+  it('rolls a single-category register entirely into that category, leaving others at zero', () => {
+    const m = computeEm385Metrics([
+      item({ category: 'permit', status: 'accepted' }),
+      item({ category: 'permit', status: 'not_started' }),
+    ])
+    expect(m.byCategory.permit.total).toBe(2)
+    expect(m.byCategory.permit.accepted).toBe(1)
+    expect(m.byCategory.app_plan.total).toBe(0)
+  })
 })
