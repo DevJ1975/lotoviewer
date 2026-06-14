@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="DOT 1.6 — Explosives 1.6">
+  <title>DOT 1.6 — Explosives 1.6</title>
+  <path d="M50 2 L98 50 L50 98 L2 50 Z" fill="#FF9900"/>
+  <path d="M50 7 L93 50 L50 93 L7 50 Z" fill="none" stroke="#000" stroke-width="1.5"/>
+  <!-- division number (large, upper area) -->
+  <text x="50" y="52" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="bold" text-anchor="middle" fill="#000">1.6</text>
+  <!-- class number (bottom corner) -->
+  <text x="50" y="86" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="bold" text-anchor="middle" fill="#000">1</text>
+</svg>
