@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft, AlertTriangle, Loader2 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { em385Headers } from '../_components/client'
+import { Field, inputCls } from '../_components/Field'
 import {
   EM385_EDITIONS,
   validateCreateProjectInput,
@@ -146,19 +147,6 @@ export default function NewEm385ProjectPage() {
           </button>
         </div>
       </form>
-    </div>
-  )
-}
-
-const inputCls = 'w-full rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm'
-
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-        {label}{required && <span className="text-rose-600 ml-0.5">*</span>}
-      </label>
-      {children}
     </div>
   )
 }

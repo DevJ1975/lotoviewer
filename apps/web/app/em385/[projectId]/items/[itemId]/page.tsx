@@ -6,6 +6,7 @@ import { ArrowLeft, AlertTriangle, Loader2, Upload, FileText, ExternalLink } fro
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { em385Headers, EM385_STATUS_PILL } from '../../../_components/client'
+import { Field, inputCls } from '../../../_components/Field'
 import {
   EM385_STATUSES,
   EM385_STATUS_LABEL,
@@ -39,6 +40,12 @@ const LINKABLE_MODULES: { id: string; label: string }[] = [
   { id: 'equipment-readiness', label: 'Equipment Readiness' },
   { id: 'admin-training',    label: 'Training records' },
 ]
+
+// Client-side mirror of the server cap in the files route — fail oversize
+// uploads fast with a friendly message instead of a raw 400. The server stays
+// the authority. ACCEPT just filters the picker; the server validates for real.
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+const UPLOAD_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*'
 
 export default function Em385ItemDetailPage({ params }: { params: Promise<{ projectId: string; itemId: string }> }) {
   const { projectId, itemId } = use(params)
@@ -79,24 +86,33 @@ export default function Em385ItemDetailPage({ params }: { params: Promise<{ proj
     setNotes(row.notes ?? '')
   }, [])
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     if (!tenantId) return
     setError(null)
     try {
       const headers = await em385Headers(tenantId)
-      if (!headers) return
-      const res = await fetch(`/api/em385/projects/${projectId}/items/${itemId}`, { headers })
+      if (!headers || signal?.aborted) return
+      const res = await fetch(`/api/em385/projects/${projectId}/items/${itemId}`, { headers, signal })
       const body = await res.json()
+      if (signal?.aborted) return
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
       hydrate(body.item as Em385RegisterItemRow)
       setFiles((body.files ?? []) as Em385DocumentFileRow[])
       setAudit((body.audit ?? []) as AuditRow[])
     } catch (e) {
+      if (signal?.aborted) return
       setError(e instanceof Error ? e.message : String(e))
     }
   }, [tenantId, projectId, itemId, hydrate])
 
-  useEffect(() => { void load() }, [load])
+  // Abort the in-flight request on unmount / param change so a late response
+  // can't setState on a dead component or clobber newer data. onSave/onUpload
+  // call load() without a signal — they intentionally refresh after a write.
+  useEffect(() => {
+    const ac = new AbortController()
+    void load(ac.signal)
+    return () => ac.abort()
+  }, [load])
 
   async function onSave() {
     if (!item) return
@@ -140,6 +156,11 @@ export default function Em385ItemDetailPage({ params }: { params: Promise<{ proj
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file || !tenantId) return
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setError('File must be 50 MB or smaller.')
+      e.target.value = ''
+      return
+    }
     setUploading(true); setError(null)
     try {
       const bytes = new Uint8Array(await file.arrayBuffer())
@@ -248,7 +269,7 @@ export default function Em385ItemDetailPage({ params }: { params: Promise<{ proj
             </Field>
 
             <div className="flex justify-end">
-              <button onClick={onSave} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-brand-navy text-white px-5 py-2 text-sm font-semibold hover:bg-brand-navy/90 disabled:opacity-60">
+              <button type="button" onClick={onSave} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-brand-navy text-white px-5 py-2 text-sm font-semibold hover:bg-brand-navy/90 disabled:opacity-60">
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                 Save
               </button>
@@ -262,7 +283,7 @@ export default function Em385ItemDetailPage({ params }: { params: Promise<{ proj
               <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer">
                 {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                 Upload
-                <input ref={fileInput} type="file" className="hidden" onChange={onUpload} disabled={uploading} />
+                <input ref={fileInput} type="file" accept={UPLOAD_ACCEPT} className="hidden" onChange={onUpload} disabled={uploading} />
               </label>
             </div>
             {files.length === 0 ? (
@@ -304,19 +325,6 @@ export default function Em385ItemDetailPage({ params }: { params: Promise<{ proj
           </section>
         </>
       )}
-    </div>
-  )
-}
-
-const inputCls = 'w-full rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm'
-
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-        {label}{required && <span className="text-rose-600 ml-0.5">*</span>}
-      </label>
-      {children}
     </div>
   )
 }

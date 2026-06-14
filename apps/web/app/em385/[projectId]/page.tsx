@@ -32,22 +32,30 @@ export default function Em385ProjectDetailPage({ params }: { params: Promise<{ p
   const [data, setData] = useState<DetailResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     if (!tenantId) return
     setError(null)
     try {
       const headers = await em385Headers(tenantId)
-      if (!headers) return
-      const res = await fetch(`/api/em385/projects/${projectId}`, { headers })
+      if (!headers || signal?.aborted) return
+      const res = await fetch(`/api/em385/projects/${projectId}`, { headers, signal })
       const body = await res.json()
+      if (signal?.aborted) return
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
       setData(body as DetailResponse)
     } catch (e) {
+      if (signal?.aborted) return
       setError(e instanceof Error ? e.message : String(e))
     }
   }, [tenantId, projectId])
 
-  useEffect(() => { void load() }, [load])
+  // Abort the in-flight request on unmount / tenant change so a late response
+  // can't setState on a dead component or clobber newer data.
+  useEffect(() => {
+    const ac = new AbortController()
+    void load(ac.signal)
+    return () => ac.abort()
+  }, [load])
 
   if (error) {
     return (
