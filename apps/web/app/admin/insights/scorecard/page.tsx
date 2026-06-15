@@ -44,6 +44,14 @@ import {
   evaluateTarget, compareToBenchmark,
   type TargetMetric,
 } from '@soteria/core/ehsTargets'
+import { useMetricDrill } from '@/components/scorecard/useMetricDrill'
+import { MetricDetailSheet } from '@/components/scorecard/MetricDetailSheet'
+import { RiskGauge } from '@/components/scorecard/RiskGauge'
+import { LeadingLaggingPanel } from '@/components/scorecard/LeadingLaggingPanel'
+import {
+  metricDetailFromDriver, buildIncidentKpiDetails,
+  type MetricDetail, type IncidentKpiId,
+} from '@/components/scorecard/metricDetail'
 
 // EHS scorecard - an operations-board view for safety leaders.
 // The top strip intentionally reads as infographics instead of plain
@@ -116,6 +124,7 @@ export default function ScorecardPage() {
   }, [authLoading, profile, windowDays])
 
   const { tenantId } = useTenant()
+  const drill = useMetricDrill()
   const [presentation, setPresentation] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [previewing, setPreviewing] = useState(false)
@@ -151,7 +160,7 @@ export default function ScorecardPage() {
           'x-active-tenant': tenantId,
           ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
         },
-        body: JSON.stringify({ metrics, windowDays }),
+        body: JSON.stringify({ metrics, incidentMetrics, windowDays }),
       })
       if (!res.ok) throw new Error(`Export failed (${res.status})`)
       const blob = await res.blob()
@@ -340,7 +349,7 @@ export default function ScorecardPage() {
               <div className="min-w-0">
                 <h1 className="truncate text-xl font-black text-slate-950 dark:text-slate-50">EHS Scorecard</h1>
                 <p className="ops-muted truncate text-sm">
-                  Recordable trend, TRIR/DART, predicted risk, and year-over-year performance — your whole safety program at a glance.
+                  Recordable trend, TRIR/DART, predicted risk, and year-over-year performance. Tap any metric for the detail behind it.
                 </p>
               </div>
             </div>
@@ -396,7 +405,14 @@ export default function ScorecardPage() {
         </div>
       )}
 
-      {risk && <PredictedRiskCard risk={risk} />}
+      {risk && <PredictedRiskCard risk={risk} onDrill={drill.open} />}
+
+      {risk && (
+        <LeadingLaggingPanel
+          drivers={risk.drivers}
+          onSelect={d => drill.open(metricDetailFromDriver(d))}
+        />
+      )}
 
       {incidentMetrics && (
         <IncidentScorecardSection
@@ -405,6 +421,7 @@ export default function ScorecardPage() {
           targetRows={targetRows}
           naics={naics}
           onSaveTargets={persistTargets}
+          onDrill={drill.open}
         />
       )}
 
@@ -417,6 +434,8 @@ export default function ScorecardPage() {
       ) : (
         <ScorecardSkeleton />
       )}
+
+      <MetricDetailSheet detail={drill.selected} onClose={drill.close} />
     </div>
   )
 }
@@ -902,7 +921,7 @@ const RISK_BAND_STYLE: Record<IncidentRiskBand, { ring: string; chip: string; ba
 
 // Predicted incident-risk card — the deterministic score + the ranked drivers
 // ("where to work"). Each driver links to the module where the work happens.
-function PredictedRiskCard({ risk }: { risk: IncidentRiskResult }) {
+function PredictedRiskCard({ risk, onDrill }: { risk: IncidentRiskResult; onDrill: (d: MetricDetail) => void }) {
   const style = RISK_BAND_STYLE[risk.band]
   const topDrivers = risk.drivers.filter(d => d.contribution > 0).slice(0, 4)
   return (
@@ -910,15 +929,10 @@ function PredictedRiskCard({ risk }: { risk: IncidentRiskResult }) {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <div className="sm:w-48 shrink-0">
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Predicted incident risk</p>
-          <div className="mt-1 flex items-end gap-2">
-            <span className="text-4xl font-black tabular-nums text-slate-900 dark:text-slate-50">{Math.round(risk.score)}</span>
-            <span className="mb-1 text-sm text-slate-400">/ 100</span>
-            <span className={`mb-1 rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${style.chip}`}>{style.label}</span>
+          <div className="mt-1 flex justify-center sm:justify-start">
+            <RiskGauge score={risk.score} band={risk.band} />
           </div>
-          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-            <div className={`h-full ${style.bar}`} style={{ width: `${clamp(risk.score, 0, 100)}%` }} />
-          </div>
-          <p className="mt-2 text-[11px] text-slate-400">Data-driven from leading + lagging indicators. Not a compliance determination.</p>
+          <p className="mt-1 text-[11px] text-slate-400">Data-driven from leading + lagging indicators. Not a compliance determination.</p>
         </div>
         <div className="min-w-0 flex-1">
           <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Where to work to lower it</p>
@@ -928,13 +942,17 @@ function PredictedRiskCard({ risk }: { risk: IncidentRiskResult }) {
             <ul className="space-y-1.5">
               {topDrivers.map(d => (
                 <li key={d.key}>
-                  <Link href={d.href} className="group flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 hover:border-brand-navy/30 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50">
+                  <button
+                    type="button"
+                    onClick={() => onDrill(metricDetailFromDriver(d))}
+                    className="motion-press group flex w-full items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-left outline-none hover:border-brand-navy/30 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-brand-navy/40 dark:border-slate-800 dark:hover:bg-slate-800/50"
+                  >
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-semibold text-slate-800 group-hover:text-brand-navy dark:text-slate-100">{d.label}</span>
                       <span className="block truncate text-[11px] text-slate-500 dark:text-slate-400">{d.value} · target {d.target}</span>
                     </span>
                     <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-slate-600 dark:bg-slate-800 dark:text-slate-300">+{d.contribution}</span>
-                  </Link>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -950,13 +968,15 @@ function PredictedRiskCard({ risk }: { risk: IncidentRiskResult }) {
 // LTIR), the 300A recordkeeping roll-up, this-week momentum, the recordable +
 // near-miss trend, and where on the body people are getting hurt. All from the
 // trailing-12-month IncidentScorecardMetrics.
-function IncidentScorecardSection({ metrics: m, annualHistory, targetRows, naics, onSaveTargets }: {
+function IncidentScorecardSection({ metrics: m, annualHistory, targetRows, naics, onSaveTargets, onDrill }: {
   metrics: IncidentScorecardMetrics
   annualHistory: YearMetric[] | null
   targetRows: TargetRow[]
   naics: string | null
   onSaveTargets: (draft: TargetDraft) => Promise<void>
+  onDrill: (d: MetricDetail) => void
 }) {
+  const kpi = useMemo<Record<IncidentKpiId, MetricDetail>>(() => buildIncidentKpiDetails(m), [m])
   const streak = m.daysSinceLastRecordable
   const monthly = mergeMonthly(m.recordablesByMonth, m.nearMissByMonth)
   const bodyParts = m.bodyPartHeatmap.slice(0, 8).map(b => ({ name: humanizeBodyPart(b.body_part), count: b.count }))
@@ -980,17 +1000,18 @@ function IncidentScorecardSection({ metrics: m, annualHistory, targetRows, naics
         <IncidentStatCard icon={CalendarClock} label="Days since last recordable"
           value={streak < 0 ? '—' : String(streak)}
           sub={streak < 0 ? 'none on file' : streak === 1 ? 'day' : 'days'}
-          accent={streak < 0 || streak >= 30 ? 'safe' : 'neutral'} href="/incidents" />
-        <IncidentStatCard icon={Activity} label="TRIR" value={fmtRate(m.trir)} sub="per 100 FTE" accent="neutral" href="/osha" />
-        <IncidentStatCard icon={Activity} label="DART" value={fmtRate(m.dart)} sub="per 100 FTE" accent="neutral" href="/osha" />
-        <IncidentStatCard icon={Activity} label="LTIR" value={fmtRate(m.ltir)} sub="per 100 FTE" accent="neutral" href="/osha" />
+          accent={streak < 0 || streak >= 30 ? 'safe' : 'neutral'} href="/incidents"
+          detail={kpi.days_since} onDrill={onDrill} />
+        <IncidentStatCard icon={Activity} label="TRIR" value={fmtRate(m.trir)} sub="per 100 FTE" accent="neutral" href="/osha" detail={kpi.trir} onDrill={onDrill} />
+        <IncidentStatCard icon={Activity} label="DART" value={fmtRate(m.dart)} sub="per 100 FTE" accent="neutral" href="/osha" detail={kpi.dart} onDrill={onDrill} />
+        <IncidentStatCard icon={Activity} label="LTIR" value={fmtRate(m.ltir)} sub="per 100 FTE" accent="neutral" href="/osha" detail={kpi.ltir} onDrill={onDrill} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <IncidentStatCard icon={Gauge} label="Severity rate" value={fmtRate(m.severityRate)} sub="days × 200K / hrs" accent="neutral" href="/osha" />
-        <IncidentStatCard icon={ClipboardCheck} label="CAPA on time" value={fmtPct(m.actionClosureOnTimePct)} sub="closed by due date" accent={pctTone(m.actionClosureOnTimePct)} href="/incidents" />
-        <IncidentStatCard icon={ShieldCheck} label="RCA completion" value={fmtPct(m.rcaCompletionPct)} sub={`${m.recordablesWithCompletedRca} of ${m.totalRecordable} recordable`} accent={pctTone(m.rcaCompletionPct)} href="/incidents" />
-        <IncidentStatCard icon={Timer} label="Time to close" value={m.meanTimeToCloseDays === null ? '—' : m.meanTimeToCloseDays.toFixed(1)} sub="avg days, reported→closed" accent="neutral" href="/incidents" />
+        <IncidentStatCard icon={Gauge} label="Severity rate" value={fmtRate(m.severityRate)} sub="days × 200K / hrs" accent="neutral" href="/osha" detail={kpi.severity} onDrill={onDrill} />
+        <IncidentStatCard icon={ClipboardCheck} label="CAPA on time" value={fmtPct(m.actionClosureOnTimePct)} sub="closed by due date" accent={pctTone(m.actionClosureOnTimePct)} href="/incidents" detail={kpi.capa} onDrill={onDrill} />
+        <IncidentStatCard icon={ShieldCheck} label="RCA completion" value={fmtPct(m.rcaCompletionPct)} sub={`${m.recordablesWithCompletedRca} of ${m.totalRecordable} recordable`} accent={pctTone(m.rcaCompletionPct)} href="/incidents" detail={kpi.rca} onDrill={onDrill} />
+        <IncidentStatCard icon={Timer} label="Time to close" value={m.meanTimeToCloseDays === null ? '—' : m.meanTimeToCloseDays.toFixed(1)} sub="avg days, reported→closed" accent="neutral" href="/incidents" detail={kpi.time_to_close} onDrill={onDrill} />
       </div>
 
       {yoy.length >= 2 && (
@@ -1340,20 +1361,28 @@ function TargetsBenchmarkPanel({ metrics: m, targetRows, naics, year, onSave }: 
   )
 }
 
-function IncidentStatCard({ icon: Icon, label, value, sub, accent, href }: {
+function IncidentStatCard({ icon: Icon, label, value, sub, accent, href, detail, onDrill }: {
   icon: LucideIcon; label: string; value: string; sub: string; accent: Tone; href: string
+  detail?: MetricDetail; onDrill?: (d: MetricDetail) => void
 }) {
   const style = TONE_STYLES[accent]
-  return (
-    <Link href={href} className={`ops-surface-interactive ops-surface animate-panel-in block rounded-lg p-4 outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/40 dark:focus-visible:ring-brand-yellow/40 ${style.border}`}>
+  const className = `ops-surface-interactive ops-surface animate-panel-in block w-full rounded-lg p-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/40 dark:focus-visible:ring-brand-yellow/40 ${style.border}`
+  const body = (
+    <>
       <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] font-black uppercase leading-tight text-slate-500 dark:text-slate-400">{label}</p>
         <span className={`flex size-7 shrink-0 items-center justify-center rounded-md ${style.soft}`}><Icon className="h-4 w-4" /></span>
       </div>
       <p className={`mt-2 text-3xl font-black tabular-nums leading-none ${style.text}`}>{value}</p>
       <p className="mt-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">{sub}</p>
-    </Link>
+    </>
   )
+  // Drill-down (Tableau-style) when a detail descriptor is supplied; otherwise a
+  // plain deep link to the source module.
+  if (detail && onDrill) {
+    return <button type="button" onClick={() => onDrill(detail)} className={`motion-press ${className}`}>{body}</button>
+  }
+  return <Link href={href} className={className}>{body}</Link>
 }
 
 function RecordkeepingStat({ label, value, critical = false }: { label: string; value: number; critical?: boolean }) {
