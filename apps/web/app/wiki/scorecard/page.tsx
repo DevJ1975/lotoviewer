@@ -1,10 +1,26 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.11.0'
+const CURRENT_VERSION = '1.12.0'
 const LAST_UPDATED    = '2026-06-15'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.12.0',
+    date:    '2026-06-15',
+    changes: [
+      'Where to focus: an on-demand AI card that reads your deterministic risk ' +
+      'drivers + forecast and ranks, in plain language, where to work next to ' +
+      'lower predicted risk — each item deep-links to the module. The risk score ' +
+      'is always computed by the model, never the assistant; if AI is ' +
+      'unavailable the card falls back to the top deterministic drivers.',
+      'Excel export: the new “Excel” button downloads a multi-tab .xlsx ' +
+      '(Summary, Leading, Lagging, Trends, Distribution, Targets, Risk drivers) ' +
+      'that opens in Excel and imports cleanly into Google Sheets. The risk ' +
+      'headline is recomputed server-side and every cell is guarded against ' +
+      'spreadsheet formula injection.',
+    ],
+  },
   {
     version: '1.11.0',
     date:    '2026-06-15',

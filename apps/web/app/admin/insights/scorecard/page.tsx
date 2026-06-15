@@ -10,6 +10,7 @@ import {
   Camera,
   ClipboardCheck,
   FileDown,
+  FileSpreadsheet,
   Gauge,
   HeartPulse,
   Loader2,
@@ -49,6 +50,7 @@ import { MetricDetailSheet } from '@/components/scorecard/MetricDetailSheet'
 import { RiskGauge } from '@/components/scorecard/RiskGauge'
 import { LeadingLaggingPanel } from '@/components/scorecard/LeadingLaggingPanel'
 import { PredictiveSection } from '@/components/scorecard/PredictiveSection'
+import { FocusCard } from '@/components/scorecard/FocusCard'
 import {
   metricDetailFromDriver, buildIncidentKpiDetails,
   type MetricDetail, type IncidentKpiId,
@@ -127,7 +129,7 @@ export default function ScorecardPage() {
   const { tenantId } = useTenant()
   const drill = useMetricDrill()
   const [presentation, setPresentation] = useState(false)
-  const [exporting, setExporting] = useState(false)
+  const [exporting, setExporting] = useState<'pdf' | 'xlsx' | null>(null)
   const [previewing, setPreviewing] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
@@ -149,12 +151,15 @@ export default function ScorecardPage() {
     }
   }
 
-  async function exportPdf() {
+  // One downloader for both formats — same admin-gated body, different endpoint
+  // and file extension. The server recomputes the authoritative risk headline.
+  async function downloadScorecard(format: 'pdf' | 'xlsx') {
     if (!tenantId || !metrics) return
-    setExporting(true); setExportError(null)
+    setExporting(format); setExportError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch('/api/scorecard/export', {
+      const endpoint = format === 'pdf' ? '/api/scorecard/export' : '/api/scorecard/export-xlsx'
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -168,13 +173,13 @@ export default function ScorecardPage() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `ehs-scorecard-${new Date().toISOString().slice(0, 10)}.pdf`
+      a.download = `ehs-scorecard-${new Date().toISOString().slice(0, 10)}.${format}`
       document.body.appendChild(a); a.click(); a.remove()
       URL.revokeObjectURL(url)
     } catch (e) {
-      setExportError(e instanceof Error ? e.message : 'Could not export PDF')
+      setExportError(e instanceof Error ? e.message : `Could not export ${format.toUpperCase()}`)
     } finally {
-      setExporting(false)
+      setExporting(null)
     }
   }
 
@@ -366,13 +371,22 @@ export default function ScorecardPage() {
               ))}
             </select>
             <button
-              onClick={exportPdf}
-              disabled={exporting || !metrics}
+              onClick={() => downloadScorecard('pdf')}
+              disabled={exporting !== null || !metrics}
               className="motion-press flex h-10 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-brand-navy/30 hover:text-brand-navy disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
               aria-label="Download PDF report"
             >
-              {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+              {exporting === 'pdf' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
               <span className="hidden sm:inline">PDF</span>
+            </button>
+            <button
+              onClick={() => downloadScorecard('xlsx')}
+              disabled={exporting !== null || !metrics}
+              className="motion-press flex h-10 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-brand-navy/30 hover:text-brand-navy disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              aria-label="Download Excel workbook"
+            >
+              {exporting === 'xlsx' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+              <span className="hidden sm:inline">Excel</span>
             </button>
             <button
               onClick={previewWeather}
@@ -407,6 +421,8 @@ export default function ScorecardPage() {
       )}
 
       {risk && <PredictedRiskCard risk={risk} onDrill={drill.open} />}
+
+      {risk && <FocusCard tenantId={tenantId} incidentMetrics={incidentMetrics} />}
 
       {risk && (
         <LeadingLaggingPanel
