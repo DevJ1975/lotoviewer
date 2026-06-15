@@ -198,7 +198,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
           <span className="placard-label text-slate-500 dark:text-slate-500">
             Made with <span role="img" aria-label="love">❤️</span> in Las Vegas{' '}
             <span className="text-slate-400 dark:text-slate-500">© 2026</span>{' '}
-            <span className="text-slate-700 dark:text-slate-300">Trainovations Technologies, LLC</span>
+            <span className="text-slate-700 dark:text-slate-300">Trainovate Technologies LLC</span>
           </span>
           <span className="flex items-center gap-3">
             <span className="placard-numeric text-[11px] text-slate-400 dark:text-slate-500" title={VERSION_LINE}>
