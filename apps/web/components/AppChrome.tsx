@@ -196,8 +196,9 @@ export default function AppChrome({ children }: { children: ReactNode }) {
         <div className="-mt-4 mb-4 h-1 hazard-stripe-thin opacity-80" aria-hidden="true" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <span className="placard-label text-slate-500 dark:text-slate-500">
-            Powered by <span className="text-slate-700 dark:text-slate-300">Trainovate Technologies</span>
-            <span className="text-slate-400 dark:text-slate-500"> · © 2026</span>
+            Made with <span role="img" aria-label="love">❤️</span> in Las Vegas{' '}
+            <span className="text-slate-400 dark:text-slate-500">© 2026</span>{' '}
+            <span className="text-slate-700 dark:text-slate-300">Trainovations Technologies, LLC</span>
           </span>
           <span className="flex items-center gap-3">
             <span className="placard-numeric text-[11px] text-slate-400 dark:text-slate-500" title={VERSION_LINE}>
