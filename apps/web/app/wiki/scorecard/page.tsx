@@ -1,10 +1,25 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.10.0'
+const CURRENT_VERSION = '1.11.0'
 const LAST_UPDATED    = '2026-06-15'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.11.0',
+    date:    '2026-06-15',
+    changes: [
+      'Predictive section — “where things are going”: a forecast of next ' +
+      'month’s recordable count (EWMA + a reliability-gated linear trend) with ' +
+      'a Poisson 95% prediction interval, plus an improving/worsening/flat ' +
+      'trend read. The number is deterministic, never an AI guess.',
+      'Statistically honest distributions: recordables are shown as a c-chart ' +
+      '(control chart with mean and ±3σ limits) and a Poisson fit — the right ' +
+      'view for rare counts — rather than a bell curve, which would imply ' +
+      'impossible negative counts. Views suppress themselves when there is too ' +
+      'little data to be honest (e.g. < 8 months for a distribution).',
+    ],
+  },
   {
     version: '1.10.0',
     date:    '2026-06-15',
@@ -180,6 +195,7 @@ export default function WikiScorecardPage() {
           <li>Where &amp; how people are getting hurt — body-part and nature-of-injury breakdowns</li>
           <li>When incidents cluster — a shift × weekday heatmap</li>
           <li>Goals vs. actuals + your TRIR/DART vs. the BLS industry benchmark for your sector</li>
+          <li>Predictive — next-month recordable forecast (Poisson interval) plus a c-chart and Poisson distribution of monthly counts</li>
           <li>Confined-space permits issued, completed, expired, canceled</li>
           <li>Atmospheric-test failures and the spaces that drove them</li>
           <li>LOTO photo-completion percentage trend</li>

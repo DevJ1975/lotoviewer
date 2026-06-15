@@ -48,6 +48,7 @@ import { useMetricDrill } from '@/components/scorecard/useMetricDrill'
 import { MetricDetailSheet } from '@/components/scorecard/MetricDetailSheet'
 import { RiskGauge } from '@/components/scorecard/RiskGauge'
 import { LeadingLaggingPanel } from '@/components/scorecard/LeadingLaggingPanel'
+import { PredictiveSection } from '@/components/scorecard/PredictiveSection'
 import {
   metricDetailFromDriver, buildIncidentKpiDetails,
   type MetricDetail, type IncidentKpiId,
@@ -424,6 +425,8 @@ export default function ScorecardPage() {
           onDrill={drill.open}
         />
       )}
+
+      {incidentMetrics && <PredictiveSection metrics={incidentMetrics} onDrill={drill.open} />}
 
       <div className="flex items-center gap-2 pt-1">
         <span className="ops-section-title text-[11px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Permits &amp; LOTO</span>
