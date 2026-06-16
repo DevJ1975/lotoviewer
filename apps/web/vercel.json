@@ -82,6 +82,10 @@
       "schedule": "0 8 1 */2 *"
     },
     {
+      "path": "/api/cron/osha-reg-watch",
+      "schedule": "0 8 1 * *"
+    },
+    {
       "path": "/api/cron/loto-audit-resume",
       "schedule": "*/5 * * * *"
     }
