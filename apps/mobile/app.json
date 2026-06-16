@@ -55,6 +55,13 @@
           "photosPermission": "Soteria FIELD lets you pick existing photos from your library when capturing isn't practical in the field.",
           "cameraPermission": "Soteria FIELD uses the camera to capture equipment and isolation-point photos for LOTO placards."
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Soteria FIELD uses your location to pull live wind, heat, UV, and official storm alerts for the Safety Weather Board at your worksite.",
+          "locationWhenInUsePermission": "Soteria FIELD uses your location to pull live wind, heat, UV, and official storm alerts for the Safety Weather Board at your worksite."
+        }
       ]
     ],
     "experiments": {
