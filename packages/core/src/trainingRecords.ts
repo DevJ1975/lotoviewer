@@ -39,6 +39,15 @@ const ROLES_FOR_SLOT: Record<'entrant' | 'attendant', TrainingRole[]> = {
   attendant: ['attendant', 'entry_supervisor'],
 }
 
+// The §(g) gate only reads these four columns. Callers can therefore
+// fetch a narrowed projection instead of `select('*')` — a full
+// TrainingRecord is structurally assignable to this, so existing
+// callers that pass whole rows keep working unchanged.
+export type TrainingGateRecord = Pick<
+  TrainingRecord,
+  'worker_name' | 'role' | 'completed_at' | 'expires_at'
+>
+
 export type TrainingIssueKind = 'missing' | 'expired'
 
 export interface TrainingIssue {
@@ -59,7 +68,7 @@ export interface TrainingIssue {
 export function validateTraining(args: {
   entrants:    string[]
   attendants:  string[]
-  records:     TrainingRecord[]
+  records:     TrainingGateRecord[]
   asOf:        Date
 }): TrainingIssue[] {
   const { entrants, attendants, records, asOf } = args
@@ -67,7 +76,7 @@ export function validateTraining(args: {
   // Name → role → most recent record (by completed_at). We pick the
   // freshest cert per (name, role) so a worker with a recent renewal
   // doesn't get flagged because of an older expired record.
-  const byName = new Map<string, Map<TrainingRole, TrainingRecord>>()
+  const byName = new Map<string, Map<TrainingRole, TrainingGateRecord>>()
   for (const r of records) {
     const k = r.worker_name.toLowerCase()
     let inner = byName.get(k)
@@ -87,7 +96,7 @@ export function validateTraining(args: {
 function check(
   name: string,
   slot: 'entrant' | 'attendant',
-  byName: Map<string, Map<TrainingRole, TrainingRecord>>,
+  byName: Map<string, Map<TrainingRole, TrainingGateRecord>>,
   today: string,
 ): TrainingIssue[] {
   const inner = byName.get(name.toLowerCase())
@@ -141,12 +150,12 @@ export interface HotWorkTrainingIssue {
 export function validateHotWorkTraining(args: {
   operators:  string[]
   watchers:   string[]
-  records:    TrainingRecord[]
+  records:    TrainingGateRecord[]
   asOf:       Date
 }): HotWorkTrainingIssue[] {
   const { operators, watchers, records, asOf } = args
   const today = ymd(asOf)
-  const byName = new Map<string, Map<TrainingRole, TrainingRecord>>()
+  const byName = new Map<string, Map<TrainingRole, TrainingGateRecord>>()
   for (const r of records) {
     const k = r.worker_name.toLowerCase()
     let inner = byName.get(k)
@@ -166,7 +175,7 @@ export function validateHotWorkTraining(args: {
 function checkHotWork(
   name: string,
   slot: 'operator' | 'watcher',
-  byName: Map<string, Map<TrainingRole, TrainingRecord>>,
+  byName: Map<string, Map<TrainingRole, TrainingGateRecord>>,
   today: string,
 ): HotWorkTrainingIssue[] {
   const inner = byName.get(name.toLowerCase())
