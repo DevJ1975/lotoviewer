@@ -14,8 +14,10 @@ import OpsSpinner from '@/components/OpsSpinner'
 // link from that email and the user technically becomes authenticated
 // momentarily (Supabase exchanges the token for a recovery session)
 // — but we still allow it as "public" so the redirect below doesn't
-// fight the recovery flow.
-const PUBLIC_PATHS = new Set(['/login', '/welcome', '/forgot-password', '/reset-password'])
+// fight the recovery flow. /privacy and /terms are static legal pages
+// linked from the signed-out login footer; without them here, clicking
+// those links would bounce the visitor straight back to /login.
+const PUBLIC_PATHS = new Set(['/login', '/welcome', '/forgot-password', '/reset-password', '/privacy', '/terms'])
 
 // Token-gated public routes. Each entry matches when the pathname
 // equals the prefix or starts with `${prefix}/`. Used for QR-scanned
@@ -26,7 +28,7 @@ const PUBLIC_PREFIXES = [
   '/qr',        // Public LOTO placard view from a scanned placard QR
 ] as const
 
-function isPublicPath(pathname: string): boolean {
+export function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.has(pathname)) return true
   for (const prefix of PUBLIC_PREFIXES) {
     if (pathname === prefix || pathname.startsWith(`${prefix}/`)) return true
