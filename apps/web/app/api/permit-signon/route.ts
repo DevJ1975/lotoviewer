@@ -1,12 +1,17 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { validateTraining } from '@/lib/trainingRecords'
+import { validateTraining, type TrainingGateRecord } from '@/lib/trainingRecords'
 import type {
   ConfinedSpaceEntry,
   ConfinedSpacePermit,
-  TrainingRecord,
 } from '@soteria/core/types'
+
+// loto_confined_space_permits.tenant_id is NOT NULL (migration 027) but
+// isn't yet on the ConfinedSpacePermit type. The QR sign-on flow needs it
+// to scope the training-records read to the permit's own tenant, so we
+// carry it explicitly on the row we load by token.
+type SignonPermit = ConfinedSpacePermit & { tenant_id: string }
 
 // Worker QR sign-on API. Three actions over one POST endpoint:
 //
@@ -86,7 +91,7 @@ function statusFor(p: ConfinedSpacePermit): LookupResponse['permit']['status'] {
   return 'active'
 }
 
-async function loadPermitByToken(token: string): Promise<ConfinedSpacePermit | null> {
+async function loadPermitByToken(token: string): Promise<SignonPermit | null> {
   const admin = supabaseAdmin()
   const { data, error } = await admin
     .from('loto_confined_space_permits')
@@ -98,10 +103,10 @@ async function loadPermitByToken(token: string): Promise<ConfinedSpacePermit | n
     if ('code' in error && (error as { code?: string }).code === 'PGRST116') return null
     throw new Error(error.message)
   }
-  return data as ConfinedSpacePermit
+  return data as SignonPermit
 }
 
-async function loadRoster(permit: ConfinedSpacePermit): Promise<RosterEntry[]> {
+async function loadRoster(permit: SignonPermit): Promise<RosterEntry[]> {
   const admin = supabaseAdmin()
   // Open entries (exited_at is null) — the page renders these as
   // "currently inside" so the worker doesn't double-tap sign-in.
@@ -118,18 +123,23 @@ async function loadRoster(permit: ConfinedSpacePermit): Promise<RosterEntry[]> {
 
   // Training records — service role read, but we only return a boolean
   // + a sanitised reason string back to the caller, never the records
-  // themselves.
+  // themselves. Scope to THIS permit's tenant: the service-role client
+  // bypasses RLS, and the §(g) gate matches by worker_name, so without
+  // the tenant filter a same-named worker in another tenant could satisfy
+  // (or wrongly fail) this permit's gate. Only the four gate columns are
+  // read, so we fetch the narrowed projection.
   const { data: trainingRows, error: trainingErr } = await admin
     .from('loto_training_records')
-    .select('*')
+    .select('worker_name, role, completed_at, expires_at')
+    .eq('tenant_id', permit.tenant_id)
   // Pre-migration-017 the table doesn't exist. Treat "table missing" as
   // "no records on file" rather than failing — the gate behaves the same
   // way the in-app permit detail page does (every worker shows as
   // "missing" but the supervisor can override). For QR sign-on with no
   // records on file we DEFAULT-PASS so a brand-new deployment isn't
   // locked out; once records exist the gate kicks in normally.
-  const records: TrainingRecord[] = !trainingErr && trainingRows
-    ? trainingRows as TrainingRecord[]
+  const records: TrainingGateRecord[] = !trainingErr && trainingRows
+    ? trainingRows as TrainingGateRecord[]
     : []
   const trainingPresent = records.length > 0
 
@@ -226,16 +236,19 @@ async function handleSignIn(token: string, name: string): Promise<NextResponse> 
   const onRoster = permit.entrants.some(n => n.toLowerCase() === trimmed.toLowerCase())
   if (!onRoster) return NextResponse.json({ error: 'Name is not on the entrants roster.' }, { status: 403 })
 
-  // Training gate — same default-pass-when-empty behaviour as lookup.
+  // Training gate — same default-pass-when-empty behaviour as lookup, and
+  // scoped to the permit's tenant for the same reason (service role bypasses
+  // RLS; the gate matches by worker_name).
   const admin = supabaseAdmin()
   const { data: trainingRows, error: trainingErr } = await admin
     .from('loto_training_records')
-    .select('*')
+    .select('worker_name, role, completed_at, expires_at')
+    .eq('tenant_id', permit.tenant_id)
   if (!trainingErr && trainingRows && trainingRows.length > 0) {
     const issues = validateTraining({
       entrants:   [trimmed],
       attendants: [],
-      records:    trainingRows as TrainingRecord[],
+      records:    trainingRows as TrainingGateRecord[],
       asOf:       new Date(),
     })
     if (issues.length > 0) {
