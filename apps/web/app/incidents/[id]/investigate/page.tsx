@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, AlertTriangle, Loader2, CheckCircle2, Play } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, Loader2, CheckCircle2, Play, Sparkles } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
+import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import {
   RCA_METHODS,
@@ -13,6 +14,7 @@ import {
   type IncidentInvestigationRow,
   type RcaMethod,
 } from '@soteria/core/rcaSchemas'
+import RcaSection from './_components/RcaSection'
 
 // /incidents/[id]/investigate — investigation dossier.
 //
@@ -45,7 +47,7 @@ const NARRATIVE_FIELDS: Array<{
   { key: 'underlying_causes',  label: 'Underlying causes',
     hint: 'Conditions that allowed the immediate causes',    rows: 3 },
   { key: 'root_causes',        label: 'Root causes',
-    hint: 'Final answer of the RCA — copy from the RCA tab', rows: 3 },
+    hint: 'The systemic roots — pull them from the analysis above, or write your own', rows: 3 },
   { key: 'lessons_learned',    label: 'Lessons learned',
     hint: 'What to publish to the rest of the org',          rows: 3 },
 ]
@@ -53,6 +55,8 @@ const NARRATIVE_FIELDS: Array<{
 export default function InvestigatePage() {
   const { id } = useParams<{ id: string }>()
   const { tenant } = useTenant()
+  const { profile } = useAuth()
+  const isAdmin = !!profile?.is_admin || !!profile?.is_superadmin
 
   const [investigation, setInvestigation] = useState<IncidentInvestigationRow | null>(null)
   const [loading, setLoading] = useState(true)
@@ -60,6 +64,9 @@ export default function InvestigatePage() {
   const [busy,    setBusy]    = useState(false)
   const [draft,   setDraft]   = useState<Partial<IncidentInvestigationRow>>({})
   const [signName, setSignName] = useState('')
+  // Identified root-cause text reported up by RcaSection, used by the
+  // one-click "Pull from RCA" affordance on the root_causes narrative.
+  const [rootTexts, setRootTexts] = useState<string[]>([])
 
   const load = useCallback(async () => {
     if (!tenant?.id || !id) return
@@ -109,6 +116,35 @@ export default function InvestigatePage() {
     } finally {
       setBusy(false)
     }
+  }
+
+  // Switch the RCA method on the investigation row. Owned here because
+  // the dossier owns the investigation; RcaSection calls this from its
+  // method selector.
+  async function changeMethod(method: RcaMethod) {
+    if (!tenant?.id || !id) return
+    setError(null)
+    try {
+      const headers = await authedHeaders()
+      const res = await fetch(`/api/incidents/${id}/investigation`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ rca_method: method }),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
+      setInvestigation(body.investigation as IncidentInvestigationRow)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  // One-click replacement for the old "copy from the RCA tab" step:
+  // compose the identified roots into the root_causes narrative draft.
+  function pullRootsIntoNarrative() {
+    if (rootTexts.length === 0) return
+    const composed = rootTexts.map((t, i) => `${i + 1}. ${t}`).join('\n')
+    setField('root_causes', composed)
   }
 
   async function saveDraft() {
@@ -183,10 +219,9 @@ export default function InvestigatePage() {
       </Link>
 
       <header>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Investigation</h1>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Investigation &amp; root cause</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Scope, timeline, and findings for this incident. The RCA tree lives on the{' '}
-          <Link href={`/incidents/${id}/rca`} className="text-brand-navy hover:underline">RCA tab</Link>.
+          Scope, timeline, the root-cause analysis, and findings for this incident — all in one place.
         </p>
       </header>
 
@@ -240,12 +275,39 @@ export default function InvestigatePage() {
             <Stat label="Completed"  value={investigation.completed_at ? new Date(investigation.completed_at).toLocaleString() : '—'} />
           </section>
 
+          {/* Root cause analysis — unified into the dossier (the /rca tab
+              now redirects here). Always shown so the analysis tree stays
+              visible after sign-off, matching the old RCA tab. */}
+          {tenant?.id && (
+            <RcaSection
+              incidentId={id}
+              tenantId={tenant.id}
+              method={investigation.rca_method}
+              isAdmin={isAdmin}
+              onChangeMethod={changeMethod}
+              onRootsChange={setRootTexts}
+            />
+          )}
+
           <section className="space-y-4">
             {NARRATIVE_FIELDS.map(f => (
               <label key={f.key} className="block">
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  {f.label}
-                  {f.hint && <span className="ml-2 text-[11px] font-normal text-slate-400">{f.hint}</span>}
+                <span className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    {f.label}
+                    {f.hint && <span className="ml-2 text-[11px] font-normal text-slate-400">{f.hint}</span>}
+                  </span>
+                  {f.key === 'root_causes' && rootTexts.length > 0 && !investigation.completed_at && (
+                    <button
+                      type="button"
+                      onClick={pullRootsIntoNarrative}
+                      disabled={busy}
+                      className="inline-flex items-center gap-1 rounded-md border border-brand-navy/40 px-2 py-0.5 text-[11px] font-semibold text-brand-navy hover:bg-brand-navy/5 disabled:opacity-50"
+                    >
+                      <Sparkles className="h-3 w-3" />
+                      Pull from RCA ({rootTexts.length})
+                    </button>
+                  )}
                 </span>
                 <textarea
                   value={fieldValue(f.key)}
@@ -273,7 +335,7 @@ export default function InvestigatePage() {
             <section className="rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50/40 dark:bg-amber-950/20 p-4">
               <h2 className="text-sm font-semibold text-amber-900 dark:text-amber-200">Sign off</h2>
               <p className="mt-1 text-[11px] text-amber-800 dark:text-amber-300">
-                Type your name to mark the investigation complete. Requires the RCA tab to have at least one node + an identified root.
+                Type your name to mark the investigation complete. Requires the analysis above to have at least one node and an identified root.
               </p>
               <div className="mt-3 flex flex-col sm:flex-row gap-2">
                 <input

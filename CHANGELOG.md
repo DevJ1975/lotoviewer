@@ -11,6 +11,20 @@ app at `/superadmin/release-notes`.
 ## [Unreleased]
 
 ### Added
+- **AI-assisted root cause analysis (incident 5 Whys, rebuilt).** Acting on
+  feedback that the old tool "is not a good tool," the 5 Whys editor now writes
+  contextual prompts that chain each "why" to the answer above it, supports
+  branching and **multiple** identified root causes, and shows an inline
+  anti-blame guardrail that flags symptom-level / person-blaming answers
+  (HOP / Safety-II aligned). An optional, **human-approved** Claude co-pilot
+  suggests the next "why" and drafts a root cause + corrective actions — nothing
+  is written until a person accepts it, and accepted AI text is badged. The
+  investigation is unified: the RCA editor moved into the **Investigate & RCA**
+  tab, identified roots pull into the narrative in one click and into tracked
+  corrective actions (`incident_actions.source_rca_node_id`), and the old
+  `/incidents/[id]/rca` tab redirects there. Migration 233 adds 5-Whys
+  branching, multi-root support, and AI provenance; new wiki page at
+  `/wiki/incident-investigation`.
 - **Public QR placard view** (`/qr/{qr_token}`) — scanning a printed placard QR
   opens a read-only, no-login view of that machine's isolation photo (with
   annotation markers), ordered energy-control steps, and verified badge. Reads

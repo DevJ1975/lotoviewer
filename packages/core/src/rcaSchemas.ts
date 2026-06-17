@@ -110,6 +110,17 @@ export interface FiveWhysRow {
   question:          string | null
   answer:            string
   is_root:           boolean
+  // The "why" this answer interrogates. NULL for the top-of-tree problem
+  // statement and for legacy linear chains (migration 233). Lets one
+  // investigation fork into several causal lines instead of one flat
+  // chain. Optional on the type so callers selecting a narrower column
+  // set still type-check.
+  parent_id?:        string | null
+  // Provenance for the AI-assisted flow: ai_origin=true when Claude
+  // drafted the answer, ai_edited=true when a human changed it before
+  // saving. Both default false (manual entry). See migration 233.
+  ai_origin?:        boolean
+  ai_edited?:        boolean
   created_at:        string
   updated_at:        string
 }
@@ -119,6 +130,9 @@ export interface FiveWhysNodeInput {
   question?:  string | null
   answer:     string
   is_root?:   boolean
+  parent_id?: string | null
+  ai_origin?: boolean
+  ai_edited?: boolean
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -295,19 +309,122 @@ export function validateRcaNode(input: RcaNodeInput): string | null {
   }
 }
 
-// Closure check: investigation can only be marked completed when an
-// RCA node tree exists AND a root has been identified. Used by the
-// API close handler before it sets completed_at.
+// ──────────────────────────────────────────────────────────────────────────
+// Guided 5 Whys helpers (pure; power the redesigned editor + AI assist)
+// ──────────────────────────────────────────────────────────────────────────
+
+// Longest prior-answer snippet we inline into a chained prompt before
+// clipping. Keeps "Why did <answer> happen?" readable.
+const PROMPT_CLIP = 80
+
+function clipForPrompt(text: string): string {
+  const clean = text.trim().replace(/\s+/g, ' ')
+  return clean.length > PROMPT_CLIP ? clean.slice(0, PROMPT_CLIP - 1).trimEnd() + '…' : clean
+}
+
+// Builds the contextual prompt for the NEXT "why" so the chain actually
+// chains: each question interrogates the answer it descends from. The
+// top-of-tree node (no parent answer) gets the problem-statement prompt.
+//
+// This replaces the old hardcoded "Why did that happen?" that never
+// echoed the prior answer — the change that made the chain read as a set
+// of disconnected boxes.
+export function nextWhyPrompt(parentAnswer?: string | null): string {
+  const clean = (parentAnswer ?? '').trim()
+  if (!clean) return 'What happened?'
+  return `Why did "${clipForPrompt(clean)}" happen?`
+}
+
+// Anti-blame / anti-symptom guardrail (HOP / Safety-II aligned). Pure,
+// zero-cost first pass that runs client-side as the investigator types —
+// the AI route is a richer second opinion, not a prerequisite.
+//
+// Advisory only: it NEVER blocks saving. The point is to nudge the
+// investigator past person-blaming and symptom-level answers toward the
+// systemic condition, exactly the failure mode the ISO-45001 wiki warns
+// about ("don't treat 'retrain the worker' as a root cause").
+export type SymptomCategory = 'blame' | 'symptom'
+
+interface SymptomPattern {
+  re:       RegExp
+  category: SymptomCategory
+  reason:   string
+}
+
+const SYMPTOM_PATTERNS: readonly SymptomPattern[] = [
+  { re: /\bhuman error\b/i, category: 'blame',
+    reason: '“Human error” is where the analysis starts, not where it ends. Ask why the situation made the error likely.' },
+  { re: /\b(careless|carelessness|negligent|negligence)\b/i, category: 'blame',
+    reason: 'Blaming carelessness stops the inquiry. Ask what made the safe action hard or the unsafe one easy.' },
+  { re: /\b(re-?train|retraining|more training|additional training|toolbox talk)\b/i, category: 'symptom',
+    reason: '“Retrain the worker” is almost always a symptom-level fix. Find the systemic gap before defaulting to training.' },
+  { re: /\b(not paying attention|wasn'?t paying attention|inattentive|distracted)\b/i, category: 'blame',
+    reason: 'Attention lapses are predictable. Ask what in the task or environment invited the lapse.' },
+  { re: /\b(complacen)/i, category: 'blame',
+    reason: 'Complacency is a label, not a cause. Ask what made the hazard easy to overlook day-to-day.' },
+  { re: /\b(forgot|forgetful)/i, category: 'symptom',
+    reason: 'If a step was forgotten, ask why the process relied on memory instead of a barrier or check.' },
+  { re: /\b(didn'?t follow|did not follow|failed to follow|ignored)\b/i, category: 'symptom',
+    reason: 'Procedure not followed? Ask whether it was workable, known, available, and reinforced in practice.' },
+  { re: /\b(violation|violated)\b/i, category: 'blame',
+    reason: 'A “violation” framing assigns fault. Ask what made the non-compliant path the path of least resistance.' },
+]
+
+export function detectSymptomLanguage(
+  answer: string,
+): { flagged: boolean; reason?: string; category?: SymptomCategory } {
+  if (!answer || !answer.trim()) return { flagged: false }
+  for (const p of SYMPTOM_PATTERNS) {
+    if (p.re.test(answer)) return { flagged: true, reason: p.reason, category: p.category }
+  }
+  return { flagged: false }
+}
+
+// Seeds a corrective-action draft from an identified root cause — the
+// one-click "turn this root into a tracked action" path. Shape matches
+// IncidentActionCreateInput (see incidentAction.ts); hierarchy is left
+// null so the owner picks the strongest workable control deliberately.
+export function buildRootCauseActionDraft(opts: { rootCauseText: string }): {
+  action_type: 'corrective'
+  description: string
+  hierarchy_of_controls: null
+} {
+  const clean = (opts.rootCauseText ?? '').trim()
+  return {
+    action_type: 'corrective',
+    description: clean ? `Address root cause: ${clean}` : 'Address identified root cause',
+    hierarchy_of_controls: null,
+  }
+}
+
+// Closure check: an investigation can only be marked completed once the
+// RCA has nodes AND at least one identified root (multiple roots are now
+// allowed — real incidents have several contributing causes).
+//
+// `require_action_per_root` is an opt-in stricter gate (ISO 45001 §10.2:
+// findings must drive corrective action). It is OFF by default so
+// in-flight investigations and existing callers/tests are never
+// retroactively locked; a tenant that wants the stronger loop turns it on
+// and supplies the root/action counts.
 export function canCompleteInvestigation(opts: {
-  rca_method: RcaMethod
-  has_nodes:  boolean
-  has_root:   boolean
+  rca_method:               RcaMethod
+  has_nodes:                boolean
+  has_root:                 boolean
+  require_action_per_root?: boolean
+  root_count?:              number
+  roots_with_actions?:      number
 }): { ok: true } | { ok: false; reason: string } {
   if (opts.rca_method === 'none_yet')
     return { ok: false, reason: 'Pick an RCA method first' }
   if (!opts.has_nodes)
     return { ok: false, reason: 'Add at least one RCA node before completing' }
   if (!opts.has_root)
-    return { ok: false, reason: 'Mark one node as the identified root before completing' }
+    return { ok: false, reason: 'Mark at least one node as an identified root before completing' }
+  if (opts.require_action_per_root) {
+    const roots   = opts.root_count ?? 0
+    const covered = opts.roots_with_actions ?? 0
+    if (roots > covered)
+      return { ok: false, reason: 'Every identified root cause needs at least one corrective action before completing' }
+  }
   return { ok: true }
 }

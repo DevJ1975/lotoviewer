@@ -112,6 +112,13 @@ export const MODEL_BY_SURFACE = {
   // LLM never computes the risk score (it is fed it). Same advisory class as
   // summarize-audit / superadmin-daily-report → Sonnet.
   'scorecard-focus':                  SONNET,
+  // RCA assist — suggests the next "why", flags symptom/blame answers, and
+  // drafts a root-cause statement + corrective actions for a 5 Whys
+  // investigation. Causal reasoning over a chain + incident context, with
+  // narrative output a human edits and signs off — same advisory class as
+  // the other structured-output surfaces. The route never writes RCA nodes
+  // or actions; acceptance is an explicit human step. Sonnet.
+  'rca-assist':                       SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

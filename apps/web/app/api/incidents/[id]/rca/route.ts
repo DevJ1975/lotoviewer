@@ -145,24 +145,19 @@ export async function POST(req: Request, ctx: RouteContext) {
       return NextResponse.json({ error: 'Only the investigation team can add RCA nodes' }, { status: 403 })
 
     // Build the insert with method-specific shape. Spread + tenant
-    // scope last so callers can't override.
+    // scope last so callers can't override. For 5 Whys this also carries
+    // the optional parent_id (branching) and ai_origin/ai_edited
+    // provenance flags (migration 233).
     const insert = {
       ...body.node,
       tenant_id:        gate.tenantId,
       investigation_id: inv.id,
     } as Record<string, unknown>
 
-    // Single-root invariant: when the caller marks a node is_root,
-    // clear is_root on every other node for this investigation in
-    // the same table. Phase 2 supports a single identified root
-    // per RCA — multi-root analyses are a future enhancement.
-    if (insert.is_root === true) {
-      await admin
-        .from(tbl)
-        .update({ is_root: false })
-        .eq('investigation_id', inv.id)
-        .eq('is_root', true)
-    }
+    // Multiple identified roots are allowed (migration 233): real
+    // incidents have several contributing root causes, and forcing a
+    // single root was a core reason the tool felt wrong. We deliberately
+    // do NOT clear other is_root flags here.
 
     const { data, error } = await admin
       .from(tbl)
@@ -177,6 +172,84 @@ export async function POST(req: Request, ctx: RouteContext) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     Sentry.captureException(e, { tags: { route: 'rca/POST' } })
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
+
+// ─── PATCH — edit one node in place ───────────────────────────────────────
+// Body: { method, nodeId, patch: { is_root?, answer?, ai_edited? } }
+// Powers the redesigned board: toggle a root (multiple allowed) and edit
+// an answer without delete+re-add. Tenant + investigation-team gated like
+// POST/DELETE.
+
+const ALLOWED_PATCH_FIELDS = ['is_root', 'answer', 'ai_edited'] as const
+
+interface PatchBody {
+  method: RcaMethod
+  nodeId: string
+  patch:  Record<string, unknown>
+}
+
+export async function PATCH(req: Request, ctx: RouteContext) {
+  const { id: incidentId } = await ctx.params
+  if (!UUID_RE.test(incidentId)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
+
+  const gate = await requireTenantMember(req)
+  if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
+  let body: PatchBody
+  try { body = (await req.json()) as PatchBody }
+  catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+
+  const tbl = TABLE_BY_METHOD[body.method]
+  if (!tbl) return NextResponse.json({ error: `Invalid or unsupported method: ${body.method}` }, { status: 400 })
+  if (!UUID_RE.test(body.nodeId ?? '')) return NextResponse.json({ error: 'nodeId is required' }, { status: 400 })
+
+  const patch: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(body.patch ?? {})) {
+    if (!(ALLOWED_PATCH_FIELDS as readonly string[]).includes(k))
+      return NextResponse.json({ error: `Field not patchable: ${k}` }, { status: 400 })
+    patch[k] = v
+  }
+  if (Object.keys(patch).length === 0)
+    return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
+  if ('answer' in patch && (typeof patch.answer !== 'string' || !patch.answer.trim()))
+    return NextResponse.json({ error: 'answer must be a non-empty string' }, { status: 400 })
+
+  try {
+    const admin = supabaseAdmin()
+
+    const { data: inv } = await admin
+      .from('incident_investigations')
+      .select('id, lead_investigator, team_member_ids')
+      .eq('incident_id', incidentId)
+      .eq('tenant_id', gate.tenantId)
+      .maybeSingle()
+    if (!inv) return NextResponse.json({ error: 'Investigation not found' }, { status: 404 })
+
+    const isPriv =
+      gate.role === 'owner' || gate.role === 'admin' || gate.role === 'superadmin'
+      || inv.lead_investigator === gate.userId
+      || (Array.isArray(inv.team_member_ids) && inv.team_member_ids.includes(gate.userId))
+    if (!isPriv)
+      return NextResponse.json({ error: 'Only the investigation team can edit RCA nodes' }, { status: 403 })
+
+    const { data, error } = await admin
+      .from(tbl)
+      .update(patch)
+      .eq('id', body.nodeId)
+      .eq('investigation_id', inv.id)
+      .eq('tenant_id', gate.tenantId)
+      .select('*')
+      .single()
+    if (error) {
+      Sentry.captureException(error, { tags: { route: 'rca/PATCH', stage: 'update', method: body.method } })
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    return NextResponse.json({ node: data })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    Sentry.captureException(e, { tags: { route: 'rca/PATCH' } })
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
