@@ -11,6 +11,18 @@ app at `/superadmin/release-notes`.
 ## [Unreleased]
 
 ### Added
+- **BBS coaching upgrade (Workplace Learning System methodology)** — the BBS v2
+  observation surface (`/bbs/observe`) gains a structured safe-behavior checklist
+  (PPE, line of fire, tools, procedures, housekeeping, ergonomics), C.A.R.E.S.
+  coaching notes on the in-the-moment feedback conversation, and a one-tap
+  *recognize* toggle for safe behaviors. Critical unsafe observations are
+  auto-flagged for a non-punitive **24-hour "Hot Seat" rapid review** (due/overdue
+  tracking). New **Safety Action Teams** (tenant-scoped lookup, managed inline on
+  the dashboard) let follow-ups group by team. The admin dashboard
+  (`/admin/observations/bbs/dashboard`) adds rapid-review, safe-behavior-trend,
+  recognition-feed, and follow-ups-by-team sections; the BBS scorecard
+  (`/bbs/scorecard`) surfaces the v2 leading indicators. Additive migration
+  (`233_bbs_v2_coaching_teams.sql`) — existing rows and flows are unchanged.
 - **Public QR placard view** (`/qr/{qr_token}`) — scanning a printed placard QR
   opens a read-only, no-login view of that machine's isolation photo (with
   annotation markers), ordered energy-control steps, and verified badge. Reads

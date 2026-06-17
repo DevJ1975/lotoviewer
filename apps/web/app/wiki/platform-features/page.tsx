@@ -1,10 +1,24 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-15'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-06-17'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.0',
+    date:    '2026-06-17',
+    changes: [
+      'BBS v2 coaching upgrade (Workplace Learning System methodology): ' +
+      'C.A.R.E.S. coaching notes + a structured safe-behavior checklist ' +
+      '(PPE, line of fire, tools, procedures, housekeeping, ergonomics); ' +
+      'recognition of safe behaviors with a dashboard recognition feed; ' +
+      'a "Hot Seat" 24-hour rapid review auto-flagged for critical unsafe ' +
+      'observations (due / overdue tracking); and Safety Action Teams — a ' +
+      'tenant-scoped lookup so follow-ups group by team. The scorecard now ' +
+      'surfaces these v2 leading indicators.',
+    ],
+  },
   {
     version: '1.0.0',
     date:    '2026-05-15',
@@ -143,6 +157,23 @@ export default function WikiPlatformFeaturesPage() {
           banded red (&lt;2:1) / yellow (2–4:1) / green (≥4:1). The
           band is intentionally loud — a sustained red is a culture
           finding, not a data finding.
+        </p>
+        <p>
+          <strong>Coaching upgrade (WLS methodology).</strong> The
+          capture form adds, for safe behaviors, a structured checklist
+          (PPE, body position / line of fire, tools &amp; equipment,
+          procedures, housekeeping, ergonomics) and a one-tap{' '}
+          <em>recognize</em> toggle; when the observer logs an in-the-
+          moment coaching conversation, a C.A.R.E.S. note captures what
+          was reinforced. Critical unsafe observations are auto-flagged
+          for a <strong>24-hour &ldquo;Hot Seat&rdquo; rapid review</strong>{' '}
+          — a learn-fast, non-punitive loop, tracked as due / overdue on
+          the dashboard. Observations can be assigned to a{' '}
+          <strong>Safety Action Team</strong> (managed inline on the
+          dashboard) so follow-ups group by team. The dashboard also
+          trends which safe behaviors are being caught and runs a
+          recognition feed; the BBS scorecard surfaces the same v2
+          leading indicators.
         </p>
       </Section>
 
