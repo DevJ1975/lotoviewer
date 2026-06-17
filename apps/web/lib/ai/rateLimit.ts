@@ -27,6 +27,7 @@ export type AiSurface =
   | 'classify-recordability'
   | 'parse-sds'
   | 'discover-sds'
+  | 'seed-sds-list'
   | 'assistant-chat'
   | 'assistant-scan-photo'
   | 'assistant-hazards'
@@ -62,6 +63,10 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   // call — expensive, and a rare onboarding/"can't find the URL" action.
   // Cap aggressively.
   'discover-sds':                     { perHour: 15, perDay: 60 },
+  // Library-seed list generation is a superadmin batch op throttled by the
+  // seed run's own MAX_PER_RUN cap, not per-user limits — these values exist
+  // to satisfy the Record and as a backstop if ever called interactively.
+  'seed-sds-list':                    { perHour: 60, perDay: 300 },
   // Home-page assistant — conversational, expected to be the
   // highest-volume AI surface once it lands.
   'assistant-chat':                   { perHour: 60, perDay: 400 },

@@ -52,6 +52,10 @@ export const MODEL_BY_SURFACE = {
   // structured-output pass to normalize candidates. Sonnet — the search
   // reasoning is the same class as parse-sds, and web_search is supported.
   'discover-sds':                     SONNET,
+  // Seeding the global SDS library: web-search to PROPOSE the most common
+  // industrial chemicals (name + CAS + manufacturer), then a structured pass
+  // to normalize the list. Sonnet — same search-reasoning class as discover.
+  'seed-sds-list':                    SONNET,
   // Cross-module assistant on the home page. Tool-use heavy, must
   // reason across LOTO + confined-spaces + chemicals + incidents +
   // uploaded company policies. Sonnet for the chat itself.
