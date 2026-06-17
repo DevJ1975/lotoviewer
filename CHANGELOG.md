@@ -23,6 +23,7 @@ app at `/superadmin/release-notes`.
   recognition-feed, and follow-ups-by-team sections; the BBS scorecard
   (`/bbs/scorecard`) surfaces the v2 leading indicators. Additive migration
   (`234_bbs_v2_coaching_teams.sql`) — existing rows and flows are unchanged.
+  Documented in a dedicated wiki page at `/wiki/bbs`.
 - **Public QR placard view** (`/qr/{qr_token}`) — scanning a printed placard QR
   opens a read-only, no-login view of that machine's isolation photo (with
   annotation markers), ordered energy-control steps, and verified badge. Reads

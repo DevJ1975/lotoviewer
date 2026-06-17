@@ -1,10 +1,19 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.1.0'
+const CURRENT_VERSION = '1.2.0'
 const LAST_UPDATED    = '2026-06-17'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.2.0',
+    date:    '2026-06-17',
+    changes: [
+      'Behavior-Based Safety now has its own dedicated wiki page at ' +
+      '/wiki/bbs (covering both BBS surfaces and the coaching upgrade). ' +
+      'This page links there instead of documenting BBS inline.',
+    ],
+  },
   {
     version: '1.1.0',
     date:    '2026-06-17',
@@ -37,7 +46,7 @@ export default function WikiPlatformFeaturesPage() {
   return (
     <WikiPage
       title="Platform Features"
-      subtitle="SSO + SCIM, CMMS sync, BBS v2, vendor prequal, i18n."
+      subtitle="SSO + SCIM, CMMS sync, vendor prequal, i18n."
       modulePath="/admin/people/sso"
       audience="admin"
       category="Admin"
@@ -49,7 +58,7 @@ export default function WikiPlatformFeaturesPage() {
         { id: 'sso',       label: 'SSO config' },
         { id: 'scim',      label: 'SCIM 2.0 provisioning' },
         { id: 'cmms',      label: 'CMMS bidirectional sync' },
-        { id: 'bbs',       label: 'BBS v2 observations' },
+        { id: 'bbs',       label: 'Behavior-Based Safety' },
         { id: 'prequal',   label: 'Vendor prequalification' },
         { id: 'i18n',      label: 'Multi-language (i18n)' },
         { id: 'faq',       label: 'FAQ' },
@@ -138,42 +147,14 @@ export default function WikiPlatformFeaturesPage() {
         </p>
       </Section>
 
-      <Section id="bbs" title="BBS v2 observations">
+      <Section id="bbs" title="Behavior-Based Safety">
         <p>
-          A second, leaner BBS surface alongside the existing one (same
-          intentional-parallel pattern Module 2 used for CAPAs vs
-          incident_actions). The v2 schema captures the safe / unsafe-
-          act / unsafe-condition categorization the EHS community has
-          converged on, plus follow-up and feedback tracking.
-        </p>
-        <p>
-          <strong>Where to find it.</strong> Workers capture at{' '}
-          <Link href="/bbs/observe">/bbs/observe</Link> (mobile-first
-          tap targets). Admins review at{' '}
-          <Link href="/admin/observations/bbs/dashboard">/admin/observations/bbs/dashboard</Link>.
-        </p>
-        <p>
-          <strong>Headline metric.</strong> safe-to-unsafe ratio,
-          banded red (&lt;2:1) / yellow (2–4:1) / green (≥4:1). The
-          band is intentionally loud — a sustained red is a culture
-          finding, not a data finding.
-        </p>
-        <p>
-          <strong>Coaching upgrade (WLS methodology).</strong> The
-          capture form adds, for safe behaviors, a structured checklist
-          (PPE, body position / line of fire, tools &amp; equipment,
-          procedures, housekeeping, ergonomics) and a one-tap{' '}
-          <em>recognize</em> toggle; when the observer logs an in-the-
-          moment coaching conversation, a C.A.R.E.S. note captures what
-          was reinforced. Critical unsafe observations are auto-flagged
-          for a <strong>24-hour &ldquo;Hot Seat&rdquo; rapid review</strong>{' '}
-          — a learn-fast, non-punitive loop, tracked as due / overdue on
-          the dashboard. Observations can be assigned to a{' '}
-          <strong>Safety Action Team</strong> (managed inline on the
-          dashboard) so follow-ups group by team. The dashboard also
-          trends which safe behaviors are being caught and runs a
-          recognition feed; the BBS scorecard surfaces the same v2
-          leading indicators.
+          Behavior-Based Safety now has its own page — see the{' '}
+          <Link href="/wiki/bbs">Behavior-Based Safety wiki</Link> for the full
+          treatment: both surfaces (v1 gamified QR + leaderboard, v2 ratio-driven
+          coaching), the safe-to-unsafe ratio, C.A.R.E.S. coaching and
+          recognition, the 24-hour &ldquo;Hot Seat&rdquo; rapid review, and
+          Safety Action Teams.
         </p>
       </Section>
 
