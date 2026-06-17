@@ -12,6 +12,7 @@ import {
   PHYSICAL_STATES,
   type ParsedSdsPayload,
 } from '@soteria/core/chemicals'
+import { parseSdsViaFallback, sdsFallbackConfigured, isAiUnavailable } from '@/lib/ai/sdsFallback'
 
 // POST /api/chemicals/products/[id]/sds/[sdsId]/parse
 //
@@ -28,6 +29,9 @@ import {
 const UUID_RE  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MODEL    = MODEL_BY_SURFACE['parse-sds']
 const MAX_PDF_BYTES = 25_000_000
+// The deterministic fallback parser's model id (services/sds-parser). Stored
+// in parse_model so the review queue / audit can tell a heuristic parse apart.
+const SDS_FALLBACK_MODEL = 'python-sds-parser@1'
 
 interface Ctx { params: Promise<{ id: string; sdsId: string }> }
 
@@ -269,6 +273,53 @@ function nullifyEmptyStrings<T>(value: T): T {
   return value
 }
 
+// Persist a parsed payload as a pending review + log the invocation, then
+// return the success response. Shared by the AI path and the deterministic
+// fallback so both write identical columns. The fallback flag tells the client
+// which parser produced the result (the deterministic one caps confidence at
+// "medium", so the review queue surfaces it for a human either way).
+async function persistParse(
+  admin: ReturnType<typeof supabaseAdmin>,
+  ids: { sdsId: string; tenantId: string; userId: string },
+  parsed: ParsedSdsPayload,
+  model: string,
+  usage: { input_tokens?: number; output_tokens?: number } | null,
+): Promise<NextResponse> {
+  const { sdsId, tenantId, userId } = ids
+  if (!parsed.product_name || !parsed.confidence) {
+    await logAiInvocation({ userId, tenantId, surface: 'parse-sds', model, status: 'error', context: sdsId })
+    return NextResponse.json({ error: 'Parser returned an incomplete payload.' }, { status: 502 })
+  }
+
+  const numericConfidence = ({ high: 1, medium: 0.66, low: 0.33 } as const)[parsed.confidence.overall] ?? 0
+
+  const { data: updated, error: upErr } = await admin
+    .from('chemical_sds_documents')
+    .update({
+      parsed_payload:      parsed,
+      parse_model:         model,
+      parse_confidence:    numericConfidence,
+      parse_review_status: 'pending',
+    })
+    .eq('id',        sdsId)
+    .eq('tenant_id', tenantId)
+    .select('id, parse_model, parse_confidence, parse_review_status')
+    .single()
+  if (upErr) {
+    await logAiInvocation({ userId, tenantId, surface: 'parse-sds', model, status: 'error', context: sdsId })
+    return NextResponse.json({ error: upErr.message }, { status: 500 })
+  }
+
+  await logAiInvocation({
+    userId, tenantId, surface: 'parse-sds', model, status: 'success',
+    inputTokens:  usage?.input_tokens,
+    outputTokens: usage?.output_tokens,
+    context:      sdsId,
+  })
+
+  return NextResponse.json({ sds: updated, parsed, fallback: model === SDS_FALLBACK_MODEL }, { status: 200 })
+}
+
 export async function POST(req: NextRequest, ctx: Ctx) {
   const gate = await requireTenantMember(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
@@ -324,36 +375,51 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     try {
       client = await getAnthropic(tenantId)
     } catch (err) {
+      // No / malformed AI key — use the deterministic parser if it's wired up.
+      const fb = sdsFallbackConfigured() ? await parseSdsViaFallback(buf) : null
+      if (fb) return await persistParse(admin, { sdsId, tenantId, userId }, nullifyEmptyStrings(fb), SDS_FALLBACK_MODEL, null)
       const mapped = aiErrorToResponse(err, 'parse-sds')
       Sentry.captureException(err, { tags: { ...mapped.tags, route: '/api/chemicals/products/sds/parse' } })
       return NextResponse.json(mapped.body, { status: mapped.status })
     }
-    const response = await client.messages.create({
-      model:      MODEL,
-      max_tokens: 16000,
-      thinking:   { type: 'adaptive' },
-      system:     SYSTEM_PROMPT,
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'document',
-            source: {
-              type:       'base64',
-              media_type: 'application/pdf',
-              data:       base64,
+    let response: Anthropic.Message
+    try {
+      response = await client.messages.create({
+        model:      MODEL,
+        max_tokens: 16000,
+        thinking:   { type: 'adaptive' },
+        system:     SYSTEM_PROMPT,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              source: {
+                type:       'base64',
+                media_type: 'application/pdf',
+                data:       base64,
+              },
             },
-          },
-          {
-            type: 'text',
-            text: 'Extract the SDS into the supplied JSON schema. Return JSON only.',
-          },
-        ],
-      }],
-      output_config: {
-        format: { type: 'json_schema', schema: PARSE_SCHEMA },
-      },
-    })
+            {
+              type: 'text',
+              text: 'Extract the SDS into the supplied JSON schema. Return JSON only.',
+            },
+          ],
+        }],
+        output_config: {
+          format: { type: 'json_schema', schema: PARSE_SCHEMA },
+        },
+      })
+    } catch (err) {
+      // AI unavailable (usage cap / rate limit / 5xx) — try the deterministic
+      // parser before surfacing the error. Other errors (bad PDF, etc.) fall
+      // through to the existing handler unchanged.
+      if (isAiUnavailable(err) && sdsFallbackConfigured()) {
+        const fb = await parseSdsViaFallback(buf)
+        if (fb) return await persistParse(admin, { sdsId, tenantId, userId }, nullifyEmptyStrings(fb), SDS_FALLBACK_MODEL, null)
+      }
+      throw err
+    }
 
     const textBlock = response.content.find(b => b.type === 'text')
     if (!textBlock || textBlock.type !== 'text') {
@@ -379,48 +445,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       return NextResponse.json({ error: 'AI returned invalid JSON.' }, { status: 502 })
     }
 
-    if (!parsed.product_name || !parsed.confidence) {
-      await logAiInvocation({
-        userId, tenantId, surface: 'parse-sds', model: MODEL, status: 'error',
-        context: sdsId,
-      })
-      return NextResponse.json({ error: 'AI returned an incomplete payload.' }, { status: 502 })
-    }
-
-    const numericConfidence = ({ high: 1, medium: 0.66, low: 0.33 } as const)[parsed.confidence.overall] ?? 0
-    const reviewStatus: 'pending' | 'approved' = 'pending'
-
-    const { data: updated, error: upErr } = await admin
-      .from('chemical_sds_documents')
-      .update({
-        parsed_payload:      parsed,
-        parse_model:         MODEL,
-        parse_confidence:    numericConfidence,
-        parse_review_status: reviewStatus,
-      })
-      .eq('id',        sdsId)
-      .eq('tenant_id', tenantId)
-      .select('id, parse_model, parse_confidence, parse_review_status')
-      .single()
-    if (upErr) {
-      await logAiInvocation({
-        userId, tenantId, surface: 'parse-sds', model: MODEL, status: 'error',
-        context: sdsId,
-      })
-      return NextResponse.json({ error: upErr.message }, { status: 500 })
-    }
-
-    await logAiInvocation({
-      userId, tenantId, surface: 'parse-sds', model: MODEL, status: 'success',
-      inputTokens:  response.usage?.input_tokens,
-      outputTokens: response.usage?.output_tokens,
-      context:      sdsId,
-    })
-
-    return NextResponse.json({
-      sds:    updated,
-      parsed,
-    }, { status: 200 })
+    return await persistParse(admin, { sdsId, tenantId, userId }, parsed, MODEL, response.usage ?? null)
   } catch (err) {
     Sentry.captureException(err, { tags: { route: '/api/chemicals/sds/parse' } })
     console.error('[parse-sds]', err)
