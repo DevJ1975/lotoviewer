@@ -98,4 +98,14 @@ describe('buildScorecardWorkbook', () => {
       expect.arrayContaining(['Summary', 'Distribution', 'Targets']),
     )
   })
+
+  it('marks the Distribution tab insufficient with fewer than two months', async () => {
+    const wb = await load(await buildScorecardWorkbook(fullInput({
+      incident: { ...fullInput().incident, recordablesByMonth: [{ month: '2025-01', count: 3 }] },
+    })))
+    const dist = wb.getWorksheet('Distribution')!
+    let insufficient = false
+    dist.eachRow(row => { if (row.getCell(1).value === 'Insufficient data') insufficient = true })
+    expect(insufficient).toBe(true)
+  })
 })
