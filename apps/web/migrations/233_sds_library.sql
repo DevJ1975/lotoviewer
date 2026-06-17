@@ -1,4 +1,4 @@
--- Migration 232: Global SDS Reference Library — Phase 1 schema.
+-- Migration 233: Global SDS Reference Library — Phase 1 schema.
 --
 -- Today every tenant onboards into an EMPTY chemical catalog and
 -- rediscovers each SDS on demand (chemical_products / chemical_sds_documents

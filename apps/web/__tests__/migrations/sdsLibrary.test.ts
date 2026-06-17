@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-// Migration 232 introduces the global (system-wide) SDS reference library.
+// Migration 233 introduces the global (system-wide) SDS reference library.
 // These assertions lock the load-bearing invariants of the schema: it must
 // stay tenant-agnostic, read-all / write-superadmin (the prop65 posture), and
 // idempotent. Mirrors the migration-text assertions in
@@ -10,7 +10,7 @@ import { resolve } from 'node:path'
 
 const REPO_APPS_WEB = resolve(__dirname, '../..')
 const sql = readFileSync(
-  resolve(REPO_APPS_WEB, 'migrations/232_sds_library.sql'),
+  resolve(REPO_APPS_WEB, 'migrations/233_sds_library.sql'),
   'utf8',
 )
 
@@ -26,7 +26,7 @@ const TABLES = [
   'sds_library_seed_items',
 ] as const
 
-describe('Migration 232 — global SDS reference library', () => {
+describe('Migration 233 — global SDS reference library', () => {
   it('creates all four library tables idempotently', () => {
     for (const t of TABLES) {
       expect(sql).toContain(`create table if not exists public.${t}`)
