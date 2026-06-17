@@ -41,6 +41,7 @@ export type AiSurface =
   | 'loto-audit-author'
   | 'loto-audit-regulator'
   | 'scorecard-focus'
+  | 'rca-assist'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
@@ -104,6 +105,11 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   // over the deterministic risk drivers. One call per "analyze" click; an admin
   // iterates a handful of times per review session. Conversational-class caps.
   'scorecard-focus':                  { perHour: 20, perDay: 100 },
+  // RCA assist — interactive during an investigation: an admin clicks
+  // "suggest next why" / "draft root cause & actions" a handful of times per
+  // case and iterates. Conversational-class caps keep an active investigation
+  // unblocked while bounding a retry loop.
+  'rca-assist':                       { perHour: 40, perDay: 200 },
 }
 
 interface CheckArgs {

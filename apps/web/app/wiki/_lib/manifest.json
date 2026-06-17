@@ -229,6 +229,22 @@
       "sources":  ["apps/web/app/near-miss/**"]
     },
     {
+      "slug":     "incident-investigation",
+      "module":   "Incident Investigation & RCA",
+      "tagline":  "Guided, AI-assisted 5 Whys root cause analysis — multiple roots, anti-blame guardrails, and one-click corrective actions.",
+      "category": "safety",
+      "href":     "/incidents",
+      "wikiPage": "apps/web/app/wiki/incident-investigation/page.tsx",
+      "sources":  [
+        "apps/web/app/incidents/[id]/investigate/**",
+        "apps/web/app/incidents/[id]/rca/**",
+        "apps/web/app/api/incidents/[id]/investigation/**",
+        "apps/web/app/api/incidents/[id]/rca/**",
+        "packages/core/src/rcaSchemas.ts",
+        "apps/web/migrations/234_rca_multi_root_branching_ai.sql"
+      ]
+    },
+    {
       "slug":     "jha",
       "module":   "Job Hazard Analysis",
       "tagline":  "Per-task hazard breakdowns with steps, hazards, controls, and review cadence.",
