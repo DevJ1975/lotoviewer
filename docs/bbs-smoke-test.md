@@ -149,9 +149,9 @@ For each step, use a real phone with the network reachable.
       token flow or permit sign-on tokens — visit one of those
       routes signed-out and confirm the existing behavior
 
-## 11 · BBS v2 coaching upgrade (migration 233)
+## 11 · BBS v2 coaching upgrade (migration 234)
 
-Apply `233_bbs_v2_coaching_teams.sql` first (idempotent; re-runnable).
+Apply `234_bbs_v2_coaching_teams.sql` first (idempotent; re-runnable).
 
 - [ ] At `/admin/observations/bbs/dashboard`, "Safety Action Teams" →
       add "Night Crew"; it appears in the list (toggle Disable/Enable works)

@@ -52,7 +52,7 @@ export interface BbsObservationV2Row {
   follow_up_required?:     boolean
   follow_up_completed_at?: string | null
   feedback_given_at?:      string | null
-  // Concept additions (migration 233). Optional so existing callers and
+  // Concept additions (migration 234). Optional so existing callers and
   // fixtures stay valid.
   behavior_tags?:             string[] | null
   recognized?:                boolean

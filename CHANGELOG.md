@@ -22,7 +22,7 @@ app at `/superadmin/release-notes`.
   (`/admin/observations/bbs/dashboard`) adds rapid-review, safe-behavior-trend,
   recognition-feed, and follow-ups-by-team sections; the BBS scorecard
   (`/bbs/scorecard`) surfaces the v2 leading indicators. Additive migration
-  (`233_bbs_v2_coaching_teams.sql`) — existing rows and flows are unchanged.
+  (`234_bbs_v2_coaching_teams.sql`) — existing rows and flows are unchanged.
 - **Public QR placard view** (`/qr/{qr_token}`) — scanning a printed placard QR
   opens a read-only, no-login view of that machine's isolation photo (with
   annotation markers), ordered energy-control steps, and verified badge. Reads
