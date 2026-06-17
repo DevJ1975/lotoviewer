@@ -1,10 +1,73 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.9.0'
-const LAST_UPDATED    = '2026-05-24'
+const CURRENT_VERSION = '1.13.0'
+const LAST_UPDATED    = '2026-06-15'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.13.0',
+    date:    '2026-06-15',
+    changes: [
+      'PDF parity: the branded PDF now includes the recordable distribution + ' +
+      'next-month forecast (mean, median, spread, c-chart control limits, and ' +
+      'the Poisson prediction interval) — the same numbers as the Excel ' +
+      '“Distribution” tab, computed once and shared by both exports.',
+      'Where to focus: the card now clearly flags when it is showing the ' +
+      'deterministic top drivers because AI analysis was unavailable, so the ' +
+      'fallback is never mistaken for an AI-written read. Screen readers now ' +
+      'announce the results as they load.',
+    ],
+  },
+  {
+    version: '1.12.0',
+    date:    '2026-06-15',
+    changes: [
+      'Where to focus: an on-demand AI card that reads your deterministic risk ' +
+      'drivers + forecast and ranks, in plain language, where to work next to ' +
+      'lower predicted risk — each item deep-links to the module. The risk score ' +
+      'is always computed by the model, never the assistant; if AI is ' +
+      'unavailable the card falls back to the top deterministic drivers.',
+      'Excel export: the new “Excel” button downloads a multi-tab .xlsx ' +
+      '(Summary, Leading, Lagging, Trends, Distribution, Targets, Risk drivers) ' +
+      'that opens in Excel and imports cleanly into Google Sheets. The risk ' +
+      'headline is recomputed server-side and every cell is guarded against ' +
+      'spreadsheet formula injection.',
+    ],
+  },
+  {
+    version: '1.11.0',
+    date:    '2026-06-15',
+    changes: [
+      'Predictive section — “where things are going”: a forecast of next ' +
+      'month’s recordable count (EWMA + a reliability-gated linear trend) with ' +
+      'a Poisson 95% prediction interval, plus an improving/worsening/flat ' +
+      'trend read. The number is deterministic, never an AI guess.',
+      'Statistically honest distributions: recordables are shown as a c-chart ' +
+      '(control chart with mean and ±3σ limits) and a Poisson fit — the right ' +
+      'view for rare counts — rather than a bell curve, which would imply ' +
+      'impossible negative counts. Views suppress themselves when there is too ' +
+      'little data to be honest (e.g. < 8 months for a distribution).',
+    ],
+  },
+  {
+    version: '1.10.0',
+    date:    '2026-06-15',
+    changes: [
+      'Tap-to-drill: every KPI card and risk driver opens a detail sheet with ' +
+      'the metric’s definition, its live formula, supporting stats, and a ' +
+      'plain-language explanation of what it means and where to act — the ' +
+      'interactive replacement for a separate “simple metrics” view.',
+      'Predicted-risk gauge + leading-vs-lagging panel: the 0–100 score now ' +
+      'reads as a graphical gauge, and the drivers are split into leading ' +
+      '(preventive) and lagging (outcome) indicators you can drill into.',
+      'Comprehensive branded PDF: the “PDF” button now exports a multi-page ' +
+      'report — executive summary, predicted risk + drivers, leading/lagging ' +
+      'tables, a recordable & near-miss trend chart, reporting/investigation ' +
+      'quality, and the LOTO program — with your tenant logo and brand mark. ' +
+      'The risk score is recomputed server-side so the headline is authoritative.',
+    ],
+  },
   {
     version: '1.9.0',
     date:    '2026-05-24',
@@ -162,6 +225,7 @@ export default function WikiScorecardPage() {
           <li>Where &amp; how people are getting hurt — body-part and nature-of-injury breakdowns</li>
           <li>When incidents cluster — a shift × weekday heatmap</li>
           <li>Goals vs. actuals + your TRIR/DART vs. the BLS industry benchmark for your sector</li>
+          <li>Predictive — next-month recordable forecast (Poisson interval) plus a c-chart and Poisson distribution of monthly counts</li>
           <li>Confined-space permits issued, completed, expired, canceled</li>
           <li>Atmospheric-test failures and the spaces that drove them</li>
           <li>LOTO photo-completion percentage trend</li>
@@ -179,10 +243,13 @@ export default function WikiScorecardPage() {
             hidden — clean enough to project in a leadership review. Press
             Esc (or &quot;Exit&quot;) to return to the normal layout.</li>
           <li><strong>PDF.</strong> The &quot;PDF&quot; button downloads a
-            one-page report of the current window&apos;s program metrics with
-            your tenant logo affixed in the header — drop it straight into a
-            board pack. Set the logo under tenant settings if the header looks
-            empty.</li>
+            comprehensive, multi-page report — executive summary, predicted
+            risk and its drivers, leading vs lagging indicators, a recordable
+            &amp; near-miss trend chart, reporting/investigation quality, and the
+            permit/LOTO program — with your tenant logo and brand mark in the
+            header. The risk score is recomputed server-side so the board-pack
+            headline is authoritative. Set the logo under tenant settings if the
+            header looks empty.</li>
           <li><strong>Weekly weather report.</strong> Every Monday, owners and
             admins get an automated email summarizing week-over-week movement
             on the key leading and lagging indicators (recordables, near-miss
@@ -203,11 +270,16 @@ export default function WikiScorecardPage() {
           always produces the same number.
         </p>
         <p>
-          Below the score is a ranked <strong>&quot;where to work to lower
-          it&quot;</strong> list — the specific drivers pushing the score up,
-          each linking straight to the module where you fix it. Work the top
-          driver first; it&apos;s contributing the most points. The same score
-          and top focus area are included in the weekly weather-report email.
+          The score reads as a graphical <strong>gauge</strong>, and below it a
+          ranked <strong>&quot;where to work to lower it&quot;</strong> list
+          shows the specific drivers pushing the score up. A separate
+          <strong> leading vs lagging</strong> panel splits those drivers into
+          preventive signals (near-miss reporting, BBS ratio, overdue actions,
+          expiring training) and outcomes (recordable trend). Tap any driver —
+          or any KPI card on the board — to open a detail sheet with its
+          definition, live formula, and where to act. Work the top driver
+          first; it&apos;s contributing the most points. The same score and top
+          focus area are included in the weekly weather-report email.
         </p>
       </Section>
 
@@ -228,8 +300,8 @@ export default function WikiScorecardPage() {
           },
           {
             q: 'Can I export the scorecard?',
-            a: <>Yes — the &quot;PDF&quot; button produces a branded one-page
-              summary for the current window (see{' '}
+            a: <>Yes — the &quot;PDF&quot; button produces a branded,
+              comprehensive multi-page report for the current window (see{' '}
               <Link href="#sharing">Present, export &amp; email</Link>). For the
               raw underlying rows, use the{' '}
               <Link href="/admin/compliance/compliance-bundle">compliance bundle</Link>{' '}

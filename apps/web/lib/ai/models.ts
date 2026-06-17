@@ -111,6 +111,11 @@ export const MODEL_BY_SURFACE = {
   //   corrections. Same safety-critical class as the gate — Opus 4.8. Critique is
   //   staged for the human review gate; it never writes live data.
   'loto-audit-regulator':             OPUS,
+  // EHS scorecard "where to focus" — an advisory narrative over the
+  // deterministic risk drivers + forecast. A human reads the bullets and the
+  // LLM never computes the risk score (it is fed it). Same advisory class as
+  // summarize-audit / superadmin-daily-report → Sonnet.
+  'scorecard-focus':                  SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

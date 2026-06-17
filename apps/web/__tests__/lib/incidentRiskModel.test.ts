@@ -86,6 +86,19 @@ describe('summarizeIncidentRisk', () => {
     expect(bbs.pressure).toBeGreaterThan(0)
   })
 
+  it('tags every driver as leading or lagging, with recordables lagging', () => {
+    const { drivers } = summarizeIncidentRisk(BAD)
+    for (const d of drivers) {
+      expect(['leading', 'lagging']).toContain(d.kind)
+    }
+    expect(drivers.find(d => d.key === 'recordable_trend')!.kind).toBe('lagging')
+    expect(drivers.find(d => d.key === 'near_miss_reporting')!.kind).toBe('leading')
+    // The model is predominantly leading indicators (that is the point of a
+    // *predictive* risk model) — there is at least one of each.
+    expect(drivers.some(d => d.kind === 'leading')).toBe(true)
+    expect(drivers.some(d => d.kind === 'lagging')).toBe(true)
+  })
+
   it('a rising recordable count raises the recordable driver', () => {
     const rising = summarizeIncidentRisk({ ...CLEAN, recordablesRecent: 3, recordablesPrior: 1 })
     const flat   = summarizeIncidentRisk({ ...CLEAN, recordablesRecent: 3, recordablesPrior: 3 })

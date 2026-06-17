@@ -1,0 +1,72 @@
+SAFETY DATA SHEET
+Acetone
+
+SECTION 1: Identification
+Product name: Acetone
+Product code: AC-100
+Manufacturer: Example Chemical Co.
+Recommended use: Solvent for laboratory and industrial cleaning
+Synonyms: 2-Propanone; Dimethyl ketone
+Emergency telephone number: 1-800-424-9300 (CHEMTREC)
+
+SECTION 2: Hazards identification
+Signal word: Danger
+GHS pictograms: Flame, Exclamation mark
+Hazard statements:
+H225 Highly flammable liquid and vapour.
+H319 Causes serious eye irritation.
+H336 May cause drowsiness or dizziness.
+Precautionary statements:
+P210 Keep away from heat, hot surfaces, sparks, and open flames.
+P233 Keep container tightly closed.
+
+SECTION 3: Composition/information on ingredients
+Chemical name: Acetone
+CAS number: 67-64-1
+Concentration: 100%
+
+SECTION 4: First-aid measures
+Inhalation: Move person to fresh air and keep comfortable for breathing.
+Skin contact: Wash with plenty of soap and water.
+Eye contact: Rinse cautiously with water for several minutes.
+Ingestion: Do not induce vomiting. Call a poison center.
+
+SECTION 5: Fire-fighting measures
+Suitable extinguishing media: Alcohol-resistant foam, carbon dioxide, dry chemical powder.
+Unsuitable extinguishing media: Do not use a heavy water stream.
+Special hazards: Vapors may form explosive mixtures with air.
+Protective equipment: Wear self-contained breathing apparatus.
+
+SECTION 6: Accidental release measures
+Personal precautions: Evacuate personnel and eliminate all ignition sources.
+Environmental precautions: Prevent product from entering drains and waterways.
+Methods for containment: Dike the spilled material with sand or earth.
+Methods for cleaning up: Absorb with inert material and place in a sealed container.
+
+SECTION 7: Handling and storage
+Storage: Store in a cool, well-ventilated place away from ignition sources.
+
+SECTION 8: Exposure controls/personal protection
+PEL 250 ppm (OSHA)
+TWA 500 ppm (ACGIH TLV)
+STEL 750 ppm
+Wear safety glasses, chemical-resistant gloves, and ensure adequate ventilation.
+
+SECTION 9: Physical and chemical properties
+Physical state: Liquid
+Appearance: Colorless liquid
+Flash point: -20 °C
+Boiling point: 56 °C
+Vapor pressure: 184 mmHg
+
+SECTION 10: Stability and reactivity
+Incompatible materials: Strong oxidizing agents, strong bases, strong acids.
+
+SECTION 14: Transport information
+UN number: UN1090
+Hazard class: 3
+Packing group: II
+
+SECTION 16: Other information
+NFPA 704: Health 1 Flammability 3 Instability 0
+Revision date: 2024-03-15

@@ -12,6 +12,14 @@
 
 export type IncidentRiskBand = 'low' | 'moderate' | 'high' | 'extreme'
 
+// Leading indicators are upstream/preventive signals you can act on *before* an
+// incident (reporting culture, overdue actions, expired training, atmospheric
+// failures). Lagging indicators are outcomes that have already happened
+// (recordable injuries). Splitting drivers this way lets the scorecard render a
+// "leading vs lagging" panel and lets the AI focus surface reason about the two
+// classes separately.
+export type IndicatorKind = 'leading' | 'lagging'
+
 // Raw, already-aggregated inputs (counts over a recent window). The web/cron
 // orchestrator gathers these per tenant from the existing tables; the model
 // stays pure so it is unit-testable without a database.
@@ -43,6 +51,8 @@ export interface IncidentRiskFeatures {
 export interface IncidentRiskDriver {
   key:             string
   label:           string
+  /** Whether this driver is a leading (preventive) or lagging (outcome) signal. */
+  kind:            IndicatorKind
   /** 0–100 pressure this indicator contributes before weighting. */
   pressure:        number
   /** Points this indicator adds to the overall score (pressure × weight). */
@@ -71,6 +81,7 @@ const round1 = (n: number) => Math.round(n * 10) / 10
 interface IndicatorSpec {
   key:    string
   label:  string
+  kind:   IndicatorKind
   weight: number   // relative weight; the set is normalized to sum 1
   href:   string
   suggestedAction: string
@@ -85,6 +96,7 @@ const INDICATORS: IndicatorSpec[] = [
   {
     key: 'recordable_trend',
     label: 'Recordable injuries (recent + trend)',
+    kind: 'lagging',
     weight: 22,
     href: '/incidents/scorecard',
     suggestedAction: 'Review recent recordables and verify CAPAs target the root causes, not symptoms.',
@@ -96,6 +108,7 @@ const INDICATORS: IndicatorSpec[] = [
   {
     key: 'near_miss_reporting',
     label: 'Near-miss reporting culture',
+    kind: 'leading',
     weight: 12,
     href: '/near-miss',
     suggestedAction: 'Drive near-miss reporting — a healthy program reports many near-misses per recordable.',
@@ -112,6 +125,7 @@ const INDICATORS: IndicatorSpec[] = [
   {
     key: 'bbs_ratio',
     label: 'BBS safe-to-unsafe ratio',
+    kind: 'leading',
     weight: 10,
     href: '/bbs/scorecard',
     suggestedAction: 'Increase safe-behavior observations and close out unsafe findings.',
@@ -129,6 +143,7 @@ const INDICATORS: IndicatorSpec[] = [
   {
     key: 'capa_overdue',
     label: 'Overdue corrective actions (CAPAs)',
+    kind: 'leading',
     weight: 16,
     href: '/incidents',
     suggestedAction: 'Close overdue CAPAs — unresolved corrective actions leave known hazards in place.',
@@ -139,6 +154,7 @@ const INDICATORS: IndicatorSpec[] = [
   {
     key: 'risk_reviews_overdue',
     label: 'Overdue risk reviews',
+    kind: 'leading',
     weight: 12,
     href: '/risk/list',
     suggestedAction: 'Re-review overdue risks; stale assessments hide drift in residual risk.',
@@ -148,6 +164,7 @@ const INDICATORS: IndicatorSpec[] = [
   {
     key: 'open_high_risks',
     label: 'Open high/extreme risks',
+    kind: 'leading',
     weight: 14,
     href: '/risk',
     suggestedAction: 'Drive high/extreme risks down with controls — these are your largest open exposures.',
@@ -158,6 +175,7 @@ const INDICATORS: IndicatorSpec[] = [
   {
     key: 'training_expired',
     label: 'Expired worker training',
+    kind: 'leading',
     weight: 8,
     href: '/admin/loto/training-records',
     suggestedAction: 'Renew expired certifications; untrained workers on hazardous tasks raise incident odds.',
@@ -167,6 +185,7 @@ const INDICATORS: IndicatorSpec[] = [
   {
     key: 'atmospheric_failures',
     label: 'Atmospheric test failures',
+    kind: 'leading',
     weight: 6,
     href: '/confined-spaces/status',
     suggestedAction: 'Investigate failed atmospheric tests; a rising fail rate signals ventilation/monitor issues.',
@@ -190,7 +209,7 @@ export function summarizeIncidentRisk(features: IncidentRiskFeatures): IncidentR
     const pressure = clamp(ind.pressure(features))
     const contribution = round1((pressure * ind.weight) / TOTAL_WEIGHT)
     const { value, target } = ind.describe(features)
-    return { key: ind.key, label: ind.label, pressure: round1(pressure), contribution, value, target, href: ind.href, suggestedAction: ind.suggestedAction }
+    return { key: ind.key, label: ind.label, kind: ind.kind, pressure: round1(pressure), contribution, value, target, href: ind.href, suggestedAction: ind.suggestedAction }
   })
 
   const score = round1(drivers.reduce((s, d) => s + d.contribution, 0))

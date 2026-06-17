@@ -8,7 +8,7 @@ import {
   CHANGE_KIND_LABEL,
   SEVERITY_BADGE,
   formatChangeValue,
-} from '@/app/admin/loto/audit/_lib/changeDisplay'
+} from '@/app/admin/loto/multi-agent-audit/_lib/changeDisplay'
 
 // One staged change, as the reviewer sees it: the diff (rendered per kind) plus
 // Approve / Reject controls and an optional note. The decision is lifted to the

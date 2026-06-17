@@ -11,7 +11,7 @@ vi.mock('@/lib/supabaseAdmin', () => ({ supabaseAdmin: () => adminClient }))
 
 const getAnthropic = vi.fn(async () => ({}))
 vi.mock('@/lib/ai/client', () => ({
-  getAnthropic: (...a: unknown[]) => getAnthropic(...a),
+  getAnthropic: () => getAnthropic(),
   AnthropicNotConfiguredError: class extends Error {},
 }))
 
