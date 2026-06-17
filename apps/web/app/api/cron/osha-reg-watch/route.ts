@@ -6,71 +6,68 @@ import { getAnthropic, AnthropicNotConfiguredError } from '@/lib/ai/client'
 import { MalformedTenantKeyError } from '@/lib/ai/getTenantApiKey'
 import { SONNET } from '@/lib/ai/models'
 import {
-  htmlToLlmText,
+  federalRegisterDocsToLlmText,
   computeDedupKey,
   normalizeOshaUpdate,
+  type FederalRegisterDoc,
   type RawOshaItem,
 } from '@/lib/oshaRegWatch'
 
 // OSHA Regulatory Watch cron (~every 30 days; scheduled monthly in vercel.json).
 //
-// Fetches a couple of osha.gov pages, reduces the HTML to a link-preserving
-// text payload, and asks Claude ONCE to extract substantive regulation
-// updates + anything upcoming, each with a plain-language workplace-impact
-// summary. Extracted items are inserted (idempotent on a cron-derived
-// dedup_key) into the GLOBAL public.osha_regulation_updates table, which the
-// home-dashboard panel reads. One summary per update, shared across tenants.
+// Pulls OSHA's recent rulemaking from the Federal Register public JSON API —
+// the official publication channel for OSHA rules/notices — then asks Claude
+// ONCE to pick the substantive items + anything upcoming and write a
+// plain-language workplace-impact summary for each. Results are inserted
+// (idempotent on a cron-derived dedup_key) into the GLOBAL
+// public.osha_regulation_updates table that the home-dashboard panel reads.
+// One summary per update, shared across tenants.
 //
-// osha.gov sits behind an Akamai WAF that 403s many automated clients. The
-// job makes a cheap reachability probe FIRST: if osha.gov is unreachable it
-// records the run and returns WITHOUT spending Anthropic tokens, leaving the
-// last successful run's summaries in place (graceful degrade). If the WAF
-// blocks the deployment for good, OSHA_SOURCE_URLS can be repointed at the
-// public Federal Register JSON API, which mirrors OSHA's rule publications.
+// Why the Federal Register API and not osha.gov: osha.gov sits behind an
+// Akamai WAF that 403s datacenter clients (confirmed from Vercel-class IPs),
+// so it can't be scraped from a serverless function. The Federal Register API
+// is built for programmatic access and carries the same OSHA final/proposed
+// rules, notices, comment periods, and effective dates as structured fields.
+// If the API is unreachable, the job records the run and returns WITHOUT
+// spending Anthropic tokens, leaving the last successful run's summaries in
+// place (graceful degrade).
 //
 // Auth + run-logging follow the same posture as the other crons.
 
 export const runtime = 'nodejs'
-// One sequential pass — a couple of fetches (each with one retry) plus a
-// single Sonnet call. Well under the cap, but the default 10s is far too
-// tight for a slow osha.gov response plus generation.
+// One sequential pass — a single API fetch plus a single Sonnet call. Well
+// under the cap, but the default 10s is too tight for the fetch + generation.
 export const maxDuration = 300
 
 const FETCH_TIMEOUT_MS = 20_000
 const AI_MODEL = SONNET
 
-// osha.gov pages the model reads. The regs landing surfaces rules/notices;
-// the newsroom surfaces announcements + upcoming activity. A small list so
-// adding or removing a source is a one-line change.
-const OSHA_SOURCE_URLS = [
-  'https://www.osha.gov/laws-regs',
-  'https://www.osha.gov/news/newsreleases',
-] as const
+// Federal Register documents.json filtered to OSHA, newest first. We request
+// only the fields we serialize for the model to keep the payload small. The
+// 25-doc window comfortably covers a monthly cadence; the unique dedup_key
+// makes re-seeing a document on the next run a no-op.
+const FR_API_URL =
+  'https://www.federalregister.gov/api/v1/documents.json' +
+  '?conditions%5Bagencies%5D%5B%5D=occupational-safety-and-health-administration' +
+  '&order=newest&per_page=25' +
+  '&fields%5B%5D=document_number&fields%5B%5D=title&fields%5B%5D=type' +
+  '&fields%5B%5D=publication_date&fields%5B%5D=effective_on' +
+  '&fields%5B%5D=comments_close_on&fields%5B%5D=abstract&fields%5B%5D=html_url'
 
-// A browser-like header set. osha.gov's WAF 403s the bare fetch() UA; this is
-// best-effort (the WAF can still fingerprint TLS, which fetch can't spoof) and
-// the reachability probe handles the case where it isn't enough.
-const BROWSER_HEADERS = {
-  'user-agent':
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-  'accept-language': 'en-US,en;q=0.9',
-} as const
+const SYSTEM_PROMPT = `You are an OSHA regulatory analyst. You are given recent U.S. Federal Register documents published by OSHA, one per block. Each block has labeled fields: Title, Type (e.g. "Rule", "Proposed Rule", "Notice"), Published, Effective, Comments close, URL, and Abstract.
 
-const SYSTEM_PROMPT = `You are an OSHA regulatory analyst. You are given the reduced text of one or more osha.gov pages. Links appear inline as "link text (url)".
-
-From that text, extract distinct, substantive U.S. OSHA regulatory items:
+From these documents, extract the distinct, substantive OSHA regulatory items:
 - recently published or updated rules, notices, and enforcement directives, and
 - anything explicitly UPCOMING: proposed rules (NPRMs), open public-comment periods, and scheduled future effective dates.
 
 For each item, write a 2-3 sentence plain-language summary of how it may affect a typical workplace's safety obligations: what is changing, who is affected, and what an employer should do.
 
 Rules:
-- Use ONLY information present in the text. Never invent titles, dates, or URLs. If a field is not present, return an empty string for it.
-- Dates must be ISO format YYYY-MM-DD, or an empty string if not stated.
-- source_url must be the osha.gov URL shown beside the item, or an empty string if none is shown.
-- Set is_upcoming=true only for proposed rules, open comment periods, or changes that are not yet in effect.
-- Ignore site navigation, search boxes, headers/footers, unrelated press, and boilerplate.
+- Use ONLY information present in the documents. Never invent titles, dates, or URLs. If a field is not present, return an empty string for it.
+- Copy dates verbatim from the labeled fields, in ISO format YYYY-MM-DD; return an empty string when a date is not given.
+- source_url must be the document's URL line; map category from Type ("Rule" -> final_rule, "Proposed Rule" -> proposed_rule, "Notice" -> guidance, otherwise other).
+- Set is_upcoming=true only for proposed rules, open comment periods, or changes whose effective date is in the future.
+- Skip purely administrative or procedural notices with no workplace impact (meetings, information collections, minor corrections).
 - Prefer a few high-confidence items over many speculative ones. If nothing substantive is present, return an empty list.`
 
 const SCHEMA = {
@@ -128,34 +125,28 @@ export async function POST(req: Request) {
   return withCronLogging(req, () => runCron())
 }
 
-interface FetchResult {
-  ok:     boolean
-  status: number
-  body:   string | null
-}
-
-// GET a URL with the browser headers and a hard timeout. Returns the body on
-// a 2xx; null otherwise. One retry with a short backoff covers a transient
-// hiccup, but a 4xx (esp. a 403 WAF block) won't fix itself, so we bail on it
-// immediately rather than retrying into the same wall.
-async function fetchText(url: string): Promise<FetchResult> {
-  let lastStatus = 0
-  for (let attempt = 0; attempt <= 1; attempt++) {
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS)
-    try {
-      const resp = await fetch(url, { signal: ctrl.signal, headers: BROWSER_HEADERS })
-      lastStatus = resp.status
-      if (resp.ok) return { ok: true, status: resp.status, body: await resp.text() }
-      if (resp.status >= 400 && resp.status < 500) return { ok: false, status: resp.status, body: null }
-    } catch {
-      lastStatus = 0
-    } finally {
-      clearTimeout(timer)
-    }
-    if (attempt < 1) await new Promise(r => setTimeout(r, 1500))
+// Fetch the newest OSHA Federal Register documents. Returns the document array
+// on success, or null on any non-2xx / network error / timeout so the caller
+// can degrade gracefully without spending Anthropic tokens.
+async function fetchFederalRegisterDocs(): Promise<FederalRegisterDoc[] | null> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS)
+  try {
+    const resp = await fetch(FR_API_URL, {
+      signal: ctrl.signal,
+      headers: {
+        accept: 'application/json',
+        'user-agent': 'SoteriaField-OSHARegWatch/1.0 (+https://soteriafield.app)',
+      },
+    })
+    if (!resp.ok) return null
+    const json = (await resp.json()) as { results?: FederalRegisterDoc[] }
+    return Array.isArray(json.results) ? json.results : []
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
   }
-  return { ok: false, status: lastStatus, body: null }
 }
 
 async function extractUpdates(sourceText: string): Promise<RawOshaItem[]> {
@@ -169,7 +160,7 @@ async function extractUpdates(sourceText: string): Promise<RawOshaItem[]> {
     system:     SYSTEM_PROMPT,
     messages: [{
       role: 'user',
-      content: `Today is ${today}. Extract OSHA regulatory updates and upcoming items from the following osha.gov page text:\n\n${sourceText}`,
+      content: `Today is ${today}. Extract OSHA regulatory updates and upcoming items from the following Federal Register documents:\n\n${sourceText}`,
     }],
     output_config: { format: { type: 'json_schema', schema: SCHEMA } },
   })
@@ -181,34 +172,25 @@ async function extractUpdates(sourceText: string): Promise<RawOshaItem[]> {
 }
 
 async function runCron(): Promise<NextResponse> {
-  // Step 0 — reachability probe. osha.gov's WAF frequently 403s automated
-  // clients; if the source is unreachable, record the run and bail BEFORE
-  // spending Anthropic tokens. The panel keeps the last run's summaries.
-  const probe = await fetchText(OSHA_SOURCE_URLS[0])
-  if (!probe.ok) {
-    Sentry.captureMessage('osha-reg-watch: source unreachable (likely WAF 403)', {
+  // Step 1 — pull OSHA's recent Federal Register documents. If the API is
+  // unreachable, record the run and bail BEFORE spending Anthropic tokens;
+  // the panel keeps showing the last successful run's summaries.
+  const docs = await fetchFederalRegisterDocs()
+  if (docs === null) {
+    Sentry.captureMessage('osha-reg-watch: Federal Register API unreachable', {
       level: 'warning',
-      tags: { source: 'osha-reg-watch', stage: 'probe', http_status: String(probe.status) },
+      tags: { source: 'osha-reg-watch', stage: 'fetch' },
     })
-    return NextResponse.json({ reachable: false, source_status: probe.status, scanned: 0, inserted: 0 })
+    return NextResponse.json({ reachable: false, scanned: 0, inserted: 0 })
+  }
+  if (docs.length === 0) {
+    return NextResponse.json({ reachable: true, scanned: 0, inserted: 0, message: 'No OSHA documents returned.' })
   }
 
-  // Step 1 — gather page text. The probe already fetched the first page;
-  // reuse its body and fetch the rest, skipping any that fail individually.
-  const pages: string[] = []
-  if (probe.body) pages.push(htmlToLlmText(probe.body))
-  for (const url of OSHA_SOURCE_URLS.slice(1)) {
-    const page = await fetchText(url)
-    if (page.ok && page.body) pages.push(htmlToLlmText(page.body))
-  }
-  if (pages.length === 0) {
-    return NextResponse.json({ reachable: true, scanned: 0, inserted: 0, message: 'No source pages yielded text.' })
-  }
-
-  // Steps 2-3 — one Claude call extracting structured items from the text.
+  // Step 2 — one Claude call: pick the substantive items + summarize impact.
   let items: RawOshaItem[]
   try {
-    items = await extractUpdates(pages.join('\n\n---\n\n'))
+    items = await extractUpdates(federalRegisterDocsToLlmText(docs))
   } catch (err) {
     if (err instanceof MalformedTenantKeyError || err instanceof AnthropicNotConfiguredError) {
       Sentry.captureMessage('osha-reg-watch: Anthropic not configured', {
@@ -220,8 +202,8 @@ async function runCron(): Promise<NextResponse> {
     return NextResponse.json({ reachable: true, scanned: 0, inserted: 0, error: 'AI extraction failed' }, { status: 502 })
   }
 
-  // Step 4 — idempotent insert. dedup_key is derived from stable fields, so
-  // re-running over an unchanged page no-ops via the unique constraint
+  // Step 3 — idempotent insert. dedup_key is derived from the document's
+  // canonical URL, so re-seeing a document no-ops via the unique constraint
   // (23505 = already have it, treated as a skip not a failure).
   const admin = supabaseAdmin()
   const fetchedAt = new Date().toISOString()

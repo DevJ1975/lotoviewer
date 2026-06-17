@@ -24,7 +24,7 @@ function update(over: Partial<OshaRegulationUpdate> = {}): OshaRegulationUpdate 
     title:              'Walking-Working Surfaces Final Rule',
     category:           'final_rule',
     is_upcoming:        false,
-    source_url:         'https://www.osha.gov/laws-regs/rule/1910-22',
+    source_url:         'https://www.federalregister.gov/documents/2026/05/01/2026-12345/walking-working-surfaces',
     published_date:     '2026-05-01',
     effective_date:     null,
     comment_close_date: null,
@@ -68,7 +68,7 @@ describe('OshaRegWatchPanel', () => {
     render(<OshaRegWatchPanel />)
 
     const link = await screen.findByRole('link', { name: /Walking-Working Surfaces/i })
-    expect(link).toHaveAttribute('href', 'https://www.osha.gov/laws-regs/rule/1910-22')
+    expect(link).toHaveAttribute('href', 'https://www.federalregister.gov/documents/2026/05/01/2026-12345/walking-working-surfaces')
     expect(link).toHaveAttribute('target', '_blank')
     expect(screen.getByText('Upcoming')).toBeInTheDocument()
     expect(screen.getByText(/Employers must inspect walking surfaces/i)).toBeInTheDocument()
