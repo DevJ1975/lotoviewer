@@ -241,7 +241,7 @@
         "apps/web/app/api/incidents/[id]/investigation/**",
         "apps/web/app/api/incidents/[id]/rca/**",
         "packages/core/src/rcaSchemas.ts",
-        "apps/web/migrations/233_rca_multi_root_branching_ai.sql"
+        "apps/web/migrations/234_rca_multi_root_branching_ai.sql"
       ]
     },
     {

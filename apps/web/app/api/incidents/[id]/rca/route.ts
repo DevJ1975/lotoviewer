@@ -147,14 +147,14 @@ export async function POST(req: Request, ctx: RouteContext) {
     // Build the insert with method-specific shape. Spread + tenant
     // scope last so callers can't override. For 5 Whys this also carries
     // the optional parent_id (branching) and ai_origin/ai_edited
-    // provenance flags (migration 233).
+    // provenance flags (migration 234).
     const insert = {
       ...body.node,
       tenant_id:        gate.tenantId,
       investigation_id: inv.id,
     } as Record<string, unknown>
 
-    // Multiple identified roots are allowed (migration 233): real
+    // Multiple identified roots are allowed (migration 234): real
     // incidents have several contributing root causes, and forcing a
     // single root was a core reason the tool felt wrong. We deliberately
     // do NOT clear other is_root flags here.

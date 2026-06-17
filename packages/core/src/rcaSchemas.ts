@@ -111,14 +111,14 @@ export interface FiveWhysRow {
   answer:            string
   is_root:           boolean
   // The "why" this answer interrogates. NULL for the top-of-tree problem
-  // statement and for legacy linear chains (migration 233). Lets one
+  // statement and for legacy linear chains (migration 234). Lets one
   // investigation fork into several causal lines instead of one flat
   // chain. Optional on the type so callers selecting a narrower column
   // set still type-check.
   parent_id?:        string | null
   // Provenance for the AI-assisted flow: ai_origin=true when Claude
   // drafted the answer, ai_edited=true when a human changed it before
-  // saving. Both default false (manual entry). See migration 233.
+  // saving. Both default false (manual entry). See migration 234.
   ai_origin?:        boolean
   ai_edited?:        boolean
   created_at:        string

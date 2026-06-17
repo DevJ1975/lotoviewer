@@ -22,7 +22,7 @@ app at `/superadmin/release-notes`.
   investigation is unified: the RCA editor moved into the **Investigate & RCA**
   tab, identified roots pull into the narrative in one click and into tracked
   corrective actions (`incident_actions.source_rca_node_id`), and the old
-  `/incidents/[id]/rca` tab redirects there. Migration 233 adds 5-Whys
+  `/incidents/[id]/rca` tab redirects there. Migration 234 adds 5-Whys
   branching, multi-root support, and AI provenance; new wiki page at
   `/wiki/incident-investigation`.
 - **Public QR placard view** (`/qr/{qr_token}`) — scanning a printed placard QR
