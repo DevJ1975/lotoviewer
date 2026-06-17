@@ -1,18 +1,25 @@
 // OSHA Regulatory Watch — pure transforms for the osha-reg-watch cron.
 //
-// The cron fetches osha.gov HTML, hands a reduced text payload to Claude,
-// and upserts the model's extracted items. These helpers are the
-// deterministic, side-effect-free pieces of that pipeline — kept here so
-// they're unit-testable without a network round-trip or a model call:
+// Source of record is the Federal Register public JSON API (the official
+// publication channel for OSHA rulemaking), filtered to the OSHA agency.
+// osha.gov's own pages sit behind an Akamai WAF that 403s datacenter clients,
+// so a Vercel cron can't scrape them — but the Federal Register API is built
+// for programmatic access and carries the same final/proposed rules, notices,
+// comment periods, and effective dates as structured fields.
 //
-//   htmlToLlmText        reduce raw HTML to link-preserving plain text for the prompt
-//   normalizeOshaUpdate  validate + coerce one model item into a DB-ready row
-//   computeDedupKey      derive a stable idempotency key for the unique constraint
+// These helpers are the deterministic, side-effect-free pieces of the
+// pipeline — kept here so they're unit-testable without a network round-trip
+// or a model call:
 //
-// Why the model never supplies the dedup key: re-running the cron over an
-// unchanged page must produce identical keys so the unique constraint makes
-// the insert idempotent. A key the model invents could drift run-to-run; a
-// key WE derive from stable fields cannot.
+//   federalRegisterDocsToLlmText  serialize FR documents into a labeled text
+//                                 block for the model to read
+//   normalizeOshaUpdate           validate + coerce one model item into a DB row
+//   computeDedupKey               derive a stable idempotency key for the unique constraint
+//
+// Why the model never supplies the dedup key: re-running the cron over the
+// same documents must produce identical keys so the unique constraint makes
+// the insert idempotent. A key the model invents could drift run-to-run; a key
+// WE derive from the document's canonical URL cannot.
 
 import { createHash } from 'node:crypto'
 import {
@@ -21,6 +28,20 @@ import {
   type OshaUpdateCategory,
   type OshaUpdateSeverity,
 } from '@soteria/core/oshaRegWatch'
+
+// The subset of a Federal Register document (documents.json) the cron reads.
+// Every field is nullable because we request them via `fields[]` and the API
+// omits/null-fills any the document doesn't carry.
+export interface FederalRegisterDoc {
+  document_number:   string | null
+  title:             string | null
+  type:              string | null   // 'Rule' | 'Proposed Rule' | 'Notice' | ...
+  publication_date:  string | null   // ISO YYYY-MM-DD
+  effective_on:      string | null
+  comments_close_on: string | null
+  abstract:          string | null
+  html_url:          string | null
+}
 
 // One item exactly as Claude emits it under the route's json_schema. The
 // model is instructed to emit '' for absent fields rather than omit them, so
@@ -52,61 +73,30 @@ export interface NormalizedOshaUpdate {
   severity:           OshaUpdateSeverity | null
 }
 
-const OSHA_BASE_URL = 'https://www.osha.gov'
 const MAX_TEXT_CHARS = 40_000
 
-// Tags whose CONTENT is noise for an LLM reading the page. Dropped wholesale.
-const STRIP_BLOCK_RE = /<(script|style|svg|head|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi
-const HTML_COMMENT_RE = /<!--[\s\S]*?-->/g
-const ANCHOR_RE = /<a\b[^>]*?href=["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi
-const TAG_RE = /<[^>]+>/g
-
-const ENTITIES: Record<string, string> = {
-  '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"',
-  '&#39;': "'", '&apos;': "'", '&nbsp;': ' ',
-}
-
-function decodeEntities(s: string): string {
-  return s.replace(/&(?:amp|lt|gt|quot|#39|apos|nbsp);/g, m => ENTITIES[m] ?? m)
-}
-
-// Resolve an href to an absolute URL so the model can recover an item's
-// canonical source. Leaves anchors/mailto/relative-fragment links untouched.
-function absolutize(href: string, baseUrl: string): string {
-  const trimmed = href.trim()
-  if (trimmed === '') return ''
-  if (/^https?:\/\//i.test(trimmed)) return trimmed
-  if (trimmed.startsWith('//')) return `https:${trimmed}`
-  if (trimmed.startsWith('/')) return `${baseUrl}${trimmed}`
-  return trimmed
-}
-
 /**
- * Reduce raw osha.gov HTML to a compact, link-preserving plain-text payload
- * for the model. Anchors become "text (absolute-url)" so the model can
- * recover each item's canonical source URL — that URL is what computeDedupKey
- * hashes, so preserving it is load-bearing, not cosmetic.
- *
- * Intentionally lossy and regex-based: the consumer is an LLM that tolerates
- * messy text, so a DOM parser (cheerio/puppeteer) would be dependency weight
- * for no accuracy gain. Output is hard-capped so a sprawling page can't blow
- * the prompt budget.
+ * Serialize Federal Register documents into a compact, labeled text block for
+ * the model. Each document becomes a delimited record carrying its title,
+ * type, key dates, canonical URL, and abstract — the same shape the model is
+ * asked to extract back out. The URL line is load-bearing: computeDedupKey
+ * hashes the URL the model echoes, so every doc with an html_url surfaces it.
+ * Output is hard-capped so an unusually large batch can't blow the prompt.
  */
-export function htmlToLlmText(html: string, baseUrl: string = OSHA_BASE_URL): string {
-  const withLinks = html
-    .replace(STRIP_BLOCK_RE, ' ')
-    .replace(HTML_COMMENT_RE, ' ')
-    .replace(ANCHOR_RE, (_m, href: string, inner: string) => {
-      const text = decodeEntities(inner.replace(TAG_RE, ' ')).replace(/\s+/g, ' ').trim()
-      if (text === '') return ' '
-      const url = absolutize(href, baseUrl)
-      return url === '' ? ` ${text} ` : ` ${text} (${url}) `
-    })
-
-  const text = decodeEntities(withLinks.replace(TAG_RE, ' '))
-    .replace(/\s+/g, ' ')
-    .trim()
-
+export function federalRegisterDocsToLlmText(docs: FederalRegisterDoc[]): string {
+  const blocks = docs.map(doc => {
+    const lines = [
+      `Title: ${(doc.title ?? '').trim()}`,
+      `Type: ${(doc.type ?? '').trim()}`,
+      doc.publication_date  ? `Published: ${doc.publication_date}`        : null,
+      doc.effective_on      ? `Effective: ${doc.effective_on}`           : null,
+      doc.comments_close_on ? `Comments close: ${doc.comments_close_on}` : null,
+      doc.html_url          ? `URL: ${doc.html_url}`                     : null,
+      doc.abstract          ? `Abstract: ${doc.abstract.trim()}`         : null,
+    ].filter(Boolean)
+    return lines.join('\n')
+  })
+  const text = blocks.join('\n\n---\n\n')
   return text.length > MAX_TEXT_CHARS ? text.slice(0, MAX_TEXT_CHARS) : text
 }
 
@@ -160,9 +150,9 @@ export function normalizeOshaUpdate(raw: RawOshaItem): NormalizedOshaUpdate | nu
 }
 
 /**
- * Stable idempotency key for the unique constraint. Prefer the source URL
- * (an item's durable identity even if OSHA re-words the headline); fall back
- * to title + published date when no URL was recovered. Always returns a
+ * Stable idempotency key for the unique constraint. Prefer the source URL (a
+ * Federal Register document's canonical, permanent html_url); fall back to
+ * title + published date on the rare doc with no URL. Always returns a
  * non-empty hash, so a row can never collide on a NULL key.
  */
 export function computeDedupKey(item: {

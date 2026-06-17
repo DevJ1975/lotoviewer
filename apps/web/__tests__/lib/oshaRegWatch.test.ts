@@ -1,10 +1,26 @@
 import { describe, it, expect } from 'vitest'
 import {
-  htmlToLlmText,
+  federalRegisterDocsToLlmText,
   computeDedupKey,
   normalizeOshaUpdate,
+  type FederalRegisterDoc,
   type RawOshaItem,
 } from '@/lib/oshaRegWatch'
+
+// A complete Federal Register document — tests override single fields.
+function frDoc(over: Partial<FederalRegisterDoc> = {}): FederalRegisterDoc {
+  return {
+    document_number:   '2026-12345',
+    title:             'Walking-Working Surfaces; Final Rule',
+    type:              'Rule',
+    publication_date:  '2026-05-01',
+    effective_on:      '2026-07-01',
+    comments_close_on: null,
+    abstract:          'OSHA is amending its walking-working surfaces standard.',
+    html_url:          'https://www.federalregister.gov/documents/2026/05/01/2026-12345/walking-working-surfaces',
+    ...over,
+  }
+}
 
 // A complete, valid model item — tests override single fields from this.
 function rawItem(over: Partial<RawOshaItem> = {}): RawOshaItem {
@@ -12,9 +28,9 @@ function rawItem(over: Partial<RawOshaItem> = {}): RawOshaItem {
     title:          'Walking-Working Surfaces; Final Rule',
     category:       'final_rule',
     is_upcoming:    false,
-    source_url:     'https://www.osha.gov/laws-regs/rule/1910-22',
+    source_url:     'https://www.federalregister.gov/documents/2026/05/01/2026-12345/walking-working-surfaces',
     published_date: '2026-05-01',
-    effective_date: '',
+    effective_date: '2026-07-01',
     comment_close_date: '',
     impact_summary: 'Employers must inspect walking surfaces and document repairs.',
     severity:       'high',
@@ -22,57 +38,64 @@ function rawItem(over: Partial<RawOshaItem> = {}): RawOshaItem {
   }
 }
 
-describe('htmlToLlmText', () => {
-  it('drops script and style content entirely', () => {
-    const html = `
-      <head><title>nav</title></head>
-      <style>.a{color:red}</style>
-      <p>Real content</p>
-      <script>window.tracker = 'SECRET_PAYLOAD'</script>
-    `
-    const out = htmlToLlmText(html)
-    expect(out).toContain('Real content')
-    expect(out).not.toContain('SECRET_PAYLOAD')
-    expect(out).not.toContain('color:red')
-    expect(out).not.toContain('nav')
+describe('federalRegisterDocsToLlmText', () => {
+  it('serializes a document into labeled lines', () => {
+    const out = federalRegisterDocsToLlmText([frDoc()])
+    expect(out).toContain('Title: Walking-Working Surfaces; Final Rule')
+    expect(out).toContain('Type: Rule')
+    expect(out).toContain('Published: 2026-05-01')
+    expect(out).toContain('Effective: 2026-07-01')
+    expect(out).toContain('URL: https://www.federalregister.gov/documents/2026/05/01/2026-12345/walking-working-surfaces')
+    expect(out).toContain('Abstract: OSHA is amending its walking-working surfaces standard.')
   })
 
-  it('renders anchors as "text (absolute-url)" and resolves relative hrefs', () => {
-    const html = '<a href="/laws-regs/rule/1910-22">New rule</a>'
-    expect(htmlToLlmText(html)).toContain('New rule (https://www.osha.gov/laws-regs/rule/1910-22)')
+  it('omits optional fields that are absent', () => {
+    const out = federalRegisterDocsToLlmText([frDoc({ effective_on: null, comments_close_on: null, abstract: null })])
+    expect(out).not.toContain('Effective:')
+    expect(out).not.toContain('Comments close:')
+    expect(out).not.toContain('Abstract:')
+    // Required-ish labels still present.
+    expect(out).toContain('Title:')
+    expect(out).toContain('Type:')
   })
 
-  it('keeps absolute hrefs intact', () => {
-    const html = '<a href="https://www.federalregister.gov/d/2026-1">FR doc</a>'
-    expect(htmlToLlmText(html)).toContain('FR doc (https://www.federalregister.gov/d/2026-1)')
+  it('includes a comment-close line for proposed rules', () => {
+    const out = federalRegisterDocsToLlmText([frDoc({ type: 'Proposed Rule', comments_close_on: '2026-08-15' })])
+    expect(out).toContain('Comments close: 2026-08-15')
   })
 
-  it('decodes common HTML entities', () => {
-    expect(htmlToLlmText('<p>Health &amp; Safety</p>')).toContain('Health & Safety')
+  it('joins multiple documents with a delimiter', () => {
+    const out = federalRegisterDocsToLlmText([
+      frDoc({ title: 'Doc One' }),
+      frDoc({ title: 'Doc Two' }),
+    ])
+    expect(out).toContain('Doc One')
+    expect(out).toContain('Doc Two')
+    expect(out).toContain('---')
   })
 
-  it('caps output length so a huge page cannot blow the prompt budget', () => {
-    const html = `<p>${'x'.repeat(80_000)}</p>`
-    expect(htmlToLlmText(html).length).toBeLessThanOrEqual(40_000)
+  it('caps output length so a huge batch cannot blow the prompt budget', () => {
+    const docs = Array.from({ length: 50 }, () => frDoc({ abstract: 'x'.repeat(5_000) }))
+    expect(federalRegisterDocsToLlmText(docs).length).toBeLessThanOrEqual(40_000)
   })
 })
 
 describe('computeDedupKey', () => {
   it('is stable for the same source URL (idempotency)', () => {
-    const a = computeDedupKey({ source_url: 'https://www.osha.gov/x', title: 'A', published_date: '2026-05-01' })
-    const b = computeDedupKey({ source_url: 'https://www.osha.gov/x', title: 'A', published_date: '2026-05-01' })
+    const a = computeDedupKey({ source_url: 'https://www.federalregister.gov/d/x', title: 'A', published_date: '2026-05-01' })
+    const b = computeDedupKey({ source_url: 'https://www.federalregister.gov/d/x', title: 'A', published_date: '2026-05-01' })
     expect(a).toBe(b)
   })
 
   it('ignores title/date when a URL is present (survives headline edits)', () => {
-    const a = computeDedupKey({ source_url: 'https://www.osha.gov/x', title: 'Old headline', published_date: '2026-05-01' })
-    const b = computeDedupKey({ source_url: 'https://www.osha.gov/x', title: 'New headline', published_date: null })
+    const a = computeDedupKey({ source_url: 'https://www.federalregister.gov/d/x', title: 'Old headline', published_date: '2026-05-01' })
+    const b = computeDedupKey({ source_url: 'https://www.federalregister.gov/d/x', title: 'New headline', published_date: null })
     expect(a).toBe(b)
   })
 
   it('differs for different URLs', () => {
-    const a = computeDedupKey({ source_url: 'https://www.osha.gov/x', title: 'A', published_date: null })
-    const b = computeDedupKey({ source_url: 'https://www.osha.gov/y', title: 'A', published_date: null })
+    const a = computeDedupKey({ source_url: 'https://www.federalregister.gov/d/x', title: 'A', published_date: null })
+    const b = computeDedupKey({ source_url: 'https://www.federalregister.gov/d/y', title: 'A', published_date: null })
     expect(a).not.toBe(b)
   })
 
