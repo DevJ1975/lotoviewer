@@ -1,4 +1,4 @@
--- Migration 234: RCA multi-root + 5-Whys branching + AI provenance.
+-- Migration 236: RCA multi-root + 5-Whys branching + AI provenance.
 --
 -- Rebuilds the 5 Whys / RCA tool to address direct user feedback that it
 -- "is not a good tool." Three schema changes, all additive and backward
