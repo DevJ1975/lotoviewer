@@ -2,6 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import { ASSISTANT_TOOLS, type ToolContext, type UserRole } from '@/lib/ai/tools'
 import type { OperatorAgentId, OperatorToolDef } from './types'
 import { roleMeets } from './types'
+import { fileNearMiss, submitBbsObservation } from './writeTools'
 
 // The Operator Console tool registry.
 //
@@ -10,10 +11,11 @@ import { roleMeets } from './types'
 // and the cached prompt prefix lean. runOperatorTool re-checks the role and
 // short-circuits regulated actions into the approval queue.
 //
-// Slice 1 wires the READ tools by reusing the read-only assistant's existing
-// handlers (one definition, imported — never duplicated). Write tools and the
-// regulated carve-out tools land in later slices; the machinery here already
-// supports them via ToolScope.
+// Slice 1 wired the READ tools by reusing the read-only assistant's existing
+// handlers (one definition, imported — never duplicated). Slice 3 adds the
+// first hands-free WRITE tools (see ./writeTools); the regulated carve-out
+// tools still land in a later slice. The machinery here already supports both
+// via ToolScope — runOperatorTool runs read + write inline and refuses regulated.
 
 function refuse(reason: string): string {
   return JSON.stringify({ ok: false, refusal: reason })
@@ -45,6 +47,7 @@ export const OPERATOR_TOOLS: Record<OperatorAgentId, Record<string, OperatorTool
     sharedRead('recent_incidents', 'incidents'),
     sharedRead('near_misses_recent', 'incidents'),
     sharedRead('incident_risk_score', 'incidents'),
+    fileNearMiss,
   ]),
   risk: byName([
     sharedRead('list_risks', 'risk'),
@@ -69,6 +72,7 @@ export const OPERATOR_TOOLS: Record<OperatorAgentId, Record<string, OperatorTool
   ]),
   bbs: byName([
     sharedRead('bbs_summary', 'bbs'),
+    submitBbsObservation,
   ]),
   osha: byName([
     sharedRead('scorecard_kpis', 'osha', 'admin'),
