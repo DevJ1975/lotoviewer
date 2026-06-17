@@ -51,20 +51,21 @@ export function FocusCard({
   }
 
   return (
-    <section className="animate-panel-in rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+    <section aria-labelledby="focus-card-heading" className="animate-panel-in rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-navy/10 text-brand-navy dark:bg-brand-yellow/15 dark:text-brand-yellow">
             <Sparkles className="h-4 w-4" />
           </span>
           <div>
-            <h2 className="text-sm font-black text-slate-900 dark:text-slate-100">Where to focus</h2>
+            <h2 id="focus-card-heading" className="text-sm font-black text-slate-900 dark:text-slate-100">Where to focus</h2>
             <p className="ops-muted text-xs">AI guidance over your deterministic risk drivers.</p>
           </div>
         </div>
         <button
           type="button"
           onClick={analyze}
+          aria-busy={loading}
           disabled={loading || !tenantId}
           className="motion-press flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-brand-navy px-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-navy/90 disabled:opacity-50 dark:bg-brand-yellow dark:text-slate-950 dark:hover:bg-brand-yellow/90"
         >
@@ -74,7 +75,7 @@ export function FocusCard({
       </div>
 
       {error && (
-        <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/40 dark:text-amber-100">
+        <p role="alert" className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/40 dark:text-amber-100">
           {error}
         </p>
       )}
@@ -86,7 +87,12 @@ export function FocusCard({
       )}
 
       {result && (
-        <div className="mt-3 space-y-3">
+        <div role="status" aria-live="polite" className="mt-3 space-y-3">
+          {result.source === 'fallback' && (
+            <p className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
+              Top drivers (deterministic) — AI analysis unavailable
+            </p>
+          )}
           <p className="text-sm text-slate-700 dark:text-slate-200">{result.rationale}</p>
           <ol className="space-y-2">
             {result.focusAreas.map((area, i) => {
