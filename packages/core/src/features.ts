@@ -990,6 +990,22 @@ export const FEATURES: FeatureDef[] = [
     color:       'teal',
   },
 
+  // ── OSHA Regulatory Watch module ────────────────────────────────────────
+  // AI-summarized OSHA regulation updates + upcoming changes, surfaced ONLY
+  // as a self-gated panel on the home dashboard — there's no page or drawer
+  // link, so href:null + internal:true (the loto-review-portal precedent:
+  // live + tenant-toggleable, surfaced via inline UI rather than the drawer).
+  {
+    id:          'osha-reg-watch',
+    name:        'OSHA Regulatory Watch',
+    description: 'AI-summarized OSHA regulation updates and upcoming changes, on the home dashboard',
+    href:        null,
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    internal:    true,
+  },
+
   // ── EM-385 Compliance module ────────────────────────────────────────────
   // USACE EM 385-1-1 is document-and-records work: per contract, a contractor
   // must produce and keep current an Accident Prevention Plan, Activity Hazard

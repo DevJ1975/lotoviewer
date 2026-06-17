@@ -26,6 +26,7 @@ import JhaKpiPanel              from './JhaKpiPanel'
 import IncidentKpiPanel         from './IncidentKpiPanel'
 import BBSKpiPanel              from './BBSKpiPanel'
 import OpenActionsPanel         from './OpenActionsPanel'
+import OshaRegWatchPanel        from './OshaRegWatchPanel'
 
 // Multi-module dashboard — the legacy default home rendered by
 // app/page.tsx for tenants who use more than one safety module.
@@ -191,6 +192,11 @@ export default function MultiModuleDashboard({ embedded = false }: { embedded?: 
       {/* Behavior-Based Safety — QR-driven observation program with
           gamification leaderboard. Self-gates via isModuleVisible. */}
       <BBSKpiPanel />
+
+      {/* OSHA Regulatory Watch — AI-summarized regulation updates + upcoming
+          changes. Self-gates via isModuleVisible('osha-reg-watch'); the feed
+          is global, so it shows the same rows to every tenant. */}
+      <OshaRegWatchPanel />
 
       <OpenActionsPanel />
 
