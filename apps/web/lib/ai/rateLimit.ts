@@ -39,6 +39,7 @@ export type AiSurface =
   | 'loto-audit-ehs'
   | 'loto-audit-author'
   | 'loto-audit-regulator'
+  | 'scorecard-focus'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
@@ -94,6 +95,10 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   // program-level call per run), so it rides the same bursty full-run fan-out as
   // the other audit surfaces — same generous caps.
   'loto-audit-regulator':             { perHour: 600, perDay: 4000 },
+  // EHS scorecard "where to focus" — an interactive, admin-triggered advisory
+  // over the deterministic risk drivers. One call per "analyze" click; an admin
+  // iterates a handful of times per review session. Conversational-class caps.
+  'scorecard-focus':                  { perHour: 20, perDay: 100 },
 }
 
 interface CheckArgs {

@@ -142,7 +142,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       tile('loto', 'public-review-link',   null,
         Share2, 'Public review link',
         'Tenant-wide anonymous URL for supervisors walking the floor — photo replacements, flag for review, 72-hour expiry.'),
-      tile('loto', 'audit',                null,
+      tile('loto', 'multi-agent-audit',    null,
         ScanSearch, 'Multi-agent audit',
         'FPE / Data-Scientist / EHS agents verify every placard photo + procedure against Cal/OSHA; fixes are approved via a review link before apply, with snapshot rollback.'),
     ],

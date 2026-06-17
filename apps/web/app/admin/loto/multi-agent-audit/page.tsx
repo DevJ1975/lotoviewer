@@ -9,7 +9,7 @@ import { toast } from '@/components/ui/sonner'
 import type { AuditRunStatus, LotoAuditRun } from '@/lib/loto/audit/schemas'
 import { authHeaders } from './_lib/authHeaders'
 
-// /admin/loto/audit — the multi-agent LOTO audit. Lists the tenant's audit
+// /admin/loto/multi-agent-audit — the multi-agent LOTO audit. Lists the tenant's audit
 // runs (newest first) and starts new ones. Starting a run kicks the engine in
 // the background (202) and returns a run_id; the detail page polls progress.
 //
@@ -226,7 +226,7 @@ export default function AuditListPage() {
                   </td>
                   <td className="px-4 py-3 align-top text-right">
                     <Link
-                      href={`/admin/loto/audit/${run.id}`}
+                      href={`/admin/loto/multi-agent-audit/${run.id}`}
                       className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                     >
                       Open
