@@ -510,6 +510,16 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
   },
   {
+    id:          'chemicals-library',
+    name:        'SDS Library',
+    description: 'Search the shared library and adopt common chemicals into your catalog',
+    href:        '/chemicals/library',
+    category:    'safety',
+    parent:      'chemicals',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
     id:          'chemicals-review',
     name:        'SDS Review Queue',
     description: 'Review AI-parsed SDS fields awaiting approval',
