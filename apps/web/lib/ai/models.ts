@@ -123,6 +123,27 @@ export const MODEL_BY_SURFACE = {
   // the other structured-output surfaces. The route never writes RCA nodes
   // or actions; acceptance is an explicit human step. Sonnet.
   'rca-assist':                       SONNET,
+  // ── Operator Console (multi-agent: orchestrator + domain sub-agents) ──────
+  // A dedicated conversational surface where an agent operates the SaaS and
+  // reconfigures the home page. Barbell routing, same posture as the LOTO
+  // audit: the orchestrator (routing + recognizing life-safety carve-outs) and
+  // the three sub-agents that CONTAIN carve-out actions (loto, permits, osha)
+  // run on Opus — the strongest reasoning where a wrong call is most costly.
+  // The remaining sub-agents do ordinary, reversible work and run on Sonnet.
+  // Every regulated action is staged for human approval regardless of model.
+  'operator-orchestrator':            OPUS,
+  'operator-incidents':               SONNET,
+  'operator-risk':                    SONNET,
+  'operator-loto':                    OPUS,
+  'operator-permits':                 OPUS,
+  'operator-chem':                    SONNET,
+  'operator-inspections':             SONNET,
+  'operator-training':                SONNET,
+  'operator-bbs':                     SONNET,
+  'operator-osha':                    OPUS,
+  'operator-admin':                   SONNET,
+  'operator-home':                    SONNET,
+  'operator-knowledge':               SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE
