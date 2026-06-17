@@ -1,7 +1,6 @@
 import type { Worksheet } from 'exceljs'
 import type { IncidentRiskResult } from '@soteria/core/incidentRiskModel'
-import { mean, median, stdDev, coefficientOfVariation, skewness } from '@soteria/core/statistics'
-import { forecastCount, cChartLimits } from '@soteria/core/forecast'
+import { summarizeRecordableDistribution } from '@soteria/core/scorecardDistribution'
 
 // Multi-tab Excel (.xlsx) export of the EHS Scorecard. The same numbers the
 // page and the PDF show, in a workbook an analyst can pivot — and that imports
@@ -199,36 +198,35 @@ export async function buildScorecardWorkbook(input: ScorecardWorkbookInput): Pro
     addRow(ws, [])
 
     const counts = (inc.recordablesByMonth ?? []).map(m => num(m.count))
-    if (counts.length < 2) {
-      addRow(ws, ['Insufficient data', `${counts.length} month(s) — need ≥ 2`])
+    const dist = summarizeRecordableDistribution(counts)
+    if (dist.n < 2) {
+      addRow(ws, ['Insufficient data', `${dist.n} month(s) — need ≥ 2`])
     } else {
       addHeader(ws, ['Statistic', 'Value'])
-      addRow(ws, ['Months observed (n)', counts.length])
-      addRow(ws, ['Mean', round(mean(counts), 2)])
-      addRow(ws, ['Median', round(median(counts), 2)])
-      addRow(ws, ['Std. deviation', round(stdDev(counts), 2)])
-      addRow(ws, ['Coefficient of variation', round(coefficientOfVariation(counts), 2)])
-      addRow(ws, ['Skewness', round(skewness(counts), 2)])
-      addRow(ws, ['Min', Math.min(...counts)])
-      addRow(ws, ['Max', Math.max(...counts)])
+      addRow(ws, ['Months observed (n)', dist.n])
+      addRow(ws, ['Mean', round(dist.mean, 2)])
+      addRow(ws, ['Median', round(dist.median, 2)])
+      addRow(ws, ['Std. deviation', round(dist.stdDev, 2)])
+      addRow(ws, ['Coefficient of variation', round(dist.cv, 2)])
+      addRow(ws, ['Skewness', round(dist.skewness, 2)])
+      addRow(ws, ['Min', dist.min])
+      addRow(ws, ['Max', dist.max])
       addRow(ws, [])
 
-      const limits = cChartLimits(counts)
-      if (limits) {
+      if (dist.cChart) {
         addHeader(ws, ['c-chart control limits', 'Value'])
-        addRow(ws, ['Center line (mean count)', round(limits.centerLine, 2)])
-        addRow(ws, ['Upper control limit (UCL)', round(limits.ucl, 2)])
-        addRow(ws, ['Lower control limit (LCL)', round(limits.lcl, 2)])
+        addRow(ws, ['Center line (mean count)', round(dist.cChart.centerLine, 2)])
+        addRow(ws, ['Upper control limit (UCL)', round(dist.cChart.ucl, 2)])
+        addRow(ws, ['Lower control limit (LCL)', round(dist.cChart.lcl, 2)])
         addRow(ws, [])
       }
 
-      const fc = forecastCount(counts)
       addHeader(ws, ['Next-month forecast', 'Value'])
-      if (fc) {
-        addRow(ws, ['Expected recordables', round(fc.expected, 2)])
-        addRow(ws, ['95% interval — lower', round(fc.lower, 2)])
-        addRow(ws, ['95% interval — upper', round(fc.upper, 2)])
-        addRow(ws, ['Reliable trend?', fc.hasTrend ? 'Yes' : 'No (run-rate)'])
+      if (dist.forecast) {
+        addRow(ws, ['Expected recordables', round(dist.forecast.expected, 2)])
+        addRow(ws, ['95% interval — lower', round(dist.forecast.lower, 2)])
+        addRow(ws, ['95% interval — upper', round(dist.forecast.upper, 2)])
+        addRow(ws, ['Reliable trend?', dist.forecast.hasTrend ? 'Yes' : 'No (run-rate)'])
       } else {
         addRow(ws, ['Forecast', 'insufficient history'])
       }

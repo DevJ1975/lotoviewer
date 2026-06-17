@@ -1,10 +1,24 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.12.0'
+const CURRENT_VERSION = '1.13.0'
 const LAST_UPDATED    = '2026-06-15'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.13.0',
+    date:    '2026-06-15',
+    changes: [
+      'PDF parity: the branded PDF now includes the recordable distribution + ' +
+      'next-month forecast (mean, median, spread, c-chart control limits, and ' +
+      'the Poisson prediction interval) — the same numbers as the Excel ' +
+      '“Distribution” tab, computed once and shared by both exports.',
+      'Where to focus: the card now clearly flags when it is showing the ' +
+      'deterministic top drivers because AI analysis was unavailable, so the ' +
+      'fallback is never mistaken for an AI-written read. Screen readers now ' +
+      'announce the results as they load.',
+    ],
+  },
   {
     version: '1.12.0',
     date:    '2026-06-15',

@@ -5,6 +5,7 @@ import {
   sanitizeForWinAnsi, drawBrandMark, reserveSpace, type DrawCtx,
 } from './pdfShared'
 import type { IncidentRiskResult } from '@soteria/core/incidentRiskModel'
+import { summarizeRecordableDistribution } from '@soteria/core/scorecardDistribution'
 
 // Comprehensive, branded EHS Scorecard PDF. Replaces the previous minimal export
 // (LOTO program metrics only). The route assembles the input — recomputing the
@@ -130,6 +131,39 @@ function drawMonthlyTrend(ctx: DrawCtx, rows: { label: string; nearMiss: number;
   ctx.y -= 16
 }
 
+// ── Recordable distribution & forecast (same numbers as the Excel tab) ───────
+function fmtStat(v: number | null, dp = 2): string {
+  return v === null ? '—' : v.toFixed(dp)
+}
+
+function drawDistribution(ctx: DrawCtx, counts: number[]): void {
+  drawSectionBar(ctx, 'Recordable distribution & forecast (monthly)')
+  const dist = summarizeRecordableDistribution(counts)
+  if (dist.n < 2) {
+    drawBullets(ctx, ['Insufficient data — need at least 2 months of recordable history.'])
+    return
+  }
+  // Counts are rare events: c-chart (mean ±3σ) + Poisson forecast, not a bell.
+  drawKeyValue(ctx, 'Months observed (n)', String(dist.n))
+  drawKeyValue(ctx, 'Mean', fmtStat(dist.mean))
+  drawKeyValue(ctx, 'Median', fmtStat(dist.median))
+  drawKeyValue(ctx, 'Std. deviation', fmtStat(dist.stdDev))
+  drawKeyValue(ctx, 'Coefficient of variation', fmtStat(dist.cv))
+  drawKeyValue(ctx, 'Skewness', fmtStat(dist.skewness))
+  drawKeyValue(ctx, 'Min / Max', `${fmtStat(dist.min, 0)} / ${fmtStat(dist.max, 0)}`)
+  if (dist.cChart) {
+    drawKeyValue(ctx, 'c-chart (CL / UCL / LCL)',
+      `${fmtStat(dist.cChart.centerLine)} / ${fmtStat(dist.cChart.ucl)} / ${fmtStat(dist.cChart.lcl)}`)
+  }
+  if (dist.forecast) {
+    drawKeyValue(ctx, 'Next-month forecast',
+      `${fmtStat(dist.forecast.expected)} (95% ${fmtStat(dist.forecast.lower)}–${fmtStat(dist.forecast.upper)})`)
+    drawKeyValue(ctx, 'Reliable trend?', dist.forecast.hasTrend ? 'Yes' : 'No (run-rate)')
+  } else {
+    drawKeyValue(ctx, 'Next-month forecast', 'insufficient history')
+  }
+}
+
 // ── Risk driver table with native contribution bars ─────────────────────────
 function drawDriverTable(ctx: DrawCtx, risk: IncidentRiskResult): void {
   const drivers = risk.drivers.filter(d => d.contribution > 0)
@@ -226,6 +260,13 @@ export async function buildScorecardPdf(input: ScorecardPdfInput): Promise<Uint8
     drawDivider(ctx)
     drawSectionBar(ctx, 'Recordable & near-miss trend (monthly)')
     drawMonthlyTrend(ctx, monthly)
+  }
+
+  // ── Recordable distribution & forecast (parity with the Excel tab) ────────
+  const recCounts = (inc.recordablesByMonth ?? []).map(m => num(m.count))
+  if (recCounts.length > 0) {
+    drawDivider(ctx)
+    drawDistribution(ctx, recCounts)
   }
 
   // ── Investigation & reporting quality ─────────────────────────────────────

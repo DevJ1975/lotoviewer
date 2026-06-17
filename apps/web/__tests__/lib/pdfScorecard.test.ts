@@ -72,4 +72,14 @@ describe('buildScorecardPdf', () => {
     }))
     expect(await pageCount(bytes)).toBeGreaterThanOrEqual(1)
   })
+
+  it('renders the distribution section and degrades on sparse recordable history', async () => {
+    // One month of recordables exercises the distribution section's
+    // insufficient-data path (the full-input cases above cover the populated path).
+    const bytes = await buildScorecardPdf(fullInput({
+      incident: { ...fullInput().incident, recordablesByMonth: [{ month: '2025-01', count: 2 }] },
+    }))
+    expect(bytes.byteLength).toBeGreaterThan(800)
+    expect(await pageCount(bytes)).toBeGreaterThanOrEqual(1)
+  })
 })
