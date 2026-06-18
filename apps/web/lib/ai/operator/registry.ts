@@ -1,9 +1,11 @@
 import type Anthropic from '@anthropic-ai/sdk'
 import { ASSISTANT_TOOLS, type ToolContext, type UserRole } from '@/lib/ai/tools'
 import type { OperatorAgentId, OperatorToolDef } from './types'
-import { roleMeets } from './types'
+import { roleMeets, isRegulatedTool } from './types'
 import { fileNearMiss, submitBbsObservation } from './writeTools'
 import { getHomeConfig, setDefaultLandingPath, setModuleVisibility } from './homeTools'
+import { authorizeHotWorkPermit } from './regulatedTools'
+import { stageRegulatedAction } from './actionQueue'
 
 // The Operator Console tool registry.
 //
@@ -13,10 +15,11 @@ import { getHomeConfig, setDefaultLandingPath, setModuleVisibility } from './hom
 // short-circuits regulated actions into the approval queue.
 //
 // Slice 1 wired the READ tools by reusing the read-only assistant's existing
-// handlers (one definition, imported — never duplicated). Slice 3 adds the
-// first hands-free WRITE tools (see ./writeTools); the regulated carve-out
-// tools still land in a later slice. The machinery here already supports both
-// via ToolScope — runOperatorTool runs read + write inline and refuses regulated.
+// handlers (one definition, imported — never duplicated). Slice 3 added the
+// first hands-free WRITE tools (see ./writeTools). Slice 5 wires the first
+// REGULATED carve-out (see ./regulatedTools): runOperatorTool runs read + write
+// inline via their `handler`, and STAGES a regulated tool via its `stage` into
+// agent_action_queue (./actionQueue) — it is never executed inline.
 
 function refuse(reason: string): string {
   return JSON.stringify({ ok: false, refusal: reason })
@@ -61,6 +64,7 @@ export const OPERATOR_TOOLS: Record<OperatorAgentId, Record<string, OperatorTool
   ]),
   permits: byName([
     sharedRead('active_permits', 'permits'),
+    authorizeHotWorkPermit,
   ]),
   chem: byName([
     sharedRead('find_chemical', 'chem'),
@@ -129,15 +133,25 @@ export async function runOperatorTool(
     return refuse(`Your role (${ctx.role}) is not permitted to run '${name}'. A ${tool.minRole} can do this.`)
   }
 
-  if (tool.scope.kind === 'regulated') {
-    // Carve-out: a regulated, life-safety action is NEVER executed inline. It
-    // must be staged for a named human's one-tap approval (the agent_action_queue,
-    // shipped in a later slice). Refuse until that path is wired so a regulated
-    // tool can never silently take effect.
-    return refuse(
-      `'${name}' is a regulated action (${tool.scope.action}) that requires approval by a qualified human. ` +
-      `The approval queue is not yet enabled in this build.`,
-    )
+  if (isRegulatedTool(tool)) {
+    // Carve-out: a regulated, life-safety action is NEVER executed inline. The
+    // tool's `stage` only validates the input and builds the approval summary; we
+    // then record it in agent_action_queue for a qualified human's one-tap
+    // approval. The model is told it is staged, not done.
+    const staged = await tool.stage(input, ctx)
+    if (!staged.ok) return fail(staged.error)
+    const res = await stageRegulatedAction(ctx, tool.scope.action, staged.payload, staged.summary)
+    if (!res.ok) return fail(res.error)
+    return JSON.stringify({
+      ok: true,
+      staged: true,
+      queueId: res.queueId,
+      action: tool.scope.action,
+      authorizingRole: res.authorizingRole,
+      note:
+        `Staged for approval — this regulated action will NOT take effect until a ${res.authorizingRole} ` +
+        `approves it. Summary: "${staged.summary}".`,
+    })
   }
 
   try {

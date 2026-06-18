@@ -90,3 +90,44 @@ export function authorizingRoleFor(action: CarveOutAction): AuthorizingRole {
 export function isReversibleAction(action: CarveOutAction): boolean {
   return CARVE_OUT_ACTIONS[action].reversible
 }
+
+// ── Staged-action lifecycle ─────────────────────────────────────────────────
+//
+// A staged carve-out is recorded as a queue row that moves through this small
+// lifecycle. It is ONE-TAP: a qualified human either applies it (it takes effect
+// immediately) or rejects it — there is no separate "approved-but-not-applied"
+// resting state. A reversible applied action can later be rolled back.
+//
+// This lives in @soteria/core so the DB migration (the CHECK constraint), the
+// engine service, and any approver UI agree on exactly one lifecycle.
+export type AgentActionStatus = 'pending' | 'applied' | 'rejected' | 'rolled_back'
+
+export const AGENT_ACTION_STATUSES: readonly AgentActionStatus[] =
+  ['pending', 'applied', 'rejected', 'rolled_back']
+
+const AGENT_ACTION_TRANSITIONS: Record<AgentActionStatus, readonly AgentActionStatus[]> = {
+  pending:     ['applied', 'rejected'],
+  applied:     ['rolled_back'],
+  rejected:    [],
+  rolled_back: [],
+}
+
+/**
+ * True when a staged action may move `from → to`. A rollback (→ 'rolled_back')
+ * is additionally gated on the action being reversible: an irreversible applied
+ * action (e.g. an OSHA ITA submission, which cannot be un-sent) can never be
+ * rolled back, so passing `{ reversible: false }` forbids that edge.
+ */
+export function canTransition(
+  from: AgentActionStatus,
+  to: AgentActionStatus,
+  opts: { reversible?: boolean } = {},
+): boolean {
+  if (to === 'rolled_back' && opts.reversible === false) return false
+  return AGENT_ACTION_TRANSITIONS[from].includes(to)
+}
+
+/** A status from which there is no legal next state (rejected / rolled_back). */
+export function isTerminalAgentActionStatus(status: AgentActionStatus): boolean {
+  return AGENT_ACTION_TRANSITIONS[status].length === 0
+}

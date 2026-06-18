@@ -10,7 +10,7 @@ let nextResult: { data: unknown; error: { message: string } | null }
 function makeBuilder() {
   const b: Record<string, unknown> = {}
   const ret = () => b
-  for (const m of ['select', 'order', 'limit', 'ilike', 'in', 'lt', 'lte', 'gt', 'gte', 'not', 'is', 'maybeSingle']) {
+  for (const m of ['select', 'insert', 'update', 'order', 'limit', 'ilike', 'in', 'lt', 'lte', 'gt', 'gte', 'not', 'is', 'maybeSingle', 'single']) {
     b[m] = ret
   }
   b.eq = (col: string, val: unknown) => { recorder.eq.push([col, val]); return b }
@@ -90,22 +90,45 @@ describe('runOperatorTool', () => {
     expect(badTool.ok).toBe(false)
   })
 
-  it('NEVER executes a regulated carve-out handler inline — it stages instead', async () => {
-    let executed = false
+  it('stages a regulated carve-out via its `stage` instead of executing — and records it', async () => {
+    // A regulated tool has no inline handler at all (the union forbids it); its
+    // `stage` only validates + summarizes. runOperatorTool must route the result
+    // into agent_action_queue and tell the model it is staged, not done.
+    let staged = false
     OPERATOR_TOOLS.loto.__test_certify = {
       definition: { name: '__test_certify', description: 'test', input_schema: { type: 'object', properties: {} } },
       agent: 'loto',
       minRole: 'admin',
       scope: { kind: 'regulated', action: 'loto_zero_energy_cert' },
-      handler: async () => { executed = true; return JSON.stringify({ ok: true }) },
+      stage: async () => { staged = true; return { ok: true, payload: { foo: 'bar' }, summary: 'Certify zero-energy on press-3' } },
     }
+    nextResult = { data: { id: 'q-staged' }, error: null } // the agent_action_queue insert
     try {
       const out = JSON.parse(await runOperatorTool('loto', '__test_certify', {}, admin))
-      expect(executed).toBe(false) // the structural carve-out: handler must not run
-      expect(out.ok).toBe(false)
-      expect(out.refusal).toMatch(/approval/i)
+      expect(staged).toBe(true)
+      expect(out).toMatchObject({ ok: true, staged: true, queueId: 'q-staged', action: 'loto_zero_energy_cert', authorizingRole: 'admin' })
+      expect(out.note).toMatch(/will NOT take effect/i)
+      expect(recorder.tables).toContain('agent_action_queue')
     } finally {
       delete OPERATOR_TOOLS.loto.__test_certify
+    }
+  })
+
+  it('returns a regulated tool\'s stage refusal without recording anything', async () => {
+    OPERATOR_TOOLS.loto.__test_reject = {
+      definition: { name: '__test_reject', description: 'test', input_schema: { type: 'object', properties: {} } },
+      agent: 'loto',
+      minRole: 'admin',
+      scope: { kind: 'regulated', action: 'loto_zero_energy_cert' },
+      stage: async () => ({ ok: false, error: 'equipment not found' }),
+    }
+    try {
+      const out = JSON.parse(await runOperatorTool('loto', '__test_reject', {}, admin))
+      expect(out.ok).toBe(false)
+      expect(out.error).toMatch(/equipment not found/i)
+      expect(recorder.tables).not.toContain('agent_action_queue')
+    } finally {
+      delete OPERATOR_TOOLS.loto.__test_reject
     }
   })
 })

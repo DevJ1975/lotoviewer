@@ -5,6 +5,9 @@ import {
   authorizingRoleFor,
   isReversibleAction,
   isCarveOutAction,
+  AGENT_ACTION_STATUSES,
+  canTransition,
+  isTerminalAgentActionStatus,
 } from '@soteria/core/operatorActions'
 
 describe('carve-out action registry', () => {
@@ -31,5 +34,36 @@ describe('carve-out action registry', () => {
   it('isCarveOutAction narrows only known actions', () => {
     expect(isCarveOutAction('permit_hot_work_auth')).toBe(true)
     expect(isCarveOutAction('delete_everything')).toBe(false)
+  })
+})
+
+describe('staged-action lifecycle', () => {
+  it('enumerates exactly the four lifecycle states', () => {
+    expect([...AGENT_ACTION_STATUSES]).toEqual(['pending', 'applied', 'rejected', 'rolled_back'])
+  })
+
+  it('allows one-tap pending → applied | rejected', () => {
+    expect(canTransition('pending', 'applied')).toBe(true)
+    expect(canTransition('pending', 'rejected')).toBe(true)
+  })
+
+  it('forbids skipping or reviving terminal states', () => {
+    expect(canTransition('rejected', 'applied')).toBe(false)
+    expect(canTransition('applied', 'rejected')).toBe(false)
+    expect(canTransition('rolled_back', 'applied')).toBe(false)
+    expect(canTransition('pending', 'rolled_back')).toBe(false)
+  })
+
+  it('gates applied → rolled_back on reversibility', () => {
+    expect(canTransition('applied', 'rolled_back')).toBe(true)
+    expect(canTransition('applied', 'rolled_back', { reversible: true })).toBe(true)
+    expect(canTransition('applied', 'rolled_back', { reversible: false })).toBe(false)
+  })
+
+  it('marks rejected and rolled_back as terminal', () => {
+    expect(isTerminalAgentActionStatus('rejected')).toBe(true)
+    expect(isTerminalAgentActionStatus('rolled_back')).toBe(true)
+    expect(isTerminalAgentActionStatus('pending')).toBe(false)
+    expect(isTerminalAgentActionStatus('applied')).toBe(false)
   })
 })

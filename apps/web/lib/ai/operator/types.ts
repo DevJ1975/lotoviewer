@@ -27,17 +27,14 @@ export type OperatorAgentId =
   | 'home'
   | 'knowledge'
 
-// How a tool behaves when invoked:
-//   read      — a query; always safe, executes for any role that meets minRole.
-//   write     — an ordinary, autonomous mutation; executes hands-free.
-//   regulated — a legally-gated, life-safety action; NEVER executes inline.
-//               runOperatorTool routes it to the human-approval queue.
-export type ToolScope =
-  | { kind: 'read' }
-  | { kind: 'write' }
-  | { kind: 'regulated'; action: CarveOutAction }
+// What a regulated tool's `stage` returns: either a validated payload + a
+// one-line summary for the approval card, or a refusal the model sees as the
+// tool_result. The payload is what the apply step later replays.
+export type StageResult =
+  | { ok: true; payload: Record<string, unknown>; summary: string }
+  | { ok: false; error: string }
 
-export interface OperatorToolDef {
+interface OperatorToolBase {
   definition: Anthropic.Tool
   /** Which sub-agent owns this tool. */
   agent: OperatorAgentId
@@ -45,10 +42,40 @@ export interface OperatorToolDef {
    *  the tool from the model's schema entirely (defense in depth: runOperatorTool
    *  re-checks, and the handler/DB enforce too). */
   minRole: UserRole
-  scope: ToolScope
-  /** Returns a string the model sees as the tool_result. Same contract as the
-   *  read-only assistant's ToolDef.handler. */
-  handler: (input: unknown, ctx: ToolContext) => Promise<string>
+}
+
+// How a tool behaves when invoked:
+//   read      — a query; always safe, executes for any role that meets minRole.
+//   write     — an ordinary, autonomous mutation; executes hands-free.
+//   regulated — a legally-gated, life-safety action; NEVER executes inline.
+//
+// These are separate shapes on purpose. A read/write tool carries a `handler`
+// runOperatorTool invokes inline; a regulated tool carries `stage`, which only
+// validates the input and builds the approval-card summary — runOperatorTool
+// routes the result to agent_action_queue. Splitting them this way means a
+// regulated tool STRUCTURALLY cannot carry an inline handler (illegal states
+// unrepresentable), so the carve-out can never be executed by accident.
+export type OperatorToolDef =
+  | (OperatorToolBase & {
+      scope: { kind: 'read' } | { kind: 'write' }
+      /** Returns a string the model sees as the tool_result. Same contract as the
+       *  read-only assistant's ToolDef.handler. */
+      handler: (input: unknown, ctx: ToolContext) => Promise<string>
+    })
+  | (OperatorToolBase & {
+      scope: { kind: 'regulated'; action: CarveOutAction }
+      /** Validate the input and describe the action for the approval card. Never
+       *  performs the mutation — that is the engine's apply step (./actionQueue). */
+      stage: (input: unknown, ctx: ToolContext) => Promise<StageResult>
+    })
+
+export type RegulatedToolDef = Extract<OperatorToolDef, { scope: { kind: 'regulated' } }>
+
+/** Narrows a tool to its regulated variant (which carries `stage`, not `handler`).
+ *  A guard is needed because the discriminant lives on the nested `scope`, which
+ *  TS won't use to narrow the outer union on its own. */
+export function isRegulatedTool(tool: OperatorToolDef): tool is RegulatedToolDef {
+  return tool.scope.kind === 'regulated'
 }
 
 // Role ranking. Higher rank can do everything a lower rank can. Mirrors the
