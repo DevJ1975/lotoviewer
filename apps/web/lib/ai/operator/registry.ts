@@ -3,6 +3,7 @@ import { ASSISTANT_TOOLS, type ToolContext, type UserRole } from '@/lib/ai/tools
 import type { OperatorAgentId, OperatorToolDef } from './types'
 import { roleMeets } from './types'
 import { fileNearMiss, submitBbsObservation } from './writeTools'
+import { getHomeConfig, setDefaultLandingPath, setModuleVisibility } from './homeTools'
 
 // The Operator Console tool registry.
 //
@@ -80,9 +81,14 @@ export const OPERATOR_TOOLS: Record<OperatorAgentId, Record<string, OperatorTool
   admin: byName([
     sharedRead('list_departments', 'admin', 'admin'),
   ]),
-  // Home-config tools land in Slice 4; the sub-agent exists so the orchestrator
-  // can already route to it (it will just explain it has nothing to do yet).
-  home: byName([]),
+  // Home-config tools (Slice 4, Phase A): inspect, then change the default
+  // landing path and per-module visibility. Branding, assistant suggestions, and
+  // command-center signals come in a later phase.
+  home: byName([
+    getHomeConfig,
+    setDefaultLandingPath,
+    setModuleVisibility,
+  ]),
   knowledge: byName([
     sharedRead('compliance_obligations_due', 'knowledge', 'viewer'),
     sharedRead('navigate_to', 'knowledge', 'viewer'),
