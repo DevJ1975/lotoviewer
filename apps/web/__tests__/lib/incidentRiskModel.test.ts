@@ -11,6 +11,7 @@ const CLEAN: IncidentRiskFeatures = {
   nearMissRecent: 20, bbsSafe: 40, bbsUnsafe: 5,
   capasOverdue: 0, riskReviewsOverdue: 0, highRisksUncontrolled: 0,
   trainingExpired: 0, atmFailed: 0, atmTotal: 30,
+  hazardHuntsDue: 8, hazardHuntsDone: 8, hhFindingsOpened: 3, hhFindingsResolved: 3,
 }
 
 // A program in trouble on every axis.
@@ -19,6 +20,7 @@ const BAD: IncidentRiskFeatures = {
   nearMissRecent: 0, bbsSafe: 0, bbsUnsafe: 10,
   capasOverdue: 8, riskReviewsOverdue: 9, highRisksUncontrolled: 4,
   trainingExpired: 6, atmFailed: 10, atmTotal: 10,
+  hazardHuntsDue: 10, hazardHuntsDone: 0, hhFindingsOpened: 8, hhFindingsResolved: 0,
 }
 
 describe('bandForRiskScore', () => {
@@ -76,6 +78,7 @@ describe('summarizeIncidentRisk', () => {
       recordablesRecent: 0, recordablesPrior: 0, nearMissRecent: 0,
       bbsSafe: 0, bbsUnsafe: 0, capasOverdue: 0, riskReviewsOverdue: 0,
       highRisksUncontrolled: 0, trainingExpired: 0, atmFailed: 0, atmTotal: 0,
+      hazardHuntsDue: 0, hazardHuntsDone: 0, hhFindingsOpened: 0, hhFindingsResolved: 0,
     }
     const r = summarizeIncidentRisk(EMPTY)
     // No incidents, but zero near-miss reporting + zero BBS are blind spots,
@@ -104,5 +107,21 @@ describe('summarizeIncidentRisk', () => {
     const flat   = summarizeIncidentRisk({ ...CLEAN, recordablesRecent: 3, recordablesPrior: 3 })
     const dr = (x: ReturnType<typeof summarizeIncidentRisk>) => x.drivers.find(d => d.key === 'recordable_trend')!.pressure
     expect(dr(rising)).toBeGreaterThan(dr(flat))
+  })
+
+  it('rewards proactive hazard hunting (new leading indicator)', () => {
+    const onCadence = summarizeIncidentRisk({
+      ...CLEAN, hazardHuntsDue: 10, hazardHuntsDone: 10, hhFindingsOpened: 5, hhFindingsResolved: 5,
+    })
+    const neglected = summarizeIncidentRisk({
+      ...CLEAN, hazardHuntsDue: 10, hazardHuntsDone: 0, hhFindingsOpened: 5, hhFindingsResolved: 0,
+    })
+    const driver = (x: ReturnType<typeof summarizeIncidentRisk>) =>
+      x.drivers.find(d => d.key === 'hazard_hunt_proactive')!
+    // The indicator exists and is a leading (preventive) signal.
+    expect(driver(onCadence).kind).toBe('leading')
+    // Neglecting hunts + leaving findings open raises its pressure and the score.
+    expect(driver(neglected).pressure).toBeGreaterThan(driver(onCadence).pressure)
+    expect(neglected.score).toBeGreaterThan(onCadence.score)
   })
 })
