@@ -101,7 +101,7 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: 'name: Name is required' }, { status: 400 })
   }
 
-  // Hazard-communication symbols (migration 235). Parse the whole set, then
+  // Hazard-communication symbols (migration 239). Parse the whole set, then
   // merge only the keys the caller actually sent so PATCH stays partial.
   const symbols = parseHazardSymbolFields(body)
   const SYMBOL_KEYS = [

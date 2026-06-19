@@ -20,7 +20,7 @@ import {
 // match the seeded reference catalogs (migrations 232-234). A mismatch
 // means the database and the renderers have drifted.
 
-describe('GHS pictogram catalog (migration 232)', () => {
+describe('GHS pictogram catalog (migration 236)', () => {
   it('has detail for all nine canonical pictograms', () => {
     expect(GHS_PICTOGRAMS.length).toBe(9)
     expect(Object.keys(GHS_PICTOGRAM_DETAIL).length).toBe(9)
@@ -45,7 +45,7 @@ describe('GHS pictogram catalog (migration 232)', () => {
   })
 })
 
-describe('DOT hazard-class catalog (migration 233)', () => {
+describe('DOT hazard-class catalog (migration 237)', () => {
   it('catalogs the 20 canonical classes/divisions', () => {
     expect(DOT_HAZARD_CLASSES.length).toBe(20)
     expect(Object.keys(DOT_HAZARD_CLASS_META).length).toBe(20)
@@ -79,7 +79,7 @@ describe('DOT hazard-class catalog (migration 233)', () => {
   })
 })
 
-describe('NFPA 704 legend (migration 234)', () => {
+describe('NFPA 704 legend (migration 238)', () => {
   it('covers four quadrants with exact render hexes', () => {
     expect(NFPA_CATEGORIES).toEqual(['health', 'flammability', 'instability', 'special'])
     for (const category of NFPA_CATEGORIES) {

@@ -1,4 +1,4 @@
--- Migration 235: hazard-communication symbols on hazardous-waste streams.
+-- Migration 239: hazard-communication symbols on hazardous-waste streams.
 --
 -- Before this migration hazardous_waste_streams (140) carried only
 -- free-form hazards text[] and RCRA waste_codes text[] — no structured

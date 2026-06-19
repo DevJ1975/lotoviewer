@@ -17,7 +17,7 @@ import {
 } from '@soteria/core/hazardSymbols'
 
 // Controlled form controls for a waste stream's hazard-communication
-// symbols (migration 235). Pure presentation: the parent owns the value and
+// symbols (migration 239). Pure presentation: the parent owns the value and
 // the setters, so the same fieldset drives both the create form and the
 // detail-page edit panel. Styling mirrors the surrounding stream form
 // (Field wrapper + inputCls) so it reads as one coherent surface.

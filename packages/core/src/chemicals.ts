@@ -785,7 +785,7 @@ export interface TierTwoRow {
   average_daily_quantity: number
   container_count:        number
   earliest_expiration:    string | null
-  // Responder-facing classification (migration 237) — the LEPC / fire
+  // Responder-facing classification (migration 241) — the LEPC / fire
   // department use these for emergency planning alongside the GHS hazards.
   nfpa_health:        number | null
   nfpa_flammability:  number | null

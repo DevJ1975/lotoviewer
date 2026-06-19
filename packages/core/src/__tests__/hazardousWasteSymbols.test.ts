@@ -6,7 +6,7 @@ import {
 } from '../hazardousWaste'
 
 // Contract tests for the hazard-communication symbol validation added in
-// migration 235. The validator is the trust boundary the API routes rely on,
+// migration 239. The validator is the trust boundary the API routes rely on,
 // so these assert the catalog/enum checks and that a clean payload passes.
 
 function emptySymbols() {

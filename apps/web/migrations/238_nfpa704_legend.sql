@@ -1,4 +1,4 @@
--- Migration 234: NFPA 704 fire-diamond legend.
+-- Migration 238: NFPA 704 fire-diamond legend.
 --
 -- NFPA 704 ("the fire diamond") is the placarding standard fire
 -- responders read at a glance: a square-on-point split into four

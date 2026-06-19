@@ -1,4 +1,4 @@
--- Migration 237: NFPA + DOT columns on the EPCRA Tier II rollup view.
+-- Migration 241: NFPA + DOT columns on the EPCRA Tier II rollup view.
 --
 -- The Tier II report (EPCRA 40 CFR 370) is filed with the LEPC / SERC and
 -- the local fire department, who use it for emergency PLANNING. The NFPA

@@ -516,7 +516,7 @@ export interface HazardousWasteStreamRow {
   owner_user_id:        string | null
   review_due_date:      string | null
   notes:                string | null
-  // Hazard-communication symbols (migration 235). Mirror chemical_products:
+  // Hazard-communication symbols (migration 239). Mirror chemical_products:
   // GHS pictograms + signal word, NFPA 704 ratings, and DOT placard fields.
   // dot_hazard_class stays a plain string (not the DotHazardClass union) so a
   // legacy or partial value round-trips through the row rather than being
@@ -630,7 +630,7 @@ export function validateHazardousWasteStreamInput(input: HazardousWasteStreamInp
 /**
  * Validate the hazard-communication symbol fields shared by streams and
  * (one day) other symbol-carrying records. Mirrors the chemical_products
- * check constraints from migration 235: GHS codes against the catalog,
+ * check constraints from migration 239: GHS codes against the catalog,
  * signal word/NFPA/DOT against their enumerations. Trim before calling.
  */
 export function validateHazardSymbolFields(input: {

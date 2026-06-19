@@ -13,7 +13,7 @@
 
 import type { GhsPictogram, GhsSignalWord } from './chemicals'
 
-// ── GHS a11y / catalog detail (mirrors migration 232) ─────────────────────
+// ── GHS a11y / catalog detail (mirrors migration 236) ─────────────────────
 // The hazard-class summary, depicted symbol, and canonical artwork path
 // for each pictogram. Lets a component render an honest alt/title and
 // resolve the SVG without a database round-trip. `name` stays in
@@ -42,7 +42,7 @@ export const GHS_PICTOGRAM_DETAIL: Record<GhsPictogram, GhsPictogramDetail> = {
   GHS09: { symbolDescription: 'Environment',          hazardClassSummary: 'Hazardous to the aquatic environment: acute cat. 1; chronic cat. 1-2',             defaultSignalWord: 'warning', imagePath: '/ghs/GHS09.svg' },
 }
 
-// ── DOT / UN transport hazard classes (mirrors migration 233) ─────────────
+// ── DOT / UN transport hazard classes (mirrors migration 237) ─────────────
 
 export const DOT_HAZARD_CLASSES = [
   '1.1', '1.2', '1.3', '1.4', '1.5', '1.6',
@@ -95,7 +95,7 @@ export const DOT_HAZARD_CLASS_META: Record<DotHazardClass, DotHazardClassMeta> =
 export const DOT_PACKING_GROUPS = ['I', 'II', 'III'] as const
 export type DotPackingGroup = typeof DOT_PACKING_GROUPS[number]
 
-// ── NFPA 704 fire diamond (mirrors migration 234) ─────────────────────────
+// ── NFPA 704 fire diamond (mirrors migration 238) ─────────────────────────
 
 export const NFPA_CATEGORIES = ['health', 'flammability', 'instability', 'special'] as const
 export type NfpaCategory = typeof NFPA_CATEGORIES[number]
