@@ -123,6 +123,16 @@ export const MODEL_BY_SURFACE = {
   // the other structured-output surfaces. The route never writes RCA nodes
   // or actions; acceptance is an explicit human step. Sonnet.
   'rca-assist':                       SONNET,
+  // ── Hazard Hunt (CSP write-up / DS analytics) ─────────────────────────────
+  // hazard-hunt-csp: a Certified Safety Professional authoring a citation-backed
+  //   write-up of a completed workplace inspection — safety-critical authoring a
+  //   human reviews before it is finalized to the wiki + KB. Opus 4.8, the same
+  //   class as the loto-audit-ehs gate.
+  'hazard-hunt-csp':                  OPUS,
+  // hazard-hunt-ds: a Data Scientist narrating deterministic hazard-finding
+  //   trends. Advisory, text-only, never computes the EHS score — same advisory
+  //   class as scorecard-focus. Sonnet (drop to Haiku if volume dominates).
+  'hazard-hunt-ds':                   SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

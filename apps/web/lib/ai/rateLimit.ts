@@ -42,6 +42,8 @@ export type AiSurface =
   | 'loto-audit-regulator'
   | 'scorecard-focus'
   | 'rca-assist'
+  | 'hazard-hunt-csp'
+  | 'hazard-hunt-ds'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
@@ -110,6 +112,11 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   // case and iterates. Conversational-class caps keep an active investigation
   // unblocked while bounding a retry loop.
   'rca-assist':                       { perHour: 40, perDay: 200 },
+  // Hazard Hunt agents fire once each per submitted inspection (post-submit,
+  // via after()). A busy site submits a handful of hunts a day; caps sit well
+  // above honest volume while bounding a retry loop.
+  'hazard-hunt-csp':                  { perHour: 30, perDay: 150 },
+  'hazard-hunt-ds':                   { perHour: 30, perDay: 150 },
 }
 
 interface CheckArgs {
