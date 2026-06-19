@@ -15,13 +15,19 @@ import {
   type HazardousWasteContainerStatus,
   type HazardousWasteStreamRow,
 } from '@soteria/core/hazardousWaste'
+import {
+  StreamSymbolBadges,
+  type StreamBadgeSource,
+} from '../streams/_components/StreamSymbolBadges'
 
 // Container list — surfaces accumulation aging using the containerAgeStatus
 // helper. Open containers with an old start date appear first so the
 // operator's eye lands on the highest-risk drum.
 
 type ContainerWithStream = HazardousWasteContainerRow & {
-  stream: Pick<HazardousWasteStreamRow, 'id' | 'name' | 'generator_category' | 'long_haul' | 'waste_codes'> | null
+  stream:
+    | (Pick<HazardousWasteStreamRow, 'id' | 'name' | 'generator_category' | 'long_haul' | 'waste_codes'> & StreamBadgeSource)
+    | null
 }
 
 const STATUS_LABEL: Record<HazardousWasteContainerStatus, string> = {
@@ -189,6 +195,11 @@ export default function HazardousWasteContainersPage() {
                         {container.stream.name}
                       </Link>
                     </p>
+                  )}
+                  {container.stream && (
+                    <div className="mt-1.5">
+                      <StreamSymbolBadges source={container.stream} />
+                    </div>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 shrink-0">

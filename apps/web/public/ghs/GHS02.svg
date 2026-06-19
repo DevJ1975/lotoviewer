@@ -1,6 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="GHS02 — Flammable">
   <title>GHS02 — Flammable</title>
-  <path d="M32 3 L61 32 L32 61 L3 32 Z" fill="#fff" stroke="#e30613" stroke-width="3" stroke-linejoin="miter"/>
-  <path d="M16 50 L48 50" stroke="#000" stroke-width="2"/>
-  <path d="M30 14 C 32 22 28 26 26 30 C 23 36 28 38 30 36 C 28 42 32 46 38 42 C 46 36 44 28 38 24 C 36 28 36 22 30 14 Z" fill="#000"/>
+  <path d="M32 3 L61 32 L32 61 L3 32 Z" fill="#fff" stroke="#E30613" stroke-width="3" stroke-linejoin="miter"/>
+  <!-- ground line the flame rises from -->
+  <path d="M18 53 L46 53" stroke="#000" stroke-width="2.6" stroke-linecap="round"/>
+  <!-- single tongue of flame with an inner curl -->
+  <path d="M33 11
+           C 36 20 31 24 28 30
+           C 24 37 26 44 31 48
+           C 29 43 31 39 35 38
+           C 33 43 36 48 41 49
+           C 48 50 51 42 48 35
+           C 46 30 41 28 40 22
+           C 39 27 37 29 35 30
+           C 38 24 37 17 33 11 Z" fill="#000"/>
 </svg>

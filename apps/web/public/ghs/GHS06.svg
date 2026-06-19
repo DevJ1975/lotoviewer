@@ -1,18 +1,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="GHS06 — Acute toxicity">
   <title>GHS06 — Acute toxicity</title>
-  <path d="M32 3 L61 32 L32 61 L3 32 Z" fill="#fff" stroke="#e30613" stroke-width="3" stroke-linejoin="miter"/>
+  <path d="M32 3 L61 32 L32 61 L3 32 Z" fill="#fff" stroke="#E30613" stroke-width="3" stroke-linejoin="miter"/>
+  <!-- crossed bones behind the skull -->
+  <g stroke="#000" stroke-width="3.6" stroke-linecap="round">
+    <line x1="17" y1="44" x2="47" y2="56"/>
+    <line x1="17" y1="56" x2="47" y2="44"/>
+  </g>
+  <g fill="#000">
+    <circle cx="16.5" cy="43.5" r="3.2"/>
+    <circle cx="16.5" cy="56.5" r="3.2"/>
+    <circle cx="47.5" cy="43.5" r="3.2"/>
+    <circle cx="47.5" cy="56.5" r="3.2"/>
+  </g>
   <!-- skull -->
-  <path d="M22 22 C 22 14 30 12 32 12 C 34 12 42 14 42 22 L 42 32 C 42 34 40 36 38 36 L 38 40 C 38 41 37 42 36 42 L 28 42 C 27 42 26 41 26 40 L 26 36 C 24 36 22 34 22 32 Z" fill="#fff" stroke="#000" stroke-width="2.5"/>
-  <circle cx="28" cy="26" r="2.5" fill="#000"/>
-  <circle cx="36" cy="26" r="2.5" fill="#000"/>
-  <path d="M30 32 L32 36 L34 32 Z" fill="#000"/>
-  <line x1="30" y1="38" x2="30" y2="40" stroke="#000" stroke-width="1.5"/>
-  <line x1="34" y1="38" x2="34" y2="40" stroke="#000" stroke-width="1.5"/>
-  <!-- crossed bones -->
-  <line x1="18" y1="44" x2="46" y2="54" stroke="#000" stroke-width="3" stroke-linecap="round"/>
-  <line x1="18" y1="54" x2="46" y2="44" stroke="#000" stroke-width="3" stroke-linecap="round"/>
-  <circle cx="18" cy="44" r="2.5" fill="#000"/>
-  <circle cx="18" cy="54" r="2.5" fill="#000"/>
-  <circle cx="46" cy="44" r="2.5" fill="#000"/>
-  <circle cx="46" cy="54" r="2.5" fill="#000"/>
+  <path d="M19 27
+           C 19 16 26 12 32 12
+           C 38 12 45 16 45 27
+           C 45 31 43 34 40 36
+           L 40 41 C 40 43 38.5 44 36 44
+           L 28 44 C 25.5 44 24 43 24 41
+           L 24 36 C 21 34 19 31 19 27 Z"
+        fill="#000"/>
+  <!-- eye sockets -->
+  <ellipse cx="27" cy="27" rx="3.6" ry="4.2" fill="#fff"/>
+  <ellipse cx="37" cy="27" rx="3.6" ry="4.2" fill="#fff"/>
+  <!-- nasal cavity -->
+  <path d="M32 31 L29 37 L35 37 Z" fill="#fff"/>
+  <!-- teeth gaps -->
+  <path d="M28 41.5 L28 44 M32 41.5 L32 44 M36 41.5 L36 44" stroke="#fff" stroke-width="1.5"/>
 </svg>
