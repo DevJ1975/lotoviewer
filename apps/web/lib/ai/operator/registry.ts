@@ -5,6 +5,10 @@ import { roleMeets, isRegulatedTool } from './types'
 import { fileNearMiss, submitBbsObservation } from './writeTools'
 import { getHomeConfig, setDefaultLandingPath, setModuleVisibility } from './homeTools'
 import { authorizeHotWorkPermit, authorizeConfinedSpaceEntry } from './regulatedTools'
+import { closeHighSeverityCapa } from './carveOuts/capaHighSeverityClose'
+import { certifyOsha300a } from './carveOuts/osha300aCert'
+import { submitOshaIta } from './carveOuts/oshaItaSubmit'
+import { certifyLotoZeroEnergy } from './carveOuts/lotoZeroEnergyCert'
 import { stageRegulatedAction } from './actionQueue'
 
 // The Operator Console tool registry.
@@ -52,6 +56,7 @@ export const OPERATOR_TOOLS: Record<OperatorAgentId, Record<string, OperatorTool
     sharedRead('near_misses_recent', 'incidents'),
     sharedRead('incident_risk_score', 'incidents'),
     fileNearMiss,
+    closeHighSeverityCapa,
   ]),
   risk: byName([
     sharedRead('list_risks', 'risk'),
@@ -61,6 +66,7 @@ export const OPERATOR_TOOLS: Record<OperatorAgentId, Record<string, OperatorTool
     sharedRead('lookup_equipment', 'loto'),
     sharedRead('list_departments', 'loto'),
     sharedRead('active_permits', 'loto'),
+    certifyLotoZeroEnergy,
   ]),
   permits: byName([
     sharedRead('active_permits', 'permits'),
@@ -82,6 +88,8 @@ export const OPERATOR_TOOLS: Record<OperatorAgentId, Record<string, OperatorTool
   ]),
   osha: byName([
     sharedRead('scorecard_kpis', 'osha', 'admin'),
+    certifyOsha300a,
+    submitOshaIta,
   ]),
   admin: byName([
     sharedRead('list_departments', 'admin', 'admin'),
