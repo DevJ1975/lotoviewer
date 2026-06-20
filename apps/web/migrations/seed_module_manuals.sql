@@ -40,6 +40,7 @@ values
   ('admin-configuration',       'Configuration',      'Tenant-level configuration: modules, branding, defaults.', E'## Overview\n\nThis manual covers Configuration. **Edit me.**'),
   ('admin-webhooks',            'Webhooks',           'Outbound webhooks for integrations.',                    E'## Overview\n\nThis manual covers Webhooks. **Edit me.**'),
   ('admin-training',            'Training records',   'Training certifications + expiry tracking.',             E'## Overview\n\nThis manual covers Training records. **Edit me.**'),
+  ('admin-training-competency-matrix', 'Training & Competency Matrix', 'Required training by worker and course, expiry status, course catalog, and per-position requirements.', E'## Overview\n\nThis manual covers the Training & Competency Matrix. **Edit me.**'),
   ('admin-ai-usage',            'AI usage',           'Tenant AI usage trends, budget caps, model spend, and invocation audit views.', E'## Overview\n\nThis manual covers AI usage administration. **Edit me.**'),
   ('admin-hygiene-log',         'Data hygiene log',   'Per-tenant data-cleanup audit trail.',                   E'## Overview\n\nThis manual covers the Data hygiene log. **Edit me.**'),
   ('settings-notifications',    'Notifications',      'Web Push subscription + per-user notification toggles.', E'## Overview\n\nThis manual covers Notification settings. **Edit me.**'),
