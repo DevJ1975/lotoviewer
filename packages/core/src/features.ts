@@ -87,6 +87,17 @@ export const FEATURES: FeatureDef[] = [
     icon:        'ShieldCheck',
     color:       'emerald',
   },
+  {
+    id:          'operator',
+    name:        'Operator Console',
+    description: 'Multi-agent assistant that operates your modules — delegates to specialists for incidents, permits, LOTO, chemicals, training, and more.',
+    href:        '/operator',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'Bot',
+    color:       'indigo',
+  },
 
   // ── LOTO module + sub-pages ─────────────────────────────────────────────
   // The "LOTO" row navigates to /, the equipment dashboard. Status,

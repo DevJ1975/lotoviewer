@@ -42,6 +42,19 @@ export type AiSurface =
   | 'loto-audit-regulator'
   | 'scorecard-focus'
   | 'rca-assist'
+  | 'operator-orchestrator'
+  | 'operator-incidents'
+  | 'operator-risk'
+  | 'operator-loto'
+  | 'operator-permits'
+  | 'operator-chem'
+  | 'operator-inspections'
+  | 'operator-training'
+  | 'operator-bbs'
+  | 'operator-osha'
+  | 'operator-admin'
+  | 'operator-home'
+  | 'operator-knowledge'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
@@ -110,6 +123,25 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   // case and iterates. Conversational-class caps keep an active investigation
   // unblocked while bounding a retry loop.
   'rca-assist':                       { perHour: 40, perDay: 200 },
+  // Operator Console. The orchestrator is the one surface rate-limited per user
+  // turn (conversational — same caps as the home assistant). The domain
+  // sub-agents are fanned out BY the orchestrator within a single turn (often
+  // several per turn), so they are not rate-limited directly — they get
+  // generous backstop caps like the audit fan-out and are still logged for
+  // per-surface cost attribution.
+  'operator-orchestrator':            { perHour: 60,  perDay: 400 },
+  'operator-incidents':               { perHour: 600, perDay: 4000 },
+  'operator-risk':                    { perHour: 600, perDay: 4000 },
+  'operator-loto':                    { perHour: 600, perDay: 4000 },
+  'operator-permits':                 { perHour: 600, perDay: 4000 },
+  'operator-chem':                    { perHour: 600, perDay: 4000 },
+  'operator-inspections':             { perHour: 600, perDay: 4000 },
+  'operator-training':                { perHour: 600, perDay: 4000 },
+  'operator-bbs':                     { perHour: 600, perDay: 4000 },
+  'operator-osha':                    { perHour: 600, perDay: 4000 },
+  'operator-admin':                   { perHour: 600, perDay: 4000 },
+  'operator-home':                    { perHour: 600, perDay: 4000 },
+  'operator-knowledge':               { perHour: 600, perDay: 4000 },
 }
 
 interface CheckArgs {
