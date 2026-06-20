@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { listPendingActions, listRecentActions } from '@/lib/ai/operator/actionQueue'
 
@@ -18,9 +19,16 @@ export async function GET(req: Request) {
   const gate = await requireTenantMember(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
-  const [pending, recent] = await Promise.all([
-    listPendingActions(gate.tenantId),
-    listRecentActions(gate.tenantId),
-  ])
-  return NextResponse.json({ pending, recent })
+  // Never mask a load failure as an empty inbox — surface it so the UI shows an
+  // error rather than implying nothing is awaiting approval.
+  try {
+    const [pending, recent] = await Promise.all([
+      listPendingActions(gate.tenantId),
+      listRecentActions(gate.tenantId),
+    ])
+    return NextResponse.json({ pending, recent })
+  } catch (err) {
+    Sentry.captureException(err, { tags: { route: '/api/operator/approvals' } })
+    return NextResponse.json({ error: 'Could not load the approval queue. Please retry.' }, { status: 500 })
+  }
 }

@@ -91,12 +91,15 @@ export async function stageRegulatedAction(
 // ── read ───────────────────────────────────────────────────────────────────
 /** The pending approval inbox for a tenant, newest first. */
 export async function listPendingActions(tenantId: string): Promise<PendingAction[]> {
-  const { data } = await supabaseAdmin()
+  const { data, error } = await supabaseAdmin()
     .from(TABLE)
     .select('id, action, authorizing_role, reversible, summary, requested_by, requested_at')
     .eq('tenant_id', tenantId)
     .eq('status', 'pending')
     .order('requested_at', { ascending: false })
+  // Surface a query failure rather than masking it as an empty inbox — a silently
+  // empty approval queue could hide a staged life-safety action from approvers.
+  if (error) throw new Error(error.message)
   return (data ?? []).map(r => ({
     id:              r.id as string,
     action:          r.action as CarveOutAction,
@@ -112,13 +115,14 @@ export async function listPendingActions(tenantId: string): Promise<PendingActio
  *  newest first. Powers the inbox's history + the rollback affordance on an
  *  applied, reversible action. */
 export async function listRecentActions(tenantId: string, limit = 20): Promise<DecidedAction[]> {
-  const { data } = await supabaseAdmin()
+  const { data, error } = await supabaseAdmin()
     .from(TABLE)
     .select('id, action, status, reversible, summary, decided_at, rolled_back_at, rejection_reason, apply_result')
     .eq('tenant_id', tenantId)
     .neq('status', 'pending')
     .order('requested_at', { ascending: false })
     .limit(limit)
+  if (error) throw new Error(error.message)
   return (data ?? []).map(r => {
     const status = r.status as AgentActionStatus
     const applyResult = r.apply_result as { summary?: string } | null
