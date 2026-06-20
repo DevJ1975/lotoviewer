@@ -19,6 +19,8 @@ function builder(table: string) {
   const ret = () => b
   b.select = ret
   b.order = ret
+  b.limit = ret
+  b.neq = (c: string, v: unknown) => { call.filters[`neq_${c}`] = v; return b }
   b.eq = (c: string, v: unknown) => { call.filters[c] = v; return b }
   b.is = (c: string, v: unknown) => { call.filters[`is_${c}`] = v; return b }
   b.not = (c: string, _o: string, v: unknown) => { call.filters[`not_${c}`] = v; return b }
@@ -34,7 +36,7 @@ function builder(table: string) {
 vi.mock('@/lib/supabaseAdmin', () => ({ supabaseAdmin: () => ({ from: (t: string) => builder(t) }) }))
 
 import {
-  stageRegulatedAction, approveAndApply, rejectAction, rollbackAction, listPendingActions,
+  stageRegulatedAction, approveAndApply, rejectAction, rollbackAction, listPendingActions, listRecentActions,
 } from '@/lib/ai/operator/actionQueue'
 
 const stageCtx = { tenantId: 'tenant-A', userId: 'u1', role: 'member' as const, conversationId: 'conv-1' }
@@ -169,5 +171,18 @@ describe('listPendingActions', () => {
     const out = await listPendingActions('tenant-A')
     expect(out).toEqual([{ id: 'q1', action: 'permit_hot_work_auth', authorizingRole: 'admin', reversible: true, summary: 'S', requestedBy: 'u1', requestedAt: 'T' }])
     expect(calls[0].filters).toMatchObject({ tenant_id: 'tenant-A', status: 'pending' })
+  })
+})
+
+describe('listRecentActions', () => {
+  it('maps decided rows (applied/rejected), surfacing the outcome and excluding pending', async () => {
+    results = [{ data: [
+      { id: 'q9', action: 'permit_hot_work_auth', status: 'applied', reversible: true, summary: 'Authorize HWP-1', decided_at: 'D1', rolled_back_at: null, rejection_reason: null, apply_result: { summary: 'Signed HWP-1' } },
+      { id: 'q8', action: 'permit_confined_space_auth', status: 'rejected', reversible: true, summary: 'Authorize CSP-1', decided_at: 'D2', rolled_back_at: null, rejection_reason: 'no rescue plan', apply_result: null },
+    ], error: null }]
+    const out = await listRecentActions('tenant-A')
+    expect(out[0]).toMatchObject({ id: 'q9', status: 'applied', outcome: 'Signed HWP-1', decidedAt: 'D1' })
+    expect(out[1]).toMatchObject({ id: 'q8', status: 'rejected', outcome: 'no rescue plan' })
+    expect(calls[0].filters).toMatchObject({ tenant_id: 'tenant-A', neq_status: 'pending' })
   })
 })

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Bot, Check, Loader2, Plus, Send, Wrench } from 'lucide-react'
+import { ArrowLeft, Bot, Check, Loader2, Plus, Send, ShieldCheck, Wrench } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
 import { authHeaders } from '@/app/admin/loto/multi-agent-audit/_lib/authHeaders'
@@ -56,7 +56,9 @@ const freshAssistantTurn = (): Turn => ({ role: 'assistant', content: '', delega
 
 export default function OperatorConsolePage() {
   const { profile, loading: authLoading } = useAuth()
-  const { tenantId, loading: tenantLoading } = useTenant()
+  const { tenantId, role, loading: tenantLoading } = useTenant()
+  // UX gate for the approvals link; the inbox + its routes enforce the real gate.
+  const canApprove = role === 'admin' || role === 'owner' || profile?.is_superadmin === true
 
   const [turns, setTurns]                 = useState<Turn[]>([])
   const [input, setInput]                 = useState('')
@@ -205,14 +207,24 @@ export default function OperatorConsolePage() {
           <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900 dark:text-slate-50">
             <Bot className="h-6 w-6 text-brand-navy" /> Operator Console
           </h1>
-          <button
-            type="button"
-            onClick={startNew}
-            disabled={sending || turns.length === 0}
-            className="motion-press inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:border-brand-navy/40 hover:text-brand-navy disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-          >
-            <Plus className="h-3.5 w-3.5" /> New
-          </button>
+          <div className="flex items-center gap-2">
+            {canApprove && (
+              <Link
+                href="/operator/approvals"
+                className="motion-press inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:border-brand-navy/40 hover:text-brand-navy dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+              >
+                <ShieldCheck className="h-3.5 w-3.5" /> Approvals
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={startNew}
+              disabled={sending || turns.length === 0}
+              className="motion-press inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:border-brand-navy/40 hover:text-brand-navy disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+            >
+              <Plus className="h-3.5 w-3.5" /> New
+            </button>
+          </div>
         </div>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           Ask across your modules — the orchestrator delegates to the right specialist agents and synthesizes the answer.

@@ -4,7 +4,7 @@ import type { OperatorAgentId, OperatorToolDef } from './types'
 import { roleMeets, isRegulatedTool } from './types'
 import { fileNearMiss, submitBbsObservation } from './writeTools'
 import { getHomeConfig, setDefaultLandingPath, setModuleVisibility } from './homeTools'
-import { authorizeHotWorkPermit } from './regulatedTools'
+import { authorizeHotWorkPermit, authorizeConfinedSpaceEntry } from './regulatedTools'
 import { stageRegulatedAction } from './actionQueue'
 
 // The Operator Console tool registry.
@@ -65,6 +65,7 @@ export const OPERATOR_TOOLS: Record<OperatorAgentId, Record<string, OperatorTool
   permits: byName([
     sharedRead('active_permits', 'permits'),
     authorizeHotWorkPermit,
+    authorizeConfinedSpaceEntry,
   ]),
   chem: byName([
     sharedRead('find_chemical', 'chem'),

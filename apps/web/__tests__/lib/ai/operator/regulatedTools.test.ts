@@ -15,7 +15,7 @@ vi.mock('@/lib/supabaseAdmin', () => ({
   supabaseAdmin: () => ({ from: (t: string) => { tables.push(t); return makeBuilder() } }),
 }))
 
-import { authorizeHotWorkPermit } from '@/lib/ai/operator/regulatedTools'
+import { authorizeHotWorkPermit, authorizeConfinedSpaceEntry } from '@/lib/ai/operator/regulatedTools'
 import { getOperatorToolDefinitions } from '@/lib/ai/operator/registry'
 
 const ctx = { tenantId: 'tenant-A', userId: 'u1', role: 'member' as const, conversationId: 'c1' }
@@ -23,6 +23,7 @@ const PERMIT = '11111111-1111-4111-8111-111111111111'
 
 // the union guarantees a regulated tool carries `stage`, not `handler`.
 const stage = (authorizeHotWorkPermit as Extract<typeof authorizeHotWorkPermit, { scope: { kind: 'regulated' } }>).stage
+const csStage = (authorizeConfinedSpaceEntry as Extract<typeof authorizeConfinedSpaceEntry, { scope: { kind: 'regulated' } }>).stage
 
 beforeEach(() => { nextResult = { data: null, error: null }; tables = [] })
 
@@ -71,6 +72,42 @@ describe('authorize_hot_work_permit stage', () => {
   it('refuses a permit that is already authorized', async () => {
     nextResult = { data: { serial: 'HWP-1', work_description: 'x', work_location: 'y', pai_signature_at: '2026-06-18T00:00:00Z', canceled_at: null }, error: null }
     const res = await stage({ permit_id: PERMIT }, ctx)
+    expect(res).toMatchObject({ ok: false })
+    if (!res.ok) expect(res.error).toMatch(/already authorized/i)
+  })
+})
+
+describe('authorize_confined_space_entry registration', () => {
+  it('is a permits regulated tool visible to a member but not a viewer', () => {
+    expect(authorizeConfinedSpaceEntry.scope).toEqual({ kind: 'regulated', action: 'permit_confined_space_auth' })
+    expect(getOperatorToolDefinitions('permits', 'member').map(d => d.name)).toContain('authorize_confined_space_entry')
+    expect(getOperatorToolDefinitions('permits', 'viewer').map(d => d.name)).not.toContain('authorize_confined_space_entry')
+  })
+})
+
+describe('authorize_confined_space_entry stage', () => {
+  it('summarizes an active, unsigned permit and returns the validated payload', async () => {
+    nextResult = { data: { serial: 'CSP-20260618-0002', purpose: 'Inspect tank interior', space_id: 'CS-12', entry_supervisor_signature_at: null, canceled_at: null }, error: null }
+    const res = await csStage({ permit_id: PERMIT }, ctx)
+    expect(res.ok).toBe(true)
+    if (res.ok) {
+      expect(res.payload).toEqual({ permit_id: PERMIT })
+      expect(res.summary).toMatch(/CSP-20260618-0002/)
+      expect(res.summary).toMatch(/CS-12/)
+    }
+    expect(tables).toEqual(['loto_confined_space_permits'])
+  })
+
+  it('refuses a canceled permit', async () => {
+    nextResult = { data: { serial: 'CSP-1', purpose: 'x', space_id: 'CS-1', entry_supervisor_signature_at: null, canceled_at: '2026-06-18T00:00:00Z' }, error: null }
+    const res = await csStage({ permit_id: PERMIT }, ctx)
+    expect(res).toMatchObject({ ok: false })
+    if (!res.ok) expect(res.error).toMatch(/canceled/i)
+  })
+
+  it('refuses an already-authorized permit', async () => {
+    nextResult = { data: { serial: 'CSP-1', purpose: 'x', space_id: 'CS-1', entry_supervisor_signature_at: '2026-06-18T00:00:00Z', canceled_at: null }, error: null }
+    const res = await csStage({ permit_id: PERMIT }, ctx)
     expect(res).toMatchObject({ ok: false })
     if (!res.ok) expect(res.error).toMatch(/already authorized/i)
   })

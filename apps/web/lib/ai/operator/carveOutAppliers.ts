@@ -40,7 +40,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 function requirePermitId(payload: Record<string, unknown>): string {
   const id = typeof payload.permit_id === 'string' ? payload.permit_id : ''
-  if (!UUID_RE.test(id)) throw new Error('permit_hot_work_auth payload is missing a valid permit_id.')
+  if (!UUID_RE.test(id)) throw new Error('payload is missing a valid permit_id.')
   return id
 }
 
@@ -118,6 +118,77 @@ const hotWorkAuth: CarveOutApplier = {
   },
 }
 
+// permit_confined_space_auth — OSHA 1910.146. "Authorize" a permit-required
+// confined-space entry by signing it as entry supervisor: the approver becomes
+// the entry supervisor of record and entry_supervisor_signature_at is stamped.
+// Snapshot the prior entry_supervisor_id so a rollback restores the exact prior
+// (unsigned) state. Structurally identical to hot-work — the regulated shape
+// (one signature gate + a canceled flag) is shared across permit-to-work types.
+//
+// Auto-cancel note: migration 053 can cancel a permit when an atmospheric test
+// fails its thresholds. apply AND rollback both guard on `canceled_at IS NULL`,
+// so we never authorize — or un-authorize — a canceled permit. A failed-reading
+// cancellation always wins, which is the correct life-safety posture.
+const confinedSpaceAuth: CarveOutApplier = {
+  async apply(ctx, payload, approverUserId) {
+    const id = requirePermitId(payload)
+    const admin = supabaseAdmin()
+
+    const { data: permit, error } = await admin
+      .from('loto_confined_space_permits')
+      .select('id, serial, entry_supervisor_id, entry_supervisor_signature_at, canceled_at')
+      .eq('id', id)
+      .eq('tenant_id', ctx.tenantId)
+      .maybeSingle()
+    if (error) throw new Error(error.message)
+    if (!permit) throw new Error('Confined-space permit not found in this tenant.')
+    if (permit.canceled_at) throw new Error(`Confined-space permit ${permit.serial} is canceled and cannot be authorized.`)
+    if (permit.entry_supervisor_signature_at) throw new Error(`Confined-space permit ${permit.serial} is already authorized.`)
+
+    const prevState = { entry_supervisor_id: permit.entry_supervisor_id as string }
+
+    const { data: updated, error: upErr } = await admin
+      .from('loto_confined_space_permits')
+      .update({ entry_supervisor_id: approverUserId, entry_supervisor_signature_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('tenant_id', ctx.tenantId)
+      .is('entry_supervisor_signature_at', null)
+      .is('canceled_at', null)
+      .select('id, serial')
+    if (upErr) throw new Error(upErr.message)
+    if (!updated || updated.length === 0) {
+      throw new Error('Confined-space permit changed before it could be authorized (it was signed or canceled). Re-check and re-stage.')
+    }
+
+    return {
+      summary: `Authorized confined-space entry permit ${permit.serial} — signed as entry supervisor.`,
+      prevState,
+    }
+  },
+
+  async rollback(ctx, payload, prevState) {
+    const id = requirePermitId(payload)
+    const priorSupervisorId = typeof prevState.entry_supervisor_id === 'string' ? prevState.entry_supervisor_id : null
+    if (!priorSupervisorId) throw new Error('Cannot roll back: the prior entry supervisor was not recorded.')
+    const admin = supabaseAdmin()
+
+    const { data: updated, error } = await admin
+      .from('loto_confined_space_permits')
+      .update({ entry_supervisor_id: priorSupervisorId, entry_supervisor_signature_at: null })
+      .eq('id', id)
+      .eq('tenant_id', ctx.tenantId)
+      .not('entry_supervisor_signature_at', 'is', null)
+      .is('canceled_at', null)
+      .select('id, serial')
+    if (error) throw new Error(error.message)
+    if (!updated || updated.length === 0) {
+      throw new Error('Confined-space permit is no longer in an authorized, active state; nothing to roll back.')
+    }
+    return { summary: `Rolled back the authorization on confined-space permit ${updated[0].serial} — it is unsigned again.` }
+  },
+}
+
 export const CARVE_OUT_APPLIERS: Partial<Record<CarveOutAction, CarveOutApplier>> = {
   permit_hot_work_auth: hotWorkAuth,
+  permit_confined_space_auth: confinedSpaceAuth,
 }

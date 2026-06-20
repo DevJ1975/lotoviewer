@@ -44,6 +44,18 @@ export interface PendingAction {
   requestedAt: string
 }
 
+export interface DecidedAction {
+  id: string
+  action: CarveOutAction
+  status: AgentActionStatus
+  reversible: boolean
+  summary: string
+  /** When it was decided (rollback time if rolled back, else the decision time). */
+  decidedAt: string | null
+  /** What happened: the apply summary, or the rejection reason. */
+  outcome: string | null
+}
+
 function engineFail(status: number, error: string): EngineResult {
   return { ok: false, status, error }
 }
@@ -94,6 +106,32 @@ export async function listPendingActions(tenantId: string): Promise<PendingActio
     requestedBy:     r.requested_by as string,
     requestedAt:     r.requested_at as string,
   }))
+}
+
+/** Recently-decided actions (applied / rejected / rolled_back) for a tenant,
+ *  newest first. Powers the inbox's history + the rollback affordance on an
+ *  applied, reversible action. */
+export async function listRecentActions(tenantId: string, limit = 20): Promise<DecidedAction[]> {
+  const { data } = await supabaseAdmin()
+    .from(TABLE)
+    .select('id, action, status, reversible, summary, decided_at, rolled_back_at, rejection_reason, apply_result')
+    .eq('tenant_id', tenantId)
+    .neq('status', 'pending')
+    .order('requested_at', { ascending: false })
+    .limit(limit)
+  return (data ?? []).map(r => {
+    const status = r.status as AgentActionStatus
+    const applyResult = r.apply_result as { summary?: string } | null
+    return {
+      id:         r.id as string,
+      action:     r.action as CarveOutAction,
+      status,
+      reversible: r.reversible as boolean,
+      summary:    r.summary as string,
+      decidedAt:  (r.rolled_back_at ?? r.decided_at ?? null) as string | null,
+      outcome:    status === 'rejected' ? (r.rejection_reason as string | null) : (applyResult?.summary ?? null),
+    }
+  })
 }
 
 // ── role re-proof ────────────────────────────────────────────────────────────

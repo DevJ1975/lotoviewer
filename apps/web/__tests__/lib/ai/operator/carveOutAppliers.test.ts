@@ -29,9 +29,11 @@ vi.mock('@/lib/supabaseAdmin', () => ({ supabaseAdmin: () => ({ from: (t: string
 import { CARVE_OUT_APPLIERS } from '@/lib/ai/operator/carveOutAppliers'
 
 const applier = CARVE_OUT_APPLIERS.permit_hot_work_auth!
+const csApplier = CARVE_OUT_APPLIERS.permit_confined_space_auth!
 const ctx = { tenantId: 'tenant-A', userId: 'approver-1' }
 const PERMIT = '11111111-1111-4111-8111-111111111111'
 const ORIG_PAI = '22222222-2222-4222-8222-222222222222'
+const ORIG_SUP = '33333333-3333-4333-8333-333333333333'
 
 beforeEach(() => { results = []; calls = [] })
 
@@ -101,6 +103,52 @@ describe('permit_hot_work_auth applier — rollback', () => {
 
   it('refuses to roll back without a recorded prior PAI', async () => {
     await expect(applier.rollback(ctx, { permit_id: PERMIT }, {})).rejects.toThrow(/prior authorizing individual/i)
+    expect(calls).toEqual([])
+  })
+})
+
+describe('permit_confined_space_auth applier — apply', () => {
+  it('signs an unsigned, active permit as entry supervisor and snapshots the prior supervisor', async () => {
+    results = [
+      { data: { id: PERMIT, serial: 'CSP-20260618-0002', entry_supervisor_id: ORIG_SUP, entry_supervisor_signature_at: null, canceled_at: null }, error: null },
+      { data: [{ id: PERMIT, serial: 'CSP-20260618-0002' }], error: null },
+    ]
+    const out = await csApplier.apply(ctx, { permit_id: PERMIT }, 'approver-1')
+    expect(out.summary).toMatch(/CSP-20260618-0002/)
+    expect(out.prevState).toEqual({ entry_supervisor_id: ORIG_SUP })
+
+    const update = calls.find(c => c.op === 'update')!
+    expect(update.table).toBe('loto_confined_space_permits')
+    expect(update.payload).toMatchObject({ entry_supervisor_id: 'approver-1' })
+    expect(update.payload!.entry_supervisor_signature_at).toBeTruthy()
+    expect(update.filters).toMatchObject({ id: PERMIT, tenant_id: 'tenant-A', is_entry_supervisor_signature_at: null, is_canceled_at: null })
+  })
+
+  it('refuses an already-authorized permit — no update', async () => {
+    results = [{ data: { id: PERMIT, serial: 'CSP-1', entry_supervisor_id: ORIG_SUP, entry_supervisor_signature_at: '2026-06-18T00:00:00Z', canceled_at: null }, error: null }]
+    await expect(csApplier.apply(ctx, { permit_id: PERMIT }, 'approver-1')).rejects.toThrow(/already authorized/i)
+    expect(calls.some(c => c.op === 'update')).toBe(false)
+  })
+
+  it('refuses a canceled permit (the auto-cancel guard) — no update', async () => {
+    results = [{ data: { id: PERMIT, serial: 'CSP-1', entry_supervisor_id: ORIG_SUP, entry_supervisor_signature_at: null, canceled_at: '2026-06-18T00:00:00Z' }, error: null }]
+    await expect(csApplier.apply(ctx, { permit_id: PERMIT }, 'approver-1')).rejects.toThrow(/canceled/i)
+    expect(calls.some(c => c.op === 'update')).toBe(false)
+  })
+})
+
+describe('permit_confined_space_auth applier — rollback', () => {
+  it('restores the prior supervisor and un-signs, guarded on signed + active', async () => {
+    results = [{ data: [{ id: PERMIT, serial: 'CSP-20260618-0002' }], error: null }]
+    const out = await csApplier.rollback(ctx, { permit_id: PERMIT }, { entry_supervisor_id: ORIG_SUP })
+    expect(out.summary).toMatch(/unsigned again/i)
+    const update = calls.find(c => c.op === 'update')!
+    expect(update.payload).toMatchObject({ entry_supervisor_id: ORIG_SUP, entry_supervisor_signature_at: null })
+    expect(update.filters).toMatchObject({ id: PERMIT, tenant_id: 'tenant-A', not_entry_supervisor_signature_at: null, is_canceled_at: null })
+  })
+
+  it('refuses to roll back without a recorded prior supervisor', async () => {
+    await expect(csApplier.rollback(ctx, { permit_id: PERMIT }, {})).rejects.toThrow(/prior entry supervisor/i)
     expect(calls).toEqual([])
   })
 })
