@@ -172,6 +172,11 @@ describe('listPendingActions', () => {
     expect(out).toEqual([{ id: 'q1', action: 'permit_hot_work_auth', authorizingRole: 'admin', reversible: true, summary: 'S', requestedBy: 'u1', requestedAt: 'T' }])
     expect(calls[0].filters).toMatchObject({ tenant_id: 'tenant-A', status: 'pending' })
   })
+
+  it('throws on a query error instead of returning a false-empty inbox', async () => {
+    results = [{ data: null, error: { message: 'db unavailable' } }]
+    await expect(listPendingActions('tenant-A')).rejects.toThrow(/db unavailable/)
+  })
 })
 
 describe('listRecentActions', () => {
@@ -184,5 +189,10 @@ describe('listRecentActions', () => {
     expect(out[0]).toMatchObject({ id: 'q9', status: 'applied', outcome: 'Signed HWP-1', decidedAt: 'D1' })
     expect(out[1]).toMatchObject({ id: 'q8', status: 'rejected', outcome: 'no rescue plan' })
     expect(calls[0].filters).toMatchObject({ tenant_id: 'tenant-A', neq_status: 'pending' })
+  })
+
+  it('throws on a query error', async () => {
+    results = [{ data: null, error: { message: 'db unavailable' } }]
+    await expect(listRecentActions('tenant-A')).rejects.toThrow(/db unavailable/)
   })
 })
