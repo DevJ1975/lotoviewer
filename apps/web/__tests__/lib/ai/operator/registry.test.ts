@@ -52,9 +52,10 @@ describe('role-gated tool visibility', () => {
     expect(names).toContain('compliance_obligations_due')
   })
 
-  it('requires admin for the osha agent read tool', () => {
+  it('gates every osha tool at admin — the read KPI tool and the regulated carve-outs', () => {
     expect(getOperatorToolDefinitions('osha', 'member')).toEqual([])
-    expect(getOperatorToolDefinitions('osha', 'admin').map(d => d.name)).toEqual(['scorecard_kpis'])
+    expect(getOperatorToolDefinitions('osha', 'admin').map(d => d.name))
+      .toEqual(['certify_osha_300a', 'scorecard_kpis', 'submit_osha_ita'])
   })
 
   it('returns tool definitions in a deterministic (sorted) order', () => {

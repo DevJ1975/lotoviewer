@@ -1,5 +1,9 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import type { CarveOutAction } from '@soteria/core/operatorActions'
+import { capaHighSeverityCloseApplier } from './carveOuts/capaHighSeverityClose'
+import { osha300aCertApplier } from './carveOuts/osha300aCert'
+import { oshaItaSubmitApplier } from './carveOuts/oshaItaSubmit'
+import { lotoZeroEnergyCertApplier } from './carveOuts/lotoZeroEnergyCert'
 
 // The apply / rollback executors for regulated carve-outs.
 //
@@ -191,4 +195,11 @@ const confinedSpaceAuth: CarveOutApplier = {
 export const CARVE_OUT_APPLIERS: Partial<Record<CarveOutAction, CarveOutApplier>> = {
   permit_hot_work_auth: hotWorkAuth,
   permit_confined_space_auth: confinedSpaceAuth,
+  // The four self-contained carve-outs in ./carveOuts (each owns its own
+  // stage/apply/rollback + tests + migration). osha_ita_submit is irreversible —
+  // its rollback throws, and the engine never reaches it (reversible:false).
+  capa_high_severity_close: capaHighSeverityCloseApplier,
+  osha_300a_cert: osha300aCertApplier,
+  osha_ita_submit: oshaItaSubmitApplier,
+  loto_zero_energy_cert: lotoZeroEnergyCertApplier,
 }
