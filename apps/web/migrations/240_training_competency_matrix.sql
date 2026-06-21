@@ -164,7 +164,10 @@ on conflict (tenant_id, code) do nothing;
 update public.loto_training_records r
    set member_id = m.id
   from (
-    select n.tenant_id, n.lname, min(mm.id) as id
+    -- uuid has no min() aggregate; the `having count(distinct mm.id) = 1`
+    -- below guarantees a single member per group, so min over the text form
+    -- returns that one id (cast back to uuid).
+    select n.tenant_id, n.lname, min(mm.id::text)::uuid as id
       from (select distinct tenant_id, lower(btrim(worker_name)) as lname
               from public.loto_training_records) n
       join public.members mm
