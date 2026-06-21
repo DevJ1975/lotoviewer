@@ -858,7 +858,7 @@ export const FEATURES: FeatureDef[] = [
     category:    'admin',
     enabled:     true,
     comingSoon:  false,
-    icon:        'GraduationCap',
+    icon:        'LayoutGrid',
     color:       'slate',
   },
   {

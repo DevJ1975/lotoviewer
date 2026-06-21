@@ -96,6 +96,7 @@ const MODULE_GROUPS: Record<string, NavigationGroupId> = {
   'admin-configuration': 'administration',
   'admin-webhooks': 'administration',
   'admin-training': 'administration',
+  'admin-training-competency-matrix': 'administration',
   'admin-hygiene-log': 'administration',
   'settings-notifications': 'administration',
   manuals: 'administration',
