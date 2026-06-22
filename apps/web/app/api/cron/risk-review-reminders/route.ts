@@ -170,7 +170,7 @@ async function run(req: Request): Promise<NextResponse> {
   // ─── Send one email per group via Promise.allSettled ───────────────────
   let sentCount = 0
   let skipCount = 0
-  await Promise.all([...groups.entries()].map(async ([key, risks]) => {
+  await Promise.allSettled([...groups.entries()].map(async ([key, risks]) => {
     const ctx = ownerCtx.get(key)!
     const email = emailById.get(ctx.ownerId)
     if (!email) {

@@ -36,6 +36,7 @@ import {
   History,
   IdCard,
   KeyRound,
+  LayoutGrid,
   LifeBuoy,
   Lock,
   Mountain,
@@ -116,6 +117,9 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       tile('people', 'contractors', 'contractors',
         Building2, 'Contractors',
         'Vendor prequalification, host-procedure acknowledgement, and renewals.'),
+      tile('people', 'training-competency-matrix', null,
+        LayoutGrid, 'Training & Competency Matrix',
+        'Required training by worker and course, with expiry status and per-position requirements.'),
     ],
   },
   {

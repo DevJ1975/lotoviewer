@@ -27,6 +27,7 @@ import IncidentKpiPanel         from './IncidentKpiPanel'
 import BBSKpiPanel              from './BBSKpiPanel'
 import OpenActionsPanel         from './OpenActionsPanel'
 import OshaRegWatchPanel        from './OshaRegWatchPanel'
+import TrainingMatrixNavCard    from './TrainingMatrixNavCard'
 
 // Multi-module dashboard — the legacy default home rendered by
 // app/page.tsx for tenants who use more than one safety module.
@@ -199,6 +200,11 @@ export default function MultiModuleDashboard({ embedded = false }: { embedded?: 
       <OshaRegWatchPanel />
 
       <OpenActionsPanel />
+
+      {/* Training & Competency Matrix — admin-only discoverability card.
+          Pure link (no data read), self-hides for non-admins and tenants
+          without the module visible. */}
+      <TrainingMatrixNavCard />
 
       <ComingSoonStrip />
       <ModulesGrid />

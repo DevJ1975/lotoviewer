@@ -19,6 +19,7 @@ import { pickLatestAmendment, computeNeedsUpdate, type EcfrVersion } from '@/lib
 // Auth + run-logging follow the same posture as the other crons.
 
 export const runtime = 'nodejs'
+export const maxDuration = 300
 
 // Don't re-nag more than this often (protects against manual re-triggers). The
 // scheduled cadence is bi-monthly, so a still-outdated corpus is reminded then.

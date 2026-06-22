@@ -851,6 +851,17 @@ export const FEATURES: FeatureDef[] = [
     color:       'slate',
   },
   {
+    id:          'admin-training-competency-matrix',
+    name:        'Training & Competency Matrix',
+    description: 'Required training by worker and course, with expiry status and per-position requirements',
+    href:        '/admin/people/training-competency-matrix',
+    category:    'admin',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'LayoutGrid',
+    color:       'slate',
+  },
+  {
     id:          'admin-hygiene-log',
     name:        'Data Hygiene Log',
     description: 'One-off LOTO data ops — decommissions, renames, FK repairs',
