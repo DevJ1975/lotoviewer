@@ -20,15 +20,19 @@
 | isolation photo | count | equipment photo | count |
 |---|---|---|---|
 | mismatch (cross-wired) | 2 | mismatch (cross-wired) | 2 |
-| missing (broken link) | 1 | match (provenance) | 3 |
-| low_confidence (shared/generic) | 1 | low_confidence | 0 |
-| match→pending vision | 2 | pending vision | 1 |
+| low_confidence (shared or pixels-pending) | 3 | match / class (provenance) | 4 |
+| match (provenance, pixels pending) | 1 | | |
 
-**Headline:** 4 of 6 placards carry an isolation photo that is provably wrong or unverifiable at the
-data layer — two wear another line's photos (`SKCC-*` Cheese Curl images on Tortilla TC1 machines),
-one isolation image is shared between a sheeter and a conveyor, and one isolation URL is a broken path
-that resolves to nothing. Only `SKT1-220` (recently repaired) looks clean, though it still carries a
-leftover Cheese-Curl template step.
+**Headline:** Of 6 placards, **3 carry a wrong or unverifiable isolation photo** (`SKT1-550` mismatch,
+`SKT1-270` mismatch, `SKT1-820` low-confidence) and **2 wear a cross-wired equipment photo** (`SKT1-550`
+and `SKT1-540`, both showing the `SKCC-*` Cheese Curl fryer). `SKT1-270`/`SKT1-820` share one generic
+conveyor isolation image. `SKT1-220` looks clean apart from a leftover Cheese-Curl `H` template step.
+
+> **Correction (re-verified 2026-06-23):** an earlier draft of this report flagged `SKT1-500`'s isolation
+> URL as a broken/404 link. Re-verification against live state shows its `iso_photo_url` and the object
+> **both** at the non-tenant-prefixed key `SKT1-500/SKT1-500_ISO_2026-04-20T22-27-41Z.jpg` — it resolves.
+> The SKT1-500 finding below is corrected to a low-severity storage-convention note (see the companion
+> fixes report).
 
 ## Findings (worst first)
 
@@ -65,13 +69,13 @@ leftover Cheese-Curl template step.
 ### `SKT1-500` — Oven (Tortilla TC 1)
 - **Mfr/model:** (blank) · **Energy steps:** G (manual gas valve / NFPA 86), M, E — coherent for a gas oven
 - **Equipment photo:** object `SKT-OVEN-EQ-2.jpg` exists — **provenance match (class)**; `vision: pending`.
-- **Isolation photo:** **missing (broken link).** The stored `iso_photo_url` points to
-  `…/loto-photos/ae3f1973-…/SKT1-500/SKT1-500_ISO_2026-04-20T22-27-41Z.jpg`, but **no such object exists**;
-  the real object is at the **non-tenant-prefixed** path `SKT1-500/SKT1-500_ISO_2026-04-20T22-27-41Z.jpg`.
-  The placard's ISO image would 404 in the app today.
-- **Recommended fix:** Repair `iso_photo_url` to the real object key (drop the spurious `ae3f1973-…/`
-  prefix). Then vision-verify it shows the gas manual shutoff + main disconnect. (The equip URL
-  `SKT-OVEN-EQ-2.jpg` does resolve, so only the ISO link is broken.)
+- **Isolation photo:** **low_confidence (resolves; pixels pending).** Re-verified against live state: the
+  stored `iso_photo_url` and the object **both** sit at the non-tenant-prefixed key
+  `SKT1-500/SKT1-500_ISO_2026-04-20T22-27-41Z.jpg` (1,044,665 bytes) — it resolves, **no 404**. The only
+  residual is that this object uses a legacy flat key outside the migration-033 tenant-UUID-first RLS folder.
+- **Recommended fix:** No URL repoint (the link already resolves; editing it would risk breaking it).
+  Optionally align the object to the tenant-prefixed RLS folder as a separate, reviewed storage task. Then
+  vision-verify the ISO shows the gas manual shutoff + main disconnect.
 
 ### `SKT1-820` — FastBack to Seasoning 1 (Tortilla TC 1) · Heat and Control
 - **Mfr/model:** Heat and Control · **Energy steps:** E (VFD, 5-min DC-bus), M (eccentric, ~60 s coast-down) — coherent
@@ -133,11 +137,11 @@ applies the consensus floor.
 
     { "equipment_id": "SKT1-500", "description": "Oven", "department": "Tortilla Tc 1", "manufacturer": null, "model": null,
       "equip_photo": { "verdict": "match", "confidence": "low", "notes": "SKT-OVEN-EQ-2.jpg resolves; pixel check pending." },
-      "iso_photo":   { "verdict": "missing", "confidence": "high", "shows_isolation_point": false, "consistent_with_energy_steps": false, "notes": "iso_photo_url has a spurious tenant prefix; no object at that key (404). Real object is SKT1-500/SKT1-500_ISO_2026-04-20T22-27-41Z.jpg." },
-      "merged_iso_verdict": "missing",
-      "consensus": { "equipment_engineer": "missing", "maintenance_engineer": "missing", "agreed": true },
-      "recommended_fix": "Repair iso_photo_url to the real object key (drop the ae3f1973-…/ prefix); then vision-verify it shows the gas manual shutoff + main disconnect.",
-      "action_priority": "high" },
+      "iso_photo":   { "verdict": "low_confidence", "confidence": "medium", "shows_isolation_point": null, "consistent_with_energy_steps": null, "notes": "Re-verified: iso_photo_url and object BOTH at non-prefixed SKT1-500/SKT1-500_ISO_2026-04-20T22-27-41Z.jpg; it resolves (no 404). Residual: legacy flat key outside the migration-033 RLS folder. Pixel check pending." },
+      "merged_iso_verdict": "low_confidence",
+      "consensus": { "equipment_engineer": "low_confidence", "maintenance_engineer": "low_confidence", "agreed": true },
+      "recommended_fix": "No URL repoint (already resolves). Optional: align object to the tenant-prefixed RLS folder as a separate reviewed storage task; then vision-verify the ISO shows the gas manual shutoff + main disconnect.",
+      "action_priority": "low" },
 
     { "equipment_id": "SKT1-820", "description": "Fastback to Seasoning 1", "department": "Tortilla Tc 1", "manufacturer": "Heat and Control", "model": null,
       "equip_photo": { "verdict": "match", "confidence": "low", "notes": "SKT-CONV-EQ-2.jpg generic conveyor image; class-consistent; pixel check pending." },
