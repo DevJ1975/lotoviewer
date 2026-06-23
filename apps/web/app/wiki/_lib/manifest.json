@@ -326,6 +326,19 @@
       "sources":  ["apps/web/app/admin/loto/training-records/**"]
     },
     {
+      "slug":     "training-competency-matrix",
+      "module":   "Training & Competency Matrix",
+      "tagline":  "Org-wide required training by worker and course, with expiry status and per-position requirements.",
+      "category": "admin",
+      "href":     "/admin/people/training-competency-matrix",
+      "wikiPage": "apps/web/app/wiki/training-competency-matrix/page.tsx",
+      "sources":  [
+        "apps/web/app/admin/people/training-competency-matrix/**",
+        "apps/web/migrations/240_training_competency_matrix.sql",
+        "packages/core/src/trainingMatrix.ts"
+      ]
+    },
+    {
       "slug":     "configuration",
       "module":   "Configuration",
       "tagline":  "Work-order URL template and push-dispatch webhook.",
