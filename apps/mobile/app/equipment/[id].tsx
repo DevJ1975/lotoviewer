@@ -10,6 +10,7 @@ import {
 
 import { Text, View } from '@/components/Themed'
 import PhotoCaptureSheet from '@/components/PhotoCaptureSheet'
+import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { loadEquipment } from '@soteria/core/queries/equipment'
 import type { PhotoSlot } from '@soteria/core/storagePaths'
@@ -23,6 +24,7 @@ import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 export default function EquipmentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const equipmentId = Array.isArray(id) ? id[0] : id
+  const { tenantId } = useTenant()
 
   const [equipment, setEquipment] = useState<Equipment | null>(null)
   const [steps,     setSteps]     = useState<LotoEnergyStep[]>([])
@@ -31,7 +33,7 @@ export default function EquipmentDetailScreen() {
   const [captureSlot, setCaptureSlot] = useState<PhotoSlot | null>(null)
 
   useEffect(() => {
-    if (!equipmentId) return
+    if (!equipmentId || !tenantId) return
     let cancelled = false
     async function load() {
       setLoading(true)
@@ -40,7 +42,7 @@ export default function EquipmentDetailScreen() {
         // Run both fetches in parallel; the steps table can be empty
         // for equipment that hasn't had its procedure documented yet.
         const [eq, stepsRes] = await Promise.all([
-          loadEquipment(equipmentId!),
+          loadEquipment(equipmentId!, tenantId!),
           supabase
             .from('loto_energy_steps')
             .select('*')
@@ -60,7 +62,7 @@ export default function EquipmentDetailScreen() {
     }
     void load()
     return () => { cancelled = true }
-  }, [equipmentId])
+  }, [equipmentId, tenantId])
 
   if (loading) {
     return (
