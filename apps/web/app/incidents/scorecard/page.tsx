@@ -11,6 +11,7 @@ import {
 import { HIERARCHY_LABEL, HIERARCHY_OF_CONTROLS } from '@soteria/core/incidentAction'
 import { SEVERITY_ACTUAL_LABEL } from '@soteria/core/incident'
 import IncidentSeverityHeatmap from '@/app/_components/IncidentSeverityHeatmap'
+import CausalFactorTrendPanel from './_components/CausalFactorTrendPanel'
 
 // /incidents/scorecard — full EHS scorecard view.
 //
@@ -100,12 +101,12 @@ export default function ScorecardPage() {
         </div>
       )}
 
-      {metrics && <ScorecardBody m={metrics} monthMax={monthMax} />}
+      {metrics && <ScorecardBody m={metrics} monthMax={monthMax} windowDays={windowDays} tenantId={tenant?.id ?? ''} />}
     </div>
   )
 }
 
-function ScorecardBody({ m, monthMax }: { m: IncidentScorecardMetrics; monthMax: number }) {
+function ScorecardBody({ m, monthMax, windowDays, tenantId }: { m: IncidentScorecardMetrics; monthMax: number; windowDays: number; tenantId: string }) {
   return (
     <>
       <DaysSinceBanner days={m.daysSinceLastRecordable} />
@@ -168,6 +169,10 @@ function ScorecardBody({ m, monthMax }: { m: IncidentScorecardMetrics; monthMax:
 
       <Section title="CAPA hierarchy of controls (closed actions)">
         <HierarchyMix mix={m.hierarchyOfControlsMix} />
+      </Section>
+
+      <Section title="Causal-factor trends (ECFA)">
+        <CausalFactorTrendPanel windowDays={windowDays} tenantId={tenantId} />
       </Section>
 
       <Section title="Heatmaps">

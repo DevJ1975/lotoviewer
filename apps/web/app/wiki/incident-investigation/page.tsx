@@ -1,10 +1,19 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-06-17'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-07-14'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.0',
+    date:    '2026-07-14',
+    changes: [
+      'The 5 Whys method is retired: existing 5 Whys investigations stay ' +
+      'read-only, and new investigations use Fishbone / TapRooT / ICAM or the ' +
+      'new Events & Causal Factors Analysis (ECFA) tool.',
+    ],
+  },
   {
     version: '1.0.0',
     date:    '2026-06-17',
@@ -60,6 +69,12 @@ export default function WikiIncidentInvestigationPage() {
           stopping at &quot;human error&quot;. An optional AI co-pilot suggests the next
           question and drafts findings &mdash; but a person always approves before anything
           is saved.
+        </p>
+        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/30">
+          <strong>5 Whys is now retired.</strong> Existing 5 Whys investigations stay visible
+          read-only; new investigations use Fishbone, TapRooT, or ICAM, or the new{' '}
+          <a href="/wiki/ecfa">Events &amp; Causal Factors Analysis</a> — which supersedes 5 Whys
+          for finding and acting on causal factors.
         </p>
       </Section>
 

@@ -17,7 +17,7 @@
 //   3. Author a release note at /superadmin/release-notes
 //   4. Commit + push; Vercel rebuilds + redeploys
 
-export const VERSION = '1.13.0'
+export const VERSION = '1.14.0'
 
 const COMMIT_RAW = process.env.NEXT_PUBLIC_COMMIT_SHA
                 ?? process.env.VERCEL_GIT_COMMIT_SHA

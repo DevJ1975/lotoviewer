@@ -42,6 +42,7 @@ export type AiSurface =
   | 'loto-audit-regulator'
   | 'scorecard-focus'
   | 'rca-assist'
+  | 'ecfa-assist'
   | 'operator-orchestrator'
   | 'operator-incidents'
   | 'operator-risk'
@@ -123,6 +124,10 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   // case and iterates. Conversational-class caps keep an active investigation
   // unblocked while bounding a retry loop.
   'rca-assist':                       { perHour: 40, perDay: 200 },
+  // ECFA assist — interactive during an investigation: an admin clicks "draft
+  // sequence" / "suggest causal factors" a handful of times per case and
+  // iterates. Conversational-class caps, same as rca-assist.
+  'ecfa-assist':                      { perHour: 40, perDay: 200 },
   // Operator Console. The orchestrator is the one surface rate-limited per user
   // turn (conversational — same caps as the home assistant). The domain
   // sub-agents are fanned out BY the orchestrator within a single turn (often

@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle2, Crown, Loader2, Plus, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
-  RCA_METHODS,
+  ACTIVE_RCA_METHODS,
+  isRetiredRcaMethod,
   RCA_METHOD_LABEL,
   RCA_METHOD_HELP,
   FISHBONE_CATEGORIES,
@@ -212,7 +213,7 @@ export default function RcaSection({
             Root cause analysis method
           </p>
           <div className="flex flex-wrap gap-2">
-            {RCA_METHODS.filter(m => m !== 'none_yet').map(m => (
+            {ACTIVE_RCA_METHODS.map(m => (
               <button
                 key={m}
                 type="button"
@@ -245,11 +246,23 @@ export default function RcaSection({
           </div>
         )}
 
+        {isRetiredRcaMethod(method) && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              The 5 Whys method is <strong>retired</strong>. This investigation is shown read-only so
+              its history is preserved. For new causal analysis, use the{' '}
+              <strong>Events &amp; Causal Factors</strong> tab, or switch this investigation to another
+              method above.
+            </span>
+          </div>
+        )}
         {method === '5_whys' && (
           <FiveWhysBoard
             rows={state.five_whys}
             busy={busy}
             isAdmin={isAdmin}
+            readOnly={isRetiredRcaMethod('5_whys')}
             onAdd={async n => (await addNode('5_whys', n)) as FiveWhysRow | null}
             onDelete={id => void removeNode('5_whys', id)}
             onPatch={(id, patch) => patchNode('5_whys', id, patch)}
