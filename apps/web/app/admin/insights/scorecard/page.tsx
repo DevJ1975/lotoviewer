@@ -49,6 +49,7 @@ import { useMetricDrill } from '@/components/scorecard/useMetricDrill'
 import { MetricDetailSheet } from '@/components/scorecard/MetricDetailSheet'
 import { RiskGauge } from '@/components/scorecard/RiskGauge'
 import { LeadingLaggingPanel } from '@/components/scorecard/LeadingLaggingPanel'
+import LeadingSignalPanel from '@/components/scorecard/LeadingSignalPanel'
 import { PredictiveSection } from '@/components/scorecard/PredictiveSection'
 import { FocusCard } from '@/components/scorecard/FocusCard'
 import {
@@ -430,6 +431,8 @@ export default function ScorecardPage() {
           onSelect={d => drill.open(metricDetailFromDriver(d))}
         />
       )}
+
+      {tenantId && <LeadingSignalPanel tenantId={tenantId} />}
 
       {incidentMetrics && (
         <IncidentScorecardSection

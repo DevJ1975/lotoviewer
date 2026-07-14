@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   mean, variance, stdDev, median, quantile, percentile,
   coefficientOfVariation, skewness, histogram, normalPdf, zScore,
-  poissonPmf, wilsonInterval, ewma, linearRegression, pearson, laggedCorrelation,
+  poissonPmf, wilsonInterval, poissonCountInterval, rateInterval,
+  ewma, linearRegression, pearson, laggedCorrelation,
 } from '../statistics'
 
 describe('central tendency & spread', () => {
@@ -88,6 +89,24 @@ describe('counts / rates', () => {
     expect(ci.lower).toBeGreaterThanOrEqual(0)
     expect(ci.upper).toBeLessThanOrEqual(1)
     expect(wilsonInterval(0, 0)).toEqual({ point: 0, lower: 0, upper: 0 })
+  })
+
+  it('poissonCountInterval: point = count, brackets it, lower floored at 0', () => {
+    const ci = poissonCountInterval(4)
+    expect(ci.point).toBe(4)
+    expect(ci.lower).toBeCloseTo(4 - 1.96 * 2, 10) // 4 ± 1.96·√4
+    expect(ci.upper).toBeCloseTo(4 + 1.96 * 2, 10)
+    expect(poissonCountInterval(0)).toEqual({ point: 0, lower: 0, upper: 0 })
+    expect(poissonCountInterval(1).lower).toBeGreaterThanOrEqual(0) // 1-1.96 floored to 0
+  })
+
+  it('rateInterval: scales the count interval by base/hours; null when hours=0', () => {
+    // 1 recordable in 100k hours → TRIR point = 1·200000/100000 = 2
+    const ci = rateInterval(1, 100_000)!
+    expect(ci.point).toBeCloseTo(2, 10)
+    expect(ci.lower).toBeGreaterThanOrEqual(0)
+    expect(ci.upper).toBeGreaterThan(ci.point) // honest: a single event is imprecise
+    expect(rateInterval(5, 0)).toBeNull()
   })
 })
 

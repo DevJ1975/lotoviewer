@@ -11,6 +11,23 @@ app at `/superadmin/release-notes`.
 ## [Unreleased]
 
 ### Added
+- **Scorecard analytics upgrade — statistical rigor + a cross-module risk
+  engine.** The incident-risk model (the site-health score on the EHS
+  Scorecard) is now **v2.0.0**: beyond incidents / CAPA / risk / training /
+  atmospheric, it reads six new cross-module leading indicators — failing
+  **inspections**, open **BBS-v2** follow-ups, overdue **JHA** reviews,
+  **permits** left open past expiry, competency-matrix **training gaps**
+  (`v_training_matrix`), and **ECFA causal factors coded to weak controls** —
+  each gathered best-effort so a tenant without a module simply contributes no
+  pressure. A new **Leading Indicator Signals** panel (deterministic
+  `laggedCorrelation`) surfaces which leading indicators actually *precede* a
+  tenant's recordables, and by how many months, presented explicitly as
+  exploratory correlation. OSHA rates on the incident scorecard now render
+  **confidence intervals** (Poisson for rates, Wilson for RCA completion) so a
+  handful-of-events rate no longer reads as precise. Adds a short-TTL memo on
+  the risk gather and migration 245 (supporting indexes). Reuses the existing
+  statistics/forecast core (`wilsonInterval`, `rateInterval`,
+  `laggedCorrelation`) rather than new machinery.
 - **Events & Causal Factors Analysis (ECFA).** A new **Events & Causal
   Factors** tab on every incident charts the investigation as a chronological
   timeline — events (rectangles), conditions (ovals) attached above/below, and
