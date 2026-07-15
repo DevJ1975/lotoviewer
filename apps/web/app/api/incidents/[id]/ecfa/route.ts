@@ -8,7 +8,10 @@ import { validateEcfaNode, type EcfaNodeInput } from '@soteria/core/ecfaSchemas'
 //                                   incident's investigation, ordered along
 //                                   the primary sequence.
 // POST   /api/incidents/[id]/ecfa   Append one node. Body: { node: {...} }.
-// PATCH  /api/incidents/[id]/ecfa   Edit one node. Body: { nodeId, patch }.
+// PATCH  /api/incidents/[id]/ecfa   Edit nodes. Body is either a single
+//                                   { nodeId, patch } or a batch
+//                                   { updates: [{ nodeId, patch }, ...] }
+//                                   (the drag-and-drop reorder path).
 // DELETE /api/incidents/[id]/ecfa?nodeId=
 //                                   Remove one node (conditions cascade with
 //                                   their event via parent_event_id).
@@ -27,6 +30,47 @@ const ALLOWED_PATCH_FIELDS = [
   'occurred_at', 'verification_status', 'is_causal_factor',
   'cf_category', 'failed_barrier', 'cf_hierarchy_control', 'ai_edited',
 ] as const
+
+// A single drag can renumber several nodes; cap the batch so a malformed or
+// hostile request can't fan out into an unbounded write.
+const MAX_BATCH = 200
+
+export type EcfaBatchUpdate = { nodeId: string; patch: Record<string, unknown> }
+
+// Validates a batch PATCH body ({ updates: [{ nodeId, patch }] }) against the
+// same whitelist + guards as a single-node PATCH. Pure (no DB), so the reorder
+// contract is unit-testable without a live Supabase. Returns sanitized updates
+// or a caller-facing error string.
+export function parseEcfaBatch(
+  body: unknown,
+): { ok: true; updates: EcfaBatchUpdate[] } | { ok: false; error: string } {
+  const updates = (body as { updates?: unknown } | null)?.updates
+  if (!Array.isArray(updates)) return { ok: false, error: 'updates must be an array' }
+  if (updates.length === 0) return { ok: false, error: 'updates is empty' }
+  if (updates.length > MAX_BATCH) return { ok: false, error: `updates exceeds ${MAX_BATCH}` }
+
+  const out: EcfaBatchUpdate[] = []
+  for (const u of updates) {
+    const nodeId = (u as { nodeId?: unknown } | null)?.nodeId
+    if (typeof nodeId !== 'string' || !UUID_RE.test(nodeId))
+      return { ok: false, error: 'each update needs a uuid nodeId' }
+    const rawPatch = (u as { patch?: unknown }).patch
+    if (!rawPatch || typeof rawPatch !== 'object' || Array.isArray(rawPatch))
+      return { ok: false, error: 'each update needs a patch object' }
+    const patch: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(rawPatch as Record<string, unknown>)) {
+      if (!(ALLOWED_PATCH_FIELDS as readonly string[]).includes(k))
+        return { ok: false, error: `Field not patchable: ${k}` }
+      patch[k] = v
+    }
+    if (Object.keys(patch).length === 0)
+      return { ok: false, error: 'each update needs at least one field' }
+    if ('title' in patch && (typeof patch.title !== 'string' || !patch.title.trim()))
+      return { ok: false, error: 'title must be a non-empty string' }
+    out.push({ nodeId, patch })
+  }
+  return { ok: true, updates: out }
+}
 
 interface RouteContext {
   params: Promise<{ id: string }>
@@ -148,9 +192,45 @@ export async function PATCH(req: Request, ctx: RouteContext) {
   const gate = await requireTenantMember(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
-  let body: { nodeId?: string; patch?: Record<string, unknown> }
+  let body: { nodeId?: string; patch?: Record<string, unknown>; updates?: unknown }
   try { body = (await req.json()) as typeof body }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+
+  // Batch reorder/move path: apply many single-field-safe updates in one
+  // round-trip. Each update targets a distinct id, all scoped to this
+  // investigation + tenant, so the parallel writes don't contend. Supabase-js
+  // has no transaction API — on partial failure we surface the error and the
+  // client reconciles by reloading (same stance as the JHA breakdown route).
+  if (body.updates !== undefined) {
+    const parsed = parseEcfaBatch(body)
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
+    try {
+      const admin = supabaseAdmin()
+      const resolved = await resolveInvestigation(admin, incidentId, gate)
+      if (!resolved.ok) return resolved.res
+
+      const results = await Promise.all(parsed.updates.map((u) =>
+        admin
+          .from(TABLE)
+          .update(u.patch)
+          .eq('id', u.nodeId)
+          .eq('investigation_id', resolved.investigationId)
+          .eq('tenant_id', gate.tenantId)
+          .select('*')
+          .single(),
+      ))
+      const failed = results.find((r) => r.error)
+      if (failed?.error) {
+        Sentry.captureException(failed.error, { tags: { route: 'ecfa/PATCH', stage: 'batch' } })
+        return NextResponse.json({ error: failed.error.message }, { status: 500 })
+      }
+      return NextResponse.json({ nodes: results.map((r) => r.data) })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      Sentry.captureException(e, { tags: { route: 'ecfa/PATCH', stage: 'batch' } })
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
+  }
 
   if (!UUID_RE.test(body.nodeId ?? '')) return NextResponse.json({ error: 'nodeId is required' }, { status: 400 })
 

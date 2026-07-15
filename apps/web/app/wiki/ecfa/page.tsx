@@ -1,9 +1,21 @@
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-07-14'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-07-15'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.0',
+    date:    '2026-07-15',
+    changes: [
+      'The chart editor is now drag-and-drop: drag to reorder events, and drag ' +
+      'conditions between events and the above/below lanes — the chart updates live. ' +
+      'Fully keyboard- and touch-accessible (focus a grip handle, press Enter to lift, ' +
+      'arrow keys to move, Enter to drop, Esc to cancel).',
+      'Events & Causal Factors is now a sub-view of the Investigate & RCA tab rather ' +
+      'than a separate tab; the old link redirects there.',
+    ],
+  },
   {
     version: '1.0.0',
     date:    '2026-07-14',
@@ -55,8 +67,9 @@ export default function WikiEcfaPage() {
           they been different, would have prevented the incident or reduced how bad it was.
         </p>
         <p>
-          ECFA runs <em>alongside</em> the root-cause tools, on its own <strong>Events &amp; Causal
-          Factors</strong> tab of any incident. It is self-contained: once you flag and code a causal
+          ECFA runs <em>alongside</em> the root-cause tools — switch to the <strong>Events &amp; Causal
+          Factors</strong> view under any incident&apos;s <strong>Investigate &amp; RCA</strong> tab. It is
+          self-contained: once you flag and code a causal
           factor, you turn it straight into a tracked corrective action — no separate root-cause step
           is required.
         </p>
@@ -84,6 +97,12 @@ export default function WikiEcfaPage() {
           <li><strong>Create a corrective action</strong> from each causal factor. That closes the loop.</li>
           <li><em>Optional:</em> <strong>Pull sequence into narrative</strong> writes your ordered events into the investigation&apos;s Sequence-of-events field.</li>
         </ol>
+        <p>
+          <strong>Reorder and move by dragging.</strong> Grab an event by its handle to drag it up or
+          down the sequence; grab a condition to drag it to a different event or between the above and
+          below lanes — the chart updates as you drop. Keyboard users can focus a handle and press
+          Enter to lift, arrow keys to move, Enter to drop (Esc cancels).
+        </p>
       </Section>
 
       <Section id="coding" title="Coding a causal factor">

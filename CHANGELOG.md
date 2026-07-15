@@ -11,6 +11,14 @@ app at `/superadmin/release-notes`.
 ## [Unreleased]
 
 ### Added
+- **Drag-and-drop Events & Causal Factors, folded into Investigate & RCA.** The
+  ECFA editor is now directly manipulable: drag to reorder events, and drag
+  conditions between events and the above/below lanes, with the chart updating
+  live. It is keyboard- and touch-accessible, built on the existing react-aria
+  stack (no new dependencies). Events & Causal Factors is now a **sub-view of
+  the Investigate & RCA tab** rather than a separate tab — the old
+  `/incidents/[id]/ecfa` route redirects there — unifying all causal analysis
+  in one place.
 - **Scorecard analytics upgrade — statistical rigor + a cross-module risk
   engine.** The incident-risk model (the site-health score on the EHS
   Scorecard) is now **v2.0.0**: beyond incidents / CAPA / risk / training /

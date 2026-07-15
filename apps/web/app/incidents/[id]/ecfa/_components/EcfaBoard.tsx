@@ -2,13 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  AlertTriangle, Check, CheckCircle2, Download, Loader2, Plus, Sparkles, Star, Trash2, Wrench, X,
+  AlertTriangle, Check, CheckCircle2, Download, GripVertical, Loader2, Plus, Sparkles, Star, Trash2, Wrench, X,
 } from 'lucide-react'
+import {
+  GridList, GridListItem, DropIndicator, Button as DragButton, useDragAndDrop, isTextDropItem,
+} from 'react-aria-components'
 import { supabase } from '@/lib/supabase'
 import {
   assessEcfaCompleteness,
   buildCausalFactorActionDraft,
   detectSymptomLanguage,
+  reorderNodes,
+  moveCondition,
+  applyEcfaPatches,
   CAUSAL_FACTOR_CATEGORIES,
   CAUSAL_FACTOR_CATEGORY_LABEL,
   ECFA_LANES,
@@ -165,6 +171,64 @@ export default function EcfaBoard({ incidentId, tenantId, isAdmin, readOnly }: P
     } finally { setBusy(false) }
   }
 
+  // ── Drag-and-drop reorder / move ─────────────────────────────────────────
+  // Apply the computed patches optimistically (chart + lists re-derive from
+  // `nodes`, so the picture updates instantly), then persist in ONE batch
+  // PATCH, reconciling with the returned rows or rolling back on error.
+  async function commitPatches(changes: Array<{ id: string; patch: Record<string, unknown> }>) {
+    if (changes.length === 0) return
+    const prev = nodes
+    setNodes(applyEcfaPatches(nodes, changes as Array<{ id: string; patch: Partial<EcfaNodeRow> }>))
+    setBusy(true); setError(null)
+    try {
+      const res = await fetch(`/api/incidents/${incidentId}/ecfa`, {
+        method: 'PATCH', headers: await authedHeaders(),
+        body: JSON.stringify({ updates: changes.map(c => ({ nodeId: c.id, patch: c.patch })) }),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
+      if (Array.isArray(body.nodes)) {
+        const byId = new Map((body.nodes as EcfaNodeRow[]).map(n => [n.id, n]))
+        setNodes(cur => cur.map(n => byId.get(n.id) ?? n))
+      }
+    } catch (e) {
+      setNodes(prev) // rollback the optimistic move
+      setError(e instanceof Error ? e.message : String(e))
+    } finally { setBusy(false) }
+  }
+
+  function onReorderEvents(movedId: string, targetId: string, position: 'before' | 'after') {
+    void commitPatches(
+      reorderNodes(events, movedId, targetId, position)
+        .map(c => ({ id: c.id, patch: c.patch as Record<string, unknown> })),
+    )
+  }
+
+  function onDropCondition(p: {
+    eventId: string; lane: EcfaLane; movedId: string; targetKey: string | null; position: 'before' | 'after'
+  }) {
+    const moved = nodes.find(n => n.id === p.movedId)
+    if (!moved || moved.node_type !== 'condition') return
+    const laneOf = (n: EcfaNodeRow): EcfaLane => n.lane ?? 'below'
+    const inLane = (eventId: string, lane: EcfaLane) => nodes
+      .filter(n => n.node_type === 'condition' && n.parent_event_id === eventId && laneOf(n) === lane && n.id !== p.movedId)
+      .sort((a, b) => a.sequence_index - b.sequence_index)
+      .map(n => ({ id: n.id, sequence_index: n.sequence_index }))
+    const dest = inLane(p.eventId, p.lane)
+    const src = moved.parent_event_id ? inLane(moved.parent_event_id, laneOf(moved)) : []
+    let index = dest.length
+    if (p.targetKey != null) {
+      const ti = dest.findIndex(n => n.id === p.targetKey)
+      index = ti === -1 ? dest.length : (p.position === 'before' ? ti : ti + 1)
+    }
+    const changes = moveCondition({
+      moved: { id: moved.id, parent_event_id: moved.parent_event_id, lane: laneOf(moved), sequence_index: moved.sequence_index },
+      from: { siblings: src },
+      to: { eventId: p.eventId, lane: p.lane, siblings: dest, index },
+    })
+    void commitPatches(changes.map(c => ({ id: c.id, patch: c.patch as Record<string, unknown> })))
+  }
+
   async function createCapa(node: EcfaNodeRow) {
     setBusy(true); setError(null); setNotice(null)
     try {
@@ -300,26 +364,26 @@ export default function EcfaBoard({ incidentId, tenantId, isAdmin, readOnly }: P
         />
       )}
 
-      {/* Editor: events + conditions */}
+      {/* Editor: events + conditions (drag to reorder / move) */}
       <div className="space-y-3">
-        {events.map((ev, i) => (
-          <EventRow
-            key={ev.id}
-            index={i}
-            event={ev}
-            conditions={condsByEvent.get(ev.id) ?? []}
-            hasAction={actionSourceIds.includes(ev.id)}
+        {events.length > 0 && (
+          <EventList
+            events={events}
+            condsByEvent={condsByEvent}
             actionSourceIds={actionSourceIds}
             readOnly={readOnly}
             busy={busy}
             onPatch={patchNode}
             onDelete={removeNode}
-            onAddCondition={(title, lane) => addNode({
-              node_type: 'condition', parent_event_id: ev.id, lane, title, sequence_index: (condsByEvent.get(ev.id)?.length ?? 0) + 1,
+            onAddCondition={(eventId, title, lane) => addNode({
+              node_type: 'condition', parent_event_id: eventId, lane, title,
+              sequence_index: (condsByEvent.get(eventId)?.length ?? 0) + 1,
             })}
             onCreateCapa={createCapa}
+            onReorderEvents={onReorderEvents}
+            onDropCondition={onDropCondition}
           />
-        ))}
+        )}
 
         {!readOnly && (
           <AddEventForm busy={busy} onAdd={(title, verified) => addNode({
@@ -353,26 +417,98 @@ export default function EcfaBoard({ incidentId, tenantId, isAdmin, readOnly }: P
 // Event row — the event + its conditions + verification + causal-factor coding
 // ──────────────────────────────────────────────────────────────────────────
 
-function EventRow({
-  index, event, conditions, hasAction, actionSourceIds, readOnly, busy,
-  onPatch, onDelete, onAddCondition, onCreateCapa,
-}: {
-  index: number
-  event: EcfaNodeRow
-  conditions: EcfaNodeRow[]
-  hasAction: boolean
+interface EventListProps {
+  events:          EcfaNodeRow[]
+  condsByEvent:    Map<string, EcfaNodeRow[]>
   actionSourceIds: string[]
-  readOnly: boolean
-  busy: boolean
-  onPatch: (id: string, patch: Record<string, unknown>) => Promise<boolean>
-  onDelete: (id: string) => void
-  onAddCondition: (title: string, lane: EcfaLane) => Promise<EcfaNodeRow | null>
-  onCreateCapa: (node: EcfaNodeRow) => void
+  readOnly:        boolean
+  busy:            boolean
+  onPatch:         (id: string, patch: Record<string, unknown>) => Promise<boolean>
+  onDelete:        (id: string) => void
+  onAddCondition:  (eventId: string, title: string, lane: EcfaLane) => Promise<EcfaNodeRow | null>
+  onCreateCapa:    (node: EcfaNodeRow) => void
+  onReorderEvents: (movedId: string, targetId: string, position: 'before' | 'after') => void
+  onDropCondition: (p: { eventId: string; lane: EcfaLane; movedId: string; targetKey: string | null; position: 'before' | 'after' }) => void
+}
+
+// The event sequence as a reorderable GridList. Events carry the 'ecfa-event'
+// drag type so they never mix with condition drops.
+function EventList(props: EventListProps) {
+  const { events, readOnly, busy } = props
+  const { dragAndDropHooks } = useDragAndDrop({
+    isDisabled: readOnly || busy,
+    getItems: (keys) => [...keys].map(k => ({ 'ecfa-event': String(k), 'text/plain': String(k) })),
+    acceptedDragTypes: ['ecfa-event'],
+    getDropOperation: () => 'move',
+    onReorder(e) {
+      const movedId = String([...e.keys][0] ?? '')
+      if (movedId) props.onReorderEvents(movedId, String(e.target.key), e.target.dropPosition === 'before' ? 'before' : 'after')
+    },
+    renderDropIndicator: (target) => (
+      <DropIndicator target={target}
+        className="h-1 my-0.5 rounded bg-transparent outline-none data-[drop-target]:bg-brand-navy" />
+    ),
+  })
+
+  return (
+    <GridList aria-label="Event sequence" items={events} selectionMode="none"
+      dragAndDropHooks={dragAndDropHooks} className="space-y-3 outline-none">
+      {(ev) => (
+        <GridListItem id={ev.id} textValue={ev.title}
+          className="block rounded-xl border border-slate-200 dark:border-slate-800 p-3 outline-none data-[dragging]:opacity-50 data-[focus-visible]:ring-2 data-[focus-visible]:ring-brand-navy">
+          <EventCard
+            event={ev}
+            index={events.findIndex(e => e.id === ev.id)}
+            conditions={props.condsByEvent.get(ev.id) ?? []}
+            actionSourceIds={props.actionSourceIds}
+            readOnly={readOnly}
+            busy={busy}
+            onPatch={props.onPatch}
+            onDelete={props.onDelete}
+            onAddCondition={props.onAddCondition}
+            onCreateCapa={props.onCreateCapa}
+            onDropCondition={props.onDropCondition}
+          />
+        </GridListItem>
+      )}
+    </GridList>
+  )
+}
+
+// One event card: its two condition lanes (above / below) with the event
+// header + coding controls between them. Kept inside a GridListItem so the
+// whole card reorders as a unit.
+function EventCard({
+  event, index, conditions, actionSourceIds, readOnly, busy,
+  onPatch, onDelete, onAddCondition, onCreateCapa, onDropCondition,
+}: {
+  event:           EcfaNodeRow
+  index:           number
+  conditions:      EcfaNodeRow[]
+  actionSourceIds: string[]
+  readOnly:        boolean
+  busy:            boolean
+  onPatch:         (id: string, patch: Record<string, unknown>) => Promise<boolean>
+  onDelete:        (id: string) => void
+  onAddCondition:  (eventId: string, title: string, lane: EcfaLane) => Promise<EcfaNodeRow | null>
+  onCreateCapa:    (node: EcfaNodeRow) => void
+  onDropCondition: EventListProps['onDropCondition']
 }) {
   const [adding, setAdding] = useState(false)
+  const hasAction = actionSourceIds.includes(event.id)
+  const above = conditions.filter(c => (c.lane ?? 'below') === 'above')
+  const below = conditions.filter(c => (c.lane ?? 'below') === 'below')
+
   return (
-    <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-2">
+    <div className="space-y-2">
+      {(above.length > 0 || !readOnly) && (
+        <ConditionLane eventId={event.id} lane="above" conditions={above}
+          actionSourceIds={actionSourceIds} readOnly={readOnly} busy={busy}
+          onPatch={onPatch} onDelete={onDelete} onCreateCapa={onCreateCapa} onDropCondition={onDropCondition} />
+      )}
+
       <div className="flex items-start gap-2">
+        {!readOnly && <DragHandle label={`Reorder event: ${event.title}`} disabled={busy} />}
         <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300">{index + 1}</span>
         <div className="flex-1 min-w-0">
           <p className="text-sm text-slate-800 dark:text-slate-200">{event.title}</p>
@@ -385,31 +521,16 @@ function EventRow({
         <NodeControls node={event} busy={busy} onPatch={onPatch} onCreateCapa={onCreateCapa} hasAction={hasAction} />
       )}
 
-      {/* Conditions */}
-      {conditions.length > 0 && (
-        <ul className="ml-8 space-y-1.5 border-l border-dashed border-slate-200 dark:border-slate-700 pl-3">
-          {conditions.map(c => (
-            <li key={c.id} className="space-y-1">
-              <div className="flex items-start gap-2">
-                <span className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-sky-400 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] text-slate-700 dark:text-slate-200">{c.title} <span className="text-[10px] text-slate-400">({c.lane ?? 'below'})</span></p>
-                  <NodeChips node={c} hasAction={actionSourceIds.includes(c.id)} />
-                </div>
-                {!readOnly && <DeleteButton onClick={() => onDelete(c.id)} disabled={busy} small />}
-              </div>
-              {!readOnly && (
-                <div className="ml-4"><NodeControls node={c} busy={busy} onPatch={onPatch} onCreateCapa={onCreateCapa} hasAction={actionSourceIds.includes(c.id)} /></div>
-              )}
-            </li>
-          ))}
-        </ul>
+      {(below.length > 0 || !readOnly) && (
+        <ConditionLane eventId={event.id} lane="below" conditions={below}
+          actionSourceIds={actionSourceIds} readOnly={readOnly} busy={busy}
+          onPatch={onPatch} onDelete={onDelete} onCreateCapa={onCreateCapa} onDropCondition={onDropCondition} />
       )}
 
       {!readOnly && (
         adding ? (
           <div className="ml-8"><AddConditionForm busy={busy} onCancel={() => setAdding(false)}
-            onAdd={async (title, lane) => { const ok = await onAddCondition(title, lane); if (ok) setAdding(false) }} /></div>
+            onAdd={async (title, lane) => { const ok = await onAddCondition(event.id, title, lane); if (ok) setAdding(false) }} /></div>
         ) : (
           <button type="button" onClick={() => setAdding(true)} disabled={busy}
             className="ml-8 inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-700 px-2 py-0.5 text-[11px] text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">
@@ -418,6 +539,116 @@ function EventRow({
         )
       )}
     </div>
+  )
+}
+
+// One droppable condition lane (above or below a given event). Conditions
+// carry the 'ecfa-condition' drag type, so they move freely between lanes and
+// events; onReorder handles same-lane, onInsert cross-lane between items, and
+// onRootDrop a drop into an empty lane.
+function ConditionLane({
+  eventId, lane, conditions, actionSourceIds, readOnly, busy,
+  onPatch, onDelete, onCreateCapa, onDropCondition,
+}: {
+  eventId:         string
+  lane:            EcfaLane
+  conditions:      EcfaNodeRow[]
+  actionSourceIds: string[]
+  readOnly:        boolean
+  busy:            boolean
+  onPatch:         (id: string, patch: Record<string, unknown>) => Promise<boolean>
+  onDelete:        (id: string) => void
+  onCreateCapa:    (node: EcfaNodeRow) => void
+  onDropCondition: EventListProps['onDropCondition']
+}) {
+  const emit = (movedId: string, targetKey: string | null, position: 'before' | 'after') =>
+    onDropCondition({ eventId, lane, movedId, targetKey, position })
+
+  const { dragAndDropHooks } = useDragAndDrop({
+    isDisabled: readOnly || busy,
+    getItems: (keys) => [...keys].map(k => ({ 'ecfa-condition': String(k), 'text/plain': String(k) })),
+    acceptedDragTypes: ['ecfa-condition'],
+    getDropOperation: () => 'move',
+    onReorder(e) {
+      const movedId = String([...e.keys][0] ?? '')
+      if (movedId) emit(movedId, String(e.target.key), e.target.dropPosition === 'before' ? 'before' : 'after')
+    },
+    async onInsert(e) {
+      const item = e.items.find(isTextDropItem)
+      if (!item) return
+      const id = await item.getText(item.types.has('ecfa-condition') ? 'ecfa-condition' : 'text/plain')
+      if (id) emit(id, String(e.target.key), e.target.dropPosition === 'before' ? 'before' : 'after')
+    },
+    async onRootDrop(e) {
+      const item = e.items.find(isTextDropItem)
+      if (!item) return
+      const id = await item.getText(item.types.has('ecfa-condition') ? 'ecfa-condition' : 'text/plain')
+      if (id) emit(id, null, 'after')
+    },
+    renderDropIndicator: (target) => (
+      <DropIndicator target={target}
+        className="h-0.5 rounded bg-transparent outline-none data-[drop-target]:bg-sky-500" />
+    ),
+  })
+
+  return (
+    <GridList aria-label={`${lane} conditions`} items={conditions} selectionMode="none"
+      dragAndDropHooks={dragAndDropHooks}
+      className="ml-8 space-y-1.5 border-l border-dashed border-slate-200 dark:border-slate-700 pl-3 outline-none"
+      renderEmptyState={() => readOnly ? null : (
+        <p className="rounded border border-dashed border-slate-200 dark:border-slate-700 px-2 py-1 text-[10px] italic text-slate-400">
+          Drop a condition here ({lane})
+        </p>
+      )}>
+      {(c) => (
+        <GridListItem id={c.id} textValue={c.title}
+          className="block rounded outline-none data-[dragging]:opacity-50 data-[focus-visible]:ring-2 data-[focus-visible]:ring-sky-400">
+          <ConditionRow condition={c} hasAction={actionSourceIds.includes(c.id)}
+            readOnly={readOnly} busy={busy} onPatch={onPatch} onDelete={onDelete} onCreateCapa={onCreateCapa} />
+        </GridListItem>
+      )}
+    </GridList>
+  )
+}
+
+function ConditionRow({
+  condition, hasAction, readOnly, busy, onPatch, onDelete, onCreateCapa,
+}: {
+  condition:    EcfaNodeRow
+  hasAction:    boolean
+  readOnly:     boolean
+  busy:         boolean
+  onPatch:      (id: string, patch: Record<string, unknown>) => Promise<boolean>
+  onDelete:     (id: string) => void
+  onCreateCapa: (node: EcfaNodeRow) => void
+}) {
+  return (
+    <div className="space-y-1 py-0.5">
+      <div className="flex items-start gap-2">
+        {!readOnly && <DragHandle label={`Move condition: ${condition.title}`} disabled={busy} small />}
+        <span className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-sky-400 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-[13px] text-slate-700 dark:text-slate-200">{condition.title} <span className="text-[10px] text-slate-400">({condition.lane ?? 'below'})</span></p>
+          <NodeChips node={condition} hasAction={hasAction} />
+        </div>
+        {!readOnly && <DeleteButton onClick={() => onDelete(condition.id)} disabled={busy} small />}
+      </div>
+      {!readOnly && (
+        <div className="ml-4"><NodeControls node={condition} busy={busy} onPatch={onPatch} onCreateCapa={onCreateCapa} hasAction={hasAction} /></div>
+      )}
+    </div>
+  )
+}
+
+// react-aria drag handle — only the handle starts a drag, so the in-card
+// buttons / selects / inputs stay clickable and the nested condition lanes
+// don't fight the event drag. Keyboard users focus it and press Enter to lift.
+function DragHandle({ label, disabled, small }: { label: string; disabled?: boolean; small?: boolean }) {
+  return (
+    <DragButton slot="drag" aria-label={label} isDisabled={disabled}
+      className="mt-0.5 shrink-0 cursor-grab rounded p-0.5 text-slate-400 outline-none hover:text-slate-600 dark:hover:text-slate-200 data-[disabled]:cursor-default data-[disabled]:opacity-40 data-[focus-visible]:ring-2 data-[focus-visible]:ring-brand-navy">
+      <GripVertical className={small ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+    </DragButton>
   )
 }
 

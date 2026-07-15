@@ -1,10 +1,19 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.1.0'
-const LAST_UPDATED    = '2026-07-14'
+const CURRENT_VERSION = '1.2.0'
+const LAST_UPDATED    = '2026-07-15'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.2.0',
+    date:    '2026-07-15',
+    changes: [
+      'Events & Causal Factors (ECFA) is now a sub-view of this tab — switch ' +
+      'between Root Cause Analysis and Events & Causal Factors above the analysis. ' +
+      'The standalone Events & Causal Factors tab (and its /ecfa link) redirects here.',
+    ],
+  },
   {
     version: '1.1.0',
     date:    '2026-07-14',

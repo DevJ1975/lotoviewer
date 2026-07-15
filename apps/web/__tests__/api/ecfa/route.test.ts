@@ -62,3 +62,56 @@ describe('ECFA CRUD route — guard paths', () => {
     expect(res.status).toBe(400)
   })
 })
+
+describe('parseEcfaBatch — pure validator', () => {
+  it('accepts a batch of whitelisted patches', async () => {
+    const { parseEcfaBatch } = await importRoute()
+    const r = parseEcfaBatch({ updates: [
+      { nodeId: VALID, patch: { sequence_index: 2 } },
+      { nodeId: VALID, patch: { parent_event_id: VALID, lane: 'above' } },
+    ] })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.updates).toHaveLength(2)
+  })
+  it('rejects a non-array updates', async () => {
+    const { parseEcfaBatch } = await importRoute()
+    expect(parseEcfaBatch({ updates: 'nope' }).ok).toBe(false)
+  })
+  it('rejects a non-uuid nodeId', async () => {
+    const { parseEcfaBatch } = await importRoute()
+    expect(parseEcfaBatch({ updates: [{ nodeId: 'x', patch: { lane: 'above' } }] }).ok).toBe(false)
+  })
+  it('rejects a non-whitelisted patch field', async () => {
+    const { parseEcfaBatch } = await importRoute()
+    const r = parseEcfaBatch({ updates: [{ nodeId: VALID, patch: { tenant_id: VALID } }] })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/not patchable/i)
+  })
+  it('rejects an empty patch', async () => {
+    const { parseEcfaBatch } = await importRoute()
+    expect(parseEcfaBatch({ updates: [{ nodeId: VALID, patch: {} }] }).ok).toBe(false)
+  })
+  it('rejects an over-large batch', async () => {
+    const { parseEcfaBatch } = await importRoute()
+    const updates = Array.from({ length: 201 }, () => ({ nodeId: VALID, patch: { sequence_index: 1 } }))
+    expect(parseEcfaBatch({ updates }).ok).toBe(false)
+  })
+})
+
+describe('ECFA PATCH batch — guard paths', () => {
+  beforeEach(() => {
+    requireTenantMemberMock.mockReset()
+    gateOk()
+  })
+  it('rejects a batch with a non-whitelisted field with 400', async () => {
+    const { PATCH } = await importRoute()
+    const res = await PATCH(
+      new Request(`http://t/api/incidents/${VALID}/ecfa`, {
+        method: 'PATCH',
+        body: JSON.stringify({ updates: [{ nodeId: VALID, patch: { node_type: 'event' } }] }),
+      }),
+      ctx(VALID),
+    )
+    expect(res.status).toBe(400)
+  })
+})
