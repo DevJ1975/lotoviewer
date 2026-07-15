@@ -15,6 +15,8 @@
 // derived here so a future change to the priority scheme
 // doesn't require a migration.
 
+import { quantile } from '@soteria/core/statistics'
+
 export type TicketReason = 'user_requested' | 'low_confidence' | 'safety_critical'
 
 export interface MetricsTicketRow {
@@ -97,16 +99,6 @@ interface TenantAccum {
 interface DailyAccum {
   opened:   number
   resolved: number
-}
-
-function quantile(sorted: number[], q: number): number | null {
-  if (sorted.length === 0) return null
-  if (sorted.length === 1) return sorted[0]
-  const pos = (sorted.length - 1) * q
-  const lo  = Math.floor(pos)
-  const hi  = Math.ceil(pos)
-  if (lo === hi) return sorted[lo]
-  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo)
 }
 
 export function aggregateMetrics(rows: MetricsTicketRow[], now: Date = new Date()): MetricsSummary {

@@ -245,6 +245,22 @@
       ]
     },
     {
+      "slug":     "ecfa",
+      "module":   "Events & Causal Factors Analysis",
+      "tagline":  "Chart the event/condition timeline, code causal factors, and turn each into a corrective action — with a human-approved AI co-pilot.",
+      "category": "safety",
+      "href":     "/incidents",
+      "wikiPage": "apps/web/app/wiki/ecfa/page.tsx",
+      "sources":  [
+        "apps/web/app/incidents/[id]/ecfa/**",
+        "apps/web/app/api/incidents/[id]/ecfa/**",
+        "apps/web/app/incidents/[id]/actions/route.ts",
+        "apps/web/app/incidents/scorecard/_components/CausalFactorTrendPanel.tsx",
+        "packages/core/src/ecfaSchemas.ts",
+        "apps/web/migrations/244_incident_ecfa.sql"
+      ]
+    },
+    {
       "slug":     "jha",
       "module":   "Job Hazard Analysis",
       "tagline":  "Per-task hazard breakdowns with steps, hazards, controls, and review cadence.",

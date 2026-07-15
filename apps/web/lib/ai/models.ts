@@ -123,6 +123,13 @@ export const MODEL_BY_SURFACE = {
   // the other structured-output surfaces. The route never writes RCA nodes
   // or actions; acceptance is an explicit human step. Sonnet.
   'rca-assist':                       SONNET,
+  // ECFA assist — drafts the chronological event sequence from the incident
+  // narrative and flags candidate causal factors (with coding + presumptive-
+  // evidence gaps). Causal reasoning over the incident context + the current
+  // chart, narrative output a human accepts node-by-node; the route never
+  // writes ECFA nodes. Same advisory structured-output class as rca-assist →
+  // Sonnet.
+  'ecfa-assist':                      SONNET,
   // ── Operator Console (multi-agent: orchestrator + domain sub-agents) ──────
   // A dedicated conversational surface where an agent operates the SaaS and
   // reconfigures the home page. Barbell routing, same posture as the LOTO

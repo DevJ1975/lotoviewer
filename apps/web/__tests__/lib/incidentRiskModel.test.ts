@@ -105,4 +105,37 @@ describe('summarizeIncidentRisk', () => {
     const dr = (x: ReturnType<typeof summarizeIncidentRisk>) => x.drivers.find(d => d.key === 'recordable_trend')!.pressure
     expect(dr(rising)).toBeGreaterThan(dr(flat))
   })
+
+  // ── Cross-module leading indicators (v2.0.0) ────────────────────────────────
+  const CROSS_KEYS = [
+    'inspection_failing', 'bbs_followup_overdue', 'jha_reviews_overdue',
+    'permit_noncompliance', 'training_gaps', 'ecfa_weak_controls',
+  ]
+
+  it('surfaces the new cross-module leading drivers when their inputs are present', () => {
+    const r = summarizeIncidentRisk({
+      ...CLEAN,
+      inspectionsFailed: 4, inspectionsTotal: 10,   // 40% fail
+      bbsFollowupsOpen: 3, jhaReviewsOverdue: 2, permitExpiredOpen: 1, trainingGaps: 5,
+      ecfaCausalFactors: 4, ecfaWeakControls: 3,    // 75% weak-control
+    })
+    const byKey = new Map(r.drivers.map(d => [d.key, d]))
+    for (const k of CROSS_KEYS) {
+      expect(byKey.has(k)).toBe(true)
+      expect(byKey.get(k)!.kind).toBe('leading')
+      expect(byKey.get(k)!.href).toBeTruthy()
+    }
+    expect(byKey.get('inspection_failing')!.pressure).toBeCloseTo(40, 5)
+    expect(byKey.get('ecfa_weak_controls')!.pressure).toBeCloseTo(75, 5)
+    // Cross-module pressure raises the score above the clean baseline.
+    expect(r.score).toBeGreaterThan(summarizeIncidentRisk(CLEAN).score)
+    expect(r.modelVersion).toBe('2.0.0')
+  })
+
+  it('cross-module drivers stay at zero pressure when their module inputs are absent', () => {
+    const { drivers } = summarizeIncidentRisk(CLEAN) // no v2 fields set
+    for (const k of CROSS_KEYS) {
+      expect(drivers.find(d => d.key === k)!.pressure).toBe(0)
+    }
+  })
 })

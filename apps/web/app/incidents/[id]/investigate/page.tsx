@@ -8,7 +8,7 @@ import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import {
-  RCA_METHODS,
+  ACTIVE_RCA_METHODS,
   RCA_METHOD_LABEL,
   RCA_METHOD_HELP,
   type IncidentInvestigationRow,
@@ -239,7 +239,7 @@ export default function InvestigatePage() {
             Pick the RCA method you&apos;ll use. You can change it later from the RCA tab.
           </p>
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {RCA_METHODS.filter(m => m !== 'none_yet').map(m => (
+            {ACTIVE_RCA_METHODS.map(m => (
               <button
                 key={m}
                 type="button"

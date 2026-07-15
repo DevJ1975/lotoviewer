@@ -157,6 +157,9 @@ export default function IncidentDetailPage() {
         <Link href={`/incidents/${id}/investigate`} className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">
           Investigate &amp; RCA
         </Link>
+        <Link href={`/incidents/${id}/ecfa`} className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">
+          Events &amp; Causal Factors
+        </Link>
         <Link href={`/incidents/${id}/actions`} className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">
           Actions
         </Link>

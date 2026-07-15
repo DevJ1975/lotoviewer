@@ -11,6 +11,46 @@ app at `/superadmin/release-notes`.
 ## [Unreleased]
 
 ### Added
+- **Scorecard analytics upgrade — statistical rigor + a cross-module risk
+  engine.** The incident-risk model (the site-health score on the EHS
+  Scorecard) is now **v2.0.0**: beyond incidents / CAPA / risk / training /
+  atmospheric, it reads six new cross-module leading indicators — failing
+  **inspections**, open **BBS-v2** follow-ups, overdue **JHA** reviews,
+  **permits** left open past expiry, competency-matrix **training gaps**
+  (`v_training_matrix`), and **ECFA causal factors coded to weak controls** —
+  each gathered best-effort so a tenant without a module simply contributes no
+  pressure. A new **Leading Indicator Signals** panel (deterministic
+  `laggedCorrelation`) surfaces which leading indicators actually *precede* a
+  tenant's recordables, and by how many months, presented explicitly as
+  exploratory correlation. OSHA rates on the incident scorecard now render
+  **confidence intervals** (Poisson for rates, Wilson for RCA completion) so a
+  handful-of-events rate no longer reads as precise. Adds a short-TTL memo on
+  the risk gather and migration 245 (supporting indexes). Reuses the existing
+  statistics/forecast core (`wilsonInterval`, `rateInterval`,
+  `laggedCorrelation`) rather than new machinery.
+- **Events & Causal Factors Analysis (ECFA).** A new **Events & Causal
+  Factors** tab on every incident charts the investigation as a chronological
+  timeline — events (rectangles), conditions (ovals) attached above/below, and
+  the terminal loss (diamond) — reading left→right. Every node tracks
+  **verified vs. presumptive** status (solid vs. dashed) so the chart separates
+  fact from assumption. Flagged **causal factors** are coded by category (ICAM
+  taxonomy), failed/missing barrier, and hierarchy-of-controls level, and turn
+  in one click into a tracked corrective action
+  (`incident_actions.source_ecfa_node_id`). An optional, **human-approved**
+  Claude co-pilot drafts the event sequence from the narrative and suggests
+  causal factors; nothing is written until a person accepts it, and accepted
+  text is badged. An advisory **investigation-quality score** surfaces gaps, and
+  the incident scorecard gains a **causal-factor trends** panel (by category and
+  control level). Rendered as dependency-free SVG from a pure layout function.
+  Migration 244 adds `incident_ecfa_nodes`, `incident_ecfa_ai_suggestions`, and
+  the `source_ecfa_node_id` link; new wiki page at `/wiki/ecfa`.
+- **5 Whys retired.** Following the ECFA rollout, the 5 Whys RCA method is no
+  longer offered for new investigations. Existing 5 Whys investigations remain
+  visible **read-only** (no data is removed); Fishbone / TapRooT / ICAM stay
+  available, and ECFA supersedes 5 Whys for causal analysis.
+- **Fix:** AI-drafted corrective actions are now badged in the database — the
+  `actions` route persists the `ai_origin` / `ai_edited` provenance the client
+  already sent (previously dropped on insert).
 - **AI-assisted root cause analysis (incident 5 Whys, rebuilt).** Acting on
   feedback that the old tool "is not a good tool," the 5 Whys editor now writes
   contextual prompts that chain each "why" to the answer above it, supports
