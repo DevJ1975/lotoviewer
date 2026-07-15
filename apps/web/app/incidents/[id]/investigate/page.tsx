@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, AlertTriangle, Loader2, CheckCircle2, Play, Sparkles } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, BookOpen, Loader2, CheckCircle2, Play, Sparkles } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
@@ -15,6 +15,7 @@ import {
   type RcaMethod,
 } from '@soteria/core/rcaSchemas'
 import RcaSection from './_components/RcaSection'
+import EcfaBoard from '../ecfa/_components/EcfaBoard'
 
 // /incidents/[id]/investigate — investigation dossier.
 //
@@ -67,6 +68,14 @@ export default function InvestigatePage() {
   // Identified root-cause text reported up by RcaSection, used by the
   // one-click "Pull from RCA" affordance on the root_causes narrative.
   const [rootTexts, setRootTexts] = useState<string[]>([])
+  // Which analysis surface is showing. Both hang off the same investigation
+  // row; ECFA runs alongside the chosen RCA method. Initial view honours a
+  // `?view=ecfa` deep-link (used by the old /ecfa route's redirect) without
+  // pulling in useSearchParams (which would force a Suspense boundary).
+  const [subView, setSubView] = useState<'rca' | 'ecfa'>(() =>
+    typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('view') === 'ecfa'
+      ? 'ecfa' : 'rca')
 
   const load = useCallback(async () => {
     if (!tenant?.id || !id) return
@@ -275,18 +284,57 @@ export default function InvestigatePage() {
             <Stat label="Completed"  value={investigation.completed_at ? new Date(investigation.completed_at).toLocaleString() : '—'} />
           </section>
 
-          {/* Root cause analysis — unified into the dossier (the /rca tab
-              now redirects here). Always shown so the analysis tree stays
-              visible after sign-off, matching the old RCA tab. */}
+          {/* Analysis — RCA and Events & Causal Factors both hang off this
+              investigation row (the old /rca and /ecfa tabs now redirect
+              here). A sub-switch picks which surface is showing. */}
           {tenant?.id && (
-            <RcaSection
-              incidentId={id}
-              tenantId={tenant.id}
-              method={investigation.rca_method}
-              isAdmin={isAdmin}
-              onChangeMethod={changeMethod}
-              onRootsChange={setRootTexts}
-            />
+            <section className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap gap-2">
+                  {(['rca', 'ecfa'] as const).map(v => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setSubView(v)}
+                      className={
+                        'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ' +
+                        (subView === v
+                          ? 'border-brand-navy bg-brand-navy text-white'
+                          : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-500')
+                      }
+                    >
+                      {v === 'rca' ? 'Root Cause Analysis' : 'Events & Causal Factors'}
+                    </button>
+                  ))}
+                </div>
+                {subView === 'ecfa' && (
+                  <Link
+                    href="/wiki/ecfa"
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-300 dark:border-slate-700 px-2.5 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                  >
+                    <BookOpen className="h-3.5 w-3.5" /> How to use
+                  </Link>
+                )}
+              </div>
+
+              {subView === 'rca' ? (
+                <RcaSection
+                  incidentId={id}
+                  tenantId={tenant.id}
+                  method={investigation.rca_method}
+                  isAdmin={isAdmin}
+                  onChangeMethod={changeMethod}
+                  onRootsChange={setRootTexts}
+                />
+              ) : (
+                <EcfaBoard
+                  incidentId={id}
+                  tenantId={tenant.id}
+                  isAdmin={isAdmin}
+                  readOnly={!!investigation.completed_at}
+                />
+              )}
+            </section>
           )}
 
           <section className="space-y-4">

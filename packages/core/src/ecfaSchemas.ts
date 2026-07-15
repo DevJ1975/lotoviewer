@@ -367,6 +367,114 @@ export function layoutEcfaChart(nodes: EcfaLayoutNode[]): EcfaGeometry {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// Reorder / move math — the pure engine behind the drag-and-drop editor
+// ──────────────────────────────────────────────────────────────────────────
+//
+// The editor moves nodes by dragging; these helpers turn a drop into the
+// MINIMAL set of { id, patch } changes to persist. They renumber per
+// (event, lane) bucket to match layoutEcfaChart, which sorts each bucket
+// independently — so cross-lane sequence_index overlap is harmless and never
+// needs reconciling. Every helper is pure + deterministic (same inputs →
+// same patches) so the same math drives the optimistic UI update and the
+// unit tests.
+
+/** A node reduced to what ordering needs. */
+type SeqNode = { id: string; sequence_index: number }
+
+// Assign contiguous sequence_index (1-based by default) across an
+// already-ordered list, returning ONLY the ids whose index actually changes.
+// This is what keeps a drag from rewriting every sibling — an adjacent move on
+// contiguous indices touches just the leapfrogged span.
+export function renumberSequence<T extends SeqNode>(
+  ordered: readonly T[],
+  base = 1,
+): Array<{ id: string; sequence_index: number }> {
+  const out: Array<{ id: string; sequence_index: number }> = []
+  ordered.forEach((n, i) => {
+    const next = base + i
+    if (n.sequence_index !== next) out.push({ id: n.id, sequence_index: next })
+  })
+  return out
+}
+
+// Reorder one flat list (the event sequence, or a single condition lane) by
+// dropping `movedId` before/after `targetId`, then renumber. `current` is the
+// list in its present display order. Returns the minimal sequence_index
+// patches, or [] for a no-op (drop onto self, or unknown ids).
+export function reorderNodes(
+  current: readonly SeqNode[],
+  movedId: string,
+  targetId: string,
+  position: 'before' | 'after',
+): Array<{ id: string; patch: { sequence_index: number } }> {
+  if (movedId === targetId) return []
+  const moved = current.find((n) => n.id === movedId)
+  if (!moved) return []
+  const without = current.filter((n) => n.id !== movedId)
+  const targetIdx = without.findIndex((n) => n.id === targetId)
+  if (targetIdx === -1) return []
+  const insertAt = position === 'before' ? targetIdx : targetIdx + 1
+  const next = [...without.slice(0, insertAt), moved, ...without.slice(insertAt)]
+  return renumberSequence(next).map((c) => ({ id: c.id, patch: { sequence_index: c.sequence_index } }))
+}
+
+// Move a condition to a (possibly different) event / lane at a given insert
+// index. Emits the moved node's changed structure fields (parent_event_id only
+// when the event changes, lane only when the lane changes) plus the renumber
+// of the destination lane and — when the node left its original lane — the
+// compaction of the source lane. `siblings` lists EXCLUDE the moved node and
+// are in display order. Merges to at most one patch per id; [] on a true
+// no-op.
+export function moveCondition(args: {
+  moved: { id: string; parent_event_id: string | null; lane: EcfaLane | null; sequence_index: number }
+  from:  { siblings: SeqNode[] }
+  to:    { eventId: string; lane: EcfaLane; siblings: SeqNode[]; index: number }
+}): Array<{ id: string; patch: EcfaNodePatchInput }> {
+  const { moved, from, to } = args
+  const sameLocation = to.eventId === moved.parent_event_id && to.lane === moved.lane
+
+  const changes = new Map<string, EcfaNodePatchInput>()
+  const put = (id: string, p: EcfaNodePatchInput) =>
+    changes.set(id, { ...(changes.get(id) ?? {}), ...p })
+
+  // Destination lane renumber, with the moved node spliced in at `index`.
+  const clampedIndex = Math.max(0, Math.min(to.index, to.siblings.length))
+  const destOrder: SeqNode[] = [
+    ...to.siblings.slice(0, clampedIndex),
+    { id: moved.id, sequence_index: moved.sequence_index },
+    ...to.siblings.slice(clampedIndex),
+  ]
+  for (const c of renumberSequence(destOrder)) put(c.id, { sequence_index: c.sequence_index })
+
+  // Source lane compaction (only when the node actually left it).
+  if (!sameLocation) {
+    for (const c of renumberSequence(from.siblings)) put(c.id, { sequence_index: c.sequence_index })
+  }
+
+  // The moved node's structural change — event/lane, only when they differ.
+  const movedPatch: EcfaNodePatchInput = {}
+  if (to.eventId !== moved.parent_event_id) movedPatch.parent_event_id = to.eventId
+  if (to.lane !== moved.lane) movedPatch.lane = to.lane
+  if (Object.keys(movedPatch).length > 0) put(moved.id, movedPatch)
+
+  return [...changes.entries()].map(([id, patch]) => ({ id, patch }))
+}
+
+// Apply a change set optimistically to a node array (also the rollback aid).
+// Pure: returns a new array; unknown ids are left untouched.
+export function applyEcfaPatches(
+  nodes: readonly EcfaNodeRow[],
+  changes: ReadonlyArray<{ id: string; patch: Partial<EcfaNodeRow> }>,
+): EcfaNodeRow[] {
+  if (changes.length === 0) return nodes.slice()
+  const byId = new Map(changes.map((c) => [c.id, c.patch]))
+  return nodes.map((n) => {
+    const p = byId.get(n.id)
+    return p ? { ...n, ...p } : n
+  })
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // Completeness / quality assessment (add-on 3; advisory)
 // ──────────────────────────────────────────────────────────────────────────
 
