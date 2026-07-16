@@ -96,6 +96,47 @@ describe('parseEcfaBatch — pure validator', () => {
     const updates = Array.from({ length: 201 }, () => ({ nodeId: VALID, patch: { sequence_index: 1 } }))
     expect(parseEcfaBatch({ updates }).ok).toBe(false)
   })
+  it('accepts a batch at exactly the 200-row cap', async () => {
+    const { parseEcfaBatch } = await importRoute()
+    const updates = Array.from({ length: 200 }, () => ({ nodeId: VALID, patch: { sequence_index: 1 } }))
+    expect(parseEcfaBatch({ updates }).ok).toBe(true)
+  })
+  it('rejects an empty updates array', async () => {
+    const { parseEcfaBatch } = await importRoute()
+    expect(parseEcfaBatch({ updates: [] }).ok).toBe(false)
+  })
+  it('rejects a patch that is an array rather than an object', async () => {
+    const { parseEcfaBatch } = await importRoute()
+    expect(parseEcfaBatch({ updates: [{ nodeId: VALID, patch: [1, 2] }] }).ok).toBe(false)
+  })
+  it('rejects a null update entry', async () => {
+    const { parseEcfaBatch } = await importRoute()
+    expect(parseEcfaBatch({ updates: [null] }).ok).toBe(false)
+  })
+  it('rejects a whitespace-only title inside a batch patch', async () => {
+    const { parseEcfaBatch } = await importRoute()
+    const r = parseEcfaBatch({ updates: [{ nodeId: VALID, patch: { title: '   ' } }] })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/title must be a non-empty string/)
+  })
+  it('rejects a non-string title inside a batch patch', async () => {
+    const { parseEcfaBatch } = await importRoute()
+    expect(parseEcfaBatch({ updates: [{ nodeId: VALID, patch: { title: 42 } }] }).ok).toBe(false)
+  })
+  it('fails the whole batch when any single update is invalid', async () => {
+    const { parseEcfaBatch } = await importRoute()
+    const r = parseEcfaBatch({ updates: [
+      { nodeId: VALID, patch: { sequence_index: 1 } },
+      { nodeId: 'not-a-uuid', patch: { lane: 'above' } },
+    ] })
+    expect(r.ok).toBe(false)
+  })
+  it('preserves multiple whitelisted fields in a single patch', async () => {
+    const { parseEcfaBatch } = await importRoute()
+    const r = parseEcfaBatch({ updates: [{ nodeId: VALID, patch: { parent_event_id: VALID, lane: 'below', sequence_index: 3 } }] })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.updates[0].patch).toEqual({ parent_event_id: VALID, lane: 'below', sequence_index: 3 })
+  })
 })
 
 describe('ECFA PATCH batch — guard paths', () => {
