@@ -24,16 +24,36 @@ are fixed in code as of this change; the records below are the remaining
 
 ## DNS changes (registrar / DNS host)
 
-1. **DMARC — visibility now, enforcement later.** Replace the `_dmarc` TXT:
+1. **DMARC — visibility now, enforcement later.** The `_dmarc` TXT is
+   published (done): `v=DMARC1; p=none; rua=mailto:jamil@trainovations.com; fo=1`.
+
+   ⚠ **REPORTS ARE NOT FLOWING YET — one record still required.** The `rua`
+   address is on `trainovations.com`, a *different* org domain than the
+   record (`soteriafield.app`). Per RFC 7489 §7.1, receivers (Gmail/Yahoo/
+   Microsoft) will **silently refuse** to send aggregate reports cross-org
+   unless the destination domain authorizes it. `trainovations.com` is on
+   **Bluehost** (not Vercel), so add this in the Bluehost DNS panel:
 
    ```
-   _dmarc.soteriafield.app  TXT  "v=DMARC1; p=none; rua=mailto:jamil@trainovations.com; fo=1"
+   Host:  soteriafield.app._report._dmarc          (Bluehost appends .trainovations.com)
+   Type:  TXT
+   Value: v=DMARC1;
    ```
 
-   After ~2 weeks of clean aggregate reports, tighten in steps:
-   `p=quarantine; pct=25` → `p=quarantine` → `p=reject`. Each step raises
-   sender trust with Gmail/Outlook. (Raw rua XML is unpleasant to read —
-   a free aggregator like dmarc.postmarkapp.com is fine.)
+   Until this exists, the p=none monitoring window collects **zero data**
+   and the enforcement ramp below is blocked. After adding it, send a test
+   invite and confirm reports from google.com / yahoo.com / outlook.com
+   arrive within 24–72h (validate the external auth with dmarcian or
+   MXToolbox). `fo=1` is inert without a `ruf=` destination — harmless, can
+   be dropped.
+
+   **Enforcement ramp (gated on reports actually flowing):** hold `p=none`
+   ≥3–4 weeks to capture a full sending cycle and confirm ~100% of
+   legitimate volume shows DMARC=pass aligned; then `p=quarantine; pct=25`
+   → `50` → `100` over ~2–3 weeks; then `p=reject` only after quarantine at
+   pct=100 runs clean. Realistic total ~6–10 weeks after reports begin.
+   Do **not** tighten before then — premature enforcement quarantines
+   legitimate mail.
 
 2. **Apex SPF — anti-spoofing.** Nothing sends envelope-from the apex
    (Resend's MAIL FROM is `send.soteriafield.app`), so publish a deny-all:
@@ -58,10 +78,32 @@ are fixed in code as of this change; the records below are the remaining
 
 - Confirm domain `soteriafield.app` still shows **Verified** for SPF +
   DKIM + MX after the changes above.
-- Backlog (from todos.md): move bulk sends (digests, reminders, alerts)
-  to a subdomain identity like `notify.soteriafield.app` so bulk-mail
-  reputation can't drag down invite deliverability. Invites keep
-  `invites@soteriafield.app`.
+- **Highest-value remaining improvement (own PR).** Move all ~19 bulk /
+  recurring digests + reminders to a dedicated `notify.soteriafield.app`
+  (a separate Resend domain with its own DKIM + DMARC), and keep cold
+  invites / password / critical alerts on a clean transactional identity
+  (`invites@soteriafield.app`). This firewalls the must-deliver
+  first-contact invite from the complaint-prone bulk stream that today
+  shares one `d=soteriafield.app` reputation bucket. Cheap now while volume
+  is thin; a damaged apex reputation later takes invites down with it.
+  Needs: verify the subdomain in Resend (dashboard + DNS records), add a
+  `BULK_FROM_EMAIL` env, route digests/reminders through it.
+- **Reputation + hygiene (from the deliverability audit):**
+  - Enroll in Google Postmaster Tools + Microsoft SNDS/JMRP to watch
+    complaint rate (target <0.10%, hard cap 0.30%).
+  - Bounce/complaint suppression is currently **dead code**
+    (`recordSuppression('bounce'|'complaint')` is never invoked; no
+    Resend/SES webhook; the reminder cron never calls
+    `loadSuppressedEmails()`). Add a Resend webhook route that feeds
+    `recordSuppression()`, and skip suppressed addresses before the
+    invite-reminder cron.
+  - Add RFC 8058 one-click `List-Unsubscribe` to the recurring **reminder**
+    (keep it off the first invite) to convert would-be spam complaints
+    into harmless opt-outs.
+- **Optional / cosmetic (do not expect a spam-score change):** rotate the
+  Resend DKIM key from 1024-bit to 2048-bit (all major receivers already
+  accept 1024 as pass — security hardening only); soften the "Final
+  reminder" subject line.
 
 ## Vercel env (production)
 
