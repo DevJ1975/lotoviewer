@@ -34,13 +34,15 @@ describe('sendInviteEmail', () => {
     process.env = ORIG_ENV
   })
 
+  const INVITE_URL = 'https://soteriafield.app/accept-invite?token=abc123'
+
   it('returns false when RESEND_API_KEY is unset and never calls Resend', async () => {
     delete process.env.RESEND_API_KEY
     const ok = await sendInviteEmail({
-      to:           'jane@example.com',
-      fullName:     'Jane',
-      tempPassword: 'X1y2-Z3a4',
-      loginUrl:     'https://soteriafield.app',
+      to:        'jane@example.com',
+      fullName:  'Jane',
+      inviteUrl: INVITE_URL,
+      loginUrl:  'https://soteriafield.app',
     })
     expect(ok).toBe(false)
     expect(sendMock).not.toHaveBeenCalled()
@@ -48,28 +50,64 @@ describe('sendInviteEmail', () => {
 
   it('returns true on a clean Resend success', async () => {
     const ok = await sendInviteEmail({
-      to:           'jane@example.com',
-      fullName:     'Jane',
-      tempPassword: 'X1y2-Z3a4',
-      loginUrl:     'https://soteriafield.app',
+      to:        'jane@example.com',
+      fullName:  'Jane',
+      inviteUrl: INVITE_URL,
+      loginUrl:  'https://soteriafield.app',
     })
     expect(ok).toBe(true)
     expect(sendMock).toHaveBeenCalledTimes(1)
     const call = sendMock.mock.calls[0][0]
     expect(call.to).toBe('jane@example.com')
     expect(call.subject).toBe("You're invited to SoteriaField")
-    // Plain-text body must include the login URL and the temp password.
-    expect(call.text).toContain('https://soteriafield.app/login')
-    expect(call.text).toContain('X1y2-Z3a4')
+    // Both bodies carry the accept-invite link — and NEVER a password.
+    expect(call.text).toContain(INVITE_URL)
+    expect(call.html).toContain(INVITE_URL)
+    expect(call.text.toLowerCase()).not.toContain('password:')
+    expect(call.html.toLowerCase()).not.toContain('one-time password')
+  })
+
+  it('sets a monitored Reply-To so "just reply" copy actually works', async () => {
+    await sendInviteEmail({
+      to:        'jane@example.com',
+      fullName:  'Jane',
+      inviteUrl: INVITE_URL,
+      loginUrl:  'https://soteriafield.app',
+    })
+    expect(sendMock.mock.calls[0][0].replyTo).toBe('jamil@trainovations.com')
+  })
+
+  it('prefers INVITE_REPLY_TO_EMAIL for the Reply-To when set', async () => {
+    process.env.INVITE_REPLY_TO_EMAIL = 'support@trainovations.com'
+    await sendInviteEmail({
+      to:        'jane@example.com',
+      fullName:  'Jane',
+      inviteUrl: INVITE_URL,
+      loginUrl:  'https://soteriafield.app',
+    })
+    expect(sendMock.mock.calls[0][0].replyTo).toBe('support@trainovations.com')
+  })
+
+  it('shows the link expiry window in the body', async () => {
+    await sendInviteEmail({
+      to:            'jane@example.com',
+      fullName:      'Jane',
+      inviteUrl:     INVITE_URL,
+      loginUrl:      'https://soteriafield.app',
+      expiresInDays: 14,
+    })
+    const call = sendMock.mock.calls[0][0]
+    expect(call.text).toContain('14 days')
+    expect(call.html).toContain('14 days')
   })
 
   it('puts the tenant name in the subject when provided', async () => {
     await sendInviteEmail({
-      to:           'jane@example.com',
-      fullName:     'Jane',
-      tempPassword: 'X1y2-Z3a4',
-      loginUrl:     'https://soteriafield.app',
-      tenantName:   'Acme Refining',
+      to:         'jane@example.com',
+      fullName:   'Jane',
+      inviteUrl:  INVITE_URL,
+      loginUrl:   'https://soteriafield.app',
+      tenantName: 'Acme Refining',
     })
     const subject = sendMock.mock.calls[0][0].subject as string
     expect(subject).toBe("You're invited to Acme Refining on SoteriaField")
@@ -78,10 +116,10 @@ describe('sendInviteEmail', () => {
   it('returns false when Resend rejects the send (does not throw)', async () => {
     sendMock.mockResolvedValue({ data: null, error: { message: 'rate limited' } })
     const ok = await sendInviteEmail({
-      to:           'jane@example.com',
-      fullName:     'Jane',
-      tempPassword: 'X1y2-Z3a4',
-      loginUrl:     'https://soteriafield.app',
+      to:        'jane@example.com',
+      fullName:  'Jane',
+      inviteUrl: INVITE_URL,
+      loginUrl:  'https://soteriafield.app',
     })
     expect(ok).toBe(false)
   })
@@ -89,40 +127,41 @@ describe('sendInviteEmail', () => {
   it('returns false when the network call throws (does not propagate)', async () => {
     sendMock.mockRejectedValue(new Error('network down'))
     const ok = await sendInviteEmail({
-      to:           'jane@example.com',
-      fullName:     'Jane',
-      tempPassword: 'X1y2-Z3a4',
-      loginUrl:     'https://soteriafield.app',
+      to:        'jane@example.com',
+      fullName:  'Jane',
+      inviteUrl: INVITE_URL,
+      loginUrl:  'https://soteriafield.app',
     })
     expect(ok).toBe(false)
   })
 
   it('falls back to the email local-part as the display name when fullName is empty', async () => {
     await sendInviteEmail({
-      to:           'jane.doe@example.com',
-      fullName:     '',
-      tempPassword: 'X1y2-Z3a4',
-      loginUrl:     'https://soteriafield.app',
+      to:        'jane.doe@example.com',
+      fullName:  '',
+      inviteUrl: INVITE_URL,
+      loginUrl:  'https://soteriafield.app',
     })
     const text = sendMock.mock.calls[0][0].text as string
     expect(text).toMatch(/^Hi jane\.doe,/)
   })
 
-  it('renders the existing-user notification template when tempPassword is empty', async () => {
+  it('renders the existing-user notification template when inviteUrl is empty', async () => {
     await sendInviteEmail({
-      to:           'jane@example.com',
-      fullName:     'Jane',
-      tempPassword: '',
-      loginUrl:     'https://soteriafield.app',
-      tenantName:   'WLS Demo',
+      to:         'jane@example.com',
+      fullName:   'Jane',
+      inviteUrl:  '',
+      loginUrl:   'https://soteriafield.app',
+      tenantName: 'WLS Demo',
     })
     const call = sendMock.mock.calls[0][0]
     expect(call.subject).toBe("You've been added to WLS Demo on SoteriaField")
     // Body mentions tenant + tells them to sign in with existing account;
-    // never references a one-time password.
+    // never references a password or an accept link.
     expect(call.text).toContain('You\'ve been added to WLS Demo')
     expect(call.text).toContain('Sign in with your existing account')
     expect(call.text).not.toContain('Password')
+    expect(call.text).not.toContain('accept-invite')
   })
 })
 

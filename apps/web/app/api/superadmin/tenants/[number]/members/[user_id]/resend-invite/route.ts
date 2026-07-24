@@ -2,15 +2,16 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin, generateTempPassword } from '@/lib/supabaseAdmin'
-import { sendInviteEmail, computeLoginUrl } from '@/lib/email/sendInvite'
+import { issueAndSendInvite } from '@/lib/invites/provision'
 import { isValidTenantNumber } from '@/lib/validation/tenants'
 
 // POST /api/superadmin/tenants/[number]/members/[user_id]/resend-invite
 //
-// Re-issues a one-time password to a member who hasn't signed in yet
-// and emails them a fresh invite. Refuses to resend for users that have
-// already signed in (their existing password works; the right action
-// for them is the password-reset flow on the auth provider, not a
+// Re-issues a fresh single-use invite LINK (superseding any previous
+// one) to a member who hasn't signed in yet, and rotates their one-time
+// password so the admin's copy-paste fallback stays honest. Refuses to
+// resend for users that have already signed in (their existing password
+// works; the right action for them is the password-reset flow, not a
 // silent password rotation).
 //
 // Behavior:
@@ -19,9 +20,9 @@ import { isValidTenantNumber } from '@/lib/validation/tenants'
 //   3. Look up auth.users; if last_sign_in_at is NOT null → 409
 //   4. Generate a new temp password, patch auth.users.password
 //   5. Patch profiles.must_change_password = true (in case it drifted)
-//   6. Email the invite via sendInviteEmail
-//   7. Return { tempPassword, emailSent } so the UI can fall back to
-//      copy-paste when Resend isn't configured
+//   6. Mint a fresh invite token + email the accept-invite link
+//   7. Return { tempPassword, inviteUrl, emailSent } so the UI can fall
+//      back to copy-paste when Resend isn't configured
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -95,14 +96,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     .eq('id', user_id)
     .maybeSingle()
 
-  const loginUrl = computeLoginUrl(req)
-  const emailSent = await sendInviteEmail({
-    to:           email,
-    fullName:     profile?.full_name ?? '',
-    tempPassword,
-    loginUrl,
-    tenantName:   tenant.name,
+  const { inviteUrl, emailSent } = await issueAndSendInvite(admin, {
+    userId:     user_id,
+    email,
+    fullName:   profile?.full_name ?? '',
+    tenantId:   tenant.id,
+    tenantName: tenant.name,
+    createdBy:  gate.userId,
+    req,
+    emailMode:  'invite_link',
   })
 
-  return NextResponse.json({ ok: true, email, tempPassword, emailSent })
+  return NextResponse.json({ ok: true, email, tempPassword, inviteUrl, emailSent })
 }

@@ -74,6 +74,7 @@ class MockChain {
         eq:     () => chain,
         neq:    () => chain,
         in:     () => chain,
+        is:     () => chain,
         order:  () => chain,
         range:  () => chain,
         limit:  () => chain,
@@ -110,10 +111,11 @@ class MockChain {
 }
 
 export const authAdminMock = {
-  createUser:   vi.fn(),
-  deleteUser:   vi.fn(),
-  getUserById:  vi.fn(),
-  listUsers:    vi.fn(),
+  createUser:     vi.fn(),
+  deleteUser:     vi.fn(),
+  getUserById:    vi.fn(),
+  listUsers:      vi.fn(),
+  updateUserById: vi.fn(),
 }
 
 export const mockState = new MockChain()
@@ -128,6 +130,7 @@ export const sendInviteEmailMock = vi.fn().mockResolvedValue(true)
 vi.mock('@/lib/email/sendInvite', () => ({
   sendInviteEmail: sendInviteEmailMock,
   computeLoginUrl: () => 'https://soteriafield.app',
+  inviteReplyTo:   () => 'jamil@trainovations.com',
 }))
 
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }))
@@ -139,6 +142,7 @@ export function resetMocks() {
   authAdminMock.deleteUser.mockReset()
   authAdminMock.getUserById.mockReset()
   authAdminMock.listUsers.mockReset()
+  authAdminMock.updateUserById.mockReset()
   sendInviteEmailMock.mockReset()
   sendInviteEmailMock.mockResolvedValue(true)
   mockState.inserts.length = 0
