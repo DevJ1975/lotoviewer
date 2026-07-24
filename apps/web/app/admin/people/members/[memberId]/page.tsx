@@ -299,8 +299,26 @@ export default function AdminMemberDetailPage() {
             <ShieldCheck className="h-5 w-5 text-emerald-700 dark:text-emerald-300" />
             <div className="flex-1">
               <p className="text-sm font-bold text-emerald-900 dark:text-emerald-100">
-                Login created.{grantResult.emailSent ? ' Invite email sent.' : ' Email was not sent — copy the password below.'}
+                Login created.{grantResult.emailSent ? ' Invite email sent.' : ' Email was not sent — share the invite link or password below.'}
               </p>
+              {grantResult.inviteUrl && (
+                <div className="mt-2 flex items-center gap-2 rounded-md bg-white px-3 py-1.5 ring-1 ring-emerald-200 dark:bg-slate-900">
+                  <code className="font-mono text-[11px] break-all min-w-0">{grantResult.inviteUrl}</code>
+                  <button
+                    type="button"
+                    aria-label="Copy invite link"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(grantResult.inviteUrl!)
+                        setCopied(true); setTimeout(() => setCopied(false), 1500)
+                      } catch { /* ignore */ }
+                    }}
+                    className="text-emerald-700 hover:text-emerald-900 dark:text-emerald-300 shrink-0"
+                  >
+                    {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+              )}
               {grantResult.tempPassword && (
                 <div className="mt-2 inline-flex items-center gap-2 rounded-md bg-white px-3 py-1.5 ring-1 ring-emerald-200 dark:bg-slate-900">
                   <code className="font-mono text-sm">{grantResult.tempPassword}</code>

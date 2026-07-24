@@ -81,6 +81,7 @@ export interface GrantLoginResult {
   memberId:     string
   profileId:    string
   tempPassword: string | null
+  inviteUrl?:   string
   emailSent:    boolean
 }
 

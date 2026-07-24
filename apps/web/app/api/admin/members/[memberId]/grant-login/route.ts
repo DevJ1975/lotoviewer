@@ -1,28 +1,25 @@
 import { NextResponse } from 'next/server'
-import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
-import { sendInviteEmail, computeLoginUrl } from '@/lib/email/sendInvite'
+import {
+  ensureInvitedUser,
+  ensureTenantMembership,
+  issueAndSendInvite,
+  provisionFailureResponse,
+} from '@/lib/invites/provision'
 import { sanitizeError } from '@/lib/security/sanitizeError'
-import { generateTempPassword, supabaseAdmin } from '@/lib/supabaseAdmin'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { normalizeEmail } from '@/lib/validation/tenants'
 
 // POST /api/admin/members/[memberId]/grant-login
 //
 // Grants app login access to an existing members row that doesn't yet
-// have a profile_id. The shape mirrors /api/admin/users POST (creates
-// or reuses an auth.users row, ensures a profiles row, ensures a
-// tenant_memberships row) but UPDATES the existing members row instead
-// of inserting a fresh one — that's the whole point of the unified
-// roster.
-//
-// TODO(phase-2): extract a shared invite helper. The auth+profile+
-// membership block here is the second occurrence of that flow (first
-// is /api/admin/users POST); Rule of Three says extract on the third.
-// For now the two copies stay inline so each route reads top-to-bottom.
+// have a profile_id. The auth+profile+membership provisioning is the
+// shared lib/invites/provision helper (also used by /api/admin/users
+// and the superadmin members route); this route additionally UPDATES
+// the existing members row instead of inserting a fresh one — that's
+// the whole point of the unified roster.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const AUTH_PAGE_SIZE = 200
-const AUTH_MAX_PAGES = 50
 
 type TenantRole = 'owner' | 'admin' | 'member' | 'viewer'
 
@@ -35,18 +32,6 @@ interface MemberRow {
   email:        string | null
   legal_name:   string | null
   display_name: string
-}
-
-async function findAuthUserByEmail(admin: SupabaseClient, email: string): Promise<User | null> {
-  const wanted = email.toLowerCase()
-  for (let page = 1; page <= AUTH_MAX_PAGES; page++) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: AUTH_PAGE_SIZE })
-    if (error) throw error
-    const user = (data?.users ?? []).find(u => u.email?.toLowerCase() === wanted)
-    if (user) return user
-    if ((data?.users ?? []).length < AUTH_PAGE_SIZE) return null
-  }
-  return null
 }
 
 export async function POST(req: Request, ctx: RouteContext) {
@@ -102,90 +87,18 @@ export async function POST(req: Request, ctx: RouteContext) {
   if (!tenantData) return NextResponse.json({ error: 'Active tenant not found' }, { status: 404 })
 
   // ── auth.users + profiles: reuse if email already exists, else create.
-  let userId: string
-  let tempPassword: string | undefined
-
-  const { data: existingProfile, error: profileLookupErr } = await admin
-    .from('profiles')
-    .select('id, email, full_name')
-    .eq('email', email)
-    .maybeSingle()
-  if (profileLookupErr) return sanitizeError(profileLookupErr, 'admin/members/grant-login profile lookup')
-
-  if (existingProfile) {
-    userId = (existingProfile as { id: string }).id
-    // Patch the profile name only when caller supplied one and it's
-    // currently empty — never clobber a user-edited name.
-    if (fullName && !(existingProfile as { full_name: string | null }).full_name) {
-      await admin
-        .from('profiles')
-        .update({ full_name: fullName, updated_at: new Date().toISOString() })
-        .eq('id', userId)
-    }
-  } else {
-    tempPassword = generateTempPassword()
-    const { data: created, error: createErr } = await admin.auth.admin.createUser({
-      email,
-      password: tempPassword,
-      email_confirm: true,
-      user_metadata: fullName ? { full_name: fullName } : undefined,
-    })
-
-    if (createErr || !created?.user) {
-      // Stale auth.users row with no profiles row: reuse it.
-      let stale: User | null = null
-      try { stale = await findAuthUserByEmail(admin, email) }
-      catch (err) { return sanitizeError(err, 'admin/members/grant-login auth listUsers') }
-      if (!stale) {
-        return NextResponse.json({
-          error: createErr?.message ?? 'Could not create auth user',
-        }, { status: 400 })
-      }
-      userId = stale.id
-      tempPassword = undefined
-      const { error: insertProfileErr } = await admin
-        .from('profiles')
-        .insert({
-          id: userId,
-          email,
-          full_name: fullName || null,
-          must_change_password: false,
-        })
-      if (insertProfileErr && (insertProfileErr as { code?: string }).code !== '23505') {
-        return sanitizeError(insertProfileErr, 'admin/members/grant-login profile repair')
-      }
-    } else {
-      userId = created.user.id
-      const { error: profileUpdateErr } = await admin
-        .from('profiles')
-        .update({
-          full_name: fullName || null,
-          must_change_password: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', userId)
-      if (profileUpdateErr) {
-        await admin.auth.admin.deleteUser(userId)
-        return sanitizeError(profileUpdateErr, 'admin/members/grant-login profile patch')
-      }
-    }
-  }
+  const invited = await ensureInvitedUser(admin, { email, fullName })
+  if (!invited.ok) return provisionFailureResponse(invited, 'admin/members/grant-login')
+  const { userId, tempPassword } = invited
 
   // ── tenant_memberships: idempotent (a 23505 here just means the
   // user was already a member of this tenant under a different members
   // row — that's the merge candidate the admin probably wants).
   const role: TenantRole = 'member'
-  const { error: membershipErr } = await admin
-    .from('tenant_memberships')
-    .insert({
-      user_id:    userId,
-      tenant_id:  gate.tenantId,
-      role,
-      invited_by: gate.userId,
-    })
-  if (membershipErr && (membershipErr as { code?: string }).code !== '23505') {
-    return sanitizeError(membershipErr, 'admin/members/grant-login membership insert')
-  }
+  const membership = await ensureTenantMembership(admin, {
+    userId, tenantId: gate.tenantId, role, invitedBy: gate.userId, onConflict: 'ignore',
+  })
+  if (!membership.ok) return provisionFailureResponse(membership, 'admin/members/grant-login')
 
   // ── Attach the new profile to the existing member row. The 183
   // partial unique index would reject this with 23505 if the same
@@ -229,19 +142,22 @@ export async function POST(req: Request, ctx: RouteContext) {
     return sanitizeError(eventErr, 'admin/members/grant-login event insert')
   }
 
-  const loginUrl = computeLoginUrl(req)
-  const emailSent = await sendInviteEmail({
-    to:           email,
-    fullName,
-    tempPassword: tempPassword ?? '',
-    loginUrl,
-    tenantName:   (tenantData as { name: string }).name,
+  const { inviteUrl, emailSent } = await issueAndSendInvite(admin, {
+    userId,
+    email,
+    fullName:   invited.fullName || fullName,
+    tenantId:   gate.tenantId,
+    tenantName: (tenantData as { name: string }).name,
+    createdBy:  gate.userId,
+    req,
+    emailMode:  invited.createdAuthUser || invited.mustChangePassword ? 'invite_link' : 'added_notification',
   })
 
   return NextResponse.json({
     memberId,
     profileId: userId,
     tempPassword,
+    inviteUrl,
     emailSent,
   })
 }

@@ -1,28 +1,38 @@
-// Shared invite-email helper. Used by both:
+// Shared invite-email helper. Used by lib/invites/provision.ts on behalf of:
 //   /api/admin/users/route.ts          — single-tenant admin invite
 //   /api/superadmin/tenants/[number]/members/route.ts — multi-tenant invite
+//   /api/admin/members/[memberId]/grant-login/route.ts — roster grant-login
+//   /api/superadmin/.../resend-invite/route.ts — fresh-link resend
+//
+// The invite carries a single-use accept-invite LINK — never a password.
+// (Passwords in email bodies are a phishing-content pattern spam filters
+// score against, and were the main content-level reason invites landed in
+// junk folders.) The temp password still exists server-side purely as the
+// admin's copy-paste fallback when email delivery fails.
 //
 // Returns true on successful send. Returns false (and logs to Sentry) when
 // RESEND_API_KEY isn't set, when Resend rejects the request, or when the
 // network call throws. Callers bubble the boolean back to the UI as
-// `emailSent` so the admin can fall back to copy-pasting the temp password.
+// `emailSent` so the admin can fall back to sharing the link or password.
 
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
 import { logEmailSend } from '@/lib/email/instrument'
 
 export interface InviteEmailArgs {
-  to:           string
-  fullName:     string
+  to:            string
+  fullName:      string
   // Empty string = "this user already has an account; we're notifying
-  // them they were added to a new tenant" (no temp password to share).
-  // Non-empty = a brand new account; the email shows the password so
-  // they can log in for the first time.
-  tempPassword: string
-  loginUrl:     string
+  // them they were added to a new tenant" (no link needed).
+  // Non-empty = a brand new (or never-signed-in) account; the email
+  // carries the single-use accept-invite link.
+  inviteUrl:     string
+  loginUrl:      string
   // Optional context — tenant name shows up in the subject + body so a
   // user invited to multiple tenants can tell which one this is for.
-  tenantName?:  string
+  tenantName?:   string
+  /** How long the invite link stays valid; shown in the email copy. */
+  expiresInDays?: number
 }
 
 // Pick the public origin to put in invite emails. Order:
@@ -37,6 +47,13 @@ export function computeLoginUrl(req: Request): string {
   const host = req.headers.get('host')
   if (host) return `https://${host}`
   return 'https://soteriafield.app'
+}
+
+// The "just reply to this email" copy is real: replies route to a
+// monitored mailbox. The invites@ sender domain has no inbound mail, so
+// without an explicit Reply-To every reply would bounce.
+export function inviteReplyTo(): string {
+  return process.env.INVITE_REPLY_TO_EMAIL?.trim() || 'jamil@trainovations.com'
 }
 
 export async function sendInviteEmail(args: InviteEmailArgs): Promise<boolean> {
@@ -59,7 +76,7 @@ export async function sendInviteEmail(args: InviteEmailArgs): Promise<boolean> {
             ?? 'SoteriaField <invites@soteriafield.app>'
 
   const displayName = args.fullName || args.to.split('@')[0]!
-  const isExisting = !args.tempPassword
+  const isExisting = !args.inviteUrl
   const subject = isExisting
     ? (args.tenantName
         ? `You've been added to ${args.tenantName} on SoteriaField`
@@ -73,7 +90,9 @@ export async function sendInviteEmail(args: InviteEmailArgs): Promise<boolean> {
 
   try {
     const resend = new Resend(apiKey)
-    const { data, error } = await resend.emails.send({ from, to: args.to, subject, text, html })
+    const { data, error } = await resend.emails.send({
+      from, to: args.to, subject, text, html, replyTo: inviteReplyTo(),
+    })
     if (error) {
       Sentry.captureException(error, { tags: { module: 'sendInviteEmail', stage: 'resend' } })
       console.error('[invite-email] Resend rejected the send', error)
@@ -99,6 +118,11 @@ export async function sendInviteEmail(args: InviteEmailArgs): Promise<boolean> {
   }
 }
 
+function expiryPhrase(expiresInDays?: number): string {
+  const days = expiresInDays && expiresInDays > 0 ? expiresInDays : 14
+  return `${days} days`
+}
+
 function renderText(a: InviteEmailArgs & { displayName: string; isExisting: boolean }): string {
   if (a.isExisting) {
     return `Hi ${a.displayName},
@@ -117,23 +141,20 @@ If you have any trouble signing in, just reply to this email.
 `
   }
 
-  const tenantLine = a.tenantName ? `\n  Tenant:    ${a.tenantName}\n` : ''
+  const tenantLine = a.tenantName ? `You've been invited to join ${a.tenantName} on SoteriaField` : "You've been invited to SoteriaField"
   return `Hi ${a.displayName},
 
-You've been invited to SoteriaField — your team's safety operations app
+${tenantLine} — your team's safety operations app
 (LOTO + Confined Space + Hot Work permits).
 
-Sign in here:
-  ${a.loginUrl}/login
+Accept your invitation and choose your password here:
+  ${a.inviteUrl}
 
-Your one-time login:
-  Email:     ${a.to}
-  Password:  ${a.tempPassword}${tenantLine}
-On your first login you'll be asked to set a new password of your own
-(at least 8 characters). The password above only works until you change
-it, and you must change it on first login.
+This link is just for you. It can be used once and expires in
+${expiryPhrase(a.expiresInDays)}. If it has expired, you can request a
+fresh one from the same page.
 
-If you have any trouble signing in, just reply to this email.
+If you have any trouble, just reply to this email.
 
 — SoteriaField
 `
@@ -174,9 +195,9 @@ function renderHtml(a: InviteEmailArgs & { displayName: string; isExisting: bool
 </body></html>`
   }
 
-  const tenantBlock = a.tenantName ? `
-          <div style="color:#5b6675;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-top:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Tenant</div>
-          <div style="margin-top:2px;">${safe(a.tenantName)}</div>` : ''
+  const tenantIntro = a.tenantName
+    ? `You've been invited to join <strong>${safe(a.tenantName)}</strong> on SoteriaField`
+    : `You've been invited to SoteriaField`
   return `<!doctype html>
 <html><body style="margin:0;padding:0;background:#f6f8fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a2230;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f6f8fb;padding:32px 16px;">
@@ -188,24 +209,16 @@ function renderHtml(a: InviteEmailArgs & { displayName: string; isExisting: bool
     </td></tr>
     <tr><td style="padding:28px;">
       <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;">Hi ${safe(a.displayName)},</p>
-      <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;">You've been invited to SoteriaField — your team's safety operations app (LOTO, Confined Space, and Hot Work permits).</p>
-      <p style="margin:0 0 22px 0;font-size:15px;line-height:1.55;">Tap the button below to sign in. Your one-time password is just under it — you'll be asked to set your own password on first login.</p>
+      <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;">${tenantIntro} — your team's safety operations app (LOTO, Confined Space, and Hot Work permits).</p>
+      <p style="margin:0 0 22px 0;font-size:15px;line-height:1.55;">Tap the button below to accept your invitation and choose your password.</p>
       <p style="margin:0 0 22px 0;text-align:center;">
-        <a href="${safe(a.loginUrl)}/login" style="display:inline-block;background:#214488;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 24px;border-radius:10px;">Sign in to SoteriaField →</a>
-      </p>
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f6f8fb;border-radius:10px;border:1px solid #e6ebf2;">
-        <tr><td style="padding:14px 16px;font-size:13px;font-family:ui-monospace,Menlo,Consolas,monospace;color:#1a2230;">
-          <div style="color:#5b6675;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Email</div>
-          <div style="margin-top:2px;">${safe(a.to)}</div>
-          <div style="color:#5b6675;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-top:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">One-time password</div>
-          <div style="margin-top:2px;letter-spacing:.04em;">${safe(a.tempPassword)}</div>${tenantBlock}
-        </td></tr>
-      </table>
-      <p style="margin:18px 0 0 0;font-size:12px;line-height:1.55;color:#5b6675;">
-        The password above only works until you change it, and you must change it on first login. Use at least 8 characters.
+        <a href="${safe(a.inviteUrl)}" style="display:inline-block;background:#214488;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 24px;border-radius:10px;">Accept your invitation →</a>
       </p>
       <p style="margin:18px 0 0 0;font-size:12px;line-height:1.55;color:#5b6675;">
-        Trouble signing in? Just reply to this email.
+        This link is just for you. It can be used once and expires in ${expiryPhrase(a.expiresInDays)} — if it has expired, you can request a fresh one from the same page.
+      </p>
+      <p style="margin:18px 0 0 0;font-size:12px;line-height:1.55;color:#5b6675;">
+        Trouble accepting the invitation? Just reply to this email.
       </p>
     </td></tr>
     <tr><td style="background:#f6f8fb;padding:16px 28px;text-align:center;font-size:11px;color:#5b6675;border-top:1px solid #e6ebf2;">
