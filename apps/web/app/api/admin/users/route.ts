@@ -118,7 +118,7 @@ export async function POST(req: Request) {
 
   // Stale never-signed-in invitees get a fresh invite link too — a
   // passwordless "you've been added" notice would leave them stuck.
-  const { inviteUrl, emailSent } = await issueAndSendInvite(admin, {
+  const { inviteUrl, expiresAt, emailSent } = await issueAndSendInvite(admin, {
     userId,
     email,
     fullName:   profileFullName,
@@ -134,6 +134,7 @@ export async function POST(req: Request) {
     fullName: profileFullName,
     tempPassword,
     inviteUrl,
+    expiresAt,
     emailSent,
     alreadyExisted,
     tenantId: gate.tenantId,

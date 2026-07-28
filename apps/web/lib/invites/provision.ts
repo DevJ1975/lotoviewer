@@ -268,14 +268,17 @@ export interface IssueAndSendInviteArgs {
    *                      email (new users + stale never-signed-in invitees).
    * added_notification → the existing "you've been added to <tenant>" email
    *                      for genuinely active users (no link, no secrets).
+   * link_only          → mint a token and send NOTHING. The admin shares the
+   *                      returned URL themselves (the escape hatch for when
+   *                      our mail keeps landing in the recipient's junk).
    */
-  emailMode:  'invite_link' | 'added_notification'
+  emailMode:  'invite_link' | 'added_notification' | 'link_only'
 }
 
 export async function issueAndSendInvite(
   admin: SupabaseClient,
   args: IssueAndSendInviteArgs,
-): Promise<{ inviteUrl?: string; emailSent: boolean }> {
+): Promise<{ inviteUrl?: string; expiresAt?: string; emailSent: boolean }> {
   const appUrl = computeLoginUrl(args.req)
 
   if (args.emailMode === 'added_notification') {
@@ -305,6 +308,10 @@ export async function issueAndSendInvite(
   }
 
   const inviteUrl = buildInviteUrl(appUrl, issued.raw)
+  if (args.emailMode === 'link_only') {
+    return { inviteUrl, expiresAt: issued.expiresAt, emailSent: false }
+  }
+
   const emailSent = await sendInviteEmail({
     to:            args.email,
     fullName:      args.fullName,
@@ -313,5 +320,5 @@ export async function issueAndSendInvite(
     tenantName:    args.tenantName,
     expiresInDays: inviteLinkTtlDays(),
   })
-  return { inviteUrl, emailSent }
+  return { inviteUrl, expiresAt: issued.expiresAt, emailSent }
 }
