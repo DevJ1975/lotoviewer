@@ -204,6 +204,10 @@ export default function AdminUsersPage() {
       // the reliable copy affordance when the browser refuses a clipboard
       // write this far from the click.
       if (!sendEmail && body.inviteUrl) await copyText(body.inviteUrl, 'link')
+    } catch {
+      // A dropped connection here is indistinguishable from success to the
+      // eye — the spinner just stops — so say so rather than fail silently.
+      toast.error('Could not reach the server. Check your connection and try again.')
     } finally {
       setResendingId(null)
     }

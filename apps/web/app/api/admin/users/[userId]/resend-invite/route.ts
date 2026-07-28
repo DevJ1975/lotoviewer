@@ -68,7 +68,7 @@ export async function POST(req: Request, ctx: RouteContext) {
   // any tenant could mint a working invite link for an arbitrary user id.
   const { data: membership, error: membershipErr } = await admin
     .from('tenant_memberships')
-    .select('user_id, invite_cancelled_at')
+    .select('user_id')
     .eq('tenant_id', gate.tenantId)
     .eq('user_id', userId)
     .maybeSingle()
