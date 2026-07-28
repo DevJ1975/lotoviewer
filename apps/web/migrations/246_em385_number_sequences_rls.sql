@@ -13,8 +13,12 @@
 -- unaffected while the anon/authenticated roles lose direct table access.
 --
 -- Mirrors the canonical *_number_sequences hardening on bbs_number_sequences
--- (migration 165), matching the sibling counters incident_/risk_number_sequences
--- (all RLS-enabled today; em385 was the lone outlier).
+-- (migration 165) and incident_number_sequences.
+--
+-- Correction (migration 250): this comment originally claimed
+-- risk_number_sequences was already RLS-enabled and that em385 was the lone
+-- outlier. Neither was true — risk_, near_miss_ and jha_number_sequences all
+-- still had RLS off, and 250 is what actually finishes the sweep.
 --
 -- Idempotent: drop-policy-if-exists + enable-RLS are both safe to re-run.
 
