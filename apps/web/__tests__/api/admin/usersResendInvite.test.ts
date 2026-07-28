@@ -22,6 +22,7 @@ vi.mock('@/lib/auth/tenantGate', () => ({
   requireTenantAdmin: (req: Request) => requireTenantAdminMock(req),
 }))
 
+import { inviteIssueRateLimit } from '@/lib/rateLimit/inviteIssue'
 import { POST as resendInvite } from '@/app/api/admin/users/[userId]/resend-invite/route'
 
 const PENDING_USER = '11111111-2222-3333-4444-555555555555'
@@ -170,6 +171,18 @@ describe('POST /api/admin/users/[userId]/resend-invite', () => {
 
     expect(res.status).toBe(400)
     expect(requireTenantAdminMock).not.toHaveBeenCalled()
+  })
+
+  it('sits behind the shared invite-issue throttle without sending', async () => {
+    // Spend the acting admin's shared bucket; tenantAdminOk() resolves
+    // userId 'admin-1', which is the key every minting endpoint throttles on.
+    for (let i = 0; i < 30; i++) inviteIssueRateLimit('admin-1')
+
+    const res = await resendInvite(jsonRequest('POST'), ctxFor({ userId: PENDING_USER }))
+
+    expect(res.status).toBe(429)
+    expect(sendInviteEmailMock).not.toHaveBeenCalled()
+    expect(mockState.inserts.some(i => i.table === 'invite_tokens')).toBe(false)
   })
 
   it('rate-limits repeated resends for the same person', async () => {

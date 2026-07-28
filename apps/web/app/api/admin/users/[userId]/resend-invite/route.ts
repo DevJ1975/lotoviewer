@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
 import { issueAndSendInvite } from '@/lib/invites/provision'
+import { inviteIssueRateLimit } from '@/lib/rateLimit/inviteIssue'
 import { checkMemoryRateLimit } from '@/lib/rateLimit/memory'
 import { sanitizeError } from '@/lib/security/sanitizeError'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -33,11 +34,15 @@ export const runtime = 'nodejs'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// Best-effort guardrail, not a security boundary (per-instance memory).
-// Enough to stop a double-click or a stuck retry loop from spamming the
-// recipient and thrashing the one link that is supposed to work.
-const RESEND_LIMIT  = 6
-const RESEND_WINDOW = 10 * 60_000
+// Per-recipient brake, on top of the shared per-actor one. Resend is the only
+// minting endpoint that is repeatable at a FIXED target — creating an invite
+// twice for the same person 409s, resending is designed to be clicked again —
+// so the actor-keyed budget cannot see this axis: one admin's 30 could all
+// land in a single inbox. Every mint also retires the link shared before it,
+// so a stuck retry loop doesn't just spam, it thrashes the one working link.
+// Per-instance memory, so a brake and not a cap, same as its sibling.
+const PER_TARGET_LIMIT  = 6
+const PER_TARGET_WINDOW = 10 * 60_000
 
 interface RouteContext { params: Promise<{ userId: string }> }
 
@@ -50,17 +55,24 @@ export async function POST(req: Request, ctx: RouteContext) {
   const gate = await requireTenantAdmin(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
+  // The shared brake every invite-minting endpoint sits behind (#259). This is
+  // the fifth one, and it sends a Resend email like the rest.
+  const limited = inviteIssueRateLimit(gate.userId)
+  if (limited) return limited
+
+  const perTarget = checkMemoryRateLimit(
+    `invite-resend:${gate.tenantId}:${userId}`, PER_TARGET_LIMIT, PER_TARGET_WINDOW,
+  )
+  if (!perTarget.ok) {
+    return NextResponse.json(
+      { error: 'Too many invites for this person just now. Try again in a few minutes.' },
+      { status: 429, headers: { 'retry-after': String(perTarget.retryAfterSec ?? 600) } },
+    )
+  }
+
   // Body is optional — a bare POST means "email it again".
   const body = await req.json().catch(() => ({})) as { sendEmail?: unknown }
   const sendEmail = body.sendEmail !== false
-
-  const limit = checkMemoryRateLimit(`invite-resend:${gate.tenantId}:${userId}`, RESEND_LIMIT, RESEND_WINDOW)
-  if (!limit.ok) {
-    return NextResponse.json(
-      { error: 'Too many invites for this person just now. Try again in a few minutes.' },
-      { status: 429, headers: { 'Retry-After': String(limit.retryAfterSec ?? 60) } },
-    )
-  }
 
   const admin = supabaseAdmin()
 
