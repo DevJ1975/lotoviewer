@@ -11,6 +11,7 @@ import {
   type InviteTokenRow,
 } from '@/lib/invites/tokens'
 import { checkMemoryRateLimit } from '@/lib/rateLimit/memory'
+import { clientIp } from '@/lib/rateLimit/clientIp'
 
 // POST /api/invites/refresh  { token }
 //
@@ -27,7 +28,7 @@ import { checkMemoryRateLimit } from '@/lib/rateLimit/memory'
 // it sends email.
 
 export async function POST(req: Request) {
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+  const ip = clientIp(req)
   const limit = checkMemoryRateLimit(`invite-refresh:${ip}`, 5, 15 * 60_000)
   if (!limit.ok) {
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })

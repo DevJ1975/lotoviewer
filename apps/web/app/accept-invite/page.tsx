@@ -38,7 +38,11 @@ export default function AcceptInvitePage() {
 function AcceptInviteForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const token = searchParams.get('token') ?? ''
+  // Captured once rather than read live. The effect below depends on `token`,
+  // and we strip the token from the URL after validating — reading it live
+  // would flip it to '' on that rewrite, re-fire the effect, and land the
+  // recipient on the "invalid link" screen mid-flow.
+  const [token] = useState(() => searchParams.get('token') ?? '')
 
   const [state, setState]         = useState<PageState>('checking')
   const [email, setEmail]         = useState('')
@@ -90,6 +94,11 @@ function AcceptInviteForm() {
         // bad link — don't tell a legitimate invitee their link is invalid.
         if (res.status === 429) { setState('rate_limited'); return }
         applyStatus(data.status, data)
+        // Drop the credential from the address bar, browser history and any
+        // Referer sent by later same-origin requests. Complements the URL
+        // redaction in lib/security/scrubEvent.ts rather than replacing it —
+        // Sentry patches replaceState and still records the prior URL.
+        window.history.replaceState(null, '', '/accept-invite')
       } catch {
         if (!cancelled) setState('invalid')
       }

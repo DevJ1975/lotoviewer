@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
+import { inviteIssueRateLimit } from '@/lib/rateLimit/inviteIssue'
 import { supabaseAdmin, generateTempPassword } from '@/lib/supabaseAdmin'
 import { issueAndSendInvite } from '@/lib/invites/provision'
 import { isValidTenantNumber } from '@/lib/validation/tenants'
@@ -29,6 +30,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export async function POST(req: Request, ctx: { params: Promise<{ number: string; user_id: string }> }) {
   const gate = await requireSuperadmin(req.headers.get('authorization'))
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
+  const limited = inviteIssueRateLimit(gate.userId)
+  if (limited) return limited
 
   const { number, user_id } = await ctx.params
   if (!isValidTenantNumber(number)) {

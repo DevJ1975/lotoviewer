@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
+import { inviteIssueRateLimit } from '@/lib/rateLimit/inviteIssue'
 import {
   ensureInvitedUser,
   ensureTenantMembership,
@@ -66,6 +67,9 @@ async function rollbackInvite(admin: SupabaseClient, tenantId: string, userId: s
 export async function POST(req: Request) {
   const gate = await requireTenantAdmin(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
+  const limited = inviteIssueRateLimit(gate.userId)
+  if (limited) return limited
 
   let body: { email?: unknown; fullName?: unknown }
   try { body = await req.json() }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { consumeInviteToken, verifyInviteToken } from '@/lib/invites/tokens'
 import { checkMemoryRateLimit } from '@/lib/rateLimit/memory'
+import { clientIp } from '@/lib/rateLimit/clientIp'
 import { sanitizeError } from '@/lib/security/sanitizeError'
 
 // POST /api/invites/accept  { token, fullName, password }
@@ -27,7 +28,7 @@ import { sanitizeError } from '@/lib/security/sanitizeError'
 const MIN_PASSWORD_LENGTH = 8
 
 export async function POST(req: Request) {
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+  const ip = clientIp(req)
   const limit = checkMemoryRateLimit(`invite-accept:${ip}`, 10, 60_000)
   if (!limit.ok) {
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })

@@ -236,9 +236,93 @@ Kept here so nothing leaks out of the plan.
   the web review portal so the diff isolates the public-facing
   surface.
 
+## Phase 4 — auth hardening follow-ups (open)
+
+Raised by the auth review that shipped migration 249. The Critical, High and
+Medium findings landed in that pass; these are what was deliberately left.
+
+### D4.1 — Server-side page protection for `/admin` and `/superadmin`
+
+- **Problem**: page gating lives in `components/AuthGate.tsx`, a client
+  component. Its own comment concedes the point: the server remains the
+  source of truth and this "only prevents obvious client-side navigation".
+  Every admin page's HTML is served to any signed-in browser.
+- **Why deferred**: the API layer *is* gated server-side (`requireTenantAdmin`
+  / `requireSuperadmin` on every route, all using server-verified
+  `getUser(token)`), so this is defence-in-depth, not an open hole. Fixing it
+  means adopting `@supabase/ssr` and changing session handling app-wide —
+  today the session lives in `localStorage` and travels as a bearer header,
+  with no auth cookie anywhere.
+- **Fix**: a sketch, not a plan — introduce `@supabase/ssr`, move the session
+  to httpOnly cookies, refresh in `proxy.ts`, and verify in a server layout.
+  Large and regression-prone; wants its own PR and a staging soak.
+
+### D4.2 — Repair the pre-existing test and lint failures, then widen the CI gate
+
+- **Problem**: `npm test` has 127 failures across 22 files on `main` and
+  `eslint .` reports 82 errors. Both are stale UI fixtures and hardcoded
+  registry counts from the Spectrum restyle, not real defects — see
+  `todos.md`. Because of them CI can only gate a scoped suite
+  (`npm run test:security`), so a regression outside the auth surface still
+  merges unnoticed.
+- **Fix**: repair the fixtures, then widen `security-tests` in
+  `.github/workflows/repo-health.yml` to the full suite and add lint,
+  typecheck and build steps.
+
+### D4.3 — Lockfile records no Linux rolldown binding
+
+- **Problem**: `package-lock.json` resolves a package entry only for
+  `@rolldown/binding-darwin-arm64`, so `npm ci` on Linux leaves vitest with no
+  native binding and it cannot start. `@next/swc` and `lightningcss` do carry
+  Linux entries, which is why `next build` has always worked and this went
+  unnoticed — CI never ran vitest until now. The `security-tests` job works
+  around it with an explicit `npm install --no-save`.
+- **Fix**: regenerate the lockfile somewhere that records the Linux binding
+  (or on CI), then delete the workaround step. Touches the whole lockfile, so
+  it wants its own PR.
+
+### D4.4 — Turn on Supabase leaked-password protection
+
+- **Problem**: the 8-character minimum is enforced server-side only on
+  `/api/invites/accept`. `/welcome` and `/reset-password` call
+  `supabase.auth.updateUser({ password })` straight from the browser, so their
+  checks are UX affordances a devtools call bypasses. The real policy is the
+  Supabase Auth project setting, and the scale audit records leaked-password
+  protection as off.
+- **Fix**: a dashboard change, not a code change — enable leaked-password
+  protection (HaveIBeenPwned) and set the minimum length. Adding more
+  client-side validation would be theatre.
+
+### D4.5 — Invite lifecycle leaves no audit trail
+
+- **Problem**: `invite_tokens` records state (`used_at`, `superseded_at`) but
+  there is no actor-attributed event for invite created or invite accepted,
+  and `invite_tokens` carries no `log_audit` trigger. Login success and
+  failure are likewise unrecorded — sign-in happens client-side against
+  GoTrue, so the app never sees it.
+- **Fix**: audit trigger on `invite_tokens`, plus an explicit event write in
+  `/api/invites/accept`.
+
+### D4.6 — Invite token edge cases
+
+Three narrow issues in `lib/invites/tokens.ts`, none reachable without already
+holding a valid token:
+
+- `consumeInviteToken` claims on `.is('used_at', null)` alone, so it does not
+  re-check `superseded_at` or `expires_at` after `verifyInviteToken`. A resend
+  or expiry landing in that window is still accepted. Three added predicates.
+- `issueInviteToken` supersedes then inserts as two statements with no
+  transaction, so concurrent issues can leave two active tokens. The clean fix
+  is a partial unique index, which cannot be built `CONCURRENTLY` inside this
+  repo's transactional migration convention — needs a decision on what the
+  losing writer should see.
+- `/api/invites/refresh` accepts an arbitrarily old unused token as proof of
+  identity, so the 14-day TTL does not bound a leaked link that was never
+  redeemed. Bounded in practice by the already-signed-in guard.
+
 ## Conventions
 
-- Add new entries with the next sequential ID (D3.3, D3.4, …).
+- Add new entries with the next sequential ID (D4.7, D4.8, …).
 - Cross-link by ID from commit messages and PRs ("unblocks D1.1").
 - Strike out a row (`~~D…~~`) when complete; don't delete — keep
   the audit trail.

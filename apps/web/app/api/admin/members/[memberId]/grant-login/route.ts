@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
+import { inviteIssueRateLimit } from '@/lib/rateLimit/inviteIssue'
 import {
   ensureInvitedUser,
   ensureTenantMembership,
@@ -42,6 +43,9 @@ export async function POST(req: Request, ctx: RouteContext) {
 
   const gate = await requireTenantAdmin(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
+  const limited = inviteIssueRateLimit(gate.userId)
+  if (limited) return limited
 
   let body: { email?: unknown; fullName?: unknown }
   try { body = await req.json().catch(() => ({})) }

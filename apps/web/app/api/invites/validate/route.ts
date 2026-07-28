@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { verifyInviteToken } from '@/lib/invites/tokens'
 import { checkMemoryRateLimit } from '@/lib/rateLimit/memory'
+import { clientIp } from '@/lib/rateLimit/clientIp'
 
 // POST /api/invites/validate  { token }
 //
@@ -19,7 +20,7 @@ export type InviteValidateStatus =
   | 'cancelled' | 'already_active' | 'not_found'
 
 export async function POST(req: Request) {
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+  const ip = clientIp(req)
   const limit = checkMemoryRateLimit(`invite-validate:${ip}`, 30, 60_000)
   if (!limit.ok) {
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
