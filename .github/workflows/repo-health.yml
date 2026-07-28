@@ -32,3 +32,46 @@ jobs:
         env:
           WIKI_SYNC_BASE: origin/${{ github.base_ref }}
         run: npm run check:wiki
+
+  # Executes application code, which the `checks` job above deliberately does
+  # not. Scoped to the auth surface rather than the whole suite: `npm test` has
+  # 127 pre-existing failures on main (stale UI fixtures after the Spectrum
+  # restyle — see todos.md) and `eslint .` has 82 pre-existing errors, so a
+  # blanket gate would land red and be ignored from day one. This set passes
+  # clean today, so it can block, and it covers exactly what a regression here
+  # would cost: the superadmin gate, the invite lifecycle, the Origin/Host CSRF
+  # check, the redirect guard, the Sentry scrubber and the rate limiter.
+  #
+  # Widen this as the pre-existing failures get repaired.
+  security-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      # SENTRYCLI_SKIP_DOWNLOAD: @sentry/cli's postinstall fetches a binary
+      # from downloads.sentry-cdn.com. It is only needed for build-time
+      # source-map upload, never for tests, and the fetch is a hard install
+      # failure on a restricted network.
+      - name: Install dependencies
+        run: SENTRYCLI_SKIP_DOWNLOAD=1 npm ci
+
+      # package-lock.json resolves a package entry only for
+      # @rolldown/binding-darwin-arm64 — the lockfile was generated on macOS —
+      # so `npm ci` on Linux leaves vitest with no native binding and it cannot
+      # start. @next/swc and lightningcss do carry Linux entries, which is why
+      # `next build` has always worked here and nobody hit this. Delete this
+      # step once the lockfile is regenerated somewhere that records the Linux
+      # binding.
+      - name: Install Linux rolldown binding (lockfile gap)
+        run: |
+          version=$(node -p "require('./node_modules/rolldown/package.json').version")
+          npm install --no-save --no-package-lock "@rolldown/binding-linux-x64-gnu@${version}"
+
+      - name: Run auth and security regression tests
+        run: npm run test:security
