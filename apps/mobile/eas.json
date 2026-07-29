@@ -19,7 +19,12 @@
       "channel": "preview",
       "ios":     { "resourceClass": "m-medium" },
       "android": { "buildType": "apk" },
-      "env":     { "EXPO_PUBLIC_ENV": "preview" }
+      "env": {
+        "EXPO_PUBLIC_ENV": "preview",
+        "EXPO_PUBLIC_WEB_ORIGIN": "https://soteriafield.app",
+        "EXPO_PUBLIC_SUPABASE_URL": "REPLACE_WITH_PROD_SUPABASE_URL",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "REPLACE_WITH_PROD_SUPABASE_ANON_KEY"
+      }
     },
 
     "production": {
@@ -28,7 +33,12 @@
       "autoIncrement": true,
       "ios":     { "resourceClass": "m-medium" },
       "android": { "buildType": "app-bundle" },
-      "env":     { "EXPO_PUBLIC_ENV": "production" }
+      "env": {
+        "EXPO_PUBLIC_ENV": "production",
+        "EXPO_PUBLIC_WEB_ORIGIN": "https://soteriafield.app",
+        "EXPO_PUBLIC_SUPABASE_URL": "REPLACE_WITH_PROD_SUPABASE_URL",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "REPLACE_WITH_PROD_SUPABASE_ANON_KEY"
+      }
     }
   },
 

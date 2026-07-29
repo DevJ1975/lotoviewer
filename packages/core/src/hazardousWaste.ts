@@ -33,6 +33,13 @@ export interface HazardousWasteDocumentPacket {
 
 export interface HazardousWasteFieldDraft {
   id: string
+  /**
+   * The persisted area this inspection belongs to (FK to
+   * `hazardous_waste_areas`). Null while the inspector is still filling the
+   * draft; required before the draft can be submitted to the server, since
+   * `hazardous_waste_inspections.area_id` is NOT NULL.
+   */
+  areaId: string | null
   areaType: HazardousWasteAreaType
   locationName: string
   containerLabel: string
@@ -236,6 +243,7 @@ export function createEmptyHazardousWasteFieldDraft(areaType: HazardousWasteArea
   const now = new Date().toISOString()
   return {
     id: `hw-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    areaId: null,
     areaType,
     locationName: '',
     containerLabel: '',

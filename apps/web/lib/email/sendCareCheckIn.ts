@@ -2,9 +2,7 @@
 // cron when a care case has next_followup_at on or before today and
 // case_status is still active.
 
-import { Resend } from 'resend'
-import * as Sentry from '@sentry/nextjs'
-import { logEmailSend } from '@/lib/email/instrument'
+import { sendEmail } from '@/lib/email/core'
 import { unsubscribeFooterText, unsubscribeFooterHtml } from '@/lib/email/unsubscribe'
 import {
   CARE_CASE_STATUS_LABEL,
@@ -29,21 +27,8 @@ export interface CareCheckInArgs {
 }
 
 export async function sendCareCheckInEmail(args: CareCheckInArgs): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY
   const subject = `[${args.reportNumber}] Care case follow-up due`
   const tenantId = args.tenantId ?? null
-
-  if (!apiKey) {
-    await logEmailSend({
-      kind: 'incident-care-followup', to: args.to, subject,
-      tenantId, status: 'skipped', errorText: 'RESEND_API_KEY not set',
-    })
-    return false
-  }
-
-  const from = process.env.INVITE_FROM_EMAIL
-            ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <invites@soteriafield.app>'
 
   const link = `${args.appUrl.replace(/\/$/, '')}/incidents/${args.incidentId}/care`
   const name = args.recipientName?.trim() || args.to.split('@')[0]!
@@ -97,32 +82,12 @@ ${args.unsubscribeUrl ? unsubscribeFooterText(args.unsubscribeUrl, 'reminder ema
 </td></tr>
 </table></body></html>`
 
-  try {
-    const resend = new Resend(apiKey)
-    const headers = args.unsubscribeUrl
-      ? { 'List-Unsubscribe': `<${args.unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
-      : undefined
-    const { data, error } = await resend.emails.send({ from, to: args.to, subject, text, html, headers })
-    if (error) {
-      Sentry.captureException(error, { tags: { module: 'sendCareCheckIn', stage: 'resend' } })
-      await logEmailSend({
-        kind: 'incident-care-followup', to: args.to, subject,
-        tenantId, status: 'failed', errorText: error.message,
-      })
-      return false
-    }
-    await logEmailSend({
-      kind: 'incident-care-followup', to: args.to, subject,
-      tenantId, status: 'sent', providerId: data?.id ?? null,
-    })
-    return true
-  } catch (err) {
-    Sentry.captureException(err, { tags: { module: 'sendCareCheckIn' } })
-    await logEmailSend({
-      kind: 'incident-care-followup', to: args.to, subject,
-      tenantId, status: 'failed',
-      errorText: err instanceof Error ? err.message : String(err),
-    })
-    return false
-  }
+  const { sent } = await sendEmail({
+    kind: 'incident-care-followup',
+    to: args.to,
+    subject, text, html,
+    tenantId,
+    unsubscribeUrl: args.unsubscribeUrl ?? null,
+  })
+  return sent
 }

@@ -11,8 +11,6 @@ import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
-  Check,
-  Copy,
   GitMerge,
   Loader2,
   ShieldCheck,
@@ -66,7 +64,6 @@ export default function AdminMemberDetailPage() {
   const [error, setError]       = useState<string | null>(null)
   const [granting, setGranting] = useState(false)
   const [grantResult, setGrantResult] = useState<GrantLoginResult | null>(null)
-  const [copied, setCopied]     = useState(false)
 
   // Merge picker state
   const [mergeOpen, setMergeOpen]   = useState(false)
@@ -299,26 +296,10 @@ export default function AdminMemberDetailPage() {
             <ShieldCheck className="h-5 w-5 text-emerald-700 dark:text-emerald-300" />
             <div className="flex-1">
               <p className="text-sm font-bold text-emerald-900 dark:text-emerald-100">
-                Login created.{grantResult.emailSent ? ' Invite email sent.' : ' Email was not sent — copy the password below.'}
+                Login created.{grantResult.emailSent
+                  ? ' Verification email sent — they verify their email and set a password via the link.'
+                  : ' Verification email could not be sent — fix email delivery, then grant access again to resend it.'}
               </p>
-              {grantResult.tempPassword && (
-                <div className="mt-2 inline-flex items-center gap-2 rounded-md bg-white px-3 py-1.5 ring-1 ring-emerald-200 dark:bg-slate-900">
-                  <code className="font-mono text-sm">{grantResult.tempPassword}</code>
-                  <button
-                    type="button"
-                    aria-label="Copy password"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(grantResult.tempPassword!)
-                        setCopied(true); setTimeout(() => setCopied(false), 1500)
-                      } catch { /* ignore */ }
-                    }}
-                    className="text-emerald-700 hover:text-emerald-900 dark:text-emerald-300"
-                  >
-                    {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         </section>

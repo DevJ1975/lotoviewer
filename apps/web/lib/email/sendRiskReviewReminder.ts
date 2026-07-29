@@ -1,6 +1,4 @@
-import { Resend } from 'resend'
-import * as Sentry from '@sentry/nextjs'
-import { logEmailSend } from '@/lib/email/instrument'
+import { sendEmail } from '@/lib/email/core'
 
 // Review-cadence reminder email.
 //
@@ -35,53 +33,17 @@ export interface RiskReviewReminderArgs {
 export async function sendRiskReviewReminder(
   args: RiskReviewReminderArgs,
 ): Promise<{ sent: boolean; providerId: string | null }> {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) {
-    console.warn('[risk-review-reminder] RESEND_API_KEY not set — skipping send')
-    await logEmailSend({
-      kind: 'risk-review', to: args.to,
-      status: 'skipped', errorText: 'RESEND_API_KEY not set',
-    })
-    return { sent: false, providerId: null }
-  }
-  const from = process.env.INVITE_FROM_EMAIL
-            ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <invites@soteriafield.app>'
-
   const subject = args.risks.length === 1
     ? `1 risk review is overdue — ${args.tenantName}`
     : `${args.risks.length} risk reviews are overdue — ${args.tenantName}`
 
-  try {
-    const resend = new Resend(apiKey)
-    const { data, error } = await resend.emails.send({
-      from,
-      to:        args.to,
-      subject,
-      text:      renderText(args),
-      html:      renderHtml(args),
-    })
-    if (error) {
-      Sentry.captureException(error, { tags: { module: 'sendRiskReviewReminder', stage: 'resend' } })
-      await logEmailSend({
-        kind: 'risk-review', to: args.to, subject,
-        status: 'failed', errorText: error.message,
-      })
-      return { sent: false, providerId: null }
-    }
-    await logEmailSend({
-      kind: 'risk-review', to: args.to, subject,
-      status: 'sent', providerId: data?.id ?? null,
-    })
-    return { sent: true, providerId: data?.id ?? null }
-  } catch (err) {
-    Sentry.captureException(err, { tags: { module: 'sendRiskReviewReminder', stage: 'resend' } })
-    await logEmailSend({
-      kind: 'risk-review', to: args.to, subject,
-      status: 'failed', errorText: err instanceof Error ? err.message : String(err),
-    })
-    return { sent: false, providerId: null }
-  }
+  return sendEmail({
+    kind: 'risk-review',
+    to: args.to,
+    subject,
+    text: renderText(args),
+    html: renderHtml(args),
+  })
 }
 
 // ──────────────────────────────────────────────────────────────────────────

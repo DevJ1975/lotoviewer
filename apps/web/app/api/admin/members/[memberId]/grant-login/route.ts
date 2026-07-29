@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
-import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
+import { generateInviteLink } from '@/lib/auth/inviteLink'
 import { sendInviteEmail, computeLoginUrl } from '@/lib/email/sendInvite'
+import { sendVerifyInviteEmail } from '@/lib/email/sendVerifyInvite'
 import { sanitizeError } from '@/lib/security/sanitizeError'
-import { generateTempPassword, supabaseAdmin } from '@/lib/supabaseAdmin'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { normalizeEmail } from '@/lib/validation/tenants'
 
 // POST /api/admin/members/[memberId]/grant-login
@@ -21,8 +22,6 @@ import { normalizeEmail } from '@/lib/validation/tenants'
 // For now the two copies stay inline so each route reads top-to-bottom.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const AUTH_PAGE_SIZE = 200
-const AUTH_MAX_PAGES = 50
 
 type TenantRole = 'owner' | 'admin' | 'member' | 'viewer'
 
@@ -35,18 +34,6 @@ interface MemberRow {
   email:        string | null
   legal_name:   string | null
   display_name: string
-}
-
-async function findAuthUserByEmail(admin: SupabaseClient, email: string): Promise<User | null> {
-  const wanted = email.toLowerCase()
-  for (let page = 1; page <= AUTH_MAX_PAGES; page++) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: AUTH_PAGE_SIZE })
-    if (error) throw error
-    const user = (data?.users ?? []).find(u => u.email?.toLowerCase() === wanted)
-    if (user) return user
-    if ((data?.users ?? []).length < AUTH_PAGE_SIZE) return null
-  }
-  return null
 }
 
 export async function POST(req: Request, ctx: RouteContext) {
@@ -101,9 +88,14 @@ export async function POST(req: Request, ctx: RouteContext) {
   if (tenantErr) return sanitizeError(tenantErr, 'admin/members/grant-login tenant lookup')
   if (!tenantData) return NextResponse.json({ error: 'Active tenant not found' }, { status: 404 })
 
-  // ── auth.users + profiles: reuse if email already exists, else create.
+  const loginUrl = computeLoginUrl(req)
+
+  // ── auth.users + profiles: reuse if email already exists, else invite.
   let userId: string
-  let tempPassword: string | undefined
+  // Set for new / re-invited users — the verify-and-set-password link emailed
+  // in place of a temp password. Undefined when an established profile is
+  // simply being linked to this member row.
+  let verifyUrl: string | undefined
 
   const { data: existingProfile, error: profileLookupErr } = await admin
     .from('profiles')
@@ -123,51 +115,28 @@ export async function POST(req: Request, ctx: RouteContext) {
         .eq('id', userId)
     }
   } else {
-    tempPassword = generateTempPassword()
-    const { data: created, error: createErr } = await admin.auth.admin.createUser({
-      email,
-      password: tempPassword,
-      email_confirm: true,
-      user_metadata: fullName ? { full_name: fullName } : undefined,
-    })
+    // No temp password and no email_confirm:true — the recipient proves
+    // mailbox ownership by clicking the link. See lib/auth/inviteLink.ts.
+    const invite = await generateInviteLink(admin, { email, fullName, redirectTo: `${loginUrl}/welcome` })
+    if (!invite.ok) {
+      return NextResponse.json({ error: invite.error.message }, { status: 400 })
+    }
+    userId = invite.result.userId
+    verifyUrl = invite.result.actionLink
 
-    if (createErr || !created?.user) {
-      // Stale auth.users row with no profiles row: reuse it.
-      let stale: User | null = null
-      try { stale = await findAuthUserByEmail(admin, email) }
-      catch (err) { return sanitizeError(err, 'admin/members/grant-login auth listUsers') }
-      if (!stale) {
-        return NextResponse.json({
-          error: createErr?.message ?? 'Could not create auth user',
-        }, { status: 400 })
-      }
-      userId = stale.id
-      tempPassword = undefined
-      const { error: insertProfileErr } = await admin
-        .from('profiles')
-        .insert({
-          id: userId,
-          email,
-          full_name: fullName || null,
-          must_change_password: false,
-        })
-      if (insertProfileErr && (insertProfileErr as { code?: string }).code !== '23505') {
-        return sanitizeError(insertProfileErr, 'admin/members/grant-login profile repair')
-      }
-    } else {
-      userId = created.user.id
-      const { error: profileUpdateErr } = await admin
-        .from('profiles')
-        .update({
-          full_name: fullName || null,
-          must_change_password: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', userId)
-      if (profileUpdateErr) {
-        await admin.auth.admin.deleteUser(userId)
-        return sanitizeError(profileUpdateErr, 'admin/members/grant-login profile patch')
-      }
+    // Upsert covers both: the handle_new_user trigger created a row for a
+    // brand-new auth user (updated here); a stale auth user gets one inserted.
+    const { error: profileUpdateErr } = await admin
+      .from('profiles')
+      .upsert(
+        { id: userId, email, full_name: fullName || null, must_change_password: true, updated_at: new Date().toISOString() },
+        { onConflict: 'id' },
+      )
+    if (profileUpdateErr) {
+      // Only roll back the auth user if this invite created it — never delete
+      // a pre-existing account we merely re-linked.
+      if (invite.result.created) await admin.auth.admin.deleteUser(userId)
+      return sanitizeError(profileUpdateErr, 'admin/members/grant-login profile patch')
     }
   }
 
@@ -229,19 +198,16 @@ export async function POST(req: Request, ctx: RouteContext) {
     return sanitizeError(eventErr, 'admin/members/grant-login event insert')
   }
 
-  const loginUrl = computeLoginUrl(req)
-  const emailSent = await sendInviteEmail({
-    to:           email,
-    fullName,
-    tempPassword: tempPassword ?? '',
-    loginUrl,
-    tenantName:   (tenantData as { name: string }).name,
-  })
+  const tenantName = (tenantData as { name: string }).name
+  // New / re-invited user → verify-and-set-password link. Established profile
+  // re-linked → "you've been added" notification (no link).
+  const emailSent = verifyUrl
+    ? await sendVerifyInviteEmail({ to: email, fullName, verifyUrl, tenantName })
+    : await sendInviteEmail({ to: email, fullName, tempPassword: '', loginUrl, tenantName })
 
   return NextResponse.json({
     memberId,
     profileId: userId,
-    tempPassword,
     emailSent,
   })
 }

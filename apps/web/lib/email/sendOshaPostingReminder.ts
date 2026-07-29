@@ -4,9 +4,7 @@
 // down. Same posture as the other helpers (boolean return, never
 // throws, every send logged via instrument.ts).
 
-import { Resend } from 'resend'
-import * as Sentry from '@sentry/nextjs'
-import { logEmailSend } from '@/lib/email/instrument'
+import { sendEmail } from '@/lib/email/core'
 
 export interface OshaPostingReminderArgs {
   to:                  string
@@ -19,21 +17,8 @@ export interface OshaPostingReminderArgs {
 }
 
 export async function sendOshaPostingReminder(args: OshaPostingReminderArgs): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY
   const subject = `[OSHA] Post your ${args.year} 300A by Feb 1`
   const tenantId = args.tenantId ?? null
-
-  if (!apiKey) {
-    await logEmailSend({
-      kind: 'osha-300a-posting', to: args.to, subject,
-      tenantId, status: 'skipped', errorText: 'RESEND_API_KEY not set',
-    })
-    return false
-  }
-
-  const from = process.env.INVITE_FROM_EMAIL
-            ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <invites@soteriafield.app>'
 
   const link = `${args.appUrl.replace(/\/$/, '')}/osha?year=${args.year}`
   const name = args.recipientName?.trim() || args.to.split('@')[0]!
@@ -88,29 +73,11 @@ Open the OSHA dashboard to certify, download the PDF, and post:
 </td></tr>
 </table></body></html>`
 
-  try {
-    const resend = new Resend(apiKey)
-    const { data, error } = await resend.emails.send({ from, to: args.to, subject, text, html })
-    if (error) {
-      Sentry.captureException(error, { tags: { module: 'sendOshaPostingReminder', stage: 'resend' } })
-      await logEmailSend({
-        kind: 'osha-300a-posting', to: args.to, subject,
-        tenantId, status: 'failed', errorText: error.message,
-      })
-      return false
-    }
-    await logEmailSend({
-      kind: 'osha-300a-posting', to: args.to, subject,
-      tenantId, status: 'sent', providerId: data?.id ?? null,
-    })
-    return true
-  } catch (err) {
-    Sentry.captureException(err, { tags: { module: 'sendOshaPostingReminder' } })
-    await logEmailSend({
-      kind: 'osha-300a-posting', to: args.to, subject,
-      tenantId, status: 'failed',
-      errorText: err instanceof Error ? err.message : String(err),
-    })
-    return false
-  }
+  const { sent } = await sendEmail({
+    kind: 'osha-300a-posting',
+    to: args.to,
+    subject, text, html,
+    tenantId,
+  })
+  return sent
 }

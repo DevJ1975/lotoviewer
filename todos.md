@@ -6,15 +6,18 @@ _Last updated: 2026-05-23. Generated from the scorecard + email-deliverability w
 Add these records for `soteriafield.app` in your DNS provider, then verify in Resend.
 This is ~80% of "emails land in spam" and I can't do it from here.
 
-- [ ] In **Resend → Domains → Add `soteriafield.app`**, copy the generated records:
-  - [ ] **SPF** — `TXT` on the MAIL FROM subdomain Resend shows (e.g. `send`), value = the exact `v=spf1 include:…` string.
-  - [ ] **DKIM** — `CNAME`/`TXT` named like `resend._domainkey` (exact name from Resend). **Most important record** — copy verbatim.
-- [ ] Add **DMARC** — `TXT` on `_dmarc`, value: `v=DMARC1; p=none; rua=mailto:dmarc@soteriafield.app; adkim=s; aspf=s`
-- [ ] Wait for Resend to show the domain **Verified** (minutes–hours).
+> **DNS status checked 2026-06-16 (live lookups):**
+> - ✅ **DKIM** — present: TXT at `resend._domainkey.soteriafield.app` (valid RSA public key). This is the most important record and it's live.
+> - ✅ **SPF** — present on the MAIL FROM subdomain: `send.soteriafield.app` = `v=spf1 include:amazonses.com ~all` (correct — Resend sends via Amazon SES; SPF authenticates against this subdomain, not the apex).
+> - ⚠️ **DMARC** — present but minimal: `_dmarc.soteriafield.app` = `v=DMARC1; p=none;`. Missing `rua` (no aggregate-report visibility) and not yet enforcing. **This is the remaining lever** — see below.
+>
+> Net: the domain is authenticated, so verification/invite mail should pass SPF+DKIM. Remaining work is DMARC hardening, which is lower-urgency than getting DKIM/SPF up (already done).
+
+- [x] **SPF** on the MAIL FROM subdomain — live (`send.soteriafield.app`).
+- [x] **DKIM** (`resend._domainkey`) — live.
+- [ ] **Harden DMARC** — replace `v=DMARC1; p=none;` with `v=DMARC1; p=none; rua=mailto:dmarc@soteriafield.app; adkim=s; aspf=s` so you start receiving aggregate reports.
 - [ ] After ~1–2 weeks of clean DMARC reports, tighten policy: `p=none` → `p=quarantine` → `p=reject`.
 - [ ] _Optional:_ send from a dedicated subdomain (e.g. `notify.soteriafield.app`) to isolate transactional reputation from corporate mail.
-
-> Once these are live, ask me to run DNS lookups to sanity-check SPF/DKIM/DMARC resolve (network permitting).
 
 ## 2. Production environment variables (Vercel)
 - [ ] _Optional:_ set `EMAIL_UNSUBSCRIBE_SECRET` (dedicated HMAC key for unsubscribe links). Falls back to `INTERNAL_PUSH_SECRET`/`CRON_SECRET`, so unsubscribe still works without it — set it only to rotate independently.
@@ -58,4 +61,16 @@ Lets a client backfill up to 20 years of EHS data so the scorecard shows YoY tre
   - [ ] Which **Intelex object/endpoint** holds the annual rollup (or per-incident data we aggregate), + field mapping to the 300A fields.
   - [ ] Where to store the secret (Vercel env / a `tenant_integrations` table) + per-tenant scoping.
   - Plan: scaffold a generic `HistoryConnector` interface + a stubbed Intelex adapter first (plumbing + admin "Connect Intelex" UI), then drop in the live adapter once creds land.
+
+## 9. Email-address verification (verify-on-invite) — manual config (2026-06-16)
+Invites no longer create pre-confirmed accounts or email a temp password. Instead every invite path (`/api/admin/users`, `/api/superadmin/.../members`, `/api/admin/members/[id]/grant-login`, and the superadmin resend-invite) emails a **single link that verifies the mailbox and lets the user set their own password** on `/welcome`. A typo'd address now just stays "Pending Verification" instead of silently getting a working login.
+
+- [ ] **Supabase redirect allowlist (REQUIRED — the links won't work without it).** In **Supabase → Authentication → URL Configuration → Redirect URLs**, add the `/welcome` callback for every origin the app runs on:
+  - [ ] `https://soteriafield.app/welcome` (prod)
+  - [ ] `https://<vercel-preview-domain>/welcome` (and any other deploy origins / custom domains)
+  - [ ] `http://localhost:3000/welcome` (local dev)
+  - Why: the verify link redirects to `${NEXT_PUBLIC_APP_URL || request origin}/welcome`; Supabase refuses to redirect to a URL that isn't allowlisted, so an un-listed origin sends users to a generic error instead of the set-password screen.
+- [ ] Confirm **`NEXT_PUBLIC_APP_URL`** is set in Vercel to the canonical prod origin so the link target is stable regardless of which host served the request.
+- [ ] (Optional) In **Supabase → Authentication → Email Templates**, you can ignore the built-in Invite/Magic-link templates — we generate the link server-side and send our own branded email via Resend, so Supabase's own emails are not used for this flow.
+- [ ] Smoke test after deploy: invite a brand-new address → confirm the email arrives, the link opens `/welcome`, setting a password works, and the user flips from "Pending Verification" to "Active". Then click the same link again → confirm the "Link expired" screen (single-use).
 

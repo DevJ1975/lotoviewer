@@ -5,9 +5,7 @@
 // rather than a dashboard link. Same posture as the other senders (boolean return,
 // never throws, every send logged via instrument.ts).
 
-import { Resend } from 'resend'
-import * as Sentry from '@sentry/nextjs'
-import { logEmailSend } from '@/lib/email/instrument'
+import { sendEmail } from '@/lib/email/core'
 
 export interface RegulationUpdateAlertArgs {
   to:                string
@@ -18,16 +16,7 @@ export interface RegulationUpdateAlertArgs {
 }
 
 export async function sendRegulationUpdateAlert(args: RegulationUpdateAlertArgs): Promise<boolean> {
-  const apiKey  = process.env.RESEND_API_KEY
   const subject = `[Regulations] ${args.title} has a newer eCFR amendment (${args.latestAmendment})`
-
-  if (!apiKey) {
-    await logEmailSend({
-      kind: 'regulation-update-alert', to: args.to, subject,
-      tenantId: null, status: 'skipped', errorText: 'RESEND_API_KEY not set',
-    })
-    return false
-  }
 
   const from = process.env.SUPPORT_FROM_EMAIL
             ?? process.env.INVITE_FROM_EMAIL
@@ -82,29 +71,12 @@ The ingest is idempotent — only changed sections are rewritten.
 </td></tr>
 </table></body></html>`
 
-  try {
-    const resend = new Resend(apiKey)
-    const { data, error } = await resend.emails.send({ from, to: args.to, subject, text, html })
-    if (error) {
-      Sentry.captureException(error, { tags: { module: 'sendRegulationUpdateAlert', stage: 'resend' } })
-      await logEmailSend({
-        kind: 'regulation-update-alert', to: args.to, subject,
-        tenantId: null, status: 'failed', errorText: error.message,
-      })
-      return false
-    }
-    await logEmailSend({
-      kind: 'regulation-update-alert', to: args.to, subject,
-      tenantId: null, status: 'sent', providerId: data?.id ?? null,
-    })
-    return true
-  } catch (err) {
-    Sentry.captureException(err, { tags: { module: 'sendRegulationUpdateAlert' } })
-    await logEmailSend({
-      kind: 'regulation-update-alert', to: args.to, subject,
-      tenantId: null, status: 'failed',
-      errorText: err instanceof Error ? err.message : String(err),
-    })
-    return false
-  }
+  const { sent } = await sendEmail({
+    kind: 'regulation-update-alert',
+    to: args.to,
+    subject, text, html,
+    tenantId: null,
+    from,
+  })
+  return sent
 }

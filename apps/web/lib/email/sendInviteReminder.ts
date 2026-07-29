@@ -7,9 +7,7 @@
 // only in the original invite email. The reminder points to /login and, as
 // a fallback, the password-reset flow.
 
-import { Resend } from 'resend'
-import * as Sentry from '@sentry/nextjs'
-import { logEmailSend } from '@/lib/email/instrument'
+import { sendEmail } from '@/lib/email/core'
 
 export interface InviteReminderArgs {
   to:             string
@@ -30,20 +28,6 @@ export interface InviteReminderResult {
 export async function sendInviteReminder(
   args: InviteReminderArgs,
 ): Promise<InviteReminderResult> {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) {
-    console.warn('[invite-reminder] RESEND_API_KEY not set — skipping send')
-    await logEmailSend({
-      kind: 'invite-reminder', to: args.to, tenantId: args.tenantId ?? null,
-      status: 'skipped', errorText: 'RESEND_API_KEY not set',
-    })
-    return { sent: false, providerId: null }
-  }
-
-  const from = process.env.INVITE_FROM_EMAIL
-            ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <invites@soteriafield.app>'
-
   const isFinal = args.reminderNumber >= args.maxReminders
   const tenantSuffix = args.tenantName ? ` to ${args.tenantName}` : ''
   const subject = isFinal
@@ -53,32 +37,12 @@ export async function sendInviteReminder(
   const text = renderText({ ...args, isFinal })
   const html = renderHtml({ ...args, isFinal })
 
-  try {
-    const resend = new Resend(apiKey)
-    const { data, error } = await resend.emails.send({ from, to: args.to, subject, text, html })
-    if (error) {
-      Sentry.captureException(error, { tags: { module: 'sendInviteReminder', stage: 'resend' } })
-      console.error('[invite-reminder] Resend rejected the send', error)
-      await logEmailSend({
-        kind: 'invite-reminder', to: args.to, subject, tenantId: args.tenantId ?? null,
-        status: 'failed', errorText: error.message,
-      })
-      return { sent: false, providerId: null }
-    }
-    await logEmailSend({
-      kind: 'invite-reminder', to: args.to, subject, tenantId: args.tenantId ?? null,
-      status: 'sent', providerId: data?.id ?? null,
-    })
-    return { sent: true, providerId: data?.id ?? null }
-  } catch (err) {
-    Sentry.captureException(err, { tags: { module: 'sendInviteReminder', stage: 'resend' } })
-    console.error('[invite-reminder] send threw', err)
-    await logEmailSend({
-      kind: 'invite-reminder', to: args.to, subject, tenantId: args.tenantId ?? null,
-      status: 'failed', errorText: err instanceof Error ? err.message : String(err),
-    })
-    return { sent: false, providerId: null }
-  }
+  return sendEmail({
+    kind: 'invite-reminder',
+    to: args.to,
+    subject, text, html,
+    tenantId: args.tenantId ?? null,
+  })
 }
 
 type RenderArgs = InviteReminderArgs & { isFinal: boolean }

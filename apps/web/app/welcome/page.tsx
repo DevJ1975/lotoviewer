@@ -17,13 +17,29 @@ export default function WelcomePage() {
   const [busy, setBusy]         = useState(false)
   const [error, setError]       = useState<string | null>(null)
 
+  // A failed verification link (expired / already used) redirects here with
+  // the failure in the URL hash and no session. Capture it on first render —
+  // before detectSessionInUrl can clear the hash — so we can show a helpful
+  // message instead of bouncing the user to /login with no explanation.
+  const [linkError] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    const hash = window.location.hash.replace(/^#/, '')
+    if (!hash) return null
+    const params = new URLSearchParams(hash)
+    if (!params.get('error') && !params.get('error_code')) return null
+    return params.get('error_description')?.replace(/\+/g, ' ')
+      || 'This link is invalid or has expired.'
+  })
+
   useEffect(() => {
     if (loading) return
-    if (!userId) { router.replace('/login'); return }
+    // Don't redirect when a dead link landed here without a session — show
+    // the explanation below instead.
+    if (!userId) { if (!linkError) router.replace('/login'); return }
     // Prefill the name field; this page doubles as a "change password / update
     // name" settings screen once the initial must_change_password flag clears.
     if (profile?.full_name) setFullName(profile.full_name)
-  }, [loading, userId, profile, router])
+  }, [loading, userId, profile, linkError, router])
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -58,6 +74,28 @@ export default function WelcomePage() {
     } finally {
       setBusy(false)
     }
+  }
+
+  // A dead verification link reaches here with no session — explain why and
+  // point the user at a resend rather than a blank set-password form.
+  if (!userId && linkError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900/40 px-4">
+        <div className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl shadow-sm ring-1 ring-slate-200 dark:ring-slate-700 p-6 space-y-4 text-center">
+          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Link expired</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {linkError} Verification links can only be used once and expire after a while.
+            Ask whoever invited you to resend your invitation, then open the new link.
+          </p>
+          <a
+            href="/login"
+            className="inline-block w-full py-2.5 rounded-lg bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 transition-colors"
+          >
+            Go to sign in
+          </a>
+        </div>
+      </div>
+    )
   }
 
   if (loading || !userId) {

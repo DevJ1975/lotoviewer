@@ -2,9 +2,7 @@
 // cron when a CAPA is overdue (due_at < now, status open/in_progress/
 // blocked) or coming up in ≤3 days. Same posture as the other helpers.
 
-import { Resend } from 'resend'
-import * as Sentry from '@sentry/nextjs'
-import { logEmailSend } from '@/lib/email/instrument'
+import { sendEmail } from '@/lib/email/core'
 import { unsubscribeFooterText, unsubscribeFooterHtml } from '@/lib/email/unsubscribe'
 import {
   ACTION_TYPE_LABEL,
@@ -31,24 +29,11 @@ export interface ActionReminderArgs {
 }
 
 export async function sendActionReminderEmail(args: ActionReminderArgs): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY
   const overdue = args.daysOverdue > 0
   const subject = overdue
     ? `[OVERDUE ${args.daysOverdue}d] ${args.reportNumber} — ${ACTION_TYPE_LABEL[args.actionType]} action`
     : `[DUE SOON] ${args.reportNumber} — ${ACTION_TYPE_LABEL[args.actionType]} action`
   const tenantId = args.tenantId ?? null
-
-  if (!apiKey) {
-    await logEmailSend({
-      kind: 'incident-action-reminder', to: args.to, subject,
-      tenantId, status: 'skipped', errorText: 'RESEND_API_KEY not set',
-    })
-    return false
-  }
-
-  const from = process.env.INVITE_FROM_EMAIL
-            ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <invites@soteriafield.app>'
 
   const link = `${args.appUrl.replace(/\/$/, '')}/incidents/${args.incidentId}/actions`
   const name = args.recipientName?.trim() || args.to.split('@')[0]!
@@ -103,32 +88,12 @@ ${args.unsubscribeUrl ? unsubscribeFooterText(args.unsubscribeUrl, 'reminder ema
 </td></tr>
 </table></body></html>`
 
-  try {
-    const resend = new Resend(apiKey)
-    const headers = args.unsubscribeUrl
-      ? { 'List-Unsubscribe': `<${args.unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
-      : undefined
-    const { data, error } = await resend.emails.send({ from, to: args.to, subject, text, html, headers })
-    if (error) {
-      Sentry.captureException(error, { tags: { module: 'sendActionReminder', stage: 'resend' } })
-      await logEmailSend({
-        kind: 'incident-action-reminder', to: args.to, subject,
-        tenantId, status: 'failed', errorText: error.message,
-      })
-      return false
-    }
-    await logEmailSend({
-      kind: 'incident-action-reminder', to: args.to, subject,
-      tenantId, status: 'sent', providerId: data?.id ?? null,
-    })
-    return true
-  } catch (err) {
-    Sentry.captureException(err, { tags: { module: 'sendActionReminder' } })
-    await logEmailSend({
-      kind: 'incident-action-reminder', to: args.to, subject,
-      tenantId, status: 'failed',
-      errorText: err instanceof Error ? err.message : String(err),
-    })
-    return false
-  }
+  const { sent } = await sendEmail({
+    kind: 'incident-action-reminder',
+    to: args.to,
+    subject, text, html,
+    tenantId,
+    unsubscribeUrl: args.unsubscribeUrl ?? null,
+  })
+  return sent
 }

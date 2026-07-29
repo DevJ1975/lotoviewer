@@ -10,10 +10,38 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import * as Sentry from '@sentry/nextjs'
 
+// Logical sender identities. The email_log.kind column is intentionally
+// free-form text (migration 057) so a new surface needs no migration — this
+// union is a TypeScript-only guardrail that prevents typos and lets the
+// superadmin email-log filter be exhaustive. Add a member when you add a
+// sender. Lives here (not core.ts) so logEmailSend can reference it without a
+// circular import back through core.
+export type EmailKind =
+  | 'invite'
+  | 'verify_invite'
+  | 'invite-reminder'
+  | 'review-link'
+  | 'incident-alert'
+  | 'incident-action-assignment'
+  | 'incident-action-reminder'
+  | 'incident-care-followup'
+  | 'incident-investigation-due'
+  | 'incident-trends-digest'
+  | 'incident-witness-request'
+  | 'risk-review'
+  | 'training-expiry'
+  | 'fleet-expiry'
+  | 'chemicals-digest'
+  | 'board-digest'
+  | 'scorecard-weather'
+  | 'osha-300a-posting'
+  | 'regulation-update-alert'
+  | 'superadmin-daily-report'
+  | 'channel'
+
 export interface LogEmailArgs {
-  /** Logical sender. Examples: 'invite', 'training-expiry', 'risk-review',
-   *  'review-link', 'support-ticket'. */
-  kind:           string
+  /** Logical sender. See EmailKind. */
+  kind:           EmailKind
   to:             string
   subject?:       string
   /** Tenant scope when the email is about tenant data. NULL OK. */

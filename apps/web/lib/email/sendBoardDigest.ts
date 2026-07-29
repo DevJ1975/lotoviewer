@@ -3,9 +3,7 @@
 // tenant into a single email so off-shift workers (who miss Web
 // Push) still see what's happening.
 
-import { Resend } from 'resend'
-import * as Sentry from '@sentry/nextjs'
-import { logEmailSend } from '@/lib/email/instrument'
+import { sendEmail } from '@/lib/email/core'
 
 export interface BoardDigestThreadEntry {
   board_id:      string
@@ -33,18 +31,7 @@ export interface BoardDigestArgs {
 }
 
 export async function sendBoardDigest(args: BoardDigestArgs): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY
   const subject = `[${args.cadence === 'daily' ? 'Daily' : 'Weekly'}] Safety boards digest`
-  if (!apiKey) {
-    await logEmailSend({
-      kind: 'board-digest', to: args.to, subject,
-      tenantId: args.tenantId, status: 'skipped', errorText: 'RESEND_API_KEY not set',
-    })
-    return false
-  }
-  const from = process.env.INVITE_FROM_EMAIL
-            ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <invites@soteriafield.app>'
 
   const name = args.recipientName?.trim() || args.to.split('@')[0]!
   const baseUrl = args.appUrl.replace(/\/$/, '')
@@ -90,31 +77,13 @@ export async function sendBoardDigest(args: BoardDigestArgs): Promise<boolean> {
   // Lightweight HTML — same content, slightly nicer formatting.
   const html = textToHtml(text, baseUrl)
 
-  try {
-    const resend = new Resend(apiKey)
-    const result = await resend.emails.send({ from, to: args.to, subject, text, html })
-    if (result.error) {
-      Sentry.captureMessage('board-digest send error', { extra: { error: result.error } })
-      await logEmailSend({
-        kind: 'board-digest', to: args.to, subject,
-        tenantId: args.tenantId, status: 'failed', errorText: String(result.error),
-      })
-      return false
-    }
-    await logEmailSend({
-      kind: 'board-digest', to: args.to, subject,
-      tenantId: args.tenantId, status: 'sent',
-    })
-    return true
-  } catch (e) {
-    Sentry.captureException(e, { tags: { kind: 'board-digest' } })
-    await logEmailSend({
-      kind: 'board-digest', to: args.to, subject,
-      tenantId: args.tenantId, status: 'failed',
-      errorText: e instanceof Error ? e.message : String(e),
-    })
-    return false
-  }
+  const { sent } = await sendEmail({
+    kind: 'board-digest',
+    to: args.to,
+    subject, text, html,
+    tenantId: args.tenantId,
+  })
+  return sent
 }
 
 function textToHtml(text: string, baseUrl: string): string {

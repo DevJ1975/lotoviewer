@@ -1,17 +1,13 @@
-// Review-portal email helper. Mirrors apps/web/lib/email/sendInvite.ts
-// — same Resend client, same Sentry error logging, same env-var
-// fallbacks. Used by /api/admin/review-links to send a tokenized
-// review link to a non-Soteria-account reviewer.
+// Review-portal email helper. Used by /api/admin/review-links to send a
+// tokenized review link to a non-Soteria-account reviewer.
 //
-// Returns true on successful send. Returns false (and logs to Sentry)
-// when RESEND_API_KEY isn't set, when Resend rejects the request, or
-// when the network call throws. Callers bubble the boolean back to
-// the UI as `emailSent` so the admin can fall back to copy-pasting
-// the review URL directly.
+// Returns { sent, providerId } straight from the send core (lib/email/core.ts),
+// which owns the Resend client, retry, and email_log write. Callers bubble
+// `sent` back to the UI as `emailSent` so the admin can fall back to
+// copy-pasting the review URL directly.
 
-import { Resend } from 'resend'
-import * as Sentry from '@sentry/nextjs'
-import { logEmailSend } from '@/lib/email/instrument'
+import { sendEmail } from '@/lib/email/core'
+import { renderEmailLayout, escapeHtml } from '@/lib/email/layout'
 import { renderReviewLinkBody } from './renderReviewLinkBody'
 
 export interface ReviewLinkEmailArgs {
@@ -33,7 +29,6 @@ export interface ReviewLinkEmailArgs {
    * tapping Reply gets the right person, not a no-reply alias.
    */
   replyTo?:       string
-  /** Resend message-id is returned for support / deliverability tracing. */
 }
 
 /**
@@ -46,24 +41,8 @@ export interface ReviewLinkEmailArgs {
 export async function sendReviewLinkEmail(
   args: ReviewLinkEmailArgs,
 ): Promise<{ sent: boolean; providerId: string | null }> {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) {
-    console.warn('[review-link-email] RESEND_API_KEY not set — skipping send')
-    await logEmailSend({
-      kind: 'review-link', to: args.to,
-      status: 'skipped', errorText: 'RESEND_API_KEY not set',
-    })
-    return { sent: false, providerId: null }
-  }
-
-  // From-address precedence — same fallback ladder as the invite helper.
-  const from = process.env.INVITE_FROM_EMAIL
-            ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <invites@soteriafield.app>'
-
-  // Subject + plain-text body come from the shared pure renderer so
-  // the manual-send (mailto) path produces identical wording. HTML
-  // template is server-only and stays inline below.
+  // Subject + plain-text body come from the shared pure renderer so the
+  // manual-send (mailto) path produces identical wording. HTML is server-only.
   const { subject, body: text } = renderReviewLinkBody({
     reviewerName:  args.reviewerName,
     reviewerEmail: args.to,
@@ -76,39 +55,12 @@ export async function sendReviewLinkEmail(
   })
   const html = renderHtml(args)
 
-  try {
-    const resend = new Resend(apiKey)
-    const { data, error } = await resend.emails.send({
-      from,
-      to:        args.to,
-      subject,
-      text,
-      html,
-      replyTo:   args.replyTo,
-    })
-    if (error) {
-      Sentry.captureException(error, { tags: { module: 'sendReviewLinkEmail', stage: 'resend' } })
-      console.error('[review-link-email] Resend rejected the send', error)
-      await logEmailSend({
-        kind: 'review-link', to: args.to, subject,
-        status: 'failed', errorText: error.message,
-      })
-      return { sent: false, providerId: null }
-    }
-    await logEmailSend({
-      kind: 'review-link', to: args.to, subject,
-      status: 'sent', providerId: data?.id ?? null,
-    })
-    return { sent: true, providerId: data?.id ?? null }
-  } catch (err) {
-    Sentry.captureException(err, { tags: { module: 'sendReviewLinkEmail', stage: 'resend' } })
-    console.error('[review-link-email] send threw', err)
-    await logEmailSend({
-      kind: 'review-link', to: args.to, subject,
-      status: 'failed', errorText: err instanceof Error ? err.message : String(err),
-    })
-    return { sent: false, providerId: null }
-  }
+  return sendEmail({
+    kind: 'review-link',
+    to: args.to,
+    subject, text, html,
+    replyTo: args.replyTo,
+  })
 }
 
 function formatDate(iso: string): string {
@@ -123,17 +75,8 @@ function formatDate(iso: string): string {
   }
 }
 
-// Plain-text body now comes from the shared `renderReviewLinkBody`
-// helper — see the import + call site at the top of this file. The
-// HTML template below stays inline because (a) it's heavy template
-// markup that the manual-send path doesn't need, and (b) it's
-// server-only by the time it ships.
-
 function renderHtml(a: ReviewLinkEmailArgs): string {
-  const safe = (s: string) => s
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
-
+  const safe = escapeHtml
   const dispName = safe(a.reviewerName || a.to.split('@')[0]!)
   const placardWord = a.placardCount === 1 ? 'placard' : 'placards'
   const adminMessageBlock = a.adminMessage?.trim()
@@ -146,17 +89,11 @@ function renderHtml(a: ReviewLinkEmailArgs): string {
 
   const reviewHostLabel = a.reviewUrl.replace(/^https?:\/\//, '').split('/')[0]
 
-  return `<!doctype html>
-<html><body style="margin:0;padding:0;background:#f6f8fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a2230;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f6f8fb;padding:32px 16px;">
-<tr><td align="center">
-  <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,0.06);">
-    <tr><td style="background:#214488;padding:24px 28px;color:#ffffff;">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">SoteriaField · Placard review</div>
-      <div style="font-size:22px;font-weight:800;margin-top:4px;">${safe(a.tenantName)} · ${safe(a.department)}</div>
-    </td></tr>
-    <tr><td style="padding:28px;">
-      <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;">Hi ${dispName},</p>
+  return renderEmailLayout({
+    eyebrow: 'SoteriaField · Placard review',
+    heading: `${safe(a.tenantName)} · ${safe(a.department)}`,
+    footerHtml: `Sent on behalf of ${safe(a.tenantName)} · <a href="${safe(a.reviewUrl)}" style="color:#214488;text-decoration:none;">${safe(reviewHostLabel ?? '')}</a>`,
+    contentHtml: `<p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;">Hi ${dispName},</p>
       <p style="margin:0 0 18px 0;font-size:15px;line-height:1.55;">
         <strong>${safe(a.tenantName)}</strong>'s <strong>${safe(a.department)}</strong> department has
         <strong>${a.placardCount}</strong> LOTO ${placardWord} ready for your review.
@@ -172,13 +109,6 @@ function renderHtml(a: ReviewLinkEmailArgs): string {
       <p style="margin:0 0 0 0;font-size:12px;line-height:1.55;color:#5b6675;">
         Link expires <strong>${safe(formatDate(a.expiresAt))}</strong>.
         Trouble opening it? Just reply to this email.
-      </p>
-    </td></tr>
-    <tr><td style="background:#f6f8fb;padding:16px 28px;text-align:center;font-size:11px;color:#5b6675;border-top:1px solid #e6ebf2;">
-      Sent on behalf of ${safe(a.tenantName)} · <a href="${safe(a.reviewUrl)}" style="color:#214488;text-decoration:none;">${safe(reviewHostLabel ?? '')}</a>
-    </td></tr>
-  </table>
-</td></tr>
-</table>
-</body></html>`
+      </p>`,
+  })
 }

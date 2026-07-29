@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
-  authAdminMock, gateOk, gateRejects, mockState, resetMocks,
-  jsonRequest, emptyRequest, ctxFor, sendInviteEmailMock,
+  authAdminMock, gateOk, gateRejects, generateLinkOk, mockState, resetMocks,
+  jsonRequest, emptyRequest, ctxFor, sendInviteEmailMock, sendVerifyInviteEmailMock,
 } from './_helpers'
 import { POST as inviteMember, GET as listMembers } from '@/app/api/superadmin/tenants/[number]/members/route'
 import { PATCH as changeRole, DELETE as removeMember }
@@ -89,60 +89,55 @@ describe('POST /api/superadmin/tenants/[number]/members (invite)', () => {
     }))
   })
 
-  it('new user: creates auth row, patches profile, sends email, returns tempPassword', async () => {
+  it('new user: generates a verify link, upserts profile, emails the link, returns no temp password', async () => {
     mockState.queue('tenants',  { data: { id: 'T1', tenant_number: '0001', name: 'Snak King' }, error: null })
     mockState.queue('profiles', { data: null, error: null })
-    authAdminMock.createUser.mockResolvedValue({
-      data: { user: { id: 'NEW', email: 'jane@x.com' } },
-      error: null,
-    })
-    mockState.queue('profiles', { data: null, error: null })             // profile patch
+    generateLinkOk('NEW', 'jane@x.com', 'https://supabase.test/verify?token=abc')
+    mockState.queue('profiles', { data: null, error: null })             // profile upsert
     mockState.queue('tenant_memberships', { data: null, error: null })   // membership insert
     const r = await inviteMember(jsonRequest('POST', { email: 'jane@x.com', role: 'member', full_name: 'Jane' }), ctxFor({ number: '0001' }))
     expect(r.status).toBe(201)
     const body = await r.json()
     expect(body.alreadyExisted).toBe(false)
-    expect(body.tempPassword).toBe('TempPass123!')
+    expect(body.tempPassword).toBeUndefined()
     expect(body.emailSent).toBe(true)
-    expect(authAdminMock.createUser).toHaveBeenCalledWith(expect.objectContaining({ email: 'jane@x.com' }))
-    expect(sendInviteEmailMock).toHaveBeenCalledWith(expect.objectContaining({
-      to:           'jane@x.com',
-      tenantName:   'Snak King',
-      tempPassword: 'TempPass123!',
+    expect(authAdminMock.createUser).not.toHaveBeenCalled()
+    expect(authAdminMock.generateLink).toHaveBeenCalledWith(expect.objectContaining({ type: 'invite', email: 'jane@x.com' }))
+    expect(mockState.upserts.find(u => u.table === 'profiles')?.payload).toMatchObject({
+      id: 'NEW', must_change_password: true,
+    })
+    expect(sendVerifyInviteEmailMock).toHaveBeenCalledWith(expect.objectContaining({
+      to: 'jane@x.com', tenantName: 'Snak King', verifyUrl: 'https://supabase.test/verify?token=abc',
     }))
   })
 
-  it('existing auth user without a matching profile: attaches membership instead of failing createUser', async () => {
+  it('already-registered auth user: invite link falls back to a magic link, still attaches membership', async () => {
     mockState.queue('tenants',  { data: { id: 'T1', tenant_number: '0001', name: 'Snak King' }, error: null })
     mockState.queue('profiles', { data: null, error: null })             // no profile by normalized email
-    authAdminMock.createUser.mockResolvedValue({
-      data: { user: null },
-      error: { message: 'A user with this email address has already been registered' },
-    })
-    authAdminMock.listUsers.mockResolvedValue({
-      data: { users: [{ id: 'AUTH-ONLY', email: 'Jane@X.com', user_metadata: {} }] },
-      error: null,
-    })
-    mockState.queue('profiles', { data: null, error: null })             // no profile by auth id
-    mockState.queue('profiles', { data: null, error: null })             // repair profile insert
+    // generateInviteLink tries invite first (rejected — already registered),
+    // then falls back to a magic link for the existing auth user.
+    authAdminMock.generateLink
+      .mockResolvedValueOnce({ data: { user: null }, error: { message: 'A user with this email address has already been registered' } })
+      .mockResolvedValueOnce({ data: { user: { id: 'AUTH-ONLY', email: 'jane@x.com' }, properties: { action_link: 'https://supabase.test/verify?token=xyz' } }, error: null })
+    mockState.queue('profiles', { data: null, error: null })             // profile upsert
     mockState.queue('tenant_memberships', { data: null, error: null })   // membership insert
 
     const r = await inviteMember(jsonRequest('POST', { email: 'jane@x.com', role: 'member', full_name: 'Jane' }), ctxFor({ number: '0001' }))
     expect(r.status).toBe(201)
     const body = await r.json()
     expect(body.user_id).toBe('AUTH-ONLY')
-    expect(body.alreadyExisted).toBe(true)
     expect(body.tempPassword).toBeUndefined()
 
-    expect(authAdminMock.listUsers).toHaveBeenCalled()
-    expect(mockState.inserts.find(i => i.table === 'profiles')?.payload).toMatchObject({
-      id: 'AUTH-ONLY', email: 'jane@x.com', full_name: 'Jane', must_change_password: false,
+    expect(authAdminMock.generateLink).toHaveBeenCalledTimes(2)
+    expect(authAdminMock.generateLink).toHaveBeenNthCalledWith(2, expect.objectContaining({ type: 'magiclink', email: 'jane@x.com' }))
+    expect(mockState.upserts.find(u => u.table === 'profiles')?.payload).toMatchObject({
+      id: 'AUTH-ONLY', email: 'jane@x.com', must_change_password: true,
     })
     expect(mockState.inserts.find(i => i.table === 'tenant_memberships')?.payload).toMatchObject({
       user_id: 'AUTH-ONLY', tenant_id: 'T1', role: 'member',
     })
-    expect(sendInviteEmailMock).toHaveBeenCalledWith(expect.objectContaining({
-      to: 'jane@x.com', tempPassword: '',
+    expect(sendVerifyInviteEmailMock).toHaveBeenCalledWith(expect.objectContaining({
+      to: 'jane@x.com', verifyUrl: 'https://supabase.test/verify?token=xyz',
     }))
   })
 

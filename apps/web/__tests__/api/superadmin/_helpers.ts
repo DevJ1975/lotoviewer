@@ -51,6 +51,7 @@ class MockChain {
   // Inserts/updates are captured for later assertions.
   public inserts: Array<{ table: string; payload: unknown }>  = []
   public updates: Array<{ table: string; payload: unknown }>  = []
+  public upserts: Array<{ table: string; payload: unknown }>  = []
   public deletes: Array<{ table: string }>                    = []
   public rpcCalls: Array<{ name: string; args?: unknown }>    = []
 
@@ -81,6 +82,7 @@ class MockChain {
         maybeSingle: result,
         insert: (payload: unknown) => { self.inserts.push({ table, payload }); return chain },
         update: (payload: unknown) => { self.updates.push({ table, payload }); return chain },
+        upsert: (payload: unknown) => { self.upserts.push({ table, payload }); return chain },
         delete: () => { self.deletes.push({ table }); return chain },
         // Terminal awaits also work directly via .then on the chain:
         then: (onFulfilled: (v: ChainResult) => unknown) =>
@@ -110,10 +112,12 @@ class MockChain {
 }
 
 export const authAdminMock = {
-  createUser:   vi.fn(),
-  deleteUser:   vi.fn(),
-  getUserById:  vi.fn(),
-  listUsers:    vi.fn(),
+  createUser:     vi.fn(),
+  deleteUser:     vi.fn(),
+  getUserById:    vi.fn(),
+  updateUserById: vi.fn(),
+  listUsers:      vi.fn(),
+  generateLink:   vi.fn(),
 }
 
 export const mockState = new MockChain()
@@ -123,12 +127,25 @@ vi.mock('@/lib/supabaseAdmin', () => ({
   generateTempPassword: vi.fn(() => 'TempPass123!'),
 }))
 
-// ── sendInviteEmail mock (for member-invite tests) ────────────────────────
+// ── email mocks (for member-invite tests) ─────────────────────────────────
 export const sendInviteEmailMock = vi.fn().mockResolvedValue(true)
 vi.mock('@/lib/email/sendInvite', () => ({
   sendInviteEmail: sendInviteEmailMock,
   computeLoginUrl: () => 'https://soteriafield.app',
 }))
+
+export const sendVerifyInviteEmailMock = vi.fn().mockResolvedValue(true)
+vi.mock('@/lib/email/sendVerifyInvite', () => ({
+  sendVerifyInviteEmail: sendVerifyInviteEmailMock,
+}))
+
+// Convenience: queue a successful generateLink (invite or magiclink) result.
+export function generateLinkOk(userId = 'NEW-UUID', email = 'new@example.com', actionLink = 'https://supabase.test/auth/v1/verify?token=abc') {
+  authAdminMock.generateLink.mockResolvedValue({
+    data:  { user: { id: userId, email }, properties: { action_link: actionLink } },
+    error: null,
+  })
+}
 
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }))
 
@@ -138,11 +155,16 @@ export function resetMocks() {
   authAdminMock.createUser.mockReset()
   authAdminMock.deleteUser.mockReset()
   authAdminMock.getUserById.mockReset()
+  authAdminMock.updateUserById.mockReset()
   authAdminMock.listUsers.mockReset()
+  authAdminMock.generateLink.mockReset()
   sendInviteEmailMock.mockReset()
   sendInviteEmailMock.mockResolvedValue(true)
+  sendVerifyInviteEmailMock.mockReset()
+  sendVerifyInviteEmailMock.mockResolvedValue(true)
   mockState.inserts.length = 0
   mockState.updates.length = 0
+  mockState.upserts.length = 0
   mockState.deletes.length = 0
   mockState.rpcCalls.length = 0
   // Clear queues

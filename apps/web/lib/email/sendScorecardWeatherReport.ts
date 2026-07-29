@@ -1,6 +1,4 @@
-import { Resend } from 'resend'
-import * as Sentry from '@sentry/nextjs'
-import { logEmailSend } from '@/lib/email/instrument'
+import { sendEmail } from '@/lib/email/core'
 import { unsubscribeFooterText, unsubscribeFooterHtml } from '@/lib/email/unsubscribe'
 import { formatDelta, type WeatherMetricRow } from '@soteria/core/scorecardWeatherReport'
 
@@ -62,34 +60,24 @@ function bar(pct: number, color: string): string {
 }
 
 export async function sendScorecardWeatherReport(args: ScorecardWeatherReportArgs): Promise<{ sent: boolean }> {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) {
-    await logEmailSend({ kind: 'scorecard-weather', to: args.to, tenantId: args.tenantId ?? null, status: 'skipped', errorText: 'RESEND_API_KEY not set' })
-    return { sent: false }
-  }
-  const from = process.env.INVITE_FROM_EMAIL ?? process.env.SUPPORT_FROM_EMAIL ?? 'SoteriaField <invites@soteriafield.app>'
   const subject = `[Weekly] EHS weather report — week of ${args.weekStart}`
   const unsub = args.unsubscribeUrl ?? null
   const text = renderText(args, unsub)
   const html = renderHtml(args, unsub)
-  const headers = unsub
-    ? { 'List-Unsubscribe': `<${unsub}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
-    : undefined
 
-  try {
-    const { data, error } = await new Resend(apiKey).emails.send({ from, to: args.to, subject, text, html, headers })
-    if (error) {
-      Sentry.captureException(error, { tags: { module: 'sendScorecardWeatherReport' } })
-      await logEmailSend({ kind: 'scorecard-weather', to: args.to, subject, tenantId: args.tenantId ?? null, status: 'failed', errorText: error.message })
-      return { sent: false }
-    }
-    await logEmailSend({ kind: 'scorecard-weather', to: args.to, subject, tenantId: args.tenantId ?? null, status: 'sent', providerId: data?.id ?? null })
-    return { sent: true }
-  } catch (err) {
-    Sentry.captureException(err, { tags: { module: 'sendScorecardWeatherReport' } })
-    await logEmailSend({ kind: 'scorecard-weather', to: args.to, subject, tenantId: args.tenantId ?? null, status: 'failed', errorText: err instanceof Error ? err.message : String(err) })
-    return { sent: false }
-  }
+  // Idempotency: at most one weekly report per (tenant, week, recipient). A
+  // cron re-run or Vercel double-fire re-claims the same key and is skipped.
+  const dedupeKey = `scorecard-weather:${args.tenantId ?? 'na'}:${args.weekStart}:${args.to.toLowerCase()}`
+
+  const { sent } = await sendEmail({
+    kind: 'scorecard-weather',
+    to: args.to,
+    subject, text, html,
+    tenantId: args.tenantId ?? null,
+    unsubscribeUrl: unsub,
+    dedupeKey,
+  })
+  return { sent }
 }
 
 // Render the exact HTML body of the weekly email without sending — used by

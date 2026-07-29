@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   authAdminMock,
+  generateLinkOk,
   jsonRequest,
   mockState,
   resetMocks,
   sendInviteEmailMock,
+  sendVerifyInviteEmailMock,
 } from '../superadmin/_helpers'
 
 const { requireTenantAdminMock } = vi.hoisted(() => ({
@@ -34,14 +36,11 @@ describe('POST /api/admin/users', () => {
     tenantAdminOk()
   })
 
-  it('creates a tenant membership and canonical member row for a new invite', async () => {
+  it('emails a verify link and creates membership + canonical member row for a new invite', async () => {
     mockState.queue('tenants', { data: { id: 'T1', name: 'Snak King' }, error: null })
     mockState.queue('profiles', { data: null, error: null })
-    authAdminMock.createUser.mockResolvedValue({
-      data: { user: { id: 'NEW-USER', email: 'new@example.com' } },
-      error: null,
-    })
-    mockState.queue('profiles', { data: null, error: null })
+    generateLinkOk('NEW-USER', 'new@example.com', 'https://supabase.test/verify?token=abc')
+    mockState.queue('profiles', { data: null, error: null })             // profile upsert
     mockState.queue('tenant_memberships', { data: null, error: null })
 
     const res = await inviteUser(
@@ -53,11 +52,13 @@ describe('POST /api/admin/users', () => {
     expect(body).toMatchObject({
       email: 'new@example.com',
       fullName: 'New Worker',
-      tempPassword: 'TempPass123!',
       emailSent: true,
       alreadyExisted: false,
       tenantId: 'T1',
     })
+    // No credential is ever returned in the response.
+    expect(body.tempPassword).toBeUndefined()
+    expect(authAdminMock.createUser).not.toHaveBeenCalled()
 
     expect(mockState.inserts.find(i => i.table === 'tenant_memberships')?.payload).toMatchObject({
       user_id: 'NEW-USER',
@@ -74,21 +75,19 @@ describe('POST /api/admin/users', () => {
       status: 'active',
       readiness_status: 'setup_needed',
     })
-    expect(sendInviteEmailMock).toHaveBeenCalledWith(expect.objectContaining({
+    expect(sendVerifyInviteEmailMock).toHaveBeenCalledWith(expect.objectContaining({
       to: 'new@example.com',
       tenantName: 'Snak King',
-      tempPassword: 'TempPass123!',
+      verifyUrl: 'https://supabase.test/verify?token=abc',
     }))
+    expect(sendInviteEmailMock).not.toHaveBeenCalled()
   })
 
   it('rolls back a brand-new auth user when membership insert races into a duplicate', async () => {
     mockState.queue('tenants', { data: { id: 'T1', name: 'Snak King' }, error: null })
     mockState.queue('profiles', { data: null, error: null })
-    authAdminMock.createUser.mockResolvedValue({
-      data: { user: { id: 'RACE-USER', email: 'race@example.com' } },
-      error: null,
-    })
-    mockState.queue('profiles', { data: null, error: null })
+    generateLinkOk('RACE-USER', 'race@example.com')
+    mockState.queue('profiles', { data: null, error: null })             // profile upsert
     mockState.queue('tenant_memberships', {
       data: null,
       error: { message: 'duplicate key', code: '23505' },
@@ -99,8 +98,9 @@ describe('POST /api/admin/users', () => {
     )
 
     expect(res.status).toBe(409)
+    // created:true (a fresh invite) → the auth user is rolled back.
     expect(authAdminMock.deleteUser).toHaveBeenCalledWith('RACE-USER')
     expect(mockState.inserts.some(i => i.table === 'members')).toBe(false)
-    expect(sendInviteEmailMock).not.toHaveBeenCalled()
+    expect(sendVerifyInviteEmailMock).not.toHaveBeenCalled()
   })
 })

@@ -1,17 +1,13 @@
 // Incident alert email — fanned out to recipients resolved by the
 // notification rules engine (packages/core/src/incidentNotificationRules.ts).
 //
-// Returns true on a clean send, false on any failure (skip / Resend
-// reject / network throw). Failures are Sentry-logged + email_log
-// rows are written via instrument.ts so the per-incident
-// notifications tab + the superadmin dashboard see the trail.
-//
-// Mirrors sendInviteEmail's posture: no exceptions bubble out, the
-// boolean drives the fan-out caller's loop.
+// Returns true on a clean send, false on any failure. The send/log/error
+// plumbing (incl. the email_log row keyed by tenant + triggering user) lives
+// in lib/email/core.ts; this file owns the alert content and the
+// severity-tinted header.
 
-import { Resend } from 'resend'
-import * as Sentry from '@sentry/nextjs'
-import { logEmailSend } from '@/lib/email/instrument'
+import { sendEmail } from '@/lib/email/core'
+import { renderEmailLayout, escapeHtml } from '@/lib/email/layout'
 import {
   INCIDENT_TYPE_LABEL,
   SEVERITY_ACTUAL_LABEL,
@@ -41,57 +37,18 @@ export interface IncidentAlertArgs {
 }
 
 export async function sendIncidentAlertEmail(args: IncidentAlertArgs): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY
   const subject = buildSubject(args)
-  const tenantId = args.tenantId ?? null
-  const triggeredBy = args.triggeredBy ?? null
-
-  if (!apiKey) {
-    console.warn('[incident-alert] RESEND_API_KEY not set — skipping send')
-    await logEmailSend({
-      kind: 'incident-alert', to: args.to, subject,
-      tenantId, triggeredBy,
-      status: 'skipped', errorText: 'RESEND_API_KEY not set',
-    })
-    return false
-  }
-
-  const from = process.env.INVITE_FROM_EMAIL
-            ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <invites@soteriafield.app>'
-
   const text = renderText(args)
   const html = renderHtml(args)
 
-  try {
-    const resend = new Resend(apiKey)
-    const { data, error } = await resend.emails.send({ from, to: args.to, subject, text, html })
-    if (error) {
-      Sentry.captureException(error, { tags: { module: 'sendIncidentAlertEmail', stage: 'resend' } })
-      console.error('[incident-alert] Resend rejected the send', error)
-      await logEmailSend({
-        kind: 'incident-alert', to: args.to, subject,
-        tenantId, triggeredBy,
-        status: 'failed', errorText: error.message,
-      })
-      return false
-    }
-    await logEmailSend({
-      kind: 'incident-alert', to: args.to, subject,
-      tenantId, triggeredBy,
-      status: 'sent', providerId: data?.id ?? null,
-    })
-    return true
-  } catch (err) {
-    Sentry.captureException(err, { tags: { module: 'sendIncidentAlertEmail', stage: 'resend' } })
-    console.error('[incident-alert] send threw', err)
-    await logEmailSend({
-      kind: 'incident-alert', to: args.to, subject,
-      tenantId, triggeredBy,
-      status: 'failed', errorText: err instanceof Error ? err.message : String(err),
-    })
-    return false
-  }
+  const { sent } = await sendEmail({
+    kind: 'incident-alert',
+    to: args.to,
+    subject, text, html,
+    tenantId: args.tenantId ?? null,
+    triggeredBy: args.triggeredBy ?? null,
+  })
+  return sent
 }
 
 function buildSubject(a: IncidentAlertArgs): string {
@@ -140,9 +97,7 @@ timer that would otherwise page leadership.${ruleLine}
 }
 
 function renderHtml(a: IncidentAlertArgs): string {
-  const safe = (s: string) => s
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+  const safe = escapeHtml
   const name = a.recipientName?.trim() || a.to.split('@')[0]!
   const sev = SEVERITY_ACTUAL_LABEL[a.severityActual]
   const type = INCIDENT_TYPE_LABEL[a.incidentType]
@@ -170,17 +125,12 @@ function renderHtml(a: IncidentAlertArgs): string {
     ? `<p style="margin:18px 0 0 0;font-size:11px;line-height:1.55;color:#94a3b8;">Notified per rule: ${safe(a.ruleName)}</p>`
     : ''
 
-  return `<!doctype html>
-<html><body style="margin:0;padding:0;background:#f6f8fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a2230;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f6f8fb;padding:32px 16px;">
-<tr><td align="center">
-  <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,0.06);">
-    <tr><td style="background:${headerBg};padding:24px 28px;color:#ffffff;">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:.85;">SoteriaField · Incident Alert</div>
-      <div style="font-size:22px;font-weight:800;margin-top:4px;">${safe(a.reportNumber)} — ${safe(sev)}</div>
-    </td></tr>
-    <tr><td style="padding:28px;">
-      <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;">Hi ${safe(name)},</p>
+  return renderEmailLayout({
+    headerBg,
+    eyebrow: 'SoteriaField · Incident Alert',
+    heading: `${safe(a.reportNumber)} — ${safe(sev)}`,
+    footerHtml: 'Sent from SoteriaField',
+    contentHtml: `<p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;">Hi ${safe(name)},</p>
       <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;">A new incident has been reported.</p>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f6f8fb;border-radius:10px;border:1px solid #e6ebf2;">
         <tr><td style="padding:14px 16px;font-size:13px;color:#1a2230;">
@@ -200,13 +150,6 @@ function renderHtml(a: IncidentAlertArgs): string {
       <p style="margin:18px 0 0 0;font-size:12px;line-height:1.55;color:#5b6675;">
         For high-severity events, please acknowledge by transitioning the incident to <strong>Investigating</strong> in the app — this stops the escalation timer that would otherwise page leadership.
       </p>
-      ${ruleBlock}
-    </td></tr>
-    <tr><td style="background:#f6f8fb;padding:16px 28px;text-align:center;font-size:11px;color:#5b6675;border-top:1px solid #e6ebf2;">
-      Sent from SoteriaField
-    </td></tr>
-  </table>
-</td></tr>
-</table>
-</body></html>`
+      ${ruleBlock}`,
+  })
 }

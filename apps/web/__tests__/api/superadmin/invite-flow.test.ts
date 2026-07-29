@@ -12,22 +12,19 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
-  authAdminMock, gateOk, mockState, resetMocks, sendInviteEmailMock,
-  jsonRequest, ctxFor,
+  authAdminMock, gateOk, generateLinkOk, mockState, resetMocks,
+  sendInviteEmailMock, sendVerifyInviteEmailMock, jsonRequest, ctxFor,
 } from './_helpers'
 import { POST as inviteMember } from '@/app/api/superadmin/tenants/[number]/members/route'
 
 describe('Member invite flow — end-to-end happy paths', () => {
   beforeEach(() => { resetMocks(); gateOk() })
 
-  it('NEW USER: creates auth row → patches profile → inserts membership → emails invite with temp password', async () => {
+  it('NEW USER: generates a verify link → upserts profile → inserts membership → emails the link (no temp password)', async () => {
     mockState.queue('tenants',  { data: { id: 'T1', tenant_number: '0001', name: 'Snak King' }, error: null })
     mockState.queue('profiles', { data: null, error: null })  // no existing profile
-    authAdminMock.createUser.mockResolvedValue({
-      data: { user: { id: 'NEW-UUID', email: 'new@example.com' } },
-      error: null,
-    })
-    mockState.queue('profiles',           { data: null, error: null })  // profile patch
+    generateLinkOk('NEW-UUID', 'new@example.com', 'https://supabase.test/verify?token=abc')
+    mockState.queue('profiles',           { data: null, error: null })  // profile upsert
     mockState.queue('tenant_memberships', { data: null, error: null })  // membership insert
 
     const r = await inviteMember(
@@ -37,21 +34,30 @@ describe('Member invite flow — end-to-end happy paths', () => {
     expect(r.status).toBe(201)
     const body = await r.json()
     expect(body.alreadyExisted).toBe(false)
-    expect(body.tempPassword).toBeTruthy()
     expect(body.emailSent).toBe(true)
+    // No credential ever leaves the server in the response.
+    expect(body.tempPassword).toBeUndefined()
 
-    // Verify the side-effects fired in the right order with the right
-    // payloads.
-    expect(authAdminMock.createUser).toHaveBeenCalledWith(expect.objectContaining({
-      email:         'new@example.com',
-      email_confirm: true,
-      user_metadata: { full_name: 'New User' },
+    // We never mint a pre-confirmed account — verification is via the link.
+    expect(authAdminMock.createUser).not.toHaveBeenCalled()
+    expect(authAdminMock.generateLink).toHaveBeenCalledWith(expect.objectContaining({
+      type:    'invite',
+      email:   'new@example.com',
+      options: expect.objectContaining({
+        data:       { full_name: 'New User' },
+        redirectTo: 'https://soteriafield.app/welcome',
+      }),
     }))
-    expect(sendInviteEmailMock).toHaveBeenCalledWith(expect.objectContaining({
-      to:           'new@example.com',
-      tenantName:   'Snak King',
-      tempPassword: 'TempPass123!',  // from generateTempPassword mock
+    // The verify link is emailed; the temp-password sender is NOT used here.
+    expect(sendVerifyInviteEmailMock).toHaveBeenCalledWith(expect.objectContaining({
+      to:         'new@example.com',
+      tenantName: 'Snak King',
+      verifyUrl:  'https://supabase.test/verify?token=abc',
     }))
+    expect(sendInviteEmailMock).not.toHaveBeenCalled()
+    // Profile is upserted with the onboarding flag set.
+    const profileUpsert = mockState.upserts.find(u => u.table === 'profiles')
+    expect(profileUpsert!.payload).toMatchObject({ id: 'NEW-UUID', must_change_password: true })
     // Membership insert payload includes the inviter's user id.
     const membershipInsert = mockState.inserts.find(i => i.table === 'tenant_memberships')
     expect(membershipInsert).toBeTruthy()
@@ -60,7 +66,7 @@ describe('Member invite flow — end-to-end happy paths', () => {
     })
   })
 
-  it('EXISTING USER: skips createUser, sends notification email with empty password, returns alreadyExisted', async () => {
+  it('EXISTING USER: skips the verify link, sends the "added to tenant" notification, returns alreadyExisted', async () => {
     mockState.queue('tenants',  { data: { id: 'T1', tenant_number: '0001', name: 'Snak King' }, error: null })
     mockState.queue('profiles', { data: { id: 'EXISTING-UUID', email: 'jane@x.com' }, error: null })
     mockState.queue('tenant_memberships', { data: null, error: null })
@@ -76,6 +82,8 @@ describe('Member invite flow — end-to-end happy paths', () => {
     expect(body.emailSent).toBe(true)
 
     expect(authAdminMock.createUser).not.toHaveBeenCalled()
+    expect(authAdminMock.generateLink).not.toHaveBeenCalled()
+    expect(sendVerifyInviteEmailMock).not.toHaveBeenCalled()
     // The notification path: empty tempPassword triggers the
     // "you've been added to {tenant}" template.
     expect(sendInviteEmailMock).toHaveBeenCalledWith(expect.objectContaining({

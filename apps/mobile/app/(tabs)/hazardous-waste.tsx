@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
@@ -10,6 +11,8 @@ import {
 
 import { Text, View } from '@/components/Themed'
 import { useTenant } from '@/components/TenantProvider'
+import { supabase } from '@/lib/supabase'
+import { submitHazardousWasteInspection } from '@/lib/hazardousWaste'
 import {
   createEmptyHazardousWasteFieldDraft,
   getChecksForArea,
@@ -17,9 +20,15 @@ import {
   HAZARDOUS_WASTE_CALENDAR,
   HAZARDOUS_WASTE_DOCUMENT_PACKETS,
   summarizeHazardousWasteDraft,
+  type HazardousWasteAreaRow,
   type HazardousWasteAreaType,
   type HazardousWasteFieldDraft,
 } from '@soteria/core/hazardousWaste'
+
+// Only the fields the picker needs. The screen reads areas directly from
+// Supabase (RLS scopes them to the active tenant), matching the read pattern
+// used by the other list screens; the submit goes through the web API.
+type AreaOption = Pick<HazardousWasteAreaRow, 'id' | 'name' | 'area_type'>
 
 const AREA_TYPES: HazardousWasteAreaType[] = [
   'satellite_accumulation',
@@ -55,6 +64,35 @@ export default function HazardousWasteFieldScreen() {
   // load or save. Lets us warn before a tenant switch wipes the draft.
   const [dirty, setDirty] = useState(false)
   const prevTenantId = useRef<string | null>(null)
+
+  // Persisted areas for the active tenant. null = still loading; [] = none
+  // configured yet (the operator must add one in the web app before an
+  // inspection can be filed against it).
+  const [areas, setAreas] = useState<AreaOption[] | null>(null)
+  const [areasError, setAreasError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [submittedAt, setSubmittedAt] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadAreas() {
+      setAreasError(null)
+      if (!tenant?.id) { setAreas([]); return }
+      setAreas(null)
+      const { data, error } = await supabase
+        .from('hazardous_waste_areas')
+        .select('id, name, area_type')
+        .eq('tenant_id', tenant.id)
+        .is('archived_at', null)
+        .order('name', { ascending: true })
+      if (cancelled) return
+      if (error) { setAreasError(error.message); setAreas([]); return }
+      setAreas((data ?? []) as AreaOption[])
+    }
+    void loadAreas()
+    return () => { cancelled = true }
+  }, [tenant?.id])
 
   useEffect(() => {
     let cancelled = false
@@ -123,15 +161,55 @@ export default function HazardousWasteFieldScreen() {
     setDraft(current => ({ ...current, ...patch, updatedAt: new Date().toISOString() }))
     setDirty(true)
     setSaveError(null)
+    setSubmitError(null)
+    setSubmittedAt(null)
   }
 
   function setAreaType(areaType: HazardousWasteAreaType) {
     const allowed = new Set(getChecksForArea(areaType).map(check => check.id))
     updateDraft({
       areaType,
+      // A manual area-type change desyncs from the selected area (the server
+      // derives area_type from the area record and would reject mismatched
+      // findings). Clear the selection so the operator re-picks a matching area.
+      areaId: null,
       checkedIds: draft.checkedIds.filter(id => allowed.has(id)),
       flaggedIds: draft.flaggedIds.filter(id => allowed.has(id)),
     })
+  }
+
+  // Selecting an area is the source of truth for area_type: it sets both so
+  // the findings we submit line up with the server's catalog cross-check.
+  function selectArea(area: AreaOption) {
+    const allowed = new Set(getChecksForArea(area.area_type).map(check => check.id))
+    updateDraft({
+      areaId: area.id,
+      areaType: area.area_type,
+      checkedIds: draft.checkedIds.filter(id => allowed.has(id)),
+      flaggedIds: draft.flaggedIds.filter(id => allowed.has(id)),
+    })
+  }
+
+  async function onSubmit() {
+    if (!tenant?.id) { setSubmitError('Sign in and confirm the active tenant first.'); return }
+    if (!draft.areaId) { setSubmitError('Select an inspection area before submitting.'); return }
+    setSubmitting(true)
+    setSubmitError(null)
+    try {
+      await submitHazardousWasteInspection({ tenantId: tenant.id, draft })
+      // Server accepted the inspection — clear the local fallback draft so the
+      // operator doesn't re-submit it, and reset to a fresh draft for the area
+      // type they were working in. On failure we keep the draft untouched.
+      await AsyncStorage.removeItem(storageKey(tenant.id)).catch(() => {})
+      setDraft(createEmptyHazardousWasteFieldDraft(draft.areaType))
+      setSavedAt(null)
+      setDirty(false)
+      setSubmittedAt(new Date().toISOString())
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Unable to submit the inspection.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   function toggleChecked(id: string) {
@@ -212,6 +290,39 @@ export default function HazardousWasteFieldScreen() {
             ? `${summary.flaggedCritical} critical item${summary.flaggedCritical === 1 ? '' : 's'} flagged`
             : 'No critical flags in this draft'}
         </Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Inspection area</Text>
+        {areas === null ? (
+          <ActivityIndicator color="#92400e" />
+        ) : areasError ? (
+          <Text style={styles.errorText}>{areasError}</Text>
+        ) : areas.length === 0 ? (
+          <View style={styles.referenceRow}>
+            <Text style={styles.referenceBody}>
+              No waste areas configured yet. Add one in the web app, then pull this screen up
+              again to file an inspection. You can still keep an offline draft below.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.segmentWrap}>
+            {areas.map(area => {
+              const active = area.id === draft.areaId
+              return (
+                <Pressable key={area.id} onPress={() => selectArea(area)}>
+                  {({ pressed }) => (
+                    <View style={[styles.segment, active && styles.segmentActive, pressed && styles.pressed]}>
+                      <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+                        {area.name}
+                      </Text>
+                    </View>
+                  )}
+                </Pressable>
+              )
+            })}
+          </View>
+        )}
       </View>
 
       <View style={styles.section}>
@@ -313,14 +424,29 @@ export default function HazardousWasteFieldScreen() {
       </View>
 
       <View style={styles.actions}>
-        <Pressable onPress={saveDraft}>
+        <Pressable onPress={onSubmit} disabled={submitting || !draft.areaId || !tenant?.id}>
           {({ pressed }) => (
-            <View style={[styles.primaryButton, pressed && styles.pressed]}>
-              <Text style={styles.primaryButtonText}>Save offline draft</Text>
+            <View
+              style={[
+                styles.primaryButton,
+                (submitting || !draft.areaId || !tenant?.id) && styles.buttonDisabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              {submitting
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={styles.primaryButtonText}>Submit inspection</Text>}
             </View>
           )}
         </Pressable>
-        <Pressable onPress={confirmClear}>
+        <Pressable onPress={saveDraft} disabled={submitting}>
+          {({ pressed }) => (
+            <View style={[styles.secondaryButton, pressed && styles.pressed]}>
+              <Text style={styles.secondaryButtonText}>Save offline draft</Text>
+            </View>
+          )}
+        </Pressable>
+        <Pressable onPress={confirmClear} disabled={submitting}>
           {({ pressed }) => (
             <View style={[styles.secondaryButton, pressed && styles.pressed]}>
               <Text style={styles.secondaryButtonText}>Clear</Text>
@@ -328,6 +454,11 @@ export default function HazardousWasteFieldScreen() {
           )}
         </Pressable>
       </View>
+      {!draft.areaId && (areas?.length ?? 0) > 0 && (
+        <Text style={styles.savedText}>Select an inspection area above to enable submit.</Text>
+      )}
+      {submitError && <Text style={styles.errorText}>{submitError}</Text>}
+      {submittedAt && <Text style={styles.savedText}>Inspection submitted {new Date(submittedAt).toLocaleString()}</Text>}
       {saveError && <Text style={styles.errorText}>{saveError}</Text>}
       {savedAt && <Text style={styles.savedText}>Saved on this device {new Date(savedAt).toLocaleString()}</Text>}
 
@@ -390,9 +521,10 @@ const styles = StyleSheet.create({
   flagButtonOn:       { borderColor: '#c2410c', backgroundColor: '#c2410c' },
   flagText:           { fontSize: 11, fontWeight: '700', color: '#475569' },
   flagTextOn:         { color: '#fff' },
-  actions:            { flexDirection: 'row', gap: 10 },
-  primaryButton:      { backgroundColor: '#1e3a8a', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11 },
+  actions:            { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  primaryButton:      { backgroundColor: '#1e3a8a', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, minWidth: 132, alignItems: 'center' },
   primaryButtonText:  { color: '#fff', fontWeight: '800', fontSize: 13 },
+  buttonDisabled:     { opacity: 0.5 },
   secondaryButton:    { borderWidth: 1, borderColor: '#94a3b8', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11 },
   secondaryButtonText:{ color: '#334155', fontWeight: '800', fontSize: 13 },
   errorText:          { color: '#b91c1c', fontSize: 12 },

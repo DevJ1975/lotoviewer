@@ -7,9 +7,7 @@
 // Recipients are owners + admins of the tenant (the SLA cron picks
 // the audience).
 
-import { Resend } from 'resend'
-import * as Sentry from '@sentry/nextjs'
-import { logEmailSend } from '@/lib/email/instrument'
+import { sendEmail } from '@/lib/email/core'
 import {
   INCIDENT_TYPE_LABEL,
   SEVERITY_ACTUAL_LABEL,
@@ -35,50 +33,19 @@ export interface InvestigationDueArgs {
 }
 
 export async function sendInvestigationDueReminder(args: InvestigationDueArgs): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY
   const subject = `[ESCALATION] ${args.reportNumber} — investigation overdue (${args.hoursOverdue}h)`
   const tenantId = args.tenantId ?? null
-
-  if (!apiKey) {
-    console.warn('[investigation-due] RESEND_API_KEY not set — skipping send')
-    await logEmailSend({
-      kind: 'incident-investigation-due', to: args.to, subject,
-      tenantId, status: 'skipped', errorText: 'RESEND_API_KEY not set',
-    })
-    return false
-  }
-
-  const from = process.env.INVITE_FROM_EMAIL
-            ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <invites@soteriafield.app>'
 
   const text = renderText(args)
   const html = renderHtml(args)
 
-  try {
-    const resend = new Resend(apiKey)
-    const { data, error } = await resend.emails.send({ from, to: args.to, subject, text, html })
-    if (error) {
-      Sentry.captureException(error, { tags: { module: 'sendInvestigationDueReminder', stage: 'resend' } })
-      await logEmailSend({
-        kind: 'incident-investigation-due', to: args.to, subject,
-        tenantId, status: 'failed', errorText: error.message,
-      })
-      return false
-    }
-    await logEmailSend({
-      kind: 'incident-investigation-due', to: args.to, subject,
-      tenantId, status: 'sent', providerId: data?.id ?? null,
-    })
-    return true
-  } catch (err) {
-    Sentry.captureException(err, { tags: { module: 'sendInvestigationDueReminder', stage: 'resend' } })
-    await logEmailSend({
-      kind: 'incident-investigation-due', to: args.to, subject,
-      tenantId, status: 'failed', errorText: err instanceof Error ? err.message : String(err),
-    })
-    return false
-  }
+  const { sent } = await sendEmail({
+    kind: 'incident-investigation-due',
+    to: args.to,
+    subject, text, html,
+    tenantId,
+  })
+  return sent
 }
 
 function deepLink(a: InvestigationDueArgs): string {

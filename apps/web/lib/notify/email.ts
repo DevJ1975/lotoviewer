@@ -1,21 +1,14 @@
-import { Resend } from 'resend'
-import * as Sentry from '@sentry/nextjs'
 import type { ChannelSendResult } from './sms'
+import { sendEmail } from '@/lib/email/core'
 
-// Generic email channel adapter (reuses Resend). The recipient is in the
-// channel config. Fail-soft.
+// Generic email channel adapter for the multi-channel dispatcher. Routes
+// through the shared send core (lib/email/core.ts) so it inherits retry +
+// the email_log audit trail. The recipient is in the channel config.
+// Fail-soft.
 
 export async function sendChannelEmail(config: Record<string, unknown>, subject: string, text: string): Promise<ChannelSendResult> {
-  const apiKey = process.env.RESEND_API_KEY
   const to = String(config.to ?? '')
-  if (!apiKey || !to) return { sent: false, error: 'email_not_configured' }
-  const from = process.env.INVITE_FROM_EMAIL ?? process.env.SUPPORT_FROM_EMAIL ?? 'SoteriaField <invites@soteriafield.app>'
-  try {
-    const { error } = await new Resend(apiKey).emails.send({ from, to, subject, text })
-    if (error) return { sent: false, error: error.message }
-    return { sent: true }
-  } catch (e) {
-    Sentry.captureException(e, { tags: { module: 'notify-email' } })
-    return { sent: false, error: 'email_threw' }
-  }
+  if (!process.env.RESEND_API_KEY || !to) return { sent: false, error: 'email_not_configured' }
+  const { sent } = await sendEmail({ kind: 'channel', to, subject, text })
+  return sent ? { sent: true } : { sent: false, error: 'email_send_failed' }
 }

@@ -80,7 +80,6 @@ export async function listAdminMembers(
 export interface GrantLoginResult {
   memberId:     string
   profileId:    string
-  tempPassword: string | null
   emailSent:    boolean
 }
 

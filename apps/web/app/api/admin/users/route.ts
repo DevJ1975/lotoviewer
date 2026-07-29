@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
+import { generateInviteLink } from '@/lib/auth/inviteLink'
 import { sendInviteEmail, computeLoginUrl } from '@/lib/email/sendInvite'
+import { sendVerifyInviteEmail } from '@/lib/email/sendVerifyInvite'
 import { sanitizeError } from '@/lib/security/sanitizeError'
-import { generateTempPassword, supabaseAdmin } from '@/lib/supabaseAdmin'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { normalizeEmail } from '@/lib/validation/tenants'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -19,70 +21,9 @@ interface ProfileLookup {
   must_change_password?: boolean | null
 }
 
-interface AuthUserLookup {
-  user: User | null
-  error: { message: string } | null
-}
-
 function profileNameFromAuthUser(user: User): string | null {
   const value = user.user_metadata?.full_name
   return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
-async function findAuthUserByEmail(admin: SupabaseClient, email: string): Promise<AuthUserLookup> {
-  const wanted = email.toLowerCase()
-
-  for (let page = 1; page <= AUTH_MAX_PAGES; page++) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: AUTH_PAGE_SIZE })
-    if (error) return { user: null, error }
-
-    const user = (data?.users ?? []).find(u => u.email?.toLowerCase() === wanted)
-    if (user) return { user, error: null }
-    if ((data?.users ?? []).length < AUTH_PAGE_SIZE) break
-  }
-
-  return { user: null, error: null }
-}
-
-async function ensureProfileForExistingAuthUser(
-  admin: SupabaseClient,
-  user: User,
-  email: string,
-  fullName: string,
-): Promise<{ ok: true; profile: ProfileLookup } | { ok: false; error: { message: string } }> {
-  const { data: profile, error: lookupErr } = await admin
-    .from('profiles')
-    .select('id, email, full_name, must_change_password')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  if (lookupErr) return { ok: false, error: lookupErr }
-
-  const existing = profile as ProfileLookup | null
-  if (existing) {
-    const patch: Partial<Pick<ProfileLookup, 'email' | 'full_name'>> & { updated_at?: string } = {}
-    if ((existing.email ?? '').toLowerCase() !== email) patch.email = email
-    if (fullName && !existing.full_name) patch.full_name = fullName
-
-    if (Object.keys(patch).length > 0) {
-      patch.updated_at = new Date().toISOString()
-      const { error } = await admin.from('profiles').update(patch).eq('id', user.id)
-      if (error) return { ok: false, error }
-    }
-
-    return { ok: true, profile: { ...existing, email, full_name: patch.full_name ?? existing.full_name } }
-  }
-
-  const createdProfile: ProfileLookup = {
-    id: user.id,
-    email,
-    full_name: fullName || profileNameFromAuthUser(user),
-    must_change_password: false,
-  }
-  const { error: insertErr } = await admin.from('profiles').insert(createdProfile)
-  if (insertErr) return { ok: false, error: insertErr }
-
-  return { ok: true, profile: createdProfile }
 }
 
 async function ensureCanonicalMember(args: {
@@ -154,11 +95,16 @@ export async function POST(req: Request) {
     .maybeSingle()
   if (profileLookupErr) return sanitizeError(profileLookupErr, 'admin/users/POST profile lookup')
 
+  const loginUrl = computeLoginUrl(req)
+
   let userId: string
   let profileFullName = fullName || ((existingProfile as ProfileLookup | null)?.full_name ?? '')
-  let tempPassword: string | undefined
-  let alreadyExisted = !!existingProfile
+  const alreadyExisted = !!existingProfile
   let createdAuthUser = false
+  // Set for brand-new / re-invited users — the verify-and-set-password link
+  // we email instead of a temp password. Stays undefined for an established
+  // user who's merely being added to another tenant (they get a notification).
+  let verifyUrl: string | undefined
 
   if (existingProfile) {
     const profile = existingProfile as ProfileLookup
@@ -172,44 +118,28 @@ export async function POST(req: Request) {
       profileFullName = fullName
     }
   } else {
-    tempPassword = generateTempPassword()
-    const { data: created, error: createErr } = await admin.auth.admin.createUser({
-      email,
-      password: tempPassword,
-      email_confirm: true,
-      user_metadata: fullName ? { full_name: fullName } : undefined,
-    })
+    // No temp password and no email_confirm:true — the user proves they own
+    // the mailbox by clicking the link, which is the only way they get a
+    // session and set a password. See lib/auth/inviteLink.ts.
+    const invite = await generateInviteLink(admin, { email, fullName, redirectTo: `${loginUrl}/welcome` })
+    if (!invite.ok) return NextResponse.json({ error: invite.error.message }, { status: 400 })
 
-    if (createErr || !created.user) {
-      const { user: authUser, error: authLookupErr } = await findAuthUserByEmail(admin, email)
-      if (authLookupErr) return sanitizeError(authLookupErr, 'admin/users/POST auth lookup')
-      if (!authUser) {
-        return NextResponse.json({ error: createErr?.message ?? 'Could not create user' }, { status: 400 })
-      }
+    userId = invite.result.userId
+    createdAuthUser = invite.result.created
+    verifyUrl = invite.result.actionLink
 
-      const profileResult = await ensureProfileForExistingAuthUser(admin, authUser, email, fullName)
-      if (!profileResult.ok) return sanitizeError(profileResult.error, 'admin/users/POST profile repair')
-
-      userId = authUser.id
-      profileFullName = fullName || profileResult.profile.full_name || ''
-      tempPassword = undefined
-      alreadyExisted = true
-    } else {
-      userId = created.user.id
-      createdAuthUser = true
-
-      const { error: profErr } = await admin
-        .from('profiles')
-        .update({
-          full_name: fullName || null,
-          must_change_password: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', userId)
-      if (profErr) {
-        await admin.auth.admin.deleteUser(userId)
-        return sanitizeError(profErr, 'admin/users/POST profile patch')
-      }
+    // Upsert covers both paths: the handle_new_user trigger already created a
+    // profiles row for a brand-new auth user (this updates it), while a stale
+    // auth user with no profile row gets one inserted.
+    const { error: profErr } = await admin
+      .from('profiles')
+      .upsert(
+        { id: userId, email, full_name: fullName || null, must_change_password: true, updated_at: new Date().toISOString() },
+        { onConflict: 'id' },
+      )
+    if (profErr) {
+      if (createdAuthUser) await admin.auth.admin.deleteUser(userId)
+      return sanitizeError(profErr, 'admin/users/POST profile patch')
     }
   }
 
@@ -241,19 +171,15 @@ export async function POST(req: Request) {
     return sanitizeError(error, 'admin/users/POST member insert')
   }
 
-  const loginUrl = computeLoginUrl(req)
-  const emailSent = await sendInviteEmail({
-    to: email,
-    fullName: profileFullName,
-    tempPassword: tempPassword ?? '',
-    loginUrl,
-    tenantName: tenant.name,
-  })
+  // New / re-invited user → verify-and-set-password link. Established user
+  // added to another tenant → "you've been added" notification (no link).
+  const emailSent = verifyUrl
+    ? await sendVerifyInviteEmail({ to: email, fullName: profileFullName, verifyUrl, tenantName: tenant.name })
+    : await sendInviteEmail({ to: email, fullName: profileFullName, tempPassword: '', loginUrl, tenantName: tenant.name })
 
   return NextResponse.json({
     email,
     fullName: profileFullName,
-    tempPassword,
     emailSent,
     alreadyExisted,
     tenantId: gate.tenantId,
@@ -307,6 +233,7 @@ export async function GET(req: Request) {
       must_change_password: profile?.must_change_password === true,
       created_at: row.created_at,
       last_sign_in_at: authUser?.last_sign_in_at ?? null,
+      email_verified: !!authUser?.email_confirmed_at,
     }
   })
 

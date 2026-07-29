@@ -1,6 +1,4 @@
-import { Resend } from 'resend'
-import * as Sentry from '@sentry/nextjs'
-import { logEmailSend } from '@/lib/email/instrument'
+import { sendEmail } from '@/lib/email/core'
 
 // Daily superadmin health-narrative email.
 //
@@ -20,51 +18,19 @@ export interface DailyReportEmailArgs {
 export async function sendDailyReport(
   args: DailyReportEmailArgs,
 ): Promise<{ sent: boolean; providerId: string | null }> {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) {
-    console.warn('[daily-report] RESEND_API_KEY not set — skipping send')
-    await logEmailSend({
-      kind: 'superadmin-daily-report', to: args.to,
-      status: 'skipped', errorText: 'RESEND_API_KEY not set',
-    })
-    return { sent: false, providerId: null }
-  }
-
   const from = process.env.SUPPORT_FROM_EMAIL
             ?? process.env.INVITE_FROM_EMAIL
             ?? 'Soteria FIELD <onboarding@resend.dev>'
   const subject = `Soteria health · ${args.forDate}${args.anomalies.length > 0 ? ` · ${args.anomalies.length} anomaly${args.anomalies.length === 1 ? '' : 's'}` : ''}`
 
-  try {
-    const resend = new Resend(apiKey)
-    const { data, error } = await resend.emails.send({
-      from,
-      to:        args.to,
-      subject,
-      text:      renderText(args),
-      html:      renderHtml(args),
-    })
-    if (error) {
-      Sentry.captureException(error, { tags: { module: 'sendDailyReport', stage: 'resend' } })
-      await logEmailSend({
-        kind: 'superadmin-daily-report', to: args.to, subject,
-        status: 'failed', errorText: error.message,
-      })
-      return { sent: false, providerId: null }
-    }
-    await logEmailSend({
-      kind: 'superadmin-daily-report', to: args.to, subject,
-      status: 'sent', providerId: data?.id ?? null,
-    })
-    return { sent: true, providerId: data?.id ?? null }
-  } catch (err) {
-    Sentry.captureException(err, { tags: { module: 'sendDailyReport', stage: 'resend' } })
-    await logEmailSend({
-      kind: 'superadmin-daily-report', to: args.to, subject,
-      status: 'failed', errorText: err instanceof Error ? err.message : String(err),
-    })
-    return { sent: false, providerId: null }
-  }
+  return sendEmail({
+    kind: 'superadmin-daily-report',
+    to: args.to,
+    subject,
+    text: renderText(args),
+    html: renderHtml(args),
+    from,
+  })
 }
 
 function renderText(a: DailyReportEmailArgs): string {

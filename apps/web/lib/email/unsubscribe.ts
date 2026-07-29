@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
+import { escapeHtml } from '@/lib/email/layout'
 
 // Signed, stateless unsubscribe tokens for RFC 8058 one-click unsubscribe.
 //
@@ -55,23 +56,23 @@ export interface UnsubscribeLink {
   headers: Record<string, string>
 }
 
+// The RFC 8058 one-click headers for a given unsubscribe URL. Single source of
+// truth — consumed by buildUnsubscribe() here and by the send core, so the
+// header shape is never re-inlined per sender.
+export function unsubscribeHeaders(url: string): Record<string, string> {
+  return {
+    'List-Unsubscribe': `<${url}>`,
+    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+  }
+}
+
 // Builds the unsubscribe URL + the List-Unsubscribe headers for a recipient.
 // Returns null when no signing secret is configured (caller omits the header).
 export function buildUnsubscribe(appUrl: string, email: string, category: string): UnsubscribeLink | null {
   const token = signUnsubscribeToken(email, category)
   if (!token) return null
   const url = `${appUrl.replace(/\/$/, '')}/api/email/unsubscribe?token=${encodeURIComponent(token)}`
-  return {
-    url,
-    headers: {
-      'List-Unsubscribe': `<${url}>`,
-      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-    },
-  }
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  return { url, headers: unsubscribeHeaders(url) }
 }
 
 export function unsubscribeFooterText(url: string, label = 'weekly emails'): string {

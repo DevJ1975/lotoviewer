@@ -1,6 +1,4 @@
-import { Resend } from 'resend'
-import * as Sentry from '@sentry/nextjs'
-import { logEmailSend } from '@/lib/email/instrument'
+import { sendEmail } from '@/lib/email/core'
 import { unsubscribeFooterText, unsubscribeFooterHtml } from '@/lib/email/unsubscribe'
 import {
   digestSubjectSummary,
@@ -37,7 +35,6 @@ export interface ChemicalsDigestArgs {
 export async function sendChemicalsDigest(
   args: ChemicalsDigestArgs,
 ): Promise<{ sent: boolean; providerId: string | null }> {
-  const apiKey = process.env.RESEND_API_KEY
   const subjectSummary = digestSubjectSummary(args.digest)
   if (!subjectSummary) {
     // Nothing to send — caller should have filtered, but defend in depth.
@@ -45,58 +42,15 @@ export async function sendChemicalsDigest(
   }
   const subject = `Chemicals weekly: ${subjectSummary} — ${args.digest.tenant_name}`
 
-  if (!apiKey) {
-    console.warn('[chemicals-digest] RESEND_API_KEY not set — skipping send')
-    await logEmailSend({
-      kind: 'chemicals-digest', to: args.to, subject,
-      tenantId: args.digest.tenant_id,
-      status: 'skipped', errorText: 'RESEND_API_KEY not set',
-    })
-    return { sent: false, providerId: null }
-  }
-
-  const from = process.env.INVITE_FROM_EMAIL
-            ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <invites@soteriafield.app>'
-
-  try {
-    const resend = new Resend(apiKey)
-    const headers = args.unsubscribeUrl
-      ? { 'List-Unsubscribe': `<${args.unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
-      : undefined
-    const { data, error } = await resend.emails.send({
-      from,
-      to:        args.to,
-      subject,
-      text:      renderText(args),
-      html:      renderHtml(args),
-      headers,
-    })
-    if (error) {
-      Sentry.captureException(error, { tags: { module: 'sendChemicalsDigest', stage: 'resend' } })
-      await logEmailSend({
-        kind: 'chemicals-digest', to: args.to, subject,
-        tenantId: args.digest.tenant_id,
-        status: 'failed', errorText: error.message,
-      })
-      return { sent: false, providerId: null }
-    }
-    await logEmailSend({
-      kind: 'chemicals-digest', to: args.to, subject,
-      tenantId: args.digest.tenant_id,
-      status: 'sent', providerId: data?.id ?? null,
-    })
-    return { sent: true, providerId: data?.id ?? null }
-  } catch (err) {
-    Sentry.captureException(err, { tags: { module: 'sendChemicalsDigest', stage: 'resend' } })
-    await logEmailSend({
-      kind: 'chemicals-digest', to: args.to, subject,
-      tenantId: args.digest.tenant_id,
-      status: 'failed',
-      errorText: err instanceof Error ? err.message : String(err),
-    })
-    return { sent: false, providerId: null }
-  }
+  return sendEmail({
+    kind: 'chemicals-digest',
+    to: args.to,
+    subject,
+    text: renderText(args),
+    html: renderHtml(args),
+    tenantId: args.digest.tenant_id,
+    unsubscribeUrl: args.unsubscribeUrl ?? null,
+  })
 }
 
 // ── Rendering ──────────────────────────────────────────────────────────

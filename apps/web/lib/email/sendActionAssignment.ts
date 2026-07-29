@@ -2,9 +2,7 @@
 // user as the owner. Mirrors sendIncidentAlert's posture (boolean
 // return, never throws, logs every send via instrument.ts).
 
-import { Resend } from 'resend'
-import * as Sentry from '@sentry/nextjs'
-import { logEmailSend } from '@/lib/email/instrument'
+import { sendEmail } from '@/lib/email/core'
 import {
   ACTION_TYPE_LABEL,
   HIERARCHY_LABEL,
@@ -29,23 +27,9 @@ export interface ActionAssignmentArgs {
 }
 
 export async function sendActionAssignmentEmail(args: ActionAssignmentArgs): Promise<boolean> {
-  const apiKey  = process.env.RESEND_API_KEY
   const subject = `[${args.reportNumber}] ${ACTION_TYPE_LABEL[args.actionType]} action assigned to you`
   const tenantId = args.tenantId ?? null
   const triggeredBy = args.triggeredBy ?? null
-
-  if (!apiKey) {
-    await logEmailSend({
-      kind: 'incident-action-assignment', to: args.to, subject,
-      tenantId, triggeredBy, status: 'skipped',
-      errorText: 'RESEND_API_KEY not set',
-    })
-    return false
-  }
-
-  const from = process.env.INVITE_FROM_EMAIL
-            ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <invites@soteriafield.app>'
 
   const link = `${args.appUrl.replace(/\/$/, '')}/incidents/${args.incidentId}/actions`
   const dueLine = args.dueAt
@@ -109,29 +93,11 @@ will verify it (separation of duty).
 </td></tr>
 </table></body></html>`
 
-  try {
-    const resend = new Resend(apiKey)
-    const { data, error } = await resend.emails.send({ from, to: args.to, subject, text, html })
-    if (error) {
-      Sentry.captureException(error, { tags: { module: 'sendActionAssignment', stage: 'resend' } })
-      await logEmailSend({
-        kind: 'incident-action-assignment', to: args.to, subject,
-        tenantId, triggeredBy, status: 'failed', errorText: error.message,
-      })
-      return false
-    }
-    await logEmailSend({
-      kind: 'incident-action-assignment', to: args.to, subject,
-      tenantId, triggeredBy, status: 'sent', providerId: data?.id ?? null,
-    })
-    return true
-  } catch (err) {
-    Sentry.captureException(err, { tags: { module: 'sendActionAssignment' } })
-    await logEmailSend({
-      kind: 'incident-action-assignment', to: args.to, subject,
-      tenantId, triggeredBy, status: 'failed',
-      errorText: err instanceof Error ? err.message : String(err),
-    })
-    return false
-  }
+  const { sent } = await sendEmail({
+    kind: 'incident-action-assignment',
+    to: args.to,
+    subject, text, html,
+    tenantId, triggeredBy,
+  })
+  return sent
 }

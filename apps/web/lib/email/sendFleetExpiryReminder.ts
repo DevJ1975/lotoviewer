@@ -1,6 +1,4 @@
-import { Resend } from 'resend'
-import * as Sentry from '@sentry/nextjs'
-import { logEmailSend } from '@/lib/email/instrument'
+import { sendEmail } from '@/lib/email/core'
 import { unsubscribeFooterText, unsubscribeFooterHtml } from '@/lib/email/unsubscribe'
 import type { DigestRow } from '@soteria/core/fleetExpiry'
 
@@ -23,16 +21,6 @@ export interface FleetExpiryReminderArgs {
 export async function sendFleetExpiryReminder(
   args: FleetExpiryReminderArgs,
 ): Promise<{ sent: boolean; providerId: string | null }> {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) {
-    console.warn('[fleet-expiry-reminder] RESEND_API_KEY not set — skipping send')
-    await logEmailSend({ kind: 'fleet-expiry', to: args.to, subject: undefined, status: 'skipped', errorText: 'RESEND_API_KEY not set' })
-    return { sent: false, providerId: null }
-  }
-  const from = process.env.INVITE_FROM_EMAIL
-            ?? process.env.SUPPORT_FROM_EMAIL
-            ?? 'SoteriaField <invites@soteriafield.app>'
-
   const expired = args.rows.filter(r => r.status === 'expired').length
   const expiring = args.rows.length - expired
   const subjectParts: string[] = []
@@ -40,27 +28,14 @@ export async function sendFleetExpiryReminder(
   if (expiring) subjectParts.push(`${expiring} expiring`)
   const subject = `Fleet: ${subjectParts.join(', ')} — ${args.tenantName}`
 
-  try {
-    const resend = new Resend(apiKey)
-    const headers = args.unsubscribeUrl
-      ? { 'List-Unsubscribe': `<${args.unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
-      : undefined
-    const { data, error } = await resend.emails.send({
-      from, to: args.to, subject,
-      text: renderText(args), html: renderHtml(args), headers,
-    })
-    if (error) {
-      Sentry.captureException(error, { tags: { module: 'sendFleetExpiryReminder', stage: 'resend' } })
-      await logEmailSend({ kind: 'fleet-expiry', to: args.to, subject, status: 'failed', errorText: error.message })
-      return { sent: false, providerId: null }
-    }
-    await logEmailSend({ kind: 'fleet-expiry', to: args.to, subject, status: 'sent', providerId: data?.id ?? null })
-    return { sent: true, providerId: data?.id ?? null }
-  } catch (err) {
-    Sentry.captureException(err, { tags: { module: 'sendFleetExpiryReminder', stage: 'resend' } })
-    await logEmailSend({ kind: 'fleet-expiry', to: args.to, subject, status: 'failed', errorText: err instanceof Error ? err.message : String(err) })
-    return { sent: false, providerId: null }
-  }
+  return sendEmail({
+    kind: 'fleet-expiry',
+    to: args.to,
+    subject,
+    text: renderText(args),
+    html: renderHtml(args),
+    unsubscribeUrl: args.unsubscribeUrl ?? null,
+  })
 }
 
 function renderText(a: FleetExpiryReminderArgs): string {

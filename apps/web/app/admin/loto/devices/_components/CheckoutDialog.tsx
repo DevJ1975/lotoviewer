@@ -76,7 +76,7 @@ export function CheckoutDialog({ device, onClose, onCheckedOut }: {
   const [trainingAuthority, setTrainingAuthority] = useState('')
   const [addBusy,           setAddBusy]           = useState(false)
   const [addError,          setAddError]          = useState<string | null>(null)
-  const [addSuccess,        setAddSuccess]        = useState<{ kind: AddKind; tempPassword?: string; emailSent?: boolean } | null>(null)
+  const [addSuccess,        setAddSuccess]        = useState<{ kind: AddKind; emailSent?: boolean } | null>(null)
 
   const [trainingRecords, setTrainingRecords] = useState<TrainingRecord[]>([])
 
@@ -222,7 +222,6 @@ export function CheckoutDialog({ device, onClose, onCheckedOut }: {
     try {
       let createdProfileId: string | null = null
       let createdWorkerId:  string | null = null
-      let tempPassword: string | undefined
       let emailSent: boolean | undefined
 
       if (addKind === 'app_user') {
@@ -240,7 +239,6 @@ export function CheckoutDialog({ device, onClose, onCheckedOut }: {
         })
         const body = await res.json().catch(() => ({}))
         if (!res.ok) { setAddError(body.error ?? `Server returned ${res.status}`); return }
-        tempPassword = body.tempPassword
         emailSent    = body.emailSent === true
         // handle_new_user trigger inserted the profiles row.
         const { data: created } = await supabase
@@ -299,7 +297,7 @@ export function CheckoutDialog({ device, onClose, onCheckedOut }: {
       await Promise.all([loadProfiles(), loadWorkers(), loadTrainingRecords()])
       if (createdProfileId)     setOwnerKeyV(ownerKey('profile', createdProfileId))
       else if (createdWorkerId) setOwnerKeyV(ownerKey('worker',  createdWorkerId))
-      setAddSuccess({ kind: addKind, tempPassword, emailSent })
+      setAddSuccess({ kind: addKind, emailSent })
 
       // Reset fields
       setAddEmail('')
@@ -491,10 +489,8 @@ export function CheckoutDialog({ device, onClose, onCheckedOut }: {
                   {addSuccess.kind === 'app_user' ? 'App user created.' : 'Worker added.'}
                   {addSuccess.kind === 'app_user' && (
                     addSuccess.emailSent
-                      ? ' Login email sent.'
-                      : addSuccess.tempPassword
-                        ? <> Email send failed — share the temp password manually: <code className="font-mono">{addSuccess.tempPassword}</code></>
-                        : null
+                      ? ' Verification email sent — they verify their email and set a password via the link.'
+                      : ' Verification email could not be sent — fix email delivery, then re-invite from Admin → Users.'
                   )}
                 </p>
               )}
