@@ -229,6 +229,38 @@
       "sources":  ["apps/web/app/near-miss/**"]
     },
     {
+      "slug":     "incident-investigation",
+      "module":   "Incident Investigation & RCA",
+      "tagline":  "Guided, AI-assisted 5 Whys root cause analysis — multiple roots, anti-blame guardrails, and one-click corrective actions.",
+      "category": "safety",
+      "href":     "/incidents",
+      "wikiPage": "apps/web/app/wiki/incident-investigation/page.tsx",
+      "sources":  [
+        "apps/web/app/incidents/[id]/investigate/**",
+        "apps/web/app/incidents/[id]/rca/**",
+        "apps/web/app/api/incidents/[id]/investigation/**",
+        "apps/web/app/api/incidents/[id]/rca/**",
+        "packages/core/src/rcaSchemas.ts",
+        "apps/web/migrations/236_rca_multi_root_branching_ai.sql"
+      ]
+    },
+    {
+      "slug":     "ecfa",
+      "module":   "Events & Causal Factors Analysis",
+      "tagline":  "Chart the event/condition timeline, code causal factors, and turn each into a corrective action — with a human-approved AI co-pilot.",
+      "category": "safety",
+      "href":     "/incidents",
+      "wikiPage": "apps/web/app/wiki/ecfa/page.tsx",
+      "sources":  [
+        "apps/web/app/incidents/[id]/ecfa/**",
+        "apps/web/app/api/incidents/[id]/ecfa/**",
+        "apps/web/app/incidents/[id]/actions/route.ts",
+        "apps/web/app/incidents/scorecard/_components/CausalFactorTrendPanel.tsx",
+        "packages/core/src/ecfaSchemas.ts",
+        "apps/web/migrations/244_incident_ecfa.sql"
+      ]
+    },
+    {
       "slug":     "jha",
       "module":   "Job Hazard Analysis",
       "tagline":  "Per-task hazard breakdowns with steps, hazards, controls, and review cadence.",

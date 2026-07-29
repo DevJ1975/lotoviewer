@@ -52,6 +52,10 @@ export const MODEL_BY_SURFACE = {
   // structured-output pass to normalize candidates. Sonnet — the search
   // reasoning is the same class as parse-sds, and web_search is supported.
   'discover-sds':                     SONNET,
+  // Seeding the global SDS library: web-search to PROPOSE the most common
+  // industrial chemicals (name + CAS + manufacturer), then a structured pass
+  // to normalize the list. Sonnet — same search-reasoning class as discover.
+  'seed-sds-list':                    SONNET,
   // Cross-module assistant on the home page. Tool-use heavy, must
   // reason across LOTO + confined-spaces + chemicals + incidents +
   // uploaded company policies. Sonnet for the chat itself.
@@ -107,6 +111,46 @@ export const MODEL_BY_SURFACE = {
   //   corrections. Same safety-critical class as the gate — Opus 4.8. Critique is
   //   staged for the human review gate; it never writes live data.
   'loto-audit-regulator':             OPUS,
+  // EHS scorecard "where to focus" — an advisory narrative over the
+  // deterministic risk drivers + forecast. A human reads the bullets and the
+  // LLM never computes the risk score (it is fed it). Same advisory class as
+  // summarize-audit / superadmin-daily-report → Sonnet.
+  'scorecard-focus':                  SONNET,
+  // RCA assist — suggests the next "why", flags symptom/blame answers, and
+  // drafts a root-cause statement + corrective actions for a 5 Whys
+  // investigation. Causal reasoning over a chain + incident context, with
+  // narrative output a human edits and signs off — same advisory class as
+  // the other structured-output surfaces. The route never writes RCA nodes
+  // or actions; acceptance is an explicit human step. Sonnet.
+  'rca-assist':                       SONNET,
+  // ECFA assist — drafts the chronological event sequence from the incident
+  // narrative and flags candidate causal factors (with coding + presumptive-
+  // evidence gaps). Causal reasoning over the incident context + the current
+  // chart, narrative output a human accepts node-by-node; the route never
+  // writes ECFA nodes. Same advisory structured-output class as rca-assist →
+  // Sonnet.
+  'ecfa-assist':                      SONNET,
+  // ── Operator Console (multi-agent: orchestrator + domain sub-agents) ──────
+  // A dedicated conversational surface where an agent operates the SaaS and
+  // reconfigures the home page. Barbell routing, same posture as the LOTO
+  // audit: the orchestrator (routing + recognizing life-safety carve-outs) and
+  // the three sub-agents that CONTAIN carve-out actions (loto, permits, osha)
+  // run on Opus — the strongest reasoning where a wrong call is most costly.
+  // The remaining sub-agents do ordinary, reversible work and run on Sonnet.
+  // Every regulated action is staged for human approval regardless of model.
+  'operator-orchestrator':            OPUS,
+  'operator-incidents':               SONNET,
+  'operator-risk':                    SONNET,
+  'operator-loto':                    OPUS,
+  'operator-permits':                 OPUS,
+  'operator-chem':                    SONNET,
+  'operator-inspections':             SONNET,
+  'operator-training':                SONNET,
+  'operator-bbs':                     SONNET,
+  'operator-osha':                    OPUS,
+  'operator-admin':                   SONNET,
+  'operator-home':                    SONNET,
+  'operator-knowledge':               SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

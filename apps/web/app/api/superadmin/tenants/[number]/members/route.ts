@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
+import { inviteIssueRateLimit } from '@/lib/rateLimit/inviteIssue'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { generateInviteLink } from '@/lib/auth/inviteLink'
-import { sendInviteEmail, computeLoginUrl } from '@/lib/email/sendInvite'
-import { sendVerifyInviteEmail } from '@/lib/email/sendVerifyInvite'
+import {
+  ensureInvitedUser,
+  ensureTenantMembership,
+  issueAndSendInvite,
+  provisionFailureResponse,
+} from '@/lib/invites/provision'
 import { isValidRole, isValidTenantNumber, normalizeEmail } from '@/lib/validation/tenants'
 import type { TenantRole } from '@soteria/core/types'
 
@@ -17,10 +21,10 @@ import type { TenantRole } from '@soteria/core/types'
 //
 // POST adds a user to a tenant. If the email already maps to a profiles
 // row, just creates the tenant_memberships link. If not, creates auth.users
-// + profile (must_change_password = true), generates a one-time password,
-// and emails the invite via Resend (lib/email/sendInvite). The temp
-// password is also returned in the response so the superadmin has a
-// copy-paste fallback when Resend isn't configured.
+// + profile (must_change_password = true) and emails a single-use
+// accept-invite LINK via Resend (lib/invites/provision). The temp
+// password + invite link are also returned in the response so the
+// superadmin has a copy-paste fallback when Resend isn't configured.
 
 // ─── GET ───────────────────────────────────────────────────────────────────
 
@@ -116,6 +120,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
   const gate = await requireSuperadmin(req.headers.get('authorization'))
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
+  const limited = inviteIssueRateLimit(gate.userId)
+  if (limited) return limited
+
   const { number } = await ctx.params
   if (!isValidTenantNumber(number)) {
     return NextResponse.json({ error: 'Invalid tenant number' }, { status: 400 })
@@ -150,86 +157,47 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
   }
   if (!tenant) return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
 
-  // Find existing profile by email.
-  const { data: existing, error: profileLookupErr } = await admin
-    .from('profiles')
-    .select('id, email')
-    .eq('email', email)
-    .maybeSingle()
-  if (profileLookupErr) {
-    Sentry.captureException(profileLookupErr, {
-      tags: { route: '/api/superadmin/tenants/[number]/members', stage: 'profile-lookup' },
-    })
-    return NextResponse.json({ error: profileLookupErr.message }, { status: 500 })
-  }
-
-  const loginUrl = computeLoginUrl(req)
-
-  let userId: string
-  const alreadyExisted = !!existing
-  // Set for new / re-invited users — the verify-and-set-password link emailed
-  // in place of a temp password. Undefined for an established user being added
-  // to another tenant (they get the "you've been added" notification instead).
-  let verifyUrl: string | undefined
-
-  if (existing) {
-    userId = existing.id
-  } else {
-    // No temp password and no email_confirm:true — the recipient proves
-    // mailbox ownership by clicking the link, which is the only path to a
-    // session + password. See lib/auth/inviteLink.ts.
-    const invite = await generateInviteLink(admin, { email, fullName, redirectTo: `${loginUrl}/welcome` })
-    if (!invite.ok) {
-      Sentry.captureException(invite.error, {
-        tags: { route: '/api/superadmin/tenants/[number]/members', stage: 'generate-invite-link' },
-      })
-      return NextResponse.json({ error: invite.error.message }, { status: 400 })
-    }
-    userId = invite.result.userId
-    verifyUrl = invite.result.actionLink
-
-    // Upsert covers both: the handle_new_user trigger created a row for a
-    // brand-new auth user (updated here); a stale auth user gets one inserted.
-    const { error: profileErr } = await admin.from('profiles').upsert(
-      { id: userId, email, full_name: fullName || null, must_change_password: true, updated_at: new Date().toISOString() },
-      { onConflict: 'id' },
-    )
-    if (profileErr) {
-      Sentry.captureException(profileErr, {
-        tags: { route: '/api/superadmin/tenants/[number]/members', stage: 'profile-upsert' },
-      })
-      return NextResponse.json({ error: profileErr.message }, { status: 500 })
-    }
-  }
+  const invited = await ensureInvitedUser(admin, { email, fullName })
+  if (!invited.ok) return provisionFailureResponse(invited, 'superadmin/members/POST')
+  const { userId, createdAuthUser, tempPassword, alreadyExisted } = invited
 
   // Insert membership. PK is (user_id, tenant_id) so re-invites collide.
-  const { error: insertErr } = await admin
-    .from('tenant_memberships')
-    .insert({ user_id: userId, tenant_id: tenant.id, role, invited_by: gate.userId })
-
-  if (insertErr) {
-    const code = (insertErr as { code?: string }).code
-    if (code === '23505') {
+  const membership = await ensureTenantMembership(admin, {
+    userId, tenantId: tenant.id, role, invitedBy: gate.userId, onConflict: 'error',
+  })
+  if (!membership.ok) {
+    if (createdAuthUser) await admin.auth.admin.deleteUser(userId)
+    if (membership.status === 409) {
       return NextResponse.json({
         error: `${email} is already a member of this tenant`,
       }, { status: 409 })
     }
-    Sentry.captureException(insertErr, { tags: { route: '/api/superadmin/tenants/[number]/members', stage: 'membership-insert' } })
-    return NextResponse.json({ error: insertErr.message }, { status: 500 })
+    return provisionFailureResponse(membership, 'superadmin/members/POST')
   }
 
-  // New / re-invited user → verify-and-set-password link. Established user
-  // added to another tenant → "you've been added" notification (no link).
-  // Best-effort: emailSent=false surfaces in the UI so the superadmin knows
-  // to resend (new user) or notify the existing user out-of-band.
-  const emailSent = verifyUrl
-    ? await sendVerifyInviteEmail({ to: email, fullName, verifyUrl, tenantName: tenant.name })
-    : await sendInviteEmail({ to: email, fullName, tempPassword: '', loginUrl, tenantName: tenant.name })
+  // Send an invite email in BOTH cases:
+  //   - new (or never-signed-in) user → single-use accept-invite link
+  //   - active existing user → notification email (no link, no secrets)
+  // Best-effort: emailSent=false surfaces in the UI so the superadmin
+  // can fall back to copy-pasting the invite link / password (new user)
+  // or telling the existing user about the new tenant out-of-band.
+  const { inviteUrl, emailSent } = await issueAndSendInvite(admin, {
+    userId,
+    email,
+    fullName:   invited.fullName,
+    tenantId:   tenant.id,
+    tenantName: tenant.name,
+    createdBy:  gate.userId,
+    req,
+    emailMode:  createdAuthUser || invited.mustChangePassword ? 'invite_link' : 'added_notification',
+  })
 
   return NextResponse.json({
     user_id: userId,
     email,
     role,
+    tempPassword,
+    inviteUrl,
     emailSent,
     alreadyExisted,
   }, { status: 201 })

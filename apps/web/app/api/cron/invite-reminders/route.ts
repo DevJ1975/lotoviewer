@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { withCronLogging } from '@/lib/cronInstrumentation'
 import { sendInviteReminder } from '@/lib/email/sendInviteReminder'
+import { buildInviteUrl, issueInviteToken } from '@/lib/invites/tokens'
 import {
   planInviteAction,
   INVITE_MAX_REMINDERS,
@@ -167,14 +168,36 @@ async function runCron(req: Request): Promise<NextResponse> {
 
     // 6. Send reminders. Promise.allSettled so one failure can't sink the
     //    batch; only advance the counter when the email actually went out.
+    //    Each reminder mints a fresh invite link (superseding older ones)
+    //    so the invitee can always act on the newest email; a mint failure
+    //    degrades to a linkless reminder rather than skipping the send.
+    //    NEVER rotate passwords here — that would brick in-flight invites
+    //    whose temp password an admin shared manually.
     const sendResults = await Promise.allSettled(
       toRemind.map(async ({ m, reminderNumber }) => {
         const prof = profileById.get(m.user_id)
         if (!prof?.email) return { m, reminderNumber, sent: false }
+
+        let inviteUrl: string | undefined
+        const issued = await issueInviteToken(admin, {
+          userId:    m.user_id,
+          tenantId:  m.tenant_id,
+          email:     prof.email,
+          createdBy: null,
+        })
+        if (issued.ok) {
+          inviteUrl = buildInviteUrl(appUrl, issued.raw)
+        } else {
+          Sentry.captureException(new Error(issued.error.message), {
+            tags: { route: '/api/cron/invite-reminders', stage: 'invite-token' },
+          })
+        }
+
         const res = await sendInviteReminder({
           to:             prof.email,
           fullName:       prof.full_name ?? '',
           loginUrl:       appUrl,
+          inviteUrl,
           tenantName:     tenantNameById.get(m.tenant_id),
           reminderNumber,
           maxReminders:   INVITE_MAX_REMINDERS,

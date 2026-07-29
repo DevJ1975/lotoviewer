@@ -5,7 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { ArrowLeft, Check, Loader2, Mail, MailCheck, Shield, Trash2, UserPlus } from 'lucide-react'
+import { ArrowLeft, Check, Copy, Loader2, Mail, MailCheck, Shield, Trash2, UserPlus } from 'lucide-react'
 import { z } from 'zod'
 
 import { useAuth } from '@/components/AuthProvider'
@@ -41,7 +41,6 @@ interface AdminUserRow {
   is_admin:             boolean
   role?:                string
   must_change_password: boolean
-  email_verified:       boolean
   created_at:           string
 }
 
@@ -68,7 +67,8 @@ export default function AdminUsersPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [removeTarget, setRemoveTarget] = useState<AdminUserRow | null>(null)
 
-  const [justInvited, setJustInvited] = useState<{ email: string; fullName: string; emailSent: boolean; alreadyExisted: boolean } | null>(null)
+  const [justInvited, setJustInvited] = useState<{ email: string; fullName: string; tempPassword?: string; inviteUrl?: string; emailSent: boolean } | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const form = useForm<InviteValues>({
     resolver: zodResolver(inviteSchema),
@@ -119,13 +119,14 @@ export default function AdminUsersPage() {
       return
     }
     setJustInvited({
-      email:          body.email,
-      fullName:       body.fullName ?? '',
-      emailSent:      body.emailSent === true,
-      alreadyExisted: body.alreadyExisted === true,
+      email:        body.email,
+      fullName:     body.fullName ?? '',
+      tempPassword: body.tempPassword,
+      inviteUrl:    body.inviteUrl,
+      emailSent:    body.emailSent === true,
     })
     if (body.emailSent === true) {
-      toast.success(`Verification email sent to ${body.email}`)
+      toast.success(`Invite emailed to ${body.email}`)
     }
     form.reset()
     fetchUsers()
@@ -148,6 +149,42 @@ export default function AdminUsersPage() {
     toast.success(`Removed ${target.email}`)
     fetchUsers()
   }
+
+  const emailTemplate = useMemo(() => {
+    if (!justInvited) return ''
+    const displayName = justInvited.fullName || justInvited.email.split('@')[0]
+    if (justInvited.inviteUrl) {
+      return `Hi ${displayName},
+
+You've been invited to SoteriaField. Set up your account here:
+
+  ${justInvited.inviteUrl}
+
+The link is just for you — it can be used once, and it lets you choose
+your own password (at least 8 characters).
+
+If you have any trouble, reply to this email.
+
+— Jamil
+jamil@trainovations.com`
+    }
+    return `Hi ${displayName},
+
+You've been invited to SoteriaField. Here's how to log in for the first time:
+
+1. Open SoteriaField in your browser.
+2. Sign in with:
+     Email:     ${justInvited.email}
+     Password:  ${justInvited.tempPassword ?? '(ask your admin)'}
+3. On your first login you'll be asked to confirm your full name and set a new password of your own. Please use a password at least 8 characters long.
+
+The temporary password above only works until you change it, and you must change it on first login.
+
+If you have any trouble signing in, reply to this email.
+
+— Jamil
+jamil@trainovations.com`
+  }, [justInvited])
 
   // DataTable columns. Memoised so TanStack Table doesn't see a new
   // reference on every render and reset its internal state.
@@ -177,12 +214,12 @@ export default function AdminUsersPage() {
     {
       id:          'status',
       header:      'Status',
-      cell: ({ row }) => {
-        const u = row.original
-        if (!u.email_verified) return <span className="safety-tag safety-tag-caution">Pending Verification</span>
-        if (u.must_change_password) return <span className="safety-tag safety-tag-caution">Setup Incomplete</span>
-        return <span className="safety-tag safety-tag-cleared">Active</span>
-      },
+      cell: ({ row }) =>
+        row.original.must_change_password ? (
+          <span className="safety-tag safety-tag-caution">Pending First Login</span>
+        ) : (
+          <span className="safety-tag safety-tag-cleared">Active</span>
+        ),
     },
     {
       id:        'actions',
@@ -280,26 +317,67 @@ export default function AdminUsersPage() {
         </Form>
       </section>
 
-      {/* Result panel for the most recent invite.
-          • emailSent=true  — confirmation that the verification email went out.
-          • emailSent=false — the send failed (e.g. Resend not configured);
-            prompt the admin to fix email and re-invite. No credential is ever
-            shown — the verification link is the only way in, and it's emailed
-            directly to the recipient, never surfaced here. */}
+      {/* Result panel for the most recent invite. Two shapes:
+          • emailSent=true  — green confirmation, password shown small as
+            a fallback in case the email got caught by spam.
+          • emailSent=false — full copy-paste template (legacy behavior),
+            so the admin can paste into their own email client. */}
       {justInvited && justInvited.emailSent && (
         <section className="bg-emerald-50 dark:bg-emerald-950/40 rounded-xl ring-1 ring-emerald-200 p-5">
           <div className="flex items-start gap-3">
             <MailCheck className="h-6 w-6 text-emerald-700 dark:text-emerald-300 shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <h2 className="text-sm font-bold text-emerald-900 dark:text-emerald-100 flex items-center gap-1.5">
-                <Check className="h-4 w-4" />
-                {justInvited.alreadyExisted ? 'Notified' : 'Verification email sent to'} {justInvited.email}
+                <Check className="h-4 w-4" /> Invitation emailed to {justInvited.email}
               </h2>
               <p className="text-xs text-emerald-800 dark:text-emerald-200 mt-1">
-                {justInvited.alreadyExisted
-                  ? `${justInvited.fullName || justInvited.email.split('@')[0]} already has an account — they've been added to this tenant and notified.`
-                  : `${justInvited.fullName || justInvited.email.split('@')[0]} will get a link to verify their email and set their own password. They show as "Pending Verification" until they open it.`}
+                {(justInvited.fullName || justInvited.email.split('@')[0])} will receive a single-use invite link to choose
+                their own password (≥ 8 characters). No password is sent in the email.
               </p>
+              {(justInvited.inviteUrl || justInvited.tempPassword) && (
+                <details className="mt-3 text-xs text-emerald-900 dark:text-emerald-100">
+                  <summary className="cursor-pointer font-semibold hover:underline">
+                    Show manual fallback (in case the email gets lost)
+                  </summary>
+                  {justInvited.inviteUrl && (
+                    <div className="mt-2 flex items-center gap-2 bg-white dark:bg-slate-900 rounded-md px-3 py-1.5 ring-1 ring-emerald-200">
+                      <code className="text-[11px] font-mono break-all min-w-0">{justInvited.inviteUrl}</code>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(justInvited.inviteUrl!)
+                            setCopied(true); setTimeout(() => setCopied(false), 1500)
+                          } catch { /* ignore */ }
+                        }}
+                        className="text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 shrink-0"
+                        aria-label="Copy invite link"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                  {justInvited.tempPassword && (
+                    <div className="mt-2 inline-flex items-center gap-2 bg-white dark:bg-slate-900 rounded-md px-3 py-1.5 ring-1 ring-emerald-200">
+                      <code className="text-sm font-mono tracking-wide">{justInvited.tempPassword}</code>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(justInvited.tempPassword!)
+                            setCopied(true); setTimeout(() => setCopied(false), 1500)
+                          } catch { /* ignore */ }
+                        }}
+                        className="text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100"
+                        aria-label="Copy password"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                  {copied && <span className="ml-2 text-[11px] text-emerald-700 dark:text-emerald-300">copied</span>}
+                </details>
+              )}
             </div>
           </div>
         </section>
@@ -307,11 +385,33 @@ export default function AdminUsersPage() {
 
       {justInvited && !justInvited.emailSent && (
         <section className="bg-amber-50 dark:bg-amber-950/40 rounded-xl ring-1 ring-amber-200 p-5">
-          <h2 className="text-sm font-bold text-amber-900 dark:text-amber-100">Account created — email not sent</h2>
-          <p className="text-xs text-amber-800 dark:text-amber-200 mt-0.5">
-            {justInvited.email} couldn&apos;t be emailed (Resend isn&apos;t configured, or the send failed). The verification
-            link is the only way in and can&apos;t be shared from here — fix email delivery, then invite {justInvited.email} again to resend it.
-          </p>
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <h2 className="text-sm font-bold text-amber-900 dark:text-amber-100">Invite created — email not sent</h2>
+              <p className="text-xs text-amber-800 dark:text-amber-200 mt-0.5">
+                The user is created but Resend isn&apos;t configured (or the send failed). Copy this into your email to {justInvited.email}.
+                The invite link/password is shown once; save it if you lose the window.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(emailTemplate)
+                  setCopied(true)
+                  setTimeout(() => setCopied(false), 1500)
+                } catch { /* ignore */ }
+              }}
+            >
+              <Copy />
+              {copied ? 'Copied' : 'Copy'}
+            </Button>
+          </div>
+          <pre className="whitespace-pre-wrap text-xs font-mono text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 rounded-lg p-3 ring-1 ring-amber-200 max-h-80 overflow-auto">
+{emailTemplate}
+          </pre>
         </section>
       )}
 

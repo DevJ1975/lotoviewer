@@ -1,6 +1,6 @@
 {
   "name": "web",
-  "version": "1.9.0",
+  "version": "1.16.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "test:security": "vitest run proxy.test.ts __tests__/lib/auth __tests__/lib/security __tests__/lib/safeRedirect __tests__/lib/scrubEvent __tests__/lib/rateLimit __tests__/lib/memoryRateLimit __tests__/lib/inviteTokens __tests__/api/invites __tests__/api/superadmin __tests__/api/admin __tests__/migrations/profilesPrivilegedColumns __tests__/anonReport",
     "test:watch": "vitest",
     "db:types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > lib/database.types.ts && echo '✓ wrote lib/database.types.ts'"
   },
@@ -28,6 +29,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
+    "exceljs": "^4.4.0",
     "lucide-react": "^1.8.0",
     "next": "16.2.6",
     "pdf-lib": "^1.17.1",

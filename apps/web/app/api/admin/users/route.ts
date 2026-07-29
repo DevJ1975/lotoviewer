@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
-import { generateInviteLink } from '@/lib/auth/inviteLink'
-import { sendInviteEmail, computeLoginUrl } from '@/lib/email/sendInvite'
-import { sendVerifyInviteEmail } from '@/lib/email/sendVerifyInvite'
+import { inviteIssueRateLimit } from '@/lib/rateLimit/inviteIssue'
+import {
+  ensureInvitedUser,
+  ensureTenantMembership,
+  issueAndSendInvite,
+  provisionFailureResponse,
+} from '@/lib/invites/provision'
 import { sanitizeError } from '@/lib/security/sanitizeError'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { normalizeEmail } from '@/lib/validation/tenants'
@@ -13,13 +17,6 @@ const AUTH_PAGE_SIZE = 200
 const AUTH_MAX_PAGES = 50
 
 type TenantRole = 'owner' | 'admin' | 'member' | 'viewer'
-
-interface ProfileLookup {
-  id: string
-  email: string | null
-  full_name: string | null
-  must_change_password?: boolean | null
-}
 
 function profileNameFromAuthUser(user: User): string | null {
   const value = user.user_metadata?.full_name
@@ -71,6 +68,9 @@ export async function POST(req: Request) {
   const gate = await requireTenantAdmin(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
+  const limited = inviteIssueRateLimit(gate.userId)
+  if (limited) return limited
+
   let body: { email?: unknown; fullName?: unknown }
   try { body = await req.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
@@ -88,72 +88,21 @@ export async function POST(req: Request) {
   if (tenantErr) return sanitizeError(tenantErr, 'admin/users/POST tenant')
   if (!tenant) return NextResponse.json({ error: 'Active tenant not found' }, { status: 404 })
 
-  const { data: existingProfile, error: profileLookupErr } = await admin
-    .from('profiles')
-    .select('id, email, full_name, must_change_password')
-    .eq('email', email)
-    .maybeSingle()
-  if (profileLookupErr) return sanitizeError(profileLookupErr, 'admin/users/POST profile lookup')
-
-  const loginUrl = computeLoginUrl(req)
-
-  let userId: string
-  let profileFullName = fullName || ((existingProfile as ProfileLookup | null)?.full_name ?? '')
-  const alreadyExisted = !!existingProfile
-  let createdAuthUser = false
-  // Set for brand-new / re-invited users — the verify-and-set-password link
-  // we email instead of a temp password. Stays undefined for an established
-  // user who's merely being added to another tenant (they get a notification).
-  let verifyUrl: string | undefined
-
-  if (existingProfile) {
-    const profile = existingProfile as ProfileLookup
-    userId = profile.id
-    if (fullName && !profile.full_name) {
-      const { error } = await admin
-        .from('profiles')
-        .update({ full_name: fullName, updated_at: new Date().toISOString() })
-        .eq('id', userId)
-      if (error) return sanitizeError(error, 'admin/users/POST profile name update')
-      profileFullName = fullName
-    }
-  } else {
-    // No temp password and no email_confirm:true — the user proves they own
-    // the mailbox by clicking the link, which is the only way they get a
-    // session and set a password. See lib/auth/inviteLink.ts.
-    const invite = await generateInviteLink(admin, { email, fullName, redirectTo: `${loginUrl}/welcome` })
-    if (!invite.ok) return NextResponse.json({ error: invite.error.message }, { status: 400 })
-
-    userId = invite.result.userId
-    createdAuthUser = invite.result.created
-    verifyUrl = invite.result.actionLink
-
-    // Upsert covers both paths: the handle_new_user trigger already created a
-    // profiles row for a brand-new auth user (this updates it), while a stale
-    // auth user with no profile row gets one inserted.
-    const { error: profErr } = await admin
-      .from('profiles')
-      .upsert(
-        { id: userId, email, full_name: fullName || null, must_change_password: true, updated_at: new Date().toISOString() },
-        { onConflict: 'id' },
-      )
-    if (profErr) {
-      if (createdAuthUser) await admin.auth.admin.deleteUser(userId)
-      return sanitizeError(profErr, 'admin/users/POST profile patch')
-    }
-  }
+  const invited = await ensureInvitedUser(admin, { email, fullName })
+  if (!invited.ok) return provisionFailureResponse(invited, 'admin/users/POST')
+  const { userId, createdAuthUser, tempPassword, alreadyExisted } = invited
+  const profileFullName = invited.fullName
 
   const role: TenantRole = 'member'
-  const { error: membershipErr } = await admin
-    .from('tenant_memberships')
-    .insert({ user_id: userId, tenant_id: gate.tenantId, role, invited_by: gate.userId })
-  if (membershipErr) {
-    if ((membershipErr as { code?: string }).code === '23505') {
-      if (createdAuthUser) await admin.auth.admin.deleteUser(userId)
+  const membership = await ensureTenantMembership(admin, {
+    userId, tenantId: gate.tenantId, role, invitedBy: gate.userId, onConflict: 'error',
+  })
+  if (!membership.ok) {
+    if (createdAuthUser) await admin.auth.admin.deleteUser(userId)
+    if (membership.status === 409) {
       return NextResponse.json({ error: `${email} is already a member of this tenant` }, { status: 409 })
     }
-    if (createdAuthUser) await admin.auth.admin.deleteUser(userId)
-    return sanitizeError(membershipErr, 'admin/users/POST membership insert')
+    return provisionFailureResponse(membership, 'admin/users/POST')
   }
 
   try {
@@ -171,15 +120,24 @@ export async function POST(req: Request) {
     return sanitizeError(error, 'admin/users/POST member insert')
   }
 
-  // New / re-invited user → verify-and-set-password link. Established user
-  // added to another tenant → "you've been added" notification (no link).
-  const emailSent = verifyUrl
-    ? await sendVerifyInviteEmail({ to: email, fullName: profileFullName, verifyUrl, tenantName: tenant.name })
-    : await sendInviteEmail({ to: email, fullName: profileFullName, tempPassword: '', loginUrl, tenantName: tenant.name })
+  // Stale never-signed-in invitees get a fresh invite link too — a
+  // passwordless "you've been added" notice would leave them stuck.
+  const { inviteUrl, emailSent } = await issueAndSendInvite(admin, {
+    userId,
+    email,
+    fullName:   profileFullName,
+    tenantId:   gate.tenantId,
+    tenantName: tenant.name,
+    createdBy:  gate.userId,
+    req,
+    emailMode:  createdAuthUser || invited.mustChangePassword ? 'invite_link' : 'added_notification',
+  })
 
   return NextResponse.json({
     email,
     fullName: profileFullName,
+    tempPassword,
+    inviteUrl,
     emailSent,
     alreadyExisted,
     tenantId: gate.tenantId,
@@ -233,7 +191,6 @@ export async function GET(req: Request) {
       must_change_password: profile?.must_change_password === true,
       created_at: row.created_at,
       last_sign_in_at: authUser?.last_sign_in_at ?? null,
-      email_verified: !!authUser?.email_confirmed_at,
     }
   })
 

@@ -18,7 +18,6 @@ import * as Sentry from '@sentry/nextjs'
 // circular import back through core.
 export type EmailKind =
   | 'invite'
-  | 'verify_invite'
   | 'invite-reminder'
   | 'review-link'
   | 'incident-alert'

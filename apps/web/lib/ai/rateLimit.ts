@@ -27,6 +27,7 @@ export type AiSurface =
   | 'classify-recordability'
   | 'parse-sds'
   | 'discover-sds'
+  | 'seed-sds-list'
   | 'assistant-chat'
   | 'assistant-scan-photo'
   | 'assistant-hazards'
@@ -39,6 +40,22 @@ export type AiSurface =
   | 'loto-audit-ehs'
   | 'loto-audit-author'
   | 'loto-audit-regulator'
+  | 'scorecard-focus'
+  | 'rca-assist'
+  | 'ecfa-assist'
+  | 'operator-orchestrator'
+  | 'operator-incidents'
+  | 'operator-risk'
+  | 'operator-loto'
+  | 'operator-permits'
+  | 'operator-chem'
+  | 'operator-inspections'
+  | 'operator-training'
+  | 'operator-bbs'
+  | 'operator-osha'
+  | 'operator-admin'
+  | 'operator-home'
+  | 'operator-knowledge'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
@@ -62,6 +79,10 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   // call — expensive, and a rare onboarding/"can't find the URL" action.
   // Cap aggressively.
   'discover-sds':                     { perHour: 15, perDay: 60 },
+  // Library-seed list generation is a superadmin batch op throttled by the
+  // seed run's own MAX_PER_RUN cap, not per-user limits — these values exist
+  // to satisfy the Record and as a backstop if ever called interactively.
+  'seed-sds-list':                    { perHour: 60, perDay: 300 },
   // Home-page assistant — conversational, expected to be the
   // highest-volume AI surface once it lands.
   'assistant-chat':                   { perHour: 60, perDay: 400 },
@@ -94,6 +115,38 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   // program-level call per run), so it rides the same bursty full-run fan-out as
   // the other audit surfaces — same generous caps.
   'loto-audit-regulator':             { perHour: 600, perDay: 4000 },
+  // EHS scorecard "where to focus" — an interactive, admin-triggered advisory
+  // over the deterministic risk drivers. One call per "analyze" click; an admin
+  // iterates a handful of times per review session. Conversational-class caps.
+  'scorecard-focus':                  { perHour: 20, perDay: 100 },
+  // RCA assist — interactive during an investigation: an admin clicks
+  // "suggest next why" / "draft root cause & actions" a handful of times per
+  // case and iterates. Conversational-class caps keep an active investigation
+  // unblocked while bounding a retry loop.
+  'rca-assist':                       { perHour: 40, perDay: 200 },
+  // ECFA assist — interactive during an investigation: an admin clicks "draft
+  // sequence" / "suggest causal factors" a handful of times per case and
+  // iterates. Conversational-class caps, same as rca-assist.
+  'ecfa-assist':                      { perHour: 40, perDay: 200 },
+  // Operator Console. The orchestrator is the one surface rate-limited per user
+  // turn (conversational — same caps as the home assistant). The domain
+  // sub-agents are fanned out BY the orchestrator within a single turn (often
+  // several per turn), so they are not rate-limited directly — they get
+  // generous backstop caps like the audit fan-out and are still logged for
+  // per-surface cost attribution.
+  'operator-orchestrator':            { perHour: 60,  perDay: 400 },
+  'operator-incidents':               { perHour: 600, perDay: 4000 },
+  'operator-risk':                    { perHour: 600, perDay: 4000 },
+  'operator-loto':                    { perHour: 600, perDay: 4000 },
+  'operator-permits':                 { perHour: 600, perDay: 4000 },
+  'operator-chem':                    { perHour: 600, perDay: 4000 },
+  'operator-inspections':             { perHour: 600, perDay: 4000 },
+  'operator-training':                { perHour: 600, perDay: 4000 },
+  'operator-bbs':                     { perHour: 600, perDay: 4000 },
+  'operator-osha':                    { perHour: 600, perDay: 4000 },
+  'operator-admin':                   { perHour: 600, perDay: 4000 },
+  'operator-home':                    { perHour: 600, perDay: 4000 },
+  'operator-knowledge':               { perHour: 600, perDay: 4000 },
 }
 
 interface CheckArgs {

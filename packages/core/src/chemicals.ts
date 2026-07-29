@@ -38,7 +38,7 @@ export type PhysicalState = typeof PHYSICAL_STATES[number]
 export const SDS_REVIEW_STATUSES = ['pending', 'approved', 'rejected'] as const
 export type SdsReviewStatus = typeof SDS_REVIEW_STATUSES[number]
 
-export const SDS_SOURCES = ['upload', 'ai_fetch', 'manufacturer_portal'] as const
+export const SDS_SOURCES = ['upload', 'ai_fetch', 'manufacturer_portal', 'photo_capture'] as const
 export type SdsSource = typeof SDS_SOURCES[number]
 
 export interface HazardStatement { code: string; text: string }

@@ -9,6 +9,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "channel": "development",
+      "environment": "development",
       "ios":     { "simulator": true },
       "android": { "buildType": "apk" },
       "env":     { "EXPO_PUBLIC_ENV": "development" }
@@ -17,6 +18,7 @@
     "preview": {
       "distribution": "internal",
       "channel": "preview",
+      "environment": "preview",
       "ios":     { "resourceClass": "m-medium" },
       "android": { "buildType": "apk" },
       "env": {
@@ -30,6 +32,7 @@
     "production": {
       "distribution": "store",
       "channel": "production",
+      "environment": "production",
       "autoIncrement": true,
       "ios":     { "resourceClass": "m-medium" },
       "android": { "buildType": "app-bundle" },
@@ -45,8 +48,11 @@
   "submit": {
     "production": {
       "ios": {
-        "ascAppId":    "REPLACE_WITH_APP_STORE_CONNECT_APP_ID",
-        "appleTeamId": "REPLACE_WITH_APPLE_TEAM_ID"
+        "ascApiKeyPath":     "./credentials/asc_api_key.p8",
+        "ascApiKeyId":       "REPLACE_WITH_ASC_API_KEY_ID",
+        "ascApiKeyIssuerId": "REPLACE_WITH_ASC_API_KEY_ISSUER_ID",
+        "ascAppId":          "REPLACE_WITH_APP_STORE_CONNECT_APP_ID",
+        "appleTeamId":       "REPLACE_WITH_APPLE_TEAM_ID"
       },
       "android": {
         "serviceAccountKeyPath": "REPLACE_WITH_PATH_TO_PLAY_SERVICE_ACCOUNT_JSON",

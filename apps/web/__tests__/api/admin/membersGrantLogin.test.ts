@@ -1,11 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   authAdminMock,
-  generateLinkOk,
   jsonRequest,
   mockState,
   resetMocks,
-  sendVerifyInviteEmailMock,
+  sendInviteEmailMock,
 } from '../superadmin/_helpers'
 
 const { requireTenantAdminMock } = vi.hoisted(() => ({
@@ -42,7 +41,7 @@ describe('POST /api/admin/members/[memberId]/grant-login', () => {
     tenantAdminOk()
   })
 
-  it('generates a verify link, attaches profile_id to existing member, emits login_granted event', async () => {
+  it('creates auth user, attaches profile_id to existing member, emits login_granted event', async () => {
     // member lookup: roster-only member with email on file
     mockState.queue('members', {
       data: {
@@ -59,9 +58,12 @@ describe('POST /api/admin/members/[memberId]/grant-login', () => {
     mockState.queue('tenants', { data: { id: TENANT, name: 'Snak King' }, error: null })
     // profile-by-email lookup: none
     mockState.queue('profiles', { data: null, error: null })
-    // verify link generated for the new auth user
-    generateLinkOk('NEW-USER', 'roster@example.com', 'https://supabase.test/verify?token=abc')
-    // profile upsert ok
+    // auth.users createUser success
+    authAdminMock.createUser.mockResolvedValue({
+      data: { user: { id: 'NEW-USER', email: 'roster@example.com' } },
+      error: null,
+    })
+    // profile patch ok
     mockState.queue('profiles', { data: null, error: null })
     // tenant_memberships insert ok
     mockState.queue('tenant_memberships', { data: null, error: null })
@@ -76,10 +78,9 @@ describe('POST /api/admin/members/[memberId]/grant-login', () => {
     expect(body).toMatchObject({
       memberId: MEMBER,
       profileId: 'NEW-USER',
+      tempPassword: 'TempPass123!',
       emailSent: true,
     })
-    expect(body.tempPassword).toBeUndefined()
-    expect(authAdminMock.createUser).not.toHaveBeenCalled()
 
     // Member link is an UPDATE, not an INSERT — that's the whole point.
     expect(mockState.updates.find(u => u.table === 'members')?.payload).toMatchObject({
@@ -93,10 +94,7 @@ describe('POST /api/admin/members/[memberId]/grant-login', () => {
       event_type: 'login_granted',
       actor_user_id: 'admin-1',
     })
-    expect(sendVerifyInviteEmailMock).toHaveBeenCalledWith(expect.objectContaining({
-      to: 'roster@example.com',
-      verifyUrl: 'https://supabase.test/verify?token=abc',
-    }))
+    expect(sendInviteEmailMock).toHaveBeenCalled()
   })
 
   it('refuses when the member already has a profile_id (409)', async () => {
@@ -116,7 +114,7 @@ describe('POST /api/admin/members/[memberId]/grant-login', () => {
     expect(res.status).toBe(409)
     const body = await res.json()
     expect(body.error).toBe('ALREADY_HAS_LOGIN')
-    expect(authAdminMock.generateLink).not.toHaveBeenCalled()
+    expect(authAdminMock.createUser).not.toHaveBeenCalled()
   })
 
   it('returns 400 when no email is on file and none provided', async () => {

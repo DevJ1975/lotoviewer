@@ -76,13 +76,79 @@ export async function gatherIncidentRiskFeatures(admin: SupabaseClient, tenantId
   const atmTotal = atm.length
   const atmFailed = atm.filter(atmosphericFailed).length
 
+  // ── Cross-module leading indicators (v2.0.0), gathered BEST-EFFORT ─────────
+  // A tenant without a given module (or a schema drift) must not break the
+  // core score — each query degrades to an empty set, contributing 0 pressure.
+  const [inspRows, bbsV2Rows, jhaRows, csRows, hwRows, matrixRows, ecfaRows] = await Promise.all([
+    safeSelect(admin.from('inspections').select('result').eq('tenant_id', tenantId).gte('created_at', recentIso)),
+    safeSelect(admin.from('bbs_observations_v2').select('follow_up_required, follow_up_completed_at').eq('tenant_id', tenantId).gte('created_at', recentIso)),
+    safeSelect(admin.from('jhas').select('status, next_review_date').eq('tenant_id', tenantId)),
+    safeSelect(admin.from('loto_confined_space_permits').select('expires_at, canceled_at').eq('tenant_id', tenantId).gte('started_at', recentIso)),
+    safeSelect(admin.from('loto_hot_work_permits').select('expires_at, canceled_at, work_completed_at').eq('tenant_id', tenantId).gte('started_at', recentIso)),
+    safeSelect(admin.from('v_training_matrix').select('status').eq('tenant_id', tenantId)),
+    safeSelect(admin.from('incident_ecfa_nodes').select('cf_hierarchy_control').eq('tenant_id', tenantId).eq('is_causal_factor', true).gte('created_at', recentIso)),
+  ])
+
+  const graded = inspRows.filter(r => r.result === 'pass' || r.result === 'fail')
+  const inspectionsTotal = graded.length
+  const inspectionsFailed = graded.filter(r => r.result === 'fail').length
+
+  const bbsFollowupsOpen = bbsV2Rows
+    .filter(r => r.follow_up_required === true && r.follow_up_completed_at == null).length
+
+  const jhaReviewsOverdue = jhaRows.filter(r =>
+    r.status === 'approved' && typeof r.next_review_date === 'string' && r.next_review_date < todayYmd).length
+
+  const permitExpiredOpen =
+    csRows.filter(r => typeof r.expires_at === 'string' && r.expires_at < nowIso && r.canceled_at == null).length
+    + hwRows.filter(r => typeof r.expires_at === 'string' && r.expires_at < nowIso && r.canceled_at == null && r.work_completed_at == null).length
+
+  const trainingGaps = matrixRows.filter(r => r.status === 'missing' || r.status === 'overdue').length
+
+  const ecfaCausalFactors = ecfaRows.length
+  const ecfaWeakControls = ecfaRows.filter(r =>
+    r.cf_hierarchy_control == null || r.cf_hierarchy_control === 'administrative' || r.cf_hierarchy_control === 'ppe').length
+
   return {
     recordablesRecent, recordablesPrior, nearMissRecent,
     bbsSafe, bbsUnsafe, capasOverdue, riskReviewsOverdue,
     highRisksUncontrolled, trainingExpired, atmFailed, atmTotal,
+    inspectionsFailed, inspectionsTotal, bbsFollowupsOpen, jhaReviewsOverdue,
+    permitExpiredOpen, trainingGaps, ecfaCausalFactors, ecfaWeakControls,
   }
 }
 
-export async function computeIncidentRisk(admin: SupabaseClient, tenantId: string): Promise<IncidentRiskResult> {
-  return summarizeIncidentRisk(await gatherIncidentRiskFeatures(admin, tenantId))
+// Best-effort read: returns the rows, or [] on any error (missing table for a
+// tenant that hasn't enabled the module, schema drift, RLS). Keeps the core
+// risk score resilient to optional cross-module inputs.
+async function safeSelect(
+  q: PromiseLike<{ data: unknown[] | null; error: unknown }>,
+): Promise<Record<string, unknown>[]> {
+  try {
+    const r = await q
+    if (r.error) return []
+    return (r.data ?? []) as Record<string, unknown>[]
+  } catch {
+    return []
+  }
+}
+
+// Short-TTL memo of the (multi-table) gather → score, keyed by tenant. The
+// scorecard page loads the risk once, then "Analyze" (scorecard-focus) recomputes
+// it seconds later; on a warm serverless instance this serves the second call
+// from cache instead of re-running the full gather. Best-effort by design —
+// cold instances just recompute, which is correct.
+const riskCache = new Map<string, { at: number; result: IncidentRiskResult }>()
+const RISK_TTL_MS = 60_000
+
+export async function computeIncidentRisk(
+  admin: SupabaseClient,
+  tenantId: string,
+  opts: { fresh?: boolean } = {},
+): Promise<IncidentRiskResult> {
+  const hit = riskCache.get(tenantId)
+  if (!opts.fresh && hit && Date.now() - hit.at < RISK_TTL_MS) return hit.result
+  const result = summarizeIncidentRisk(await gatherIncidentRiskFeatures(admin, tenantId))
+  riskCache.set(tenantId, { at: Date.now(), result })
+  return result
 }

@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
-import { generateInviteLink } from '@/lib/auth/inviteLink'
-import { sendInviteEmail, computeLoginUrl } from '@/lib/email/sendInvite'
-import { sendVerifyInviteEmail } from '@/lib/email/sendVerifyInvite'
+import { inviteIssueRateLimit } from '@/lib/rateLimit/inviteIssue'
+import {
+  ensureInvitedUser,
+  ensureTenantMembership,
+  issueAndSendInvite,
+  provisionFailureResponse,
+} from '@/lib/invites/provision'
+import { inviteLinkTtlDays } from '@/lib/invites/tokens'
 import { sanitizeError } from '@/lib/security/sanitizeError'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { normalizeEmail } from '@/lib/validation/tenants'
@@ -10,16 +15,11 @@ import { normalizeEmail } from '@/lib/validation/tenants'
 // POST /api/admin/members/[memberId]/grant-login
 //
 // Grants app login access to an existing members row that doesn't yet
-// have a profile_id. The shape mirrors /api/admin/users POST (creates
-// or reuses an auth.users row, ensures a profiles row, ensures a
-// tenant_memberships row) but UPDATES the existing members row instead
-// of inserting a fresh one — that's the whole point of the unified
-// roster.
-//
-// TODO(phase-2): extract a shared invite helper. The auth+profile+
-// membership block here is the second occurrence of that flow (first
-// is /api/admin/users POST); Rule of Three says extract on the third.
-// For now the two copies stay inline so each route reads top-to-bottom.
+// have a profile_id. The auth+profile+membership provisioning is the
+// shared lib/invites/provision helper (also used by /api/admin/users
+// and the superadmin members route); this route additionally UPDATES
+// the existing members row instead of inserting a fresh one — that's
+// the whole point of the unified roster.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -44,6 +44,9 @@ export async function POST(req: Request, ctx: RouteContext) {
 
   const gate = await requireTenantAdmin(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
+  const limited = inviteIssueRateLimit(gate.userId)
+  if (limited) return limited
 
   let body: { email?: unknown; fullName?: unknown }
   try { body = await req.json().catch(() => ({})) }
@@ -88,73 +91,19 @@ export async function POST(req: Request, ctx: RouteContext) {
   if (tenantErr) return sanitizeError(tenantErr, 'admin/members/grant-login tenant lookup')
   if (!tenantData) return NextResponse.json({ error: 'Active tenant not found' }, { status: 404 })
 
-  const loginUrl = computeLoginUrl(req)
-
-  // ── auth.users + profiles: reuse if email already exists, else invite.
-  let userId: string
-  // Set for new / re-invited users — the verify-and-set-password link emailed
-  // in place of a temp password. Undefined when an established profile is
-  // simply being linked to this member row.
-  let verifyUrl: string | undefined
-
-  const { data: existingProfile, error: profileLookupErr } = await admin
-    .from('profiles')
-    .select('id, email, full_name')
-    .eq('email', email)
-    .maybeSingle()
-  if (profileLookupErr) return sanitizeError(profileLookupErr, 'admin/members/grant-login profile lookup')
-
-  if (existingProfile) {
-    userId = (existingProfile as { id: string }).id
-    // Patch the profile name only when caller supplied one and it's
-    // currently empty — never clobber a user-edited name.
-    if (fullName && !(existingProfile as { full_name: string | null }).full_name) {
-      await admin
-        .from('profiles')
-        .update({ full_name: fullName, updated_at: new Date().toISOString() })
-        .eq('id', userId)
-    }
-  } else {
-    // No temp password and no email_confirm:true — the recipient proves
-    // mailbox ownership by clicking the link. See lib/auth/inviteLink.ts.
-    const invite = await generateInviteLink(admin, { email, fullName, redirectTo: `${loginUrl}/welcome` })
-    if (!invite.ok) {
-      return NextResponse.json({ error: invite.error.message }, { status: 400 })
-    }
-    userId = invite.result.userId
-    verifyUrl = invite.result.actionLink
-
-    // Upsert covers both: the handle_new_user trigger created a row for a
-    // brand-new auth user (updated here); a stale auth user gets one inserted.
-    const { error: profileUpdateErr } = await admin
-      .from('profiles')
-      .upsert(
-        { id: userId, email, full_name: fullName || null, must_change_password: true, updated_at: new Date().toISOString() },
-        { onConflict: 'id' },
-      )
-    if (profileUpdateErr) {
-      // Only roll back the auth user if this invite created it — never delete
-      // a pre-existing account we merely re-linked.
-      if (invite.result.created) await admin.auth.admin.deleteUser(userId)
-      return sanitizeError(profileUpdateErr, 'admin/members/grant-login profile patch')
-    }
-  }
+  // ── auth.users + profiles: reuse if email already exists, else create.
+  const invited = await ensureInvitedUser(admin, { email, fullName })
+  if (!invited.ok) return provisionFailureResponse(invited, 'admin/members/grant-login')
+  const { userId, tempPassword } = invited
 
   // ── tenant_memberships: idempotent (a 23505 here just means the
   // user was already a member of this tenant under a different members
   // row — that's the merge candidate the admin probably wants).
   const role: TenantRole = 'member'
-  const { error: membershipErr } = await admin
-    .from('tenant_memberships')
-    .insert({
-      user_id:    userId,
-      tenant_id:  gate.tenantId,
-      role,
-      invited_by: gate.userId,
-    })
-  if (membershipErr && (membershipErr as { code?: string }).code !== '23505') {
-    return sanitizeError(membershipErr, 'admin/members/grant-login membership insert')
-  }
+  const membership = await ensureTenantMembership(admin, {
+    userId, tenantId: gate.tenantId, role, invitedBy: gate.userId, onConflict: 'ignore',
+  })
+  if (!membership.ok) return provisionFailureResponse(membership, 'admin/members/grant-login')
 
   // ── Attach the new profile to the existing member row. The 183
   // partial unique index would reject this with 23505 if the same
@@ -198,16 +147,25 @@ export async function POST(req: Request, ctx: RouteContext) {
     return sanitizeError(eventErr, 'admin/members/grant-login event insert')
   }
 
-  const tenantName = (tenantData as { name: string }).name
-  // New / re-invited user → verify-and-set-password link. Established profile
-  // re-linked → "you've been added" notification (no link).
-  const emailSent = verifyUrl
-    ? await sendVerifyInviteEmail({ to: email, fullName, verifyUrl, tenantName })
-    : await sendInviteEmail({ to: email, fullName, tempPassword: '', loginUrl, tenantName })
+  const { inviteUrl, emailSent } = await issueAndSendInvite(admin, {
+    userId,
+    email,
+    fullName:   invited.fullName || fullName,
+    tenantId:   gate.tenantId,
+    tenantName: (tenantData as { name: string }).name,
+    createdBy:  gate.userId,
+    req,
+    emailMode:  invited.createdAuthUser || invited.mustChangePassword ? 'invite_link' : 'added_notification',
+  })
 
   return NextResponse.json({
     memberId,
     profileId: userId,
+    email,
+    tempPassword,
+    inviteUrl,
     emailSent,
+    expiresInDays: inviteLinkTtlDays(),
+    tenantName: (tenantData as { name: string }).name,
   })
 }

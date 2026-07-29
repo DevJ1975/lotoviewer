@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Download, ExternalLink, FileText, Loader2, RefreshCw, Search, Sparkles } from 'lucide-react'
+import { ArrowLeft, Camera, Download, ExternalLink, FileText, Loader2, RefreshCw, Search, Sparkles } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import Dropzone from '@/components/ui/Dropzone'
@@ -447,6 +447,13 @@ export default function ChemicalDetailPage() {
               helpText={uploading ? 'Uploading…' : 'PDF only, ≤25MB. Drop a new revision or click to browse.'}
               disabled={uploading}
             />
+            <Link
+              href={`/chemicals/${id}/capture`}
+              className="self-start inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+              title="Photograph a paper SDS with your camera"
+            >
+              <Camera className="w-4 h-4" /> Capture paper SDS
+            </Link>
           </div>
         </div>
 

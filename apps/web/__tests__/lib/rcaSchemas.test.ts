@@ -197,4 +197,35 @@ describe('canCompleteInvestigation', () => {
     const r = canCompleteInvestigation({ rca_method: 'icam', has_nodes: true, has_root: true })
     expect(r.ok).toBe(true)
   })
+
+  it('passes with multiple roots (single-root is no longer required)', () => {
+    // has_root is "≥1 root" — the gate does not cap the count.
+    const r = canCompleteInvestigation({ rca_method: '5_whys', has_nodes: true, has_root: true })
+    expect(r.ok).toBe(true)
+  })
+
+  it('ignores the per-root rule unless explicitly enabled (backward compat)', () => {
+    const r = canCompleteInvestigation({
+      rca_method: '5_whys', has_nodes: true, has_root: true,
+      root_count: 2, roots_with_actions: 0, // would fail IF the rule applied
+    })
+    expect(r.ok).toBe(true)
+  })
+
+  it('blocks when require_action_per_root is on and a root has no action', () => {
+    const r = canCompleteInvestigation({
+      rca_method: '5_whys', has_nodes: true, has_root: true,
+      require_action_per_root: true, root_count: 2, roots_with_actions: 1,
+    })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.reason).toMatch(/corrective action/i)
+  })
+
+  it('passes when require_action_per_root is on and every root is covered', () => {
+    const r = canCompleteInvestigation({
+      rca_method: '5_whys', has_nodes: true, has_root: true,
+      require_action_per_root: true, root_count: 2, roots_with_actions: 2,
+    })
+    expect(r.ok).toBe(true)
+  })
 })

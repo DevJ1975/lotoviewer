@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Loader2, AlertCircle, CheckCircle2, UserPlus, X, Trash2, Mail, Crown, MoreVertical } from 'lucide-react'
+import { Loader2, AlertCircle, CheckCircle2, UserPlus, X, Trash2, Mail, Crown, Copy, MoreVertical } from 'lucide-react'
 import { superadminJson } from '@/lib/superadminFetch'
 import type { TenantRole } from '@soteria/core/types'
 import { Section } from './Section'
@@ -13,6 +13,8 @@ import { ROLE_OPTIONS, type MemberRow } from './types'
 interface InviteResult {
   email:          string
   role:           TenantRole
+  tempPassword?:  string
+  inviteUrl?:     string
   emailSent?:     boolean
   alreadyExisted: boolean
 }
@@ -166,17 +168,21 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
 
   async function resendInvite(userId: string, label: string) {
     setBusyUserId(userId); setRowError(null)
-    const result = await superadminJson<{ email: string; emailSent: boolean }>(
+    const result = await superadminJson<{ email: string; tempPassword: string; inviteUrl?: string; emailSent: boolean }>(
       `/api/superadmin/tenants/${tenantNumber}/members/${userId}/resend-invite`,
       { method: 'POST' },
     )
     if (!result.ok || !result.body) {
       setRowError(result.error ?? 'Resend failed')
     } else {
-      // Surface the resend outcome through the existing invite-result panel.
+      // Surface the fresh invite link + temp password through the
+      // existing invite-result panel so the superadmin can copy/paste
+      // if email failed.
       setInviteResult({
         email:          result.body.email,
         role:           members.find(m => m.user_id === userId)?.role ?? 'member',
+        tempPassword:   result.body.tempPassword,
+        inviteUrl:      result.body.inviteUrl,
         emailSent:      result.body.emailSent,
         alreadyExisted: false,
       })
@@ -193,8 +199,8 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
 
     setInviteBusy(true)
     const result = await superadminJson<{
-      email: string; role: TenantRole
-      emailSent?: boolean; alreadyExisted: boolean
+      email: string; role: TenantRole; tempPassword?: string
+      inviteUrl?: string; emailSent?: boolean; alreadyExisted: boolean
     }>(`/api/superadmin/tenants/${tenantNumber}/members`, {
       method: 'POST',
       body:   JSON.stringify({
@@ -209,6 +215,8 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
       setInviteResult({
         email:          result.body.email,
         role:           result.body.role,
+        tempPassword:   result.body.tempPassword,
+        inviteUrl:      result.body.inviteUrl,
         emailSent:      result.body.emailSent === true,
         alreadyExisted: result.body.alreadyExisted,
       })
@@ -276,6 +284,18 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
       label,
       message: `Deleted ${label} from SoteriaField entirely`,
     })
+  }
+
+  async function copyTempPassword() {
+    if (!inviteResult?.tempPassword) return
+    try { await navigator.clipboard.writeText(inviteResult.tempPassword) }
+    catch { /* clipboard blocked — user can still select-all */ }
+  }
+
+  async function copyInviteUrl() {
+    if (!inviteResult?.inviteUrl) return
+    try { await navigator.clipboard.writeText(inviteResult.inviteUrl) }
+    catch { /* clipboard blocked — user can still select-all */ }
   }
 
   return (
@@ -346,8 +366,8 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
               {!inviteResult.alreadyExisted && (
                 <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-200">
                   {inviteResult.emailSent
-                    ? '✉ Verification email sent — they verify their email and set a password via the link. Shown as "Invited" until they do.'
-                    : '⚠ Email not sent (Resend not configured or send failed). The verification link can\'t be shared from here — fix email delivery, then use Resend invite.'}
+                    ? '✉ Invite emailed. They set their own password via the link — no password in the email.'
+                    : '⚠ Email not sent (Resend not configured or send failed). Share the invite link or password below manually.'}
                 </p>
               )}
               {inviteResult.alreadyExisted && (
@@ -356,6 +376,40 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
                     ? '✉ Notification emailed — they can sign in with their existing account; the new tenant will appear in the switcher.'
                     : '⚠ Email not sent. Tell them out-of-band that they were added to this tenant.'}
                 </p>
+              )}
+              {inviteResult.inviteUrl && (
+                <div className="mt-2 text-emerald-800 dark:text-emerald-200 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Invite link — safe to DM; lets them set their own password:</span>
+                    <button
+                      type="button"
+                      onClick={copyInviteUrl}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-200 dark:bg-emerald-900/40 text-emerald-900 dark:text-emerald-200 hover:bg-emerald-300 dark:hover:bg-emerald-900/60 transition-colors"
+                    >
+                      <Copy className="h-3 w-3" /> Copy
+                    </button>
+                  </div>
+                  <code className="block mt-1 p-2 bg-emerald-100 dark:bg-emerald-900/40 rounded font-mono text-[11px] select-all break-all">
+                    {inviteResult.inviteUrl}
+                  </code>
+                </div>
+              )}
+              {inviteResult.tempPassword && (
+                <div className="mt-2 text-emerald-800 dark:text-emerald-200 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Temporary password — copy if email failed:</span>
+                    <button
+                      type="button"
+                      onClick={copyTempPassword}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-200 dark:bg-emerald-900/40 text-emerald-900 dark:text-emerald-200 hover:bg-emerald-300 dark:hover:bg-emerald-900/60 transition-colors"
+                    >
+                      <Copy className="h-3 w-3" /> Copy
+                    </button>
+                  </div>
+                  <code className="block mt-1 p-2 bg-emerald-100 dark:bg-emerald-900/40 rounded font-mono text-sm select-all">
+                    {inviteResult.tempPassword}
+                  </code>
+                </div>
               )}
             </div>
           </div>
@@ -430,7 +484,7 @@ export function MembersSection({ tenantNumber, members, reload }: Props) {
                         onClick={() => resendInvite(m.user_id, label)}
                         disabled={busy}
                         aria-label={`Resend invite to ${label}`}
-                        title="Generate a fresh temp password and re-email the invite"
+                        title="Email a fresh single-use invite link (also rotates the fallback temp password)"
                         className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-brand-navy dark:text-brand-yellow bg-brand-navy/5 dark:bg-brand-navy/20 hover:bg-brand-navy/10 dark:hover:bg-brand-navy/30 transition-colors disabled:opacity-50"
                       >
                         {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}

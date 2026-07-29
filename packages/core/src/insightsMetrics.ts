@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { zScore } from './statistics'
 import { evaluateTest, effectiveThresholds, type ThresholdSet } from './confinedSpaceThresholds'
 import type {
   AtmosphericTest,
@@ -273,7 +274,8 @@ export function computeAnomalies(args: {
       // safely below real measurement noise — atmospheric readings are
       // reported to 1-2 decimals — so anything below it is FP only.
       if (stat.std < 1e-6) continue
-      const z = (value - stat.mean) / stat.std
+      const z = zScore(value, stat.mean, stat.std)
+      if (z == null) continue
       const az = Math.abs(z)
       if (az < Z_MODERATE) continue
       out.push({

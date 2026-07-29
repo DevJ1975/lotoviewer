@@ -87,6 +87,17 @@ export const FEATURES: FeatureDef[] = [
     icon:        'ShieldCheck',
     color:       'emerald',
   },
+  {
+    id:          'operator',
+    name:        'Operator Console',
+    description: 'Multi-agent assistant that operates your modules — delegates to specialists for incidents, permits, LOTO, chemicals, training, and more.',
+    href:        '/operator',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'Bot',
+    color:       'indigo',
+  },
 
   // ── LOTO module + sub-pages ─────────────────────────────────────────────
   // The "LOTO" row navigates to /, the equipment dashboard. Status,
@@ -510,6 +521,16 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
   },
   {
+    id:          'chemicals-library',
+    name:        'SDS Library',
+    description: 'Search the shared library and adopt common chemicals into your catalog',
+    href:        '/chemicals/library',
+    category:    'safety',
+    parent:      'chemicals',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
     id:          'chemicals-review',
     name:        'SDS Review Queue',
     description: 'Review AI-parsed SDS fields awaiting approval',
@@ -830,6 +851,17 @@ export const FEATURES: FeatureDef[] = [
     color:       'slate',
   },
   {
+    id:          'admin-training-competency-matrix',
+    name:        'Training & Competency Matrix',
+    description: 'Required training by worker and course, with expiry status and per-position requirements',
+    href:        '/admin/people/training-competency-matrix',
+    category:    'admin',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'LayoutGrid',
+    color:       'slate',
+  },
+  {
     id:          'admin-hygiene-log',
     name:        'Data Hygiene Log',
     description: 'One-off LOTO data ops — decommissions, renames, FK repairs',
@@ -988,6 +1020,22 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
     icon:        'ClipboardList',
     color:       'teal',
+  },
+
+  // ── OSHA Regulatory Watch module ────────────────────────────────────────
+  // AI-summarized OSHA regulation updates + upcoming changes, surfaced ONLY
+  // as a self-gated panel on the home dashboard — there's no page or drawer
+  // link, so href:null + internal:true (the loto-review-portal precedent:
+  // live + tenant-toggleable, surfaced via inline UI rather than the drawer).
+  {
+    id:          'osha-reg-watch',
+    name:        'OSHA Regulatory Watch',
+    description: 'AI-summarized OSHA regulation updates and upcoming changes, on the home dashboard',
+    href:        null,
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    internal:    true,
   },
 
   // ── EM-385 Compliance module ────────────────────────────────────────────
