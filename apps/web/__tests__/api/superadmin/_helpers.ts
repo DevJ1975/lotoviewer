@@ -75,6 +75,7 @@ class MockChain {
         neq:    () => chain,
         in:     () => chain,
         is:     () => chain,
+        not:    () => chain,
         order:  () => chain,
         range:  () => chain,
         limit:  () => chain,

@@ -272,11 +272,57 @@ export interface IssueAndSendInviteArgs {
   emailMode:  'invite_link' | 'added_notification'
 }
 
+/**
+ * Undo a prior soft-cancel so a freshly issued invite is actually usable.
+ *
+ * The invite-reminders cron stamps `invite_cancelled_at` once an invitee
+ * ignores all four reminders, and /api/invites/{validate,accept,refresh} all
+ * refuse a cancelled membership. Nothing used to clear that stamp — so an
+ * admin could grant access, mint a valid token, email it, and the invitee
+ * would still hit "this invitation was cancelled" with no way out. An admin
+ * deliberately re-issuing access IS the reactivation the cron's comment
+ * ("an admin can clear invite_cancelled_at") always assumed existed.
+ *
+ * The reminder counter has to reset too: leaving it at the maximum means the
+ * next cron run re-cancels the invite we just revived. `invite_last_reminder_at`
+ * anchors the cadence in planInviteAction, so stamping it now gives the
+ * invitee the usual interval before the first nudge instead of one immediately.
+ *
+ * Best-effort: the invite itself is already valid, and failing the whole
+ * request here would strand the caller worse than a stale cancel flag.
+ */
+async function reactivateInvite(
+  admin: SupabaseClient,
+  args: { userId: string; tenantId: string },
+): Promise<void> {
+  const { error } = await admin
+    .from('tenant_memberships')
+    .update({
+      invite_cancelled_at:     null,
+      invite_cancelled_reason: null,
+      invite_reminders_sent:   0,
+      invite_last_reminder_at: new Date().toISOString(),
+    })
+    .eq('user_id', args.userId)
+    .eq('tenant_id', args.tenantId)
+    .not('invite_cancelled_at', 'is', null)
+
+  if (error) {
+    Sentry.captureException(error, {
+      tags: { module: 'issueAndSendInvite', stage: 'reactivate-invite' },
+    })
+  }
+}
+
 export async function issueAndSendInvite(
   admin: SupabaseClient,
   args: IssueAndSendInviteArgs,
 ): Promise<{ inviteUrl?: string; emailSent: boolean }> {
   const appUrl = computeLoginUrl(args.req)
+
+  // Runs for both modes: an admin re-adding someone who was cancelled should
+  // clear the block whether or not this particular send carries a link.
+  await reactivateInvite(admin, { userId: args.userId, tenantId: args.tenantId })
 
   if (args.emailMode === 'added_notification') {
     const emailSent = await sendInviteEmail({
