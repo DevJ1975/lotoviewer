@@ -12,8 +12,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
   Check,
+  ClipboardCopy,
   Copy,
   GitMerge,
+  KeyRound,
   Loader2,
   ShieldCheck,
   UserCheck,
@@ -38,8 +40,9 @@ import {
   grantMemberLogin,
   listAdminMembers,
   mergeMembers,
-  type GrantLoginResult,
+  resetMemberAccess,
 } from '@/lib/members/client'
+import { composeAccessMessage, type AccessMessageKind } from '@/lib/members/accessMessage'
 import type { MemberSearchResult, MemberSummary } from '@/lib/members/types'
 
 interface MemberStatusEvent {
@@ -50,6 +53,19 @@ interface MemberStatusEvent {
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Both credential flows — first-time grant and admin reset — end at the
+// same screen: "here is what to send the worker." One shape keeps the
+// result panel from forking into two near-identical branches.
+interface AccessOutcome {
+  kind:          AccessMessageKind
+  email:         string
+  tempPassword:  string | null
+  inviteUrl?:    string
+  emailSent:     boolean
+  expiresInDays: number
+  tenantName?:   string
+}
 
 export default function AdminMemberDetailPage() {
   const params = useParams<{ memberId: string }>()
@@ -65,8 +81,12 @@ export default function AdminMemberDetailPage() {
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
   const [granting, setGranting] = useState(false)
-  const [grantResult, setGrantResult] = useState<GrantLoginResult | null>(null)
-  const [copied, setCopied]     = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [accessResult, setAccessResult] = useState<AccessOutcome | null>(null)
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
+  // Keyed rather than boolean: three copy buttons share this panel, and a
+  // single flag would flash the tick on all of them at once.
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
 
   // Merge picker state
   const [mergeOpen, setMergeOpen]   = useState(false)
@@ -136,7 +156,7 @@ export default function AdminMemberDetailPage() {
     try {
       const result = await grantMemberLogin(tenantId, member.member_id, email ? { email } : {})
       if (!mountedRef.current) return
-      setGrantResult(result)
+      setAccessResult({ kind: 'invite', ...result })
       await load()
     } catch (err) {
       if (mountedRef.current) {
@@ -146,6 +166,57 @@ export default function AdminMemberDetailPage() {
       if (mountedRef.current) setGranting(false)
     }
   }, [tenantId, member, load])
+
+  const doResetAccess = useCallback(async () => {
+    if (!tenantId || !member) return
+    setResetting(true)
+    setError(null)
+    setResetConfirmOpen(false)
+    try {
+      const result = await resetMemberAccess(tenantId, member.member_id)
+      if (!mountedRef.current) return
+      setAccessResult({ kind: 'reset', ...result })
+      await load()
+    } catch (err) {
+      if (mountedRef.current) {
+        setError(err instanceof Error ? err.message : 'Could not reset access')
+      }
+    } finally {
+      if (mountedRef.current) setResetting(false)
+    }
+  }, [tenantId, member, load])
+
+  // Composed once and shared by the preview and the copy button, so what
+  // the admin reads on screen is byte-identical to what lands on their
+  // clipboard. window is safe to read here: 'use client' + this only
+  // evaluates once accessResult exists, which requires a user action.
+  const accessMessage = useMemo(() => {
+    if (!accessResult || !member) return ''
+    return composeAccessMessage({
+      kind:          accessResult.kind,
+      recipientName: member.display_name,
+      email:         accessResult.email,
+      appUrl:        window.location.origin,
+      inviteUrl:     accessResult.inviteUrl,
+      tempPassword:  accessResult.tempPassword,
+      expiresInDays: accessResult.expiresInDays,
+      tenantName:    accessResult.tenantName,
+    })
+  }, [accessResult, member])
+
+  // Clipboard writes reject when the document isn't focused or the
+  // browser withholds permission. Surfacing that beats a button that
+  // silently does nothing while the admin waits for a tick.
+  const copyValue = useCallback(async (key: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      if (!mountedRef.current) return
+      setCopiedKey(key)
+      setTimeout(() => { if (mountedRef.current) setCopiedKey(null) }, 1500)
+    } catch {
+      if (mountedRef.current) setError('Could not copy — select the text and copy manually.')
+    }
+  }, [])
 
   // If the member has an email on file, send directly. Otherwise open
   // the prompt so the admin can supply one — without it the server
@@ -279,6 +350,12 @@ export default function AdminMemberDetailPage() {
               {granting ? <Loader2 className="h-4 w-4 animate-spin" /> : hasLogin ? <UserCheck className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
               {hasLogin ? 'Login active' : 'Grant app access'}
             </Button>
+            {hasLogin && (
+              <Button variant="outline" onClick={() => setResetConfirmOpen(true)} disabled={resetting}>
+                {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                Reset access
+              </Button>
+            )}
             <Button variant="outline" onClick={openMerge}>
               <GitMerge className="h-4 w-4" />
               Merge into…
@@ -293,50 +370,68 @@ export default function AdminMemberDetailPage() {
         </p>
       )}
 
-      {grantResult && (
+      {accessResult && (
         <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/40">
           <div className="flex items-start gap-3">
-            <ShieldCheck className="h-5 w-5 text-emerald-700 dark:text-emerald-300" />
-            <div className="flex-1">
+            <ShieldCheck className="h-5 w-5 shrink-0 text-emerald-700 dark:text-emerald-300" />
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-bold text-emerald-900 dark:text-emerald-100">
-                Login created.{grantResult.emailSent ? ' Invite email sent.' : ' Email was not sent — share the invite link or password below.'}
+                {accessResult.kind === 'invite' ? 'Login created.' : 'Access reset — the old password no longer works.'}
+                {accessResult.emailSent
+                  ? ' Email sent.'
+                  : ' Email was not sent — send the message below yourself.'}
               </p>
-              {grantResult.inviteUrl && (
-                <div className="mt-2 flex items-center gap-2 rounded-md bg-white px-3 py-1.5 ring-1 ring-emerald-200 dark:bg-slate-900">
-                  <code className="font-mono text-[11px] break-all min-w-0">{grantResult.inviteUrl}</code>
-                  <button
-                    type="button"
-                    aria-label="Copy invite link"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(grantResult.inviteUrl!)
-                        setCopied(true); setTimeout(() => setCopied(false), 1500)
-                      } catch { /* ignore */ }
-                    }}
-                    className="text-emerald-700 hover:text-emerald-900 dark:text-emerald-300 shrink-0"
+
+              <div className="mt-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-bold uppercase tracking-wide text-emerald-900/70 dark:text-emerald-100/70">
+                    Message for {member.display_name}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => copyValue('message', accessMessage)}
                   >
-                    {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                  </button>
+                    {copiedKey === 'message' ? <Check className="h-3.5 w-3.5" /> : <ClipboardCopy className="h-3.5 w-3.5" />}
+                    {copiedKey === 'message' ? 'Copied' : 'Copy message'}
+                  </Button>
                 </div>
-              )}
-              {grantResult.tempPassword && (
-                <div className="mt-2 inline-flex items-center gap-2 rounded-md bg-white px-3 py-1.5 ring-1 ring-emerald-200 dark:bg-slate-900">
-                  <code className="font-mono text-sm">{grantResult.tempPassword}</code>
-                  <button
-                    type="button"
-                    aria-label="Copy password"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(grantResult.tempPassword!)
-                        setCopied(true); setTimeout(() => setCopied(false), 1500)
-                      } catch { /* ignore */ }
-                    }}
-                    className="text-emerald-700 hover:text-emerald-900 dark:text-emerald-300"
-                  >
-                    {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                  </button>
+                <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-white px-3 py-2 text-xs leading-relaxed text-slate-800 ring-1 ring-emerald-200 dark:bg-slate-900 dark:text-slate-200 dark:ring-emerald-900">{accessMessage}</pre>
+              </div>
+
+              <details className="mt-3">
+                <summary className="cursor-pointer text-xs font-semibold text-emerald-900/80 hover:text-emerald-900 dark:text-emerald-100/80">
+                  Copy link or password on its own
+                </summary>
+                <div className="mt-2 space-y-2">
+                  {accessResult.inviteUrl && (
+                    <div className="flex items-center gap-2 rounded-md bg-white px-3 py-1.5 ring-1 ring-emerald-200 dark:bg-slate-900">
+                      <code className="min-w-0 break-all font-mono text-[11px]">{accessResult.inviteUrl}</code>
+                      <button
+                        type="button"
+                        aria-label="Copy invite link"
+                        onClick={() => copyValue('link', accessResult.inviteUrl!)}
+                        className="shrink-0 text-emerald-700 hover:text-emerald-900 dark:text-emerald-300"
+                      >
+                        {copiedKey === 'link' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                  )}
+                  {accessResult.tempPassword && (
+                    <div className="inline-flex items-center gap-2 rounded-md bg-white px-3 py-1.5 ring-1 ring-emerald-200 dark:bg-slate-900">
+                      <code className="font-mono text-sm">{accessResult.tempPassword}</code>
+                      <button
+                        type="button"
+                        aria-label="Copy password"
+                        onClick={() => copyValue('password', accessResult.tempPassword!)}
+                        className="text-emerald-700 hover:text-emerald-900 dark:text-emerald-300"
+                      >
+                        {copiedKey === 'password' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
+              </details>
             </div>
           </div>
         </section>
@@ -379,6 +474,25 @@ export default function AdminMemberDetailPage() {
           </ul>
         )}
       </section>
+
+      <AlertDialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset access for {member.display_name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This sets a new temporary password and sends a fresh invite link.
+              Their current password stops working immediately, and any earlier
+              invite link is superseded. You&apos;ll get a message to send them.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={resetting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={doResetAccess} disabled={resetting}>
+              {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Reset access'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={grantPromptOpen} onOpenChange={setGrantPromptOpen}>
         <AlertDialogContent>

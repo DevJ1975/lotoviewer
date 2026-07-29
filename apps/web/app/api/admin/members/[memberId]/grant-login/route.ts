@@ -7,6 +7,7 @@ import {
   issueAndSendInvite,
   provisionFailureResponse,
 } from '@/lib/invites/provision'
+import { inviteLinkTtlDays } from '@/lib/invites/tokens'
 import { sanitizeError } from '@/lib/security/sanitizeError'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { normalizeEmail } from '@/lib/validation/tenants'
@@ -160,8 +161,11 @@ export async function POST(req: Request, ctx: RouteContext) {
   return NextResponse.json({
     memberId,
     profileId: userId,
+    email,
     tempPassword,
     inviteUrl,
     emailSent,
+    expiresInDays: inviteLinkTtlDays(),
+    tenantName: (tenantData as { name: string }).name,
   })
 }
