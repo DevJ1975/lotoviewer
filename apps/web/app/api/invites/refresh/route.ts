@@ -81,11 +81,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'internal' }, { status: 500 })
   }
 
-  // Burn the presented token so the same leaked link can't be replayed to
-  // re-send email or thrash the freshly-issued link. The next replay hits
-  // the row.used_at guard above.
-  await consumeInviteToken(admin, row.id)
-
   const { data: profile } = await admin
     .from('profiles')
     .select('full_name')
@@ -111,6 +106,19 @@ export async function POST(req: Request) {
     tenantName,
     expiresInDays: inviteLinkTtlDays(),
   })
+
+  // Burn the presented token only once its replacement has actually reached
+  // the invitee, so a leaked link can't be replayed to thrash the new one.
+  //
+  // Burning it first — as this did — turned any Resend failure into a dead
+  // end: the replacement's raw token is never returned to the client (by
+  // design; it belongs in the invitee's inbox, not in an HTTP response), so
+  // a failed send left NOBODY holding a usable link, and the spent token
+  // then reported 'used', which the UI renders as "your account is already
+  // set up". Leaving it unburned costs nothing — issueInviteToken above has
+  // already superseded it, so it can no longer be accepted; it can only be
+  // re-presented here to try the send again.
+  if (emailSent) await consumeInviteToken(admin, row.id)
 
   return NextResponse.json({ ok: true, emailSent })
 }

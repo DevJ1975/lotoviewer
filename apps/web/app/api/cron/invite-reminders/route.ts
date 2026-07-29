@@ -3,7 +3,7 @@ import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { withCronLogging } from '@/lib/cronInstrumentation'
 import { sendInviteReminder } from '@/lib/email/sendInviteReminder'
-import { buildInviteUrl, issueInviteToken } from '@/lib/invites/tokens'
+import { buildInviteUrl, issueInviteToken, supersedeInviteTokens } from '@/lib/invites/tokens'
 import {
   planInviteAction,
   INVITE_MAX_REMINDERS,
@@ -139,6 +139,16 @@ async function runCron(req: Request): Promise<NextResponse> {
         Sentry.captureException(error, { tags: { route: '/api/cron/invite-reminders', stage: 'cancel' } })
         continue
       }
+
+      // Retire any link still outstanding for this person. The 4th reminder
+      // mints a fresh 14-day token on day 28 but the cancel lands on day 35,
+      // so without this there is a week in which the invitee holds a link
+      // that looks live, that we emailed them, and that dies on arrival.
+      // Superseding makes the token agree with the membership: they land on
+      // the "expired or replaced" screen rather than a link that verifies as
+      // 'valid' and is then refused downstream.
+      await supersedeInviteTokens(admin, { userId: m.user_id })
+
       cancelled++
     }
 

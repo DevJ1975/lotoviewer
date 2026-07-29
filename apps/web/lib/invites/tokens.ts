@@ -138,3 +138,53 @@ export async function consumeInviteToken(
   if (error) return false
   return (data ?? []).length > 0
 }
+
+/**
+ * Give a claimed token back after the work it was claimed for failed.
+ *
+ * /api/invites/accept claims the token *before* writing the password, so two
+ * concurrent submits can't both set one. That ordering is right, but it means
+ * a failed password write leaves the token spent and the invitee holding a
+ * link that reports 'used' — which the UI renders as "your account is already
+ * set up", advice that is false for someone who never got a password. Undoing
+ * the claim on the failure path keeps the concurrency guarantee and lets them
+ * simply click the link again.
+ *
+ * Best-effort: the caller is already returning an error, and a failure here
+ * only restores the pre-existing (bad) behaviour rather than making it worse.
+ */
+export async function releaseInviteToken(
+  admin: SupabaseClient,
+  tokenId: string,
+): Promise<void> {
+  const { error } = await admin
+    .from('invite_tokens')
+    .update({ used_at: null })
+    .eq('id', tokenId)
+  if (error) {
+    Sentry.captureException(error, { tags: { module: 'releaseInviteToken', stage: 'release' } })
+  }
+}
+
+/**
+ * Retire every outstanding link for a user without minting a replacement.
+ *
+ * Used when an invite is cancelled: leaving a live, unexpired token pointing
+ * at a cancelled membership is an incoherent state. The invitee holds a link
+ * that looks fine and dies on arrival, and `verifyInviteToken` cheerfully
+ * reports 'valid' for something no route will honour.
+ */
+export async function supersedeInviteTokens(
+  admin: SupabaseClient,
+  args: { userId: string },
+): Promise<void> {
+  const { error } = await admin
+    .from('invite_tokens')
+    .update({ superseded_at: new Date().toISOString() })
+    .eq('user_id', args.userId)
+    .is('used_at', null)
+    .is('superseded_at', null)
+  if (error) {
+    Sentry.captureException(error, { tags: { module: 'supersedeInviteTokens', stage: 'supersede' } })
+  }
+}
