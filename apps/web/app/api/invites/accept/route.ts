@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { consumeInviteToken, verifyInviteToken } from '@/lib/invites/tokens'
+import { consumeInviteToken, releaseInviteToken, verifyInviteToken } from '@/lib/invites/tokens'
 import { checkMemoryRateLimit } from '@/lib/rateLimit/memory'
 import { clientIp } from '@/lib/rateLimit/clientIp'
 import { sanitizeError } from '@/lib/security/sanitizeError'
@@ -82,8 +82,15 @@ export async function POST(req: Request) {
   const claimed = await consumeInviteToken(admin, row.id)
   if (!claimed) return NextResponse.json({ status: 'used' }, { status: 400 })
 
+  // If the work the claim was for fails, hand the token back. Otherwise a
+  // transient auth outage spends the invitee's only link and the retry shows
+  // "your account is already set up" — advice that is false for someone who
+  // never got a password, and unrecoverable without an admin.
   const { error: pwErr } = await admin.auth.admin.updateUserById(row.user_id, { password })
-  if (pwErr) return sanitizeError(pwErr, 'invites/accept password update')
+  if (pwErr) {
+    await releaseInviteToken(admin, row.id)
+    return sanitizeError(pwErr, 'invites/accept password update')
+  }
 
   const { error: profileErr } = await admin
     .from('profiles')
@@ -93,6 +100,9 @@ export async function POST(req: Request) {
       updated_at:           new Date().toISOString(),
     })
     .eq('id', row.user_id)
+  // The password is already set here, so the token stays spent — releasing it
+  // would let a second submit rotate the password of an account that now has
+  // a working one. The profile write is retried by /welcome on next sign-in.
   if (profileErr) return sanitizeError(profileErr, 'invites/accept profile update')
 
   return NextResponse.json({ ok: true, email: row.email })
