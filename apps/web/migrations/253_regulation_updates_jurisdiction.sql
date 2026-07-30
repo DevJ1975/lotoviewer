@@ -1,4 +1,4 @@
--- Migration 252: give the regulatory-updates feed a jurisdiction dimension.
+-- Migration 253: give the regulatory-updates feed a jurisdiction dimension.
 --
 -- Migration 232 created osha_regulation_updates as a deliberately global
 -- table, and said why in its own comment: "federal OSHA regulations are

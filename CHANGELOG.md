@@ -29,7 +29,7 @@ _Nothing pending._
   soonest date that demands action and labelled *Comments close* vs *Effective*
   — an employer acts very differently on each — with the lead time alongside.
   **Cal/OSHA items reach only tenants with a facility or establishment in
-  California**; federal items reach everyone. Migration 252 adds the
+  California**; federal items reach everyone. Migration 253 adds the
   `jurisdiction` dimension; the feed stays global because the *content* is the
   same for everyone — what differs is whether it applies, which is a read-time
   filter, not a reason to duplicate rows per tenant.
@@ -48,7 +48,7 @@ _Nothing pending._
   countdown, status badge, and escalation were **16 hours too generous** on
   hospitalization, amputation, and loss of an eye. The window is now resolved
   from the incident's establishment and **frozen onto the row** (migration
-  251), so re-pointing a facility later never moves a deadline someone was
+  252), so re-pointing a facility later never moves a deadline someone was
   already held to; jurisdiction is a *required* argument, so a call site that
   forgets it fails to compile rather than silently reporting federal. Existing
   rows backfill to `federal` — they were tracked under that window, and

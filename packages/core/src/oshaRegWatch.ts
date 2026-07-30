@@ -12,7 +12,7 @@
 //
 // The table carries no tenant_id because the *content* of an update really is
 // the same for every tenant — what differs is whether it applies. That is a
-// read-time filter on jurisdiction (migration 252), not a reason to duplicate
+// read-time filter on jurisdiction (migration 253), not a reason to duplicate
 // rows per tenant: a tenant with no California site should never see Title 8
 // items, and a tenant with one should see them alongside the federal feed.
 

@@ -183,7 +183,7 @@ export default function RegulatoryReportingPanel({ incidentId, defaultBasisAt }:
   const tracked = new Set(rows.map(r => r.trigger_type))
   const available = SEVERE_INJURY_TRIGGERS.filter(t => !tracked.has(t))
 
-  // Rows written before migration 251 were backfilled to 'federal'; a null
+  // Rows written before migration 252 were backfilled to 'federal'; a null
   // here means the same thing, so don't substitute the tenant's current
   // jurisdiction — that would retroactively shorten an old deadline.
   const rowJurisdiction = (r: ReportRow): ReportingJurisdiction => r.reporting_jurisdiction ?? 'federal'

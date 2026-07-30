@@ -29,7 +29,7 @@
 // This module is pure: given a trigger, a jurisdiction, the basis moment,
 // and "now", it returns the deadline + a status the UI colours.
 // Persistence + the actual case number live in
-// incident_severe_injury_reports (migrations 197, 251).
+// incident_severe_injury_reports (migrations 197, 252).
 
 export const SEVERE_INJURY_TRIGGERS = [
   'fatality',

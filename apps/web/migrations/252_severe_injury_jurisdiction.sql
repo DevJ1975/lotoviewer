@@ -1,4 +1,4 @@
--- Migration 251: record which jurisdiction's reporting window a severe-injury
+-- Migration 252: record which jurisdiction's reporting window a severe-injury
 -- report was tracked under.
 --
 -- Migration 197 created incident_severe_injury_reports assuming federal

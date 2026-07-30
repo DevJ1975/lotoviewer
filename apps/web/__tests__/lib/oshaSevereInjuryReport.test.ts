@@ -114,7 +114,7 @@ describe('evaluateSevereInjuryReport', () => {
 
   // The defect this jurisdiction split exists to fix: at 9 hours after an
   // amputation, a California employer is already late while a federal one
-  // still has 15 hours. Before migration 251 both read "pending".
+  // still has 15 hours. Before migration 252 both read "pending".
   it('is overdue in California but pending federally, 9h after an amputation', () => {
     const args = { trigger: 'amputation', basisMs: basis, reportedAtMs: null, nowMs: basis + 9 * HOUR } as const
 

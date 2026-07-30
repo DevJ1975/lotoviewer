@@ -311,7 +311,7 @@ an eye.
   site that forgets it fails to compile rather than silently reporting federal
 - Jurisdiction is resolved **server-side** from the incident's facility (then
   the tenant's primary facility, then any registered establishment) and
-  **frozen onto the row** (migration 251), so re-pointing a facility later
+  **frozen onto the row** (migration 252), so re-pointing a facility later
   never moves a deadline someone was already held to
 - Unresolvable states fall back to federal — never the shorter window, so a
   miss can't invent time a site lacks
@@ -334,7 +334,7 @@ Register filtered to the OSHA agency, and Cal/OSHA rulemaking is not published
 there. Migration 232's own comment named the assumption: *"federal OSHA
 regulations are identical for every tenant."*
 
-- **Migration 252** adds `jurisdiction` (`federal` | `CA`) to
+- **Migration 253** adds `jurisdiction` (`federal` | `CA`) to
   `osha_regulation_updates`. The table stays global — the *content* really is
   the same for everyone; what differs is whether it applies — so filtering is a
   read-time concern, not a reason to duplicate rows per tenant.
