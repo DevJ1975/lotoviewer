@@ -10,6 +10,69 @@ app at `/superadmin/release-notes`.
 
 ## [Unreleased]
 
+_Nothing pending._
+
+## [1.17.0] — 2026-07-30
+
+### Added
+- **Regulatory Watch now covers Cal/OSHA, and a "Coming Up" box says what's
+  next.** The monthly regulation cron previously read only the Federal
+  Register — where California rulemaking never appears — so a Cal/OSHA tenant
+  saw nothing about the Title 8 changes that actually bind them. It now runs
+  **two independent passes**: federal keeps the Federal Register API, and a new
+  Cal/OSHA pass reads Standards Board rulemaking pages from `dir.ca.gov`,
+  strips them to text, and extracts them under a **stricter prompt** (the
+  source is scraped prose with no schema, so the model is forbidden from
+  inferring any date the page does not state). Either source can be down
+  without taking the other with it. A new **Coming Up** panel on the Control
+  Center dashboard lists changes that are not yet in force, ordered by the
+  soonest date that demands action and labelled *Comments close* vs *Effective*
+  — an employer acts very differently on each — with the lead time alongside.
+  **Cal/OSHA items reach only tenants with a facility or establishment in
+  California**; federal items reach everyone. Migration 253 adds the
+  `jurisdiction` dimension; the feed stays global because the *content* is the
+  same for everyone — what differs is whether it applies, which is a read-time
+  filter, not a reason to duplicate rows per tenant.
+- **Regulatory review, July 2026** — a CSP-lens sweep of federal OSHA and
+  Cal/OSHA at `docs/regulatory-review-2026-07.md`, mapping what changed and
+  what is coming to the feature backlog, with per-item confidence marks and an
+  explicit note that the primary sources could not be fetched from the review
+  environment. Nearest hard deadline: **HazCom employee retraining, 20 Nov
+  2026**.
+
+### Fixed
+- **California severe-injury reporting gave a 24-hour countdown where the law
+  gives 8.** `reportingWindowHours()` encoded federal 29 CFR 1904.39 only — 8
+  hours for a fatality, 24 for the rest — but Cal/OSHA (Lab. Code §6409.1(b),
+  8 CCR §342) requires **8 hours for all four triggers**. A California tenant's
+  countdown, status badge, and escalation were **16 hours too generous** on
+  hospitalization, amputation, and loss of an eye. The window is now resolved
+  from the incident's establishment and **frozen onto the row** (migration
+  252), so re-pointing a facility later never moves a deadline someone was
+  already held to; jurisdiction is a *required* argument, so a call site that
+  forgets it fails to compile rather than silently reporting federal. Existing
+  rows backfill to `federal` — they were tracked under that window, and
+  recomputing history would retroactively mark past filings late. The form now
+  also reflects California's constructive-knowledge basis ("knew, or with
+  diligent inquiry would have known").
+- **The LOTO audit agents cited a superseded consensus standard.**
+  **ANSI/ASSP Z244.1-2024** supersedes Z244.1-2016 (R2020) and is a substantive
+  revision: alternative methods are now a *co-equal* choice with
+  lockout/tagout. The prompts now name the edition from one shared constant,
+  and the EHS gate and Regulator carry an explicit rule that **conformance is
+  not compliance** — OSHA does not accept Z244.1 alternative methods as a
+  1910.147 path and §3314 rejects interlocks and PLC "softlock" as lockout, so
+  when the standard and the regulation disagree, the regulation decides
+  pass/fail.
+
+## [1.10.0 – 1.16.0]
+
+> These six releases shipped without being cut into versioned sections, so
+> their entries accumulated under `[Unreleased]`. They are preserved verbatim
+> here rather than split across versions after the fact: git history can settle
+> which release each belongs to, but not cheaply, and guessing would be worse
+> than grouping them honestly.
+
 ### Added
 - **Drag-and-drop Events & Causal Factors, folded into Investigate & RCA.** The
   ECFA editor is now directly manipulable: drag to reorder events, and drag
@@ -109,5 +172,7 @@ Baseline release. Earlier history is tracked in git and in the in-app release
 notes (`/superadmin/release-notes`); this changelog starts the forward record
 from 1.9.0.
 
-[Unreleased]: https://github.com/devj1975/lotoviewer/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/devj1975/lotoviewer/compare/v1.17.0...HEAD
+[1.17.0]: https://github.com/devj1975/lotoviewer/compare/v1.16.0...v1.17.0
+[1.10.0 – 1.16.0]: https://github.com/devj1975/lotoviewer/compare/v1.9.0...v1.16.0
 [1.9.0]: https://github.com/devj1975/lotoviewer/releases/tag/v1.9.0

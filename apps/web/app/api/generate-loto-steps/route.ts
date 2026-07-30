@@ -5,6 +5,7 @@ import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { checkAiRateLimit, checkTenantBudget, logAiInvocation } from '@/lib/ai/rateLimit'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 import { getAnthropic, aiErrorToResponse } from '@/lib/ai/client'
+import { Z244_1_EDITION } from '@/lib/loto/consensusStandards'
 
 // Anthropic client comes from the shared lib/ai/client wrapper so
 // every AI route inherits the same timeout, retry, and key-handling
@@ -19,7 +20,7 @@ const MODEL = MODEL_BY_SURFACE['generate-loto-steps']
 // energy sources technicians most often miss (capacitors, trapped pneumatic
 // volume, CIP chemical/thermal energy). "Qualified personnel must review"
 // is surfaced in the UI — the model is not allowed to act as the authority.
-const SYSTEM_PROMPT = `You are a LOTO (Lockout/Tagout) procedure author for food production equipment, trained on OSHA 29 CFR 1910.147 and ANSI/ASSP Z244.1. You draft procedures that a qualified safety professional will review and sign off on — never the authoritative final version.
+const SYSTEM_PROMPT = `You are a LOTO (Lockout/Tagout) procedure author for food production equipment, trained on OSHA 29 CFR 1910.147 and ${Z244_1_EDITION}. You draft procedures that a qualified safety professional will review and sign off on — never the authoritative final version.
 
 FOOD-PRODUCTION CONTEXT
 Common equipment: mixers, kneaders, conveyors, fillers, cappers, seal checkers, sealers, depalletizers, palletizers, bottle washers, tunnel pasteurizers, ovens, fryers, extruders, formers, slicers, grinders, CIP (clean-in-place) stations.
