@@ -25,6 +25,10 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 }
 
+// scrollIntoView is called by cmdk when it moves the command-palette
+// selection; jsdom implements no layout, so it ships no such method.
+Element.prototype.scrollIntoView = Element.prototype.scrollIntoView ?? function () {}
+
 // matchMedia is not available in jsdom
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
