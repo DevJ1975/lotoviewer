@@ -29,11 +29,13 @@ interface VersionRow {
   passing_score: number
 }
 
+// `explanation` is deliberately absent: it is a soft copy of the answer key
+// ("Correct, because ...") and migration 256 revoked it from `authenticated`.
+// It comes back in the submit response, per missed question, after grading.
 interface QuestionRow {
   id: string
   question_type: StrikeQuestionType
   prompt: string
-  explanation: string | null
   sort_order: number
   required: boolean
   points: number
@@ -164,7 +166,7 @@ export default function StrikeModulePage() {
 
       const { data: questionRows, error: questionErr } = await supabase
         .from('strike_quiz_questions')
-        .select('id,question_type,prompt,explanation,sort_order,required,points')
+        .select('id,question_type,prompt,sort_order,required,points')
         .eq('module_version_id', nextVersion.id)
         .order('sort_order', { ascending: true })
       if (questionErr) throw questionErr
@@ -421,7 +423,6 @@ function Question({
           ))}
         </div>
       )}
-      {question.explanation && <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{question.explanation}</p>}
     </fieldset>
   )
 }

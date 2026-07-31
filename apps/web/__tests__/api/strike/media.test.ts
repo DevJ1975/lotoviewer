@@ -86,6 +86,10 @@ function ctx() { return { params: Promise.resolve({ moduleId: MODULE_ID }) } }
 function queueGate() {
   queue('profiles', { data: { is_superadmin: false } })
   queue('tenant_memberships', { data: { role: 'member' } })
+  // requireStrikeMember wraps requireTenantModuleMember, which resolves the
+  // tenant's module map before the route runs. Without STRIKE enabled here
+  // every request 403s well before the behaviour under test.
+  queue('tenants', { data: { name: 'Test Tenant', modules: { strike: true }, settings: {}, disabled_at: null } })
 }
 
 function queueModuleAndVersion(versionOverrides: Record<string, unknown> = {}, moduleOverrides: Record<string, unknown> = {}) {
