@@ -49,10 +49,17 @@ export const ENTITY_LINK_LABEL: Record<EntityLinkType, string> = {
 // Hrefs from a (type, id) pair. Returns null when the type doesn't
 // have a known route (template gracefully degrades to no link).
 //
-// The id is encoded because it is not always a UUID: equipment_id is
-// unconstrained `text`, so a real one can carry a space, a slash or a percent
-// ("MIX-100%"). An unencoded percent produces a path that decodeURIComponent
-// rejects, and the drawer's Recents decodes every path it renders.
+// The id is encoded defensively. Today it is always a UUID —
+// safety_board_threads.linked_entity_id is declared `uuid` (migration 077), and
+// EntityLinkPicker only ever supplies a primary key — so no current caller can
+// produce a path segment needing escapes. It is encoded anyway because the
+// signature takes a bare `string`, nothing at this boundary enforces the uuid
+// shape, and an unencoded percent yields a path that decodeURIComponent
+// rejects downstream.
+//
+// (An earlier version of this comment claimed the id was `equipment_id`, which
+// is unconstrained `text`. That is a different value and reached this function
+// via no path; the encoding is still correct, the stated reason was not.)
 export function entityHref(type: EntityLinkType, id: string): string | null {
   const safeId = encodeURIComponent(id)
   switch (type) {

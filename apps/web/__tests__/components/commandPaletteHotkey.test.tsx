@@ -66,6 +66,28 @@ describe('⌘K ownership', () => {
       .toBeInTheDocument()
   })
 
+  // Caps Lock or a habitual shift reports 'K', and the comparison was
+  // case-sensitive, so the chord silently did nothing.
+  it('opens on \u21e7\u2318K too, not just lowercase k', async () => {
+    render(<CommandPalette />)
+    await userEvent.keyboard('{Meta>}{Shift>}K{/Shift}{/Meta}')
+    expect(await screen.findByPlaceholderText(/Search pages, modules, and equipment/i))
+      .toBeInTheDocument()
+  })
+
+  // It toggles, but the "don't hijack a field the user is typing in" guard
+  // fired on the palette's own input — which always has focus while the
+  // palette is open — so the chord could open it and never close it.
+  it('closes on a second \u2318K while focus is in its own input', async () => {
+    render(<CommandPalette />)
+    await userEvent.keyboard('{Meta>}k{/Meta}')
+    const input = await screen.findByPlaceholderText(/Search pages, modules, and equipment/i)
+    input.focus()
+    await userEvent.keyboard('{Meta>}k{/Meta}')
+    await waitFor(() =>
+      expect(screen.queryByPlaceholderText(/Search pages, modules, and equipment/i)).toBeNull())
+  })
+
   // The old GlobalSearch stole bare "/" too, which meant a user could not type
   // a slash into any non-input surface without the header hijacking focus.
   it('ignores a bare "/" keypress', async () => {

@@ -62,12 +62,22 @@ export default function CommandPalette() {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key !== 'k') return
+      // Case-insensitive: Caps Lock or ⇧⌘K reports 'K', and a user who holds
+      // shift out of habit should still get the palette rather than nothing.
+      if (e.key.toLowerCase() !== 'k') return
       if (!(e.metaKey || e.ctrlKey)) return
+
       const target = e.target as HTMLElement | null
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+      // The guard below stops ⌘K hijacking a field the user is typing in. The
+      // palette's own input is not that case — it is the thing the chord just
+      // opened, and closing with the same chord is what makes it a toggle.
+      // Without this exemption the guard fires on every close attempt, because
+      // focus is always in that input while the palette is open.
+      const inPalette = target?.closest('[data-slot="command-input"]') != null
+      if (!inPalette && target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
         return
       }
+
       e.preventDefault()
       setOpen(prev => !prev)
     }
