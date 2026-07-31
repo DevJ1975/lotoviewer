@@ -10,12 +10,42 @@ app at `/superadmin/release-notes`.
 
 ## [Unreleased]
 
+_Nothing pending._
+
+## [1.17.1] — 2026-07-31
+
+A navigation and search release. The version is a patch, but the most visible
+changes are in how you find things: search now covers equipment as well as
+pages, module sub-pages are reachable without first opening the module, and
+deep pages carry a breadcrumb trail.
+
+### Added
+- **Search finds equipment, not just pages.** ⌘K now searches pages, modules
+  and equipment in one list. Before this, the only search box you could
+  actually see queried equipment alone, while the thing that searched the other
+  288 pages was invisible behind a keyboard chord — so typing "confined space
+  permit" into the visible box returned nothing while the page sat one
+  keystroke away. The header control now opens the same palette everything else
+  uses.
+- **Module sub-pages are reachable from the drawer.** Child pages — SDS
+  Library, Tier II Report, MAQ Caps, Approval Queue and the rest — only
+  appeared once you had already navigated into their module by some other
+  route. The chevron beside a module is now a real disclosure control, and the
+  open/closed choice is remembered per tenant.
+- **Recents remembers the pages worth returning to.** An incident, a chemical
+  or a piece of equipment used to vanish from Recents entirely, because the
+  drawer could only name pages listed in its catalog and no catalog lists an
+  id. Detail pages now resolve against the module that owns them.
 ### Added
 - **Breadcrumbs on deep pages.** A page five levels down — say
   `/admin/people/contractors/<id>/prequalification` — rendered a title and
   nothing else, with a back arrow only when the page bothered to pass one.
   Every page using the shared `PageHeader` now derives its own trail from the
-  feature and admin catalogs. Id segments are skipped rather than shown as raw
+  feature and admin catalogs. That is **11 pages today** — nine under Fleet
+  plus Incidents and Risk — and a module home renders no trail by design, so
+  in practice the trail is visible on the deeper Fleet pages. It reaches the
+  rest of the app as those pages adopt `PageHeader`; the derivation already
+  handles routes far deeper than anything wired to it yet. Id segments are skipped rather than shown as raw
   UUIDs, the current page is not repeated (the heading already names it), and
   an admin *section* renders as text rather than a link, because
   `/admin/<section>` 301-redirects to `/admin` and a link there would send you
@@ -31,14 +61,50 @@ app at `/superadmin/release-notes`.
   split is kept: the eyebrow names the standard a panel answers to
   ("Risk Assessment · ISO 45001 6.1"), the title names the thing.
 - **Incidents, Risk and LOTO adopt the shared primitives** — `PageHeader` for
-  page titles, `EmptyState` for zero-row and load-failure states, and the
-  branded `OpsSpinner` in place of the generic spinner. LOTO's failure state
+  page titles on Incidents and Risk, `EmptyState` for zero-row and load-failure
+  states, and the branded `OpsSpinner` in place of the generic spinner. LOTO
+  takes `EmptyState` and `OpsSpinner` only: it is a three-panel workspace with
+  no page title to head, so it has no `PageHeader` and therefore no breadcrumb
+  trail. LOTO's failure state
   now reads "Offline" rather than the default "All Clear": an empty LOTO screen
   because the fetch failed is not the same as a tenant with no equipment, and
   in a safety product that distinction matters.
 - Panel "view all" links gain a dark-mode colour. Brand navy on a dark slate
   surface was close to invisible; the navy/yellow pairing matches what the
   Active Permits panel already did one panel over.
+
+### Changed
+- **Administration is navigable again.** One oversized drawer group — larger
+  than Pinned, Hazards and Permits combined — is now three: **People &
+  Training**, **Platform & Integrations**, and **Records & Support**. Ten
+  modules that had silently drifted into it are mapped explicitly, and a new
+  build check fails if any module ever lands there by accident again.
+- **⌘K has one owner.** Three global keyboard listeners were live at once, all
+  intercepting the same chord and none aware of the others. It also now
+  responds to Caps Lock and ⇧⌘K, and closes the palette when pressed a second
+  time.
+
+### Fixed
+- **A malformed address in Recents could take the whole app down.** A path
+  containing an incomplete percent-escape — `MIX-100%` is enough — threw while
+  the drawer was rendering, replacing the entire application with an error
+  screen. Because the address was already saved in Recents, it recurred on
+  every reload until browser storage was cleared. The label now degrades to
+  showing the raw text.
+- **The command palette said "No matches." above real results.** Equipment rows
+  were rendered outside the palette's own result set, so an exact equipment ID
+  showed the empty-state message directly above the matching row — and pressing
+  Enter activated an unrelated page rather than the equipment.
+- **The command palette dialog is now named and described for screen readers.**
+  It previously announced as an unnamed dialog. A first attempt at this fix was
+  silently inert — the attribute used is not part of the accessibility
+  standard, so it never reached the page — and it is now wired the supported
+  way.
+- Documentation and release tooling: the wiki-sync build check no longer lets
+  one commit's exemption suppress the check for every later change, releases
+  now include a tagging step (previously absent, which is why v1.9.0 through
+  v1.17.0 shipped untagged), and a stale link in the multi-tenancy plan that
+  pointed at a deleted file is corrected.
 
 ## [1.17.0] — 2026-07-30
 
@@ -200,7 +266,8 @@ Baseline release. Earlier history is tracked in git and in the in-app release
 notes (`/superadmin/release-notes`); this changelog starts the forward record
 from 1.9.0.
 
-[Unreleased]: https://github.com/devj1975/lotoviewer/compare/v1.17.0...HEAD
+[Unreleased]: https://github.com/devj1975/lotoviewer/compare/v1.17.1...HEAD
+[1.17.1]: https://github.com/devj1975/lotoviewer/compare/v1.17.0...v1.17.1
 [1.17.0]: https://github.com/devj1975/lotoviewer/compare/v1.16.0...v1.17.0
 [1.10.0 – 1.16.0]: https://github.com/devj1975/lotoviewer/compare/v1.9.0...v1.16.0
 [1.9.0]: https://github.com/devj1975/lotoviewer/releases/tag/v1.9.0
