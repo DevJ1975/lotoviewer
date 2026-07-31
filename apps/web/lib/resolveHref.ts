@@ -129,7 +129,26 @@ function adoptDetailRoot(segments: string[]): ResolvedHref | null {
 
 // Long ids (UUIDs especially) would push the module name out of a 22rem
 // drawer, so show enough to tell two rows apart and no more.
+//
+// The decode is guarded because it is reachable with attacker-free but
+// malformed input and used to take the whole app down. decodeURIComponent
+// throws URIError on any incomplete escape — '/equipment/MIX-100%' is enough —
+// and this runs inside AppDrawer's render, which AppChrome mounts from the
+// ROOT layout. A throw there escapes the route-level error boundary and hits
+// global-error, replacing the entire application; because the offending path
+// is persisted in localStorage by pushRecent, it kept doing so on every
+// authenticated route until the user cleared storage.
+//
+// A display-only helper must never be able to throw. An id we cannot decode is
+// still worth showing raw, which is the same call the surrounding fallback
+// already makes for ids it cannot name.
 function leafLabel(segments: string[]): string {
-  const leaf = decodeURIComponent(segments[segments.length - 1] ?? '')
+  const raw = segments[segments.length - 1] ?? ''
+  let leaf: string
+  try {
+    leaf = decodeURIComponent(raw)
+  } catch {
+    leaf = raw
+  }
   return leaf.length > 12 ? `${leaf.slice(0, 12)}…` : leaf
 }
