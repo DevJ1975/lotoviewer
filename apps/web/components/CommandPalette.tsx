@@ -38,6 +38,18 @@ type EquipmentHit = Pick<Equipment, 'equipment_id' | 'description' | 'department
 const EQUIPMENT_LIMIT = 6
 const MIN_QUERY_CHARS = 2
 
+/**
+ * The text cmdk filters an equipment row against.
+ *
+ * Must stay in step with the `.or()` in the lookup below: it lists the same
+ * three columns the server searched, so any row the server returned is one
+ * cmdk will also keep. Drop a column here and rows matched on it vanish the
+ * moment they arrive.
+ */
+function equipmentValue(item: EquipmentHit): string {
+  return [item.equipment_id, item.description, item.department].filter(Boolean).join(' ')
+}
+
 export default function CommandPalette() {
   const router = useRouter()
   const { tenant, tenantId } = useTenant()
@@ -184,17 +196,27 @@ export default function CommandPalette() {
       <CommandList className="max-h-[min(480px,70vh)]">
         <CommandEmpty>No matches.</CommandEmpty>
 
-        {/* Equipment is filtered server-side, so forceMount keeps cmdk's
-            client-side filter from second-guessing the query and hiding rows
-            whose text doesn't literally contain what was typed (a department
-            match, for instance). */}
+        {/* Equipment is filtered server-side, and the row's `value` carries
+            every field the server searched — equipment_id, description and
+            department, the three columns in the `.or()` above. That is what
+            keeps cmdk's client-side filter from second-guessing the query and
+            hiding a row matched on a field the user can't see, e.g. a
+            department match.
+
+            NOT forceMount. forceMount renders a row while leaving it out of
+            cmdk's filtered set, which breaks two things at once: <CommandEmpty>
+            counts the filtered set, so it printed "No matches." directly above
+            visible results; and cmdk only ever selects from that set, so Enter
+            on a highlighted equipment row activated an unrelated nav item
+            instead. Because a server match means the query is a substring of
+            one of those three fields, it is also a substring of `value`, so
+            ordinary filtering keeps the row — in the set, counted, selectable. */}
         {equipment.length > 0 && (
-          <CommandGroup heading="Equipment" forceMount>
+          <CommandGroup heading="Equipment">
             {equipment.map(item => (
               <CommandItem
                 key={item.equipment_id}
-                value={`equipment-${item.equipment_id}`}
-                forceMount
+                value={equipmentValue(item)}
                 onSelect={() => go(`/equipment/${encodeURIComponent(item.equipment_id)}`)}
               >
                 <Wrench className="size-4" />
