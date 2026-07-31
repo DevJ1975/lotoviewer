@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Loader2, ShieldAlert } from 'lucide-react'
+import { ShieldAlert } from 'lucide-react'
 import {
   fetchOshaRegulationUpdates,
   fetchTenantJurisdictions,
@@ -10,6 +10,8 @@ import {
   type OshaUpdateCategory,
   type RegulationJurisdiction,
 } from '@soteria/core/oshaRegWatch'
+import { DashboardPanel } from '@/components/DashboardPanel'
+import OpsSpinner from '@/components/OpsSpinner'
 import { useTenant } from '@/components/TenantProvider'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { JurisdictionBadge, SeverityPill, TitleLink } from './RegulationUpdateParts'
@@ -82,24 +84,18 @@ export default function OshaRegWatchPanel() {
   const showJurisdiction = jurisdictions.length > 1
 
   return (
-    <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5 space-y-4">
-      <header className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-            Regulatory Watch
-          </div>
-          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
-            Regulatory updates
-          </h2>
-        </div>
+    <DashboardPanel
+      eyebrow="Regulatory Watch"
+      title="Regulatory updates"
+      action={
         <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
           <ShieldAlert className="h-3.5 w-3.5" /> AI summary
         </span>
-      </header>
-
+      }
+    >
       {loading && ordered === null ? (
         <div className="flex items-center justify-center py-6">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+          <OpsSpinner size="sm" label={null} />
         </div>
       ) : ordered === null || ordered.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-4 text-center">
@@ -112,7 +108,7 @@ export default function OshaRegWatchPanel() {
           ))}
         </ul>
       )}
-    </section>
+    </DashboardPanel>
   )
 }
 
