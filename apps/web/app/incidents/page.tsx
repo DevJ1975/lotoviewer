@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, AlertTriangle, Plus } from 'lucide-react'
+import { AlertTriangle, Plus, Siren } from 'lucide-react'
+import { EmptyState } from '@/components/EmptyState'
+import OpsSpinner from '@/components/OpsSpinner'
+import { PageHeader } from '@/components/PageHeader'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import {
@@ -68,21 +71,20 @@ export default function IncidentListPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Incidents</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Injuries, near-misses, property damage, and environmental events.
-          </p>
-        </div>
-        <Link
-          href="/incidents/new"
-          className="inline-flex items-center gap-2 rounded-lg bg-brand-navy text-white px-4 py-2 text-sm font-semibold hover:bg-brand-navy/90"
-        >
-          <Plus className="h-4 w-4" />
-          Report incident
-        </Link>
-      </header>
+      <PageHeader
+        eyebrow="Incident program · OSHA 1904 / ISO 45001"
+        title="Incidents"
+        description="Injuries, near-misses, property damage, and environmental events."
+        actions={
+          <Link
+            href="/incidents/new"
+            className="inline-flex items-center gap-2 rounded-lg bg-brand-navy text-white px-4 py-2 text-sm font-semibold hover:bg-brand-navy/90"
+          >
+            <Plus className="h-4 w-4" />
+            Report incident
+          </Link>
+        }
+      />
 
       <section className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
         <CountTile label="Catastrophic" count={counts.catastrophic} pill={SEVERITY_PILL.catastrophic} />
@@ -114,19 +116,25 @@ export default function IncidentListPage() {
 
       {rows === null && !error && (
         <div className="flex items-center justify-center py-10">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+          <OpsSpinner />
         </div>
       )}
 
       {rows && rows.length === 0 && (
-        <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-8 text-center">
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            No {showAll ? '' : 'open '}incidents.
-          </p>
-          <Link href="/incidents/new" className="mt-3 inline-block text-sm font-medium text-brand-navy hover:underline">
-            File the first one →
-          </Link>
-        </div>
+        <EmptyState
+          icon={Siren}
+          title={showAll ? 'No incidents on record' : 'No open incidents'}
+          description={
+            showAll
+              ? 'Nothing has been reported for this tenant yet.'
+              : 'Nothing is currently under investigation. Tick "Show closed" to see the full history.'
+          }
+          action={
+            <Link href="/incidents/new" className="text-sm font-medium text-brand-navy hover:underline dark:text-brand-yellow">
+              File the first one →
+            </Link>
+          }
+        />
       )}
 
       {rows && rows.length > 0 && (

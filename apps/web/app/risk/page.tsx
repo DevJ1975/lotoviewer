@@ -3,7 +3,10 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ChevronDown, Download, Loader2, Printer } from 'lucide-react'
+import { ChevronDown, Download, Printer, ShieldAlert } from 'lucide-react'
+import { EmptyState } from '@/components/EmptyState'
+import OpsSpinner from '@/components/OpsSpinner'
+import { PageHeader } from '@/components/PageHeader'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { parseRiskFilters, toApiParams, toUrlSearch, toQueryFilters, type RiskFilterState } from '@/lib/risk-filters'
@@ -117,44 +120,37 @@ function RiskHeatmapPageInner() {
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-6 space-y-5">
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <div>
-          <div className="text-[11px] font-bold tracking-widest uppercase text-slate-500 dark:text-slate-400">
-            Risk Assessment · ISO 45001 6.1
+      <PageHeader
+        eyebrow="Risk Assessment · ISO 45001 6.1"
+        title="Heat map"
+        description={`Click any cell to drill into the risks at that score. ${filters.view === 'inherent' ? 'Inherent' : 'Residual'} view.`}
+        actions={
+          <div className="flex items-center gap-3 flex-wrap">
+            <Link
+              href={`/risk/list?${toUrlSearch(filters)}`}
+              className="text-xs font-semibold text-brand-navy hover:underline dark:text-brand-yellow"
+            >
+              View as list →
+            </Link>
+            <ExportMenu />
+            <Link
+              href="/risk/new"
+              className="text-sm font-bold inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-brand-navy text-white hover:bg-brand-navy/90 transition-colors"
+            >
+              + New risk
+            </Link>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-0.5">
-            Heat map
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Click any cell to drill into the risks at that score. {' '}
-            {filters.view === 'inherent' ? 'Inherent' : 'Residual'} view.
-          </p>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <Link
-            href={`/risk/list?${toUrlSearch(filters)}`}
-            className="text-xs font-semibold text-brand-navy hover:underline"
-          >
-            View as list →
-          </Link>
-          <ExportMenu />
-          <Link
-            href="/risk/new"
-            className="text-sm font-bold inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-brand-navy text-white hover:bg-brand-navy/90 transition-colors"
-          >
-            + New risk
-          </Link>
-        </div>
-      </header>
+        }
+      />
 
-      <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5">
+      <section className="placard-surface p-5">
         <RiskFilters filters={filters} />
       </section>
 
-      <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5">
+      <section className="placard-surface p-5">
         {loading && cells === null ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+            <OpsSpinner />
           </div>
         ) : error ? (
           <div className="py-8 text-center text-sm text-rose-700 bg-rose-50 rounded-lg">{error}</div>
@@ -173,12 +169,23 @@ function RiskHeatmapPageInner() {
         )}
       </section>
 
-      <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5">
-        <h2 className="text-[11px] font-bold tracking-widest uppercase text-slate-500 dark:text-slate-400 mb-3">
-          Top risks by residual score
-        </h2>
+      <section className="placard-surface p-5">
+        <h2 className="placard-section-title mb-3">Top risks by residual score</h2>
         {topRisks.length === 0 ? (
-          <p className="text-xs text-slate-400 italic">No risks yet for this tenant.</p>
+          <EmptyState
+            eyebrow="All Clear"
+            icon={ShieldAlert}
+            title="No risks assessed yet"
+            description="Assessed risks appear here ranked by residual score, highest first."
+            action={
+              <Link
+                href="/risk/new"
+                className="text-sm font-bold inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-brand-navy text-white hover:bg-brand-navy/90 transition-colors"
+              >
+                + New risk
+              </Link>
+            }
+          />
         ) : (
           <RiskTable risks={topRisks} compact bandScheme={config.bandScheme} />
         )}
@@ -188,11 +195,7 @@ function RiskHeatmapPageInner() {
 }
 
 function FullPageSpinner() {
-  return (
-    <div className="min-h-[60vh] flex items-center justify-center">
-      <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-    </div>
-  )
+  return <OpsSpinner size="lg" fullPage />
 }
 
 // Export menu — JSON download (ISO 45001 audit format) + Cal/OSHA

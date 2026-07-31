@@ -1,11 +1,19 @@
 import Link from 'next/link'
 import { ArrowLeft, type LucideIcon } from 'lucide-react'
 
+import { Breadcrumbs } from '@/components/Breadcrumbs'
+import { PanelEyebrow } from '@/components/DashboardPanel'
 import { cn } from '@/lib/utils'
 
 interface Props {
   /** Optional Lucide icon rendered next to the title at h1-size. */
   icon?:        LucideIcon
+  /**
+   * Standard or programme this page answers to — "Risk Assessment ·
+   * ISO 45001 6.1". Same slot DashboardPanel gives its panels, so a
+   * module home and its dashboard panel read as one thing.
+   */
+  eyebrow?:     React.ReactNode
   /** Page title. h1, font-bold, tight tracking. Required. */
   title:        string
   /** One-line description shown below the title. Optional. */
@@ -22,7 +30,7 @@ interface Props {
 // description, optional right-aligned actions. Replaces the
 // `<header><Link><div><h1>...` boilerplate that was repeating across
 // 50+ pages.
-export function PageHeader({ icon: Icon, title, description, back, actions, className }: Props) {
+export function PageHeader({ icon: Icon, eyebrow, title, description, back, actions, className }: Props) {
   return (
     <header
       data-slot="page-header"
@@ -47,6 +55,11 @@ export function PageHeader({ icon: Icon, title, description, back, actions, clas
         </Link>
       )}
       <div className="flex-1 min-w-0">
+        {/* Self-deriving from the route, so every page that adopts
+            PageHeader gets its trail without passing anything. Renders
+            nothing above a module home. */}
+        <Breadcrumbs />
+        {eyebrow && <PanelEyebrow className="mb-1">{eyebrow}</PanelEyebrow>}
         <h1 className="stencil-title flex items-center gap-2 text-lg leading-tight text-slate-950 sm:text-xl dark:text-slate-50">
           {Icon && (
             <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-brand-navy dark:border-slate-800 dark:bg-slate-900 dark:text-brand-yellow">

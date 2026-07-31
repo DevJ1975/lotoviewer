@@ -10,7 +10,35 @@ app at `/superadmin/release-notes`.
 
 ## [Unreleased]
 
-_Nothing pending._
+### Added
+- **Breadcrumbs on deep pages.** A page five levels down — say
+  `/admin/people/contractors/<id>/prequalification` — rendered a title and
+  nothing else, with a back arrow only when the page bothered to pass one.
+  Every page using the shared `PageHeader` now derives its own trail from the
+  feature and admin catalogs. Id segments are skipped rather than shown as raw
+  UUIDs, the current page is not repeated (the heading already names it), and
+  an admin *section* renders as text rather than a link, because
+  `/admin/<section>` 301-redirects to `/admin` and a link there would send you
+  further up than the crumb you clicked.
+
+### Changed
+- **One panel anatomy on the Control Center dashboard.** Eight panels
+  hand-rolled the same six-line header, and the eyebrow's ad-hoc
+  `text-[10px] font-bold uppercase tracking-widest` sat inches from siblings
+  already speaking the placard vocabulary — two card geometries and two type
+  scales on one screen. They now share a `DashboardPanel` built on
+  `.placard-surface` / `.placard-label` / `.stencil-title`. The eyebrow/title
+  split is kept: the eyebrow names the standard a panel answers to
+  ("Risk Assessment · ISO 45001 6.1"), the title names the thing.
+- **Incidents, Risk and LOTO adopt the shared primitives** — `PageHeader` for
+  page titles, `EmptyState` for zero-row and load-failure states, and the
+  branded `OpsSpinner` in place of the generic spinner. LOTO's failure state
+  now reads "Offline" rather than the default "All Clear": an empty LOTO screen
+  because the fetch failed is not the same as a tenant with no equipment, and
+  in a safety product that distinction matters.
+- Panel "view all" links gain a dark-mode colour. Brand navy on a dark slate
+  surface was close to invisible; the navy/yellow pairing matches what the
+  Active Permits panel already did one panel over.
 
 ## [1.17.0] — 2026-07-30
 

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { ArrowRight, LayoutGrid } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
+import { PanelEyebrow } from '@/components/DashboardPanel'
 import { useTenant } from '@/components/TenantProvider'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 
@@ -26,17 +27,17 @@ export default function TrainingMatrixNavCard() {
   const visible = isModuleVisible('admin-training-competency-matrix', tenant?.modules)
   if (tenantLoading || !profile?.is_admin || !visible) return null
 
+  // Not a DashboardPanel: the whole card is one link, so it takes the
+  // system's interactive-placard treatment rather than a panel header.
   return (
-    <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5">
+    <section className="placard-surface placard-surface-interactive p-5">
       <Link href={MATRIX_HREF} className="group flex items-center gap-4">
-        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand-navy/10 text-brand-navy dark:bg-brand-yellow/10 dark:text-brand-yellow">
+        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-brand-navy/10 text-brand-navy dark:bg-brand-yellow/10 dark:text-brand-yellow">
           <LayoutGrid className="h-6 w-6" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-            Administration · Compliance
-          </div>
-          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+          <PanelEyebrow>Administration · Compliance</PanelEyebrow>
+          <h2 className="stencil-title mt-1 text-base text-slate-950 dark:text-slate-50">
             Training &amp; Competency Matrix
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
