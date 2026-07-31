@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 
-// @ts-expect-error — plain .mjs helper outside the web workspace, no types
+// Plain .mjs helper outside the web workspace. It resolves without a
+// suppression — an earlier `@ts-expect-error` here was itself an error, since
+// there was no error to expect. `tsc --noEmit` catches that; CI does not run
+// it, so it reached main.
 import { skipScanRange } from '../../../../scripts/lib/wikiSyncRange.mjs'
 
 // The wiki-sync gate scanned `git log -50` for a `wiki-sync-skip:` directive —
