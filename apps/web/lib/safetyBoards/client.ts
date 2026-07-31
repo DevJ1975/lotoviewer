@@ -48,16 +48,22 @@ export const ENTITY_LINK_LABEL: Record<EntityLinkType, string> = {
 
 // Hrefs from a (type, id) pair. Returns null when the type doesn't
 // have a known route (template gracefully degrades to no link).
+//
+// The id is encoded because it is not always a UUID: equipment_id is
+// unconstrained `text`, so a real one can carry a space, a slash or a percent
+// ("MIX-100%"). An unencoded percent produces a path that decodeURIComponent
+// rejects, and the drawer's Recents decodes every path it renders.
 export function entityHref(type: EntityLinkType, id: string): string | null {
+  const safeId = encodeURIComponent(id)
   switch (type) {
-    case 'incident':         return `/incidents/${id}`
-    case 'near_miss':        return `/near-miss/${id}`
-    case 'equipment':        return `/equipment/${id}`
-    case 'hot_work_permit':  return `/hot-work/${id}`
-    case 'confined_space':   return `/confined-spaces/${id}`
+    case 'incident':         return `/incidents/${safeId}`
+    case 'near_miss':        return `/near-miss/${safeId}`
+    case 'equipment':        return `/equipment/${safeId}`
+    case 'hot_work_permit':  return `/hot-work/${safeId}`
+    case 'confined_space':   return `/confined-spaces/${safeId}`
     case 'incident_action':  return null  // detail lives inline on incident
-    case 'jha':              return `/jha/${id}`
-    case 'toolbox_talk':     return `/toolbox-talks/${id}`
+    case 'jha':              return `/jha/${safeId}`
+    case 'toolbox_talk':     return `/toolbox-talks/${safeId}`
   }
 }
 
