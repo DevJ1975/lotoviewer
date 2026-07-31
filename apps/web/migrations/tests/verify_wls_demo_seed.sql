@@ -1,6 +1,7 @@
 -- Verification test for the WLS Demo seed (migration 200 + the
 -- seed_wls_incidents_demo / seed_wls_near_miss_demo / seed_wls_bbs_demo
--- functions). Asserts that the seed reconciles with the EHS scorecard.
+-- functions, and migration 256 + seed_wls_equipment_readiness_demo).
+-- Asserts that the seed reconciles with the EHS scorecard.
 --
 -- Usage (run AFTER the seed has been applied — migration 200 self-seeds on
 -- apply, or run Reset Demo / the seed_*.sql wrappers first):
@@ -23,6 +24,9 @@
 --   10 investigations across all 4 RCA methods (2 of 3 recordables completed → RCA 67%)
 --   6 near-miss incidents · 7 dedicated near-miss reports · 8 BBS observations · 4 QR locations
 --   current-year 300A: 3 recordables, 96,720 hours → TRIR ≈ 6.2
+--   Equipment Readiness: 5 mobile units · 5 inspections whose denormalised
+--   failure counts reconcile with their responses · 3 open defects across
+--   all three severities · 1 repair returned to service
 
 begin;
 
@@ -149,6 +153,83 @@ begin
     raise exception 'CHECK 8 failed: 300A hours = %, expected 96720', v_hours;
   end if;
   raise notice 'CHECK 8 ok: 300A summary = 3 recordables, 96720 hours';
+
+  -- ── 9. Equipment Readiness fleet (migration 256) ─────────────────────
+  -- The module Reset Demo used to empty. Assert the five mobile units and
+  -- their readiness statuses, not just that "some rows exist".
+  select count(*) into v_n
+    from public.loto_equipment
+   where tenant_id = v_tid and equipment_id like 'DEMO-PIT-%' and decommissioned = false;
+  if v_n <> 5 then
+    raise exception 'CHECK 9 failed: expected 5 DEMO-PIT-* mobile units, got %', v_n;
+  end if;
+  perform 1 from public.loto_equipment
+   where tenant_id = v_tid and equipment_id = 'DEMO-PIT-REACH-01'
+     and readiness_status = 'out_of_service_pending_review';
+  if not found then raise exception 'CHECK 9 failed: REACH-01 not out of service'; end if;
+  perform 1 from public.loto_equipment
+   where tenant_id = v_tid and equipment_id = 'DEMO-PIT-SCIS-01' and readiness_status = 'inspection_due';
+  if not found then raise exception 'CHECK 9 failed: SCIS-01 not inspection_due'; end if;
+  raise notice 'CHECK 9 ok: 5 mobile units (1 out of service, 1 inspection due)';
+
+  -- ── 10. Inspection failure counts match the actual responses ─────────
+  -- The counts on an inspection row are denormalised, so a seed can state
+  -- one thing and answer another. This is the check that catches it.
+  select count(*) into v_n
+    from public.equipment_inspections i
+   where i.tenant_id = v_tid
+     and (
+       i.failed_item_count <> (
+         select count(*) from public.equipment_inspection_responses r
+          where r.inspection_id = i.id and r.response = 'fail')
+       or i.failed_critical_count <> (
+         select count(*) from public.equipment_inspection_responses r
+           join public.equipment_checklist_items it on it.id = r.item_id
+          where r.inspection_id = i.id and r.response = 'fail' and it.critical)
+     );
+  if v_n <> 0 then
+    raise exception 'CHECK 10 failed: % inspection(s) whose failure counts disagree with their responses', v_n;
+  end if;
+  select count(*) into v_n from public.equipment_inspections where tenant_id = v_tid;
+  if v_n <> 5 then
+    raise exception 'CHECK 10 failed: expected 5 equipment inspections, got %', v_n;
+  end if;
+  raise notice 'CHECK 10 ok: 5 inspections, failure counts reconcile with responses';
+
+  -- ── 11. Every checklist item on every inspection was answered ────────
+  select count(*) into v_n
+    from public.equipment_inspections i
+    join public.equipment_checklist_items it on it.template_id = i.checklist_template_id
+   where i.tenant_id = v_tid
+     and not exists (
+       select 1 from public.equipment_inspection_responses r
+        where r.inspection_id = i.id and r.item_id = it.id
+     );
+  if v_n <> 0 then
+    raise exception 'CHECK 11 failed: % checklist item(s) left unanswered', v_n;
+  end if;
+  raise notice 'CHECK 11 ok: no unanswered checklist items';
+
+  -- ── 12. Defect queue: 3 open across all severities, 1 closed loop ────
+  select count(*) into v_n
+    from public.equipment_defects
+   where tenant_id = v_tid and status in ('open', 'acknowledged', 'in_repair');
+  if v_n <> 3 then
+    raise exception 'CHECK 12 failed: expected 3 open defects, got %', v_n;
+  end if;
+  select count(distinct severity) into v_n
+    from public.equipment_defects
+   where tenant_id = v_tid and status in ('open', 'acknowledged', 'in_repair');
+  if v_n <> 3 then
+    raise exception 'CHECK 12 failed: open defects span % severities, expected 3', v_n;
+  end if;
+  select count(*) into v_n
+    from public.equipment_repairs
+   where tenant_id = v_tid and status = 'returned_to_service' and return_to_service_at is not null;
+  if v_n <> 1 then
+    raise exception 'CHECK 12 failed: expected 1 returned-to-service repair, got %', v_n;
+  end if;
+  raise notice 'CHECK 12 ok: 3 open defects (monitor/repair_soon/critical) + 1 returned to service';
 
   -- ── Informational: tenant-wide scorecard values (eyeball vs targets) ──
   select count(*) into v_rec

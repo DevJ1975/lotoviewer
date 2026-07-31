@@ -10,7 +10,22 @@ app at `/superadmin/release-notes`.
 
 ## [Unreleased]
 
-_Nothing pending._
+### Fixed
+- **Reset Demo no longer empties Equipment Readiness.** The reset wiped 31
+  tables and re-seeded 17. Everything Equipment Readiness owns — inspections,
+  their responses, defects, repairs and photo evidence — was in the first list
+  and not the second, so every reset silently emptied the module and nothing
+  put it back. A new seed restores a five-unit mobile fleet with inspections,
+  three open defects and a repair returned to service. A wipe followed by a
+  re-seed now leaves the tenant identical.
+- **Reset Demo re-seeds any demo tenant, not just #0002.** The wipe ran against
+  any tenant flagged `is_demo`, but the re-seed was gated on the tenant number.
+  A second demo tenant was therefore emptied and never restored. The seeds
+  resolve their own tenant by `is_demo`, so the number check was both wrong and
+  redundant. (Audit item A10.)
+- **A missing seed function is reported instead of silently skipped.** The
+  response now carries `seedsMissing`, so a partially-migrated database is
+  visible rather than quietly under-seeding.
 
 ## [1.17.1] — 2026-07-31
 
