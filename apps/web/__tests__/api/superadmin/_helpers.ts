@@ -53,6 +53,10 @@ class MockChain {
   public updates: Array<{ table: string; payload: unknown }>  = []
   public deletes: Array<{ table: string }>                    = []
   public rpcCalls: Array<{ name: string; args?: unknown }>    = []
+  // Unified, ordered log of write ops across every table, so a test can assert
+  // the RELATIVE order of, say, an update on one table vs. an insert on another
+  // (the per-table arrays above can't express cross-table ordering).
+  public calls: Array<{ op: 'insert' | 'update' | 'delete'; table: string }> = []
 
   queue(table: string, ...results: ChainResult[]) {
     if (!this.queues.has(table)) this.queues.set(table, [])
@@ -81,9 +85,9 @@ class MockChain {
         limit:  () => chain,
         single: result,
         maybeSingle: result,
-        insert: (payload: unknown) => { self.inserts.push({ table, payload }); return chain },
-        update: (payload: unknown) => { self.updates.push({ table, payload }); return chain },
-        delete: () => { self.deletes.push({ table }); return chain },
+        insert: (payload: unknown) => { self.inserts.push({ table, payload }); self.calls.push({ op: 'insert', table }); return chain },
+        update: (payload: unknown) => { self.updates.push({ table, payload }); self.calls.push({ op: 'update', table }); return chain },
+        delete: () => { self.deletes.push({ table }); self.calls.push({ op: 'delete', table }); return chain },
         // Terminal awaits also work directly via .then on the chain:
         then: (onFulfilled: (v: ChainResult) => unknown) =>
           Promise.resolve(self.next(table)).then(onFulfilled),
@@ -150,6 +154,7 @@ export function resetMocks() {
   mockState.updates.length = 0
   mockState.deletes.length = 0
   mockState.rpcCalls.length = 0
+  mockState.calls.length = 0
   // Clear queues
   ;(mockState as unknown as { queues: Map<string, unknown> }).queues = new Map()
 }

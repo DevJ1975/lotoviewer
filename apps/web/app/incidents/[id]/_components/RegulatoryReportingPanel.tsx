@@ -61,9 +61,12 @@ function toLocalInput(iso: string): string {
 }
 
 function humanizeHours(hours: number): string {
-  const abs = Math.abs(hours)
-  const h = Math.floor(abs)
-  const m = Math.round((abs - h) * 60)
+  // Round to whole minutes FIRST, then split. Flooring the hours and rounding
+  // the minutes independently lets a value like 7.999 render as "7h 60m"
+  // (round(0.999·60) === 60) instead of "8h".
+  const totalMinutes = Math.round(Math.abs(hours) * 60)
+  const h = Math.floor(totalMinutes / 60)
+  const m = totalMinutes % 60
   return m === 0 ? `${h}h` : `${h}h ${m}m`
 }
 
@@ -100,6 +103,7 @@ export default function RegulatoryReportingPanel({ incidentId, defaultBasisAt }:
 
   const load = useCallback(async () => {
     if (!tenant?.id) return
+    setError(null)
     try {
       const res = await fetch(`/api/incidents/${incidentId}/severe-injury-report`, { headers: await buildHeaders() })
       const body = await res.json()
@@ -171,11 +175,24 @@ export default function RegulatoryReportingPanel({ incidentId, defaultBasisAt }:
   }
 
   if (rows === null) {
+    // A load failure leaves rows null with error set. This guard runs before
+    // the error banner further down is ever reached, so surface the error and
+    // a retry HERE — otherwise a failed GET spins forever with no way out.
     return (
       <section className="rounded-xl border border-slate-200 dark:border-slate-800 p-4">
-        <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading reporting status…
-        </div>
+        {error ? (
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-rose-900 dark:text-rose-100">{error}</span>
+            <button type="button" onClick={() => void load()}
+              className="text-xs font-semibold text-brand-navy hover:underline dark:text-brand-yellow">
+              Try again
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading reporting status…
+          </div>
+        )}
       </section>
     )
   }
