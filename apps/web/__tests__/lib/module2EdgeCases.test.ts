@@ -1,3 +1,10 @@
+// @vitest-environment node
+//
+// Node-only module under test: no DOM, and jsdom's Web Crypto rejects an
+// ArrayBuffer minted in another realm on Node 20, so sha256Hex fails there
+// for reasons unrelated to the code. Native Node hashes it correctly on 20
+// and 22 alike — verified — so this is a harness fix, not a product one.
+
 // Phase-D edge-case tests for Module 2 helpers. Targets boundaries
 // the happy-path suites don't fully cover: retention exact-boundary
 // days, legal-hold timing, hierarchy normalization fallbacks, and

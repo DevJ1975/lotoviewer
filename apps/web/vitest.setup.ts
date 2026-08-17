@@ -18,28 +18,36 @@ beforeEach(async () => {
   setActiveSupabaseClient(mod.supabase)
 })
 
-// ResizeObserver is used by Recharts' ResponsiveContainer — not available in jsdom
-global.ResizeObserver = class ResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
+// Everything below patches gaps in jsdom, so it only applies under jsdom. A
+// file opts out with `// @vitest-environment node` — right for a module with
+// no DOM involvement, and required for anything reaching Web Crypto through
+// @soteria/core, which jsdom rejects on Node 20 (see the header of
+// __tests__/lib/signedArtifactHash.test.ts). Without this guard, opting out
+// throws here at setup time before a single test runs.
+if (typeof window !== 'undefined') {
+  // ResizeObserver is used by Recharts' ResponsiveContainer — not available in jsdom
+  global.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+
+  // scrollIntoView is called by cmdk when it moves the command-palette
+  // selection; jsdom implements no layout, so it ships no such method.
+  Element.prototype.scrollIntoView = Element.prototype.scrollIntoView ?? function () {}
+
+  // matchMedia is not available in jsdom
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  })
 }
-
-// scrollIntoView is called by cmdk when it moves the command-palette
-// selection; jsdom implements no layout, so it ships no such method.
-Element.prototype.scrollIntoView = Element.prototype.scrollIntoView ?? function () {}
-
-// matchMedia is not available in jsdom
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: (query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => false,
-  }),
-})
