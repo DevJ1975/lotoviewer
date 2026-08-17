@@ -133,6 +133,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     const response = await client.messages.create({
       model:      MODEL,
       max_tokens: 1024,
+      thinking:   { type: 'disabled' },
       system:     SYSTEM_PROMPT,
       messages:   [{ role: 'user', content: userBrief }],
       output_config: {

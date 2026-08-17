@@ -42,7 +42,7 @@ interface ApiTurn {
 // Phase 1 contract: non-streaming. Streaming (SSE) lands in Phase 2.
 
 const MODEL = MODEL_BY_SURFACE['support-chat']
-const MAX_TOKENS = 1500
+const MAX_TOKENS = 3000
 const HISTORY_TURNS = 20    // last N messages from the conversation
 const MAX_USER_MESSAGES_PER_HOUR = 30
 const MAX_USER_MESSAGES_PER_DAY  = 200
@@ -347,6 +347,8 @@ export async function POST(req: Request) {
     response = await client.messages.create({
       model:      MODEL,
       max_tokens: MAX_TOKENS,
+      thinking:   { type: 'adaptive' },
+      output_config: { effort: 'low' },
       system: [{
         type: 'text',
         text: systemPrompt,
@@ -412,6 +414,8 @@ export async function POST(req: Request) {
       next = await client.messages.create({
         model:      MODEL,
         max_tokens: MAX_TOKENS,
+        thinking:   { type: 'adaptive' },
+        output_config: { effort: 'low' },
         system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
         tools:    allTools,
         messages: [
@@ -480,7 +484,12 @@ export async function POST(req: Request) {
     try {
       secondResponse = await client.messages.create({
         model:      MODEL,
-        max_tokens: 600,
+        // 600 was ample for a one-line confirmation when nothing else drew on
+        // it; on Claude 5 max_tokens covers thinking as well, and truncating
+        // here would drop the ticket ID the user needs.
+        max_tokens: 1500,
+        thinking:   { type: 'adaptive' },
+        output_config: { effort: 'low' },
         system: [{
           type: 'text',
           text: systemPrompt,

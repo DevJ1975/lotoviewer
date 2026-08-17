@@ -98,6 +98,7 @@ async function extractRevisionDate(
   const response = await client.messages.create({
     model:      REVISION_MODEL,
     max_tokens: 1000,
+    thinking:   { type: 'disabled' },
     system:     'You extract single fields from regulatory documents. Reply with JSON only.',
     messages: [{
       role: 'user',

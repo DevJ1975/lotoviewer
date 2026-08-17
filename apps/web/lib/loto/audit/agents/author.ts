@@ -19,6 +19,7 @@ import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 import { AUTHOR_SCHEMA, type AuthorResult, type EhsCitation } from '../schemas'
 import { AUTHOR_SYSTEM, describeEquipment, describeSteps, describeFindings } from '../prompts'
 import type { AgentOutput } from './fpe'
+import { assertNotRefused } from '@/lib/ai/client'
 
 const MODEL = MODEL_BY_SURFACE['loto-audit-author']
 
@@ -51,6 +52,7 @@ export async function runAuthorAgent(
   const response = await client.messages.create({
     model:      MODEL,
     max_tokens: 8000,
+    thinking:   { type: 'disabled' },
     // Cache the static system prompt — a full audit run drafts for many failed
     // machines in one burst, all sharing this prompt.
     system:     [{ type: 'text', text: AUTHOR_SYSTEM, cache_control: { type: 'ephemeral' } }],
@@ -58,6 +60,7 @@ export async function runAuthorAgent(
     output_config: { format: { type: 'json_schema', schema: AUTHOR_SCHEMA } },
   })
 
+  assertNotRefused(response, 'loto-audit-author')
   const textBlock = response.content.find(b => b.type === 'text')
   if (!textBlock || textBlock.type !== 'text') throw new Error('Author agent: no text block in response')
   const result = JSON.parse(textBlock.text) as AuthorResult

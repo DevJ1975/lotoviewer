@@ -16,7 +16,7 @@ import type { OperatorAgentId } from './types'
 // with a mock client.
 
 export const MAX_SUBAGENT_LOOPS = 4
-const SUBAGENT_MAX_TOKENS = 1500
+const SUBAGENT_MAX_TOKENS = 3000
 
 export interface SubAgentToolCall {
   name: string
@@ -75,6 +75,8 @@ export async function runSubAgent(args: RunSubAgentArgs): Promise<SubAgentResult
     const response = await client.messages.create({
       model,
       max_tokens: SUBAGENT_MAX_TOKENS,
+      thinking:   { type: 'adaptive' },
+      output_config: { effort: 'low' },
       system: [
         { type: 'text', text: staticBlock, cache_control: { type: 'ephemeral' } },
         { type: 'text', text: dynamicBlock },

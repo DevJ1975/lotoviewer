@@ -152,6 +152,11 @@ export async function extractAnnualSummary(args: ExtractArgs): Promise<ExtractRe
   const response = (await client.messages.create({
     model:       SONNET,
     max_tokens:  1024,
+    // Thinking off even though this passes tools: `tool_choice` forces
+    // EXTRACT_TOOL, so there is no tool-selection decision to reason about,
+    // and on Claude 5 max_tokens is shared with thinking — spending it here
+    // risks truncating the tool call this function requires.
+    thinking:   { type: 'disabled' },
     system:      SYSTEM,
     tools:       [EXTRACT_TOOL],
     tool_choice: { type: 'tool', name: EXTRACT_TOOL.name },

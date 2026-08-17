@@ -238,6 +238,7 @@ async function extractUpdates(
   const response = await client.messages.create({
     model:      AI_MODEL,
     max_tokens: 8000,
+    thinking:   { type: 'disabled' },
     system:     systemPrompt,
     messages: [{
       role: 'user',
