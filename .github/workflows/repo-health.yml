@@ -69,15 +69,22 @@ jobs:
       # source-map upload, never for tests, and the fetch is a hard install
       # failure on a restricted network.
       #
-      # This used to be followed by a step that hand-installed
-      # @rolldown/binding-linux-x64-gnu, because package-lock.json was
-      # generated on macOS and recorded only the darwin binding, leaving
-      # vitest unable to start on Linux. apps/web now declares the Linux
-      # binding as a devDependency — the same fix already used for
-      # @tailwindcss/oxide-linux-x64-gnu — so `npm ci` installs it directly.
-      # The pin is exact and must track rolldown's own version (both
-      # 1.0.0-rc.17 today); if a dependency bump moves rolldown, bump this
-      # with it or vitest will fail to load its native binding.
+      # package-lock.json was generated on macOS, so for every native module
+      # it recorded only the darwin binary. On a Linux runner `npm ci` then
+      # installs no usable binding: vitest could not start at all, and the one
+      # suite that touches sharp failed to load. Both Linux binaries are now
+      # declared as devDependencies of apps/web — the same fix the repo
+      # already uses for @tailwindcss/oxide-linux-x64-gnu — which is why the
+      # step that used to hand-install the rolldown binding here is gone.
+      #
+      # Both pins are exact and must track their parent's version:
+      # @rolldown/binding-linux-x64-gnu with rolldown (1.0.0-rc.17 today) and
+      # @img/sharp-linux-x64 with sharp (0.34.5). A dependency bump that moves
+      # either parent without moving its binding fails at load, not at install.
+      #
+      # The real fix is regenerating the lockfile on Linux, or with
+      # --os=linux --cpu=x64, so every platform binary is recorded. Until
+      # then, expect to add a line here each time a native module arrives.
       - name: Install dependencies
         run: SENTRYCLI_SKIP_DOWNLOAD=1 npm ci
 

@@ -54,6 +54,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@img/sharp-linux-x64": "0.34.5",
     "@rolldown/binding-linux-x64-gnu": "1.0.0-rc.17",
     "@tailwindcss/oxide-linux-x64-gnu": "^4.2.4",
     "@tailwindcss/postcss": "^4",
