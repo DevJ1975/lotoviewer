@@ -8,6 +8,7 @@
     "prebuild": "node ../../scripts/check-deeplink-placeholders.mjs && node ../../scripts/check-migration-numbers.mjs && node ../../scripts/check-manual-coverage.mjs",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:security": "vitest run proxy.test.ts __tests__/lib/auth __tests__/lib/security __tests__/lib/safeRedirect __tests__/lib/scrubEvent __tests__/lib/rateLimit __tests__/lib/memoryRateLimit __tests__/lib/inviteTokens __tests__/api/invites __tests__/api/superadmin __tests__/api/admin __tests__/migrations/profilesPrivilegedColumns __tests__/anonReport",
     "test:watch": "vitest",
@@ -53,6 +54,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@rolldown/binding-linux-x64-gnu": "1.0.0-rc.17",
     "@tailwindcss/oxide-linux-x64-gnu": "^4.2.4",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",

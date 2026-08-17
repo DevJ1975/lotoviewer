@@ -34,18 +34,28 @@ jobs:
         run: npm run check:wiki
 
   # Executes application code, which the `checks` job above deliberately does
-  # not. Scoped to the auth surface rather than the whole suite: `npm test` has
-  # 127 pre-existing failures on main (stale UI fixtures after the Spectrum
-  # restyle — see todos.md) and `eslint .` has 82 pre-existing errors, so a
-  # blanket gate would land red and be ignored from day one. This set passes
-  # clean today, so it can block, and it covers exactly what a regression here
-  # would cost: the superadmin gate, the invite lifecycle, the Origin/Host CSRF
-  # check, the redirect guard, the Sentry scrubber and the rate limiter.
+  # not.
   #
-  # Widen this as the pre-existing failures get repaired.
-  security-tests:
+  # This used to run only `test:security` — a 28-file subset of the auth
+  # surface — because `npm test` was believed to have ~127 pre-existing
+  # failures. That is no longer true, and the two records of it disagreed with
+  # each other (this comment said 127, todos.md said 81). Measured on main:
+  # the full suite is 329 files / 4092 tests / 0 failures, and `tsc --noEmit`
+  # is clean for apps/web. So the gate is widened to the whole suite, which
+  # subsumes the old security subset — `npm run test:security` is kept as a
+  # script for fast local runs, not as a separate CI job.
+  #
+  # Lint is the one gate that genuinely cannot block yet: `eslint .` reports
+  # 82 errors and 70 warnings, concentrated in the React Compiler rules
+  # (preserve-manual-memoization 26, no-unescaped-entities 20, refs 19,
+  # purity 10). It runs here for visibility and is expected to fail until
+  # those are repaired; flip continue-on-error off in the PR that fixes them.
+  #
+  # One job rather than three so `npm ci` runs once. Typecheck goes first: it
+  # is the fastest way to fail a broken PR.
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -58,20 +68,30 @@ jobs:
       # from downloads.sentry-cdn.com. It is only needed for build-time
       # source-map upload, never for tests, and the fetch is a hard install
       # failure on a restricted network.
+      #
+      # This used to be followed by a step that hand-installed
+      # @rolldown/binding-linux-x64-gnu, because package-lock.json was
+      # generated on macOS and recorded only the darwin binding, leaving
+      # vitest unable to start on Linux. apps/web now declares the Linux
+      # binding as a devDependency — the same fix already used for
+      # @tailwindcss/oxide-linux-x64-gnu — so `npm ci` installs it directly.
+      # The pin is exact and must track rolldown's own version (both
+      # 1.0.0-rc.17 today); if a dependency bump moves rolldown, bump this
+      # with it or vitest will fail to load its native binding.
       - name: Install dependencies
         run: SENTRYCLI_SKIP_DOWNLOAD=1 npm ci
 
-      # package-lock.json resolves a package entry only for
-      # @rolldown/binding-darwin-arm64 — the lockfile was generated on macOS —
-      # so `npm ci` on Linux leaves vitest with no native binding and it cannot
-      # start. @next/swc and lightningcss do carry Linux entries, which is why
-      # `next build` has always worked here and nobody hit this. Delete this
-      # step once the lockfile is regenerated somewhere that records the Linux
-      # binding.
-      - name: Install Linux rolldown binding (lockfile gap)
-        run: |
-          version=$(node -p "require('./node_modules/rolldown/package.json').version")
-          npm install --no-save --no-package-lock "@rolldown/binding-linux-x64-gnu@${version}"
+      - name: Typecheck
+        run: npm run typecheck
 
-      - name: Run auth and security regression tests
-        run: npm run test:security
+      - name: Run the web test suite
+        run: npm test
+
+      - name: Run the core package test suite
+        run: npm run test:core
+
+      # Expected red — see the note above. Visibility only until the 82
+      # pre-existing errors are repaired.
+      - name: Lint (non-blocking)
+        continue-on-error: true
+        run: npm run lint

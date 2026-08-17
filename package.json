@@ -11,6 +11,7 @@
     "build": "npm --workspace web run build",
     "start": "npm --workspace web run start",
     "lint": "npm --workspace web run lint",
+    "typecheck": "npm --workspace web run typecheck",
     "test": "npm --workspace web run test",
     "test:security": "npm --workspace web run test:security",
     "test:core": "vitest run --root packages/core",
