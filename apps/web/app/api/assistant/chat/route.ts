@@ -6,6 +6,7 @@ import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 import { checkAiRateLimit, logAiInvocation } from '@/lib/ai/rateLimit'
 import { getAnthropic, aiErrorToResponse } from '@/lib/ai/client'
+import { toSendableHistory } from '@/lib/ai/conversationWindow'
 import { buildAssistantSystemPrompt } from '@/lib/ai/systemPrompt'
 import { getToolDefinitions, runTool, type UserRole } from '@/lib/ai/tools'
 import { retrieveContext, type RetrievedChunk } from '@/lib/ai/rag'
@@ -116,12 +117,15 @@ export async function POST(req: Request) {
     content:         userText,
   })
 
-  // Pull recent history (chronological, capped).
+  // Pull the most recent HISTORY_TURNS, newest-first. Newest-first is
+  // load-bearing: LIMIT applies after ORDER BY, so an ascending read returns
+  // the OLDEST rows and the window would freeze at the start of a long
+  // conversation. toSendableHistory below puts it back in order.
   const { data: priorRows } = await admin
     .from('assistant_messages')
     .select('role, content, metadata, created_at')
     .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(HISTORY_TURNS)
   const prior: PriorMessage[] = (priorRows ?? [])
     .filter((r): r is PriorMessage & { created_at: string } =>
@@ -175,12 +179,17 @@ export async function POST(req: Request) {
   // ContentBlockParam[] content (tool_use + tool_result blocks); without
   // the annotation TS narrows the array element type to {content: string}
   // from the initial map and rejects the later push.
-  const sdkMessages: Anthropic.MessageParam[] = prior.map((m): Anthropic.MessageParam => {
-    if (m.role === 'tool') {
-      return { role: 'user', content: `[tool result] ${m.content}` }
-    }
-    return { role: m.role, content: m.content }
-  })
+  // `prior` is newest-first; toSendableHistory restores chronological order
+  // and drops any leading assistant turn the tail-slice started on. Tool turns
+  // are folded into user turns first so that trim sees their real role.
+  const sdkMessages: Anthropic.MessageParam[] = toSendableHistory(
+    prior.map((m): Anthropic.MessageParam & { role: 'user' | 'assistant' } => {
+      if (m.role === 'tool') {
+        return { role: 'user', content: `[tool result] ${m.content}` }
+      }
+      return { role: m.role, content: m.content }
+    }),
+  )
 
   // Tool-use loop. We let the model call tools up to MAX_TOOL_LOOPS times
   // before forcing a final text reply.
