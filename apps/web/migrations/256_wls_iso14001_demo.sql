@@ -41,17 +41,28 @@
 -- Clause 8.2 also reads as a gap: no drill or test record exists anywhere
 -- in the platform to read.
 --
--- Assuming the rest of the WLS demo is seeded (risks, training,
--- inspections, toolbox talks), the card lands on:
+-- This seed only owns the eight clauses listed above. Overall coverage
+-- also depends on data other modules put in the tenant — risks, training
+-- currency, inspections, communications — so the headline percentage is a
+-- property of the whole demo tenant, not of this file.
 --
---   10 conforming · 5 attention · 4 gap · 53% evidence coverage
+-- Measured against WLS Demo (#0002) when this shipped:
+--
+--   7 conforming · 6 attention · 6 gap · 37% evidence coverage
 --   headline: "Not ready for a certification audit — 1 open major
 --              nonconformity; no evidence for clauses 7.5, 9.2."
 --
--- Those figures are pinned by the "WLS demo seed story" block in
--- packages/core/src/__tests__/iso14001Readiness.test.ts, so a change to
--- either the seed or the scoring rules fails a test rather than quietly
--- making this comment a lie.
+-- The extra gaps are adjacent-module, not environmental: 7.4 has no
+-- communication record, 8.1 has no submitted inspection, and 7.2 reads
+-- attention because 45 training records have lapsed. They improve on
+-- their own as the other demo seeds land — in particular migration 200's
+-- seed_wls_incidents_demo / _near_miss_ / _bbs_, which were not applied
+-- to this database when this migration ran.
+--
+-- The eight clause outcomes above are pinned by the "WLS demo seed story"
+-- block in packages/core/src/__tests__/iso14001Readiness.test.ts, so a
+-- change to either the seed or the scoring rules fails a test rather than
+-- quietly making this comment a lie.
 --
 -- SEPARATION OF DUTY
 -- ──────────────────
