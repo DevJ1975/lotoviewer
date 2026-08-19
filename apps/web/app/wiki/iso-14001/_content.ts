@@ -31,8 +31,8 @@ export interface ManualSection {
 
 export const MANUAL_TITLE        = 'ISO 14001 — Environmental Management'
 export const MANUAL_SUBTITLE     = 'A plain-language implementation guide to the environmental management-system standard — clause by clause, with the records an auditor will ask for and where Soteria produces them.'
-export const MANUAL_VERSION      = '1.0.0'
-export const MANUAL_LAST_UPDATED = '2026-05-24'
+export const MANUAL_VERSION      = '1.1.0'
+export const MANUAL_LAST_UPDATED = '2026-08-19'
 
 export const SECTIONS: ManualSection[] = [
   // ────────────────────────────────────────────────────────────────
@@ -330,18 +330,22 @@ export const SECTIONS: ManualSection[] = [
     id:    'platform-mapping',
     title: 'How Soteria supports an EMS',
     paragraphs: [
-      'Soteria is primarily an occupational health & safety platform, so it does not yet ship a dedicated ISO 14001 clause-evidence map the way it does for ISO 45001. Several modules nonetheless produce environmental evidence directly, and the shared management-system clauses (context, leadership, support, audit, management review, corrective action) are satisfied by the same Soteria features regardless of which standard you certify against.',
-      'The strongest overlap is chemical and waste management, the compliance calendar, the incident/CAPA loop, and the evidence-sealing infrastructure. Where a 14001 requirement has no current Soteria surface (for example, the aspects/impacts register itself), keep that evidence in your controlled document repository and reference it from the management review.',
+      'Soteria ships a dedicated Environmental module for ISO 14001. It holds the four registers the standard turns on — environmental aspects & impacts (6.1.2), objectives and their monitoring readings (6.2 / 9.1.1), management review (9.3), and nonconformities with corrective actions (10.2) — plus a clause-by-clause evidence map and an audit-readiness report card that grades every clause from those registers. The shared management-system clauses (context, leadership, support, audit, management review, corrective action) are satisfied by the same Soteria features regardless of which standard you certify against.',
+      'The report card is deliberately named for readiness, not conformity. It reports evidence coverage — whether the records exist and are current in the platform — and treats blocking findings as decisive: one open major nonconformity, or no evidence at all on a core clause, reads as "not ready" however high the percentage climbs. Only an accredited certification body determines conformity. Two clauses still report structural gaps today: 7.5 documented information and 9.2 internal audit have no register in the platform yet, so keep that evidence in your own controlled-document repository and reference it from the management review until those ship.',
     ],
     bullets: [
-      'Clause 6.1.3 / 9.1.2 (compliance obligations & evaluation) — the Compliance Calendar tracks recurring regulatory and permit obligations with overdue/due-soon status.',
-      'Clause 6.1.2 / 8.1 (aspects & operational control for chemicals & waste) — the Chemicals, Prop 65, and hazardous-waste features capture substance inventories, exposure assessments, and disposal records.',
-      'Clause 7.5 (documented information) — signed/sealed PDF artifacts with chain-of-custody hashes (see the Integrity & Compliance wiki page).',
-      'Clause 8.2 (emergency preparedness) — permit modules and incident response capture spill/release readiness and events.',
-      'Clause 9.1 / 9.2 (monitoring & internal audit) — the Inspections module and EHS Scorecard.',
-      'Clause 10.2 (corrective action) — the Incidents module and the CAPA loop apply equally to environmental nonconformities.',
+      'Clause 6.1.2 (aspects & impacts) — the Environmental module\'s aspects register scores significance as severity × likelihood on a 1-5 scale, significant at 12 or higher, so the criterion an auditor asks for is documented and repeatable.',
+      'Clause 6.2 / 9.1.1 (objectives & monitoring) — measurable objectives with a baseline, target, target date, and periodic readings; progress is evaluated in the improvement direction you set.',
+      'Clause 6.1.3 / 9.1.2 (compliance obligations & evaluation) — the Compliance Calendar tracks recurring regulatory and permit obligations with overdue/due-soon status, and each completion is a recorded evaluation.',
+      'Clause 8.1 (operational control for chemicals & waste) — the Chemicals, Prop 65, and hazardous-waste features capture substance inventories, exposure assessments, and disposal records.',
+      'Clause 9.3 (management review) — reviews carry the standard §9.3.2 input agenda and §9.3.3 output slots; a review with no recorded conclusions or decisions is flagged rather than counted.',
+      'Clause 10.2 (nonconformity & corrective action) — findings from any source, with corrective actions whose effectiveness check must be signed by someone other than the person who completed the work. Separation of duty is enforced in the database, not just the UI.',
+      'Clause 7.5 (documented information) — partially covered: signed/sealed PDF artifacts carry chain-of-custody hashes (see the Integrity & Compliance wiki page), but a controlled-document register with revision and approval control is not shipped yet.',
+      'Clause 9.2 (internal audit) — partially covered: the Inspections module runs scored audit checklists, but an audit programme with clause coverage and auditor independence is not shipped yet.',
     ],
     citations: [
+      { label: 'Soteria — Environmental / ISO 14001 (live module)', url: '/environmental' },
+      { label: 'Soteria — Audit readiness report card', url: '/environmental/report-card' },
       { label: 'Soteria — Compliance Calendar (live module)', url: '/admin/compliance/calendar' },
     ],
   },
