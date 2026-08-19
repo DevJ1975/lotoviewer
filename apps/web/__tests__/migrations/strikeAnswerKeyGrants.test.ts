@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-// Migration 256 closes an answer-key disclosure: strike_answers_read (114)
+// Migration 259 closes an answer-key disclosure: strike_answers_read (114)
 // grants row-level SELECT on strike_quiz_answers to any authenticated member,
 // and Postgres RLS cannot filter columns. The learner page only ever asked for
 // answer_text, but nothing enforced that — a session could request is_correct
@@ -19,11 +19,11 @@ import { resolve } from 'node:path'
 const REPO_APPS_WEB = resolve(__dirname, '../..')
 
 const sql = readFileSync(
-  resolve(REPO_APPS_WEB, 'migrations/256_strike_security_hardening.sql'),
+  resolve(REPO_APPS_WEB, 'migrations/259_strike_security_hardening.sql'),
   'utf8',
 )
 const rollback = readFileSync(
-  resolve(REPO_APPS_WEB, 'migrations/256_rollback.sql'),
+  resolve(REPO_APPS_WEB, 'migrations/259_rollback.sql'),
   'utf8',
 )
 
@@ -40,7 +40,7 @@ function grantedColumns(table: string): string[] {
   return match[1].split(',').map(c => c.trim()).filter(Boolean)
 }
 
-describe('Migration 256 — STRIKE answer-key column grants', () => {
+describe('Migration 259 — STRIKE answer-key column grants', () => {
   it('strips the base grant before re-granting, on both quiz tables', () => {
     // Revoke-then-grant is what makes a column added later default to
     // unreadable rather than silently exposed.
@@ -109,7 +109,7 @@ describe('Migration 256 — STRIKE answer-key column grants', () => {
   })
 })
 
-describe('Migration 256 rollback', () => {
+describe('Migration 259 rollback', () => {
   it('restores whole-row select on both quiz tables', () => {
     expect(rollback).toContain('grant select on public.strike_quiz_answers   to authenticated')
     expect(rollback).toContain('grant select on public.strike_quiz_questions to authenticated')

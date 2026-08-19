@@ -222,7 +222,7 @@ export async function POST(req: Request, ctx: RouteContext) {
       if (completionErr) throw new Error(completionErr.message)
     }
 
-    // Explanations are revoked from `authenticated` (migration 256) precisely
+    // Explanations are revoked from `authenticated` (migration 259) precisely
     // so they can't be read before answering. Returning them here — only for
     // what the learner actually missed — is the feedback path that replaces
     // the old give-away render.

@@ -30,7 +30,7 @@ interface VersionRow {
 }
 
 // `explanation` is deliberately absent: it is a soft copy of the answer key
-// ("Correct, because ...") and migration 256 revoked it from `authenticated`.
+// ("Correct, because ...") and migration 259 revoked it from `authenticated`.
 // It comes back in the submit response, per missed question, after grading.
 interface QuestionRow {
   id: string
