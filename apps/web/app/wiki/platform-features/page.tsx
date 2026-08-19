@@ -2,7 +2,7 @@ import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
 const CURRENT_VERSION = '1.1.0'
-const LAST_UPDATED    = '2026-08-01'
+const LAST_UPDATED    = '2026-08-19'
 
 const CHANGELOG: ChangelogEntry[] = [
   {
@@ -13,6 +13,17 @@ const CHANGELOG: ChangelogEntry[] = [
       '/api/auth/saml/callback — a path in this application that does not ' +
       'exist. Supabase Auth terminates SAML, so the ACS lives under the ' +
       'Supabase project origin, and the field now defaults there.',
+    ],
+  },
+  {
+    version: '1.0.1',
+    date:    '2026-08-19',
+    changes: [
+      'BBS v2: the "BBS observations" tile on /admin now opens an index ' +
+      'at /admin/observations/bbs gathering the leading-indicator ' +
+      'dashboard, the QR / location manager, and the observation log. ' +
+      'The tile previously pointed at a URL that served no page, so it ' +
+      '404ed.',
     ],
   },
   {
@@ -159,8 +170,13 @@ export default function WikiPlatformFeaturesPage() {
         <p>
           <strong>Where to find it.</strong> Workers capture at{' '}
           <Link href="/bbs/observe">/bbs/observe</Link> (mobile-first
-          tap targets). Admins review at{' '}
-          <Link href="/admin/observations/bbs/dashboard">/admin/observations/bbs/dashboard</Link>.
+          tap targets). Admins start from the{' '}
+          <Link href="/admin/observations/bbs">BBS observations</Link> tile
+          on <Link href="/admin">/admin</Link>, which gathers the
+          leading-indicator dashboard at{' '}
+          <Link href="/admin/observations/bbs/dashboard">/admin/observations/bbs/dashboard</Link>,
+          the QR / location manager at <Link href="/bbs/qr">/bbs/qr</Link>,
+          and the observation log at <Link href="/bbs">/bbs</Link>.
         </p>
         <p>
           <strong>Headline metric.</strong> safe-to-unsafe ratio,
