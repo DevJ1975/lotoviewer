@@ -1,12 +1,12 @@
--- Rollback for migration 256.
+-- Rollback for migration 259.
 --
--- Hand-applied in an emergency only. Restores the pre-256 state:
+-- Hand-applied in an emergency only. Restores the pre-259 state:
 -- whole-row select on the quiz tables, the migration 223 storage policy
 -- body verbatim, and no video_provider domain.
 --
 -- Note what this gives back: reverting section 1 re-opens the answer-key
 -- leak to every learner. Only run it if the column grants are actively
--- breaking a read path, and re-apply 256 as soon as that path is fixed.
+-- breaking a read path, and re-apply 259 as soon as that path is fixed.
 
 begin;
 
@@ -39,7 +39,7 @@ create policy strike_media_read on storage.objects
     end
   );
 
--- 3. Drop the provider domain. The normalizing UPDATE in 256 is not undone —
+-- 3. Drop the provider domain. The normalizing UPDATE in 259 is not undone —
 --    it only ever wrote 'vimeo', which is the column default.
 alter table public.strike_module_versions
   drop constraint if exists strike_versions_provider_ck;
