@@ -1,6 +1,6 @@
--- Rollback for migration 256 (Predictive Safety Intelligence).
+-- Rollback for migration 257 (Predictive Safety Intelligence).
 --
--- 256 is purely additive — four new tables, no column added to and no policy
+-- 257 is purely additive — four new tables, no column added to and no policy
 -- changed on an existing one — so the rollback is a clean drop. Nothing else
 -- references these tables.
 --

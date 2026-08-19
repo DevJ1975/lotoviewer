@@ -1,4 +1,4 @@
--- Migration 256: Predictive Safety Intelligence — vision hazard sweep +
+-- Migration 257: Predictive Safety Intelligence — vision hazard sweep +
 -- LLM regulatory document drafts.
 --
 -- Two independent subsystems, one migration because they share the same

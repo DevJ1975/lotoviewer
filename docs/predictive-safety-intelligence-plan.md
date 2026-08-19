@@ -109,7 +109,7 @@ apps/web/app/api/
   cron/vision-hazard-sweep   POST  opens a run
   cron/vision-sweep-resume   POST  drains claimable work   (*/5)
 
-apps/web/migrations/256_predictive_safety_intelligence.sql (+ 256_rollback.sql)
+apps/web/migrations/257_predictive_safety_intelligence.sql (+ 257_rollback.sql)
 ```
 
 ### 4.1 Vision — execution model

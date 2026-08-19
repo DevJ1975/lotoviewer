@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-// Migration 256 carries four security-relevant decisions that are invisible in
+// Migration 257 carries four security-relevant decisions that are invisible in
 // the app code: facility-scoped RLS on hand-written policies, a content-
 // addressed natural key that makes the sweep idempotent, storage keys instead
 // of public photo URLs, and a bounded evidence column.
@@ -16,11 +16,11 @@ import { resolve } from 'node:path'
 const REPO_APPS_WEB = resolve(__dirname, '../..')
 
 const sql = readFileSync(
-  resolve(REPO_APPS_WEB, 'migrations/256_predictive_safety_intelligence.sql'),
+  resolve(REPO_APPS_WEB, 'migrations/257_predictive_safety_intelligence.sql'),
   'utf8',
 )
 const rollback = readFileSync(
-  resolve(REPO_APPS_WEB, 'migrations/256_rollback.sql'),
+  resolve(REPO_APPS_WEB, 'migrations/257_rollback.sql'),
   'utf8',
 )
 
@@ -35,7 +35,7 @@ const NEW_TABLES = [
   'document_drafts',
 ] as const
 
-describe('Migration 256 — structure', () => {
+describe('Migration 257 — structure', () => {
   it('creates all four tables idempotently', () => {
     for (const table of NEW_TABLES) {
       expect(ddl, table).toContain(`create table if not exists public.${table}`)
@@ -57,7 +57,7 @@ describe('Migration 256 — structure', () => {
   })
 })
 
-describe('Migration 256 — tenant AND facility isolation', () => {
+describe('Migration 257 — tenant AND facility isolation', () => {
   // Migration 211 auto-scopes only the generated <table>_tenant_scope
   // policies and explicitly skips hand-written ones. A hand-written policy
   // copied from a pre-facility migration leaves rows from one facility
@@ -97,7 +97,7 @@ describe('Migration 256 — tenant AND facility isolation', () => {
   })
 })
 
-describe('Migration 256 — the sweep cannot be turned into an SSRF', () => {
+describe('Migration 257 — the sweep cannot be turned into an SSRF', () => {
   // bbs_observations_v2.photo_url is written by a direct browser PostgREST
   // insert into an unconstrained text column, so a stored URL is attacker-
   // controlled. The work row must carry a storage key the service role
@@ -112,7 +112,7 @@ describe('Migration 256 — the sweep cannot be turned into an SSRF', () => {
   })
 })
 
-describe('Migration 256 — signals cannot double-count', () => {
+describe('Migration 257 — signals cannot double-count', () => {
   // A sweep is resumable and re-runnable. Keying on the run would let one
   // hazard land once per resume.
   it('makes identity content-addressed, not run-scoped', () => {
@@ -130,7 +130,7 @@ describe('Migration 256 — signals cannot double-count', () => {
   })
 })
 
-describe('Migration 256 — the model cannot write outside the taxonomy', () => {
+describe('Migration 257 — the model cannot write outside the taxonomy', () => {
   const CODES = [
     'ppe_head', 'ppe_eye', 'ppe_hand', 'ppe_foot', 'ppe_hi_vis', 'ppe_fall_arrest',
     'guard_removed', 'egress_blocked', 'housekeeping', 'spill_leak',
@@ -161,7 +161,7 @@ describe('Migration 256 — the model cannot write outside the taxonomy', () => 
   })
 })
 
-describe('Migration 256 — drafts are grounded and staged', () => {
+describe('Migration 257 — drafts are grounded and staged', () => {
   it('requires a jurisdiction rather than letting the model infer one', () => {
     expect(ddl).toContain('jurisdiction   text        not null check (length(btrim(jurisdiction)) > 0)')
   })
@@ -184,7 +184,7 @@ describe('Migration 256 — drafts are grounded and staged', () => {
   })
 })
 
-describe('Migration 256 — rollback', () => {
+describe('Migration 257 — rollback', () => {
   it('drops every table the migration created', () => {
     for (const table of NEW_TABLES) {
       expect(rollback, table).toContain(`drop table if exists public.${table}`)
