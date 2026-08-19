@@ -16,7 +16,7 @@ import {
   type ImprovementDirection,
 } from '@soteria/core/environmentalObjective'
 
-// /admin/environmental/objectives — ISO 14001:2015 clause 6.2 + 9.1.1.
+// /environmental/objectives — ISO 14001:2015 clause 6.2 + 9.1.1.
 //
 // Environmental objectives with a baseline → target and an append-only
 // reading trail. Progress + "achieved?" come from the shared helper so
@@ -250,7 +250,7 @@ export default function EnvironmentalObjectivesPage() {
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-5">
       <div>
-        <Link href="/" className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300">
+        <Link href="/environmental" className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300">
           <ArrowLeft className="h-3 w-3" /> Back
         </Link>
         <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
