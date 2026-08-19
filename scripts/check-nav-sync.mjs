@@ -16,7 +16,10 @@
 //      without a tile fail this check.
 //
 //   2. Every tile in the catalog references a directory that actually
-//      exists.
+//      exists AND holds a page file. A directory alone is not a route:
+//      apps/web/app/admin/observations/bbs/ existed only to hold
+//      dashboard/, so the "BBS observations" tile — and the breadcrumb
+//      derived from it — sent every admin to a 404.
 //
 //   3. Every FEATURES entry whose href starts with /admin/ resolves to
 //      a real route (top-level admin dirs no longer accept leaves;
@@ -51,6 +54,13 @@ function fail(msg) {
 }
 function ok(msg) {
   console.log(`[nav-sync] ✓ ${msg}`)
+}
+
+// A folder under app/ is only a route once it holds a page file — a
+// folder that just groups deeper routes serves nothing at its own URL.
+function isRoute(...segments) {
+  return existsSync(resolve(appDir, ...segments, 'page.tsx'))
+      || existsSync(resolve(appDir, ...segments, 'page.ts'))
 }
 
 function loadAdminDirs() {
@@ -127,6 +137,14 @@ if (orphanTile.length > 0) {
   console.error('      Remove the tile from apps/web/lib/adminCatalog.ts or restore the route.\n')
 }
 
+// Check 2b — and that directory serves a page at the tile's own href.
+const pagelessTile = catalogEntries.filter(c => dirPathSet.has(c.path) && !isRoute('admin', c.section, c.slug))
+if (pagelessTile.length > 0) {
+  fail(`${pagelessTile.length} catalog tile(s) point at a directory with no page — the tile 404s:`)
+  pagelessTile.forEach(c => console.error(`        - /admin/${c.path} (no apps/web/app/admin/${c.path}/page.tsx)`))
+  console.error('      Add the page, or move the tile to the route that already has one.\n')
+}
+
 // Check 3 — catalog path uniqueness (section + slug pair).
 const seen = new Set()
 const dupes = []
@@ -138,19 +156,20 @@ if (dupes.length > 0) {
   fail(`catalog has duplicate <section>/<slug> path(s): ${[...new Set(dupes)].join(', ')}`)
 }
 
-// Check 4 — FEATURES href: /admin/<section>/<slug> resolves. Only the
-// first two segments after /admin/ are required; deeper paths are
-// owned by the route's own routing.
+// Check 4 — every FEATURES href serves a page at the exact path it
+// links to. The href regex above only matches static segments, so the
+// whole path can be resolved on disk; a deep href like
+// /admin/observations/bbs/dashboard is checked at its own depth rather
+// than at its first two segments, where a pageless parent would pass.
 const featureBrokenHrefs = []
 for (const href of featureAdminHrefs) {
   const parts = href.split('/').filter(Boolean) // ['admin', '<section>', '<slug>', ...]
   if (parts.length < 3) continue                 // /admin/<bare> — legacy shape; skip
-  const path = `${parts[1]}/${parts[2]}`
-  if (!dirPathSet.has(path)) featureBrokenHrefs.push({ href, path })
+  if (!isRoute(...parts)) featureBrokenHrefs.push(href)
 }
 if (featureBrokenHrefs.length > 0) {
   fail(`${featureBrokenHrefs.length} FEATURES entry/entries link to a missing admin route:`)
-  featureBrokenHrefs.forEach(f => console.error(`        - href: '${f.href}' (no apps/web/app/admin/${f.path}/)`))
+  featureBrokenHrefs.forEach(href => console.error(`        - href: '${href}' (no apps/web/app${href}/page.tsx)`))
   console.error('      Update or remove the entry in packages/core/src/features.ts.\n')
 }
 
