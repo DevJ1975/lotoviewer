@@ -18,8 +18,8 @@
 //   2. Every tile in the catalog references a directory that actually
 //      exists AND holds a page file. A directory alone is not a route:
 //      apps/web/app/admin/observations/bbs/ existed only to hold
-//      dashboard/, so the "BBS observations" tile — and the breadcrumb
-//      derived from it — sent every admin to a 404.
+//      dashboard/, so the "BBS observations" tile sent every admin to
+//      a 404 — and this check passed it, because the directory was there.
 //
 //   3. Every FEATURES entry whose href starts with /admin/ resolves to
 //      a real route (top-level admin dirs no longer accept leaves;

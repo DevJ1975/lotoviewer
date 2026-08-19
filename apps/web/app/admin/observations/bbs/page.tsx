@@ -6,9 +6,9 @@ import { ArrowLeft, ArrowRight, ClipboardList, Eye, QrCode, type LucideIcon } fr
 // lib/adminCatalog.ts advertises this exact URL (every tile lives at
 // /admin/<section>/<slug>) and promises three things: observation
 // locations, QR codes, and the leading-indicator dashboard. Those three
-// surfaces shipped; the index that gathers them did not, so the tile on
-// /admin — and the "BBS observations" breadcrumb above the dashboard —
-// both landed on a Next.js 404.
+// surfaces shipped; the index that gathers them did not, so both routes
+// into it — the "BBS observations" tile on /admin, and the legacy
+// /admin/bbs 301 from getAdminRedirects() — hit a Next.js 404.
 //
 // No auth gate here on purpose: this page holds links, not data.
 // AuthGate already keeps non-admins out of /admin/*, and each
