@@ -88,6 +88,14 @@
     {
       "path": "/api/cron/loto-audit-resume",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/vision-hazard-sweep",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/vision-sweep-resume",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

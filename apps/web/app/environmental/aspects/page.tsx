@@ -19,7 +19,7 @@ import {
   type AspectSignificanceBand,
 } from '@soteria/core/environmentalAspect'
 
-// /admin/environmental/aspects — ISO 14001:2015 clause 6.1.2 register.
+// /environmental/aspects — ISO 14001:2015 clause 6.1.2 register.
 //
 // Lists the environmental aspects & impacts with their significance
 // rating (severity × likelihood; significant at ≥ 12). Admins add rows
@@ -179,7 +179,7 @@ export default function EnvironmentalAspectsPage() {
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-5">
       <div>
-        <Link href="/" className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300">
+        <Link href="/environmental" className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300">
           <ArrowLeft className="h-3 w-3" /> Back
         </Link>
         <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">

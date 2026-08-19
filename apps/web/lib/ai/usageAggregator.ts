@@ -12,7 +12,7 @@
 // surfaces this caveat in the UI; do not treat dollar figures here
 // as billing-grade.
 
-import { SONNET, HAIKU, OPUS } from './models'
+import { SONNET, HAIKU, OPUS, SONNET_5 } from './models'
 
 // ─── Pricing ──────────────────────────────────────────────────────────
 // Rates expressed in USD per million tokens. Source: Anthropic public
@@ -27,6 +27,10 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   [SONNET]: { inputPerMTok: 3,  outputPerMTok: 15 },
   [HAIKU]:  { inputPerMTok: 1,  outputPerMTok: 5  },
   [OPUS]:   { inputPerMTok: 5,  outputPerMTok: 25 },
+  // Sonnet 5 list price. An introductory rate was in effect at time of
+  // writing; the list rate is used deliberately, because over-estimating
+  // spend makes a tenant budget cap fire early rather than late.
+  [SONNET_5]: { inputPerMTok: 3, outputPerMTok: 15 },
 }
 
 // Anthropic prompt-cache rate multipliers relative to base input price.
