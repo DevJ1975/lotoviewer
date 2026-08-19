@@ -341,28 +341,39 @@ async function dispatchInitialNotifications(
   // Build a rule-id → name lookup for audit/email rendering.
   const ruleNameById = new Map(rules.map(r => [r.id, r.name]))
 
-  const logRows: Array<Record<string, unknown>> = []
-
-  for (const plan of plans) {
+  // One send per recipient, all in flight together. These run inside the
+  // request that returns the reporter's 201, so sending them in sequence
+  // put every recipient's SMTP round trip between the reporter and their
+  // confirmation — a ten-recipient rule made filing an incident feel broken.
+  const logRows = await Promise.all(plans.map(async (plan) => {
     const { recipient, rule_id } = plan
     if (recipient.channel === 'email' && recipient.email) {
-      const ok = await sendIncidentAlertEmail({
-        to:             recipient.email,
-        recipientName:  null,
-        reportNumber:   incident.report_number,
-        incidentType:   incident.incident_type,
-        severityActual: incident.severity_actual,
-        occurredAt:     incident.occurred_at,
-        locationText:   incident.location_text,
-        description:    incident.description,
-        appUrl,
-        incidentId:     incident.id,
-        tenantName,
-        tenantId:       incident.tenant_id,
-        triggeredBy,
-        ruleName:       ruleNameById.get(rule_id) ?? null,
-      })
-      logRows.push({
+      // A recipient whose send throws is logged as failed like one that
+      // returns false; it must not take the other recipients down with it.
+      let ok = false
+      try {
+        ok = await sendIncidentAlertEmail({
+          to:             recipient.email,
+          recipientName:  null,
+          reportNumber:   incident.report_number,
+          incidentType:   incident.incident_type,
+          severityActual: incident.severity_actual,
+          occurredAt:     incident.occurred_at,
+          locationText:   incident.location_text,
+          description:    incident.description,
+          appUrl,
+          incidentId:     incident.id,
+          tenantName,
+          tenantId:       incident.tenant_id,
+          triggeredBy,
+          ruleName:       ruleNameById.get(rule_id) ?? null,
+        })
+      } catch (e) {
+        Sentry.captureException(e, {
+          tags: { route: 'incidents/POST', stage: 'notify-send' },
+        })
+      }
+      return {
         tenant_id:          incident.tenant_id,
         incident_id:        incident.id,
         rule_id,
@@ -371,12 +382,12 @@ async function dispatchInitialNotifications(
         recipient_user_id:  recipient.user_id,
         recipient_email:    recipient.email,
         status:             ok ? 'sent' : 'failed',
-      })
+      }
     } else if (recipient.channel === 'push') {
       // Phase 2 wires push via /api/push/dispatch. Log as 'skipped'
       // so the per-incident notifications tab shows what *would*
       // have been sent.
-      logRows.push({
+      return {
         tenant_id:          incident.tenant_id,
         incident_id:        incident.id,
         rule_id,
@@ -386,10 +397,10 @@ async function dispatchInitialNotifications(
         recipient_email:    recipient.email,
         status:             'skipped',
         error_text:         'push channel ships in Phase 2',
-      })
+      }
     } else if (recipient.channel === 'sms') {
       // SMS channel reserved for a future provider integration.
-      logRows.push({
+      return {
         tenant_id:          incident.tenant_id,
         incident_id:        incident.id,
         rule_id,
@@ -399,9 +410,10 @@ async function dispatchInitialNotifications(
         recipient_phone:    null,
         status:             'skipped',
         error_text:         'sms channel not configured',
-      })
+      }
     }
-  }
+    return null
+  })).then(rows => rows.flatMap(r => (r ? [r] : [])))
 
   // _ to silence the unused-var lint for triggeredByEmail — kept in the
   // signature so a future audit-context tag can use it.
