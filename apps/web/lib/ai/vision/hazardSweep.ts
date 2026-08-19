@@ -293,6 +293,10 @@ export async function drainVisionSweep(
   while (Date.now() - startedAt < opts.budgetMs) {
     const batch = await claimBatch(admin, opts.runId, batchSize)
     if (batch.length === 0) {
+      // No QUEUED work left. That is not the same as finished: rows another
+      // worker claimed moments ago are still in flight, and closing the run
+      // here would strand them — the resume cron only looks at runs still
+      // marked 'running'. recordProgress re-checks before closing.
       result.drained = true
       break
     }
@@ -507,8 +511,32 @@ async function recordProgress(
     gate_rejections: merged,
     input_tokens:    (prior.input_tokens  ?? 0) + result.inputTokens,
     output_tokens:   (prior.output_tokens ?? 0) + result.outputTokens,
-    ...(result.drained ? { status: 'completed', finished_at: new Date().toISOString() } : {}),
+    ...(await isRunFinished(admin, runId, result.drained)
+      ? { status: 'completed', finished_at: new Date().toISOString() }
+      : {}),
   }).eq('id', runId)
+}
+
+// A run is finished only when nothing remains QUEUED or CLAIMED. An in-flight
+// claim belongs to a worker that may still be mid-photo; if that worker died,
+// releaseStaleClaims in the resume cron returns the row to 'queued' — but only
+// while the run is still 'running'. Closing on an empty queue alone would
+// therefore lose exactly the rows a crash left behind.
+async function isRunFinished(
+  admin: SupabaseClient,
+  runId: string,
+  queueWasEmpty: boolean,
+): Promise<boolean> {
+  if (!queueWasEmpty) return false
+  const { count, error } = await admin
+    .from('vision_sweep_photos')
+    .select('id', { count: 'exact', head: true })
+    .eq('run_id', runId)
+    .in('state', ['queued', 'claimed'])
+  // On a count failure, leave the run open. A run that stays 'running' one tick
+  // too long is retried; one closed early is silently incomplete.
+  if (error) return false
+  return (count ?? 0) === 0
 }
 
 async function failRun(admin: SupabaseClient, runId: string, message: string) {

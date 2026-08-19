@@ -170,6 +170,14 @@ about something else.
   and an upfront tenant budget check. Note `checkTenantBudget` reads every
   successful invocation row for the tenant that day — a mid-run re-check would
   be quadratic, so the per-run cap is the control instead.
+  **Attribution caveat:** `ai_invocations.user_id` is
+  `uuid not null references auth.users`, so a cron-driven run has no honest
+  value for it. Those runs accumulate `input_tokens` / `output_tokens` on
+  `vision_sweep_runs` instead of writing invocation rows — visible, but outside
+  the daily budget sum, which is the second reason the per-run photo cap is the
+  cron's real cost control. A run a person triggers logs normally under their
+  id. Folding cron spend into the daily cap needs a service-principal identity
+  in `ai_invocations`, which is its own change.
 - **R3 — precursor false positives** eroding trust. Mitigated by the
   validated/unvalidated label, the required `basis`, and cited evidence.
 - **R4 — draft over-trust.** Mitigated by enforced citation resolution,
