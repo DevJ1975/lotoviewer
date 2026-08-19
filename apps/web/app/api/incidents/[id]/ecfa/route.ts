@@ -31,6 +31,19 @@ const ALLOWED_PATCH_FIELDS = [
   'cf_category', 'failed_barrier', 'cf_hierarchy_control', 'ai_edited',
 ] as const
 
+// Fields a POST may set. The server owns identity (id), scope (tenant_id,
+// investigation_id), authorship (created_by) and timestamps — without this
+// allowlist a caller could supply its own id or backdate created_at, forging
+// the identity and timeline of an investigation record. ai_origin/ai_edited
+// stay caller-supplied because the AI-accept flow runs client-side; they are
+// self-reported provenance, not an authorization boundary.
+const ALLOWED_INSERT_FIELDS = [
+  'node_type', 'title', 'description', 'sequence_index', 'parent_event_id',
+  'lane', 'occurred_at', 'verification_status', 'is_causal_factor',
+  'cf_category', 'failed_barrier', 'cf_hierarchy_control',
+  'ai_origin', 'ai_edited',
+] as const
+
 // A single drag can renumber several nodes; cap the batch so a malformed or
 // hostile request can't fan out into an unbounded write.
 const MAX_BATCH = 200
@@ -161,14 +174,16 @@ export async function POST(req: Request, ctx: RouteContext) {
     const resolved = await resolveInvestigation(admin, incidentId, gate)
     if (!resolved.ok) return resolved.res
 
-    // Spread the client node, then scope tenant + investigation LAST so
-    // callers can't override them.
-    const insert = {
-      ...node,
+    // Copy only the caller-settable fields, then scope tenant + investigation
+    // + authorship. A spread here would let a caller set id/created_at.
+    const insert: Record<string, unknown> = {
       tenant_id:        gate.tenantId,
       investigation_id: resolved.investigationId,
       created_by:       gate.userId,
-    } as Record<string, unknown>
+    }
+    for (const field of ALLOWED_INSERT_FIELDS) {
+      if (field in node) insert[field] = (node as Record<string, unknown>)[field]
+    }
 
     const { data, error } = await admin.from(TABLE).insert(insert).select('*').single()
     if (error) {
