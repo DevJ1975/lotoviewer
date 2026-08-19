@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { AlertTriangle, Plus, Siren } from 'lucide-react'
 import { EmptyState } from '@/components/EmptyState'
@@ -31,9 +31,23 @@ const SEVERITY_PILL: Record<IncidentSeverityActual, string> = {
   none:         'bg-slate-200 text-slate-700',
 }
 
+// The list request is capped server-side, so the page can hold fewer rows
+// than the tenant has. Counts therefore come from the server, which tallies
+// the whole set — deriving them from `rows` would silently under-report the
+// most severe incidents the moment a tenant crosses the cap.
+const PAGE_LIMIT = 200
+
+type ActiveSeverityCounts = Record<IncidentSeverityActual, number>
+
+const EMPTY_COUNTS: ActiveSeverityCounts = {
+  catastrophic: 0, fatality: 0, lost_time: 0, medical: 0, first_aid: 0, none: 0,
+}
+
 export default function IncidentListPage() {
   const { tenant } = useTenant()
   const [rows,    setRows]    = useState<IncidentRow[] | null>(null)
+  const [counts,  setCounts]  = useState<ActiveSeverityCounts>(EMPTY_COUNTS)
+  const [total,   setTotal]   = useState(0)
   const [error,   setError]   = useState<string | null>(null)
   const [showAll, setShowAll] = useState(false)
 
@@ -46,28 +60,21 @@ export default function IncidentListPage() {
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
 
       const params = new URLSearchParams()
-      params.set('limit', '200')
+      params.set('limit', String(PAGE_LIMIT))
       if (!showAll) params.set('status', ACTIVE_INCIDENT_STATUSES.join(','))
 
       const res = await fetch(`/api/incidents?${params.toString()}`, { headers })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
       setRows(((body.reports ?? []) as IncidentRow[]).slice().sort(compareForTriage))
+      setCounts((body.active_severity_counts as ActiveSeverityCounts | undefined) ?? EMPTY_COUNTS)
+      setTotal((body.total as number | undefined) ?? 0)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
   }, [tenant, showAll])
 
   useEffect(() => { void load() }, [load])
-
-  const counts = useMemo(() => {
-    const c = { catastrophic: 0, fatality: 0, lost_time: 0, medical: 0, first_aid: 0, none: 0 }
-    for (const r of rows ?? []) {
-      if (r.status === 'closed') continue
-      c[r.severity_actual]++
-    }
-    return c
-  }, [rows])
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
@@ -95,7 +102,13 @@ export default function IncidentListPage() {
         <CountTile label="No injury"    count={counts.none}         pill={SEVERITY_PILL.none} />
       </section>
 
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-between gap-3">
+        {rows && total > rows.length ? (
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            Showing the {rows.length} most recent of {total}. The tiles above
+            count every open incident.
+          </p>
+        ) : <span />}
         <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 cursor-pointer">
           <input
             type="checkbox"
