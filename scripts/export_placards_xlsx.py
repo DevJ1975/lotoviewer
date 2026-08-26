@@ -227,7 +227,8 @@ FONT_NAME = "Arial"
 GRID_COLS = 12  # the placard's band grid; every band divides into these
 MAX_ROW_BREAKS = 1026  # Excel's per-sheet ceiling on manual page breaks
 COLUMN_WIDTH = 13      # character units; 12 of these span a landscape page
-PHOTO_ROWS = 7         # rows a photo slot occupies
+PHOTO_ROWS = 7            # rows an empty photo slot occupies
+PHOTO_ROWS_WITH_IMAGE = 14  # rows when a photo is actually embedded
 PHOTO_ROW_POINTS = 14  # height of each of those rows
 BODY_ROW_POINTS = 12   # height of a wrapped body row
 # Excel's line pitch as a multiple of the font size. Its own autofit row
@@ -740,13 +741,20 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
     sheet.band(TEXT["section_header"][language],
                Style(fill=NAVY_HEADER, color=WHITE, size=9, bold=True), height=14)
 
-    # 7. Photo slots, side by side.
+    # 7. Photo slots, side by side. A slot with a photo in it earns the taller
+    # band: the isolation shot is what a worker matches against the machine,
+    # and in the short band a 4:3 photo fills barely a third of the slot's
+    # width. An empty slot keeps the compact height — reserving the space for
+    # a placeholder would cost a page and show nothing.
     caption_en, caption_es = TEXT["photo_captions"][language]
-    photo_rows = PHOTO_ROWS
+    stem = equipment["equipment_id"].replace("/", "_")
+    photo_paths = {kind: sheet.photos / f"{stem}_{kind}.jpg" for kind in ("equip", "iso")}
+    photo_rows = (PHOTO_ROWS_WITH_IMAGE if any(p.exists() for p in photo_paths.values())
+                  else PHOTO_ROWS)
     start = sheet.row
     for index, (kind, caption) in enumerate((("equip", caption_en), ("iso", caption_es))):
         span = (1, half) if index == 0 else (half + 1, GRID_COLS)
-        path = sheet.photos / f"{equipment['equipment_id'].replace('/', '_')}_{kind}.jpg"
+        path = photo_paths[kind]
         url = equipment.get(f"{kind}_photo_url")
         embedded = False
         if path.exists():
