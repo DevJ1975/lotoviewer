@@ -909,17 +909,73 @@ def _flat_sheet(ws, rows: list[dict], columns: list[str]) -> None:
         )
 
 
-def cmd_build(args: argparse.Namespace) -> int:
-    data = Path(args.data)
-    equipment = json.loads((data / "equipment.json").read_text("utf-8"))
-    steps = json.loads((data / "steps.json").read_text("utf-8"))
-    photos = data / "photos"
-    languages = ["en", "es"] if args.language == "both" else [args.language]
+_UNSAFE_FILENAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_WINDOWS_RESERVED = {"con", "prn", "aux", "nul",
+                     *(f"com{n}" for n in range(1, 10)),
+                     *(f"lpt{n}" for n in range(1, 10))}
 
+
+def filename_for(label: str) -> str:
+    """A department name as a filename that survives every OS.
+
+    Windows rejects <>:"/\\|?*, reserved device names, and trailing dots or
+    spaces. The name still has to be recognisable to whoever opens the
+    folder, so characters are replaced rather than dropped.
+    """
+    safe = _UNSAFE_FILENAME.sub("-", label).strip().rstrip(". ")
+    safe = (safe or "Unassigned")[:80].rstrip(". ") or "Unassigned"
+    if safe.casefold() in _WINDOWS_RESERVED:
+        safe = f"{safe} (dept)"
+    return safe
+
+
+def unique_filenames(labels: list[str]) -> dict[str, str]:
+    """Map each department label to a distinct filename stem.
+
+    Department names are free text an admin edits in the app, so two of them
+    can sanitise to the same stem — "Line A/B" and "Line A-B" both become
+    "Line A-B". Windows and macOS also treat names as case-insensitive, so
+    "Shipping" and "SHIPPING" would collide there even though Linux keeps
+    them apart. Either way one workbook would silently overwrite another and
+    a whole department would vanish from the folder, so collisions are
+    resolved rather than left to the filesystem.
+    """
+    assigned: dict[str, str] = {}
+    taken: set[str] = set()
+    for label in labels:
+        stem = filename_for(label)
+        candidate, suffix = stem, 2
+        while candidate.casefold() in taken:
+            candidate = f"{stem} ({suffix})"
+            suffix += 1
+        taken.add(candidate.casefold())
+        assigned[label] = candidate
+    return assigned
+
+
+def group_by_department(equipment: list[dict]) -> list[tuple[str, list[dict]]]:
+    """Departments as the workbook counts them: case-insensitively, each
+    labelled with the spelling most of its rows use. "Shipping" and
+    "SHIPPING" are one department with 18 placards, not two with 18 each."""
+    groups: dict[str, list[dict]] = {}
+    spellings: dict[str, Counter] = {}
+    for row in equipment:
+        name = clean(row.get("department")) or "Unassigned"
+        key = name.casefold()
+        groups.setdefault(key, []).append(row)
+        spellings.setdefault(key, Counter())[name] += 1
+    labelled = [(spellings[key].most_common(1)[0][0], rows)
+                for key, rows in groups.items()]
+    return sorted(labelled, key=lambda pair: pair[0].casefold())
+
+
+def build_workbook(equipment: list[dict], steps: list[dict], photos: Path,
+                   languages: list[str], date: str, out_path: Path) -> int:
+    """Write one placard workbook. Returns the number of placard pages."""
     by_equipment: dict[str, list[dict]] = {}
     for step in steps:
         by_equipment.setdefault(step["equipment_id"], []).append(step)
-    equipment.sort(key=lambda row: row["equipment_id"])
+    equipment = sorted(equipment, key=lambda row: row["equipment_id"])
 
     workbook = Workbook()
     workbook.remove(workbook.active)
@@ -949,7 +1005,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     for row in equipment:
         for language in languages:
             top = draw_placard(sheet, row, by_equipment.get(row["equipment_id"], []),
-                               language, args.date)
+                               language, date)
             index.append((row["equipment_id"], clean(row.get("department")), language, top))
 
     _flat_sheet(equipment_sheet, equipment,
@@ -957,18 +1013,99 @@ def cmd_build(args: argparse.Namespace) -> int:
     _flat_sheet(steps_sheet, steps, list(steps[0].keys()) if steps else [])
     _index_sheet(index_sheet, index)
     _summary_sheet(summary, equipment, len(steps), len(index))
-    _readme_sheet(readme, equipment, steps, photos, args,
+    _readme_sheet(readme, equipment, steps, photos, date,
                   fit=_page_fit(placards, sorted(b.id for b in placards.row_breaks.brk)),
                   pages=len(index))
 
-    workbook.save(args.out)
-    print(f"{len(equipment)} placards x {len(languages)} language(s) -> {args.out}")
+    workbook.save(out_path)
     if len(index) > MAX_ROW_BREAKS:
         print(f"  note: Excel caps a sheet at {MAX_ROW_BREAKS} manual page breaks, so the "
-              f"last {len(index) - MAX_ROW_BREAKS} placard(s) share a page with the one "
-              f"before. Export a single language, or split the run, to page them all.",
-              file=sys.stderr)
+              f"last {len(index) - MAX_ROW_BREAKS} placard(s) in {out_path.name} share a "
+              f"page with the one before. Export a single language, or split by "
+              f"department, to page them all.", file=sys.stderr)
+    return len(index)
+
+
+def cmd_build(args: argparse.Namespace) -> int:
+    data = Path(args.data)
+    equipment = json.loads((data / "equipment.json").read_text("utf-8"))
+    steps = json.loads((data / "steps.json").read_text("utf-8"))
+    photos = data / "photos"
+    languages = ["en", "es"] if args.language == "both" else [args.language]
+    steps_for = _steps_index(steps)
+
+    if not args.by_department:
+        pages = build_workbook(equipment, steps, photos, languages, args.date,
+                               Path(args.out))
+        print(f"{len(equipment)} placards, {pages} pages -> {args.out}")
+        return 0
+
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    groups = group_by_department(equipment)
+    names = unique_filenames([label for label, _ in groups])
+    written = 0
+    for label, rows in groups:
+        department_steps = steps_for(rows)
+        target = out_dir / f"{names[label]}.xlsx"
+        pages = build_workbook(rows, department_steps, photos, languages,
+                               args.date, target)
+        written += len(rows)
+        print(f"  {len(rows):4d} placards, {pages:4d} pages -> {target.name}")
+
+    _folder_readme(out_dir, groups, names, equipment, photos, args.date)
+    print(f"{written} placards across {len(groups)} departments -> {out_dir}/")
     return 0
+
+
+def _steps_index(steps: list[dict]):
+    """Return a function mapping equipment rows to their steps."""
+    by_id: dict[str, list[dict]] = {}
+    for step in steps:
+        by_id.setdefault(step["equipment_id"], []).append(step)
+
+    def for_rows(rows: list[dict]) -> list[dict]:
+        collected: list[dict] = []
+        for row in rows:
+            collected.extend(by_id.get(row["equipment_id"], []))
+        return collected
+
+    return for_rows
+
+
+def _folder_readme(out_dir: Path, groups, names: dict[str, str],
+                   equipment: list[dict], photos: Path, date: str) -> None:
+    """A plain-text index so the folder explains itself without Excel."""
+    cached = len(list(photos.glob("*.jpg"))) if photos.exists() else 0
+    expected = sum(1 for row in equipment for kind in ("equip", "iso")
+                   if row.get(f"{kind}_photo_url"))
+    lines = [
+        "LOTO placards by department",
+        f"Generated {date}",
+        "",
+        f"{len(equipment)} placards across {len(groups)} departments.",
+        f"Photos embedded: {cached} of {expected} referenced.",
+        "",
+        "One workbook per department. Each contains that department's placards",
+        "laid out like the printed PDF (English and Spanish page per machine),",
+        "plus filterable Equipment and Energy Steps sheets and a Summary.",
+        "",
+        "Departments:",
+    ]
+    for label, rows in groups:
+        lines.append(f"  {len(rows):4d}  {names[label]}.xlsx")
+    if cached < expected:
+        lines += [
+            "",
+            "To embed the photos, from the repo root:",
+            "  python scripts/export_placards_xlsx.py fetch --photos-only --out <data-dir>",
+            "  python scripts/export_placards_xlsx.py build --data <data-dir> "
+            "--by-department --out-dir <this-folder>",
+            "",
+            "The photo step needs no credentials: placard photos are public storage",
+            "objects and their URLs are already in the cached equipment.json.",
+        ]
+    (out_dir / "README.txt").write_text("\n".join(lines) + "\n", "utf-8")
 
 
 def _index_sheet(ws, index: list[tuple[str, str, str, int]]) -> None:
@@ -1080,7 +1217,7 @@ def _page_fit(ws, breaks: list[int]) -> tuple[int, int]:
 
 
 def _readme_sheet(ws, equipment: list[dict], steps: list[dict], photos: Path,
-                  args: argparse.Namespace, fit: tuple[int, int] = (0, 1),
+                  date: str, fit: tuple[int, int] = (0, 1),
                   pages: int = 0) -> None:
     cached = len(list(photos.glob("*.jpg"))) if photos.exists() else 0
     expected = sum(1 for row in equipment for kind in ("equip", "iso")
@@ -1089,7 +1226,7 @@ def _readme_sheet(ws, equipment: list[dict], steps: list[dict], photos: Path,
     lines = [
         ("Soteria Field — LOTO placard export", 15, True, NAVY_HEADER),
         ("", 10, False, SLATE_TEXT),
-        (f"Generated: {args.date}", 10, False, SLATE_TEXT),
+        (f"Generated: {date}", 10, False, SLATE_TEXT),
         (f"Placards (active, non-decommissioned equipment): {len(equipment)}", 10, False, SLATE_TEXT),
         (f"Energy isolation steps: {len(steps)}", 10, False, SLATE_TEXT),
         (f"Photos embedded: {cached} of {expected} referenced", 10, False, SLATE_TEXT),
@@ -1146,6 +1283,10 @@ def main() -> int:
     build = sub.add_parser("build", help="render the workbook from a cache directory")
     build.add_argument("--data", default="placard-data", help="directory fetch wrote")
     build.add_argument("--out", default="loto-placards.xlsx", help="workbook to write")
+    build.add_argument("--by-department", action="store_true",
+                       help="write one workbook per department into --out-dir")
+    build.add_argument("--out-dir", default="placards-by-department",
+                       help="folder for --by-department")
     build.add_argument("--language", choices=("en", "es", "both"), default="both")
     build.add_argument("--date", default="", help="date printed on each placard")
     build.set_defaults(func=cmd_build)
