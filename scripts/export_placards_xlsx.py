@@ -230,7 +230,12 @@ COLUMN_WIDTH = 13      # character units; 12 of these span a landscape page
 PHOTO_ROWS = 7         # rows a photo slot occupies
 PHOTO_ROW_POINTS = 14  # height of each of those rows
 BODY_ROW_POINTS = 12   # height of a wrapped body row
-LINE_SPACING = 1.22    # Excel's line pitch as a multiple of the font size
+# Excel's line pitch as a multiple of the font size. Its own autofit row
+# heights for Arial run 1.275x at 10pt to 1.31x at 12pt, so 1.22 — the
+# figure the font's own ascent+descent suggests — under-allocates every
+# wrapped block by roughly a line in twelve. Over-allocating costs
+# whitespace; under-allocating silently drops a line of isolation procedure.
+LINE_SPACING = 1.32
 
 # Excel sizes columns in character units and rows in points, but anchors
 # images in pixels, so a slot's pixel box has to be derived from both.
