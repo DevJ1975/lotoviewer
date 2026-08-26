@@ -34,6 +34,7 @@ import sys
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -45,21 +46,22 @@ from openpyxl.worksheet.cell_range import CellRange
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.pagebreak import Break
+from openpyxl.worksheet.page import PageMargins
 
 # ── Placard constants, mirrored from the TypeScript sources ─────────────────
 # energyCodes.ts — code registry. 'N' is an app-side sentinel the placard
 # legend filters out, so it is last and excluded from the grid.
 ENERGY_CODES: list[tuple[str, str, str, str, str]] = [
     # code, label_en,          label_es,          fill,      text
-    ("E",  "Electrical",       "Electrico",       "BF1414", "FFFFFF"),
+    ("E",  "Electrical",       "Eléctrico",       "BF1414", "FFFFFF"),
     ("G",  "Gas",              "Gas",             "FFD900", "1A1A1A"),
-    ("H",  "Hydraulic",        "Hidraulico",      "A67B5B", "FFFFFF"),
-    ("P",  "Pneumatic",        "Neumatico",       "1478C7", "FFFFFF"),
-    ("M",  "Mechanical",       "Mecanico",        "7F4DB3", "FFFFFF"),
-    ("T",  "Thermal",          "Termico",         "000000", "FFFFFF"),
+    ("H",  "Hydraulic",        "Hidráulico",      "A67B5B", "FFFFFF"),
+    ("P",  "Pneumatic",        "Neumático",       "1478C7", "FFFFFF"),
+    ("M",  "Mechanical",       "Mecánico",        "7F4DB3", "FFFFFF"),
+    ("T",  "Thermal",          "Térmico",         "000000", "FFFFFF"),
     ("W",  "Water",            "Agua",            "33993A", "FFFFFF"),
     ("S",  "Steam",            "Vapor",           "E07B00", "FFFFFF"),
-    ("V",  "Valve",            "Valvula",         "888888", "FFFFFF"),
+    ("V",  "Valve",            "Válvula",         "888888", "FFFFFF"),
     ("CG", "Compressed Gas",   "Gas Comprimido",  "0E8A8A", "FFFFFF"),
     ("CP", "Control Panel",    "Panel Control",   "FFFFFF", "1A1A1A"),
     ("GR", "Gravity",          "Gravedad",        "8B0A1A", "FFFFFF"),
@@ -214,19 +216,116 @@ TABLE_BORDER = "D1D9E6"
 SLATE_TEXT = "262E3B"
 PHOTO_SLOT = "F5F7FA"
 SIG_BAR = "F7F7FA"
+GREY_TEXT = "8C8C99"         # pdfPlacard rgb(0.55, 0.55, 0.6)
+GREY_PLACEHOLDER = "9999A6"  # pdfPlacard rgb(0.6, 0.6, 0.65)
+DRAFT_RED = "BF1A1A"         # the ES draft watermark
+DRAFT_FILL = "FDECEC"
+LINK_BLUE = "1155CC"
 
 FONT_NAME = "Arial"
 GRID_COLS = 12  # the placard's band grid; every band divides into these
 MAX_ROW_BREAKS = 1026  # Excel's per-sheet ceiling on manual page breaks
-COLUMN_WIDTH = 11.4    # character units; 12 of these span a landscape page
-PHOTO_ROWS = 10        # rows a photo slot occupies
-PHOTO_ROW_POINTS = 15  # height of each of those rows
+COLUMN_WIDTH = 13      # character units; 12 of these span a landscape page
+PHOTO_ROWS = 7         # rows a photo slot occupies
+PHOTO_ROW_POINTS = 14  # height of each of those rows
+BODY_ROW_POINTS = 12   # height of a wrapped body row
+LINE_SPACING = 1.22    # Excel's line pitch as a multiple of the font size
 
 # Excel sizes columns in character units and rows in points, but anchors
 # images in pixels, so a slot's pixel box has to be derived from both.
 PX_PER_CHAR, PX_CELL_PADDING, PX_PER_POINT = 7, 5, 4 / 3
+COLUMN_PX = round(COLUMN_WIDTH * PX_PER_CHAR) + PX_CELL_PADDING
+COLUMN_POINTS = COLUMN_PX * 0.75
+CELL_PADDING_POINTS = 5
 
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+# Arial, or the metrically identical Liberation Sans. Row heights are derived
+# from measured text, so the font used to measure has to match the font Excel
+# will wrap with; anything else mis-sizes every band.
+_ARIAL_PATHS = (
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+    "C:/Windows/Fonts/arial.ttf",
+    "/Library/Fonts/Arial.ttf",
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+)
+_MEASURE_SIZE = 200  # measure big, scale down — avoids integer-pixel rounding
+
+
+@lru_cache(maxsize=None)
+def _measuring_font():
+    try:
+        from PIL import ImageFont
+    except ImportError:
+        return None
+    for path in _ARIAL_PATHS:
+        if os.path.exists(path):
+            try:
+                return ImageFont.truetype(path, _MEASURE_SIZE)
+            except OSError:
+                continue
+    return None
+
+
+@lru_cache(maxsize=8192)
+def _text_width(text: str, points: float) -> float:
+    """Width of `text` in points at `points` size, in the placard's font."""
+    font = _measuring_font()
+    if font is None:
+        # No font file to measure with: Arial's average lowercase advance is
+        # close to half its em, which over-estimates narrow text and so errs
+        # toward a taller row rather than a clipped one.
+        return len(text) * points * 0.5
+    return font.getlength(text) * points / _MEASURE_SIZE
+
+
+def wrapped_lines(text: str, points: float, width_points: float) -> int:
+    """How many lines Excel wraps `text` into within `width_points`."""
+    if not text:
+        return 1
+    usable = max(width_points - CELL_PADDING_POINTS, points)
+    total = 0
+    for paragraph in str(text).split("\n"):
+        words = paragraph.split()
+        if not words:
+            total += 1
+            continue
+        lines, current = 1, ""
+        for word in words:
+            candidate = f"{current} {word}".strip()
+            if _text_width(candidate, points) <= usable or not current:
+                current = candidate
+            else:
+                lines += 1
+                current = word
+                # A single word wider than the cell wraps again mid-word.
+                while _text_width(current, points) > usable and len(current) > 1:
+                    cut = max(1, int(len(current) * usable / _text_width(current, points)))
+                    current = current[cut:]
+                    lines += 1
+        total += lines
+    return total
+
+
+def span_points(first_col: int, last_col: int) -> float:
+    """Printable width of a merged column span, in points."""
+    return (last_col - first_col + 1) * COLUMN_POINTS
+
+
+def rows_for(text: str, points: float, first_col: int, last_col: int,
+             row_points: float = BODY_ROW_POINTS, minimum: int = 1,
+             maximum: int = 40) -> int:
+    """Rows a wrapped block needs so Excel clips none of it.
+
+    Excel never grows a merged cell to fit its contents — whatever overflows
+    is simply not drawn. Every wrapped band therefore has to be sized from
+    the text itself, or a placard quietly loses isolation steps.
+    """
+    lines = wrapped_lines(text, points, span_points(first_col, last_col))
+    needed = -(-int(lines * points * LINE_SPACING + 2) // int(row_points))
+    return max(minimum, min(maximum, needed))
 
 
 def clean(value) -> str:
@@ -234,6 +333,20 @@ def clean(value) -> str:
     if value is None:
         return ""
     return _CONTROL_CHARS.sub("", str(value))
+
+
+_BLANK_LINES = re.compile(r"\n[ \t]*\n+")
+
+
+def placard_text(value) -> str:
+    """Cell text for a placard band.
+
+    Collapses runs of blank lines: most tag_description values are stored as
+    a heading, an empty line, then the body, and that empty line costs a
+    wrapped line in the narrowest column of every step on every page. Only
+    whitespace is touched — the flat data sheets still carry the raw value.
+    """
+    return _BLANK_LINES.sub("\n", clean(value)).strip()
 
 
 def cell_value(value):
@@ -424,7 +537,12 @@ class PlacardSheet:
         self.row += 1
         return row
 
-    def cell(self, row: int, span: tuple[int, int], text, style: Style):
+    def cell(self, row: int, span: tuple[int, int], text, style: Style,
+             merge: bool = True):
+        """Write one single-row band. `merge=False` leaves the range to the
+        caller, so a multi-row block does not also register a one-row merge
+        over its own anchor — two ranges sharing a corner is a malformed
+        workbook that Excel offers to repair on open."""
         first, last = span
         cell = self.ws.cell(row=row, column=first)
         cell.value = clean(text) if text != "" else None
@@ -436,7 +554,8 @@ class PlacardSheet:
         if style.border:
             cell.border = BOX
         if last > first:
-            self.merge(row, first, row, last)
+            if merge:
+                self.merge(row, first, row, last)
             # Merged cells keep their own fill/border, so paint the tail too.
             for column in range(first + 1, last + 1):
                 tail = self.ws.cell(row=row, column=column)
@@ -450,8 +569,9 @@ class PlacardSheet:
               start: int | None = None) -> int:
         """A band that spans several rows (wrapped body text, photo slots)."""
         row = self.row if start is None else start
-        cell = self.cell(row, span, text, style)
-        self.merge(row, span[0], row + rows - 1, span[1])
+        cell = self.cell(row, span, text, style, merge=False)
+        if rows > 1 or span[1] > span[0]:
+            self.merge(row, span[0], row + rows - 1, span[1])
         for r in range(row, row + rows):
             for c in range(span[0], span[1] + 1):
                 tail = self.ws.cell(row=r, column=c)
@@ -478,9 +598,9 @@ def _grouped_steps(steps: list[dict]) -> list[dict]:
 def _pick(step: dict, field: str, language: str) -> str:
     """Spanish text where present, English as the placard's own fallback."""
     if language == "en":
-        return clean(step.get(field))
-    spanish = clean(step.get(f"{field}_es")).strip()
-    return spanish or clean(step.get(field))
+        return placard_text(step.get(field))
+    spanish = placard_text(step.get(f"{field}_es"))
+    return spanish or placard_text(step.get(field))
 
 
 def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
@@ -489,23 +609,34 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
     ws, is_en = sheet.ws, language == "en"
     half = GRID_COLS // 2
 
-    # 1. Yellow title band.
+    # 1. Yellow title band. The QR caption shares the date line rather than
+    # taking a row of its own — vertical space is the scarce resource here.
     top = sheet.row
     sheet.band(TEXT["title"][language],
-               Style(fill=YELLOW_BAND, color="000000", size=15, bold=True, align="center"),
-               height=30)
+               Style(fill=YELLOW_BAND, color="000000", size=14, bold=True, align="center"),
+               height=24)
     date_label = f"{'Date' if is_en else 'Fecha'}: {generated}"
-    sheet.band(f"[{'EN' if is_en else 'ES'}]   {date_label}",
-               Style(fill=YELLOW_BAND, color="000000", size=8, align="center"), height=13)
-
-    # QR target — the read-only public placard the printed code encodes.
+    row = sheet.row
+    subtitle = sheet.cell(row, (1, GRID_COLS),
+                          f"[{'EN' if is_en else 'ES'}]   {date_label}",
+                          Style(fill=YELLOW_BAND, color="000000", size=8, align="center"))
     if equipment.get("qr_token"):
-        row = sheet.band("", Style(fill=YELLOW_BAND), height=12)
-        link = sheet.cell(row, (1, GRID_COLS),
-                          f"{'Scan for digital placard' if is_en else 'Escanee para placa digital'}: "
-                          f"https://soteriafield.app/qr/{equipment['qr_token']}",
-                          Style(fill=YELLOW_BAND, color="1155CC", size=7, align="center"))
-        link.hyperlink = f"https://soteriafield.app/qr/{equipment['qr_token']}"
+        target = f"https://soteriafield.app/qr/{equipment['qr_token']}"
+        subtitle.value = (f"[{'EN' if is_en else 'ES'}]   {date_label}   ·   "
+                          f"{'Scan for digital placard' if is_en else 'Escanee para placa digital'}")
+        subtitle.hyperlink = target
+    ws.row_dimensions[row].height = 12
+    sheet.row += 1
+
+    # 1b. Draft banner. The PDF stamps a rotated "BORRADOR — NO REVISADO"
+    # watermark across any Spanish page whose translation is unreviewed. A
+    # spreadsheet cannot rotate a watermark behind its cells, so the same
+    # warning takes a band of its own — losing it would present an unreviewed
+    # translation as an approved procedure.
+    if not is_en and equipment.get("spanish_reviewed") is False:
+        sheet.band("BORRADOR — NO REVISADO  ·  traducción sin revisar",
+                   Style(fill=DRAFT_FILL, color=DRAFT_RED, size=9, bold=True,
+                         align="center"), height=13)
 
     # 2. Blue equipment bar — description left, department right.
     row = sheet.row
@@ -513,18 +644,23 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
                Style(fill=BLUE_BAR, color=NAVY_HEADER, size=10, bold=True))
     sheet.cell(row, (9, GRID_COLS), clean(equipment.get("department")),
                Style(fill=BLUE_BAR, color=NAVY_HEADER, size=10, bold=True, align="right"))
-    ws.row_dimensions[row].height = 18
+    ws.row_dimensions[row].height = 16
     sheet.row += 1
 
-    # 3. Red warning block.
+    # 3. Red warning block. The PDF prints only the first wrapped line of the
+    # note; here the whole note is shown, because the band is the one place a
+    # machine-specific hazard is written down.
     sheet.band(TEXT["warning_header"][language],
-               Style(fill=RED_BLOCK, color=WHITE, size=10, bold=True, align="center"), height=15)
-    notes = clean(equipment.get("notes") if is_en else equipment.get("notes_es")).strip()
-    sheet.block(2, (1, GRID_COLS), notes or TEXT["warning_fallback"][language],
+               Style(fill=RED_BLOCK, color=WHITE, size=9.5, bold=True, align="center"),
+               height=14)
+    notes = placard_text(equipment.get("notes") if is_en else equipment.get("notes_es"))
+    warning = notes or TEXT["warning_fallback"][language]
+    warning_rows = rows_for(warning, 8, 1, GRID_COLS, minimum=1, maximum=4)
+    sheet.block(warning_rows, (1, GRID_COLS), warning,
                 Style(fill=RED_BLOCK, color=WHITE, size=8, align="center", wrap=True))
-    for r in (sheet.row, sheet.row + 1):
-        ws.row_dimensions[r].height = 13
-    sheet.row += 2
+    for r in range(sheet.row, sheet.row + warning_rows):
+        ws.row_dimensions[r].height = BODY_ROW_POINTS
+    sheet.row += warning_rows
 
     # 4. Purpose | Lockout application process.
     row = sheet.row
@@ -532,19 +668,21 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
                Style(color=NAVY_HEADER, size=9, bold=True))
     sheet.cell(row, (8, GRID_COLS), TEXT["application_header"][language],
                Style(color=NAVY_HEADER, size=9, bold=True))
-    ws.row_dimensions[row].height = 13
+    ws.row_dimensions[row].height = 12
     sheet.row += 1
 
-    body_rows = 5
-    start = sheet.row
-    sheet.block(body_rows, (1, 7), TEXT["purpose_body"][language],
-                Style(size=8, wrap=True, valign="top"), start=start)
+    purpose = TEXT["purpose_body"][language]
     application = "\n".join(f"{i}. {s}" for i, s in
                             enumerate(TEXT["application_steps"][language], 1))
+    body_rows = max(rows_for(purpose, 8, 1, 7),
+                    rows_for(application, 8, 8, GRID_COLS))
+    start = sheet.row
+    sheet.block(body_rows, (1, 7), purpose,
+                Style(size=8, wrap=True, valign="top"), start=start)
     sheet.block(body_rows, (8, GRID_COLS), application,
                 Style(size=8, wrap=True, valign="top"), start=start)
     for r in range(start, start + body_rows):
-        ws.row_dimensions[r].height = 14
+        ws.row_dimensions[r].height = BODY_ROW_POINTS
     sheet.row = start + body_rows
 
     # 5. Colour codes — red strip over a 6x2 grid of the 12 real codes.
@@ -561,7 +699,7 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
                        f"{code} = {label_en if is_en else label_es}",
                        Style(fill=fill, color=text_color, size=7, bold=True,
                              align="center", border=True))
-        ws.row_dimensions[row].height = 13
+        ws.row_dimensions[row].height = 12
         sheet.row += 1
 
     # 6. Navy section header.
@@ -580,10 +718,15 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
             sheet.block(photo_rows, span, "", Style(fill=PHOTO_SLOT, border=True), start=start)
             _embed(ws, path, start, span[0], photo_rows)
         else:
-            cell = sheet.block(photo_rows, span,
-                               TEXT["no_photo"][language] if not url else
-                               f"{TEXT['no_photo'][language]}\n{url}",
-                               Style(fill=PHOTO_SLOT, color="1155CC" if url else "999999",
+            # The URL goes on the hyperlink, never into the cell text: it is one
+            # unbreakable token, so Excel cannot wrap it and it would sprawl
+            # across the neighbouring slot.
+            label = TEXT["no_photo"][language]
+            if url:
+                label += "\n" + ("click to open the photo" if is_en
+                                 else "haga clic para abrir la foto")
+            cell = sheet.block(photo_rows, span, label,
+                               Style(fill=PHOTO_SLOT, color=LINK_BLUE if url else GREY_PLACEHOLDER,
                                      size=8, align="center", wrap=True, border=True),
                                start=start)
             if url:
@@ -592,7 +735,7 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
                    Style(fill=PHOTO_SLOT, color=NAVY_HEADER, size=7.5, bold=True, border=True))
     for r in range(start, start + photo_rows):
         ws.row_dimensions[r].height = PHOTO_ROW_POINTS
-    ws.row_dimensions[start + photo_rows].height = 12
+    ws.row_dimensions[start + photo_rows].height = 11
     sheet.row = start + photo_rows + 1
 
     # 8. Energy steps table.
@@ -608,7 +751,7 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
     ordered = _grouped_steps(steps)
     if not ordered:
         sheet.band(TEXT["no_steps"][language],
-                   Style(color="8C8C93", size=9, align="center", border=True), height=20)
+                   Style(color=GREY_TEXT, size=9, align="center", border=True), height=20)
     for index, step in enumerate(ordered):
         code, label_en, label_es, fill, text_color = energy_code(step.get("energy_type"))
         tag = _pick(step, "tag_description", language)
@@ -617,10 +760,18 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
         phase = PHASE_LABELS[language].get(step.get("step_type"), clean(step.get("step_type")))
         alt = ROW_ALT if index % 2 else None
 
-        rows_needed = max(2, min(6, 1 + max(len(procedure), len(verification)) // 110))
-        start = sheet.row
         badge = f"{code} — {label_en if is_en else label_es}\n{phase}"
-        sheet.block(rows_needed, (1, 2), f"{badge}\n{tag}" if tag else badge,
+        if tag:
+            badge += f"\n{tag}"
+        # Sized to the tallest of the three columns — the badge carries three
+        # lines of its own and used to be the one that clipped.
+        rows_needed = max(
+            rows_for(badge, 7, 1, 2, minimum=2),
+            rows_for(procedure, 7.5, 3, 7, minimum=2),
+            rows_for(verification, 7.5, 8, GRID_COLS, minimum=2),
+        )
+        start = sheet.row
+        sheet.block(rows_needed, (1, 2), badge,
                     Style(fill=fill, color=text_color, size=7, bold=True,
                           wrap=True, valign="top", border=True), start=start)
         sheet.block(rows_needed, (3, 7), procedure,
@@ -628,25 +779,28 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
         sheet.block(rows_needed, (8, GRID_COLS), verification,
                     Style(fill=alt, size=7.5, wrap=True, valign="top", border=True), start=start)
         for r in range(start, start + rows_needed):
-            ws.row_dimensions[r].height = 13
+            ws.row_dimensions[r].height = BODY_ROW_POINTS
         sheet.row = start + rows_needed
 
     # 9. Lockout removal process — red strip over two columns.
     sheet.band(TEXT["removal_header"][language],
-               Style(fill=RED_BLOCK, color=WHITE, size=9, bold=True, align="center"), height=14)
+               Style(fill=RED_BLOCK, color=WHITE, size=9, bold=True, align="center"), height=13)
     removal = TEXT["removal_steps"][language]
     split = -(-len(removal) // 2)
     left = "\n".join(f"{i}. {s}" for i, s in enumerate(removal[:split], 1))
     right = "\n".join(f"{i}. {s}" for i, s in enumerate(removal[split:], split + 1))
+    removal_rows = max(rows_for(left, 7.5, 1, 6), rows_for(right, 7.5, 7, GRID_COLS))
     start = sheet.row
-    sheet.block(4, (1, 6), left, Style(size=7.5, wrap=True, valign="top"), start=start)
-    sheet.block(4, (7, GRID_COLS), right, Style(size=7.5, wrap=True, valign="top"), start=start)
-    for r in range(start, start + 4):
-        ws.row_dimensions[r].height = 12
-    sheet.row = start + 4
+    sheet.block(removal_rows, (1, 6), left,
+                Style(size=7.5, wrap=True, valign="top"), start=start)
+    sheet.block(removal_rows, (7, GRID_COLS), right,
+                Style(size=7.5, wrap=True, valign="top"), start=start)
+    for r in range(start, start + removal_rows):
+        ws.row_dimensions[r].height = BODY_ROW_POINTS
+    sheet.row = start + removal_rows
 
     # 10. Print note.
-    sheet.band(TEXT["print_note"][language], Style(color="8C8C93", size=6.5), height=10)
+    sheet.band(TEXT["print_note"][language], Style(color=GREY_TEXT, size=6.5), height=9)
 
     # 11. Signature bar.
     row = sheet.row
@@ -654,15 +808,18 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
         column = 1 + index * 3
         sheet.cell(row, (column, column + 2), label,
                    Style(fill=SIG_BAR, color=NAVY_HEADER, size=8, bold=True, border=True))
-    ws.row_dimensions[row].height = 20
+    ws.row_dimensions[row].height = 18
     sheet.row += 1
 
+    # A blank spacer separates placards on screen. It has to be added before
+    # the break, or it lands after it and every printed page opens with an
+    # empty row.
+    sheet.row += 1
     # One placard per printed page. Excel stores at most 1026 manual row
-    # breaks per sheet and repairs the file if it finds more, so past that
-    # the pages simply flow — the layout is unchanged either way.
+    # breaks per sheet and repairs the file if it finds more; past that the
+    # pages flow together, which cmd_build reports rather than hiding.
     if len(ws.row_breaks.brk) < MAX_ROW_BREAKS:
         ws.row_breaks.append(Break(id=sheet.row - 1))
-    sheet.row += 1
     return top
 
 
@@ -734,10 +891,16 @@ def cmd_build(args: argparse.Namespace) -> int:
     for column in range(1, GRID_COLS + 1):
         placards.column_dimensions[get_column_letter(column)].width = COLUMN_WIDTH
     placards.page_setup.orientation = "landscape"
+    placards.page_setup.paperSize = placards.PAPERSIZE_LETTER
     placards.page_setup.fitToWidth = 1
     placards.page_setup.fitToHeight = 0
     placards.sheet_properties.pageSetUpPr.fitToPage = True
     placards.print_options.horizontalCentered = True
+    # Narrow margins. openpyxl defaults to an inch top and bottom, which costs
+    # 144pt of a 612pt page — more than the photo band and the steps table
+    # header put together, and the difference between one page and two.
+    placards.page_margins = PageMargins(left=0.3, right=0.3, top=0.3, bottom=0.3,
+                                        header=0.15, footer=0.15)
 
     sheet = PlacardSheet(placards, photos)
     index: list[tuple[str, str, str, int]] = []
@@ -752,10 +915,17 @@ def cmd_build(args: argparse.Namespace) -> int:
     _flat_sheet(steps_sheet, steps, list(steps[0].keys()) if steps else [])
     _index_sheet(index_sheet, index)
     _summary_sheet(summary, equipment, len(steps), len(index))
-    _readme_sheet(readme, equipment, steps, photos, args)
+    _readme_sheet(readme, equipment, steps, photos, args,
+                  fit=_page_fit(placards, sorted(b.id for b in placards.row_breaks.brk)),
+                  pages=len(index))
 
     workbook.save(args.out)
     print(f"{len(equipment)} placards x {len(languages)} language(s) -> {args.out}")
+    if len(index) > MAX_ROW_BREAKS:
+        print(f"  note: Excel caps a sheet at {MAX_ROW_BREAKS} manual page breaks, so the "
+              f"last {len(index) - MAX_ROW_BREAKS} placard(s) share a page with the one "
+              f"before. Export a single language, or split the run, to page them all.",
+              file=sys.stderr)
     return 0
 
 
@@ -833,11 +1003,36 @@ def _summary_sheet(ws, equipment: list[dict], step_count: int, page_count: int) 
     ws.freeze_panes = f"A{header_row + 1}"
 
 
+def _page_fit(ws, breaks: list[int]) -> tuple[int, int]:
+    """How many placards print on one page, and how many pages the rest take.
+
+    Fit-to-width scales the sheet down by the ratio of printable width to
+    sheet width, and that same factor shrinks the rows, so the comparison
+    has to be made after scaling.
+    """
+    margins = ws.page_margins
+    printable_w = 792 - (margins.left + margins.right) * 72
+    printable_h = 612 - (margins.top + margins.bottom) * 72
+    sheet_w = GRID_COLS * COLUMN_POINTS
+    scale = min(1.0, printable_w / sheet_w)
+
+    starts = [1] + [b + 1 for b in breaks[:-1]]
+    on_one_page, most_pages = 0, 1
+    for start, end in zip(starts, breaks):
+        height = sum(ws.row_dimensions[r].height or 15.0 for r in range(start, end + 1))
+        pages = max(1, -(-int(height * scale) // int(printable_h)))
+        on_one_page += pages == 1
+        most_pages = max(most_pages, pages)
+    return on_one_page, most_pages
+
+
 def _readme_sheet(ws, equipment: list[dict], steps: list[dict], photos: Path,
-                  args: argparse.Namespace) -> None:
+                  args: argparse.Namespace, fit: tuple[int, int] = (0, 1),
+                  pages: int = 0) -> None:
     cached = len(list(photos.glob("*.jpg"))) if photos.exists() else 0
     expected = sum(1 for row in equipment for kind in ("equip", "iso")
                    if row.get(f"{kind}_photo_url"))
+    on_one_page, most_pages = fit
     lines = [
         ("Soteria Field — LOTO placard export", 15, True, NAVY_HEADER),
         ("", 10, False, SLATE_TEXT),
@@ -857,8 +1052,15 @@ def _readme_sheet(ws, equipment: list[dict], steps: list[dict], photos: Path,
         ("Summary — per-department counts, computed by formula.", 10, False, SLATE_TEXT),
         ("", 10, False, SLATE_TEXT),
         ("Printing", 12, True, NAVY_HEADER),
-        ("The Placards sheet is set to landscape, fit-to-width, with a page break "
-         "after each placard. Print the sheet to get the placards one per page.", 10, False, SLATE_TEXT),
+        ("The Placards sheet is landscape, fit-to-width, with a page break after "
+         "each placard, so no placard ever shares a sheet with another.", 10, False, SLATE_TEXT),
+        (f"{on_one_page} of {pages} placard pages fit a single Letter sheet; the rest "
+         f"run to {most_pages if most_pages > 1 else 2} sheets. That is the deliberate "
+         "difference from the PDF: the PDF fits every placard on one page by dropping "
+         "the isolation-step rows that overflow, and a silently shortened isolation "
+         "procedure is a safety defect, so this export keeps the full text and takes "
+         "the extra sheet instead. Machines with the most energy sources are the ones "
+         "that run long.", 10, False, SLATE_TEXT),
         ("", 10, False, SLATE_TEXT),
         ("Regenerating", 12, True, NAVY_HEADER),
         ("  python scripts/export_placards_xlsx.py fetch --out data/", 10, False, SLATE_TEXT),
