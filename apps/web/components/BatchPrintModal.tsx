@@ -22,6 +22,7 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
   const [progress, setProgress]   = useState(0)
   const [phase, setPhase]         = useState<'idle' | 'fetching' | 'rendering' | 'done' | 'error'>('idle')
   const [errorMsg, setErrorMsg]   = useState<string | null>(null)
+  const [photoTally, setPhotoTally] = useState<{ referenced: number; embedded: number } | null>(null)
   const { tenantId }              = useTenant()
   // Batch placard PDFs can take 30–60s for a full department. Hold the
   // screen awake so the tablet doesn't sleep mid-render.
@@ -48,6 +49,7 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
       setPhase('idle')
       setProgress(0)
       setErrorMsg(null)
+      setPhotoTally(null)
     }
   }, [open, initialDepartment])
 
@@ -137,15 +139,21 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
         import('@/lib/pdfPlacard'),
         import('@/lib/pdfUtils'),
       ])
-      const bytes = await generateBatchPlacardPdf(items, (done: number, total: number) => {
+      const { bytes, photos } = await generateBatchPlacardPdf(items, (done: number, total: number) => {
         setProgress(Math.round((done / total) * 100))
       })
+      setPhotoTally(photos)
 
       const label = isAll ? 'All_Departments' : dept.replace(/[^\w -]+/g, '-')
       downloadPdf(bytes, `${label}_LOTO_Placards.pdf`)
       setPhase('done')
       if (autoCloseTimer.current) clearTimeout(autoCloseTimer.current)
-      autoCloseTimer.current = setTimeout(() => onCloseRef.current(), 900)
+      // Stay open when photos are missing. Auto-closing would flash the
+      // warning past the one person who can act on it, which is the same
+      // silent failure as not reporting it at all.
+      if (photos.embedded >= photos.referenced) {
+        autoCloseTimer.current = setTimeout(() => onCloseRef.current(), 900)
+      }
     } catch {
       setPhase('error')
       setErrorMsg('Could not generate batch PDF. Please try again.')
@@ -230,9 +238,20 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
             </div>
           )}
 
-          {phase === 'done' && (
+          {phase === 'done' && photoTally && photoTally.embedded < photoTally.referenced && (
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 rounded-lg px-3 py-2">
+              PDF downloaded, but {photoTally.referenced - photoTally.embedded} of{' '}
+              {photoTally.referenced} photos could not be loaded and print as
+              “— No photo —”. Check your connection and generate again before
+              posting these.
+            </p>
+          )}
+
+          {phase === 'done' && (!photoTally || photoTally.embedded >= photoTally.referenced) && (
             <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg px-3 py-2">
-              ✓ PDF downloaded.
+              ✓ PDF downloaded{photoTally && photoTally.referenced > 0
+                ? ` — all ${photoTally.referenced} photos embedded.`
+                : '.'}
             </p>
           )}
 
