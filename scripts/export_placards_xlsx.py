@@ -235,9 +235,24 @@ LINE_SPACING = 1.22    # Excel's line pitch as a multiple of the font size
 # Excel sizes columns in character units and rows in points, but anchors
 # images in pixels, so a slot's pixel box has to be derived from both.
 PX_PER_CHAR, PX_CELL_PADDING, PX_PER_POINT = 7, 5, 4 / 3
-COLUMN_PX = round(COLUMN_WIDTH * PX_PER_CHAR) + PX_CELL_PADDING
+
+
+def column_pixels(stored_width: float) -> int:
+    """Rendered width of a column whose OOXML `width` attribute is given.
+
+    ECMA-376 18.3.1.13. The stored width already includes the five pixels of
+    cell padding — visible characters c are stored as
+    trunc((c*MDW + 5)/MDW * 256)/256 — so the padding must not be added a
+    second time here. Getting this wrong the other way makes every wrapping
+    width about 5% too generous, which under-allocates rows and lets Excel
+    clip the overflow with no other symptom.
+    """
+    return int(((256 * stored_width + int(128 / PX_PER_CHAR)) / 256) * PX_PER_CHAR)
+
+
+COLUMN_PX = column_pixels(COLUMN_WIDTH)
 COLUMN_POINTS = COLUMN_PX * 0.75
-CELL_PADDING_POINTS = 5
+CELL_PADDING_POINTS = PX_CELL_PADDING * 0.75
 
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
@@ -848,8 +863,7 @@ def _embed(ws, path: Path, row: int, column: int, rows: int) -> None:
     """Place a cached photo inside its slot, scaled to fit and centred."""
     from PIL import Image
 
-    column_px = round(COLUMN_WIDTH * PX_PER_CHAR) + PX_CELL_PADDING
-    slot_width = (GRID_COLS // 2) * column_px - 6      # 6px of breathing room
+    slot_width = (GRID_COLS // 2) * COLUMN_PX - 6      # 6px of breathing room
     slot_height = round(rows * PHOTO_ROW_POINTS * PX_PER_POINT) - 6
     with Image.open(path) as probe:
         width, height = probe.size
