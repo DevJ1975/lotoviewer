@@ -33,6 +33,7 @@ import re
 import sys
 import urllib.parse
 import urllib.request
+from collections import Counter
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -274,10 +275,11 @@ def _text_width(text: str, points: float) -> float:
     """Width of `text` in points at `points` size, in the placard's font."""
     font = _measuring_font()
     if font is None:
-        # No font file to measure with: Arial's average lowercase advance is
-        # close to half its em, which over-estimates narrow text and so errs
-        # toward a taller row rather than a clipped one.
-        return len(text) * points * 0.5
+        # No font file to measure with. Arial's lowercase advance averages
+        # about half an em but its uppercase runs nearer 0.68, and the badges
+        # and phase labels are uppercase — so estimate at the wider end and
+        # err toward a taller row rather than a clipped one.
+        return len(text) * points * 0.68
     return font.getlength(text) * points / _MEASURE_SIZE
 
 
@@ -300,11 +302,13 @@ def wrapped_lines(text: str, points: float, width_points: float) -> int:
             else:
                 lines += 1
                 current = word
-                # A single word wider than the cell wraps again mid-word.
-                while _text_width(current, points) > usable and len(current) > 1:
-                    cut = max(1, int(len(current) * usable / _text_width(current, points)))
-                    current = current[cut:]
-                    lines += 1
+            # A word wider than the cell wraps again mid-word. This runs for
+            # the first word of a paragraph too, which is where an unbroken
+            # token — a URL, a part number — would otherwise be under-counted.
+            while _text_width(current, points) > usable and len(current) > 1:
+                cut = max(1, int(len(current) * usable / _text_width(current, points)))
+                current = current[cut:]
+                lines += 1
         total += lines
     return total
 
@@ -442,9 +446,12 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     })
     ids = {row["equipment_id"] for row in equipment}
     steps = [s for s in _paged(base, key, "loto_energy_steps", {
-        "select": STEP_COLUMNS,
+        "select": STEP_COLUMNS + ",id",
         "tenant_id": f"eq.{tenant['id']}",
-        "order": "equipment_id.asc,sequence_order.asc,step_number.asc",
+        # id breaks ties: the other three columns are not unique together
+        # (523 steps share equipment_id + sequence_order), and OFFSET
+        # paging over a non-unique sort may repeat or skip tied rows.
+        "order": "equipment_id.asc,sequence_order.asc,step_number.asc,id.asc",
     }) if s["equipment_id"] in ids]
 
     (out / "equipment.json").write_text(json.dumps(equipment, ensure_ascii=False), "utf-8")
@@ -472,19 +479,26 @@ def _download_photos(equipment: list[dict], into: Path) -> int:
             if target.exists():
                 count += 1
                 continue
+            # Download to a scratch name and rename only once the bytes have
+            # been decoded. Writing to the final path directly means an
+            # interrupted run — 996 photos over a slow link invites one —
+            # leaves a truncated JPEG that the next run counts as cached and
+            # the build later fails to open.
+            partial = target.with_suffix(".part")
             try:
                 with urllib.request.urlopen(url, timeout=60) as response:
-                    target.write_bytes(response.read())
-                # Downscale in place: 996 full-resolution photos would push the
-                # workbook past 300 MB, and the placard slot is ~370pt wide.
-                with Image.open(target) as image:
+                    partial.write_bytes(response.read())
+                # Downscale: 996 full-resolution photos would push the workbook
+                # past 300 MB, and the placard slot is ~370pt wide.
+                with Image.open(partial) as image:
                     image = image.convert("RGB")
                     image.thumbnail((PHOTO_MAX_PX, PHOTO_MAX_PX), Image.LANCZOS)
-                    image.save(target, "JPEG", quality=82, optimize=True)
+                    image.save(partial, "JPEG", quality=82, optimize=True)
+                partial.replace(target)
                 count += 1
             except Exception as error:  # one bad photo must not sink the export
                 print(f"  photo failed {row['equipment_id']} {kind}: {error}", file=sys.stderr)
-                target.unlink(missing_ok=True)
+                partial.unlink(missing_ok=True)
     return count
 
 
@@ -714,10 +728,17 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
         span = (1, half) if index == 0 else (half + 1, GRID_COLS)
         path = sheet.photos / f"{equipment['equipment_id'].replace('/', '_')}_{kind}.jpg"
         url = equipment.get(f"{kind}_photo_url")
+        embedded = False
         if path.exists():
             sheet.block(photo_rows, span, "", Style(fill=PHOTO_SLOT, border=True), start=start)
-            _embed(ws, path, start, span[0], photo_rows)
-        else:
+            try:
+                _embed(ws, path, start, span[0], photo_rows)
+                embedded = True
+            except Exception as error:
+                # An unreadable photo costs one slot, not the whole export.
+                print(f"  photo unreadable {equipment['equipment_id']} {kind}: {error}",
+                      file=sys.stderr)
+        if not embedded:
             # The URL goes on the hyperlink, never into the cell text: it is one
             # unbreakable token, so Excel cannot wrap it and it would sprawl
             # across the neighbouring slot.
@@ -859,6 +880,8 @@ def _flat_sheet(ws, rows: list[dict], columns: list[str]) -> None:
     ws.row_dimensions[1].height = 30
     for row in rows:
         ws.append([cell_value(row.get(column)) for column in columns])
+    if not columns:
+        return
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = f"A1:{get_column_letter(len(columns))}{len(rows) + 1}"
     for index, column in enumerate(columns, 1):
@@ -975,7 +998,18 @@ def _summary_sheet(ws, equipment: list[dict], step_count: int, page_count: int) 
         cell.font = Font(name=FONT_NAME, size=10, bold=True, color=WHITE)
         cell.fill = PatternFill("solid", fgColor=NAVY_HEADER)
 
-    for department in sorted({clean(row.get("department")) for row in equipment}):
+    # One row per department as COUNTIF sees it. COUNTIF matches text
+    # case-insensitively, so listing "Shipping" and "SHIPPING" separately
+    # would report the combined count against each and double them again in
+    # the Total. Group the way the formula counts, and label each row with
+    # the spelling most of its rows actually use.
+    spellings: dict[str, Counter] = {}
+    for row in equipment:
+        name = clean(row.get("department"))
+        spellings.setdefault(name.casefold(), Counter())[name] += 1
+    labels = sorted(counts.most_common(1)[0][0] for counts in spellings.values())
+
+    for department in labels:
         ws.append([department])
         row = ws.max_row
         ws.cell(row=row, column=2).value = f'=COUNTIF({dept_range},$A{row})'
