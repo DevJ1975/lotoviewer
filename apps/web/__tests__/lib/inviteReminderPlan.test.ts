@@ -133,3 +133,45 @@ describe('planInviteAction — full lifecycle', () => {
     expect(observed).toEqual(['reminder:1', 'reminder:2', 'reminder:3', 'reminder:4', 'cancel'])
   })
 })
+
+
+describe('planInviteAction — passwordSet is a second liveness signal', () => {
+  const DAY_MS = 24 * 60 * 60 * 1000
+  const invitedAt = new Date(Date.now() - 60 * DAY_MS).toISOString()
+  const at        = new Date()
+
+  // Would otherwise CANCEL: four reminders sent, the last one 10 days ago.
+  const dueForCancel = {
+    invitedAt,
+    lastSignInAt:   null,
+    remindersSent:  4,
+    lastReminderAt: new Date(Date.now() - 10 * DAY_MS).toISOString(),
+    cancelledAt:    null,
+  }
+
+  it('short-circuits when the user has chosen a password but never signed in', () => {
+    // This is the state /api/invites/accept leaves behind when the client's
+    // follow-up signInWithPassword never lands: a working credential and a
+    // null last_sign_in_at.
+    expect(planInviteAction({ ...dueForCancel, passwordSet: true }, at))
+      .toEqual({ kind: 'none', reason: 'credential_already_set' })
+  })
+
+  it('blocks the reminder path too, not just the cancel', () => {
+    const dueForReminder = { ...dueForCancel, remindersSent: 0, lastReminderAt: null }
+    expect(planInviteAction({ ...dueForReminder, passwordSet: true }, at))
+      .toEqual({ kind: 'none', reason: 'credential_already_set' })
+  })
+
+  it('leaves the decision unchanged when the flag is false or absent', () => {
+    // Absent means "not looked up" — callers that cannot resolve the flag
+    // keep the previous behaviour rather than a silently different one.
+    expect(planInviteAction({ ...dueForCancel, passwordSet: false }, at).kind).toBe('cancel')
+    expect(planInviteAction(dueForCancel, at).kind).toBe('cancel')
+  })
+
+  it('already_signed_in still wins — it is checked first', () => {
+    expect(planInviteAction({ ...dueForCancel, lastSignInAt: at.toISOString(), passwordSet: true }, at))
+      .toEqual({ kind: 'none', reason: 'already_signed_in' })
+  })
+})
