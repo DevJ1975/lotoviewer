@@ -33,13 +33,22 @@ LINE_SPACING = 1.31          # Excel autofit for Arial: 1.275x @10pt, 1.312x @12
 DEFAULT_ROW_POINTS = 15.0
 MEASURE_SIZE = 200           # measure large, scale down, to dodge pixel rounding
 
-ARIAL_PATHS = (
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-    "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
-    "C:/Windows/Fonts/arial.ttf",
-    "/Library/Fonts/Arial.ttf",
-    "/System/Library/Fonts/Supplemental/Arial.ttf",
-)
+ARIAL_PATHS = {
+    False: (
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+        "C:/Windows/Fonts/arial.ttf",
+        "/Library/Fonts/Arial.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+    ),
+    True: (
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+        "C:/Windows/Fonts/arialbd.ttf",
+        "/Library/Fonts/Arial Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    ),
+}
 
 
 def column_points(stored_width: float) -> float:
@@ -51,13 +60,26 @@ def column_points(stored_width: float) -> float:
     return int(((256 * stored_width + int(128 / MDW)) / 256) * MDW) * 0.75
 
 
-def load_font():
+def load_fonts():
+    """Regular and bold. Bold is materially wider, and the energy badges and
+    every band header are bold — measuring them with the regular face
+    under-states their width."""
     from PIL import ImageFont
 
-    for path in ARIAL_PATHS:
-        if Path(path).exists():
-            return ImageFont.truetype(path, MEASURE_SIZE)
-    sys.exit("No Arial-metric font found; cannot measure text.")
+    faces = {}
+    for bold, paths in ARIAL_PATHS.items():
+        for path in paths:
+            if Path(path).exists():
+                faces[bold] = ImageFont.truetype(path, MEASURE_SIZE)
+                break
+    if False not in faces:
+        sys.exit("No Arial-metric font found; cannot measure text.")
+    faces.setdefault(True, faces[False])
+    return faces
+
+
+def span_label(first_col: int, last_col: int) -> str:
+    return f"{get_column_letter(first_col)}:{get_column_letter(last_col)}"
 
 
 def main() -> int:
@@ -67,17 +89,18 @@ def main() -> int:
     if "Placards" not in workbook.sheetnames:
         sys.exit("No 'Placards' sheet in this workbook.")
     ws = workbook["Placards"]
-    font = load_font()
+    fonts = load_fonts()
 
     width_of_column = {}
     for index in range(1, ws.max_column + 1):
         stored = ws.column_dimensions[get_column_letter(index)].width or 8.43
         width_of_column[index] = column_points(stored)
 
-    def text_width(text: str, points: float) -> float:
-        return font.getlength(text) * points / MEASURE_SIZE
+    def text_width(text: str, points: float, bold: bool = False) -> float:
+        return fonts[bold].getlength(text) * points / MEASURE_SIZE
 
-    def wrapped_lines(text: str, points: float, available: float) -> int:
+    def wrapped_lines(text: str, points: float, available: float,
+                      bold: bool = False) -> int:
         usable = max(available - CELL_INSET_POINTS, points)
         total = 0
         for paragraph in str(text).split("\n"):
@@ -88,13 +111,13 @@ def main() -> int:
             lines, current = 1, ""
             for word in words:
                 candidate = f"{current} {word}".strip()
-                if text_width(candidate, points) <= usable or not current:
+                if text_width(candidate, points, bold) <= usable or not current:
                     current = candidate
                 else:
                     lines += 1
                     current = word
-                while text_width(current, points) > usable and len(current) > 1:
-                    cut = max(1, int(len(current) * usable / text_width(current, points)))
+                while text_width(current, points, bold) > usable and len(current) > 1:
+                    cut = max(1, int(len(current) * usable / text_width(current, points, bold)))
                     current = current[cut:]
                     lines += 1
             total += lines
@@ -107,9 +130,13 @@ def main() -> int:
         for cell in row:
             if not isinstance(cell.value, str) or not cell.value or cell.value.startswith("="):
                 continue
-            if not (cell.alignment and cell.alignment.wrap_text):
-                continue  # unwrapped text spills sideways, which is only cosmetic
             merged = anchors.get((cell.row, cell.column))
+            wraps = bool(cell.alignment and cell.alignment.wrap_text)
+            if not wraps and merged is None:
+                # A lone unwrapped cell spills into empty neighbours, which is
+                # cosmetic. A MERGED one does not spill — Excel clips it at the
+                # merge boundary — so those are checked below.
+                continue
             last_col = merged.max_col if merged else cell.column
             last_row = merged.max_row if merged else cell.row
 
@@ -118,19 +145,29 @@ def main() -> int:
             height = sum(ws.row_dimensions[r].height or DEFAULT_ROW_POINTS
                          for r in range(cell.row, last_row + 1))
             size = cell.font.size or 11
+            bold = bool(cell.font.bold)
 
             checked += 1
-            needed = wrapped_lines(cell.value, size, available) * size * LINE_SPACING
-            if needed > height + 0.5:
-                overflows.append((cell.row,
-                                  f"{get_column_letter(cell.column)}:{get_column_letter(last_col)}",
-                                  needed - height, height,
-                                  cell.value[:70].replace("\n", " / ")))
+            if wraps:
+                needed = wrapped_lines(cell.value, size, available, bold) * size * LINE_SPACING
+                short = needed - height
+                if short > 0.5:
+                    overflows.append((cell.row, span_label(cell.column, last_col),
+                                      short, height, cell.value))
+            else:
+                # One line, clipped horizontally at the merge boundary.
+                widest = max(text_width(line, size, bold)
+                             for line in str(cell.value).split("\n"))
+                short = widest - (available - CELL_INSET_POINTS)
+                if short > 0.5 or size * LINE_SPACING > height + 0.5:
+                    overflows.append((cell.row, span_label(cell.column, last_col),
+                                      short, available, cell.value))
 
-    print(f"checked {checked} wrapped cells")
+    print(f"checked {checked} cells that Excel clips rather than spills")
     print(f"clipped: {len(overflows)}")
     for row, span, short, have, text in sorted(overflows, key=lambda o: -o[2])[:15]:
-        print(f"  row {row:6d} {span:>7}  short {short:6.1f}pt of {have:6.1f}pt  {text}")
+        print(f"  row {row:6d} {span:>7}  short {short:6.1f}pt of {have:6.1f}pt  "
+              f"{text[:70].replace(chr(10), ' / ')}")
     if overflows:
         print("\nby column span:")
         for span, count in Counter(o[1] for o in overflows).most_common():

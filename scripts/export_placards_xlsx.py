@@ -27,6 +27,7 @@ Environment (fetch only):
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import re
@@ -273,38 +274,50 @@ _ARIAL_PATHS = (
     "/System/Library/Fonts/Supplemental/Arial.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 )
+_ARIAL_BOLD_PATHS = (
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+    "/Library/Fonts/Arial Bold.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+)
 _MEASURE_SIZE = 200  # measure big, scale down — avoids integer-pixel rounding
 
 
 @lru_cache(maxsize=None)
-def _measuring_font():
+def _measuring_font(bold: bool = False):
+    """The face Excel will wrap with. Bold is measured with the bold face:
+    it is materially wider, and the energy badge — the one wrapped band that
+    is bold — would otherwise be sized for text narrower than it renders."""
     try:
         from PIL import ImageFont
     except ImportError:
         return None
-    for path in _ARIAL_PATHS:
+    for path in (_ARIAL_BOLD_PATHS if bold else _ARIAL_PATHS):
         if os.path.exists(path):
             try:
                 return ImageFont.truetype(path, _MEASURE_SIZE)
             except OSError:
                 continue
-    return None
+    return None if bold else None
 
 
-@lru_cache(maxsize=8192)
-def _text_width(text: str, points: float) -> float:
+@lru_cache(maxsize=16384)
+def _text_width(text: str, points: float, bold: bool = False) -> float:
     """Width of `text` in points at `points` size, in the placard's font."""
-    font = _measuring_font()
+    font = _measuring_font(bold) or _measuring_font(False)
     if font is None:
         # No font file to measure with. Arial's lowercase advance averages
         # about half an em but its uppercase runs nearer 0.68, and the badges
         # and phase labels are uppercase — so estimate at the wider end and
         # err toward a taller row rather than a clipped one.
-        return len(text) * points * 0.68
+        return len(text) * points * (0.75 if bold else 0.68)
     return font.getlength(text) * points / _MEASURE_SIZE
 
 
-def wrapped_lines(text: str, points: float, width_points: float) -> int:
+def wrapped_lines(text: str, points: float, width_points: float,
+                  bold: bool = False) -> int:
     """How many lines Excel wraps `text` into within `width_points`."""
     if not text:
         return 1
@@ -318,7 +331,7 @@ def wrapped_lines(text: str, points: float, width_points: float) -> int:
         lines, current = 1, ""
         for word in words:
             candidate = f"{current} {word}".strip()
-            if _text_width(candidate, points) <= usable or not current:
+            if _text_width(candidate, points, bold) <= usable or not current:
                 current = candidate
             else:
                 lines += 1
@@ -326,8 +339,8 @@ def wrapped_lines(text: str, points: float, width_points: float) -> int:
             # A word wider than the cell wraps again mid-word. This runs for
             # the first word of a paragraph too, which is where an unbroken
             # token — a URL, a part number — would otherwise be under-counted.
-            while _text_width(current, points) > usable and len(current) > 1:
-                cut = max(1, int(len(current) * usable / _text_width(current, points)))
+            while _text_width(current, points, bold) > usable and len(current) > 1:
+                cut = max(1, int(len(current) * usable / _text_width(current, points, bold)))
                 current = current[cut:]
                 lines += 1
         total += lines
@@ -341,14 +354,14 @@ def span_points(first_col: int, last_col: int) -> float:
 
 def rows_for(text: str, points: float, first_col: int, last_col: int,
              row_points: float = BODY_ROW_POINTS, minimum: int = 1,
-             maximum: int = 40) -> int:
+             maximum: int = 40, bold: bool = False) -> int:
     """Rows a wrapped block needs so Excel clips none of it.
 
     Excel never grows a merged cell to fit its contents — whatever overflows
     is simply not drawn. Every wrapped band therefore has to be sized from
     the text itself, or a placard quietly loses isolation steps.
     """
-    lines = wrapped_lines(text, points, span_points(first_col, last_col))
+    lines = wrapped_lines(text, points, span_points(first_col, last_col), bold)
     needed = -(-int(lines * points * LINE_SPACING + 2) // int(row_points))
     return max(minimum, min(maximum, needed))
 
@@ -760,7 +773,8 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
         if path.exists():
             sheet.block(photo_rows, span, "", Style(fill=PHOTO_SLOT, border=True), start=start)
             try:
-                _embed(ws, path, start, span[0], photo_rows)
+                _embed(ws, path, start, span[0], photo_rows,
+                       label=clean(equipment["equipment_id"]))
                 embedded = True
             except Exception as error:
                 # An unreadable photo costs one slot, not the whole export.
@@ -815,7 +829,7 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
         # Sized to the tallest of the three columns — the badge carries three
         # lines of its own and used to be the one that clipped.
         rows_needed = max(
-            rows_for(badge, 7, 1, 2, minimum=2),
+            rows_for(badge, 7, 1, 2, minimum=2, bold=True),
             rows_for(procedure, 7.5, 3, 7, minimum=2),
             rows_for(verification, 7.5, 8, GRID_COLS, minimum=2),
         )
@@ -872,7 +886,58 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
     return top
 
 
-def _embed(ws, path: Path, row: int, column: int, rows: int) -> None:
+def _stamp_label(path: Path, label: str):
+    """Burn the equipment name onto a copy of the photo, bottom-left.
+
+    A placard photo travels: it gets cropped into a work pack, pasted into a
+    report, or pulled out of the workbook on its own, and at that point
+    nothing says which machine it shows. Stamping the identifier into the
+    pixels keeps the two together. Returns a BytesIO of the stamped JPEG, or
+    None to fall back to the file as it is.
+    """
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError:
+        return None
+    try:
+        with Image.open(path) as source:
+            image = source.convert("RGB")
+        width, height = image.size
+        # Sized against the image, so the label survives being scaled into the
+        # placard slot and stays proportionate on any source resolution.
+        bar_height = max(16, int(height * 0.075))
+        text_size = max(11, int(bar_height * 0.68))
+        font = None
+        for candidate in _ARIAL_BOLD_PATHS:
+            if os.path.exists(candidate):
+                try:
+                    font = ImageFont.truetype(candidate, text_size)
+                    break
+                except OSError:
+                    continue
+        if font is None:
+            font = ImageFont.load_default()
+
+        draw = ImageDraw.Draw(image, "RGBA")
+        pad = max(4, bar_height // 5)
+        text_width = int(draw.textlength(label, font=font))
+        draw.rectangle(
+            [0, height - bar_height, min(width, text_width + pad * 3), height],
+            fill=(0, 0, 0, 168),
+        )
+        draw.text((pad, height - bar_height + (bar_height - text_size) // 2),
+                  label, font=font, fill=(255, 255, 255))
+
+        stamped = io.BytesIO()
+        image.save(stamped, "JPEG", quality=82, optimize=True)
+        stamped.seek(0)
+        return stamped
+    except Exception:
+        return None
+
+
+def _embed(ws, path: Path, row: int, column: int, rows: int,
+           label: str | None = None) -> None:
     """Place a cached photo inside its slot, scaled to fit and centred."""
     from PIL import Image
 
@@ -883,7 +948,8 @@ def _embed(ws, path: Path, row: int, column: int, rows: int) -> None:
     scale = min(slot_width / width, slot_height / height, 1.0)
     drawn_width, drawn_height = int(width * scale), int(height * scale)
 
-    image = XLImage(str(path))
+    stamped = _stamp_label(path, label) if label else None
+    image = XLImage(stamped if stamped is not None else str(path))
     image.width, image.height = drawn_width, drawn_height
     # A plain cell anchor pins the image to the slot's top-left corner; the
     # offsets recentre it the way the PDF centres its photo slots.
