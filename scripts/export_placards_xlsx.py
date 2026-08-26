@@ -41,6 +41,7 @@ from openpyxl.drawing.image import Image as XLImage
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
 from openpyxl.drawing.xdr import XDRPositiveSize2D
 from openpyxl.utils.units import pixels_to_EMU
+from openpyxl.worksheet.cell_range import CellRange
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.pagebreak import Break
@@ -400,6 +401,19 @@ class PlacardSheet:
         self.photos = photos
         self.row = 1
 
+    def merge(self, first_row: int, first_col: int, last_row: int, last_col: int) -> None:
+        """Merge a band, skipping Worksheet.merge_cells.
+
+        merge_cells tests the new range against every existing one before
+        storing it, which is O(n) per call and quadratic over a workbook
+        this size — around six minutes for 499 placards. The bands here are
+        laid out row by row and never overlap, so the test only costs time.
+        """
+        self.ws.merged_cells.ranges.add(CellRange(
+            min_col=first_col, min_row=first_row,
+            max_col=last_col, max_row=last_row,
+        ))
+
     def band(self, text, style: Style, height: float | None = None,
              span: tuple[int, int] = (1, GRID_COLS)) -> int:
         """Write one merged, styled band and advance to the next row."""
@@ -422,8 +436,7 @@ class PlacardSheet:
         if style.border:
             cell.border = BOX
         if last > first:
-            self.ws.merge_cells(start_row=row, start_column=first,
-                                end_row=row, end_column=last)
+            self.merge(row, first, row, last)
             # Merged cells keep their own fill/border, so paint the tail too.
             for column in range(first + 1, last + 1):
                 tail = self.ws.cell(row=row, column=column)
@@ -438,8 +451,7 @@ class PlacardSheet:
         """A band that spans several rows (wrapped body text, photo slots)."""
         row = self.row if start is None else start
         cell = self.cell(row, span, text, style)
-        self.ws.merge_cells(start_row=row, start_column=span[0],
-                            end_row=row + rows - 1, end_column=span[1])
+        self.merge(row, span[0], row + rows - 1, span[1])
         for r in range(row, row + rows):
             for c in range(span[0], span[1] + 1):
                 tail = self.ws.cell(row=r, column=c)
