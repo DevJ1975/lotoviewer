@@ -12,8 +12,8 @@ import {
 
 // Daily invite-reminder cron.
 //
-// Finds tenant memberships whose invitee has never signed in
-// (auth.users.last_sign_in_at IS NULL) and runs each through
+// Finds tenant memberships whose invite has not been acted on — the
+// invitee has not signed in since it was issued — and runs each through
 // planInviteAction():
 //   - send_reminder → email reminder #N (weekly), advance the counter
 //   - cancel        → soft-cancel the invite (stamp invite_cancelled_at;
@@ -108,12 +108,32 @@ async function runCron(req: Request): Promise<NextResponse> {
       if (users.length < PAGE_SIZE) break
     }
 
-    // 3. Decide an action for each membership.
+    // 3. Newest invite issuance per user. THIS is what the cadence is
+    //    anchored to, not the membership row: an access reset mints a fresh
+    //    invite for someone who joined months ago, and the reminders have to
+    //    follow the reset's clock rather than the day they first joined.
+    //    Memberships predating invite tokens keep the old anchor.
+    const invitedAtByUserId = new Map<string, string>()
+    const { data: tokenRows, error: tErr } = await admin
+      .from('invite_tokens')
+      .select('user_id, created_at')
+      .in('user_id', memberships.map(m => m.user_id))
+      .order('created_at', { ascending: false })
+    if (tErr) {
+      Sentry.captureException(tErr, { tags: { route: '/api/cron/invite-reminders', stage: 'invite-tokens' } })
+      return NextResponse.json({ error: tErr.message }, { status: 500 })
+    }
+    for (const t of (tokenRows ?? []) as Array<{ user_id: string; created_at: string }>) {
+      // Rows arrive newest-first, so the first one seen per user is the one.
+      if (!invitedAtByUserId.has(t.user_id)) invitedAtByUserId.set(t.user_id, t.created_at)
+    }
+
+    // 4. Decide an action for each membership.
     const toRemind: Array<{ m: PendingMembership; reminderNumber: number }> = []
     const toCancel: PendingMembership[] = []
     for (const m of memberships) {
       const state: InviteReminderState = {
-        invitedAt:      m.created_at,
+        invitedAt:      invitedAtByUserId.get(m.user_id) ?? m.created_at,
         lastSignInAt:   lastSignInByUserId.get(m.user_id) ?? null,
         remindersSent:  m.invite_reminders_sent ?? 0,
         lastReminderAt: m.invite_last_reminder_at,
@@ -124,7 +144,7 @@ async function runCron(req: Request): Promise<NextResponse> {
       else if (action.kind === 'cancel')   toCancel.push(m)
     }
 
-    // 4. Soft-cancel expired invites (no email; the 4th reminder was the
+    // 5. Soft-cancel expired invites (no email; the 4th reminder was the
     //    final notice). Retained + reversible.
     let cancelled = 0
     const nowIso = now.toISOString()
@@ -156,7 +176,7 @@ async function runCron(req: Request): Promise<NextResponse> {
       return NextResponse.json({ scanned: memberships.length, reminders_sent: 0, invites_cancelled: cancelled })
     }
 
-    // 5. Resolve emails + tenant names for the invitees we're reminding.
+    // 6. Resolve emails + tenant names for the invitees we're reminding.
     const userIds   = Array.from(new Set(toRemind.map(r => r.m.user_id)))
     const tenantIds = Array.from(new Set(toRemind.map(r => r.m.tenant_id)))
 
@@ -176,7 +196,7 @@ async function runCron(req: Request): Promise<NextResponse> {
     const tenantNameById = new Map<string, string>()
     for (const t of tenants ?? []) tenantNameById.set(t.id as string, t.name as string)
 
-    // 6. Send reminders. Promise.allSettled so one failure can't sink the
+    // 7. Send reminders. Promise.allSettled so one failure can't sink the
     //    batch; only advance the counter when the email actually went out.
     //    Each reminder mints a fresh invite link (superseding older ones)
     //    so the invitee can always act on the newest email; a mint failure

@@ -133,3 +133,52 @@ describe('planInviteAction — full lifecycle', () => {
     expect(observed).toEqual(['reminder:1', 'reminder:2', 'reminder:3', 'reminder:4', 'cancel'])
   })
 })
+
+// An access reset issues a fresh invite to somebody who HAS signed in
+// before. These are the cases that used to fall out of the cadence
+// entirely: planInviteAction saw a non-null last_sign_in_at, called the
+// lifecycle finished, and sent nothing — so a missed reset email stranded
+// the member until an admin noticed by hand.
+describe('planInviteAction — access reset after a prior sign-in', () => {
+  it('keeps reminding when the invite was issued after the last sign-in', () => {
+    const a = planInviteAction(state({
+      invitedAt:    daysAgo(INVITE_REMINDER_INTERVAL_DAYS),
+      lastSignInAt: daysAgo(60),
+    }), NOW)
+    expect(a).toEqual({ kind: 'send_reminder', reminderNumber: 1 })
+  })
+
+  it('treats a sign-in at the moment of the invite as acceptance', () => {
+    const at = daysAgo(30)
+    const a = planInviteAction(state({ invitedAt: at, lastSignInAt: at }), NOW)
+    expect(a).toEqual({ kind: 'none', reason: 'already_signed_in' })
+  })
+
+  it('anchors the cadence on the reset, not on the original membership', () => {
+    // Invited months ago, reset yesterday: the first nudge is still a week
+    // out. Anchoring on the old date would have jumped straight to cancel.
+    const a = planInviteAction(state({
+      invitedAt:    daysAgo(1),
+      lastSignInAt: daysAgo(90),
+    }), NOW)
+    expect(a).toEqual({ kind: 'none', reason: 'too_soon' })
+  })
+
+  it('still cancels a reset invite that goes unanswered through all four reminders', () => {
+    const a = planInviteAction(state({
+      invitedAt:      daysAgo(35),
+      lastSignInAt:   daysAgo(90),
+      remindersSent:  INVITE_MAX_REMINDERS,
+      lastReminderAt: daysAgo(INVITE_REMINDER_INTERVAL_DAYS),
+    }), NOW)
+    expect(a).toEqual({ kind: 'cancel', reason: 'no_signup_after_max_reminders' })
+  })
+
+  it('leaves a settled account alone when no newer invite exists', () => {
+    const a = planInviteAction(state({
+      invitedAt:    daysAgo(90),
+      lastSignInAt: daysAgo(2),
+    }), NOW)
+    expect(a).toEqual({ kind: 'none', reason: 'already_signed_in' })
+  })
+})
