@@ -108,16 +108,29 @@ async function runCron(req: Request): Promise<NextResponse> {
       if (users.length < PAGE_SIZE) break
     }
 
-    // 3. Newest invite issuance per user. THIS is what the cadence is
+    // 3. Newest ADMIN-ISSUED invite per user. THIS is what the cadence is
     //    anchored to, not the membership row: an access reset mints a fresh
     //    invite for someone who joined months ago, and the reminders have to
     //    follow the reset's clock rather than the day they first joined.
     //    Memberships predating invite tokens keep the old anchor.
+    //
+    //    `created_by is not null` is the whole point of the filter, not an
+    //    optimisation. Step 7 mints a fresh token on every reminder, and those
+    //    carry created_by = NULL (247). Counting them would march the anchor
+    //    forward weekly until it outran the invitee's own sign-in — so someone
+    //    who signed in moments before a mint would read as "still hasn't acted"
+    //    on every later run, collecting all four reminders and then a cancel
+    //    despite holding working credentials. An admin issuing access starts
+    //    the lifecycle; a reminder is a nudge inside it, never a new one.
+    //    Superseded rows stay in scope deliberately: the cron supersedes the
+    //    admin's token the first time it nudges, and that token is still where
+    //    the lifecycle began.
     const invitedAtByUserId = new Map<string, string>()
     const { data: tokenRows, error: tErr } = await admin
       .from('invite_tokens')
       .select('user_id, created_at')
       .in('user_id', memberships.map(m => m.user_id))
+      .not('created_by', 'is', null)
       .order('created_at', { ascending: false })
     if (tErr) {
       Sentry.captureException(tErr, { tags: { route: '/api/cron/invite-reminders', stage: 'invite-tokens' } })

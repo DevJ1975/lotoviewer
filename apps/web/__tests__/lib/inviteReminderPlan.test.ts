@@ -182,3 +182,58 @@ describe('planInviteAction — access reset after a prior sign-in', () => {
     expect(a).toEqual({ kind: 'none', reason: 'already_signed_in' })
   })
 })
+
+// planInviteAction cannot see WHERE invitedAt came from, so the caller owes it
+// one guarantee: invitedAt is when an ADMIN issued access, never when the cron
+// minted a reminder token. These tests pin the consequence of breaking that
+// guarantee, which is why the cron filters on `created_by is not null`.
+describe('planInviteAction — the anchor contract its caller must uphold', () => {
+  it('treats an anchor later than the sign-in as "has not acted yet"', () => {
+    const a = planInviteAction(state({
+      invitedAt:    daysAgo(7),
+      lastSignInAt: daysAgo(8),
+    }), NOW)
+    expect(a).toEqual({ kind: 'send_reminder', reminderNumber: 1 })
+  })
+
+  // The damage is cumulative, not a one-off: an anchor that keeps advancing
+  // past the sign-in never lets the invitee out of the cadence, so a person
+  // holding working credentials collects every reminder and is then cancelled.
+  it('runs a signed-in user all the way to cancel when the anchor keeps outrunning them', () => {
+    const signedInAt = daysAgo(40)
+    let remindersSent = 0
+    let lastReminderAt: string | null = null
+    const observed: string[] = []
+
+    for (let day = 1; day <= 40; day++) {
+      const at = new Date(NOW.getTime() + day * DAY)
+      const action = planInviteAction({
+        // Simulates the broken anchor: each reminder mints a token and the
+        // anchor follows it, so it is always newer than the sign-in.
+        invitedAt:    lastReminderAt ?? daysAgo(7),
+        lastSignInAt: signedInAt,
+        remindersSent,
+        lastReminderAt,
+        cancelledAt:  null,
+      }, at)
+      if (action.kind === 'send_reminder') {
+        observed.push(`reminder:${action.reminderNumber}`)
+        remindersSent = action.reminderNumber
+        lastReminderAt = at.toISOString()
+      } else if (action.kind === 'cancel') {
+        observed.push('cancel')
+        break
+      }
+    }
+
+    expect(observed).toEqual(['reminder:1', 'reminder:2', 'reminder:3', 'reminder:4', 'cancel'])
+  })
+
+  it('leaves the same user alone the moment the anchor is the admin invite they answered', () => {
+    const a = planInviteAction(state({
+      invitedAt:    daysAgo(40),
+      lastSignInAt: daysAgo(39),
+    }), NOW)
+    expect(a).toEqual({ kind: 'none', reason: 'already_signed_in' })
+  })
+})
