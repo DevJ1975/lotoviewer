@@ -1053,7 +1053,8 @@ def group_by_department(equipment: list[dict]) -> list[tuple[str, list[dict]]]:
 
 
 def build_workbook(equipment: list[dict], steps: list[dict], photos: Path,
-                   languages: list[str], date: str, out_path: Path) -> int:
+                   languages: list[str], date: str, out_path: Path,
+                   rebuild_hint: str | None = None) -> int:
     """Write one placard workbook. Returns the number of placard pages."""
     by_equipment: dict[str, list[dict]] = {}
     for step in steps:
@@ -1098,7 +1099,7 @@ def build_workbook(equipment: list[dict], steps: list[dict], photos: Path,
     _summary_sheet(summary, equipment, len(steps), len(index))
     _readme_sheet(readme, equipment, steps, photos, date,
                   fit=_page_fit(placards, sorted(b.id for b in placards.row_breaks.brk)),
-                  pages=len(index))
+                  pages=len(index), rebuild_hint=rebuild_hint)
 
     # Open on the placards, scrolled to the first one. The person receiving
     # this file is meant to press Print, not go looking for the right tab —
@@ -1127,7 +1128,8 @@ def cmd_build(args: argparse.Namespace) -> int:
 
     if not args.by_department:
         pages = build_workbook(equipment, steps, photos, languages, args.date,
-                               Path(args.out))
+                               Path(args.out),
+                               rebuild_hint=f"--single {args.out}")
         print(f"{len(equipment)} placards, {pages} pages -> {args.out}")
         return 0
 
@@ -1135,17 +1137,40 @@ def cmd_build(args: argparse.Namespace) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     groups = group_by_department(equipment)
     names = unique_filenames([label for label, _ in groups])
-    written = 0
+    expected_files = {f"{name}.xlsx" for name in names.values()}
+
+    written, failed = 0, []
     for label, rows in groups:
-        department_steps = steps_for(rows)
         target = out_dir / f"{names[label]}.xlsx"
-        pages = build_workbook(rows, department_steps, photos, languages,
-                               args.date, target)
+        try:
+            pages = build_workbook(rows, steps_for(rows), photos, languages,
+                                   args.date, target,
+                                   rebuild_hint=f"--by-department --out-dir {out_dir}")
+        except Exception as error:
+            # One department must not cost the other twenty-eight, and the
+            # folder must still get its index saying which one is missing.
+            failed.append((names[label], error))
+            print(f"  FAILED {target.name}: {error}", file=sys.stderr)
+            continue
         written += len(rows)
         print(f"  {len(rows):4d} placards, {pages:4d} pages -> {target.name}")
 
-    _folder_readme(out_dir, groups, names, equipment, photos, args.date)
-    print(f"{written} placards across {len(groups)} departments -> {out_dir}/")
+    # A department renamed or emptied since the last run leaves its old
+    # workbook behind. Handing a client a folder containing a stale placard
+    # set is worse than handing them a folder with one missing, and nothing
+    # in the file itself would reveal it, so they are named and removed.
+    stale = sorted(p for p in out_dir.glob("*.xlsx") if p.name not in expected_files)
+    for path in stale:
+        print(f"  removing stale workbook (no such department now): {path.name}",
+              file=sys.stderr)
+        path.unlink()
+
+    _folder_readme(out_dir, groups, names, equipment, photos, args.date, languages)
+    print(f"{written} placards across {len(groups) - len(failed)} departments -> {out_dir}/")
+    if failed:
+        print(f"  {len(failed)} department(s) failed to build: "
+              f"{', '.join(name for name, _ in failed)}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -1164,12 +1189,34 @@ def _steps_index(steps: list[dict]):
     return for_rows
 
 
+def _photo_counts(equipment: list[dict], photos: Path) -> tuple[int, int]:
+    """Photos embedded, and photos referenced, for THIS set of equipment.
+
+    Counting every JPEG in the cache instead would make a 22-machine
+    department report the whole site's 996 photos against its own 44, which
+    reads as a surplus rather than the shortfall it is.
+    """
+    referenced = embedded = 0
+    for row in equipment:
+        stem = clean(row.get("equipment_id")).replace("/", "_")
+        for kind in ("equip", "iso"):
+            if not row.get(f"{kind}_photo_url"):
+                continue
+            referenced += 1
+            if (photos / f"{stem}_{kind}.jpg").exists():
+                embedded += 1
+    return embedded, referenced
+
+
 def _folder_readme(out_dir: Path, groups, names: dict[str, str],
-                   equipment: list[dict], photos: Path, date: str) -> None:
+                   equipment: list[dict], photos: Path, date: str,
+                   languages: list[str] | None = None) -> None:
     """A plain-text index so the folder explains itself without Excel."""
-    cached = len(list(photos.glob("*.jpg"))) if photos.exists() else 0
-    expected = sum(1 for row in equipment for kind in ("equip", "iso")
-                   if row.get(f"{kind}_photo_url"))
+    cached, expected = _photo_counts(equipment, photos)
+    languages = languages or ["en", "es"]
+    per_machine = ("an English and a Spanish page per machine"
+                   if len(languages) > 1 else
+                   f"one {'English' if languages[0] == 'en' else 'Spanish'} page per machine")
     lines = [
         "LOTO placards by department",
         f"Generated {date}",
@@ -1178,8 +1225,8 @@ def _folder_readme(out_dir: Path, groups, names: dict[str, str],
         f"Photos embedded: {cached} of {expected} referenced.",
         "",
         "One workbook per department. Each contains that department's placards",
-        "laid out like the printed PDF (English and Spanish page per machine),",
-        "plus filterable Equipment and Energy Steps sheets and a Summary.",
+        f"laid out like the printed PDF, {per_machine}, plus filterable",
+        "Equipment and Energy Steps sheets and a Summary.",
         "",
         "Departments:",
     ]
@@ -1309,10 +1356,8 @@ def _page_fit(ws, breaks: list[int]) -> tuple[int, int]:
 
 def _readme_sheet(ws, equipment: list[dict], steps: list[dict], photos: Path,
                   date: str, fit: tuple[int, int] = (0, 1),
-                  pages: int = 0) -> None:
-    cached = len(list(photos.glob("*.jpg"))) if photos.exists() else 0
-    expected = sum(1 for row in equipment for kind in ("equip", "iso")
-                   if row.get(f"{kind}_photo_url"))
+                  pages: int = 0, rebuild_hint: str | None = None) -> None:
+    cached, expected = _photo_counts(equipment, photos)
     on_one_page, most_pages = fit
     lines = [
         ("Soteria Field — LOTO placard export", 15, True, NAVY_HEADER),
@@ -1344,11 +1389,11 @@ def _readme_sheet(ws, equipment: list[dict], steps: list[dict], photos: Path,
          "that run long.", 10, False, SLATE_TEXT),
         ("", 10, False, SLATE_TEXT),
         ("Regenerating", 12, True, NAVY_HEADER),
-        ("  python scripts/export_placards_xlsx.py fetch --out data/", 10, False, SLATE_TEXT),
-        ("  python scripts/export_placards_xlsx.py build --data data/ --out placards.xlsx",
-         10, False, SLATE_TEXT),
-        ("fetch needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY and downloads the "
-         "photos; build works offline from whatever fetch cached.", 10, False, SLATE_TEXT),
+        ("  python scripts/make_placards.py --data data/ "
+         + (rebuild_hint or "--single placards.xlsx"), 10, False, SLATE_TEXT),
+        ("That downloads any missing photos and rebuilds this workbook. It needs no "
+         "credentials — placard photos are public objects and their URLs are already "
+         "in the cached equipment.json.", 10, False, SLATE_TEXT),
     ]
     for text, size, bold, color in lines:
         ws.append([text])
