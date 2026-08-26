@@ -1091,6 +1091,14 @@ def build_workbook(equipment: list[dict], steps: list[dict], photos: Path,
                   fit=_page_fit(placards, sorted(b.id for b in placards.row_breaks.brk)),
                   pages=len(index))
 
+    # Open on the placards, scrolled to the first one. The person receiving
+    # this file is meant to press Print, not go looking for the right tab —
+    # Excel prints the active sheet, and a workbook that opens on Read Me
+    # prints one page of prose instead of the placards.
+    workbook.active = workbook.index(placards)
+    placards.sheet_view.selection[0].activeCell = "A1"
+    placards.sheet_view.selection[0].sqref = "A1"
+
     workbook.save(out_path)
     if len(index) > MAX_ROW_BREAKS:
         print(f"  note: Excel caps a sheet at {MAX_ROW_BREAKS} manual page breaks, so the "
