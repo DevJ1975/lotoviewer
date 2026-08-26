@@ -701,7 +701,16 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
     sheet.band(TEXT["warning_header"][language],
                Style(fill=RED_BLOCK, color=WHITE, size=9.5, bold=True, align="center"),
                height=14)
-    notes = placard_text(equipment.get("notes") if is_en else equipment.get("notes_es"))
+    # The Spanish note falls back to the English one, not to boilerplate.
+    # The PDF drops straight to generic Spanish text when notes_es is blank,
+    # and on this data that is every machine that has a note at all — 286 of
+    # them, including "all three boilers share a common steam header". A
+    # Spanish-speaking worker was being shown generic wording exactly where
+    # the English placard warns about a specific hazard. An untranslated
+    # warning is worth more than none, and the step text already falls back
+    # this way.
+    notes = placard_text(equipment.get("notes")) if is_en else (
+        placard_text(equipment.get("notes_es")) or placard_text(equipment.get("notes")))
     warning = notes or TEXT["warning_fallback"][language]
     warning_rows = rows_for(warning, 8, 1, GRID_COLS, minimum=1, maximum=4)
     sheet.block(warning_rows, (1, GRID_COLS), warning,
