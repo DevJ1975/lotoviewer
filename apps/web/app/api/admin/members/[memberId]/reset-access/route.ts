@@ -211,6 +211,17 @@ async function assertOutranksTarget(
   // of tenant A reset someone who is a plain member of A but the OWNER of
   // tenant B — rotating the credential that owns B, and handing it back in
   // this route's response body.
+  //
+  // Deliberately UNFILTERED — no `invite_cancelled_at is null`, no
+  // `tenants.disabled_at is null`, unlike tenantGate and migration 190's RLS
+  // functions. They answer a different question. The gate asks "does this row
+  // grant access right now", so it must honour revocation. This asks "what
+  // could this credential become", and both revocation states are one-click
+  // reversible: reactivateInvite() clears invite_cancelled_at on any re-issue,
+  // and the superadmin tenant PATCH sets disabled_at back to null. Filtering
+  // them would reopen the hole — let tenant B's invite lapse, have A's admin
+  // reset the shared login and read tempPassword out of this response, then
+  // reactivate B. The password outlives the revocation, so the rank must too.
   const { data: targetMemberships, error: membershipErr } = await admin
     .from('tenant_memberships')
     .select('role')
