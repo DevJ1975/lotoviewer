@@ -31,6 +31,22 @@ export interface InviteReminderState {
    * Only ends the lifecycle when it is at or after `invitedAt`.
    */
   lastSignInAt: string | Date | null | undefined
+  /**
+   * True when the user has chosen their own password
+   * (profiles.must_change_password === false).
+   *
+   * A SECOND liveness signal, because lastSignInAt alone is not the same
+   * question. /api/invites/accept sets the password and clears the flag but
+   * does not establish a session — the client signs in separately, and that
+   * is what stamps last_sign_in_at. Between those two steps (and forever, if
+   * the sign-in never lands) the user holds a working credential while
+   * looking, to lastSignInAt, exactly like someone who never showed up.
+   *
+   * Undefined means "not looked up", which is treated as not-set: callers
+   * that cannot resolve the flag get the old behaviour rather than a
+   * silently different one.
+   */
+  passwordSet?: boolean
   /** tenant_memberships.invite_reminders_sent. */
   remindersSent: number
   /** tenant_memberships.invite_last_reminder_at. */
@@ -47,6 +63,7 @@ export type InviteReminderAction =
 export type NoneReason =
   | 'already_cancelled'
   | 'already_signed_in'
+  | 'credential_already_set'
   | 'missing_invited_at'
   | 'too_soon'
 
@@ -94,6 +111,20 @@ export function planInviteAction(
   const lastSignInMs = toMs(state.lastSignInAt)
   if (lastSignInMs != null && lastSignInMs >= invitedMs) {
     return { kind: 'none', reason: 'already_signed_in' }
+  }
+
+  // Password chosen but no completed sign-in yet → still accepted. Nagging
+  // this person is wrong, and cancelling them is worse: the cancel is an
+  // RLS-level access revocation (migration 190 puts `invite_cancelled_at is
+  // null` inside current_user_tenant_ids()), so they would sign in with a
+  // password that works and see an empty application.
+  //
+  // Checked after the sign-in comparison above, not before: an access reset
+  // sets must_change_password back to true, so a reset member reads
+  // passwordSet=false here and correctly falls through to the cadence. This
+  // guard is for the invitee whose accept landed and whose session never did.
+  if (state.passwordSet === true) {
+    return { kind: 'none', reason: 'credential_already_set' }
   }
 
   const sent = Math.max(0, Math.floor(state.remindersSent ?? 0))

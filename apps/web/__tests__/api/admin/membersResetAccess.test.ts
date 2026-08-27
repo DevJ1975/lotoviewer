@@ -181,3 +181,108 @@ describe('POST /api/admin/members/[memberId]/reset-access', () => {
     expect(authAdminMock.updateUserById).not.toHaveBeenCalled()
   })
 })
+
+
+// The route rotates a credential AND returns it in the response body. That
+// combination means authorizing only the CALLER turns "reset a worker's
+// access" into "mint myself a working login as anyone in this tenant" —
+// including the owner, and any superadmin holding a membership here.
+describe('reset-access — the caller must out-rank the target', () => {
+  beforeEach(() => { resetMocks(); tenantAdminOk() })
+
+  /** members row, then the two target-rank lookups the guard performs. */
+  function queueTargetAs(role: string | null, isSuperadmin = false) {
+    mockState.queue('members', {
+      data: {
+        id: MEMBER, tenant_id: TENANT, profile_id: PROFILE,
+        email: 'worker@example.com', legal_name: 'Worker One', display_name: 'Worker One',
+      },
+      error: null,
+    })
+    mockState.queue('profiles',           { data: { is_superadmin: isSuperadmin }, error: null })
+    mockState.queue('tenant_memberships', { data: role ? { role } : null, error: null })
+  }
+
+  function allowRotationAndSend() {
+    authAdminMock.getUserById.mockResolvedValue({
+      data: { user: { id: PROFILE, email: 'worker@example.com' } }, error: null,
+    })
+    authAdminMock.updateUserById.mockResolvedValue({ data: { user: { id: PROFILE } }, error: null })
+    mockState.queue('tenants', { data: { id: TENANT, name: 'Snak King' }, error: null })
+  }
+
+  it('403s when an admin targets the tenant owner', async () => {
+    queueTargetAs('owner')
+
+    const res = await resetAccess(emptyRequest('POST'), ctxFor(MEMBER))
+    const body = await res.json()
+
+    expect(res.status).toBe(403)
+    expect(body.error).toBe('FORBIDDEN_TARGET')
+    expect(authAdminMock.updateUserById).not.toHaveBeenCalled()
+  })
+
+  it('403s when an admin targets another admin', async () => {
+    queueTargetAs('admin')
+
+    const res = await resetAccess(emptyRequest('POST'), ctxFor(MEMBER))
+
+    expect(res.status).toBe(403)
+    expect(authAdminMock.updateUserById).not.toHaveBeenCalled()
+  })
+
+  it('403s when the target is a superadmin, whatever their tenant role', async () => {
+    queueTargetAs('member', true)
+
+    const res = await resetAccess(emptyRequest('POST'), ctxFor(MEMBER))
+    const body = await res.json()
+
+    expect(res.status).toBe(403)
+    expect(body.message).toMatch(/Soteria administrator/i)
+    expect(authAdminMock.updateUserById).not.toHaveBeenCalled()
+  })
+
+  it('allows the core case — an admin resetting a member', async () => {
+    queueTargetAs('member')
+    allowRotationAndSend()
+
+    const res = await resetAccess(emptyRequest('POST'), ctxFor(MEMBER))
+
+    expect(res.status).toBe(200)
+    expect(authAdminMock.updateUserById).toHaveBeenCalledWith(PROFILE, { password: 'TempPass123!' })
+  })
+
+  it('allows an owner to reset an admin', async () => {
+    requireTenantAdminMock.mockResolvedValue({
+      ok: true, userId: 'owner-1', userEmail: 'owner@example.com',
+      tenantId: TENANT, role: 'owner', authedClient: {},
+    })
+    queueTargetAs('admin')
+    allowRotationAndSend()
+
+    const res = await resetAccess(emptyRequest('POST'), ctxFor(MEMBER))
+
+    expect(res.status).toBe(200)
+    expect(authAdminMock.updateUserById).toHaveBeenCalled()
+  })
+
+  it('allows a self-reset — rotating your own password is not an escalation', async () => {
+    requireTenantAdminMock.mockResolvedValue({
+      ok: true, userId: PROFILE, userEmail: 'admin@example.com',
+      tenantId: TENANT, role: 'admin', authedClient: {},
+    })
+    // No rank lookups are queued: the self case short-circuits before them.
+    mockState.queue('members', {
+      data: {
+        id: MEMBER, tenant_id: TENANT, profile_id: PROFILE,
+        email: 'admin@example.com', legal_name: 'Ad Min', display_name: 'Ad Min',
+      },
+      error: null,
+    })
+    allowRotationAndSend()
+
+    const res = await resetAccess(emptyRequest('POST'), ctxFor(MEMBER))
+
+    expect(res.status).toBe(200)
+  })
+})

@@ -12,8 +12,10 @@ import {
 
 // Daily invite-reminder cron.
 //
-// Finds tenant memberships whose invite has not been acted on — the
-// invitee has not signed in since it was issued — and runs each through
+// Finds tenant memberships whose invite has not been acted on — the invitee
+// has neither signed in since that invite was issued (auth.users.last_sign_in_at)
+// nor chosen a password of their own (profiles.must_change_password IS NOT
+// false) — and runs each through
 // planInviteAction():
 //   - send_reminder → email reminder #N (weekly), advance the counter
 //   - cancel        → soft-cancel the invite (stamp invite_cancelled_at;
@@ -71,6 +73,36 @@ interface PendingMembership {
   invite_last_reminder_at:  string | null
 }
 
+/**
+ * Resolve profiles.must_change_password === false for the given users.
+ *
+ * Chunked because a single `.in()` becomes a URL long enough to be rejected
+ * once the candidate list grows — and a request that fails or silently
+ * returns short here would put us straight back into the misclassification
+ * this guard exists to prevent. A chunk that errors is rethrown rather than
+ * skipped, so the caller aborts the run instead of proceeding on partial
+ * knowledge.
+ */
+async function loadPasswordSetFlags(
+  admin: ReturnType<typeof supabaseAdmin>,
+  userIds: string[],
+): Promise<Map<string, boolean>> {
+  const out = new Map<string, boolean>()
+  const CHUNK = 200
+  for (let i = 0; i < userIds.length; i += CHUNK) {
+    const slice = userIds.slice(i, i + CHUNK)
+    const { data, error } = await admin
+      .from('profiles')
+      .select('id, must_change_password')
+      .in('id', slice)
+    if (error) throw new Error(`profiles lookup failed: ${error.message}`)
+    for (const p of data ?? []) {
+      out.set(p.id as string, (p as { must_change_password: boolean | null }).must_change_password === false)
+    }
+  }
+  return out
+}
+
 async function runCron(req: Request): Promise<NextResponse> {
   const admin = supabaseAdmin()
   const appUrl = publicAppUrl(req)
@@ -96,7 +128,8 @@ async function runCron(req: Request): Promise<NextResponse> {
     const lastSignInByUserId = new Map<string, string | null>()
     const PAGE_SIZE = 200
     const MAX_PAGES = 50
-    for (let page = 1; page <= MAX_PAGES; page++) {
+    let scanComplete = false
+    for (let page = 1; page <= MAX_PAGES + 1; page++) {
       const { data: authData, error: aErr } =
         await admin.auth.admin.listUsers({ page, perPage: PAGE_SIZE })
       if (aErr) {
@@ -105,7 +138,35 @@ async function runCron(req: Request): Promise<NextResponse> {
       }
       const users = authData?.users ?? []
       for (const u of users) lastSignInByUserId.set(u.id, u.last_sign_in_at ?? null)
-      if (users.length < PAGE_SIZE) break
+      // A short page is the only proof the scan reached the end. The extra
+      // iteration (MAX_PAGES + 1) exists solely to supply that proof when the
+      // user count is an exact multiple of PAGE_SIZE: at exactly 10,000 users
+      // pages 1..50 are all full, and without a probe page the run would
+      // declare itself truncated and refuse to do anything, every day, until
+      // the count happened to change.
+      if (users.length < PAGE_SIZE) { scanComplete = true; break }
+    }
+
+    // The scan is the ONLY thing separating an established member from a
+    // never-signed-in invitee, and a user absent from it is indistinguishable
+    // from one whose last_sign_in_at is genuinely null (see the `?? null` in
+    // step 4). Past 10k auth users the loop used to exhaust MAX_PAGES and
+    // return a truncated map with no error — so arbitrary long-active members
+    // read as "never signed in", collected four reminder emails, and were then
+    // soft-cancelled, which migration 190 makes an RLS-level revocation.
+    //
+    // Refuse to act on a partial map. Same posture as the listUsers error
+    // branch above: no reminders, no cancels, loud in Sentry. Skipping a day
+    // of reminders is recoverable; revoking a working member's access is not.
+    if (!scanComplete) {
+      Sentry.captureException(
+        new Error(`invite-reminders: listUsers exceeded ${MAX_PAGES * PAGE_SIZE} users — skipping run`),
+        { tags: { route: '/api/cron/invite-reminders', stage: 'list-users-truncated' } },
+      )
+      return NextResponse.json({
+        error:   'user scan incomplete — no reminders sent and no invites cancelled',
+        scanned: memberships.length,
+      }, { status: 500 })
     }
 
     // 3. Newest ADMIN-ISSUED invite per user. THIS is what the cadence is
@@ -141,18 +202,49 @@ async function runCron(req: Request): Promise<NextResponse> {
       if (!invitedAtByUserId.has(t.user_id)) invitedAtByUserId.set(t.user_id, t.created_at)
     }
 
-    // 4. Decide an action for each membership.
+    // 4. Decide an action for each membership, in two passes.
+    //
+    //    Pass one narrows thousands of memberships to the handful that are
+    //    actually due for something. Pass two re-runs the same pure planner
+    //    with the second liveness signal — profiles.must_change_password —
+    //    resolved for just those few. Two passes rather than one so the
+    //    profile lookup stays proportional to the actionable set instead of
+    //    the whole tenant base.
+    //
+    //    The reset anchor belongs HERE, in the shared base state, not only in
+    //    pass two: pass one is a filter, so a reset member scored against the
+    //    membership date would resolve to already_signed_in and be dropped
+    //    from `candidates` before pass two ever saw them — silently restoring
+    //    the very gap this anchor exists to close.
+    const baseStateFor = (m: PendingMembership): InviteReminderState => ({
+      invitedAt:      invitedAtByUserId.get(m.user_id) ?? m.created_at,
+      lastSignInAt:   lastSignInByUserId.get(m.user_id) ?? null,
+      remindersSent:  m.invite_reminders_sent ?? 0,
+      lastReminderAt: m.invite_last_reminder_at,
+      cancelledAt:    null,
+    })
+
+    const candidates = memberships.filter(m => planInviteAction(baseStateFor(m), now).kind !== 'none')
+
+    //    last_sign_in_at is not the same question as "does this person have a
+    //    working password". /api/invites/accept sets the password and clears
+    //    must_change_password but does NOT establish a session — the client
+    //    signs in separately, and that is what stamps last_sign_in_at. A user
+    //    whose accept landed and whose sign-in did not holds a working
+    //    credential and looks, to last_sign_in_at alone, exactly like someone
+    //    who never showed up.
+    const passwordSetByUserId = await loadPasswordSetFlags(
+      admin,
+      Array.from(new Set(candidates.map(m => m.user_id))),
+    )
+
     const toRemind: Array<{ m: PendingMembership; reminderNumber: number }> = []
     const toCancel: PendingMembership[] = []
-    for (const m of memberships) {
-      const state: InviteReminderState = {
-        invitedAt:      invitedAtByUserId.get(m.user_id) ?? m.created_at,
-        lastSignInAt:   lastSignInByUserId.get(m.user_id) ?? null,
-        remindersSent:  m.invite_reminders_sent ?? 0,
-        lastReminderAt: m.invite_last_reminder_at,
-        cancelledAt:    null,
-      }
-      const action = planInviteAction(state, now)
+    for (const m of candidates) {
+      const action = planInviteAction(
+        { ...baseStateFor(m), passwordSet: passwordSetByUserId.get(m.user_id) === true },
+        now,
+      )
       if (action.kind === 'send_reminder') toRemind.push({ m, reminderNumber: action.reminderNumber })
       else if (action.kind === 'cancel')   toCancel.push(m)
     }

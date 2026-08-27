@@ -18,7 +18,8 @@ import { isValidTenantNumber } from '@/lib/validation/tenants'
 // Behavior:
 //   1. Require superadmin (env allowlist + DB flag)
 //   2. Look up the membership; 404 if missing
-//   3. Look up auth.users; if last_sign_in_at is NOT null → 409
+//   3. Look up auth.users + the profile; 409 if EITHER last_sign_in_at is
+//      set OR must_change_password is already false (see the guard below)
 //   4. Generate a new temp password, patch auth.users.password
 //   5. Patch profiles.must_change_password = true (in case it drifted)
 //   6. Mint a fresh invite token + email the accept-invite link
@@ -62,14 +63,40 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     return NextResponse.json({ error: 'No membership in this tenant' }, { status: 404 })
   }
 
-  // Refuse the resend if they've already signed in — rotating their
-  // password silently would lock them out.
+  // Refuse the resend if they already hold a password of their own —
+  // rotating it silently would lock them out.
+  //
+  // Two independent signals, because neither alone is sufficient:
+  //
+  //   last_sign_in_at   — they have completed a browser sign-in.
+  //   must_change_password === false — they chose their own password.
+  //
+  // The second is the one that matters. /api/invites/accept sets the
+  // password and clears the flag but does NOT establish a session — the
+  // client signs in separately afterwards, and that is what stamps
+  // last_sign_in_at. A user whose accept succeeded but whose follow-up
+  // sign-in never landed (closed tab, dropped network) therefore has a
+  // WORKING password and a null last_sign_in_at. The superadmin UI lists
+  // them as "Invited", so resending at them is a likely mis-click, not an
+  // exotic race — and on the old last_sign_in_at-only guard it silently
+  // rotated a password they were still using.
   const { data: authUser } = await admin.auth.admin.getUserById(user_id)
   const lastSignInAt = authUser?.user?.last_sign_in_at ?? null
   const email = authUser?.user?.email ?? null
-  if (lastSignInAt) {
+
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('full_name, must_change_password')
+    .eq('id', user_id)
+    .maybeSingle()
+
+  // Strict `=== false`: a null flag or a missing profile row means setup
+  // never completed, which is exactly who a resend is for.
+  const hasOwnPassword = profile?.must_change_password === false
+
+  if (lastSignInAt || hasOwnPassword) {
     return NextResponse.json({
-      error: 'User has already signed in — use the auth provider\'s password-reset flow instead of resending the invite.',
+      error: 'User has already set their password — use the auth provider\'s password-reset flow instead of resending the invite.',
     }, { status: 409 })
   }
   if (!email) {
@@ -91,14 +118,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     })
     return NextResponse.json({ error: updateAuthErr.message }, { status: 500 })
   }
+  // Safe to force unconditionally: the guard above established that the
+  // flag is not already false, so this can only re-assert an existing
+  // `true` or repair a null.
   await admin.from('profiles').update({ must_change_password: true }).eq('id', user_id)
-
-  // Look up display name for the email.
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('full_name')
-    .eq('id', user_id)
-    .maybeSingle()
 
   const { inviteUrl, emailSent } = await issueAndSendInvite(admin, {
     userId:     user_id,
