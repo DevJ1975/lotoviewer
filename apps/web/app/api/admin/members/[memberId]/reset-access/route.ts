@@ -212,6 +212,20 @@ async function assertOutranksTarget(
   // tenant B — rotating the credential that owns B, and handing it back in
   // this route's response body.
   //
+  // Ranks are compared WITHIN a tenant and never across one. A single
+  // account-global `max(role)` compared against the caller's tenant-local role
+  // reads as a total order, and there isn't one: being the owner of tenant A
+  // confers no authority whatsoever inside tenant B. That asymmetry left the
+  // mirror image of the hole above open — owner of A (rank 3) still
+  // out-ranked a target who was merely a member of A but an ADMIN of B
+  // (rank 2), and walked away with a credential that administers B.
+  //
+  // So: administrative power in someone else's tenant is disqualifying
+  // outright, at any caller rank, and strict dominance decides the rest
+  // inside the caller's own tenant. Member/viewer rows elsewhere stay
+  // resettable — they carry no power to steal, which is what keeps the
+  // ordinary "worker who also does shifts for another site" case working.
+  //
   // Deliberately UNFILTERED — no `invite_cancelled_at is null`, no
   // `tenants.disabled_at is null`, unlike tenantGate and migration 190's RLS
   // functions. They answer a different question. The gate asks "does this row
@@ -224,19 +238,25 @@ async function assertOutranksTarget(
   // reactivate B. The password outlives the revocation, so the rank must too.
   const { data: targetMemberships, error: membershipErr } = await admin
     .from('tenant_memberships')
-    .select('role')
+    .select('role, tenant_id')
     .eq('user_id', targetUserId)
   if (membershipErr) return sanitizeError(membershipErr, 'admin/members/reset-access target membership lookup')
 
-  const rows = (targetMemberships ?? []) as Array<{ role?: string }>
-  const targetRank = rows.reduce((hi, r) => Math.max(hi, ROLE_RANK[r.role ?? ''] ?? 0), 0)
+  const rows = (targetMemberships ?? []) as Array<{ role?: string; tenant_id?: string }>
+  const forbidden = NextResponse.json({
+    error:   'FORBIDDEN_TARGET',
+    message: 'You cannot reset access for someone at or above your own role, or who administers another organization. They can reset their own password from the sign-in page.',
+  }, { status: 403 })
+
+  const administersAnotherTenant = rows.some(r =>
+    r.tenant_id !== gate.tenantId && (ROLE_RANK[r.role ?? ''] ?? 0) >= ROLE_RANK.admin)
+  if (administersAnotherTenant) return forbidden
+
   const callerRank = ROLE_RANK[gate.role] ?? 0
-  if (targetRank >= callerRank) {
-    return NextResponse.json({
-      error:   'FORBIDDEN_TARGET',
-      message: 'You cannot reset access for someone at or above your own role, here or in another organization they belong to. They can reset their own password from the sign-in page.',
-    }, { status: 403 })
-  }
+  const targetRankHere = rows
+    .filter(r => r.tenant_id === gate.tenantId)
+    .reduce((hi, r) => Math.max(hi, ROLE_RANK[r.role ?? ''] ?? 0), 0)
+  if (targetRankHere >= callerRank) return forbidden
 
   return null
 }

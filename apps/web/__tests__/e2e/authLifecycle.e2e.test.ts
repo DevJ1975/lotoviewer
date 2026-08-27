@@ -31,6 +31,7 @@ import { planInviteAction, type InviteReminderState } from '@soteria/core/invite
 
 const RAW      = 'raw-invite-token-for-jane'
 const TENANT_A = '00000000-0000-0000-0000-00000000000a'
+const TENANT_B = '00000000-0000-0000-0000-00000000000b'
 const MEMBER_ID = '00000000-0000-0000-0000-0000000000f1'
 
 function tokenRow(overrides: Record<string, unknown> = {}) {
@@ -318,15 +319,20 @@ describe('E2E — the accept endpoint validates before it touches auth', () => {
 // "mint myself a working credential as anyone". The password is ACCOUNT-global
 // while membership is per-tenant, so the rank has to be account-global too.
 
-function gateAsAdminOfTenantA() {
+function gateAsTenantA(role: 'admin' | 'owner' = 'admin') {
   tenantGateMock.mockResolvedValue({
-    ok: true, userId: 'U-admin-a', userEmail: 'admin@a.com',
-    tenantId: TENANT_A, facilityId: null, role: 'admin', authedClient: {},
+    ok: true, userId: `U-${role}-a`, userEmail: `${role}@a.com`,
+    tenantId: TENANT_A, facilityId: null, role, authedClient: {},
   })
 }
+const gateAsAdminOfTenantA = () => gateAsTenantA('admin')
 
-/** Queue the reads reset-access performs up to and including the rank check. */
-function seedResetAccessUpToRank(targetRoles: string[], targetIsSuperadmin = false) {
+/**
+ * Queue the reads reset-access performs up to and including the rank check.
+ * Memberships are given as `role@tenant` so each scenario states plainly which
+ * organisation the target holds power in.
+ */
+function seedResetAccessUpToRank(targetMemberships: string[], targetIsSuperadmin = false) {
   mockState.queue('members', {
     data: {
       id: MEMBER_ID, tenant_id: TENANT_A, profile_id: 'U-target',
@@ -335,7 +341,13 @@ function seedResetAccessUpToRank(targetRoles: string[], targetIsSuperadmin = fal
     error: null,
   })
   mockState.queue('profiles', { data: { is_superadmin: targetIsSuperadmin }, error: null })
-  mockState.queue('tenant_memberships', { data: targetRoles.map(role => ({ role })), error: null })
+  mockState.queue('tenant_memberships', {
+    data: targetMemberships.map(spec => {
+      const [role, tenant] = spec.split('@')
+      return { role, tenant_id: tenant === 'B' ? TENANT_B : TENANT_A }
+    }),
+    error: null,
+  })
 }
 
 describe('E2E — cross-tenant privilege escalation via access reset', () => {
@@ -343,7 +355,7 @@ describe('E2E — cross-tenant privilege escalation via access reset', () => {
     gateAsAdminOfTenantA()
     // The target is a `member` of tenant A — but the OWNER of tenant B. One
     // password unlocks both.
-    seedResetAccessUpToRank(['member', 'owner'])
+    seedResetAccessUpToRank(['member@A', 'owner@B'])
 
     const r = await resetAccess(jsonRequest('POST', {}), ctxFor({ memberId: MEMBER_ID }))
     expect(r.status).toBe(403)
@@ -352,8 +364,23 @@ describe('E2E — cross-tenant privilege escalation via access reset', () => {
     expect(authAdminMock.updateUserById).not.toHaveBeenCalled()
   })
 
+  it('refuses even when the caller out-ranks the target numerically', async () => {
+    // The mirror image, and the one a global max(role) missed: the caller is
+    // the OWNER of A (rank 3) and the target merely an ADMIN of B (rank 2), so
+    // strict dominance said yes. It should not — owning A confers nothing
+    // inside B, so the comparison was never meaningful, and the reset hands
+    // A's owner a credential that administers B.
+    gateAsTenantA('owner')
+    seedResetAccessUpToRank(['member@A', 'admin@B'])
+
+    const r = await resetAccess(jsonRequest('POST', {}), ctxFor({ memberId: MEMBER_ID }))
+    expect(r.status).toBe(403)
+    expect((await r.json()).error).toBe('FORBIDDEN_TARGET')
+    expect(authAdminMock.updateUserById).not.toHaveBeenCalled()
+  })
+
   it('refuses to reset a peer admin, and refuses to reset a superadmin', async () => {
-    for (const roles of [['admin'], ['viewer', 'admin']]) {
+    for (const roles of [['admin@A'], ['viewer@A', 'admin@A']]) {
       resetMocks(); tenantGateMock.mockReset(); gateAsAdminOfTenantA()
       seedResetAccessUpToRank(roles)
       const r = await resetAccess(jsonRequest('POST', {}), ctxFor({ memberId: MEMBER_ID }))
@@ -361,7 +388,7 @@ describe('E2E — cross-tenant privilege escalation via access reset', () => {
     }
 
     resetMocks(); tenantGateMock.mockReset(); gateAsAdminOfTenantA()
-    seedResetAccessUpToRank(['member'], true)   // Soteria staff account
+    seedResetAccessUpToRank(['member@A'], true)   // Soteria staff account
     const r = await resetAccess(jsonRequest('POST', {}), ctxFor({ memberId: MEMBER_ID }))
     expect(r.status).toBe(403)
     expect(authAdminMock.updateUserById).not.toHaveBeenCalled()
@@ -369,9 +396,10 @@ describe('E2E — cross-tenant privilege escalation via access reset', () => {
 
   it('still lets a site lead reset the forklift operator who is locked out', async () => {
     gateAsAdminOfTenantA()
-    // The whole point of the route: a worker who holds only member/viewer rows,
-    // anywhere, is resettable by their admin.
-    seedResetAccessUpToRank(['member', 'viewer', 'member'])
+    // The whole point of the route: a worker who holds only member/viewer rows
+    // — including at another site — is resettable by their admin. Those rows
+    // carry no power to steal.
+    seedResetAccessUpToRank(['member@A', 'viewer@B', 'member@B'])
     authAdminMock.getUserById.mockResolvedValue({ data: { user: { email: 'target@a.com' } } })
     authAdminMock.updateUserById.mockResolvedValue({ data: { user: {} }, error: null })
     mockState.queue('profiles', { data: null, error: null })          // must_change_password
