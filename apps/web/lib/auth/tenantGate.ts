@@ -96,12 +96,19 @@ async function gate(req: Request, opts: GateOptions = {}): Promise<TenantGate> {
 
   // The embedded tenants row makes this agree with current_user_tenant_ids()
   // in one round-trip rather than two.
-  const { data: membership } = await admin
+  const { data: membership, error: membershipErr } = await admin
     .from('tenant_memberships')
     .select('role, invite_cancelled_at, tenants:tenant_id(disabled_at)')
     .eq('user_id',   user.id)
     .eq('tenant_id', tenantId)
     .maybeSingle()
+  // Distinguish "no such membership" from "the lookup failed". Discarding the
+  // error made every DB or PostgREST fault present as 403 Not a member — a
+  // permanent-looking denial for a transient fault, on the hot path of every
+  // gated route. A 500 is honest and retryable.
+  if (membershipErr) {
+    return { ok: false, status: 500, message: 'Could not verify tenant membership' }
+  }
   if (!membership) {
     return { ok: false, status: 403, message: 'Not a member of this tenant' }
   }

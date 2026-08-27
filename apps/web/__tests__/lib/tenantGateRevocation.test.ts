@@ -136,6 +136,21 @@ describe('tenantGate — revoked and disabled access', () => {
     }
   })
 
+  it('reports a failed lookup as 500, not as "not a member"', async () => {
+    // The embed makes this query more complex than it was; a PostgREST or
+    // network fault must not present as a permanent-looking 403.
+    notSuperadmin()
+    queue('tenant_memberships', { data: null, error: { message: 'could not find relationship' } })
+
+    const g = await requireTenantMember(req())
+
+    expect(g.ok).toBe(false)
+    if (!g.ok) {
+      expect(g.status).toBe(500)
+      expect(g.message).not.toMatch(/not a member/i)
+    }
+  })
+
   it('still enforces the role floor for admin routes', async () => {
     notSuperadmin()
     queue('tenant_memberships', {
