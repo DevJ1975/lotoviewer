@@ -191,7 +191,8 @@ describe('reset-access — the caller must out-rank the target', () => {
   beforeEach(() => { resetMocks(); tenantAdminOk() })
 
   /** members row, then the two target-rank lookups the guard performs. */
-  function queueTargetAs(role: string | null, isSuperadmin = false) {
+  function queueTargetAs(roles: string | string[] | null, isSuperadmin = false) {
+    const list = roles == null ? [] : (Array.isArray(roles) ? roles : [roles])
     mockState.queue('members', {
       data: {
         id: MEMBER, tenant_id: TENANT, profile_id: PROFILE,
@@ -200,7 +201,8 @@ describe('reset-access — the caller must out-rank the target', () => {
       error: null,
     })
     mockState.queue('profiles',           { data: { is_superadmin: isSuperadmin }, error: null })
-    mockState.queue('tenant_memberships', { data: role ? { role } : null, error: null })
+    // The guard reads EVERY membership the target holds, not just this tenant's.
+    mockState.queue('tenant_memberships', { data: list.map(role => ({ role })), error: null })
   }
 
   function allowRotationAndSend() {
@@ -250,6 +252,32 @@ describe('reset-access — the caller must out-rank the target', () => {
 
     expect(res.status).toBe(200)
     expect(authAdminMock.updateUserById).toHaveBeenCalledWith(PROFILE, { password: 'TempPass123!' })
+  })
+
+  it('403s when the target is a plain member here but an owner elsewhere', async () => {
+    // auth.users holds ONE password, and `members` is per-tenant by design, so
+    // a person legitimately holds member rows in several tenants. A
+    // tenant-local rank check would let this tenant's admin rotate — and read —
+    // the credential that owns a different tenant.
+    queueTargetAs(['member', 'owner'])
+
+    const res = await resetAccess(emptyRequest('POST'), ctxFor(MEMBER))
+    const body = await res.json()
+
+    expect(res.status).toBe(403)
+    expect(body.error).toBe('FORBIDDEN_TARGET')
+    expect(body.message).toMatch(/another organization/i)
+    expect(authAdminMock.updateUserById).not.toHaveBeenCalled()
+  })
+
+  it('still allows an admin to reset someone who is a member in several tenants', async () => {
+    queueTargetAs(['member', 'viewer', 'member'])
+    allowRotationAndSend()
+
+    const res = await resetAccess(emptyRequest('POST'), ctxFor(MEMBER))
+
+    expect(res.status).toBe(200)
+    expect(authAdminMock.updateUserById).toHaveBeenCalled()
   })
 
   it('allows an owner to reset an admin', async () => {
