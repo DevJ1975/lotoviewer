@@ -24,6 +24,15 @@ import { supabaseAdmin, generateTempPassword } from '@/lib/supabaseAdmin'
 // Requires tenant admin (not superadmin): resetting a forklift
 // operator's password at 6am is a site-lead task, and routing it
 // through superadmin is why it wasn't getting done.
+//
+// The caller must also OUT-RANK the target. Authorizing the caller alone is
+// not enough when the route rotates a credential and hands it back in the
+// response body: that combination turns "reset a worker's access" into
+// "mint myself a working login as anyone in this tenant", including the
+// owner and any superadmin who happens to hold a membership here. Returning
+// the password is deliberate — the copy-paste fallback is the whole point
+// for a worker with no email on their phone — so the rank check is what
+// bounds it.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -68,6 +77,9 @@ export async function POST(req: Request, ctx: RouteContext) {
       message: 'This member has no login yet. Use "Grant app access" instead.',
     }, { status: 409 })
   }
+
+  const rankCheck = await assertOutranksTarget(admin, gate, member.profile_id)
+  if (rankCheck) return rankCheck
 
   // auth.users is the authority on the sign-in address; members.email can
   // drift from it (a member row edited without re-provisioning). Reset the
@@ -148,4 +160,58 @@ export async function POST(req: Request, ctx: RouteContext) {
     expiresInDays: inviteLinkTtlDays(),
     tenantName,
   })
+}
+
+/** owner > admin > member/viewer. A target with no membership here ranks 0. */
+const ROLE_RANK: Record<string, number> = { owner: 3, admin: 2, member: 1, viewer: 1 }
+
+/**
+ * Refuse a reset whose target ranks at or above the caller.
+ *
+ * Strict dominance, not "is the caller an admin": two admins in one tenant
+ * must not be able to take each other over, and no tenant role may reset a
+ * superadmin. Self-reset is allowed explicitly — rotating your own password
+ * is not an escalation, and strict dominance would otherwise forbid it.
+ *
+ * Returns a response to send, or null when the reset may proceed.
+ */
+async function assertOutranksTarget(
+  admin: ReturnType<typeof supabaseAdmin>,
+  gate: { userId: string; tenantId: string; role: string },
+  targetUserId: string,
+): Promise<NextResponse | null> {
+  if (targetUserId === gate.userId) return null
+  if (gate.role === 'superadmin') return null
+
+  const { data: targetProfile, error: profileErr } = await admin
+    .from('profiles')
+    .select('is_superadmin')
+    .eq('id', targetUserId)
+    .maybeSingle()
+  if (profileErr) return sanitizeError(profileErr, 'admin/members/reset-access target profile lookup')
+  if ((targetProfile as { is_superadmin?: boolean } | null)?.is_superadmin) {
+    return NextResponse.json({
+      error:   'FORBIDDEN_TARGET',
+      message: 'This login belongs to a Soteria administrator and cannot be reset from here.',
+    }, { status: 403 })
+  }
+
+  const { data: targetMembership, error: membershipErr } = await admin
+    .from('tenant_memberships')
+    .select('role')
+    .eq('user_id',   targetUserId)
+    .eq('tenant_id', gate.tenantId)
+    .maybeSingle()
+  if (membershipErr) return sanitizeError(membershipErr, 'admin/members/reset-access target membership lookup')
+
+  const targetRank = ROLE_RANK[(targetMembership as { role?: string } | null)?.role ?? ''] ?? 0
+  const callerRank = ROLE_RANK[gate.role] ?? 0
+  if (targetRank >= callerRank) {
+    return NextResponse.json({
+      error:   'FORBIDDEN_TARGET',
+      message: 'You cannot reset access for someone at or above your own role. Ask an owner to do it.',
+    }, { status: 403 })
+  }
+
+  return null
 }
