@@ -155,6 +155,53 @@ describe('E2E — a live account is protected from its own old invite link', () 
   })
 })
 
+// ─── Scenario 2b: the guards themselves fail ────────────────────────────────
+//
+// A guard that is skipped when its own lookup errors is worse than no guard,
+// because it holds exactly while the system is healthy and lets go the moment
+// it is not. Both invite guards read through Supabase, so both have to say
+// "no" when they cannot say anything.
+
+describe('E2E — the invite guards fail closed when their lookups fail', () => {
+  it('refuses the accept when the account state cannot be read', async () => {
+    mockState.queue('invite_tokens',      { data: tokenRow(), error: null })
+    mockState.queue('tenant_memberships', { data: { invite_cancelled_at: null }, error: null })
+    // GoTrue is down. Previously this left last_sign_in_at undefined and the
+    // already-active guard silently satisfied, so a leaked token became a
+    // password reset against a live account during an outage.
+    authAdminMock.getUserById.mockResolvedValue({ data: null, error: { message: 'gotrue unavailable' } })
+
+    const r = await accept(jsonRequest('POST', {
+      token: RAW, fullName: 'Attacker', password: 'attacker-chosen-password',
+    }))
+    expect(r.status).toBeGreaterThanOrEqual(500)
+    expect(authAdminMock.updateUserById).not.toHaveBeenCalled()
+  })
+
+  it('refuses the accept when the membership state cannot be read', async () => {
+    mockState.queue('invite_tokens',      { data: tokenRow(), error: null })
+    mockState.queue('tenant_memberships', { data: null, error: { message: 'connection reset' } })
+
+    const r = await accept(jsonRequest('POST', {
+      token: RAW, fullName: 'Jane Doe', password: 'correct horse battery',
+    }))
+    expect(r.status).toBeGreaterThanOrEqual(500)
+    expect(authAdminMock.updateUserById).not.toHaveBeenCalled()
+  })
+
+  it('does not show the setup form when validate cannot read the account state', async () => {
+    mockState.queue('invite_tokens',      { data: tokenRow(), error: null })
+    mockState.queue('tenant_memberships', { data: { invite_cancelled_at: null }, error: null })
+    authAdminMock.getUserById.mockResolvedValue({ data: null, error: { message: 'gotrue unavailable' } })
+
+    const r = await validate(jsonRequest('POST', { token: RAW }))
+    expect(r.status).toBeGreaterThanOrEqual(500)
+    // Emphatically not 'valid' — that would invite someone to start a flow
+    // /api/invites/accept will refuse.
+    expect((await r.json()).status).not.toBe('valid')
+  })
+})
+
 // ─── Scenario 3: an admin cancels the invitation ────────────────────────────
 
 describe('E2E — a cancelled invitation cannot be redeemed', () => {
