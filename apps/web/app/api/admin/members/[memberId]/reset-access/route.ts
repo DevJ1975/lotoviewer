@@ -162,7 +162,7 @@ export async function POST(req: Request, ctx: RouteContext) {
   })
 }
 
-/** owner > admin > member/viewer. A target with no membership here ranks 0. */
+/** owner > admin > member/viewer. A target with no membership anywhere ranks 0. */
 const ROLE_RANK: Record<string, number> = { owner: 3, admin: 2, member: 1, viewer: 1 }
 
 /**
@@ -172,6 +172,13 @@ const ROLE_RANK: Record<string, number> = { owner: 3, admin: 2, member: 1, viewe
  * must not be able to take each other over, and no tenant role may reset a
  * superadmin. Self-reset is allowed explicitly — rotating your own password
  * is not an escalation, and strict dominance would otherwise forbid it.
+ *
+ * The target's rank is the HIGHEST role they hold in ANY tenant, because the
+ * password being rotated is account-global. The cost is that a customer admin
+ * can no longer reset someone who owns a tenant of their own; that person uses
+ * the self-service reset on the sign-in page instead, which is the correct
+ * trade — the alternative hands one tenant's admin a credential for another
+ * tenant's owner.
  *
  * Returns a response to send, or null when the reset may proceed.
  */
@@ -196,20 +203,27 @@ async function assertOutranksTarget(
     }, { status: 403 })
   }
 
-  const { data: targetMembership, error: membershipErr } = await admin
+  // EVERY tenant, not just this one. The rank check has to be account-global
+  // because the thing it guards is account-global: auth.users holds ONE
+  // password, and `members` is per-tenant by design (migration 131:
+  // `unique (tenant_id, profile_id)`), so one person legitimately holds member
+  // rows in several tenants. Scoping this to gate.tenantId would let an admin
+  // of tenant A reset someone who is a plain member of A but the OWNER of
+  // tenant B — rotating the credential that owns B, and handing it back in
+  // this route's response body.
+  const { data: targetMemberships, error: membershipErr } = await admin
     .from('tenant_memberships')
     .select('role')
-    .eq('user_id',   targetUserId)
-    .eq('tenant_id', gate.tenantId)
-    .maybeSingle()
+    .eq('user_id', targetUserId)
   if (membershipErr) return sanitizeError(membershipErr, 'admin/members/reset-access target membership lookup')
 
-  const targetRank = ROLE_RANK[(targetMembership as { role?: string } | null)?.role ?? ''] ?? 0
+  const rows = (targetMemberships ?? []) as Array<{ role?: string }>
+  const targetRank = rows.reduce((hi, r) => Math.max(hi, ROLE_RANK[r.role ?? ''] ?? 0), 0)
   const callerRank = ROLE_RANK[gate.role] ?? 0
   if (targetRank >= callerRank) {
     return NextResponse.json({
       error:   'FORBIDDEN_TARGET',
-      message: 'You cannot reset access for someone at or above your own role. Ask an owner to do it.',
+      message: 'You cannot reset access for someone at or above your own role, here or in another organization they belong to. They can reset their own password from the sign-in page.',
     }, { status: 403 })
   }
 
