@@ -114,6 +114,25 @@ beforeEach(() => {
 afterEach(() => { process.env.CRON_SECRET = ORIG })
 
 describe('invite-reminders cron — never acts on a partial user scan', () => {
+  it('does NOT abort when the user count is an exact multiple of the page size', async () => {
+    // 200 users: page 1 is full, so the only proof the scan finished is the
+    // empty probe page after it. Without that probe this run would declare
+    // itself truncated and do nothing, every day, forever.
+    queue('tenant_memberships', { data: [dueForCancel], error: null })
+    queue('profiles',           { data: [{ id: USER, must_change_password: true }], error: null })
+    queue('tenant_memberships', { data: null, error: null })   // the cancel UPDATE
+    const fullPage = Array.from({ length: 200 }, (_, i) => ({ id: `other-${i}`, last_sign_in_at: null }))
+    listUsersMock
+      .mockResolvedValueOnce({ data: { users: fullPage }, error: null })
+      .mockResolvedValueOnce({ data: { users: [] },       error: null })
+
+    const res = await run()
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ invites_cancelled: 1 })
+    expect(listUsersMock).toHaveBeenCalledTimes(2)
+  })
+
   it('aborts the whole run when listUsers truncates at the page cap', async () => {
     queue('tenant_memberships', { data: [dueForCancel], error: null })
     // Every page comes back full, so the loop never sees a short page.
@@ -130,7 +149,7 @@ describe('invite-reminders cron — never acts on a partial user scan', () => {
     expect(sendInviteReminderMock).not.toHaveBeenCalled()
     // And it must be loud, not silent.
     expect(captureExceptionMock).toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringMatching(/truncated/i) }),
+      expect.objectContaining({ message: expect.stringMatching(/exceeded/i) }),
       expect.objectContaining({ tags: expect.objectContaining({ stage: 'list-users-truncated' }) }),
     )
   })

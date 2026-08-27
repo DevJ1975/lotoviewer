@@ -128,7 +128,7 @@ async function runCron(req: Request): Promise<NextResponse> {
     const PAGE_SIZE = 200
     const MAX_PAGES = 50
     let scanComplete = false
-    for (let page = 1; page <= MAX_PAGES; page++) {
+    for (let page = 1; page <= MAX_PAGES + 1; page++) {
       const { data: authData, error: aErr } =
         await admin.auth.admin.listUsers({ page, perPage: PAGE_SIZE })
       if (aErr) {
@@ -137,6 +137,12 @@ async function runCron(req: Request): Promise<NextResponse> {
       }
       const users = authData?.users ?? []
       for (const u of users) lastSignInByUserId.set(u.id, u.last_sign_in_at ?? null)
+      // A short page is the only proof the scan reached the end. The extra
+      // iteration (MAX_PAGES + 1) exists solely to supply that proof when the
+      // user count is an exact multiple of PAGE_SIZE: at exactly 10,000 users
+      // pages 1..50 are all full, and without a probe page the run would
+      // declare itself truncated and refuse to do anything, every day, until
+      // the count happened to change.
       if (users.length < PAGE_SIZE) { scanComplete = true; break }
     }
 
@@ -153,7 +159,7 @@ async function runCron(req: Request): Promise<NextResponse> {
     // of reminders is recoverable; revoking a working member's access is not.
     if (!scanComplete) {
       Sentry.captureException(
-        new Error(`invite-reminders: listUsers truncated at ${MAX_PAGES * PAGE_SIZE} users — skipping run`),
+        new Error(`invite-reminders: listUsers exceeded ${MAX_PAGES * PAGE_SIZE} users — skipping run`),
         { tags: { route: '/api/cron/invite-reminders', stage: 'list-users-truncated' } },
       )
       return NextResponse.json({
