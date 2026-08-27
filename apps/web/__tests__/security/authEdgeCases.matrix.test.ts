@@ -639,7 +639,6 @@ describe('edge-case census', () => {
   it('executed the full matrix', () => {
     // Guards against a refactor silently collapsing a matrix to a handful of
     // cases while the suite still reports green.
-    // eslint-disable-next-line no-console
     console.log(`\n  ▸ pure-matrix auth edge cases executed: ${EXECUTED_CASES.toLocaleString()}\n`)
     expect(EXECUTED_CASES).toBeGreaterThanOrEqual(10_000)
   })

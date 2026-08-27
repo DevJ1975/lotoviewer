@@ -12,7 +12,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
-  authAdminMock, mockState, resetMocks, sendInviteEmailMock, jsonRequest, ctxFor,
+  authAdminMock, mockState, resetMocks, jsonRequest, ctxFor,
 } from '../api/superadmin/_helpers'
 
 // reset-access is gated by the TENANT admin gate, not the superadmin one that

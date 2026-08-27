@@ -388,7 +388,6 @@ describe('requireSuperadmin — allowlist × DB-flag matrix', () => {
 
 describe('gate-matrix census', () => {
   it('executed the full matrix', () => {
-    // eslint-disable-next-line no-console
     console.log(`\n  ▸ gate-matrix auth edge cases executed: ${EXECUTED_CASES.toLocaleString()}\n`)
     expect(EXECUTED_CASES).toBeGreaterThanOrEqual(750)
   })
