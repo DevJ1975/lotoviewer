@@ -12,9 +12,10 @@ import {
 
 // Daily invite-reminder cron.
 //
-// Finds tenant memberships whose invitee has neither signed in
-// (auth.users.last_sign_in_at IS NULL) nor chosen a password of their own
-// (profiles.must_change_password IS NOT false) and runs each through
+// Finds tenant memberships whose invite has not been acted on — the invitee
+// has neither signed in since that invite was issued (auth.users.last_sign_in_at)
+// nor chosen a password of their own (profiles.must_change_password IS NOT
+// false) — and runs each through
 // planInviteAction():
 //   - send_reminder → email reminder #N (weekly), advance the counter
 //   - cancel        → soft-cancel the invite (stamp invite_cancelled_at;
@@ -149,7 +150,7 @@ async function runCron(req: Request): Promise<NextResponse> {
     // The scan is the ONLY thing separating an established member from a
     // never-signed-in invitee, and a user absent from it is indistinguishable
     // from one whose last_sign_in_at is genuinely null (see the `?? null` in
-    // step 3). Past 10k auth users the loop used to exhaust MAX_PAGES and
+    // step 4). Past 10k auth users the loop used to exhaust MAX_PAGES and
     // return a truncated map with no error — so arbitrary long-active members
     // read as "never signed in", collected four reminder emails, and were then
     // soft-cancelled, which migration 190 makes an RLS-level revocation.
@@ -168,7 +169,40 @@ async function runCron(req: Request): Promise<NextResponse> {
       }, { status: 500 })
     }
 
-    // 3. Decide an action for each membership, in two passes.
+    // 3. Newest ADMIN-ISSUED invite per user. THIS is what the cadence is
+    //    anchored to, not the membership row: an access reset mints a fresh
+    //    invite for someone who joined months ago, and the reminders have to
+    //    follow the reset's clock rather than the day they first joined.
+    //    Memberships predating invite tokens keep the old anchor.
+    //
+    //    `created_by is not null` is the whole point of the filter, not an
+    //    optimisation. Step 7 mints a fresh token on every reminder, and those
+    //    carry created_by = NULL (247). Counting them would march the anchor
+    //    forward weekly until it outran the invitee's own sign-in — so someone
+    //    who signed in moments before a mint would read as "still hasn't acted"
+    //    on every later run, collecting all four reminders and then a cancel
+    //    despite holding working credentials. An admin issuing access starts
+    //    the lifecycle; a reminder is a nudge inside it, never a new one.
+    //    Superseded rows stay in scope deliberately: the cron supersedes the
+    //    admin's token the first time it nudges, and that token is still where
+    //    the lifecycle began.
+    const invitedAtByUserId = new Map<string, string>()
+    const { data: tokenRows, error: tErr } = await admin
+      .from('invite_tokens')
+      .select('user_id, created_at')
+      .in('user_id', memberships.map(m => m.user_id))
+      .not('created_by', 'is', null)
+      .order('created_at', { ascending: false })
+    if (tErr) {
+      Sentry.captureException(tErr, { tags: { route: '/api/cron/invite-reminders', stage: 'invite-tokens' } })
+      return NextResponse.json({ error: tErr.message }, { status: 500 })
+    }
+    for (const t of (tokenRows ?? []) as Array<{ user_id: string; created_at: string }>) {
+      // Rows arrive newest-first, so the first one seen per user is the one.
+      if (!invitedAtByUserId.has(t.user_id)) invitedAtByUserId.set(t.user_id, t.created_at)
+    }
+
+    // 4. Decide an action for each membership, in two passes.
     //
     //    Pass one narrows thousands of memberships to the handful that are
     //    actually due for something. Pass two re-runs the same pure planner
@@ -176,8 +210,14 @@ async function runCron(req: Request): Promise<NextResponse> {
     //    resolved for just those few. Two passes rather than one so the
     //    profile lookup stays proportional to the actionable set instead of
     //    the whole tenant base.
+    //
+    //    The reset anchor belongs HERE, in the shared base state, not only in
+    //    pass two: pass one is a filter, so a reset member scored against the
+    //    membership date would resolve to already_signed_in and be dropped
+    //    from `candidates` before pass two ever saw them — silently restoring
+    //    the very gap this anchor exists to close.
     const baseStateFor = (m: PendingMembership): InviteReminderState => ({
-      invitedAt:      m.created_at,
+      invitedAt:      invitedAtByUserId.get(m.user_id) ?? m.created_at,
       lastSignInAt:   lastSignInByUserId.get(m.user_id) ?? null,
       remindersSent:  m.invite_reminders_sent ?? 0,
       lastReminderAt: m.invite_last_reminder_at,
@@ -209,7 +249,7 @@ async function runCron(req: Request): Promise<NextResponse> {
       else if (action.kind === 'cancel')   toCancel.push(m)
     }
 
-    // 4. Soft-cancel expired invites (no email; the 4th reminder was the
+    // 5. Soft-cancel expired invites (no email; the 4th reminder was the
     //    final notice). Retained + reversible.
     let cancelled = 0
     const nowIso = now.toISOString()
@@ -241,7 +281,7 @@ async function runCron(req: Request): Promise<NextResponse> {
       return NextResponse.json({ scanned: memberships.length, reminders_sent: 0, invites_cancelled: cancelled })
     }
 
-    // 5. Resolve emails + tenant names for the invitees we're reminding.
+    // 6. Resolve emails + tenant names for the invitees we're reminding.
     const userIds   = Array.from(new Set(toRemind.map(r => r.m.user_id)))
     const tenantIds = Array.from(new Set(toRemind.map(r => r.m.tenant_id)))
 
@@ -261,7 +301,7 @@ async function runCron(req: Request): Promise<NextResponse> {
     const tenantNameById = new Map<string, string>()
     for (const t of tenants ?? []) tenantNameById.set(t.id as string, t.name as string)
 
-    // 6. Send reminders. Promise.allSettled so one failure can't sink the
+    // 7. Send reminders. Promise.allSettled so one failure can't sink the
     //    batch; only advance the counter when the email actually went out.
     //    Each reminder mints a fresh invite link (superseding older ones)
     //    so the invitee can always act on the newest email; a mint failure
