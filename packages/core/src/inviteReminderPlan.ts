@@ -18,6 +18,22 @@ export interface InviteReminderState {
   invitedAt: string | Date
   /** auth.users.last_sign_in_at — null/undefined means never signed in. */
   lastSignInAt: string | Date | null | undefined
+  /**
+   * True when the user has chosen their own password
+   * (profiles.must_change_password === false).
+   *
+   * A SECOND liveness signal, because lastSignInAt alone is not the same
+   * question. /api/invites/accept sets the password and clears the flag but
+   * does not establish a session — the client signs in separately, and that
+   * is what stamps last_sign_in_at. Between those two steps (and forever, if
+   * the sign-in never lands) the user holds a working credential while
+   * looking, to lastSignInAt, exactly like someone who never showed up.
+   *
+   * Undefined means "not looked up", which is treated as not-set: callers
+   * that cannot resolve the flag get the old behaviour rather than a
+   * silently different one.
+   */
+  passwordSet?: boolean
   /** tenant_memberships.invite_reminders_sent. */
   remindersSent: number
   /** tenant_memberships.invite_last_reminder_at. */
@@ -34,6 +50,7 @@ export type InviteReminderAction =
 export type NoneReason =
   | 'already_cancelled'
   | 'already_signed_in'
+  | 'credential_already_set'
   | 'missing_invited_at'
   | 'too_soon'
 
@@ -67,6 +84,15 @@ export function planInviteAction(
   // Signed in → invite accepted; the lifecycle is over.
   if (toMs(state.lastSignInAt) != null) {
     return { kind: 'none', reason: 'already_signed_in' }
+  }
+
+  // Password chosen but no completed sign-in yet → still accepted. Nagging
+  // this person is wrong, and cancelling them is worse: the cancel is an
+  // RLS-level access revocation (migration 190 puts `invite_cancelled_at is
+  // null` inside current_user_tenant_ids()), so they would sign in with a
+  // password that works and see an empty application.
+  if (state.passwordSet === true) {
+    return { kind: 'none', reason: 'credential_already_set' }
   }
 
   const invitedMs = toMs(state.invitedAt)
