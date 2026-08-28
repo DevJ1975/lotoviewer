@@ -251,6 +251,15 @@ The method is language-agnostic; only the tooling names change.
   Use the existing mock harness rather than inventing a parallel one.
 - **Wire new suites into whatever gate CI actually runs.** A suite CI
   never executes is documentation, not a test.
+- **Run every gate CI runs, including the ones that only run on a PR.**
+  Read the CI config and reproduce each job's command locally before
+  pushing — not the aggregate task that looks like it covers them. A
+  guard conditioned on `if: github.event_name == 'pull_request'`, or one
+  needing an env var CI sets (`WIKI_SYNC_BASE=origin/main`), is invisible
+  to the local catch-all and will fail after you have declared success.
+  I hit exactly this twice in one session: a docs-sync guard outside the
+  local `check:repo` task, missed once, then missed again on the next
+  branch. Enumerate the jobs; do not infer them.
 - Property-based tools (Hypothesis, fast-check, proptest, QuickCheck)
   are a fine substitute for hand-rolled cross-products where available;
   the invariant discipline above is what matters, not the loop.

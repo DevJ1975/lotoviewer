@@ -44,7 +44,7 @@ async function authenticate(req: NextRequest): Promise<TokenAuthResult> {
   const admin = supabaseAdmin()
   const { data: row, error } = await admin
     .from('scim_tokens')
-    .select('id, tenant_id, revoked_at')
+    .select('id, tenant_id, revoked_at, tenants:tenant_id(disabled_at)')
     .eq('token_hash', tokenHash)
     .maybeSingle()
   if (error) {
@@ -52,6 +52,20 @@ async function authenticate(req: NextRequest): Promise<TokenAuthResult> {
     return { ok: false, status: 500, detail: 'Auth lookup failed' }
   }
   if (!row || row.revoked_at) {
+    return { ok: false, status: 401, detail: 'Invalid or revoked token' }
+  }
+  // Disabling a tenant is the offboarding lever, and it works by excluding the
+  // tenant from current_user_tenant_ids() so RLS hides its data. SCIM queries
+  // run through supabaseAdmin(), which is not subject to RLS — so without this
+  // check a suspended customer's IdP kept reading and mutating the full
+  // workforce roster indefinitely. Disabling deliberately does not delete the
+  // token rows (they are retained for audit), so the token itself stays valid
+  // unless the tenant is consulted here. Same drift tenantGate warns about:
+  // once a route reaches for the service-role client, its own gate IS the
+  // access control.
+  const embedded = (row as { tenants?: { disabled_at?: string | null } | Array<{ disabled_at?: string | null }> | null }).tenants
+  const tenantRow = Array.isArray(embedded) ? embedded[0] : embedded
+  if (tenantRow?.disabled_at) {
     return { ok: false, status: 401, detail: 'Invalid or revoked token' }
   }
   // Fire-and-forget freshness stamp. Failure here doesn't reject the
@@ -120,6 +134,11 @@ function toScimUser(row: WorkerRow): ScimResponseUser {
 
 // ── handlers ────────────────────────────────────────────────────────
 
+// PostgREST filter grammar uses , . ( ) and quotes as separators. An email or
+// employee id never legitimately contains them, so a value carrying one is
+// rejected outright rather than escaped — see the .or() call below.
+const SAFE_FILTER_VALUE = /^[^,()"'\\]+$/
+
 export async function GET(req: NextRequest) {
   const auth = await authenticate(req)
   if (!auth.ok) return scimError(auth.status, auth.detail)
@@ -149,9 +168,37 @@ export async function GET(req: NextRequest) {
     const [, field, value] = filterMatch
     if (field.toLowerCase() === 'externalid') {
       query = query.eq('scim_external_id', value)
-    } else {
+    } else if (SAFE_FILTER_VALUE.test(value)) {
       // userName maps to email first, then employee_id (matches toScimUser).
+      //
+      // `.or()` appends its argument to the PostgREST `or=` parameter
+      // VERBATIM, so the value is interpolated into filter grammar rather
+      // than parameterised. The capture group above excludes only the closing
+      // quote, which leaves commas, dots and parens — the whole grammar —
+      // free. `userName eq "zz,notes.ilike.*settlement*"` therefore became an
+      // extra predicate over a column this endpoint never projects, turning
+      // the result count into a blind oracle for free-text notes.
+      //
+      // Tenant isolation held throughout (the .eq('tenant_id') above is a
+      // separate, ANDed parameter and an injected paren cannot escape the one
+      // `or=` value), so this reads within the token's own tenant only — but
+      // an email or employee id has no business containing filter
+      // metacharacters, so reject rather than escape.
       query = query.or(`email.eq.${value},employee_id.eq.${value}`)
+    } else {
+      // Well-formed but unusable value. Return an empty page explicitly rather
+      // than falling through to the unfiltered list, which a SCIM client reads
+      // as "every one of these users matched".
+      return NextResponse.json(
+        {
+          schemas:      [SCIM_LIST_SCHEMA],
+          totalResults: 0,
+          startIndex,
+          itemsPerPage: 0,
+          Resources:    [],
+        },
+        { headers: { 'content-type': SCIM_CONTENT_TYPE } },
+      )
     }
   }
 
