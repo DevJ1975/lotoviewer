@@ -255,11 +255,11 @@ export default function LotoManualPage() {
 
       <Section id="client-review" title="Client review portal">
         <p>
-          When a department's placards are complete, you can send them out
+          When a department&apos;s placards are complete, you can send them out
           for client signoff without giving the reviewer a Soteria account.
           On any <code className="kbd">/departments/&#91;dept&#93;</code> page, scroll to
           <strong> Client review portal</strong> → click <strong>Send for client review</strong>,
-          enter the reviewer's name + email + an optional message, and submit.
+          enter the reviewer&apos;s name + email + an optional message, and submit.
           The reviewer gets an email with a tokenized link.
         </p>
         <ul>
@@ -273,7 +273,7 @@ export default function LotoManualPage() {
             <strong>What you see back.</strong> The same panel on
             <code className="kbd"> /departments/&#91;dept&#93; </code>
             shows status badges (Sent / Opened / Approved / Needs changes / Revoked),
-            the reviewer's overall comments, and per-placard notes. Revoke any
+            the reviewer&apos;s overall comments, and per-placard notes. Revoke any
             outstanding link at any time with the inline <strong>Revoke</strong> button.
           </li>
           <li>
@@ -282,7 +282,7 @@ export default function LotoManualPage() {
             same link shows a read-only thank-you page.
           </li>
           <li>
-            <strong>Audit.</strong> The signoff captures the reviewer's
+            <strong>Audit.</strong> The signoff captures the reviewer&apos;s
             typed name, drawn signature, IP, and user-agent at submission
             time so the record holds up in front of an inspector.
           </li>

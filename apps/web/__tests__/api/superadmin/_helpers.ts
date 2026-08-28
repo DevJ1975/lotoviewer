@@ -70,9 +70,8 @@ class MockChain {
   }
 
   buildAdmin() {
-    const self = this
-    function tableProxy(table: string) {
-      const result = (): Promise<ChainResult> => Promise.resolve(self.next(table))
+    const tableProxy = (table: string) => {
+      const result = (): Promise<ChainResult> => Promise.resolve(this.next(table))
       const chain: Record<string, unknown> = {
         select: () => chain,
         eq:     () => chain,
@@ -85,12 +84,12 @@ class MockChain {
         limit:  () => chain,
         single: result,
         maybeSingle: result,
-        insert: (payload: unknown) => { self.inserts.push({ table, payload }); self.calls.push({ op: 'insert', table }); return chain },
-        update: (payload: unknown) => { self.updates.push({ table, payload }); self.calls.push({ op: 'update', table }); return chain },
-        delete: () => { self.deletes.push({ table }); self.calls.push({ op: 'delete', table }); return chain },
+        insert: (payload: unknown) => { this.inserts.push({ table, payload }); this.calls.push({ op: 'insert', table }); return chain },
+        update: (payload: unknown) => { this.updates.push({ table, payload }); this.calls.push({ op: 'update', table }); return chain },
+        delete: () => { this.deletes.push({ table }); this.calls.push({ op: 'delete', table }); return chain },
         // Terminal awaits also work directly via .then on the chain:
         then: (onFulfilled: (v: ChainResult) => unknown) =>
-          Promise.resolve(self.next(table)).then(onFulfilled),
+          Promise.resolve(this.next(table)).then(onFulfilled),
       }
       return chain
     }
@@ -98,8 +97,8 @@ class MockChain {
     return {
       from: (table: string) => tableProxy(table),
       rpc:  (name: string, args?: unknown) => {
-        self.rpcCalls.push({ name, args })
-        const r = self.queues.get(`rpc:${name}`)?.shift() ?? { data: null, error: null }
+        this.rpcCalls.push({ name, args })
+        const r = this.queues.get(`rpc:${name}`)?.shift() ?? { data: null, error: null }
         return Promise.resolve(r)
       },
       auth: { admin: authAdminMock },

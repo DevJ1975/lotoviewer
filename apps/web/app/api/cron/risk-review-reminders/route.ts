@@ -29,6 +29,9 @@ import { bandFor } from '@soteria/core/risk'
 // same business day).
 
 export const runtime = 'nodejs'
+// One digest email per (tenant, risk owner) pair with something overdue. Send
+// count tracks owner count across all tenants.
+export const maxDuration = 300
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false

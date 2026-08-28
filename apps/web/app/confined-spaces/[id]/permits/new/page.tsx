@@ -9,6 +9,7 @@ import { useTenant } from '@/components/TenantProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import type { ConfinedSpace } from '@soteria/core/types'
 import { effectiveThresholds, SITE_DEFAULTS } from '@soteria/core/confinedSpaceThresholds'
+import { useNow } from '@/hooks/useNow'
 
 // Permit issuance — creates the row in `pending_signature` state. The
 // supervisor reviews the live permit page, takes the pre-entry atmospheric
@@ -105,6 +106,11 @@ export default function NewPermitPage() {
     [space],
   )
 
+  // The expiry checks below compare against the clock, so the form has to
+  // re-render as time passes — otherwise an expiry that lapses while the
+  // form sits open still reads as valid.
+  const now = useNow(30_000)
+
   if (loading) {
     return <div className="max-w-3xl mx-auto px-4 py-10 text-center text-sm text-slate-400 dark:text-slate-500">Loading…</div>
   }
@@ -124,11 +130,11 @@ export default function NewPermitPage() {
 
   const trimmedPurpose = purpose.trim()
   const expiresDate    = expiresAt ? new Date(expiresAt) : null
-  const validExpiry    = expiresDate && !Number.isNaN(expiresDate.getTime()) && expiresDate.getTime() > Date.now()
+  const validExpiry    = expiresDate && !Number.isNaN(expiresDate.getTime()) && expiresDate.getTime() > now
   // Site policy: max 8h. Schema enforces this via CHECK so the form is
   // a friendly first line of defense — without this clamp the user gets
   // a 400 from Postgres only on submit.
-  const exceedsMax = validExpiry && (expiresDate!.getTime() - Date.now()) > MAX_PERMIT_HOURS * 3600_000
+  const exceedsMax = validExpiry && (expiresDate!.getTime() - now) > MAX_PERMIT_HOURS * 3600_000
   const errors: string[] = []
   if (!trimmedPurpose)            errors.push('Purpose is required.')
   if (!validExpiry)                errors.push('Expiration must be a valid future date/time.')

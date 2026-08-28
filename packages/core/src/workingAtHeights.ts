@@ -115,10 +115,50 @@ const DEFAULT_HARNESS_STRETCH_FT       = 1.5
 const DEFAULT_WORKER_BELOW_DRING_FT    = 5.0
 const DEFAULT_SAFETY_MARGIN_FT         = 2.0
 
+/**
+ * Every input here is a physical DISTANCE, so a negative or non-finite value
+ * is not a smaller distance — it is not a distance at all. Treated naively it
+ * SUBTRACTS from the total, and the total is what tells a worker how much room
+ * they need below the anchor.
+ *
+ * That is the dangerous direction. With `lanyardLengthFt: -6` the requirement
+ * dropped from 18 ft to 6 ft; with every field negative it reached −8 ft, and
+ * callers decide with `availableFt >= requiredClearanceFt`, so a negative
+ * requirement means ZERO clearance reads as safe. The calculator's number
+ * inputs carry `min`, but `min` is a browser hint — the onChange handler
+ * forwards whatever was typed — so this is reachable from the primary UI, not
+ * just from an API.
+ *
+ * Fall back to the documented default instead of clamping to zero: a default
+ * is a real, conservative distance, whereas zero silently accepts nonsense as
+ * if it were a measurement. The result can then only ever be conservative.
+ *
+ * Guarded here rather than at each call site because this module is shared —
+ * its own header says the mobile shell will import it — and a safety floor
+ * that depends on every future caller remembering to validate is not a floor.
+ */
+function distanceOrDefault(value: number | undefined, fallbackFt: number): number {
+  if (value == null || !Number.isFinite(value) || value < 0) return fallbackFt
+  return value
+}
+
+/**
+ * For the distances that cannot physically be zero. A worker always extends
+ * some way below their dorsal D-ring and a lanyard always has length, so a
+ * zero there is a missing measurement, not a measurement of nothing — and it
+ * shortens the total exactly like a negative would. Zero IS meaningful for the
+ * safety margin (a supervisor may choose none) and for the swing-fall offset
+ * (an anchor directly overhead), so those keep it.
+ */
+function positiveDistanceOrDefault(value: number | undefined, fallbackFt: number): number {
+  const d = distanceOrDefault(value, fallbackFt)
+  return d > 0 ? d : fallbackFt
+}
+
 export function calculateRequiredClearance(inputs: ClearanceInputs): ClearanceResult {
-  const workerBelowDringFt = inputs.workerBelowDringFt ?? DEFAULT_WORKER_BELOW_DRING_FT
-  const safetyMarginFt     = inputs.safetyMarginFt     ?? DEFAULT_SAFETY_MARGIN_FT
-  const swingFallOffsetFt  = inputs.swingFallOffsetFt  ?? 0
+  const workerBelowDringFt = positiveDistanceOrDefault(inputs.workerBelowDringFt, DEFAULT_WORKER_BELOW_DRING_FT)
+  const safetyMarginFt     = distanceOrDefault(inputs.safetyMarginFt,     DEFAULT_SAFETY_MARGIN_FT)
+  const swingFallOffsetFt  = distanceOrDefault(inputs.swingFallOffsetFt,  0)
 
   // Restraint never falls — clearance is just the worker length plus margin.
   if (inputs.system === 'restraint') {
@@ -138,7 +178,9 @@ export function calculateRequiredClearance(inputs: ClearanceInputs): ClearanceRe
 
   // Lanyard / SRL — free fall, deceleration, harness stretch, worker, margin.
   if (inputs.system === 'shock_lanyard') {
-    const lanyardFt = inputs.lanyardLengthFt ?? 6
+    // A zero-length lanyard is not a shorter fall, it is a divide-by-zero in
+    // the swing-fall term below — so it falls back to the default too.
+    const lanyardFt = positiveDistanceOrDefault(inputs.lanyardLengthFt, 6)
     const breakdown = [
       { label: 'Lanyard length',           feet: lanyardFt },
       { label: 'Deceleration distance',    feet: DEFAULT_DECELERATION_LANYARD_FT },

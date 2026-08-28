@@ -18,6 +18,10 @@ import { sendOshaPostingReminder } from '@/lib/email/sendOshaPostingReminder'
 // Vercel schedule: 0 14 15 1 * (Jan 15 09:00 EST).
 
 export const runtime = 'nodejs'
+// Emails every admin of every tenant holding an uncertified 300A. It fires once
+// a year, so the ceiling should cover the worst tenant count we might have by
+// then rather than today's.
+export const maxDuration = 300
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false

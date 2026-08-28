@@ -43,16 +43,17 @@ function timeAgo(iso: string): string {
 
 export default function BBSListPage() {
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const [rows, setRows] = useState<ObservationRow[] | null>(null)
   const [leaderboard, setLeaderboard] = useState<BBSLeaderboardRow[]>([])
   const [showAll, setShowAll] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     setError(null)
     const { data: { session } } = await supabase.auth.getSession()
-    const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+    const headers: Record<string, string> = { 'x-active-tenant': tenantId }
     if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
 
     const params = new URLSearchParams()
@@ -73,7 +74,7 @@ export default function BBSListPage() {
       const lbBody = await lbRes.json()
       setLeaderboard(lbBody.leaderboard ?? [])
     }
-  }, [tenant?.id, showAll])
+  }, [tenantId, showAll])
 
   useEffect(() => { void load() }, [load])
 

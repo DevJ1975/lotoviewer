@@ -12,6 +12,7 @@ import {
 } from '@/lib/invites/tokens'
 import { checkMemoryRateLimit } from '@/lib/rateLimit/memory'
 import { clientIp } from '@/lib/rateLimit/clientIp'
+import { sanitizeError } from '@/lib/security/sanitizeError'
 
 // POST /api/invites/refresh  { token }
 //
@@ -51,18 +52,25 @@ export async function POST(req: Request) {
 
   if (row.used_at) return NextResponse.json({ status: 'already_active' })
 
-  const { data: authUser } = await admin.auth.admin.getUserById(row.user_id)
-  if (authUser?.user?.last_sign_in_at) {
+  // Fail closed on a lookup fault, as /accept and /validate do: an
+  // unreadable account state is not a dormant one, and this route mints and
+  // EMAILS a fresh live token off the back of these two checks.
+  const { data: authUser, error: authUserErr } = await admin.auth.admin.getUserById(row.user_id)
+  if (authUserErr || !authUser?.user) {
+    return sanitizeError(authUserErr ?? new Error('invite target not found'), 'invites/refresh user lookup')
+  }
+  if (authUser.user.last_sign_in_at) {
     return NextResponse.json({ status: 'already_active' })
   }
 
   if (row.tenant_id) {
-    const { data: membership } = await admin
+    const { data: membership, error: membershipErr } = await admin
       .from('tenant_memberships')
       .select('invite_cancelled_at')
       .eq('user_id', row.user_id)
       .eq('tenant_id', row.tenant_id)
       .maybeSingle()
+    if (membershipErr) return sanitizeError(membershipErr, 'invites/refresh membership lookup')
     if (membership?.invite_cancelled_at) {
       return NextResponse.json({ status: 'cancelled' })
     }
