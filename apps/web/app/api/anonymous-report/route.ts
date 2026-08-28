@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { computeLoginUrl } from '@/lib/email/sendInvite'
-import { sendIncidentAlertEmail } from '@/lib/email/sendIncidentAlert'
+import { dispatchIntakeNotifications } from '@/lib/incident/notifyOnIntake'
 import {
+  coerceCreateInput,
+  parseIncidentGeo,
   validateCreateInput,
   type IncidentCreateInput,
   type IncidentRow,
@@ -12,7 +13,7 @@ import {
 import { buildIncidentSafetyAlertInsert } from '@soteria/core/incidentSafetyAlerts'
 import { clientIp, hashIp, isOverIpLimit, recordAttempt } from '@/lib/anonReport/ipThrottle'
 import { verifyTurnstile } from '@/lib/anonReport/turnstile'
-import { generateReceiptPin, hashReceipt, isValidPinFormat, normalizePin } from '@/lib/anonReport/receipt'
+import { generateReceiptPin, hashReceipt } from '@/lib/anonReport/receipt'
 import { isOutsideRadius } from '@/lib/anonReport/geofence'
 
 // PUBLIC POST /api/anonymous-report
@@ -43,37 +44,32 @@ const ATTACH_BUCKET = 'loto-photos'
 
 type SeverityQuick = 'green' | 'amber' | 'red'
 
-interface PostBody extends Partial<IncidentCreateInput> {
-  token:           string
-  severity_quick?: SeverityQuick
-  request_pin?:    boolean
-  request_uploads?:number
-  turnstile_token?:string
-}
-
 // Quick-tap maps to severity_potential. severity_actual stays
 // 'none' until triage; the public form is for hazard signal, not
 // post-incident severity coding.
-function mapQuickSeverity(q: SeverityQuick | undefined): IncidentCreateInput['severity_potential'] | null {
-  switch (q) {
-    case 'green': return 'low'
-    case 'amber': return 'moderate'
-    case 'red':   return 'high'
-    default:      return null
-  }
+const QUICK_SEVERITY: Record<SeverityQuick, IncidentCreateInput['severity_potential']> = {
+  green: 'low',
+  amber: 'moderate',
+  red:   'high',
+}
+
+function parseSeverityQuick(raw: unknown): SeverityQuick | null {
+  return typeof raw === 'string' && raw in QUICK_SEVERITY ? (raw as SeverityQuick) : null
 }
 
 export async function POST(req: Request) {
   const ipHash = hashIp(clientIp(req))
 
-  let body: PostBody
-  try { body = (await req.json()) as PostBody }
+  let raw: unknown
+  try { raw = await req.json() }
   catch {
     void recordAttempt(ipHash, 'submit_invalid')
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
+  const body = (raw ?? {}) as Record<string, unknown>
 
-  if (!body.token || !TOKEN_RE.test(body.token)) {
+  const token = typeof body.token === 'string' ? body.token : ''
+  if (!TOKEN_RE.test(token)) {
     void recordAttempt(ipHash, 'submit_invalid')
     return NextResponse.json({ error: 'Invalid token' }, { status: 400 })
   }
@@ -87,18 +83,21 @@ export async function POST(req: Request) {
     )
   }
 
-  // Coerce severity_quick onto the create input before validation.
-  if (body.severity_quick && !body.severity_potential) {
-    body.severity_potential = mapQuickSeverity(body.severity_quick) ?? undefined
+  // Same narrowing as the authenticated route: a caller who posts
+  // `description: 42` gets a 400, not a TypeError-turned-500.
+  const input = coerceCreateInput(raw)
+
+  const severityQuick = parseSeverityQuick(body.severity_quick)
+  if (severityQuick) {
+    input.severity_potential ??= QUICK_SEVERITY[severityQuick]
+    // A quick-tap report puts its signal in the chip, not in prose.
+    // Stand in a marker so the row still satisfies the
+    // description-required contract every downstream reader assumes.
+    input.description = input.description?.trim()
+      || `[severity:${severityQuick}] (no narrative provided)`
   }
 
-  // Description is required for the typed form path; with severity-
-  // only quick-tap, accept a minimal description so validation passes.
-  if (body.severity_quick && (!body.description || body.description.trim().length < 4)) {
-    body.description = body.description?.trim() || `[severity:${body.severity_quick}] (no narrative provided)`
-  }
-
-  const validationError = validateCreateInput(body)
+  const validationError = validateCreateInput(input)
   if (validationError) {
     void recordAttempt(ipHash, 'submit_invalid')
     return NextResponse.json({ error: validationError }, { status: 400 })
@@ -115,7 +114,7 @@ export async function POST(req: Request) {
         require_captcha, default_assigned_investigator, auto_route_enabled,
         site_geo_lat, site_geo_lng, geofence_radius_m
       `)
-      .eq('token', body.token)
+      .eq('token', token)
       .maybeSingle()
     if (tokenErr) {
       Sentry.captureException(tokenErr, { tags: { route: 'anonymous-report', stage: 'token-lookup' } })
@@ -141,7 +140,8 @@ export async function POST(req: Request) {
     // recently tripped throttling (we already passed the hard cap,
     // but being on the edge warrants a friction step).
     if (t.require_captcha) {
-      const result = await verifyTurnstile(body.turnstile_token, clientIp(req))
+      const turnstileToken = typeof body.turnstile_token === 'string' ? body.turnstile_token : undefined
+      const result = await verifyTurnstile(turnstileToken, clientIp(req))
       if (!result.ok) {
         void recordAttempt(ipHash, 'submit_invalid', t.id)
         return NextResponse.json(
@@ -167,40 +167,35 @@ export async function POST(req: Request) {
       }
     }
 
-    // Geofence: never reject, just flag. null = not in effect.
-    let geoMismatch: boolean | null = null
-    const reporterGeo = body.location_geo
-      ? parseClientGeo(body.location_geo as unknown)
-      : null
-    if (t.site_geo_lat != null && t.site_geo_lng != null && t.geofence_radius_m) {
-      const outside = isOutsideRadius(
-        { lat: t.site_geo_lat, lng: t.site_geo_lng },
-        reporterGeo,
-        t.geofence_radius_m,
-      )
-      geoMismatch = outside
-    }
-
-    const description = (body.description ?? '').trim()
+    // Geofence: never reject, just flag. null = not in effect, which
+    // is also what a report with no GPS gets.
+    const reporterGeo = parseIncidentGeo(input.location_geo)
+    const geoMismatch = isOutsideRadius(
+      t.site_geo_lat != null && t.site_geo_lng != null
+        ? { lat: t.site_geo_lat, lng: t.site_geo_lng }
+        : null,
+      reporterGeo,
+      t.geofence_radius_m,
+    )
 
     const insert = {
       tenant_id:               t.tenant_id,
-      incident_type:           body.incident_type as IncidentType,
-      occurred_at:             body.occurred_at!,
-      description,
+      incident_type:           input.incident_type as IncidentType,
+      occurred_at:             input.occurred_at!,
+      description:             input.description!.trim(),
       reported_by:             null,
       is_anonymous:            true,
       anon_token_id:           t.id,
-      location_text:           body.location_text?.trim() || t.label,
-      shift:                   body.shift ?? null,
-      immediate_action_taken:  body.immediate_action_taken?.trim() || null,
-      severity_actual:         body.severity_actual ?? 'none',
-      severity_potential:      body.severity_potential ?? null,
-      probability:             body.probability ?? null,
-      spill_substance:         body.spill_substance?.trim() || null,
-      spill_quantity:          body.spill_quantity ?? null,
-      spill_quantity_unit:     body.spill_quantity_unit ?? null,
-      location_geo:            body.location_geo ?? null,
+      location_text:           input.location_text?.trim() || t.label,
+      shift:                   input.shift ?? null,
+      immediate_action_taken:  input.immediate_action_taken?.trim() || null,
+      severity_actual:         input.severity_actual ?? 'none',
+      severity_potential:      input.severity_potential ?? null,
+      probability:             input.probability ?? null,
+      spill_substance:         input.spill_substance?.trim() || null,
+      spill_quantity:          input.spill_quantity ?? null,
+      spill_quantity_unit:     input.spill_quantity_unit ?? null,
+      location_geo:            input.location_geo ?? null,
       geo_mismatch:            geoMismatch,
 
       // Auto-route assignment, if the token has one and the safety
@@ -236,30 +231,34 @@ export async function POST(req: Request) {
       })
       .eq('id', t.id)
 
-    // Receipt PIN: generate, hash, store. Show once in response.
+    // Receipt PIN: generate, hash, store. Shown once in the response
+    // and never persisted in the clear. If the hash write fails we
+    // withhold the PIN — handing a worker a code that can never
+    // resolve is worse than telling them there is no code.
     let pin: string | null = null
-    if (body.request_pin) {
-      pin = generateReceiptPin()
-      const hash = hashReceipt(incident.report_number, pin)
-      await admin
+    if (body.request_pin === true) {
+      const candidate = generateReceiptPin()
+      const { error: pinErr } = await admin
         .from('incidents')
-        .update({ anon_receipt_hash: hash })
+        .update({ anon_receipt_hash: hashReceipt(incident.report_number, candidate) })
         .eq('id', incident.id)
+      if (pinErr) {
+        Sentry.captureException(pinErr, { tags: { route: 'anonymous-report', stage: 'receipt-pin' } })
+      } else {
+        pin = candidate
+      }
     }
 
     // Mint signed upload URLs for attachments. Each path includes
     // the incident_id so attachments are scoped; tokens are short-
     // lived (Supabase default).
     let uploads: Array<{ path: string; token: string }> = []
-    const requested = clamp(body.request_uploads ?? 0, 0, MAX_UPLOADS)
+    const requested = clamp(body.request_uploads, 0, MAX_UPLOADS)
     if (requested > 0) {
       uploads = await mintUploadTargets(t.tenant_id, incident.id, requested)
     }
 
-    // Notification fan-out (unchanged from prior version, except we
-    // now include the auto-routed assignee in the recipient set so
-    // they get the same email everyone else does).
-    try { await fanOutNotifications(req, admin, incident, t.tenant_id, insert.description) }
+    try { await dispatchIntakeNotifications(req, incident, null) }
     catch (err) { Sentry.captureException(err, { tags: { route: 'anonymous-report', stage: 'notify' } }) }
 
     void recordAttempt(ipHash, 'submit_ok', t.id)
@@ -290,18 +289,10 @@ async function createCommandCenterSafetyAlert(
   if (error) throw new Error(error.message)
 }
 
-// Browser ships {lat, lng}; the DB column accepts the Postgres
-// `point` literal. The ?? null at call sites means this only runs
-// when the body provides location_geo.
-function parseClientGeo(raw: unknown): { lat: number; lng: number } | null {
-  if (!raw || typeof raw !== 'object') return null
-  const o = raw as { lat?: number; lng?: number }
-  if (typeof o.lat !== 'number' || typeof o.lng !== 'number') return null
-  return { lat: o.lat, lng: o.lng }
-}
-
-function clamp(n: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, Math.floor(n)))
+function clamp(n: unknown, lo: number, hi: number): number {
+  const floored = Math.floor(Number(n))
+  if (!Number.isFinite(floored)) return lo
+  return Math.max(lo, Math.min(hi, floored))
 }
 
 async function mintUploadTargets(
@@ -326,115 +317,4 @@ async function mintUploadTargets(
     out.push({ path: data.path, token: data.token })
   }
   return out
-}
-
-// Fan-out extracted to keep POST() readable. Implementation is
-// unchanged from the prior version; only the receiver context is
-// trimmed so we don't need the old in-line typing duplication.
-async function fanOutNotifications(
-  req: Request,
-  admin: ReturnType<typeof supabaseAdmin>,
-  incident: IncidentRow,
-  tenantId: string,
-  displayDescription: string,
-): Promise<void> {
-  const { data: tenantData } = await admin
-    .from('tenants')
-    .select('name')
-    .eq('id', tenantId)
-    .maybeSingle()
-  const { data: rules } = await admin
-    .from('incident_notification_rules')
-    .select('id, name, match_incident_type, match_severity_actual, notify_roles, notify_user_ids, notify_emails, channels, enabled')
-    .eq('tenant_id', tenantId)
-    .eq('enabled', true)
-  const { data: members } = await admin
-    .from('tenant_memberships')
-    .select('user_id, role, profiles:profiles!inner(email)')
-    .eq('tenant_id', tenantId)
-
-  type Rule = {
-    id: string; name: string; enabled: boolean
-    match_incident_type: string[] | null
-    match_severity_actual: string[] | null
-    notify_roles: string[] | null
-    notify_user_ids: string[] | null
-    notify_emails: string[] | null
-    channels: string[]
-  }
-  type MRow = {
-    user_id: string
-    role: string
-    profiles: { email: string | null } | { email: string | null }[] | null
-  }
-  const memEmails = new Map<string, { email: string; userId: string; role: string }>()
-  for (const m of (members ?? []) as MRow[]) {
-    const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles
-    if (p?.email) memEmails.set(p.email.toLowerCase(), { email: p.email, userId: m.user_id, role: m.role })
-  }
-  const recipients = new Map<string, { email: string; user_id: string | null; rule_id: string }>()
-  for (const r of (rules ?? []) as Rule[]) {
-    const typeMatch = !r.match_incident_type || r.match_incident_type.includes(incident.incident_type)
-    const sevMatch  = !r.match_severity_actual || r.match_severity_actual.includes(incident.severity_actual)
-    if (!typeMatch || !sevMatch) continue
-    if (!r.channels.includes('email')) continue
-    if (r.notify_roles) {
-      for (const m of memEmails.values()) {
-        if (!r.notify_roles.includes(m.role)) continue
-        const key = m.email.toLowerCase()
-        if (!recipients.has(key)) recipients.set(key, { email: m.email, user_id: m.userId, rule_id: r.id })
-      }
-    }
-    if (r.notify_user_ids) {
-      for (const uid of r.notify_user_ids) {
-        const m = Array.from(memEmails.values()).find(x => x.userId === uid)
-        if (m) {
-          const key = m.email.toLowerCase()
-          if (!recipients.has(key)) recipients.set(key, { email: m.email, user_id: m.userId, rule_id: r.id })
-        }
-      }
-    }
-    if (r.notify_emails) {
-      for (const e of r.notify_emails) {
-        const trimmed = e.trim()
-        if (!trimmed) continue
-        const key = trimmed.toLowerCase()
-        if (!recipients.has(key)) recipients.set(key, { email: trimmed, user_id: null, rule_id: r.id })
-      }
-    }
-  }
-
-  const appUrl = computeLoginUrl(req)
-  const tenantName = (tenantData as { name?: string | null } | null)?.name ?? null
-  const logRows: Array<Record<string, unknown>> = []
-  for (const r of recipients.values()) {
-    const ok = await sendIncidentAlertEmail({
-      to:             r.email,
-      recipientName:  null,
-      reportNumber:   incident.report_number,
-      incidentType:   incident.incident_type,
-      severityActual: incident.severity_actual,
-      occurredAt:     incident.occurred_at,
-      locationText:   incident.location_text,
-      description:    displayDescription,
-      appUrl,
-      incidentId:     incident.id,
-      tenantName,
-      tenantId:       incident.tenant_id,
-      ruleName:       'Anonymous report',
-    })
-    logRows.push({
-      tenant_id:         incident.tenant_id,
-      incident_id:       incident.id,
-      rule_id:           r.rule_id,
-      trigger_type:      'initial',
-      channel:           'email',
-      recipient_user_id: r.user_id,
-      recipient_email:   r.email,
-      status:            ok ? 'sent' : 'failed',
-    })
-  }
-  if (logRows.length > 0) {
-    await admin.from('incident_notifications').insert(logRows)
-  }
 }

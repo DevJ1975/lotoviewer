@@ -15,6 +15,7 @@ import {
   INCIDENT_PROBABILITY,
   INCIDENT_SHIFTS,
   INCIDENT_SPILL_UNITS,
+  formatIncidentGeo,
   validateCreateInput,
   type IncidentType,
   type IncidentCreateInput,
@@ -98,10 +99,10 @@ export default function NewIncidentPage() {
     setGpsBusy(true); setGpsError(null)
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        // Postgres point is "(x,y)" = "(lon,lat)".
-        const lon = pos.coords.longitude.toFixed(6)
-        const lat = pos.coords.latitude.toFixed(6)
-        setLocationGeo(`(${lon},${lat})`)
+        setLocationGeo(formatIncidentGeo({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        }))
         setGpsBusy(false)
       },
       (err) => {
@@ -117,7 +118,15 @@ export default function NewIncidentPage() {
     if (!tenant?.id) { setError('No active tenant — refresh and try again.'); return }
     if (!incidentType) { setError('Please pick an incident type.'); return }
 
-    const occurredIso = new Date(occurredAt).toISOString()
+    // A cleared or half-typed datetime-local reads as an unparseable
+    // Date, and .toISOString() throws — outside the try below, so the
+    // submit would die silently with no error shown to the reporter.
+    const occurred = new Date(occurredAt)
+    if (Number.isNaN(occurred.getTime())) {
+      setError('Enter a valid date and time for when it happened.')
+      return
+    }
+    const occurredIso = occurred.toISOString()
 
     const input: Partial<IncidentCreateInput> = {
       incident_type:           incidentType,

@@ -27,7 +27,10 @@ interface PostBody {
   pin?:           string
 }
 
-const REPORT_NO_RE = /^[A-Z]{2,5}-\d{3,8}$/i
+// Report numbers are three segments — INC-2026-0042 (migration 059's
+// set_incident_number trigger). The previous two-segment pattern
+// matched none of them, so every lookup 404'd before touching the DB.
+const REPORT_NO_RE = /^[A-Z]{2,5}-\d{4}-\d{1,8}$/i
 
 export async function POST(req: Request) {
   const ipHash = hashIp(clientIp(req))
@@ -47,8 +50,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const reportNumber = (body.report_number ?? '').trim()
-  const pin          = (body.pin          ?? '').trim()
+  // The stored hash was built from the canonical uppercase report
+  // number, so a worker typing "inc-2026-0042" has to normalise to
+  // the same input or the digest never matches.
+  const reportNumber = (typeof body.report_number === 'string' ? body.report_number : '').trim().toUpperCase()
+  const pin          = (typeof body.pin === 'string' ? body.pin : '').trim()
 
   if (!REPORT_NO_RE.test(reportNumber) || !isValidPinFormat(pin)) {
     void recordAttempt(ipHash, 'receipt_invalid')

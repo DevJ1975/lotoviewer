@@ -99,11 +99,30 @@ export function matchRules(
 // Recipient resolution
 // ──────────────────────────────────────────────────────────────────────────
 //
-// Builds the unique (channel, recipient) list for one rule. We
-// dedupe by (channel, user_id) when the recipient is a known user
-// and by (channel, email) for raw-email recipients — a single user
-// who matches both via role membership and an explicit user_id won't
-// receive duplicate emails.
+// Builds the unique (channel, recipient) list for one rule.
+//
+// Dedupe is by *deliverable*, not by how the recipient was named. An
+// email is delivered to an address, so the address alone is the key:
+// an admin matched by notify_roles whose address an operator also
+// typed into notify_emails is one recipient, not two. Push and SMS are
+// delivered to a person's registered devices, so those key on user_id.
+//
+// The earlier key included user_id, which meant a raw notify_emails
+// entry never collapsed onto the member at that address — the same
+// inbox received the alert twice and the audit log counted it twice.
+//
+// Extracted so the per-rule pass and buildDispatchPlan's cross-rule
+// pass cannot drift apart; they were previously two copies of the same
+// template literal.
+function recipientKey(r: ResolvedRecipient): string {
+  if (r.channel === 'email') {
+    const email = r.email?.trim().toLowerCase()
+    // No address means nothing is deliverable; key on user_id so two
+    // undeliverable members don't collapse into a single entry.
+    return email ? `email|${email}` : `email|user:${r.user_id ?? ''}`
+  }
+  return `${r.channel}|${r.user_id ?? ''}`
+}
 
 export function buildRecipientList(
   rule: IncidentNotificationRule,
@@ -113,7 +132,7 @@ export function buildRecipientList(
   const seen = new Set<string>()    // dedupe key
 
   function add(r: ResolvedRecipient): void {
-    const key = `${r.channel}|${r.user_id ?? ''}|${(r.email ?? '').toLowerCase()}`
+    const key = recipientKey(r)
     if (seen.has(key)) return
     seen.add(key)
     out.push(r)
@@ -143,8 +162,11 @@ export function buildRecipientList(
   }
 
   // Raw email recipients — email channel only (we don't have a push
-  // subscription or phone for someone outside the tenant).
-  if (rule.notify_emails && rule.notify_emails.length > 0) {
+  // subscription or phone for someone outside the tenant), and only
+  // when the rule actually enables email. A push-only rule that still
+  // mailed an outside address would be sending on a channel the
+  // operator switched off.
+  if (rule.channels.includes('email') && rule.notify_emails && rule.notify_emails.length > 0) {
     for (const email of rule.notify_emails) {
       const trimmed = email.trim()
       if (!trimmed) continue
@@ -177,7 +199,7 @@ export function buildDispatchPlan(
   for (const rule of matched) {
     const recipients = buildRecipientList(rule, memberships)
     for (const r of recipients) {
-      const key = `${r.channel}|${r.user_id ?? ''}|${(r.email ?? '').toLowerCase()}`
+      const key = recipientKey(r)
       if (seen.has(key)) continue
       seen.add(key)
       plans.push({ rule_id: rule.id, recipient: r })

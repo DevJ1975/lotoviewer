@@ -235,6 +235,13 @@ export default function AnonymousReportPage() {
       setSubmitError(T.errorCaptcha); return
     }
 
+    // An unparseable datetime-local would otherwise surface as a raw
+    // RangeError under the generic "something went wrong" branch.
+    const occurred = new Date(occurredAt)
+    if (Number.isNaN(occurred.getTime())) {
+      setSubmitError(T.errorPickWhen); return
+    }
+
     setSubmitting(true); setSubmitError(null)
     try {
       const res = await fetch('/api/anonymous-report', {
@@ -242,8 +249,8 @@ export default function AnonymousReportPage() {
         headers: { 'content-type': 'application/json' },
         body:    JSON.stringify({
           token,
-          incident_type:           quickOnly ? 'near-miss' : incidentType,
-          occurred_at:             new Date(occurredAt).toISOString(),
+          incident_type:           quickOnly ? 'near_miss' : incidentType,
+          occurred_at:             occurred.toISOString(),
           description:             description.trim()
                                      || (quickOnly ? `[severity:${severityQuick}] (no narrative provided)` : ''),
           immediate_action_taken:  immediate.trim() || null,

@@ -227,14 +227,13 @@ describe('matchRules — empty + many-rule cases', () => {
 })
 
 describe('buildDispatchPlan — recipient dedupe under load', () => {
-  it('dedupes role + user_id matches into one entry per user', () => {
-    // Same user reachable via role + explicit user_id should
-    // produce ONE entry (same channel + user_id + email tuple).
-    // Listing the same email as a raw "external email" produces a
-    // second entry by design — raw-email recipients carry user_id=null
-    // so the dedupe key differs. That's intentional (external safety
-    // officer at the same address as a tenant user is a legitimate
-    // scenario) but worth pinning so the behaviour can't drift.
+  it('dedupes every path that resolves to the same inbox', () => {
+    // Same user reachable via role + explicit user_id produces ONE
+    // entry. Listing that user's own address in notify_emails also
+    // collapses onto it: an email is delivered to an address, so the
+    // address is the identity. The rule used to key raw-email
+    // recipients on user_id=null, which sent the same alert to the
+    // same inbox twice and double-counted the notification log.
     const owner = { user_id: 'u-owner', email: 'owner@x.com', role: 'owner' as const }
     const ruleRoleAndUserId: IncidentNotificationRule = {
       id: 'a', tenant_id: 't', name: 'a', enabled: true,
@@ -251,11 +250,11 @@ describe('buildDispatchPlan — recipient dedupe under load', () => {
       { incident_type: 'injury_illness', severity_actual: 'medical', severity_potential: null },
       [ruleRoleAndUserId], [owner], false,
     )).toHaveLength(1)
-    // Adding the email-only rule → 2 (raw-email path, user_id=null).
+    // Adding the email-only rule → still 1: same address, same inbox.
     expect(buildDispatchPlan(
       { incident_type: 'injury_illness', severity_actual: 'medical', severity_potential: null },
       [ruleRoleAndUserId, ruleEmailOnly], [owner], false,
-    )).toHaveLength(2)
+    )).toHaveLength(1)
   })
 })
 
