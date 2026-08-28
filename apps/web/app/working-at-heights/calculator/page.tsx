@@ -342,7 +342,15 @@ function NumberInput({ value, onChange, step, min, max }: { value: number; onCha
       max={max}
       onChange={e => {
         const v = Number(e.target.value)
-        onChange(Number.isFinite(v) ? v : 0)
+        if (!Number.isFinite(v)) { onChange(min ?? 0); return }
+        // `min`/`max` on a number input are browser hints: the field goes
+        // :invalid but onChange still fires with whatever was typed. These are
+        // fall-clearance distances, so an out-of-range value that reached the
+        // calculation would under-state the room a worker needs below the
+        // anchor. Clamp here so the number shown is the number computed.
+        const lo = min ?? Number.NEGATIVE_INFINITY
+        const hi = max ?? Number.POSITIVE_INFINITY
+        onChange(Math.min(hi, Math.max(lo, v)))
       }}
       className={baseInput}
     />
