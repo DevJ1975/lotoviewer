@@ -16,6 +16,7 @@ import type { AuditSummaryResponse } from '@/app/api/admin/audit-summary/route'
 
 export function AuditNarrativeCard() {
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const [data,    setData]    = useState<AuditSummaryResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
@@ -29,7 +30,7 @@ export function AuditNarrativeCard() {
         method: 'POST',
         headers: {
           authorization:    `Bearer ${session.access_token}`,
-          'x-active-tenant': tenant?.id ?? '',
+          'x-active-tenant': tenantId ?? '',
         },
         cache: 'no-store',
       })
@@ -45,7 +46,7 @@ export function AuditNarrativeCard() {
     } finally {
       setLoading(false)
     }
-  }, [tenant?.id])
+  }, [tenantId])
 
   useEffect(() => { void load() }, [load])
 

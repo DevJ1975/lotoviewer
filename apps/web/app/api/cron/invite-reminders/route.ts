@@ -28,6 +28,9 @@ import {
 //       INTERNAL_PUSH_SECRET (manual curl) — same posture as sibling crons.
 
 export const runtime = 'nodejs'
+// Per pending invite: issue a fresh token, supersede the old ones, send the
+// email. Three round-trips each, across every tenant's outstanding invites.
+export const maxDuration = 300
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false

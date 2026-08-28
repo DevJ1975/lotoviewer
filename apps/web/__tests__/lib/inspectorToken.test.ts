@@ -8,8 +8,7 @@ import {
 
 const SECRET = 'test-secret-do-not-use-in-prod'
 const NOW    = 1_750_000_000   // an arbitrary "now" in unix seconds
-
-const TENANT = '00000000-0000-0000-0000-0000000000aa'
+const TENANT = '11111111-2222-3333-4444-555555555555'
 
 function payload(overrides: Partial<InspectorTokenPayload> = {}): InspectorTokenPayload {
   return {
@@ -165,6 +164,18 @@ describe('buildInspectorUrl', () => {
     expect(verifyInspectorToken({ payload: reconstructed, sig, secret: SECRET, nowSec: NOW }).ok).toBe(true)
   })
 
+  // The tenant is what scopes the inspector view to one organisation. It is
+  // signed, so editing it in the URL must invalidate the token rather than
+  // silently widen access.
+  it('rejects a token whose tenant was swapped in the URL', () => {
+    const p = payload()
+    const sig = signInspectorPayload(p, SECRET)
+    const swapped = payload({ tenantId: '99999999-8888-7777-6666-555555555555' })
+    const result = verifyInspectorToken({ payload: swapped, sig, secret: SECRET, nowSec: NOW })
+    expect(result.ok).toBe(false)
+    expect(result.ok === false && result.reason).toBe('Bad signature')
+  })
+
   it('URL-encodes special chars in the label', () => {
     const p = payload({ label: 'Audit / 2026 — site #4' })
     const url = buildInspectorUrl({ origin: 'https://x.test', payload: p, secret: SECRET })
@@ -191,7 +202,7 @@ describe('tenant scoping', () => {
       payload: withoutTenant as InspectorTokenPayload, sig, secret: SECRET, nowSec: NOW,
     })
     expect(r.ok).toBe(false)
-    if (!r.ok) expect(r.reason).toMatch(/tenant/i)
+    if (!r.ok) expect(r.reason).toBe('Invalid or missing tenant')
   })
 
   it('refuses a malformed tenant rather than passing it to a query', () => {

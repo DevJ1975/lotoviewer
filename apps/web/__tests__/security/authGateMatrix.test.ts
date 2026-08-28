@@ -49,7 +49,7 @@ const EMAIL  = 'user@example.com'
 let EXECUTED_CASES = 0
 const countCase = () => { EXECUTED_CASES += 1 }
 
-function cross<T extends readonly unknown[][]>(...lists: T): unknown[][] {
+function cross<T extends readonly (readonly unknown[])[]>(...lists: T): unknown[][] {
   return lists.reduce<unknown[][]>(
     (acc, list) => acc.flatMap(row => list.map(v => [...row, v])),
     [[]],

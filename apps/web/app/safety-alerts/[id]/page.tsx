@@ -117,7 +117,7 @@ export default function SafetyAlertDetailPage() {
   }
 
   const { alert, incident, people, notifications } = data
-  const Icon = iconForTone(alert.severity_tone)
+  const toneIcon = iconForTone(alert.severity_tone)
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-5">
@@ -129,7 +129,7 @@ export default function SafetyAlertDetailPage() {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-rose-100">
                 <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-1">
-                  <Icon className="h-3.5 w-3.5" />
+                  {toneIcon}
                   {TONE_LABEL[alert.severity_tone]} safety alert
                 </span>
                 <span>{ALERT_STATUS_LABEL[alert.status]}</span>
@@ -298,9 +298,9 @@ function EmptyLine({ icon, text }: { icon: ReactNode; text: string }) {
 }
 
 function iconForTone(tone: CommandCenterAlertTone) {
-  if (tone === 'critical') return ShieldAlert
-  if (tone === 'warning') return AlertTriangle
-  return Clock
+  if (tone === 'critical') return <ShieldAlert className="h-3.5 w-3.5" />
+  if (tone === 'warning') return <AlertTriangle className="h-3.5 w-3.5" />
+  return <Clock className="h-3.5 w-3.5" />
 }
 
 function formatDateTime(iso: string): string {
