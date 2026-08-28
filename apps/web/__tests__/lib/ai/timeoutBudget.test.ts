@@ -46,15 +46,31 @@ function anthropicBudget(src: string): { timeoutMs: number; maxRetries: number }
 const OVERHEAD_RESERVE_SEC = 12
 
 describe('AI route timeout budgets fit inside maxDuration', () => {
-  // Every route that declares a maxDuration AND calls getAnthropic. A route
-  // that declares one has committed to a ceiling, so its AI budget has to fit
-  // under it. (Routes that declare none inherit the platform default, which
-  // is far shorter than a 30s model call — tracked separately; see the audit
-  // note in the PR.)
+  // Every route that calls getAnthropic on a user-facing path. Each must
+  // declare a ceiling and keep its AI budget under it — a route that declares
+  // none inherits the platform default, which is far shorter than a single
+  // model call, so a slow generation can never finish.
   const ROUTES = [
     'app/api/assistant/hazards/route.ts',
     'app/api/assistant/scan-photo/route.ts',
+    'app/api/assistant/chat/route.ts',
+    'app/api/generate-loto-steps/route.ts',
+    'app/api/generate-confined-space-hazards/route.ts',
+    'app/api/incidents/[id]/rca/assist/route.ts',
+    'app/api/incidents/[id]/classify/ai-suggest/route.ts',
+    'app/api/incidents/[id]/ecfa/assist/route.ts',
+    'app/api/incidents/[id]/predict-escalation/route.ts',
+    'app/api/insights/scorecard-focus/route.ts',
+    'app/api/support/chat/route.ts',
   ]
+
+  it('every AI route on this list declares a duration ceiling', () => {
+    // The failure this guards against is silent: with no maxDuration the route
+    // still deploys and still works for short answers, then 504s the moment a
+    // generation runs long.
+    const missing = ROUTES.filter(r => maxDuration(source(r)) === null)
+    expect(missing, 'AI routes with no maxDuration').toEqual([])
+  })
 
   it.each(ROUTES)('%s leaves room for the rest of the request', route => {
     const src = source(route)
