@@ -22,7 +22,7 @@ export default function StepInherent({ state, set }: Props) {
   return (
     <div className="space-y-3">
       <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
-        <strong>Score the hazard as if no controls were in place</strong> — this is the “inherent” baseline against which we'll measure control effectiveness in step 5 (Residual).
+        <strong>Score the hazard as if no controls were in place</strong> — this is the “inherent” baseline against which we&apos;ll measure control effectiveness in step 5 (Residual).
       </div>
 
       <ScorePicker

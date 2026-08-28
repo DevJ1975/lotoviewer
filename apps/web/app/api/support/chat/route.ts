@@ -18,6 +18,15 @@ import { toSendableHistory } from '@/lib/ai/conversationWindow'
 import { checkTenantBudget, logAiInvocation } from '@/lib/ai/rateLimit'
 import { executeTool, isDataFetchTool, visibleDataFetchTools } from '@/lib/support/tools'
 
+// An AI route's worst case is `timeout x (retries + 1)`, and it must fit
+// inside maxDuration or the platform kills the function mid-flight and the
+// caller gets a raw 504 rather than any error this code produces. This route
+// asks for three sequential calls of up to 1,500 tokens each,
+// and previously declared no ceiling at all — so it inherited the platform
+// default, which is far shorter than a single model call.
+export const runtime     = 'nodejs'
+export const maxDuration = 90
+
 // Only the two roles Anthropic accepts in messages[]. Internally
 // ChatMessage allows system/tool for transcript rendering, but we never
 // hand those to the model.
@@ -334,7 +343,7 @@ export async function POST(req: Request) {
   // the escalation tool.
   let client: Anthropic
   try {
-    client = await getAnthropic(reporter.tenantId)
+    client = await getAnthropic(reporter.tenantId, { timeoutMs: 25_000, maxRetries: 0 })
   } catch (err) {
     const mapped = aiErrorToResponse(err, 'support-chat')
     Sentry.captureException(err, { tags: { ...mapped.tags, route: '/api/support/chat' } })

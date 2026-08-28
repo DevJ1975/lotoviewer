@@ -11,6 +11,15 @@ import { buildAssistantSystemPrompt } from '@/lib/ai/systemPrompt'
 import { getToolDefinitions, runTool, type UserRole } from '@/lib/ai/tools'
 import { retrieveContext, type RetrievedChunk } from '@/lib/ai/rag'
 
+// An AI route's worst case is `timeout x (retries + 1)`, and it must fit
+// inside maxDuration or the platform kills the function mid-flight and the
+// caller gets a raw 504 rather than any error this code produces. This route
+// asks for up to 2,000 tokens,
+// and previously declared no ceiling at all — so it inherited the platform
+// default, which is far shorter than a single model call.
+export const runtime     = 'nodejs'
+export const maxDuration = 90
+
 // POST /api/assistant/chat
 //
 // Home-page assistant. Cross-module conversational AI with tool use.
@@ -161,7 +170,7 @@ export async function POST(req: Request) {
   // aiErrorToResponse maps both to clean HTTP responses.
   let client: Anthropic
   try {
-    client = await getAnthropic(gate.tenantId)
+    client = await getAnthropic(gate.tenantId, { timeoutMs: 60_000, maxRetries: 0 })
   } catch (err) {
     const mapped = aiErrorToResponse(err, 'assistant-chat')
     Sentry.captureException(err, { tags: { ...mapped.tags, route: '/api/assistant/chat' } })

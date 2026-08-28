@@ -1,5 +1,5 @@
-// Regression: a soft-cancelled invite must be reactivated when an admin
-// re-issues access.
+// Regression: issuing access must restart the invite lifecycle, not just
+// mint a token.
 //
 // The bug this locks down was live in production. The invite-reminders cron
 // stamps `invite_cancelled_at` after four ignored reminders, and
@@ -34,12 +34,12 @@ function baseArgs(emailMode: 'invite_link' | 'added_notification') {
   }
 }
 
-/** The membership update issued by reactivateInvite, if any. */
+/** The membership update issued by restartInviteLifecycle, if any. */
 function membershipUpdate() {
   return mockState.updates.find(u => u.table === 'tenant_memberships')
 }
 
-describe('issueAndSendInvite — reactivates a cancelled invite', () => {
+describe('issueAndSendInvite — restarts the invite lifecycle', () => {
   beforeEach(() => {
     resetMocks()
     authAdminMock.getUserById.mockResolvedValue({ data: { user: { id: USER } }, error: null })
@@ -68,9 +68,26 @@ describe('issueAndSendInvite — reactivates a cancelled invite', () => {
 
     const payload = membershipUpdate()!.payload as Record<string, unknown>
     expect(payload.invite_reminders_sent).toBe(0)
-    // Anchors planInviteAction's cadence, so the first nudge is a full
-    // interval away rather than firing on the next run.
-    expect(typeof payload.invite_last_reminder_at).toBe('string')
+    // Cleared, not stamped: planInviteAction falls back to the invite's own
+    // timestamp when there is no prior reminder, and the token minted by
+    // this very call is the honest anchor for a lifecycle starting over.
+    expect(payload.invite_last_reminder_at).toBeNull()
+  })
+
+  // The reset-access route re-invites people who are NOT cancelled — the
+  // worker who lost their phone, or whose password was rotated. Scoping the
+  // restart to cancelled memberships left those invites carrying the old
+  // reminder bookkeeping, so the cadence for the new invite was wrong from
+  // the first run.
+  it('restarts the lifecycle for a membership that was never cancelled', async () => {
+    mockState.queue('invite_tokens', { data: { id: 'tok-1' }, error: null })
+
+    await issueAndSendInvite(mockState.buildAdmin() as never, baseArgs('invite_link'))
+
+    expect(membershipUpdate()!.payload).toMatchObject({
+      invite_reminders_sent:   0,
+      invite_last_reminder_at: null,
+    })
   })
 
   it('also reactivates on the added_notification path', async () => {
