@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { ADMIN_SECTIONS, getAdminRedirects, getAllAdminTiles, SETTINGS_NOTIFICATIONS_TILE } from '@/lib/adminCatalog'
+import { ADMIN_SECTIONS, MOVED_ADMIN_ROUTES, getAdminRedirects, getAllAdminTiles, SETTINGS_NOTIFICATIONS_TILE } from '@/lib/adminCatalog'
 import { calculateRequiredClearance } from '@soteria/core/workingAtHeights'
 import { daysUntil, expiryBand, EXPIRY_BAND_CLASS } from '@/lib/wah/inventoryHelpers'
 import { resolveHref } from '@/lib/resolveHref'
@@ -111,10 +111,15 @@ describe('Regression #104 — admin URL renames + 301 redirects', () => {
     // /admin/insights (scorecard, ai-usage, …) and (b) infinitely re-match its
     // own destination (ERR_TOO_MANY_REDIRECTS). Those redirects intentionally
     // map the bare legacy path exactly, with NO wildcard. See getAdminRedirects.
+    // A subtree that left /admin entirely emits a PAIR: the `/:path*` rule
+    // carries deep links, and an exact rule catches the bare path. The bare
+    // half is intentionally wildcard-free and cannot loop — its destination
+    // sits outside /admin, so nothing re-matches the source.
+    const movedBarePaths = new Set(MOVED_ADMIN_ROUTES.map(m => m.from))
     const tileRedirects = getAdminRedirects().filter(r => r.destination !== '/admin')
     for (const r of tileRedirects) {
       const nested = r.destination.startsWith(`${r.source}/`)
-      if (nested) {
+      if (nested || movedBarePaths.has(r.source)) {
         // Bare-path redirect only — no wildcard on either side, or the rule
         // would greedily re-match its own destination and loop.
         expect(r.source.endsWith('/:path*')).toBe(false)
@@ -123,6 +128,14 @@ describe('Regression #104 — admin URL renames + 301 redirects', () => {
         expect(r.source.endsWith('/:path*')).toBe(true)
         expect(r.destination.endsWith('/:path*')).toBe(true)
       }
+    }
+    // The pair must actually be a pair: every moved subtree also carries a
+    // wildcard rule, or deep links 404 instead of following the move.
+    for (const m of MOVED_ADMIN_ROUTES) {
+      expect(
+        tileRedirects.some(r => r.source === `${m.from}/:path*` && r.destination === `${m.to}/:path*`),
+        `moved subtree ${m.from} is missing its /:path* rule`,
+      ).toBe(true)
     }
   })
 })

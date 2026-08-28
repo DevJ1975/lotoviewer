@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ADMIN_SECTIONS, SETTINGS_NOTIFICATIONS_TILE, getAdminRedirects, getAllAdminTiles, getAdminTile } from '@/lib/adminCatalog'
+import { ADMIN_SECTIONS, MOVED_ADMIN_ROUTES, SETTINGS_NOTIFICATIONS_TILE, getAdminRedirects, getAllAdminTiles, getAdminTile } from '@/lib/adminCatalog'
 
 describe('adminCatalog', () => {
   it('has at least one section and at least one tile per section', () => {
@@ -42,8 +42,13 @@ describe('adminCatalog', () => {
   it('generates one 301 redirect per tile that carries a legacyHref', () => {
     const redirects = getAdminRedirects()
     const tilesWithLegacy = getAllAdminTiles().filter(t => t.legacyHref)
-    // tile redirects + 8 section-bare redirects (one per section).
-    expect(redirects.length).toBe(tilesWithLegacy.length + ADMIN_SECTIONS.length)
+    // One redirect per legacyHref tile, one bare lander per section, and TWO
+    // per moved subtree — a `/:path*` rule for deep links plus an exact rule
+    // for the bare path, because getAdminRedirects deliberately declines to
+    // bet a 404 on whether a trailing wildcard also matches zero segments.
+    expect(redirects.length).toBe(
+      tilesWithLegacy.length + ADMIN_SECTIONS.length + MOVED_ADMIN_ROUTES.length * 2,
+    )
     for (const r of redirects) {
       expect(r.permanent).toBe(true)
       expect(r.source.startsWith('/admin/')).toBe(true)

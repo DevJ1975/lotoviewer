@@ -38,12 +38,15 @@ jobs:
   #
   # This used to run only `test:security` — a 28-file subset of the auth
   # surface — because `npm test` was believed to have ~127 pre-existing
-  # failures. That is no longer true, and the two records of it disagreed with
-  # each other (this comment said 127, todos.md said 81). Measured on main:
-  # the full suite is 329 files / 4092 tests / 0 failures, and `tsc --noEmit`
-  # is clean for apps/web. So the gate is widened to the whole suite, which
-  # subsumes the old security subset — `npm run test:security` is kept as a
-  # script for fast local runs, not as a separate CI job.
+  # failures. That was stale, and the two records of it disagreed with each
+  # other anyway (this comment said 127, todos.md said 81). The full suite
+  # passes, and `tsc --noEmit` is clean for apps/web, so the gate is widened
+  # to the whole suite — which subsumes the old security subset. `npm run
+  # test:security` is kept as a script for fast local runs, not as a CI job.
+  #
+  # Deliberately no test-count in this comment: the last one rotted within
+  # days, which is how the 127 got here in the first place. The suite either
+  # passes or it does not, and this job is what says which.
   #
   # Lint is the one gate that genuinely cannot block yet: `eslint .` reports
   # 82 errors and 70 warnings, concentrated in the React Compiler rules
