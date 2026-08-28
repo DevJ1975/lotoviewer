@@ -84,11 +84,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
   const lastSignInAt = authUser?.user?.last_sign_in_at ?? null
   const email = authUser?.user?.email ?? null
 
-  const { data: profile } = await admin
+  const { data: profile, error: profileErr } = await admin
     .from('profiles')
     .select('full_name, must_change_password')
     .eq('id', user_id)
     .maybeSingle()
+  // Fail closed. must_change_password is the signal that AUTHORIZES a
+  // destructive write — the password rotation below — and discarding this
+  // error made an unreadable profile look identical to a profile that says
+  // "setup never finished". A statement timeout was therefore enough to
+  // rotate a password the user had chosen themselves, which is the exact
+  // outcome resendInvitePasswordGuard.test.ts exists to forbid.
+  if (profileErr) {
+    return NextResponse.json({ error: 'Could not verify account state' }, { status: 500 })
+  }
 
   // Strict `=== false`: a null flag or a missing profile row means setup
   // never completed, which is exactly who a resend is for.

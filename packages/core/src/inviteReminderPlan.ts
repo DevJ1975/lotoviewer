@@ -127,7 +127,17 @@ export function planInviteAction(
     return { kind: 'none', reason: 'credential_already_set' }
   }
 
-  const sent = Math.max(0, Math.floor(state.remindersSent ?? 0))
+  // An unreadable counter must not fall through to the cancel branch below.
+  // `NaN` is a legal `number`, and every comparison against it is false — so
+  // `sent < INVITE_MAX_REMINDERS` failed and a corrupted or mistyped
+  // invite_reminders_sent CANCELLED the invite. That is an access revocation
+  // (migration 190 puts `invite_cancelled_at is null` inside
+  // current_user_tenant_ids()), issued on the strength of a value we could not
+  // read. Same posture as `missing_invited_at` above: when the state is
+  // unreadable, do nothing rather than guess — here, by restarting the ladder
+  // rather than ending it.
+  const rawRemindersSent = Number(state.remindersSent ?? 0)
+  const sent = Number.isFinite(rawRemindersSent) ? Math.max(0, Math.floor(rawRemindersSent)) : 0
   const lastReminderMs = toMs(state.lastReminderAt)
 
   // "Is the next step due yet?" is measured from the last reminder once one

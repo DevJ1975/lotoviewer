@@ -30,10 +30,11 @@ export async function GET(req: Request) {
 
   const u = new URL(req.url)
   const payload: InspectorTokenPayload = {
-    start: u.searchParams.get('start') ?? '',
-    end:   u.searchParams.get('end')   ?? '',
-    exp:   Number(u.searchParams.get('exp') ?? '0'),
-    label: u.searchParams.get('label') ?? '',
+    tenantId: u.searchParams.get('tenant') ?? '',
+    start:    u.searchParams.get('start')  ?? '',
+    end:      u.searchParams.get('end')    ?? '',
+    exp:      Number(u.searchParams.get('exp') ?? '0'),
+    label:    u.searchParams.get('label')  ?? '',
   }
   const sig = u.searchParams.get('sig') ?? ''
   const verify = verifyInspectorToken({ payload, sig, secret })
@@ -46,17 +47,21 @@ export async function GET(req: Request) {
   try {
     // Fetch CS permits, hot-work permits, atmospheric tests for the
     // CS permits, and parent spaces — same shape generateCompliancePdfBundle
-    // expects. Service role bypasses RLS; the HMAC is the boundary.
+    // expects. Service role bypasses RLS, so the HMAC bounds WHO may read and
+    // the tenant filter bounds WHAT: without the latter, one customer's
+    // inspection bundle contained every customer's permits.
     const [csRes, hwRes] = await Promise.all([
       admin
         .from('loto_confined_space_permits')
         .select('*')
+        .eq('tenant_id', payload.tenantId)
         .gte('started_at', startTs)
         .lte('started_at', endTs)
         .order('started_at', { ascending: true }),
       admin
         .from('loto_hot_work_permits')
         .select('*')
+        .eq('tenant_id', payload.tenantId)
         .gte('started_at', startTs)
         .lte('started_at', endTs)
         .order('started_at', { ascending: true }),

@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:security": "vitest run proxy.test.ts __tests__/lib/auth __tests__/lib/security __tests__/lib/safeRedirect __tests__/lib/scrubEvent __tests__/lib/rateLimit __tests__/lib/memoryRateLimit __tests__/lib/inviteTokens __tests__/api/invites __tests__/api/superadmin __tests__/api/admin __tests__/migrations/profilesPrivilegedColumns __tests__/anonReport",
+    "test:security": "vitest run proxy.test.ts __tests__/security __tests__/e2e/authLifecycle.e2e.test.ts __tests__/lib/auth __tests__/lib/security __tests__/lib/safeRedirect __tests__/lib/scrubEvent __tests__/lib/rateLimit __tests__/lib/memoryRateLimit __tests__/lib/inviteTokens __tests__/api/invites __tests__/api/superadmin __tests__/api/admin __tests__/migrations/profilesPrivilegedColumns __tests__/anonReport",
     "test:watch": "vitest",
     "db:types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > lib/database.types.ts && echo '✓ wrote lib/database.types.ts'"
   },
