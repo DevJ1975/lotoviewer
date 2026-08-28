@@ -66,12 +66,13 @@ function InspectorView() {
     setLoading(true)
     setError(null)
 
+    const tenantId = params.get('tenant')
     const start = params.get('start')
     const end   = params.get('end')
     const exp   = params.get('exp')
     const label = params.get('label')
     const sig   = params.get('sig')
-    if (!start || !end || !exp || label == null || !sig) {
+    if (!tenantId || !start || !end || !exp || label == null || !sig) {
       setError('Inspector URL is incomplete. Ask the issuer to mint a fresh URL.')
       setLoading(false)
       return
@@ -81,7 +82,7 @@ function InspectorView() {
       const res = await fetch('/api/inspector/lookup', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ start, end, exp: Number(exp), label, sig }),
+        body:    JSON.stringify({ tenantId, start, end, exp: Number(exp), label, sig }),
       })
       const json = await res.json()
       if (!res.ok) {

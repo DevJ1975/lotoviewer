@@ -64,6 +64,14 @@ export default function ConfigurationPage() {
     return () => { cancelled = true }
   }, [authLoading, profile])
 
+  // Auto-clear the "Saved" indicator after 5s. Deriving the visibility
+  // from Date.now() during render would never re-render to hide it.
+  useEffect(() => {
+    if (savedAt == null) return
+    const t = setTimeout(() => setSavedAt(null), 5000)
+    return () => clearTimeout(t)
+  }, [savedAt])
+
   useEffect(() => {
     if (authLoading || !profile?.is_admin || !tenantId) return
     let cancelled = false
@@ -259,7 +267,7 @@ export default function ConfigurationPage() {
           )}
 
           <div className="flex items-center justify-end gap-3">
-            {savedAt && Date.now() - savedAt < 5000 && (
+            {savedAt != null && (
               <span className="text-[11px] text-emerald-700 dark:text-emerald-300">Saved.</span>
             )}
             <button

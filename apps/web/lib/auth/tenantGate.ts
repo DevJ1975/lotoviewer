@@ -88,14 +88,33 @@ async function gate(req: Request, opts: GateOptions = {}): Promise<TenantGate> {
     return makeOk(user, tenantId, facilityId, 'superadmin', token, url, anon)
   }
 
+  // Mirror the DB helper the RLS policies use (migration 190): membership
+  // alone is not authority — a disabled tenant or a cancelled invite revokes
+  // access. This gate has to enforce both itself, because 279 of the 344 API
+  // route files reach the database through the service-role client, which
+  // bypasses RLS entirely. For those routes this check IS the boundary.
   const { data: membership } = await admin
     .from('tenant_memberships')
-    .select('role')
+    .select('role, invite_cancelled_at, tenants!inner(disabled_at)')
     .eq('user_id',   user.id)
     .eq('tenant_id', tenantId)
-    .maybeSingle()
+    .maybeSingle<{
+      role: string
+      invite_cancelled_at: string | null
+      tenants: { disabled_at: string | null } | { disabled_at: string | null }[] | null
+    }>()
   if (!membership) {
     return { ok: false, status: 403, message: 'Not a member of this tenant' }
+  }
+  if (membership.invite_cancelled_at) {
+    return { ok: false, status: 403, message: 'Access to this tenant has been cancelled' }
+  }
+  // PostgREST returns an embedded to-one as an object, but shapes it as a
+  // single-element array under some select forms. Normalize rather than bet
+  // on which one this query produces.
+  const tenantRow = Array.isArray(membership.tenants) ? membership.tenants[0] : membership.tenants
+  if (!tenantRow || tenantRow.disabled_at) {
+    return { ok: false, status: 403, message: 'This tenant is disabled' }
   }
 
   const role = membership.role as 'owner' | 'admin' | 'member' | 'viewer'

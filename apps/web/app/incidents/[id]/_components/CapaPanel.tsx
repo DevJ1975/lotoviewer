@@ -42,6 +42,7 @@ interface Props {
 
 export default function CapaPanel({ incidentId }: Props) {
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const { profile } = useAuth()
   const userId = profile?.id ?? null
   const canEdit = !!profile?.is_admin || !!profile?.is_superadmin
@@ -58,10 +59,10 @@ export default function CapaPanel({ incidentId }: Props) {
   const [draftDueAt,          setDraftDueAt]          = useState('')
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+      const headers: Record<string, string> = { 'x-active-tenant': tenantId }
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
       const res = await fetch(`/api/incidents/${incidentId}/capas`, { headers })
       const body = await res.json()
@@ -70,7 +71,7 @@ export default function CapaPanel({ incidentId }: Props) {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load CAPAs.')
     }
-  }, [tenant?.id, incidentId])
+  }, [tenantId, incidentId])
 
   useEffect(() => { void load() }, [load])
 

@@ -20,7 +20,8 @@ const DOC_EVENTS     = ['visibilitychange'] as const
 export default function IdleLogout() {
   const { userId, signOut } = useAuth()
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
-  const lastActivityAt = useRef<number>(Date.now())
+  // Seeded by the effect below on mount — Date.now() during render is impure.
+  const lastActivityAt = useRef<number>(0)
 
   const reset = () => {
     lastActivityAt.current = Date.now()

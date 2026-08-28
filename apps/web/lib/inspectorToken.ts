@@ -1,7 +1,14 @@
 // Stateless HMAC-signed inspector tokens. The token is the only auth
-// for the /inspector view — anyone with the URL can read every CS and
-// hot-work permit issued in the encoded window for the duration of the
+// for the /inspector view — anyone with the URL can read the issuing
+// tenant's CS and hot-work permits for the encoded window, until the
 // encoded expiry.
+//
+// `tenantId` is part of the SIGNED payload, not a separate query param,
+// which is what scopes the view to one tenant. The secret is global, so
+// a tenant id carried outside the signature could simply be edited to
+// read another tenant's permits. Signing it also means every token
+// minted before this field existed fails verification — intended: those
+// tokens were tenant-blind.
 //
 // We intentionally do NOT use a DB-backed token table here. The trade-
 // off:
@@ -23,6 +30,8 @@ import { createHmac, timingSafeEqual } from 'crypto'
 // end up as query-string params. exp is a unix timestamp in seconds
 // (chosen for compactness and easy human readability vs. ms).
 export interface InspectorTokenPayload {
+  /** Tenant whose permits this token may read. Signed, never trusted raw. */
+  tenantId: string
   start: string   // YYYY-MM-DD inclusive
   end:   string   // YYYY-MM-DD inclusive
   exp:   number   // unix seconds
@@ -33,6 +42,7 @@ export interface InspectorTokenPayload {
 }
 
 const HMAC_LEN = 32   // bytes (SHA-256)
+const UUID_RE  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // Build the canonical signing string. Field order is fixed so the
 // signature is reproducible regardless of how the JS object was built.
@@ -40,6 +50,7 @@ const HMAC_LEN = 32   // bytes (SHA-256)
 // pipes (free-text labels) don't collide with the delimiter.
 function canonicalize(p: InspectorTokenPayload): string {
   return [
+    `tenant:${p.tenantId}`,
     `start:${p.start}`,
     `end:${p.end}`,
     `exp:${p.exp}`,
@@ -84,6 +95,7 @@ export function verifyInspectorToken(args: {
 
   // Validate payload shape so a malformed query string is rejected
   // before we spend time computing HMACs.
+  if (typeof payload.tenantId !== 'string' || !UUID_RE.test(payload.tenantId)) return { ok: false, reason: 'Invalid tenant' }
   if (typeof payload.start !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(payload.start)) return { ok: false, reason: 'Invalid start date' }
   if (typeof payload.end   !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(payload.end))   return { ok: false, reason: 'Invalid end date' }
   if (payload.start > payload.end) return { ok: false, reason: 'Start date is after end date' }
@@ -113,6 +125,7 @@ export function buildInspectorUrl(args: {
 }): string {
   const sig = signInspectorPayload(args.payload, args.secret)
   const params = new URLSearchParams({
+    tenant: args.payload.tenantId,
     start: args.payload.start,
     end:   args.payload.end,
     exp:   String(args.payload.exp),

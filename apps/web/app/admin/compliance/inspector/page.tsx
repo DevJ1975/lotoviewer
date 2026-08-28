@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, ClipboardCopy, Eye, Loader2, ShieldCheck } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useTenant } from '@/components/TenantProvider'
 
 // Admin tool to mint a read-only inspector URL. Pick a date range +
 // label + expiry, post to /api/inspector/sign, get back a signed URL
@@ -22,6 +23,7 @@ function nDaysAgoIso(n: number): string {
 
 export default function InspectorMintPage() {
   const { profile, loading: authLoading } = useAuth()
+  const { tenant } = useTenant()
   const [start,   setStart]   = useState(() => nDaysAgoIso(90))
   const [end,     setEnd]     = useState(() => todayIso())
   const [label,   setLabel]   = useState('')
@@ -34,6 +36,10 @@ export default function InspectorMintPage() {
 
   async function mint() {
     if (!label.trim()) { setError('Add a label so the audit trail is meaningful.'); return }
+    // The token is scoped to one tenant, so we cannot mint from the
+    // all-tenants roll-up view.
+    const tenantId = tenant?.id
+    if (!tenantId) { setError('Pick a tenant before minting an inspector URL.'); return }
     setBusy(true); setError(null); setUrl(null); setCopied(false)
 
     try {
@@ -46,8 +52,9 @@ export default function InspectorMintPage() {
       const res = await fetch('/api/inspector/sign', {
         method:  'POST',
         headers: {
-          'Content-Type':  'application/json',
-          Authorization:   `Bearer ${session.access_token}`,
+          'Content-Type':   'application/json',
+          Authorization:    `Bearer ${session.access_token}`,
+          'x-active-tenant': tenantId,
         },
         body: JSON.stringify({ start, end, label: label.trim(), expiresInDays: days }),
       })

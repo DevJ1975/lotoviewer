@@ -8,9 +8,11 @@ import {
 
 const SECRET = 'test-secret-do-not-use-in-prod'
 const NOW    = 1_750_000_000   // an arbitrary "now" in unix seconds
+const TENANT = '11111111-2222-3333-4444-555555555555'
 
 function payload(overrides: Partial<InspectorTokenPayload> = {}): InspectorTokenPayload {
   return {
+    tenantId: TENANT,
     start: '2026-04-01',
     end:   '2026-04-30',
     exp:   NOW + 30 * 24 * 60 * 60,   // 30 days out
@@ -152,6 +154,7 @@ describe('buildInspectorUrl', () => {
     const url = buildInspectorUrl({ origin: 'https://x.test', payload: p, secret: SECRET })
     const u = new URL(url)
     const reconstructed: InspectorTokenPayload = {
+      tenantId: u.searchParams.get('tenant')!,
       start: u.searchParams.get('start')!,
       end:   u.searchParams.get('end')!,
       exp:   Number(u.searchParams.get('exp')),
@@ -159,6 +162,36 @@ describe('buildInspectorUrl', () => {
     }
     const sig = u.searchParams.get('sig')!
     expect(verifyInspectorToken({ payload: reconstructed, sig, secret: SECRET, nowSec: NOW }).ok).toBe(true)
+  })
+
+  // The tenant is what scopes the inspector view to one organisation. It is
+  // signed, so editing it in the URL must invalidate the token rather than
+  // silently widen access.
+  it('rejects a token whose tenant was swapped in the URL', () => {
+    const p = payload()
+    const sig = signInspectorPayload(p, SECRET)
+    const swapped = payload({ tenantId: '99999999-8888-7777-6666-555555555555' })
+    const result = verifyInspectorToken({ payload: swapped, sig, secret: SECRET, nowSec: NOW })
+    expect(result.ok).toBe(false)
+    expect(result.ok === false && result.reason).toBe('Bad signature')
+  })
+
+  it('rejects a token with no tenant at all (the pre-fix token shape)', () => {
+    const { tenantId: _drop, ...tenantless } = payload()
+    const sig = signInspectorPayload(payload(), SECRET)
+    const result = verifyInspectorToken({
+      payload: tenantless as InspectorTokenPayload, sig, secret: SECRET, nowSec: NOW,
+    })
+    expect(result.ok).toBe(false)
+    expect(result.ok === false && result.reason).toBe('Invalid tenant')
+  })
+
+  it('rejects a malformed tenant id', () => {
+    const p = payload({ tenantId: 'not-a-uuid' })
+    const sig = signInspectorPayload(p, SECRET)
+    const result = verifyInspectorToken({ payload: p, sig, secret: SECRET, nowSec: NOW })
+    expect(result.ok).toBe(false)
+    expect(result.ok === false && result.reason).toBe('Invalid tenant')
   })
 
   it('URL-encodes special chars in the label', () => {

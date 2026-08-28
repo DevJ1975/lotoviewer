@@ -85,7 +85,11 @@ function ctx() { return { params: Promise.resolve({ moduleId: MODULE_ID }) } }
 
 function queueGate() {
   queue('profiles', { data: { is_superadmin: false } })
-  queue('tenant_memberships', { data: { role: 'member' } })
+  // Shape matches the gate's select: the embedded tenant is what proves the
+  // tenant is not disabled. tenantGate fails closed without it.
+  queue('tenant_memberships', {
+    data: { role: 'member', invite_cancelled_at: null, tenants: { disabled_at: null } },
+  })
 }
 
 function queueModuleAndVersion(versionOverrides: Record<string, unknown> = {}, moduleOverrides: Record<string, unknown> = {}) {
