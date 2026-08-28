@@ -42,9 +42,9 @@ describe('adminCatalog', () => {
   it('generates one 301 redirect per tile that carries a legacyHref', () => {
     const redirects = getAdminRedirects()
     const tilesWithLegacy = getAllAdminTiles().filter(t => t.legacyHref)
-    // One rule per tile with a legacyHref, one bare redirect per section,
-    // and *two* per moved subtree — the `/:path*` rule plus the exact rule
-    // that catches the bare path. See getAdminRedirects.
+    // tile redirects + one bare redirect per section + two rules per moved
+    // subtree (the `/:path*` rule for deep links, plus the exact rule for
+    // the bare path — see getAdminRedirects).
     expect(redirects.length).toBe(
       tilesWithLegacy.length + ADMIN_SECTIONS.length + MOVED_ADMIN_ROUTES.length * 2,
     )

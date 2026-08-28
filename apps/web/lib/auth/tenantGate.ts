@@ -13,6 +13,12 @@ import { isModuleVisible } from '@soteria/core/moduleVisibility'
 //     Used for read endpoints.
 //   - requireTenantAdmin: only owner / admin roles on the active
 //     tenant. Used for mutation endpoints.
+//
+// Both reject a membership whose invite has been cancelled, and any
+// membership in a disabled tenant, so the gate agrees with the RLS
+// functions in migration 190. That matters most for the routes that pass
+// the gate and then query with the RLS-bypassing service-role client, where
+// this gate is the only access control in the path.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -88,32 +94,47 @@ async function gate(req: Request, opts: GateOptions = {}): Promise<TenantGate> {
     return makeOk(user, tenantId, facilityId, 'superadmin', token, url, anon)
   }
 
-  // Mirror the DB helper the RLS policies use (migration 190): membership
-  // alone is not authority — a disabled tenant or a cancelled invite revokes
-  // access. This gate has to enforce both itself, because 279 of the 344 API
-  // route files reach the database through the service-role client, which
-  // bypasses RLS entirely. For those routes this check IS the boundary.
-  const { data: membership } = await admin
+  // The embedded tenants row makes this agree with current_user_tenant_ids()
+  // in one round-trip rather than two.
+  const { data: membership, error: membershipErr } = await admin
     .from('tenant_memberships')
-    .select('role, invite_cancelled_at, tenants!inner(disabled_at)')
+    .select('role, invite_cancelled_at, tenants:tenant_id(disabled_at)')
     .eq('user_id',   user.id)
     .eq('tenant_id', tenantId)
-    .maybeSingle<{
-      role: string
-      invite_cancelled_at: string | null
-      tenants: { disabled_at: string | null } | { disabled_at: string | null }[] | null
-    }>()
+    .maybeSingle()
+  // Distinguish "no such membership" from "the lookup failed". Discarding the
+  // error made every DB or PostgREST fault present as 403 Not a member — a
+  // permanent-looking denial for a transient fault, on the hot path of every
+  // gated route. A 500 is honest and retryable.
+  if (membershipErr) {
+    return { ok: false, status: 500, message: 'Could not verify tenant membership' }
+  }
   if (!membership) {
     return { ok: false, status: 403, message: 'Not a member of this tenant' }
   }
-  if (membership.invite_cancelled_at) {
-    return { ok: false, status: 403, message: 'Access to this tenant has been cancelled' }
+
+  // Mirror the RLS definition, which this gate had drifted from.
+  //
+  // Migration 190 put `invite_cancelled_at is null` — and migration 190's
+  // join puts `t.disabled_at is null` — inside current_user_tenant_ids() and
+  // current_user_admin_tenant_ids(), the security-definer functions every
+  // domain-table policy consults. This gate checked neither. That is only
+  // invisible while a route queries through gate.authedClient, which carries
+  // the user's JWT and is subject to those policies; the many routes that
+  // pass the gate and then reach for supabaseAdmin() bypass RLS entirely, so
+  // for them the gate IS the access control. A revoked member or a member of
+  // a disabled tenant still passed it.
+  const cancelledAt = (membership as { invite_cancelled_at?: string | null }).invite_cancelled_at ?? null
+  if (cancelledAt) {
+    return { ok: false, status: 403, message: 'Access to this tenant has been revoked' }
   }
-  // PostgREST returns an embedded to-one as an object, but shapes it as a
-  // single-element array under some select forms. Normalize rather than bet
-  // on which one this query produces.
-  const tenantRow = Array.isArray(membership.tenants) ? membership.tenants[0] : membership.tenants
-  if (!tenantRow || tenantRow.disabled_at) {
+
+  // PostgREST returns an embedded to-one either as an object or as a
+  // single-element array depending on how it infers the relationship, so
+  // accept both rather than depending on the inference.
+  const embedded = (membership as { tenants?: { disabled_at?: string | null } | Array<{ disabled_at?: string | null }> | null }).tenants
+  const tenantRow = Array.isArray(embedded) ? embedded[0] : embedded
+  if (tenantRow?.disabled_at) {
     return { ok: false, status: 403, message: 'This tenant is disabled' }
   }
 

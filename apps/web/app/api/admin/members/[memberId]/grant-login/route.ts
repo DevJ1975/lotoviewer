@@ -163,7 +163,12 @@ export async function POST(req: Request, ctx: RouteContext) {
     profileId: userId,
     email,
     tempPassword,
-    inviteUrl,
+    // Same bound as /api/admin/users: the raw link is a password-set
+    // credential, so it is returned only for an account this call created.
+    // A reused never-signed-in account belongs to someone who may hold a
+    // pending invite in another tenant, and handing their link to this
+    // tenant's admin is an account takeover. They still get it by email.
+    inviteUrl: invited.createdAuthUser ? inviteUrl : undefined,
     emailSent,
     expiresInDays: inviteLinkTtlDays(),
     tenantName: (tenantData as { name: string }).name,

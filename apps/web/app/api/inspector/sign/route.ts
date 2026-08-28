@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import * as Sentry from '@sentry/nextjs'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { buildInspectorUrl, type InspectorTokenPayload } from '@/lib/inspectorToken'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
 
@@ -20,24 +18,6 @@ interface Body {
   end?:            string
   label?:          string
   expiresInDays?:  number
-}
-
-async function requireAdmin(authHeader: string | null): Promise<string | null> {
-  if (!authHeader?.startsWith('Bearer ')) return null
-  const token = authHeader.slice('Bearer '.length)
-  const url  = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !anon) return null
-  const client = createClient(url, anon, { auth: { persistSession: false } })
-  const { data: { user }, error } = await client.auth.getUser(token)
-  if (error || !user) return null
-  const admin = supabaseAdmin()
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('is_admin')
-    .eq('id', user.id)
-    .maybeSingle()
-  return profile?.is_admin ? user.id : null
 }
 
 const DATE_RE  = /^\d{4}-\d{2}-\d{2}$/

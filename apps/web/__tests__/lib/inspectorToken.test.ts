@@ -176,24 +176,6 @@ describe('buildInspectorUrl', () => {
     expect(result.ok === false && result.reason).toBe('Bad signature')
   })
 
-  it('rejects a token with no tenant at all (the pre-fix token shape)', () => {
-    const { tenantId: _drop, ...tenantless } = payload()
-    const sig = signInspectorPayload(payload(), SECRET)
-    const result = verifyInspectorToken({
-      payload: tenantless as InspectorTokenPayload, sig, secret: SECRET, nowSec: NOW,
-    })
-    expect(result.ok).toBe(false)
-    expect(result.ok === false && result.reason).toBe('Invalid tenant')
-  })
-
-  it('rejects a malformed tenant id', () => {
-    const p = payload({ tenantId: 'not-a-uuid' })
-    const sig = signInspectorPayload(p, SECRET)
-    const result = verifyInspectorToken({ payload: p, sig, secret: SECRET, nowSec: NOW })
-    expect(result.ok).toBe(false)
-    expect(result.ok === false && result.reason).toBe('Invalid tenant')
-  })
-
   it('URL-encodes special chars in the label', () => {
     const p = payload({ label: 'Audit / 2026 — site #4' })
     const url = buildInspectorUrl({ origin: 'https://x.test', payload: p, secret: SECRET })
@@ -201,5 +183,53 @@ describe('buildInspectorUrl', () => {
     // URLSearchParams handles encoding; round-trip the value to confirm
     // the original came out the other side.
     expect(u.searchParams.get('label')).toBe('Audit / 2026 — site #4')
+  })
+})
+
+// The inspector feature predates multi-tenancy. Its payload carried a date
+// range and nothing else, and /api/inspector/{lookup,bundle} query the permit
+// tables through the service-role client — which bypasses RLS. With no tenant
+// in the token there was nothing to filter on, so a token minted for one
+// customer's inspection returned every customer's confined-space and hot-work
+// permits.
+describe('tenant scoping', () => {
+  it('refuses a token with no tenant — the pre-multi-tenancy shape', () => {
+    const p = payload()
+    const sig = signInspectorPayload(p, SECRET)
+    const withoutTenant = { ...p } as Partial<InspectorTokenPayload>
+    delete withoutTenant.tenantId
+    const r = verifyInspectorToken({
+      payload: withoutTenant as InspectorTokenPayload, sig, secret: SECRET, nowSec: NOW,
+    })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.reason).toBe('Invalid or missing tenant')
+  })
+
+  it('refuses a malformed tenant rather than passing it to a query', () => {
+    for (const bad of ['', '   ', 'not-a-uuid', '*', "' OR '1'='1", '../..', TENANT.slice(0, -1)]) {
+      const p = payload({ tenantId: bad })
+      const sig = signInspectorPayload(p, SECRET)
+      const r = verifyInspectorToken({ payload: p, sig, secret: SECRET, nowSec: NOW })
+      expect(r.ok, `tenantId=${JSON.stringify(bad)}`).toBe(false)
+    }
+  })
+
+  it('binds the tenant into the signature, so it cannot be swapped in the URL', () => {
+    // The attack the field exists to stop: take a legitimately-signed token
+    // and point it at someone else's organisation.
+    const mine = payload()
+    const sig  = signInspectorPayload(mine, SECRET)
+    const theirs = { ...mine, tenantId: '00000000-0000-0000-0000-0000000000bb' }
+
+    expect(verifyInspectorToken({ payload: mine,   sig, secret: SECRET, nowSec: NOW }).ok).toBe(true)
+    expect(verifyInspectorToken({ payload: theirs, sig, secret: SECRET, nowSec: NOW }).ok).toBe(false)
+    // Signing the swapped payload gives a different signature, so the two are
+    // not interchangeable even with a valid secret.
+    expect(signInspectorPayload(theirs, SECRET)).not.toBe(sig)
+  })
+
+  it('carries the tenant in the minted URL so the verifier can recompute the HMAC', () => {
+    const url = buildInspectorUrl({ origin: 'https://x.test', payload: payload(), secret: SECRET })
+    expect(new URL(url).searchParams.get('tenant')).toBe(TENANT)
   })
 })

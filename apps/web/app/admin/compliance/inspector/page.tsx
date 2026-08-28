@@ -23,7 +23,10 @@ function nDaysAgoIso(n: number): string {
 
 export default function InspectorMintPage() {
   const { profile, loading: authLoading } = useAuth()
-  const { tenant } = useTenant()
+  // The minted token is scoped to this tenant, and /api/inspector/sign
+  // rejects a request without it — the URL must never be ambiguous about
+  // whose permits it exposes.
+  const { tenantId } = useTenant()
   const [start,   setStart]   = useState(() => nDaysAgoIso(90))
   const [end,     setEnd]     = useState(() => todayIso())
   const [label,   setLabel]   = useState('')
@@ -36,10 +39,6 @@ export default function InspectorMintPage() {
 
   async function mint() {
     if (!label.trim()) { setError('Add a label so the audit trail is meaningful.'); return }
-    // The token is scoped to one tenant, so we cannot mint from the
-    // all-tenants roll-up view.
-    const tenantId = tenant?.id
-    if (!tenantId) { setError('Pick a tenant before minting an inspector URL.'); return }
     setBusy(true); setError(null); setUrl(null); setCopied(false)
 
     try {
@@ -49,11 +48,16 @@ export default function InspectorMintPage() {
         setBusy(false)
         return
       }
+      if (!tenantId) {
+        setError('Select an organisation before minting an inspector URL.')
+        setBusy(false)
+        return
+      }
       const res = await fetch('/api/inspector/sign', {
         method:  'POST',
         headers: {
-          'Content-Type':   'application/json',
-          Authorization:    `Bearer ${session.access_token}`,
+          'Content-Type':    'application/json',
+          Authorization:     `Bearer ${session.access_token}`,
           'x-active-tenant': tenantId,
         },
         body: JSON.stringify({ start, end, label: label.trim(), expiresInDays: days }),

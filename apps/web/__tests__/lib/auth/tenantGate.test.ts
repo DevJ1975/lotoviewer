@@ -115,6 +115,14 @@ describe('tenantGate', () => {
       expect(r).toMatchObject({ ok: false, status: 403, message: 'Not a member of this tenant' })
     })
 
+    it('reports 500 when the membership lookup itself fails', async () => {
+      // A discarded error presented as 403 Not a member — a permanent-looking
+      // denial for a transient DB fault, on the hot path of every gated route.
+      membershipMaybeSingle.mockResolvedValue({ data: null, error: { message: 'connection reset' } })
+      const r = await requireTenantMember(req())
+      expect(r).toMatchObject({ ok: false, status: 500 })
+    })
+
     it('admits a member of the tenant', async () => {
       membershipMaybeSingle.mockResolvedValue(membership({ role: 'member' }))
       const r = await requireTenantMember(req())
@@ -138,7 +146,7 @@ describe('tenantGate', () => {
       membershipMaybeSingle.mockResolvedValue(membership({ invite_cancelled_at: '2026-08-01T00:00:00Z' }))
       const r = await requireTenantMember(req())
       expect(r).toMatchObject({ ok: false, status: 403 })
-      expect((r as { message: string }).message).toMatch(/cancelled/i)
+      expect((r as { message: string }).message).toMatch(/revoked/i)
     })
 
     it('rejects an ADMIN of a disabled tenant too — role does not exempt', async () => {

@@ -111,17 +111,14 @@ describe('Regression #104 — admin URL renames + 301 redirects', () => {
     // /admin/insights (scorecard, ai-usage, …) and (b) infinitely re-match its
     // own destination (ERR_TOO_MANY_REDIRECTS). Those redirects intentionally
     // map the bare legacy path exactly, with NO wildcard. See getAdminRedirects.
-    //
-    // Second exemption: a moved subtree ships a PAIR of rules — the `/:path*`
-    // rule that carries deep links plus an exact rule for the bare path,
-    // because whether a trailing `/:path*` also matches zero segments is a
-    // path-to-regexp detail the catalog deliberately does not bet a 404 on.
-    // The bare half of that pair is checked via its wildcard sibling, so
-    // exclude it here rather than demanding a wildcard it must not have.
-    const movedFroms = new Set(MOVED_ADMIN_ROUTES.map(m => m.from))
+    // Moved subtrees (MOVED_ADMIN_ROUTES) are not tile redirects and follow a
+    // different rule: each contributes BOTH a `/:path*` rule and a bare-path
+    // rule, so the bare one legitimately carries no wildcard.
+    const movedSources = new Set(
+      MOVED_ADMIN_ROUTES.flatMap(m => [m.from, `${m.from}/:path*`]),
+    )
     const tileRedirects = getAdminRedirects()
-      .filter(r => r.destination !== '/admin')
-      .filter(r => !movedFroms.has(r.source))
+      .filter(r => r.destination !== '/admin' && !movedSources.has(r.source))
     for (const r of tileRedirects) {
       const nested = r.destination.startsWith(`${r.source}/`)
       if (nested) {

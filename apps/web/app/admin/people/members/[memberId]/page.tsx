@@ -18,7 +18,6 @@ import {
   KeyRound,
   Loader2,
   ShieldCheck,
-  UserCheck,
   UserPlus,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
@@ -43,7 +42,8 @@ import {
   resetMemberAccess,
 } from '@/lib/members/client'
 import { composeAccessMessage, type AccessMessageKind } from '@/lib/members/accessMessage'
-import type { MemberSearchResult, MemberSummary } from '@/lib/members/types'
+import MemberAccessBadge from '@/components/MemberAccessBadge'
+import type { AdminMemberRow, MemberSearchResult } from '@/lib/members/types'
 
 interface MemberStatusEvent {
   id:         string
@@ -76,7 +76,7 @@ export default function AdminMemberDetailPage() {
   const { tenantId, loading: tenantLoading } = useTenant()
   const canManage = !!profile?.is_admin || !!profile?.is_superadmin
 
-  const [member, setMember]     = useState<MemberSummary | null>(null)
+  const [member, setMember]     = useState<AdminMemberRow | null>(null)
   const [events, setEvents]     = useState<MemberStatusEvent[]>([])
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
@@ -340,16 +340,19 @@ export default function AdminMemberDetailPage() {
               <p className="mt-1 text-xs text-slate-500">
                 @{member.handle} · #{member.member_code} · {member.employment_type}
               </p>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Source: {hasLogin ? 'login user' : 'roster only'} · Status: {member.status}
+              <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                <span>Status: {member.status}</span>
+                <MemberAccessBadge state={member.access_state} />
               </p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={onGrantLoginClick} disabled={hasLogin || granting}>
-              {granting ? <Loader2 className="h-4 w-4 animate-spin" /> : hasLogin ? <UserCheck className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
-              {hasLogin ? 'Login active' : 'Grant app access'}
-            </Button>
+            {!hasLogin && (
+              <Button onClick={onGrantLoginClick} disabled={granting}>
+                {granting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                Grant app access
+              </Button>
+            )}
             {hasLogin && (
               <Button variant="outline" onClick={() => setResetConfirmOpen(true)} disabled={resetting}>
                 {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
