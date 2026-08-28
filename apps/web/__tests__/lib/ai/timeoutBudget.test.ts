@@ -29,7 +29,7 @@ function maxDuration(src: string): number | null {
 
 /** The `{ timeoutMs, maxRetries }` a route hands getAnthropic. */
 function anthropicBudget(src: string): { timeoutMs: number; maxRetries: number } | null {
-  const call = src.match(/getAnthropic\([^)]*\{([^}]*)\}[^)]*\)/s)
+  const call = src.match(/getAnthropic\([^)]*\{([^}]*)\}[^)]*\)/)
   if (!call) return null
   const timeout = call[1].match(/timeoutMs:\s*([\d_]+)/)
   const retries = call[1].match(/maxRetries:\s*(\d+)/)
@@ -111,8 +111,8 @@ describe('AI route timeout budgets fit inside maxDuration', () => {
 describe('getAnthropic exposes the knobs a route needs to stay inside its budget', () => {
   it('accepts both timeoutMs and maxRetries', () => {
     const src = source('lib/ai/client.ts')
-    expect(src).toMatch(/opts\?:\s*\{[^}]*timeoutMs\?:\s*number/s)
-    expect(src).toMatch(/opts\?:\s*\{[^}]*maxRetries\?:\s*number/s)
+    expect(src).toMatch(/opts\?:\s*\{[\s\S]*?timeoutMs\?:\s*number/)
+    expect(src).toMatch(/opts\?:\s*\{[\s\S]*?maxRetries\?:\s*number/)
     expect(src).toMatch(/maxRetries:\s*opts\?\.maxRetries\s*\?\?\s*DEFAULT_MAX_RETRIES/)
   })
 
