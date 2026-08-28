@@ -83,15 +83,20 @@ export async function POST(req: Request) {
   const admin = supabaseAdmin()
   try {
     const [csRes, hwRes] = await Promise.all([
+      // Both queries run through the service-role client, which bypasses
+      // RLS — so the tenant filter here is the only thing keeping one
+      // customer's inspection from returning every customer's permits.
       admin
         .from('loto_confined_space_permits')
         .select('id, serial, space_id, started_at, expires_at, canceled_at, cancel_reason, entry_supervisor_signature_at, entry_supervisor_id')
+        .eq('tenant_id', rest.tenantId)
         .gte('started_at', startTs)
         .lte('started_at', endTs)
         .order('started_at', { ascending: true }),
       admin
         .from('loto_hot_work_permits')
         .select('id, serial, work_location, started_at, expires_at, canceled_at, cancel_reason, work_completed_at, pai_signature_at')
+        .eq('tenant_id', rest.tenantId)
         .gte('started_at', startTs)
         .lte('started_at', endTs)
         .order('started_at', { ascending: true }),

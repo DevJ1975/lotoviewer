@@ -39,6 +39,7 @@ async function requireAdmin(authHeader: string | null): Promise<string | null> {
   return profile?.is_admin ? user.id : null
 }
 
+const UUID_RE  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DATE_RE  = /^\d{4}-\d{2}-\d{2}$/
 const MAX_DAYS = 90      // Cap so a leak doesn't grant year-long access
 const MIN_DAYS = 1
@@ -83,7 +84,29 @@ export async function POST(req: Request) {
     origin = process.env.NEXT_PUBLIC_APP_URL ?? 'https://localhost:3000'
   }
 
-  const payload: InspectorTokenPayload = { start, end, label, exp }
+  // The token is scoped to the tenant the admin is acting in, and that
+  // scope is what /lookup and /bundle filter on. Verify membership rather
+  // than trusting the header: requireAdmin above checks the legacy global
+  // profiles.is_admin flag, which says nothing about WHICH tenant this
+  // person may export permits from.
+  const tenantId = req.headers.get('x-active-tenant')?.trim() ?? ''
+  if (!UUID_RE.test(tenantId)) {
+    return NextResponse.json({ error: 'Missing or malformed x-active-tenant header' }, { status: 400 })
+  }
+  const { data: membership, error: membershipErr } = await supabaseAdmin()
+    .from('tenant_memberships')
+    .select('role')
+    .eq('user_id', adminId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+  if (membershipErr) {
+    return NextResponse.json({ error: 'Could not verify tenant membership' }, { status: 500 })
+  }
+  if (!membership) {
+    return NextResponse.json({ error: 'Not a member of this tenant' }, { status: 403 })
+  }
+
+  const payload: InspectorTokenPayload = { tenantId, start, end, label, exp }
   try {
     const url = buildInspectorUrl({ origin, payload, secret })
     return NextResponse.json({ url, exp })
