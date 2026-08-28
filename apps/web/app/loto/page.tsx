@@ -195,7 +195,7 @@ function HomeDashboard() {
   // HomeDashboard) — blowing up the memoization inside EquipmentListPanel
   // and forcing every row to re-render on every DB change.
   const searchParamsRef = useRef(searchParams)
-  searchParamsRef.current = searchParams
+  useEffect(() => { searchParamsRef.current = searchParams }, [searchParams])
 
   const setUrlState = useCallback((next: { dept?: string | null; eq?: string | null }) => {
     // URL builder lives in lib/lotoNavigation.ts so the merge semantics

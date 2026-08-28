@@ -31,10 +31,10 @@ export async function GET(req: Request) {
   const u = new URL(req.url)
   const payload: InspectorTokenPayload = {
     tenantId: u.searchParams.get('tenant') ?? '',
-    start:    u.searchParams.get('start')  ?? '',
-    end:      u.searchParams.get('end')    ?? '',
-    exp:      Number(u.searchParams.get('exp') ?? '0'),
-    label:    u.searchParams.get('label')  ?? '',
+    start: u.searchParams.get('start') ?? '',
+    end:   u.searchParams.get('end')   ?? '',
+    exp:   Number(u.searchParams.get('exp') ?? '0'),
+    label: u.searchParams.get('label') ?? '',
   }
   const sig = u.searchParams.get('sig') ?? ''
   const verify = verifyInspectorToken({ payload, sig, secret })
@@ -47,21 +47,22 @@ export async function GET(req: Request) {
   try {
     // Fetch CS permits, hot-work permits, atmospheric tests for the
     // CS permits, and parent spaces — same shape generateCompliancePdfBundle
-    // expects. Service role bypasses RLS, so the HMAC bounds WHO may read and
-    // the tenant filter bounds WHAT: without the latter, one customer's
-    // inspection bundle contained every customer's permits.
+    // expects. Service role bypasses RLS, so the HMAC is the boundary AND
+    // every query must carry tenant_id explicitly: nothing below is scoped
+    // for us.
+    const tenantId = payload.tenantId
     const [csRes, hwRes] = await Promise.all([
       admin
         .from('loto_confined_space_permits')
         .select('*')
-        .eq('tenant_id', payload.tenantId)
+        .eq('tenant_id', tenantId)
         .gte('started_at', startTs)
         .lte('started_at', endTs)
         .order('started_at', { ascending: true }),
       admin
         .from('loto_hot_work_permits')
         .select('*')
-        .eq('tenant_id', payload.tenantId)
+        .eq('tenant_id', tenantId)
         .gte('started_at', startTs)
         .lte('started_at', endTs)
         .order('started_at', { ascending: true }),
@@ -77,10 +78,10 @@ export async function GET(req: Request) {
 
     const [spacesRes, testsRes] = await Promise.all([
       spaceIds.length > 0
-        ? admin.from('loto_confined_spaces').select('*').in('space_id', spaceIds)
+        ? admin.from('loto_confined_spaces').select('*').eq('tenant_id', tenantId).in('space_id', spaceIds)
         : Promise.resolve({ data: [], error: null }),
       permitIds.length > 0
-        ? admin.from('loto_atmospheric_tests').select('*').in('permit_id', permitIds).order('tested_at', { ascending: false })
+        ? admin.from('loto_atmospheric_tests').select('*').eq('tenant_id', tenantId).in('permit_id', permitIds).order('tested_at', { ascending: false })
         : Promise.resolve({ data: [], error: null }),
     ])
     if (spacesRes.error) throw new Error(`spaces: ${spacesRes.error.message}`)
