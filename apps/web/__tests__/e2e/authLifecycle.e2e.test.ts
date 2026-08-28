@@ -12,7 +12,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
-  authAdminMock, mockState, resetMocks, jsonRequest, ctxFor,
+  authAdminMock, mockState, resetMocks, sendInviteEmailMock, jsonRequest, ctxFor,
 } from '../api/superadmin/_helpers'
 
 // reset-access is gated by the TENANT admin gate, not the superadmin one that
@@ -474,5 +474,44 @@ describe('E2E — the reminder cadence over a five-week silence', () => {
     // password. Cancelling here would revoke access to an account that works.
     expect(planInviteAction({ ...base, lastSignInAt: null, passwordSet: true }, day35))
       .toEqual({ kind: 'none', reason: 'credential_already_set' })
+  })
+})
+
+// ─── Scenario 10: one tenant's admin goes after another tenant's invitee ────
+//
+// profiles.email is globally unique (migration 003), so one address is one
+// account across every tenant. Adding an address that already exists REUSES
+// that account — and "exists but never signed in" is precisely the state of
+// anyone holding an outstanding invite somewhere else. The raw invite link is
+// a password-set credential for that account, so returning it to the caller
+// turned "add a colleague" into "take over their pending account".
+
+describe('E2E — the raw invite link never goes back to the caller for a reused account', () => {
+  it('withholds it when the account already existed, and still emails the invitee', async () => {
+    const { POST: addUser } = await import('@/app/api/admin/users/route')
+    gateAsAdminOfTenantA()
+
+    mockState.queue('tenants', { data: { id: TENANT_A, name: 'Tenant A' }, error: null })
+    // The victim: a profiles row that exists and has never signed in.
+    mockState.queue('profiles', {
+      data: { id: 'U-victim', email: 'victim@other.example', full_name: 'Victim', must_change_password: true },
+      error: null,
+    })
+    mockState.queue('tenant_memberships', { data: null, error: null })   // membership insert
+    mockState.queue('members', { data: null, error: null })
+
+    const res = await addUser(jsonRequest('POST', { email: 'victim@other.example' }))
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.alreadyExisted).toBe(true)
+    // The takeover primitive: absent.
+    expect(body.inviteUrl).toBeUndefined()
+    // And no temp password either — provision only mints one on the create path.
+    expect(body.tempPassword).toBeUndefined()
+    // The invitee is still reachable: the link went to their own address.
+    expect(sendInviteEmailMock).toHaveBeenCalled()
+    expect(sendInviteEmailMock.mock.calls[0][0]).toMatchObject({ to: 'victim@other.example' })
+    expect(sendInviteEmailMock.mock.calls[0][0].inviteUrl).toBeTruthy()
   })
 })
