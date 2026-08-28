@@ -1,10 +1,34 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.1'
-const LAST_UPDATED    = '2026-08-19'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-08-28'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.0',
+    date:    '2026-08-28',
+    changes: [
+      'SCIM provisioning tokens are now owner/admin only. The database rule ' +
+      'behind the token table accepted any member of the organisation, ' +
+      'including a read-only viewer — and because a SCIM token is checked on ' +
+      'its own and not against a session, anyone who could add a row could ' +
+      'mint themselves a working provisioning credential and use it to ' +
+      'create, rename or deactivate workforce records. Issuing and revoking ' +
+      'now happen only through the admin screen. NOTE: this ships as a ' +
+      'database migration and is not in effect until that migration is ' +
+      'applied.',
+      'A SCIM token stops working the moment its organisation is disabled. ' +
+      'Disabling is the offboarding lever, but the SCIM endpoints never ' +
+      'consulted it, so a suspended customer’s identity provider kept ' +
+      'reading and updating the full workforce roster.',
+      'SCIM user lookups reject filter values containing characters the ' +
+      'query grammar treats as syntax (commas, parentheses, quotes). Such a ' +
+      'value used to be spliced into the query and could match on fields the ' +
+      'endpoint does not return; it now returns an empty result. Ordinary ' +
+      'email addresses and employee IDs are unaffected.',
+    ],
+  },
   {
     version: '1.0.1',
     date:    '2026-08-19',
