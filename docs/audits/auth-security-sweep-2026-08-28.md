@@ -237,18 +237,42 @@ write access.
 short-lived token (or an HMAC of `qr_token + equipment_id + exp`) that
 `/api/review/[token]` pins to that one equipment row.
 
-### 16. Review token ignores link kind and batch membership — HIGH
+### 16. Review token ignores link kind and batch membership — MEDIUM
 `api/review/[token]/route.ts:219`
 
-`lookupLink()` never filters on `kind`, so an audit-review token is accepted
-by the placard-review endpoint — contradicting the audit route's documented
-invariant that deciding a change never writes to live LOTO tables. And unlike
-`submit-note` / `replace-photo`, which route through RPCs that enforce batch
-membership, `mark-for-review` / `unmark-for-review` touch any equipment row in
-the tenant.
+**Re-verified by hand — the original finding overstated this.** Its second
+refuter (the code-accuracy lens) died on an API error, so it reached the
+confirmed list on a single vote. Two of its three claims hold; one does not.
 
-*Fix:* reject `kind !== 'placard'` in `lookupLink()`, and require a
-`loto_review_link_equipment` row when `is_public` is false.
+Real:
+
+- `lookupLink()` selects `id, tenant_id, department, is_public, expires_at,
+  revoked_at, first_viewed_at, signed_off_at` — never `kind`, and never
+  filters it. Migration 218:135 added `kind in ('placard_walk','audit')`, and
+  `/api/admin/loto/audit/[runId]/review-link:52` mints `kind: 'audit'`. So an
+  audit token is accepted by the placard-review *write* endpoint, crossing the
+  invariant the audit route documents for itself — that deciding a change
+  never writes to the live LOTO tables.
+- `mark-for-review` and `unmark-for-review` scope only by `tenant_id`. For a
+  **non-public** link — one narrowed to a batch via
+  `loto_review_link_equipment` — that lets a per-reviewer link flag or clear
+  equipment outside its own batch, which the sibling actions (`submit-note`,
+  `replace-photo`) do enforce because they route through RPCs that raise
+  `equipment not in batch`.
+
+Not a defect:
+
+- A **public** link clearing any flagged row in the tenant. The handler says
+  so explicitly and gives the reasoning: "The link is the only auth here;
+  tying clear-permissions to a typed-in name would be a paper boundary, not
+  real security." Deliberate, and correct for that link type.
+
+Downgraded from HIGH to MEDIUM accordingly: the exposure is bounded by
+holding a valid, unexpired, unrevoked link for the tenant already.
+
+*Fix:* reject `kind !== 'placard_walk'` in `lookupLink()`, and require a
+`loto_review_link_equipment` row when `is_public` is false — leaving the
+public-link behaviour as documented.
 
 ### 17. `signOut()` discards its error, leaving the session in localStorage — HIGH
 `components/AuthProvider.tsx:131`
@@ -304,3 +328,16 @@ noise.
 same shape: a guard that discards the error from its own lookup, so it holds
 while the system is healthy and lets go the moment it is not. `grep` for a
 destructured `data` with no `error` beside it.
+
+**One verifier died, and it mattered.** 126 of 127 agents completed; the
+code-accuracy refuter for finding #16 failed on an API error, so that finding
+reached this list on one vote instead of two. Re-verified by hand, it turned
+out to be part right and part wrong — it had swept up behaviour the handler
+documents as deliberate, which is exactly what that lens exists to catch. Its
+severity is now MEDIUM rather than HIGH.
+
+The lesson for the harness: treat a finding whose verification did not
+complete as unverified, not as confirmed. `parallel()` resolves a failed agent
+to `null`, so a survivor test of "no refuter objected" silently passes a
+finding that only one refuter ever saw. Count the votes and require the full
+panel before promoting anything.

@@ -150,10 +150,28 @@ default to "refuted" when uncertain:
 - **code accuracy** — does the cited code say what the finding claims,
   or was control flow misread?
 
-Keep only what survives both. Then run a completeness critic: what
-surface was not covered, what spans two surfaces and fell between the
-finders, what trusts input from the body rather than the verified
-context.
+Keep only what survives both — and require that both actually **ran**. A
+verifier that crashes is not a verifier that agreed. Most orchestrators
+resolve a failed agent to `null`, so a survivor test written as "no
+refuter objected" silently promotes a finding only one refuter ever saw:
+
+```js
+// Wrong — a dead verifier counts as assent
+const survives = votes.filter(v => v && v.refuted).length === 0
+// Right — demand the full panel, else mark it unverified
+const cast = votes.filter(Boolean)
+const survives = cast.length === LENSES.length && cast.every(v => !v.refuted)
+```
+
+Not hypothetical: in the sweep this skill came from, one of 127 agents
+died on an API error and the finding it should have checked reached the
+confirmed list on a single vote. Re-verified by hand it was part wrong —
+it had swept up behaviour the handler documented as deliberate, which is
+exactly what the missing lens existed to catch.
+
+Then run a completeness critic: what surface was not covered, what spans
+two surfaces and fell between the finders, what trusts input from the
+body rather than the verified context.
 
 **Verify the serious ones yourself.** Read the code and trace the
 exploit before changing security-critical logic. Subagent votes raise
