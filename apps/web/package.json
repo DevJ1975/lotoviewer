@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:security": "vitest run proxy.test.ts __tests__/security __tests__/e2e/authLifecycle.e2e.test.ts __tests__/lib/auth __tests__/lib/security __tests__/lib/safeRedirect __tests__/lib/scrubEvent __tests__/lib/rateLimit __tests__/lib/memoryRateLimit __tests__/lib/inviteTokens __tests__/api/invites __tests__/api/superadmin __tests__/api/admin __tests__/migrations/profilesPrivilegedColumns __tests__/anonReport",
     "test:watch": "vitest",
-    "db:types": "{ printf '%s\\n' '// Generated from the live Postgres schema — do not edit by hand.' '//' '// Regenerate from apps/web:' '//   SUPABASE_PROJECT_ID=zwtnpyjifbdytlektxlc npm run db:types' '//' '// Re-run after every migration. This file is what narrows every `.from()` and' '// `.select()` in the app, so a stale copy silently re-opens the hole it exists' '// to close: a mistyped table or column compiling clean and failing at runtime.' '// The build is not gated on regeneration — that would block iterating on a' '// migration locally — so CI typecheck is the backstop.' ''; supabase gen types typescript --project-id $SUPABASE_PROJECT_ID; } > ../../packages/core/src/database.types.ts && echo '✓ wrote packages/core/src/database.types.ts'"
+    "db:types": "{ printf '%s\\n' '// Generated from the live Postgres schema \u2014 do not edit by hand.' '//' '// Regenerate from apps/web:' '//   SUPABASE_PROJECT_ID=zwtnpyjifbdytlektxlc npm run db:types' '//' '// Re-run after every migration. This file is what narrows every `.from()` and' '// `.select()` in the app, so a stale copy silently re-opens the hole it exists' '// to close: a mistyped table or column compiling clean and failing at runtime.' '// The build is not gated on regeneration \u2014 that would block iterating on a' '// migration locally \u2014 so CI typecheck is the backstop.' ''; supabase gen types typescript --project-id $SUPABASE_PROJECT_ID; } > ../../packages/core/src/database.types.ts && echo '\u2713 wrote packages/core/src/database.types.ts'"
   },
   "dependencies": {
     "@adobe/spectrum-tokens": "^14.11.0",
@@ -51,6 +51,10 @@
     "vaul": "^1.1.2",
     "web-push": "^3.6.7",
     "zod": "^4.1.13"
+  },
+  "optionalDependencies": {
+    "@img/sharp-libvips-linux-x64": "1.2.4",
+    "@img/sharp-linux-x64": "0.34.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
