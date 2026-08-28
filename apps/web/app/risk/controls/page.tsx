@@ -42,6 +42,7 @@ const HAZARD_CATS = [
 
 export default function ControlsLibraryPage() {
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const { profile } = useAuth()
   const isAdmin = !!profile?.is_admin || !!profile?.is_superadmin
 
@@ -58,7 +59,7 @@ export default function ControlsLibraryPage() {
       const { data: { session } } = await supabase.auth.getSession()
       const headers: Record<string, string> = {}
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
-      if (tenant?.id)            headers['x-active-tenant'] = tenant.id
+      if (tenantId)              headers['x-active-tenant'] = tenantId
       const res = await fetch('/api/risk/controls-library?include_inactive=1', { headers })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
@@ -68,7 +69,7 @@ export default function ControlsLibraryPage() {
     } finally {
       setLoading(false)
     }
-  }, [tenant?.id])
+  }, [tenantId])
 
   useEffect(() => { void refresh() }, [refresh])
 
@@ -141,7 +142,7 @@ export default function ControlsLibraryPage() {
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             Tenant-scoped catalog of available controls (ISO 45001 8.1.2 hierarchy).
-            The wizard's “Suggested controls” panel pulls from active entries here.
+            The wizard&apos;s “Suggested controls” panel pulls from active entries here.
           </p>
         </div>
         {isAdmin && (

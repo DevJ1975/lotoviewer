@@ -89,7 +89,11 @@ function ctx() { return { params: Promise.resolve({ moduleId: MODULE_ID }) } }
 
 function queueGate() {
   queue('profiles', { data: { is_superadmin: false } })
-  queue('tenant_memberships', { data: { role: 'member' } })
+  // Shape matches the gate's select: the embedded tenant is what proves the
+  // tenant is not disabled. tenantGate fails closed without it.
+  queue('tenant_memberships', {
+    data: { role: 'member', invite_cancelled_at: null, tenants: { disabled_at: null } },
+  })
   // requireStrikeMember wraps requireTenantModuleMember, which resolves the
   // tenant's module map before the route runs. Without STRIKE enabled here
   // every request 403s well before the behaviour under test.

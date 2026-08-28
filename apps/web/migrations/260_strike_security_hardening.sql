@@ -1,4 +1,4 @@
--- Migration 259: Close the STRIKE answer-key leak and tighten media reads.
+-- Migration 260: Close the STRIKE answer-key leak and tighten media reads.
 --
 -- Three independent findings, all verified against the code:
 --
@@ -64,9 +64,9 @@ grant  select (id, module_version_id, tenant_id, library_scope, question_type,
   on public.strike_quiz_questions to authenticated;
 
 comment on column public.strike_quiz_answers.is_correct is
-  'ANSWER KEY. Revoked from `authenticated` in migration 259 — readable only by service_role. Grading happens server-side in /api/strike/[moduleId]/submit. Never grant this to a browser-facing role.';
+  'ANSWER KEY. Revoked from `authenticated` in migration 260 — readable only by service_role. Grading happens server-side in /api/strike/[moduleId]/submit. Never grant this to a browser-facing role.';
 comment on column public.strike_quiz_questions.explanation is
-  'Soft copy of the answer key. Revoked from `authenticated` in migration 259 — returned to the learner in the submit response after grading, never before.';
+  'Soft copy of the answer key. Revoked from `authenticated` in migration 260 — returned to the learner in the submit response after grading, never before.';
 
 -- ────────────────────────────────────────────────────────────────────
 -- 2. storage.objects — audio joins video behind the signed-URL route

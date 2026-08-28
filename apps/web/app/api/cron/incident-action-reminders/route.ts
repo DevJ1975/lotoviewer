@@ -28,6 +28,9 @@ import {
 // Vercel schedule: 0 13 * * * (08:00 EST — start of US business day).
 
 export const runtime = 'nodejs'
+// One email per overdue or due-soon CAPA owner across every tenant. A backlog
+// day is exactly when this must not be cut off half-sent.
+export const maxDuration = 300
 
 const REMINDER_WINDOW_DAYS = 3
 

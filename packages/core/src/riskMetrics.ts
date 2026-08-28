@@ -187,39 +187,65 @@ export function computeTopResidualRisks(
 // DB fetcher — reads the active tenant's data via the registered client
 // ──────────────────────────────────────────────────────────────────────────
 
+// "Active" = anything not closed / accepted-exception (those are out of
+// the live register from a KPI perspective). Expressed as a PostgREST
+// negated IN so the predicate matches the partial index that already
+// exists for it (idx_risks_next_review).
+const ARCHIVED_STATUSES = '("closed","accepted_exception")'
+
+// Backstops, not business rules — a register this large means the read
+// was truncated, which warns rather than quietly shrinking a tile.
+const MAX_ACTIVE_RISK_ROWS = 5_000
+const MAX_CONTROL_ROWS     = 20_000
+
 /**
- * Pulls the active tenant's risks + risk_controls (RLS scopes both)
- * and computes every KPI in one round-trip-pair. Returns null when
- * the user has no active tenant or RLS denies access — caller hides
- * the panel rather than rendering an error.
+ * Pulls the active tenant's live risk register + its controls (RLS
+ * scopes both) and computes every KPI in one parallel round-trip.
+ * Returns null when the user has no active tenant or RLS denies access
+ * — caller hides the panel rather than rendering an error.
  */
 export async function fetchRiskMetrics(): Promise<RiskMetrics | null> {
-  const [risksRes, controlsRes] = await Promise.all([
+  // Closed risks feed exactly one number (the totalAll denominator), so
+  // they come back as a count instead of rows, and their controls are
+  // joined out server-side — every control consumer here keys off the
+  // active register.
+  const [activeRes, totalRes, controlsRes] = await Promise.all([
     supabase
       .from('risks')
-      .select('id, risk_number, title, status, hazard_category, inherent_score, inherent_band, residual_score, residual_band, next_review_date'),
+      .select(
+        'id, risk_number, title, status, hazard_category, inherent_score, inherent_band, residual_score, residual_band, next_review_date',
+        { count: 'exact' },
+      )
+      .not('status', 'in', ARCHIVED_STATUSES)
+      .limit(MAX_ACTIVE_RISK_ROWS),
+    supabase
+      .from('risks')
+      .select('id', { count: 'exact', head: true }),
     supabase
       .from('risk_controls')
-      .select('risk_id, hierarchy_level'),
+      .select('risk_id, hierarchy_level, risks!inner(status)')
+      .not('risks.status', 'in', ARCHIVED_STATUSES)
+      .limit(MAX_CONTROL_ROWS),
   ])
 
-  if (risksRes.error || controlsRes.error) {
-    console.warn('[riskMetrics] fetch failed', risksRes.error ?? controlsRes.error)
+  const error = activeRes.error ?? totalRes.error ?? controlsRes.error
+  if (error) {
+    console.warn('[riskMetrics] fetch failed', error)
     return null
   }
 
-  const allRisks = (risksRes.data ?? []) as unknown as RiskRowForMetrics[]
-  const controls = (controlsRes.data ?? []) as unknown as RiskControlForMetrics[]
+  const activeRisks = (activeRes.data   ?? []) as unknown as RiskRowForMetrics[]
+  const controls    = (controlsRes.data ?? []) as unknown as RiskControlForMetrics[]
 
-  // "Active" = anything not closed / accepted-exception (those are
-  // out of the live register from a KPI perspective).
-  const activeRisks = allRisks.filter(
-    r => r.status !== 'closed' && r.status !== 'accepted_exception',
-  )
+  if (activeRisks.length >= MAX_ACTIVE_RISK_ROWS || controls.length >= MAX_CONTROL_ROWS) {
+    console.warn(
+      `[riskMetrics] row cap reached (risks=${activeRisks.length}, controls=${controls.length}) — band, hierarchy and overdue counts cover the truncated read only`,
+    )
+  }
 
   return {
-    totalActive:              activeRisks.length,
-    totalAll:                 allRisks.length,
+    totalActive:              activeRes.count ?? activeRisks.length,
+    totalAll:                 totalRes.count  ?? activeRisks.length,
     byEffectiveBand:          computeBandDistribution(activeRisks),
     overdueReviewCount:       computeOverdueReviewCount(activeRisks),
     highOrExtremeWithoutPlan: computeHighOrExtremeWithoutPlan(activeRisks, controls),

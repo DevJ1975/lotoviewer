@@ -137,7 +137,20 @@ export async function POST(req: Request) {
     email,
     fullName: profileFullName,
     tempPassword,
-    inviteUrl,
+    // The raw invite link is a password-set credential for `userId`, so it
+    // goes back to the caller ONLY for an account this call brought into
+    // existence. profiles.email is globally unique (migration 003), so an
+    // address that already has an account is REUSED rather than duplicated —
+    // and an account that has never signed in is exactly the state of anyone
+    // holding an outstanding invite at another tenant. Returning the link for
+    // one of those handed this tenant's admin a working takeover primitive
+    // against a person they have no relationship with: add the address, read
+    // inviteUrl out of the response, set the password.
+    //
+    // Reused accounts still get their link — by email, to the address that
+    // owns it. tempPassword is already limited this way: provision.ts sets it
+    // only on the create path.
+    inviteUrl: createdAuthUser ? inviteUrl : undefined,
     emailSent,
     alreadyExisted,
     tenantId: gate.tenantId,
