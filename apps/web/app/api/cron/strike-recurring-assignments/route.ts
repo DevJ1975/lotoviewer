@@ -4,6 +4,9 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { withCronLogging } from '@/lib/cronInstrumentation'
 
 export const runtime = 'nodejs'
+// Hard-capped at 500 assignments per tick, each a single indexed UPDATE with no
+// email or external call. 120s covers a full batch with room to spare.
+export const maxDuration = 120
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false

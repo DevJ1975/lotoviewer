@@ -73,7 +73,7 @@ export default function WebhookDeliveriesPage() {
   // operator otherwise has to F5 to see results land. When everything
   // is OK or failed (no pending), polling stops to avoid useless load.
   const loadRef = useRef(load)
-  loadRef.current = load
+  useEffect(() => { loadRef.current = load }, [load])
   useEffect(() => {
     if (!data || data.counts.pending === 0) return
     let cancelled = false

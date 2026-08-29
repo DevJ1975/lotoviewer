@@ -7,6 +7,15 @@ import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 import { getAnthropic, aiErrorToResponse } from '@/lib/ai/client'
 import { Z244_1_EDITION } from '@/lib/loto/consensusStandards'
 
+// An AI route's worst case is `timeout x (retries + 1)`, and it must fit
+// inside maxDuration or the platform kills the function mid-flight and the
+// caller gets a raw 504 rather than any error this code produces. This route
+// asks for up to 16,000 tokens of ordered isolation steps,
+// and previously declared no ceiling at all — so it inherited the platform
+// default, which is far shorter than a single model call.
+export const runtime     = 'nodejs'
+export const maxDuration = 300
+
 // Anthropic client comes from the shared lib/ai/client wrapper so
 // every AI route inherits the same timeout, retry, and key-handling
 // posture. The wrapper resolves the tenant override (or env fallback)
@@ -183,7 +192,7 @@ export async function POST(req: NextRequest) {
     // (502) — aiErrorToResponse maps both to clear operator messages.
     let client: Anthropic
     try {
-      client = await getAnthropic(gate.tenantId)
+      client = await getAnthropic(gate.tenantId, { timeoutMs: 240_000, maxRetries: 0 })
     } catch (err) {
       const mapped = aiErrorToResponse(err, 'generate-loto-steps')
       Sentry.captureException(err, { tags: { ...mapped.tags, route: '/api/generate-loto-steps' } })

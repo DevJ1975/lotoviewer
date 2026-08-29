@@ -35,31 +35,33 @@ export function useFormDraft<T>(
 
   // Read the draft exactly once on first render — putting it inside the
   // useState initializer avoids a re-render-induced restore flash.
-  const wasRestoredRef = useRef(false)
-  const [state, setStateRaw] = useState<T>(() => {
-    if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') return initial
+  // `restored` rides along in the same state object rather than a ref:
+  // callers render it, so React has to be told when it changes.
+  const [draft, setDraft] = useState<{ value: T; restored: boolean }>(() => {
+    const fresh = { value: initial, restored: false }
+    if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') return fresh
     try {
       const raw = sessionStorage.getItem(key)
-      if (!raw) return initial
+      if (!raw) return fresh
       const parsed = JSON.parse(raw) as Wrapper<T>
-      if (parsed?.v !== 1) return initial
+      if (parsed?.v !== 1) return fresh
       if (Date.now() - parsed.t > maxAgeMs) {
         sessionStorage.removeItem(key)
-        return initial
+        return fresh
       }
-      wasRestoredRef.current = true
-      return parsed.d
+      return { value: parsed.d, restored: true }
     } catch {
-      return initial
+      return fresh
     }
   })
+  const state = draft.value
 
   // Track the current `initial` reference so the save effect can detect
   // a clear() reset (which sets state back to initial) and skip writing.
   // Without this, clear() wiped storage, then the state update re-triggered
   // the save effect and the initial state got written right back.
   const initialRef = useRef(initial)
-  initialRef.current = initial
+  useEffect(() => { initialRef.current = initial }, [initial])
 
   // Persist on every change. Quota/private-mode writes are ignored —
   // draft persistence is a best-effort UX nicety, not load-bearing.
@@ -75,17 +77,19 @@ export function useFormDraft<T>(
   }, [key, state])
 
   const setState = useCallback((updater: T | ((prev: T) => T)) => {
-    setStateRaw(updater)
+    setDraft(prev => ({
+      value: typeof updater === 'function' ? (updater as (prev: T) => T)(prev.value) : updater,
+      restored: prev.restored,
+    }))
   }, [])
 
   const clear = useCallback(() => {
     try { sessionStorage.removeItem(key) } catch { /* ignore */ }
-    wasRestoredRef.current = false
-    setStateRaw(initial)
+    setDraft({ value: initial, restored: false })
     // Caller can choose to close the dialog after this — resetting to
     // `initial` here means a follow-up "Reopen the dialog without a
     // draft to restore" shows a clean form.
   }, [key, initial])
 
-  return [state, setState, clear, wasRestoredRef.current]
+  return [state, setState, clear, draft.restored]
 }

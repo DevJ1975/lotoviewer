@@ -190,7 +190,7 @@ function dedupeCitations(citations: EhsCitation[]): EhsCitation[] {
   const seen = new Set<string>()
   const out: EhsCitation[] = []
   for (const c of citations) {
-    const key = `${c.code} ${c.text}`
+    const key = `${c.code}\u0000${c.text}`
     if (seen.has(key)) continue
     seen.add(key)
     out.push(c)
