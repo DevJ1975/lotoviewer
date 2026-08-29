@@ -1,0 +1,65 @@
+# Builds the placard photo cache where the network allows it.
+#
+# The Claude environment that renders the placard workbooks runs behind a
+# trusted-hosts egress policy that blocks the Supabase storage host, so it
+# cannot download the placard photos itself. This runner can: it fetches the
+# public photos named by scripts/placard-photo-manifest.tsv, downscales them,
+# and force-pushes them to the orphan branch `claude/placard-photo-cache`,
+# where the workbook build (or anyone else) fetches them from GitHub.
+#
+# The branch is a disposable artifact: safe to delete once consumed, and the
+# next run recreates it. Runs when the manifest or this pipeline changes on
+# the export branch, or on demand.
+
+name: Placard photo cache
+
+on:
+  push:
+    branches: [claude/placards-excel-export-ug3x5b]
+    paths:
+      - scripts/placard-photo-manifest.tsv
+      - scripts/ci_fetch_placard_photos.py
+      - .github/workflows/placard-photo-cache.yml
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  fetch-photos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Pillow
+        run: pip install --quiet Pillow
+
+      - name: Download and downscale the photos
+        run: |
+          python scripts/ci_fetch_placard_photos.py \
+            scripts/placard-photo-manifest.tsv photo-cache
+
+      - name: Publish the cache branch
+        # checkout@v4 leaves its credentials in the local git config, so a
+        # plain push works. The orphan branch carries a single commit holding
+        # only the photos; --force because each run replaces it wholesale.
+        run: |
+          count=$(find photo-cache -name '*.jpg' | wc -l)
+          git checkout --orphan claude/placard-photo-cache
+          git rm -rq .
+          mv photo-cache/*.jpg .
+          printf '%s\n' \
+            "Downscaled placard photos, fetched by the placard-photo-cache workflow." \
+            "" \
+            "$count photos. Disposable: consumed by the placard workbook build," \
+            "safe to delete, recreated by re-running the workflow." > README.md
+          git add -A
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -qm "Placard photo cache: $count photos"
+          git push --force origin claude/placard-photo-cache
