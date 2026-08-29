@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { verifyInviteToken } from '@/lib/invites/tokens'
 import { checkMemoryRateLimit } from '@/lib/rateLimit/memory'
+import { clientIp } from '@/lib/rateLimit/clientIp'
+import { sanitizeError } from '@/lib/security/sanitizeError'
 
 // POST /api/invites/validate  { token }
 //
@@ -19,7 +21,7 @@ export type InviteValidateStatus =
   | 'cancelled' | 'already_active' | 'not_found'
 
 export async function POST(req: Request) {
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+  const ip = clientIp(req)
   const limit = checkMemoryRateLimit(`invite-validate:${ip}`, 30, 60_000)
   if (!limit.ok) {
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
@@ -38,21 +40,29 @@ export async function POST(req: Request) {
   // A cancelled invite must not be acceptable (mirrors the RLS gates from
   // migration 190 that stop cancelled memberships granting access).
   if (row.tenant_id) {
-    const { data: membership } = await admin
+    const { data: membership, error: membershipErr } = await admin
       .from('tenant_memberships')
       .select('invite_cancelled_at')
       .eq('user_id', row.user_id)
       .eq('tenant_id', row.tenant_id)
       .maybeSingle()
+    // Fail closed, and say so honestly: a 500 is retryable, whereas showing
+    // the setup form on an unreadable membership invites the recipient to
+    // start a flow /api/invites/accept will refuse.
+    if (membershipErr) return sanitizeError(membershipErr, 'invites/validate membership lookup')
     if (membership?.invite_cancelled_at) {
       return NextResponse.json({ status: 'cancelled' satisfies InviteValidateStatus })
     }
   }
 
   // Someone who already signed in has a working password of their own —
-  // point them at /login instead of silently rotating it.
-  const { data: authUser } = await admin.auth.admin.getUserById(row.user_id)
-  if (authUser?.user?.last_sign_in_at) {
+  // point them at /login instead of silently rotating it. Fail closed when
+  // the lookup itself fails, matching the write path in /accept.
+  const { data: authUser, error: authUserErr } = await admin.auth.admin.getUserById(row.user_id)
+  if (authUserErr || !authUser?.user) {
+    return sanitizeError(authUserErr ?? new Error('invite target not found'), 'invites/validate user lookup')
+  }
+  if (authUser.user.last_sign_in_at) {
     return NextResponse.json({ status: 'already_active' satisfies InviteValidateStatus })
   }
 

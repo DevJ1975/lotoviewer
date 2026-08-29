@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
+import { inviteIssueRateLimit } from '@/lib/rateLimit/inviteIssue'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
   ensureInvitedUser,
@@ -118,6 +119,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ number: string 
 export async function POST(req: Request, ctx: { params: Promise<{ number: string }> }) {
   const gate = await requireSuperadmin(req.headers.get('authorization'))
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
+  const limited = inviteIssueRateLimit(gate.userId)
+  if (limited) return limited
 
   const { number } = await ctx.params
   if (!isValidTenantNumber(number)) {

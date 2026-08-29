@@ -98,7 +98,7 @@ export default function IntegrityManualPage() {
           <strong>How it works.</strong> When a reviewer signs off on
           a placard through the client review portal, the rendered PDF
           is hashed in the browser with the Web Crypto API
-          (<code>crypto.subtle.digest('SHA-256', ...)</code>) and the
+          (<code>crypto.subtle.digest(&apos;SHA-256&apos;, ...)</code>) and the
           hex digest is persisted alongside the signoff in{' '}
           <code>loto_signed_pdf_artifacts</code>. The PDF bytes go to
           storage; the hash goes to the table.

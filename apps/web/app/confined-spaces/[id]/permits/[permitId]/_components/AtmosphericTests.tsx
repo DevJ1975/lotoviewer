@@ -14,6 +14,7 @@ import {
 } from '@soteria/core/confinedSpaceThresholds'
 import { bumpStatus, calibrationOverdue } from '@/lib/gasMeters'
 import { createMeterReader, meterReaderSupported } from '@/lib/meterReader'
+import { useNow } from '@/hooks/useNow'
 
 // ── Existing-test row ─────────────────────────────────────────────────────
 
@@ -94,6 +95,11 @@ export function NewTestForm({
   const [meterMessage, setMeterMessage] = useState<string | null>(null)
   const meterAvailable = meterReaderSupported()
 
+  // Bump/calibration windows are measured in hours, so a minute of drift is
+  // immaterial — but the status must not freeze at whenever the last render
+  // happened while the tester keeps the form open.
+  const now = useNow(60_000)
+
   // Update default kind when hint changes (e.g. after a pre-entry test lands).
   useEffect(() => { setKind(kindHint) }, [kindHint])
 
@@ -151,8 +157,8 @@ export function NewTestForm({
   // Bump-test status for the typed instrument id. Re-computed each render
   // — the lookup is a Map.get + a single Date parse, both negligible.
   const meterRow      = instrumentId.trim() ? meters.get(instrumentId.trim()) ?? null : null
-  const meterStatus   = bumpStatus(meterRow, Date.now())
-  const calOverdue    = calibrationOverdue(meterRow, Date.now())
+  const meterStatus   = bumpStatus(meterRow, now)
+  const calOverdue    = calibrationOverdue(meterRow, now)
 
   async function submit() {
     if (!userId) { setError('You must be logged in.'); return }

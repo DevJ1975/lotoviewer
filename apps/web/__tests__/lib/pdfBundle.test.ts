@@ -1,3 +1,15 @@
+/**
+ * @vitest-environment node
+ *
+ * sha256Hex goes through Web Crypto, and under the project-wide jsdom
+ * environment the SubtleCrypto implementation and the ArrayBuffer handed to it
+ * come from different realms — WebIDL then rejects the buffer outright
+ * ("2nd argument is not instance of ArrayBuffer"). Node 20 surfaces this; the
+ * newer Node most of us run locally does not, which is how it stayed hidden
+ * until CI started gating the whole suite. Nothing in this file touches the
+ * DOM, so the node environment is both the fix and the honest description of
+ * what is under test: one realm, the real Web Crypto.
+ */
 import { describe, it, expect } from 'vitest'
 import { PDFDocument } from 'pdf-lib'
 import { generateCompliancePdfBundle } from '@/lib/pdfBundle'

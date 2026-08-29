@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
+import { inviteIssueRateLimit } from '@/lib/rateLimit/inviteIssue'
 import {
   ensureInvitedUser,
   ensureTenantMembership,
@@ -66,6 +67,9 @@ async function rollbackInvite(admin: SupabaseClient, tenantId: string, userId: s
 export async function POST(req: Request) {
   const gate = await requireTenantAdmin(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
+  const limited = inviteIssueRateLimit(gate.userId)
+  if (limited) return limited
 
   let body: { email?: unknown; fullName?: unknown }
   try { body = await req.json() }
@@ -133,7 +137,20 @@ export async function POST(req: Request) {
     email,
     fullName: profileFullName,
     tempPassword,
-    inviteUrl,
+    // The raw invite link is a password-set credential for `userId`, so it
+    // goes back to the caller ONLY for an account this call brought into
+    // existence. profiles.email is globally unique (migration 003), so an
+    // address that already has an account is REUSED rather than duplicated —
+    // and an account that has never signed in is exactly the state of anyone
+    // holding an outstanding invite at another tenant. Returning the link for
+    // one of those handed this tenant's admin a working takeover primitive
+    // against a person they have no relationship with: add the address, read
+    // inviteUrl out of the response, set the password.
+    //
+    // Reused accounts still get their link — by email, to the address that
+    // owns it. tempPassword is already limited this way: provision.ts sets it
+    // only on the create path.
+    inviteUrl: createdAuthUser ? inviteUrl : undefined,
     emailSent,
     alreadyExisted,
     tenantId: gate.tenantId,

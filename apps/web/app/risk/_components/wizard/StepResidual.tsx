@@ -39,7 +39,7 @@ export default function StepResidual({ state, set }: Props) {
         {residualSet && acceptable === false && (
           <div className="mt-1 text-amber-700 dark:text-amber-400 font-semibold">
             Residual ({residualScore}) is above the acceptance threshold (≤ {acceptanceThreshold}).
-            The risk can't be marked Closed until residual is reduced — additional controls or
+            The risk can&apos;t be marked Closed until residual is reduced — additional controls or
             an exception approval will be required.
           </div>
         )}

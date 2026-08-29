@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
-import { AlertTriangle, ArrowRight, Loader2, ShieldAlert } from 'lucide-react'
+import { AlertTriangle, ShieldAlert } from 'lucide-react'
 import { fetchRiskMetrics, type RiskMetrics } from '@soteria/core/riskMetrics'
+import { DashboardPanel, PanelEyebrow, PanelLink } from '@/components/DashboardPanel'
+import OpsSpinner from '@/components/OpsSpinner'
 import { RiskBandPill } from '@/components/ui/RiskBandPill'
 import { useTenant } from '@/components/TenantProvider'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
@@ -63,34 +65,21 @@ export default function RiskKpiPanel() {
   if (error && !metrics) return null
 
   return (
-    <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5 space-y-4">
-      <header className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-            Risk Assessment · ISO 45001 6.1
-          </div>
-          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
-            Risk intelligence
-          </h2>
-        </div>
-        <Link
-          href="/risk"
-          className="text-xs font-semibold text-brand-navy hover:underline inline-flex items-center gap-1"
-        >
-          Heat map <ArrowRight className="h-3 w-3" />
-        </Link>
-      </header>
-
+    <DashboardPanel
+      eyebrow="Risk Assessment · ISO 45001 6.1"
+      title="Risk intelligence"
+      action={<PanelLink href="/risk">Heat map</PanelLink>}
+    >
       {loading && metrics === null ? (
         <div className="flex items-center justify-center py-6">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+          <OpsSpinner size="sm" label={null} />
         </div>
       ) : metrics === null ? (
         <p className="text-xs italic text-slate-400 py-2">No risks yet for this tenant.</p>
       ) : (
         <Inner metrics={metrics} />
       )}
-    </section>
+    </DashboardPanel>
   )
 }
 
@@ -131,9 +120,7 @@ function Inner({ metrics }: { metrics: RiskMetrics }) {
 
       {topResidualRisks.length > 0 && (
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">
-            Top risks by residual score
-          </div>
+          <PanelEyebrow className="mb-2">Top risks by residual score</PanelEyebrow>
           <ul className="space-y-1">
             {topResidualRisks.map(r => (
               <li key={r.id} className="flex items-center gap-2 text-sm">
