@@ -1,4 +1,4 @@
--- Migration 260: record why fleet_motor_vehicle_incidents is kept.
+-- Migration 261: record why fleet_motor_vehicle_incidents is kept.
 --
 -- The table has zero code references — no route, component, API handler,
 -- core module or test reads or writes it. That reads as an orphan, and an

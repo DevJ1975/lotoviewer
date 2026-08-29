@@ -131,34 +131,71 @@ export function computeTopByWorstCase(
 // Fetch
 // ──────────────────────────────────────────────────────────────────────────
 
+// Backstops, not business rules. A register this large means the read
+// is truncated, so hitting one warns instead of quietly under-counting.
+const MAX_ACTIVE_JHA_ROWS = 2_000
+const MAX_HAZARD_ROWS     = 10_000
+const MAX_CONTROL_ROWS    = 20_000
+
 export async function fetchJhaMetrics(): Promise<JhaMetrics | null> {
-  const [jhasRes, hazardsRes, ctrlsRes] = await Promise.all([
-    supabase.from('jhas').select('id, job_number, title, status, next_review_date'),
-    supabase.from('jha_hazards').select('id, jha_id, step_id, hazard_category, description, potential_severity, notes, tenant_id, created_at'),
-    supabase.from('jha_hazard_controls').select('id, jha_id, hazard_id, control_id, custom_name, hierarchy_level, notes, tenant_id, created_at'),
+  // Superseded revisions accumulate forever and feed exactly one number
+  // (the totalAll denominator), so they come back as a count rather than
+  // as rows — and their hazards/controls are joined out server-side
+  // instead of being shipped to the browser and filtered here.
+  const [activeRes, totalRes, hazardsRes, ctrlsRes] = await Promise.all([
+    supabase
+      .from('jhas')
+      .select('id, job_number, title, status, next_review_date', { count: 'exact' })
+      .neq('status', 'superseded')
+      .limit(MAX_ACTIVE_JHA_ROWS),
+    supabase
+      .from('jhas')
+      .select('id', { count: 'exact', head: true }),
+    supabase
+      .from('jha_hazards')
+      .select('id, jha_id, step_id, hazard_category, description, potential_severity, notes, tenant_id, created_at, jhas!inner(status)')
+      .neq('jhas.status', 'superseded')
+      .limit(MAX_HAZARD_ROWS),
+    supabase
+      .from('jha_hazard_controls')
+      .select('id, jha_id, hazard_id, control_id, custom_name, hierarchy_level, notes, tenant_id, created_at, jhas!inner(status)')
+      .neq('jhas.status', 'superseded')
+      .limit(MAX_CONTROL_ROWS),
   ])
 
-  if (jhasRes.error || hazardsRes.error || ctrlsRes.error) {
-    console.warn('[jhaMetrics] fetch failed', jhasRes.error ?? hazardsRes.error ?? ctrlsRes.error)
+  const error = activeRes.error ?? totalRes.error ?? hazardsRes.error ?? ctrlsRes.error
+  if (error) {
+    console.warn('[jhaMetrics] fetch failed', error)
     return null
   }
 
-  const allJhas  = (jhasRes.data    ?? []) as unknown as JhaRowForMetrics[]
+  const active   = (activeRes.data  ?? []) as unknown as JhaRowForMetrics[]
   const hazards  = (hazardsRes.data ?? []) as unknown as JhaHazard[]
   const controls = (ctrlsRes.data   ?? []) as unknown as JhaHazardControl[]
 
-  const active   = selectActiveJhas(allJhas)
+  if (active.length >= MAX_ACTIVE_JHA_ROWS || hazards.length >= MAX_HAZARD_ROWS || controls.length >= MAX_CONTROL_ROWS) {
+    console.warn(
+      `[jhaMetrics] row cap reached (jhas=${active.length}, hazards=${hazards.length}, controls=${controls.length}) — hazard counts cover the truncated read only`,
+    )
+  }
+
   const activeIds = new Set(active.map(r => r.id))
   const activeHazards = hazards.filter(h => activeIds.has(h.jha_id))
 
-  const byStatus = computeStatusDistribution(allJhas)
+  const totalAll = totalRes.count ?? active.length
+  const totalActive = activeRes.count ?? active.length
+
+  const byStatus = computeStatusDistribution(active)
+  // Superseded is the only status excluded from the fetch, so it's the
+  // remainder — every other bucket is already complete.
+  byStatus.superseded = Math.max(0, totalAll - totalActive)
 
   return {
-    totalActive:          active.length,
-    totalAll:             allJhas.length,
+    totalActive,
+    totalAll,
     byStatus,
     awaitingApproval:     byStatus.in_review,
-    overdueReview:        countOverdueReview(allJhas),
+    overdueReview:        countOverdueReview(active),
     highOrExtremeHazards: countHighOrExtremeHazards(activeIds, hazards),
     ppeAloneWarnings:     countPpeAloneWarnings(activeHazards, controls),
     topByWorstCase:       computeTopByWorstCase(active, hazards, 5),

@@ -108,7 +108,7 @@ export default function AnnualReviewPage() {
         <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block">Corrective actions
           <textarea value={actions} onChange={e => setActions(e.target.value)} rows={3} className="mt-1 block w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1.5 text-sm" />
         </label>
-        <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block">Signer's printed name (required to sign)
+        <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block">Signer&apos;s printed name (required to sign)
           <input value={signedName} onChange={e => setSignedName(e.target.value)} className="mt-1 block w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1.5 text-sm" />
         </label>
         <div className="flex gap-2">

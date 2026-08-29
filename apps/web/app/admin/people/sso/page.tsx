@@ -95,6 +95,14 @@ export default function SsoPage() {
 
   useEffect(() => { if (!authLoading && profile?.is_admin) void load() }, [authLoading, profile, load])
 
+  // Auto-clear the "Saved" indicator after 5s. Deriving the visibility
+  // from Date.now() during render would never re-render to hide it.
+  useEffect(() => {
+    if (savedAt == null) return
+    const t = setTimeout(() => setSavedAt(null), 5000)
+    return () => clearTimeout(t)
+  }, [savedAt])
+
   const dirty = useMemo(() => {
     if (!config) {
       // Treat unsaved-yet rows as dirty so the Save button is live.
@@ -288,7 +296,7 @@ export default function SsoPage() {
           )}
 
           <div className="flex items-center justify-end gap-3">
-            {savedAt && Date.now() - savedAt < 5000 && (
+            {savedAt != null && (
               <span className="text-[11px] text-emerald-700 dark:text-emerald-300">Saved.</span>
             )}
             <button

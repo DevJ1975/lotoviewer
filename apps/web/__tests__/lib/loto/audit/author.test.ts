@@ -24,6 +24,30 @@ const MODEL_RESULT: AuthorResult = {
       isolation_procedure_es: 'Abra el desconectador principal y aplique un candado a la aldaba.',
       method_of_verification_es: 'Intente reiniciar y confirme que no haya movimiento; mida cero voltaje en los conductores del motor.',
     },
+    // release_stored_energy + lockout are here because runAuthorAgent now runs
+    // validateProcedure on the draft and refuses one that still fails the gate
+    // it was invoked to fix. A corrected procedure must carry every required
+    // phase, so the golden-path fixture has to be a genuinely compliant one.
+    {
+      energy_type: 'P',
+      step_type: 'release_stored_energy',
+      tag_description: 'Pneumatic accumulator downstream of the FRL',
+      isolation_procedure: 'Bleed the accumulator through the manual dump valve until flow stops.',
+      method_of_verification: 'Observe the bleed port vent fully with no residual hiss.',
+      tag_description_es: 'Acumulador neumático aguas abajo del FRL',
+      isolation_procedure_es: 'Purgue el acumulador por la válvula de descarga manual hasta que cese el flujo.',
+      method_of_verification_es: 'Observe que el puerto de purga ventile por completo sin silbido residual.',
+    },
+    {
+      energy_type: 'E',
+      step_type: 'lockout',
+      tag_description: 'Main disconnect hasp',
+      isolation_procedure: 'Apply each authorized employee’s personal lock and tag to the hasp.',
+      method_of_verification: 'Confirm one lock per authorized employee is present on the hasp.',
+      tag_description_es: 'Aldaba del desconectador principal',
+      isolation_procedure_es: 'Aplique el candado y la etiqueta personal de cada empleado autorizado a la aldaba.',
+      method_of_verification_es: 'Confirme que haya un candado por empleado autorizado en la aldaba.',
+    },
     {
       energy_type: 'P',
       step_type: 'verify_zero_energy',
@@ -129,7 +153,7 @@ describe('runAuthorAgent — response parsing', () => {
     )
 
     expect(model).toBe('claude-sonnet-4-6')
-    expect(result.steps).toHaveLength(2)
+    expect(result.steps).toHaveLength(4)
     // The draft addresses the cited gap: a verify_zero_energy step is present.
     expect(result.steps.some(s => s.step_type === 'verify_zero_energy')).toBe(true)
     // The honesty rule produced a placeholder rather than a fabricated ID.

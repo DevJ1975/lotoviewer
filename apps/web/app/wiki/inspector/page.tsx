@@ -1,10 +1,19 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-05'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-08-28'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.0',
+    date: '2026-08-28',
+    changes: [
+      'Inspector URLs are now scoped to one organisation. The tenant is part of the signature, so a URL only ever shows the permits of the organisation it was minted in.',
+      'ACTION REQUIRED: URLs issued before this change no longer open. Mint a fresh one for any engagement still in progress.',
+      'Minting now requires an active organisation and confirms you are a member of it.',
+    ],
+  },
   { version: '1.0.0', date: '2026-05-05', changes: ['Initial inspector-access wiki page.'] },
 ]
 
@@ -38,11 +47,22 @@ export default function WikiInspectorPage() {
 
       <Section id="how" title="How the URL works">
         <p>
-          The URL is a stateless signed token — the date range, label, and
-          expiry are encoded in the signature, so revoking one URL doesn&apos;t
-          revoke the others. The inspector can&apos;t edit anything; the
-          page at <Link href="/inspector">/inspector</Link> verifies the
-          signature on every request.
+          The URL is a stateless signed token — the organisation, date range,
+          label, and expiry are all encoded in the signature, so revoking one
+          URL doesn&apos;t revoke the others. The inspector can&apos;t edit
+          anything; the page at <Link href="/inspector">/inspector</Link>
+          verifies the signature on every request.
+        </p>
+        <p>
+          Because the organisation is signed into the token, a URL shows the
+          permits of the organisation you minted it in and no other — and it
+          can&apos;t be re-pointed by editing the address bar. You must have an
+          organisation selected when you mint, and you must be a member of it.
+        </p>
+        <p>
+          <strong>URLs minted before 28 August 2026 no longer open.</strong>
+          They predate the organisation field, so they fail verification. If an
+          engagement is still running, mint a replacement and send that instead.
         </p>
       </Section>
 
@@ -70,10 +90,11 @@ export default function WikiInspectorPage() {
           },
           {
             q: 'What can the inspector do?',
-            a: <>Read every permit in the period and download attached PDFs.
-              They cannot: see other tenants, see anything outside the date
-              range, or modify any record. The inspector page renders without
-              a side drawer to prevent accidental over-exposure.</>,
+            a: <>Read every permit in the period, for the one organisation the
+              URL was minted in, and download attached PDFs. They cannot: see
+              another organisation, see anything outside the date range, or
+              modify any record. The inspector page renders without a side
+              drawer to prevent accidental over-exposure.</>,
           },
           {
             q: 'Is the inspector\'s activity logged?',
