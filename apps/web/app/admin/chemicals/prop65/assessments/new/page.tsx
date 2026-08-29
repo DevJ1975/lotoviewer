@@ -146,7 +146,7 @@ function NewAssessmentForm() {
         <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <ClipboardList className="h-6 w-6 text-brand-navy" /> New exposure assessment
         </h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Per §25249.6 — document the daily exposure relative to OEHHA's safe-harbor numbers.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Per §25249.6 — document the daily exposure relative to OEHHA&apos;s safe-harbor numbers.</p>
       </div>
 
       {error && <div className="rounded-md border border-rose-200 bg-rose-50 dark:bg-rose-950/40 px-3 py-2 text-xs text-rose-900 dark:text-rose-100">{error}</div>}

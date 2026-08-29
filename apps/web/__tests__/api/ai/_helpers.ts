@@ -113,7 +113,12 @@ export const getTenantApiKeyMock = vi.fn(
   async (_tenantId: string | null) => 'sk-ant-test-' + 'a'.repeat(40),
 )
 
-vi.mock('@/lib/ai/getTenantApiKey', () => ({
+vi.mock('@/lib/ai/getTenantApiKey', async () => ({
+  // Pass through everything real, then override only the fetch. Notably this
+  // keeps MalformedTenantKeyError: aiErrorToResponse() does an `instanceof`
+  // against it, so a route's error path would otherwise fail with "No export is
+  // defined" for a reason unrelated to what the test is checking.
+  ...await vi.importActual<typeof import('@/lib/ai/getTenantApiKey')>('@/lib/ai/getTenantApiKey'),
   getTenantApiKey: (tenantId: string | null) => getTenantApiKeyMock(tenantId),
   // Re-export the shape validator with its real implementation so
   // anything that imports it directly still gets the production

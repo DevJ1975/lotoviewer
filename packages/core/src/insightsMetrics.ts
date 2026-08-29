@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { zScore } from './statistics'
 import { evaluateTest, effectiveThresholds, type ThresholdSet } from './confinedSpaceThresholds'
 import type {
   AtmosphericTest,
@@ -23,6 +24,33 @@ import type {
 // summarizers directly.
 
 // ── Types ──────────────────────────────────────────────────────────────────
+
+// The summarizers below read a handful of columns each, and these Picks are
+// exactly what the orchestrator selects — so the query and the math can't
+// drift apart. Full rows still satisfy them, which is why every caller (and
+// every fixture) keeps working.
+
+export type TestRowForInsights = Pick<
+  AtmosphericTest,
+  'id' | 'permit_id' | 'tested_at' | 'o2_pct' | 'lel_pct' | 'h2s_ppm' | 'co_ppm'
+>
+
+export type PermitRowForInsights = Pick<
+  ConfinedSpacePermit,
+  | 'id'
+  | 'space_id'
+  | 'started_at'
+  | 'canceled_at'
+  | 'cancel_reason'
+  | 'entry_supervisor_id'
+  | 'entry_supervisor_signature_at'
+  | 'acceptable_conditions_override'
+>
+
+export type SpaceRowForInsights = Pick<
+  ConfinedSpace,
+  'space_id' | 'description' | 'acceptable_conditions'
+>
 
 export interface SpaceFailureRow {
   space_id:    string
@@ -99,22 +127,22 @@ const Z_MODERATE = 2
 // the window simply don't appear; that's fine — the rank list is for
 // "where to look harder," not "every space ever."
 export function computeSpaceFailureRows(args: {
-  tests:      AtmosphericTest[]
-  permits:    ConfinedSpacePermit[]
-  spaces:     ConfinedSpace[]
+  tests:      TestRowForInsights[]
+  permits:    PermitRowForInsights[]
+  spaces:     SpaceRowForInsights[]
   windowDays: number
   nowMs:      number
   // Per-permit threshold computer. Defaults to effectiveThresholds
   // against the parent space, which is what the runtime evaluator uses.
-  computeThresholds?: (permit: ConfinedSpacePermit, space: ConfinedSpace) => ThresholdSet
+  computeThresholds?: (permit: PermitRowForInsights, space: SpaceRowForInsights) => ThresholdSet
 }): SpaceFailureRow[] {
   const { tests, permits, spaces, windowDays, nowMs } = args
   const thresholdsFor = args.computeThresholds ?? effectiveThresholds
   const startMs = nowMs - windowDays * 24 * 60 * 60 * 1000
 
-  const permitById = new Map<string, ConfinedSpacePermit>()
+  const permitById = new Map<string, PermitRowForInsights>()
   for (const p of permits) permitById.set(p.id, p)
-  const spaceById = new Map<string, ConfinedSpace>()
+  const spaceById = new Map<string, SpaceRowForInsights>()
   for (const s of spaces) spaceById.set(s.space_id, s)
 
   // Aggregate per space.
@@ -168,8 +196,8 @@ export function computeSpaceFailureRows(args: {
 // Tests with null values for a channel are excluded from that channel's
 // stats but contribute to others.
 function buildBaselines(
-  tests:    AtmosphericTest[],
-  permits:  ConfinedSpacePermit[],
+  tests:    TestRowForInsights[],
+  permits:  PermitRowForInsights[],
   startMs:  number,    // start of the evaluation window
 ): Map<string, {
   o2:  { mean: number; std: number; n: number } | null
@@ -177,7 +205,7 @@ function buildBaselines(
   h2s: { mean: number; std: number; n: number } | null
   co:  { mean: number; std: number; n: number } | null
 }> {
-  const permitById = new Map<string, ConfinedSpacePermit>()
+  const permitById = new Map<string, PermitRowForInsights>()
   for (const p of permits) permitById.set(p.id, p)
 
   // First pass — collect raw values per (space, channel) for tests
@@ -237,15 +265,15 @@ function computeStat(values: number[]): { mean: number; std: number; n: number }
 // for the channel — small spaces don't produce false positives just
 // because their stdev is tiny.
 export function computeAnomalies(args: {
-  tests:      AtmosphericTest[]      // all tests, for baseline + window slice
-  permits:    ConfinedSpacePermit[]
+  tests:      TestRowForInsights[]   // window slice + the history behind it
+  permits:    PermitRowForInsights[]
   windowDays: number
   nowMs:      number
 }): ReadingAnomaly[] {
   const { tests, permits, windowDays, nowMs } = args
   const startMs = nowMs - windowDays * 24 * 60 * 60 * 1000
   const baselines = buildBaselines(tests, permits, startMs)
-  const permitById = new Map<string, ConfinedSpacePermit>()
+  const permitById = new Map<string, PermitRowForInsights>()
   for (const p of permits) permitById.set(p.id, p)
 
   const out: ReadingAnomaly[] = []
@@ -273,7 +301,8 @@ export function computeAnomalies(args: {
       // safely below real measurement noise — atmospheric readings are
       // reported to 1-2 decimals — so anything below it is FP only.
       if (stat.std < 1e-6) continue
-      const z = (value - stat.mean) / stat.std
+      const z = zScore(value, stat.mean, stat.std)
+      if (z == null) continue
       const az = Math.abs(z)
       if (az < Z_MODERATE) continue
       out.push({
@@ -303,7 +332,7 @@ export function computeAnomalies(args: {
 
 // Per-supervisor activity summary in a window.
 export function computeSupervisorRows(args: {
-  permits:    ConfinedSpacePermit[]
+  permits:    PermitRowForInsights[]
   windowDays: number
   nowMs:      number
 }): SupervisorRow[] {
@@ -363,24 +392,77 @@ export function computeSupervisorRows(args: {
 
 // ── Orchestrator ───────────────────────────────────────────────────────────
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
+// Anomaly baselines are built from readings OLDER than the evaluation
+// window, so a floor at the window start would erase them — this is the
+// extra history the read reaches back for. At MIN_BASELINE_SAMPLES (8)
+// readings per space+channel, a year of prior history covers any space
+// tested more than about every six weeks. A space tested less often than
+// that loses its baseline once its 8th-oldest reading ages past the
+// floor, and that is the intended answer: a baseline assembled from
+// readings several years old describes a different space than the one in
+// service today.
+export const BASELINE_LOOKBACK_DAYS = 365
+
+// Permits can open shortly before a reading is taken, so they're read a
+// little further back than tests — otherwise an in-range reading would
+// lose its space and drop out of the ranking.
+const PERMIT_LEAD_DAYS = 30
+
+// Backstops, not business rules. Reached only by a tenant running an
+// implausible number of entries; hitting one warns rather than silently
+// skewing the page.
+const MAX_TEST_ROWS   = 20_000
+const MAX_PERMIT_ROWS = 5_000
+const MAX_SPACE_ROWS  = 2_000
+
 export async function fetchInsightsMetrics(windowDays: number = 90): Promise<InsightsMetrics> {
-  // Ranking + anomaly detection both want the FULL test history (for
-  // baselines), so we don't filter at the DB. Permits are bounded by
-  // started_at because canceling outside the window doesn't change
-  // who issued them in the window.
+  const nowMs         = Date.now()
+  const windowStartMs = nowMs - windowDays * DAY_MS
+  const testFloor     = new Date(windowStartMs - BASELINE_LOOKBACK_DAYS * DAY_MS).toISOString()
+  const permitFloor   = new Date(windowStartMs - (BASELINE_LOOKBACK_DAYS + PERMIT_LEAD_DAYS) * DAY_MS).toISOString()
+
+  // Ranking and supervisor rows only look inside the window; anomaly
+  // baselines look at the history behind it. Neither ever looks further
+  // back than the floors above, so the read is bounded by time rather
+  // than by how long the tenant has been operating. Ordering is
+  // newest-first so a cap, if it ever bites, drops the oldest baseline
+  // history and leaves the displayed window intact.
   const [permitsRes, testsRes, spacesRes] = await Promise.all([
-    supabase.from('loto_confined_space_permits').select('*'),
-    supabase.from('loto_atmospheric_tests').select('*'),
-    supabase.from('loto_confined_spaces').select('*'),
+    supabase
+      .from('loto_confined_space_permits')
+      .select('id, space_id, started_at, canceled_at, cancel_reason, entry_supervisor_id, entry_supervisor_signature_at, acceptable_conditions_override')
+      .gte('started_at', permitFloor)
+      .order('started_at', { ascending: false })
+      .limit(MAX_PERMIT_ROWS),
+    supabase
+      .from('loto_atmospheric_tests')
+      .select('id, permit_id, tested_at, o2_pct, lel_pct, h2s_ppm, co_ppm')
+      .gte('tested_at', testFloor)
+      .order('tested_at', { ascending: false })
+      .limit(MAX_TEST_ROWS),
+    // The space registry is a catalogue, not a log, so no date floor
+    // applies. Decommissioned spaces stay in: their readings still count
+    // toward the window they were taken in.
+    supabase
+      .from('loto_confined_spaces')
+      .select('space_id, description, acceptable_conditions')
+      .limit(MAX_SPACE_ROWS),
   ])
   if (permitsRes.error) throw new Error(`permits: ${permitsRes.error.message}`)
   if (testsRes.error)   throw new Error(`tests: ${testsRes.error.message}`)
   if (spacesRes.error)  throw new Error(`spaces: ${spacesRes.error.message}`)
 
-  const permits = (permitsRes.data ?? []) as ConfinedSpacePermit[]
-  const tests   = (testsRes.data   ?? []) as AtmosphericTest[]
-  const spaces  = (spacesRes.data  ?? []) as ConfinedSpace[]
-  const nowMs   = Date.now()
+  const permits = (permitsRes.data ?? []) as PermitRowForInsights[]
+  const tests   = (testsRes.data   ?? []) as TestRowForInsights[]
+  const spaces  = (spacesRes.data  ?? []) as SpaceRowForInsights[]
+
+  if (permits.length >= MAX_PERMIT_ROWS || tests.length >= MAX_TEST_ROWS || spaces.length >= MAX_SPACE_ROWS) {
+    console.warn(
+      `[insightsMetrics] row cap reached (permits=${permits.length}, tests=${tests.length}, spaces=${spaces.length}) — rankings and baselines cover the truncated read only`,
+    )
+  }
 
   return {
     windowDays,

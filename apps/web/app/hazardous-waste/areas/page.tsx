@@ -27,6 +27,7 @@ const AREA_TYPE_OPTIONS: ReadonlyArray<{ value: HazardousWasteAreaType; label: s
 
 export default function HazardousWasteAreasPage() {
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const { profile } = useAuth()
   const canWrite = !!profile?.is_admin || !!profile?.is_superadmin
 
@@ -35,11 +36,11 @@ export default function HazardousWasteAreasPage() {
   const [showArchived, setShowArchived] = useState(false)
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     setError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+      const headers: Record<string, string> = { 'x-active-tenant': tenantId }
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
       const url = `/api/hazardous-waste/areas${showArchived ? '?include_archived=true' : ''}`
       const res = await fetch(url, { headers })
@@ -49,7 +50,7 @@ export default function HazardousWasteAreasPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [tenant?.id, showArchived])
+  }, [tenantId, showArchived])
 
   useEffect(() => { void load() }, [load])
 

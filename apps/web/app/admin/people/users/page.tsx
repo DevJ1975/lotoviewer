@@ -67,7 +67,7 @@ export default function AdminUsersPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [removeTarget, setRemoveTarget] = useState<AdminUserRow | null>(null)
 
-  const [justInvited, setJustInvited] = useState<{ email: string; fullName: string; tempPassword: string; emailSent: boolean } | null>(null)
+  const [justInvited, setJustInvited] = useState<{ email: string; fullName: string; tempPassword?: string; inviteUrl?: string; emailSent: boolean } | null>(null)
   const [copied, setCopied] = useState(false)
 
   const form = useForm<InviteValues>({
@@ -122,6 +122,7 @@ export default function AdminUsersPage() {
       email:        body.email,
       fullName:     body.fullName ?? '',
       tempPassword: body.tempPassword,
+      inviteUrl:    body.inviteUrl,
       emailSent:    body.emailSent === true,
     })
     if (body.emailSent === true) {
@@ -152,6 +153,21 @@ export default function AdminUsersPage() {
   const emailTemplate = useMemo(() => {
     if (!justInvited) return ''
     const displayName = justInvited.fullName || justInvited.email.split('@')[0]
+    if (justInvited.inviteUrl) {
+      return `Hi ${displayName},
+
+You've been invited to SoteriaField. Set up your account here:
+
+  ${justInvited.inviteUrl}
+
+The link is just for you — it can be used once, and it lets you choose
+your own password (at least 8 characters).
+
+If you have any trouble, reply to this email.
+
+— Jamil
+jamil@trainovations.com`
+    }
     return `Hi ${displayName},
 
 You've been invited to SoteriaField. Here's how to log in for the first time:
@@ -159,7 +175,7 @@ You've been invited to SoteriaField. Here's how to log in for the first time:
 1. Open SoteriaField in your browser.
 2. Sign in with:
      Email:     ${justInvited.email}
-     Password:  ${justInvited.tempPassword}
+     Password:  ${justInvited.tempPassword ?? '(ask your admin)'}
 3. On your first login you'll be asked to confirm your full name and set a new password of your own. Please use a password at least 8 characters long.
 
 The temporary password above only works until you change it, and you must change it on first login.
@@ -315,31 +331,53 @@ jamil@trainovations.com`
                 <Check className="h-4 w-4" /> Invitation emailed to {justInvited.email}
               </h2>
               <p className="text-xs text-emerald-800 dark:text-emerald-200 mt-1">
-                {(justInvited.fullName || justInvited.email.split('@')[0])} will receive a sign-in link with their one-time password.
-                On first login they&apos;ll be required to set their own password (≥ 8 characters).
+                {(justInvited.fullName || justInvited.email.split('@')[0])} will receive a single-use invite link to choose
+                their own password (≥ 8 characters). No password is sent in the email.
               </p>
-              <details className="mt-3 text-xs text-emerald-900 dark:text-emerald-100">
-                <summary className="cursor-pointer font-semibold hover:underline">
-                  Show one-time password (in case the email gets lost)
-                </summary>
-                <div className="mt-2 inline-flex items-center gap-2 bg-white dark:bg-slate-900 rounded-md px-3 py-1.5 ring-1 ring-emerald-200">
-                  <code className="text-sm font-mono tracking-wide">{justInvited.tempPassword}</code>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(justInvited.tempPassword)
-                        setCopied(true); setTimeout(() => setCopied(false), 1500)
-                      } catch { /* ignore */ }
-                    }}
-                    className="text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100"
-                    aria-label="Copy password"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </button>
-                  {copied && <span className="text-[11px] text-emerald-700 dark:text-emerald-300">copied</span>}
-                </div>
-              </details>
+              {(justInvited.inviteUrl || justInvited.tempPassword) && (
+                <details className="mt-3 text-xs text-emerald-900 dark:text-emerald-100">
+                  <summary className="cursor-pointer font-semibold hover:underline">
+                    Show manual fallback (in case the email gets lost)
+                  </summary>
+                  {justInvited.inviteUrl && (
+                    <div className="mt-2 flex items-center gap-2 bg-white dark:bg-slate-900 rounded-md px-3 py-1.5 ring-1 ring-emerald-200">
+                      <code className="text-[11px] font-mono break-all min-w-0">{justInvited.inviteUrl}</code>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(justInvited.inviteUrl!)
+                            setCopied(true); setTimeout(() => setCopied(false), 1500)
+                          } catch { /* ignore */ }
+                        }}
+                        className="text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 shrink-0"
+                        aria-label="Copy invite link"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                  {justInvited.tempPassword && (
+                    <div className="mt-2 inline-flex items-center gap-2 bg-white dark:bg-slate-900 rounded-md px-3 py-1.5 ring-1 ring-emerald-200">
+                      <code className="text-sm font-mono tracking-wide">{justInvited.tempPassword}</code>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(justInvited.tempPassword!)
+                            setCopied(true); setTimeout(() => setCopied(false), 1500)
+                          } catch { /* ignore */ }
+                        }}
+                        className="text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100"
+                        aria-label="Copy password"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                  {copied && <span className="ml-2 text-[11px] text-emerald-700 dark:text-emerald-300">copied</span>}
+                </details>
+              )}
             </div>
           </div>
         </section>
@@ -352,7 +390,7 @@ jamil@trainovations.com`
               <h2 className="text-sm font-bold text-amber-900 dark:text-amber-100">Invite created — email not sent</h2>
               <p className="text-xs text-amber-800 dark:text-amber-200 mt-0.5">
                 The user is created but Resend isn&apos;t configured (or the send failed). Copy this into your email to {justInvited.email}.
-                The password is shown once; save it if you lose the window.
+                The invite link/password is shown once; save it if you lose the window.
               </p>
             </div>
             <Button

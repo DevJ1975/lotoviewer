@@ -80,12 +80,12 @@ describe('POST /api/superadmin/tenants/[number]/members (invite)', () => {
     expect(body.alreadyExisted).toBe(true)
     expect(body.tempPassword).toBeUndefined()
     expect(authAdminMock.createUser).not.toHaveBeenCalled()
-    // Notification email goes out with empty tempPassword — the helper
+    // Notification email goes out with empty inviteUrl — the helper
     // renders the "you've been added to {tenant}" template.
     expect(sendInviteEmailMock).toHaveBeenCalledWith(expect.objectContaining({
-      to:           'jane@x.com',
-      tenantName:   'Snak King',
-      tempPassword: '',
+      to:         'jane@x.com',
+      tenantName: 'Snak King',
+      inviteUrl:  '',
     }))
   })
 
@@ -103,13 +103,19 @@ describe('POST /api/superadmin/tenants/[number]/members (invite)', () => {
     const body = await r.json()
     expect(body.alreadyExisted).toBe(false)
     expect(body.tempPassword).toBe('TempPass123!')
+    expect(body.inviteUrl).toContain('/accept-invite?token=')
     expect(body.emailSent).toBe(true)
     expect(authAdminMock.createUser).toHaveBeenCalledWith(expect.objectContaining({ email: 'jane@x.com' }))
-    expect(sendInviteEmailMock).toHaveBeenCalledWith(expect.objectContaining({
-      to:           'jane@x.com',
-      tenantName:   'Snak King',
-      tempPassword: 'TempPass123!',
-    }))
+    // The email carries the accept-invite link — never the password.
+    const emailArgs = sendInviteEmailMock.mock.calls[0]![0] as Record<string, unknown>
+    expect(emailArgs.to).toBe('jane@x.com')
+    expect(emailArgs.tenantName).toBe('Snak King')
+    expect(emailArgs.inviteUrl).toContain('/accept-invite?token=')
+    expect(emailArgs).not.toHaveProperty('tempPassword')
+    // A hashed token row was minted for the link.
+    expect(mockState.inserts.find(i => i.table === 'invite_tokens')?.payload).toMatchObject({
+      user_id: 'NEW', tenant_id: 'T1', email: 'jane@x.com',
+    })
   })
 
   it('existing auth user without a matching profile: attaches membership instead of failing createUser', async () => {
@@ -119,8 +125,11 @@ describe('POST /api/superadmin/tenants/[number]/members (invite)', () => {
       data: { user: null },
       error: { message: 'A user with this email address has already been registered' },
     })
-    authAdminMock.listUsers.mockResolvedValue({
-      data: { users: [{ id: 'AUTH-ONLY', email: 'Jane@X.com', user_metadata: {} }] },
+    // Stale-account repair now resolves the auth user via the indexed
+    // lookup (migration 248) instead of paging listUsers.
+    mockState.queue('rpc:auth_user_id_by_email', { data: 'AUTH-ONLY', error: null })
+    authAdminMock.getUserById.mockResolvedValue({
+      data: { user: { id: 'AUTH-ONLY', email: 'Jane@X.com', user_metadata: {} } },
       error: null,
     })
     mockState.queue('profiles', { data: null, error: null })             // no profile by auth id
@@ -134,16 +143,20 @@ describe('POST /api/superadmin/tenants/[number]/members (invite)', () => {
     expect(body.alreadyExisted).toBe(true)
     expect(body.tempPassword).toBeUndefined()
 
-    expect(authAdminMock.listUsers).toHaveBeenCalled()
+    expect(mockState.rpcCalls.find(c => c.name === 'auth_user_id_by_email')).toBeTruthy()
+    expect(authAdminMock.listUsers).not.toHaveBeenCalled()
+    // A stale auth user that never signed in has no usable password, so
+    // the repaired profile keeps must_change_password and gets a real
+    // invite LINK — not the passwordless "you've been added" notice.
     expect(mockState.inserts.find(i => i.table === 'profiles')?.payload).toMatchObject({
-      id: 'AUTH-ONLY', email: 'jane@x.com', full_name: 'Jane', must_change_password: false,
+      id: 'AUTH-ONLY', email: 'jane@x.com', full_name: 'Jane', must_change_password: true,
     })
     expect(mockState.inserts.find(i => i.table === 'tenant_memberships')?.payload).toMatchObject({
       user_id: 'AUTH-ONLY', tenant_id: 'T1', role: 'member',
     })
-    expect(sendInviteEmailMock).toHaveBeenCalledWith(expect.objectContaining({
-      to: 'jane@x.com', tempPassword: '',
-    }))
+    const emailArgs = sendInviteEmailMock.mock.calls[0]![0] as Record<string, unknown>
+    expect(emailArgs.to).toBe('jane@x.com')
+    expect(emailArgs.inviteUrl).toContain('/accept-invite?token=')
   })
 
   it('returns 409 when membership already exists (PG 23505 on insert)', async () => {
