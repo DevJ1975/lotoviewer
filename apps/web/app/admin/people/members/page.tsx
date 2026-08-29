@@ -13,19 +13,21 @@ import {
   ShieldAlert,
   UserRoundCog,
   Users,
+  UserRoundX,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
+import MemberAccessBadge from '@/components/MemberAccessBadge'
 import { listAdminMembers } from '@/lib/members/client'
-import type { MemberSearchResult } from '@/lib/members/types'
+import type { AdminMemberRow } from '@/lib/members/types'
 
 export default function AdminMembersPage() {
   const { profile, loading: authLoading } = useAuth()
   const { tenantId } = useTenant()
-  const [members, setMembers] = useState<MemberSearchResult[]>([])
+  const [members, setMembers] = useState<AdminMemberRow[]>([])
   const [q, setQ] = useState('')
   const [includeArchived, setIncludeArchived] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -56,7 +58,8 @@ export default function AdminMembersPage() {
     const active = members.filter(m => m.status === 'active').length
     const login = members.filter(m => !!m.profile_id).length
     const restricted = members.filter(m => m.readiness_status === 'restricted').length
-    return { active, login, restricted, total: members.length }
+    const lockedOut = members.filter(m => m.access_state === 'locked_out').length
+    return { active, login, restricted, lockedOut, total: members.length }
   }, [members])
 
   function exportCsv() {
@@ -105,10 +108,11 @@ export default function AdminMembersPage() {
         </Button>
       </header>
 
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Metric icon={<Users className="h-4 w-4" />} label="Total" value={stats.total} />
         <Metric icon={<BadgeCheck className="h-4 w-4" />} label="Active" value={stats.active} />
         <Metric icon={<UserRoundCog className="h-4 w-4" />} label="Login access" value={stats.login} />
+        <Metric icon={<UserRoundX className="h-4 w-4" />} label="Locked out" value={stats.lockedOut} tone={stats.lockedOut > 0 ? 'warn' : 'normal'} />
         <Metric icon={<ShieldAlert className="h-4 w-4" />} label="Restricted" value={stats.restricted} tone={stats.restricted > 0 ? 'warn' : 'normal'} />
       </section>
 
@@ -174,6 +178,9 @@ export default function AdminMembersPage() {
                   <p className="mt-1 text-xs text-slate-500">{m.supervisor_name ? `Supervisor: ${m.supervisor_name}` : 'No supervisor assigned'}</p>
                 </div>
                 <div className="flex items-center justify-between gap-3 lg:justify-end">
+                  {(m.access_state === 'locked_out' || m.access_state === 'setup_pending') && (
+                    <MemberAccessBadge state={m.access_state} />
+                  )}
                   <span className={`safety-tag ${m.status === 'active' ? 'safety-tag-cleared' : 'safety-tag-caution'}`}>{m.status}</span>
                   <BriefcaseBusiness className="h-4 w-4 text-slate-400" />
                 </div>

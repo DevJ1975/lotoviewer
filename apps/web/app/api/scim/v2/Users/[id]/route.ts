@@ -36,7 +36,7 @@ async function authenticate(req: NextRequest): Promise<AuthResult> {
   const admin = supabaseAdmin()
   const { data: row, error } = await admin
     .from('scim_tokens')
-    .select('id, tenant_id, revoked_at')
+    .select('id, tenant_id, revoked_at, tenants:tenant_id(disabled_at)')
     .eq('token_hash', tokenHash)
     .maybeSingle()
   if (error) {
@@ -44,6 +44,20 @@ async function authenticate(req: NextRequest): Promise<AuthResult> {
     return { ok: false, status: 500, detail: 'Auth lookup failed' }
   }
   if (!row || row.revoked_at) {
+    return { ok: false, status: 401, detail: 'Invalid or revoked token' }
+  }
+  // Disabling a tenant is the offboarding lever, and it works by excluding the
+  // tenant from current_user_tenant_ids() so RLS hides its data. SCIM queries
+  // run through supabaseAdmin(), which is not subject to RLS — so without this
+  // check a suspended customer's IdP kept reading and mutating the full
+  // workforce roster indefinitely. Disabling deliberately does not delete the
+  // token rows (they are retained for audit), so the token itself stays valid
+  // unless the tenant is consulted here. Same drift tenantGate warns about:
+  // once a route reaches for the service-role client, its own gate IS the
+  // access control.
+  const embedded = (row as { tenants?: { disabled_at?: string | null } | Array<{ disabled_at?: string | null }> | null }).tenants
+  const tenantRow = Array.isArray(embedded) ? embedded[0] : embedded
+  if (tenantRow?.disabled_at) {
     return { ok: false, status: 401, detail: 'Invalid or revoked token' }
   }
   void admin.from('scim_tokens').update({ last_used_at: new Date().toISOString() }).eq('id', row.id)

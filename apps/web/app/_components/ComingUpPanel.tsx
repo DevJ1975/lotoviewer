@@ -70,11 +70,15 @@ export default function ComingUpPanel() {
     return () => clearInterval(id)
   }, [tenantLoading, visible, load])
 
-  // Hide entirely for tenants without the module, and on a first-load failure
-  // — the panel is informational, so a transient error shouldn't break the
-  // dashboard (Sentry already captured it).
+  // Hide entirely for tenants without the module, and on a fetch failure — the
+  // panel is informational, so a transient error shouldn't break the dashboard
+  // (Sentry already captured it). fetchComingUpUpdates returns null ONLY on a
+  // query error (a genuinely empty result is []), so `updates === null` after
+  // loading means the fetch failed: hide rather than render the reassuring
+  // "nothing on the horizon" empty state, which would disguise an error as a
+  // clean bill of health on a compliance panel.
   if (tenantLoading || !visible) return null
-  if (error && !updates) return null
+  if (!loading && (error !== null || updates === null)) return null
 
   const todayIso = new Date().toISOString().slice(0, 10)
   const coming = updates

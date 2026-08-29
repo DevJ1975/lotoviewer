@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import type { MemberProfilePatch, MemberSearchResult, MemberSummary } from '@/lib/members/types'
+import type { AdminMemberRow, MemberProfilePatch, MemberSearchResult, MemberSummary } from '@/lib/members/types'
 
 async function authHeader(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession()
@@ -65,7 +65,7 @@ export async function updateMyMemberProfile(
 export async function listAdminMembers(
   tenantId: string,
   opts: { q?: string; includeArchived?: boolean; limit?: number } = {},
-): Promise<MemberSearchResult[]> {
+): Promise<AdminMemberRow[]> {
   const u = new URL('/api/admin/members', window.location.origin)
   if (opts.q) u.searchParams.set('q', opts.q)
   if (opts.includeArchived) u.searchParams.set('includeArchived', '1')
@@ -73,7 +73,7 @@ export async function listAdminMembers(
   const res = await fetch(u.pathname + u.search, {
     headers: { ...tenantHeader(tenantId), ...(await authHeader()) },
   })
-  const json = await readJson<{ members: MemberSearchResult[] }>(res)
+  const json = await readJson<{ members: AdminMemberRow[] }>(res)
   return json.members
 }
 

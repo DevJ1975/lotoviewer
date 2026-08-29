@@ -27,6 +27,7 @@ type FindingDraft = Pick<HazardousWasteInspectionFinding, 'check_id'> & {
 
 export default function NewHazardousWasteInspectionPage() {
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const router = useRouter()
   const search = useSearchParams()
   const initialAreaId = search.get('area') ?? ''
@@ -47,11 +48,11 @@ export default function NewHazardousWasteInspectionPage() {
   const [draftId] = useState(() => crypto.randomUUID())
 
   const loadAreas = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     setLoadError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+      const headers: Record<string, string> = { 'x-active-tenant': tenantId }
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
       const res = await fetch('/api/hazardous-waste/areas', { headers })
       const body = await res.json()
@@ -60,7 +61,7 @@ export default function NewHazardousWasteInspectionPage() {
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : String(e))
     }
-  }, [tenant?.id])
+  }, [tenantId])
 
   useEffect(() => { void loadAreas() }, [loadAreas])
 

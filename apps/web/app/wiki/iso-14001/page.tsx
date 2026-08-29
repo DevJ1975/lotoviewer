@@ -15,6 +15,13 @@ import {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.1.0',
+    date: '2026-08-19',
+    changes: [
+      'Rewrote "How Soteria supports an EMS" — it claimed no ISO 14001 clause-evidence map shipped, which stopped being true when the aspects, objectives, management-review, and nonconformity registers landed. Now describes the live Environmental module, the clause map, and the audit-readiness report card, and is explicit that two clauses (7.5 documented information, 9.2 internal audit) still have no register in the platform.',
+    ],
+  },
+  {
     version: '1.0.0',
     date: '2026-05-24',
     changes: [
@@ -28,9 +35,9 @@ export default function WikiIso14001Page() {
     <WikiPage
       title={MANUAL_TITLE}
       subtitle={MANUAL_SUBTITLE}
-      modulePath={null}
+      modulePath="/environmental"
       audience="admin"
-      category="Admin"
+      category="Safety"
       version={MANUAL_VERSION}
       lastUpdated={MANUAL_LAST_UPDATED}
       changelog={CHANGELOG}

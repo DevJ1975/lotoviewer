@@ -59,7 +59,7 @@ export default function StepReview({ state, set }: Props) {
         {' '}
         <strong>Extreme</strong> 90 days · <strong>High</strong> 180 days
         · <strong>Moderate</strong> annually · <strong>Low</strong> 2 years.
-        We've pre-filled today + cadence based on the
+        We&apos;ve pre-filled today + cadence based on the
         {' '}
         {residualScore != null ? <strong>residual</strong> : <strong>inherent</strong>}
         {' '}band ({band ?? 'unset'}); change it if your program calls for a tighter window.

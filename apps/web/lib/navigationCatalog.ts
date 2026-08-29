@@ -109,6 +109,7 @@ const MODULE_GROUPS: Record<string, NavigationGroupId> = {
   'working-at-heights': 'permits-controls',
   prop65: 'permits-controls',
   em385: 'permits-controls',
+  environmental: 'permits-controls',
   // Internal (no drawer row), but mapped so the coverage test can assert
   // MODULE_GROUPS is exhaustive without carving out an exception.
   'osha-reg-watch': 'reporting',
@@ -156,6 +157,7 @@ const KEYWORDS: Record<string, string[]> = {
   'working-at-heights': ['fall protection', 'harness', 'lanyard', 'srl', 'ladder', 'anchor', 'rescue', 'osha 1910.28', 'osha 1926.501', 'ansi z359'],
   'hot-work': ['permit', 'fire watch', 'spark'],
   'confined-spaces': ['permit', 'entry', 'atmosphere'],
+  environmental: ['iso 14001', 'ems', 'aspects', 'impacts', 'objectives', 'nonconformity', 'capa', 'management review', 'audit readiness', 'report card'],
   jha: ['job hazard analysis', 'task', 'hazard'],
   'fleet-safety': ['fleet', 'vehicle', 'truck', 'driver', 'journey', 'trip', 'road', 'dot', 'hazmat', 'placard', 'license', 'insurance', 'registration'],
   strike: ['training', 'microlearning', 'lesson'],
