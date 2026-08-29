@@ -13,9 +13,12 @@ straight into `build`.
 
 Only URLs inside the project's public loto-photos bucket are accepted; a
 manifest line pointing anywhere else fails the run rather than being
-fetched. The exit code is non-zero if any photo could not be fetched, but
-the photos that did succeed are kept — the workbook build degrades per
-slot, never per run.
+fetched. A photo that fails to download is recorded in MISSING.txt beside
+the cache and costs its own slot only: the run still succeeds and
+publishes everything that was fetched. The first run proved why this must
+not be an exit code — 3 stale database rows pointing at deleted storage
+objects failed the job after 993 good photos had already been downloaded,
+and the job discarded all of them.
 """
 
 import sys
@@ -32,7 +35,8 @@ PHOTO_MAX_PX = 900
 def main() -> int:
     manifest, out_dir = Path(sys.argv[1]), Path(sys.argv[2])
     out_dir.mkdir(parents=True, exist_ok=True)
-    ok = failed = 0
+    ok = 0
+    missing: list[str] = []
     for line in manifest.read_text("utf-8").splitlines():
         if not line.strip():
             continue
@@ -58,9 +62,16 @@ def main() -> int:
         except Exception as error:  # noqa: BLE001 — one bad photo, one lost slot
             print(f"failed {equipment_id} {kind}: {error}", file=sys.stderr)
             partial.unlink(missing_ok=True)
-            failed += 1
-    print(f"{ok} photos cached, {failed} failed")
-    return 1 if failed else 0
+            missing.append(f"{equipment_id}\t{kind}\t{url}\t{error}")
+    if missing:
+        (out_dir / "MISSING.txt").write_text(
+            "Photos referenced by the database that could not be fetched.\n"
+            "These placard slots keep the placeholder; fix the photo in\n"
+            "Soteria Field and re-run the workflow.\n\n"
+            + "\n".join(missing) + "\n", "utf-8")
+    print(f"{ok} photos cached, {len(missing)} missing (see MISSING.txt)"
+          if missing else f"{ok} photos cached, none missing")
+    return 0
 
 
 if __name__ == "__main__":
