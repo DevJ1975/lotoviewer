@@ -90,6 +90,10 @@ function queueGate() {
   queue('tenant_memberships', {
     data: { role: 'member', invite_cancelled_at: null, tenants: { disabled_at: null } },
   })
+  // requireStrikeMember wraps requireTenantModuleMember, which resolves the
+  // tenant's module map before the route runs. Without STRIKE enabled here
+  // every request 403s well before the behaviour under test.
+  queue('tenants', { data: { name: 'Test Tenant', modules: { strike: true }, settings: {}, disabled_at: null } })
 }
 
 function queueModuleAndVersion(versionOverrides: Record<string, unknown> = {}, moduleOverrides: Record<string, unknown> = {}) {

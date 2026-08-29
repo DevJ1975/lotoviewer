@@ -34,6 +34,7 @@ interface MemberRow {
   email:        string | null
   legal_name:   string | null
   display_name: string
+  source:       string
 }
 
 export async function POST(req: Request, ctx: RouteContext) {
@@ -56,7 +57,7 @@ export async function POST(req: Request, ctx: RouteContext) {
 
   const { data: memberData, error: memberErr } = await admin
     .from('members')
-    .select('id, tenant_id, profile_id, email, legal_name, display_name')
+    .select('id, tenant_id, profile_id, email, legal_name, display_name, source')
     .eq('id', memberId)
     .eq('tenant_id', gate.tenantId)
     .maybeSingle()
@@ -96,19 +97,19 @@ export async function POST(req: Request, ctx: RouteContext) {
   if (!invited.ok) return provisionFailureResponse(invited, 'admin/members/grant-login')
   const { userId, tempPassword } = invited
 
-  // ── tenant_memberships: idempotent (a 23505 here just means the
-  // user was already a member of this tenant under a different members
-  // row — that's the merge candidate the admin probably wants).
-  const role: TenantRole = 'member'
-  const membership = await ensureTenantMembership(admin, {
-    userId, tenantId: gate.tenantId, role, invitedBy: gate.userId, onConflict: 'ignore',
-  })
-  if (!membership.ok) return provisionFailureResponse(membership, 'admin/members/grant-login')
-
-  // ── Attach the new profile to the existing member row. The 183
-  // partial unique index would reject this with 23505 if the same
-  // (tenant, profile) was already attached to a different member;
-  // surface that as 409 so the UI can suggest merging.
+  // ── Attach the new profile to the existing member row BEFORE inserting the
+  // membership. The tenant_memberships insert below fires
+  // trg_sync_membership_to_members (migration 180), which does
+  // `insert members(tenant, profile) ... on conflict (tenant_id, profile_id)
+  // do nothing`. Linking first makes THIS roster row the (tenant, profile)
+  // member, so the trigger no-ops. Do it the other way round and the trigger
+  // creates a *second* members row for (tenant, profile), which this UPDATE
+  // then collides with on the migration-183 partial unique index — a 23505
+  // that made grant-login 409 on its primary "roster worker gets a login"
+  // path and leak the auth user + a duplicate member row.
+  //
+  // A 23505 here means a *different* member row in this tenant is already
+  // linked to this login; surface that as 409 so the UI can suggest merging.
   const { error: linkErr } = await admin
     .from('members')
     .update({
@@ -128,6 +129,24 @@ export async function POST(req: Request, ctx: RouteContext) {
       }, { status: 409 })
     }
     return sanitizeError(linkErr, 'admin/members/grant-login member link')
+  }
+
+  // ── tenant_memberships: idempotent (a 23505 here just means the user was
+  // already a member of this tenant). The sync trigger no-ops against the row
+  // we linked above.
+  const role: TenantRole = 'member'
+  const membership = await ensureTenantMembership(admin, {
+    userId, tenantId: gate.tenantId, role, invitedBy: gate.userId, onConflict: 'ignore',
+  })
+  if (!membership.ok) {
+    // Undo the link so a retry isn't blocked by the ALREADY_HAS_LOGIN guard
+    // at the top — the row must look roster-only again.
+    await admin
+      .from('members')
+      .update({ profile_id: null, source: member.source, updated_by: gate.userId })
+      .eq('id', memberId)
+      .eq('tenant_id', gate.tenantId)
+    return provisionFailureResponse(membership, 'admin/members/grant-login')
   }
 
   // Audit insert is best-effort but failures must be visible — a

@@ -1148,7 +1148,11 @@ export const FEATURES: FeatureDef[] = [
   {
     id:          'fleet-safety',
     name:        'Fleet Safety & Journeys',
-    description: 'Vehicle register, driver licensing, DOT + hazmat records, and monitored journey plans',
+    // Journey plans are not built — no journey tables exist in any
+    // migration. /fleet already labels them "(coming soon)"; this
+    // description is what the drawer and catalog tile render, so it says
+    // the same thing rather than promising a module that isn't there.
+    description: 'Vehicle register, driver licensing, and DOT + hazmat records',
     href:        '/fleet',
     category:    'safety',
     enabled:     true,
