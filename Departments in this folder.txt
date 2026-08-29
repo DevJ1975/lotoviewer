@@ -1,0 +1,39 @@
+DEPARTMENTS IN THIS FOLDER
+
+499 placards across 29 departments, photos included.
+Open the file for the department you need, then print it.
+See "How to use these LOTO placards" for printing instructions.
+
+Placards   Department file
+--------   ---------------
+      94   Automated Packaging.xlsx
+      22   Baggers.xlsx
+      25   Building & Grounds.xlsx
+      20   Case Sealer.xlsx
+      20   Cheese Curl.xlsx
+      22   Cheese Puff.xlsx
+       3   Conveyors.xlsx
+      22   Detectors.xlsx
+      18   Discharge Conveyors.xlsx
+      53   Jensen.xlsx
+       4   Jensen Packaging.xlsx
+       7   Kettle Popcorn.xlsx
+       1   Main Distribution Fastback 1A.xlsx
+       1   Main Distribution Fastback 1B.xlsx
+       1   Main Distribution Fastback 1C.xlsx
+       1   Main Transfer Fastback.xlsx
+       2   Mixers.xlsx
+      22   Pop Chip.xlsx
+       7   Popcorn.xlsx
+       2   Scales.xlsx
+      18   Shipping.xlsx
+       1   Snakking 200.xlsx
+      33   Tortilla Tc 1.xlsx
+      30   Tortilla Tc 2.xlsx
+       9   Two Stage Tortilla.xlsx
+      32   USDA Packaging.xlsx
+      14   USDA Process.xlsx
+       1   VRC.xlsx
+      14   Weight Feeder Fastback.xlsx
+
+     499   total

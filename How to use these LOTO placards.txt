@@ -1,0 +1,81 @@
+LOTO PLACARDS - HOW TO USE THIS FOLDER
+Snak King, by department
+
+
+WHAT YOU HAVE
+-------------
+29 Excel files, one per department, covering all 499 pieces of equipment.
+Each file holds the lockout/tagout placards for that department - an English
+page and a Spanish page for every machine.
+
+You do not need Excel expertise. Each file is already set up to print.
+
+
+TO PRINT THE PLACARDS
+---------------------
+1. Open the department's file.
+
+2. It opens on the "Placards" tab, which is the printable one.
+   Do not switch tabs before printing.
+
+3. Press Ctrl+P (Windows) or Cmd+P (Mac).
+
+4. Print. Page size, orientation and page breaks are already set:
+   landscape, one placard per page.
+
+If your print dialog offers "Print Active Sheet" and "Print Entire Workbook",
+choose PRINT ACTIVE SHEET. The other tabs are reference data, not placards.
+
+Machines with several energy sources run onto a second sheet. That is
+intentional - the full isolation procedure is printed rather than cut short
+to fit on one page.
+
+
+WHAT IS IN EACH FILE
+--------------------
+Placards       The printable placards. This is the tab the file opens on.
+Read Me        A short summary of what the file contains.
+Index          A list of every placard, with a link that jumps to it.
+Equipment      One row per machine - department, photo status, verification.
+Energy Steps   Every isolation step, filterable by machine or energy type.
+Summary        Counts for the department.
+
+
+ABOUT THE PHOTOS
+----------------
+Every placard carries two photos: the equipment itself, and its isolation
+or disconnect point. Each photo is stamped with the equipment ID in the
+corner, so a picture stays identified even if it is copied out of the
+placard into a report or work pack.
+
+The isolation photo is what a worker matches against the machine in front
+of them before applying a lock. If a photo looks wrong for the machine,
+flag it to whoever sent you this folder rather than posting that placard.
+
+
+MAKING CHANGES
+--------------
+These are ordinary Excel files. Edit any cell, save, print - nothing is
+locked.
+
+One thing to know: the placard pages are a snapshot. Editing a placard here
+changes this file only. It does not change anything back in the Soteria
+Field system, and a fresh export would not carry your edit. If a correction
+should stick, have it made in Soteria Field as well.
+
+
+TWO THINGS TO CHECK BEFORE POSTING THESE
+----------------------------------------
+1. The Spanish pages are marked "BORRADOR - NO REVISADO" (draft, not
+   reviewed). No Spanish translation has been signed off in the system yet.
+   Have them reviewed, or post the English pages only, until that is done.
+
+2. Some hazard notes on Spanish pages appear in English. Where a machine has
+   a specific warning that has not been translated, the English wording is
+   shown rather than generic text, so the warning is not lost.
+
+
+---
+Generated from Soteria Field. Placard content - isolation steps, energy codes
+and verification methods - comes directly from the LOTO records; nothing is
+summarised or shortened.
