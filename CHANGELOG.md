@@ -37,6 +37,24 @@ app at `/superadmin/release-notes`.
 - **STRIKE assignment errors no longer echo database internals** to the caller.
   Every other STRIKE endpoint already returned a generic message.
 
+### Fixed
+- **The SSO setup page handed admins a callback URL that goes nowhere.** The SP
+  ACS URL — the address your identity provider posts a sign-in to — defaulted to
+  a path inside this application that does not exist. An admin who pasted it
+  into Okta or Azure AD would have configured a dead endpoint and only found out
+  when the first user tried to sign in. SAML is terminated by Supabase Auth, not
+  by this app, so the field now defaults to the real Supabase endpoint, and is
+  left blank rather than guessing when the deployment cannot determine it.
+- **Fleet no longer advertises journey management.** The module description
+  promised "monitored journey plans", which are not built — the module home
+  already said "(coming soon)", but the drawer and catalog tile did not.
+- **The Data Hygiene Log showed operator instructions to admins.** When the log
+  could not load, the page told the reader to "run the data-hygiene SQL script
+  first — the table is created in Section -1", which is a note to whoever runs
+  the SQL, not to the admin reading the page. It now distinguishes three states
+  properly: nothing logged yet, nothing matching the current filter, and a real
+  load failure.
+
 ## [1.17.1] — 2026-07-31
 
 A navigation and search release. The version is a patch, but the most visible
