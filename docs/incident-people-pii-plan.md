@@ -106,7 +106,7 @@ leak — a strictly worse failure than the one being fixed.
 
 Only take this if the PII split cannot be scheduled and the hole must close this week.
 
-## What migration 256 does (already written, not applied)
+## What migration 262 does (already written, not applied)
 
 Independent of the above, both gate helpers ignored the investigation team:
 

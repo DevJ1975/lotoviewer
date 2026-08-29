@@ -1,4 +1,4 @@
--- 258_incident_pii_investigation_team.sql
+-- 262_incident_pii_investigation_team.sql
 --
 -- can_view_incident_pii() has never honoured the investigation team, even
 -- though migration 062 says it does:
