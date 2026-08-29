@@ -51,7 +51,7 @@ jobs:
         run: |
           count=$(find photo-cache -name '*.jpg' | wc -l)
           git checkout --orphan claude/placard-photo-cache
-          git rm -rq .
+          git rm -rqf .
           mv photo-cache/* .
           printf '%s\n' \
             "Downscaled placard photos, fetched by the placard-photo-cache workflow." \
