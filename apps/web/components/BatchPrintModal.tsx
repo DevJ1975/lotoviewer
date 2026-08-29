@@ -30,7 +30,7 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
 
   // Ref keeps onClose current without forcing the keydown effect to re-bind
   const onCloseRef = useRef(onClose)
-  onCloseRef.current = onClose
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
 
   // Track timers so we can clear them on unmount / re-open
   const autoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)

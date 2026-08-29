@@ -23,6 +23,9 @@ import type { TrainingRole } from '@soteria/core/types'
 // shift, before any locktags get issued for the day).
 
 export const runtime = 'nodejs'
+// Reads every training record, then emails a digest to every owner/admin of
+// every tenant with something expiring. Recipient fan-out sets the runtime.
+export const maxDuration = 300
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false

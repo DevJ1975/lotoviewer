@@ -51,6 +51,7 @@ const STATUS_LABEL: Record<NearMissStatus, string> = {
 export default function NearMissDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const { profile } = useAuth()
   const canEdit = !!profile?.is_admin || !!profile?.is_superadmin
 
@@ -60,11 +61,11 @@ export default function NearMissDetailPage({ params }: { params: Promise<{ id: s
   const [showEscalate,  setShowEscalate]  = useState(false)
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     setError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+      const headers: Record<string, string> = { 'x-active-tenant': tenantId }
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
       const res = await fetch(`/api/near-miss/${id}`, { headers })
       const body = await res.json()
@@ -73,7 +74,7 @@ export default function NearMissDetailPage({ params }: { params: Promise<{ id: s
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [tenant?.id, id])
+  }, [tenantId, id])
 
   useEffect(() => { void load() }, [load])
 

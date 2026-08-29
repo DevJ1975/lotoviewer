@@ -27,21 +27,23 @@ const CATEGORY_LABEL: Record<HazardousWasteStreamRow['generator_category'], stri
 export default function HazardousWasteStreamDetailPage() {
   const params = useParams<{ id: string }>()
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
+  const paramsId = params?.id
   const [stream, setStream] = useState<HazardousWasteStreamRow | null>(null)
   const [error, setError]   = useState<string | null>(null)
   const [busy, setBusy]     = useState(false)
 
   const load = useCallback(async () => {
-    if (!tenant?.id || !params?.id) return
+    if (!tenantId || !paramsId) return
     setError(null)
     const { data: { session } } = await supabase.auth.getSession()
-    const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+    const headers: Record<string, string> = { 'x-active-tenant': tenantId }
     if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
-    const res = await fetch(`/api/hazardous-waste/streams/${params.id}`, { headers })
+    const res = await fetch(`/api/hazardous-waste/streams/${paramsId}`, { headers })
     const json = await res.json()
     if (!res.ok) { setError(json.error ?? 'Failed to load'); return }
     setStream(json.stream)
-  }, [tenant?.id, params?.id])
+  }, [tenantId, paramsId])
 
   useEffect(() => { void load() }, [load])
 
