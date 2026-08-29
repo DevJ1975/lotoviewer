@@ -10,7 +10,32 @@ app at `/superadmin/release-notes`.
 
 ## [Unreleased]
 
-_Nothing pending._
+### Security
+- **STRIKE quiz answers are no longer readable by learners.** The RLS policy on
+  the quiz tables grants row-level read to any signed-in member, and Postgres
+  RLS cannot filter columns — so while the learner page politely asked for only
+  the answer text, anything holding a session could ask for `is_correct` and get
+  the key for every published module. Column grants now withhold it (and the
+  explanation text, which often paraphrases it) from browser-facing roles;
+  grading has always been server-side and is unaffected. Explanations now come
+  back with the graded result, for the questions you actually missed, instead of
+  being rendered next to the question before you answered it.
+- **Narration and audio files are no longer world-readable inside the shared
+  library.** Media reads under the cross-tenant `global/` prefix only restricted
+  video extensions, so any other file type was readable by every signed-in user
+  of every tenant. Audio now follows the same rule as video.
+
+### Fixed
+- **A module with no quiz questions no longer records itself as passed.** Such a
+  module scores 100% by definition, and the "I reviewed this" confirmation was
+  only enforced in the browser — so a submission that skipped it still wrote a
+  passing training record. The server now requires the acknowledgement.
+- **Turning STRIKE off for a tenant now also turns off its APIs.** The module
+  toggle was enforced on the pages but not the endpoints behind them, so a
+  tenant without STRIKE still had working submit, playback, and assignment
+  endpoints.
+- **STRIKE assignment errors no longer echo database internals** to the caller.
+  Every other STRIKE endpoint already returned a generic message.
 
 ## [1.17.1] — 2026-07-31
 
