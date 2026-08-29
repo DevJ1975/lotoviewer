@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { requireTenantAdmin } from '@/lib/auth/tenantGate'
 
 // POST /api/admin/review-links/[id]/extend
 //   Body: { hours: number }   default 24, max 168 (7 days)
@@ -15,49 +15,6 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DEFAULT_HOURS = 24
 const MAX_HOURS     = 168   // one week — beyond this, mint a new link
-
-type Gate =
-  | { ok: true;  userId: string; tenantId: string }
-  | { ok: false; status: number; message: string }
-
-async function requireTenantAdmin(req: Request): Promise<Gate> {
-  const authHeader = req.headers.get('authorization')
-  if (!authHeader?.startsWith('Bearer ')) {
-    return { ok: false, status: 401, message: 'Missing bearer token' }
-  }
-  const token = authHeader.slice('Bearer '.length)
-  const url  = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !anon) return { ok: false, status: 500, message: 'Supabase env missing' }
-
-  const userClient = createClient(url, anon, { auth: { persistSession: false } })
-  const { data: { user }, error } = await userClient.auth.getUser(token)
-  if (error || !user) return { ok: false, status: 401, message: 'Invalid session' }
-
-  const tenantId = req.headers.get('x-active-tenant')?.trim() ?? ''
-  if (!UUID_RE.test(tenantId)) {
-    return { ok: false, status: 400, message: 'Missing or malformed x-active-tenant header' }
-  }
-
-  const admin = supabaseAdmin()
-  const { data: profile } = await admin.from('profiles')
-    .select('is_superadmin').eq('id', user.id).maybeSingle()
-  const allow = (process.env.SUPERADMIN_EMAILS ?? '')
-    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
-  if (profile?.is_superadmin && user.email && allow.includes(user.email.toLowerCase())) {
-    return { ok: true, userId: user.id, tenantId }
-  }
-  const { data: membership } = await admin
-    .from('tenant_memberships')
-    .select('role')
-    .eq('user_id',   user.id)
-    .eq('tenant_id', tenantId)
-    .maybeSingle()
-  if (!membership || !['owner', 'admin'].includes(membership.role)) {
-    return { ok: false, status: 403, message: 'Tenant admin or owner required' }
-  }
-  return { ok: true, userId: user.id, tenantId }
-}
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const gate = await requireTenantAdmin(req)

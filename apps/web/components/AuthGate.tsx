@@ -14,14 +14,17 @@ import OpsSpinner from '@/components/OpsSpinner'
 // link from that email and the user technically becomes authenticated
 // momentarily (Supabase exchanges the token for a recovery session)
 // — but we still allow it as "public" so the redirect below doesn't
-// fight the recovery flow.
-const PUBLIC_PATHS = new Set(['/login', '/welcome', '/forgot-password', '/reset-password'])
+// fight the recovery flow. /accept-invite is where invite-email links
+// land — the URL token is the credential; there is no session yet.
+const PUBLIC_PATHS = new Set(['/login', '/welcome', '/forgot-password', '/reset-password', '/accept-invite'])
 
 // Token-gated public routes. Each entry matches when the pathname
 // equals the prefix or starts with `${prefix}/`. Used for QR-scanned
 // flows whose authorization is the URL token, not a Supabase session.
 const PUBLIC_PREFIXES = [
   '/r/bbs',     // Behavior-Based Safety anonymous QR submission
+  '/review',    // LOTO placard reviewer portal — the URL token is the auth
+  '/qr',        // Public LOTO placard view from a scanned placard QR
 ] as const
 
 function isPublicPath(pathname: string): boolean {

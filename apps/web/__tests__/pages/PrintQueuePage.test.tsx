@@ -7,6 +7,10 @@ import type { Equipment } from '@soteria/core/types'
 
 vi.mock('@/lib/supabase', () => ({ supabase: { from: vi.fn() } }))
 
+vi.mock('@/components/TenantProvider', () => ({
+  useTenant: () => ({ tenantId: 'tenant-1', loading: false }),
+}))
+
 function makeEquipment(overrides: Partial<Equipment> = {}): Equipment {
   return {
     equipment_id: 'EQ-001', description: 'Conveyor Motor', department: 'Mech',
@@ -33,6 +37,7 @@ function makeChain(data: Equipment[]) {
       Promise.resolve({ data, error: null }).then(resolve, reject),
   }
   chain.select = vi.fn().mockReturnValue(chain)
+  chain.eq     = vi.fn().mockReturnValue(chain)
   chain.not    = vi.fn().mockReturnValue(chain)
   chain.order  = vi.fn().mockReturnValue(chain)
   return chain
@@ -52,6 +57,7 @@ describe('PrintQueuePage', () => {
   it('shows loading spinner while fetching', () => {
     const hangingChain: Record<string, unknown> = { then: () => new Promise(() => {}) }
     hangingChain.select = vi.fn().mockReturnValue(hangingChain)
+    hangingChain.eq     = vi.fn().mockReturnValue(hangingChain)
     hangingChain.not    = vi.fn().mockReturnValue(hangingChain)
     hangingChain.order  = vi.fn().mockReturnValue(hangingChain)
     vi.mocked(supabase.from).mockReturnValue(hangingChain as unknown as ReturnType<typeof supabase.from>)

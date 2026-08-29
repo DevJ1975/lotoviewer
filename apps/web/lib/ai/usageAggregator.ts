@@ -6,13 +6,13 @@
 // keeps cost math, time bucketing, and group-by logic in one place.
 //
 // Pricing posture: hardcoded per-million-token rates as documented
-// on docs.anthropic.com at the time of writing (Sonnet 4.6, Haiku 4.5).
+// on docs.anthropic.com at the time of writing (Sonnet 4.6, Haiku 4.5, Opus 4.8).
 // These are USD estimates — Anthropic's actual invoice will differ
 // (cache reads, batch discounts, prompt caching). The dashboard
 // surfaces this caveat in the UI; do not treat dollar figures here
 // as billing-grade.
 
-import { SONNET, HAIKU } from './models'
+import { SONNET, HAIKU, OPUS, SONNET_5 } from './models'
 
 // ─── Pricing ──────────────────────────────────────────────────────────
 // Rates expressed in USD per million tokens. Source: Anthropic public
@@ -26,6 +26,11 @@ export interface ModelPricing {
 export const MODEL_PRICING: Record<string, ModelPricing> = {
   [SONNET]: { inputPerMTok: 3,  outputPerMTok: 15 },
   [HAIKU]:  { inputPerMTok: 1,  outputPerMTok: 5  },
+  [OPUS]:   { inputPerMTok: 5,  outputPerMTok: 25 },
+  // Sonnet 5 list price. An introductory rate was in effect at time of
+  // writing; the list rate is used deliberately, because over-estimating
+  // spend makes a tenant budget cap fire early rather than late.
+  [SONNET_5]: { inputPerMTok: 3, outputPerMTok: 15 },
 }
 
 // Anthropic prompt-cache rate multipliers relative to base input price.

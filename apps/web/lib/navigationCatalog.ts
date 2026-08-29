@@ -13,6 +13,9 @@ export type NavigationGroupId =
   | 'hazards-incidents'
   | 'permits-controls'
   | 'reporting'
+  | 'admin-people'
+  | 'admin-platform'
+  | 'admin-records'
   | 'administration'
 
 export interface NavigationGroup {
@@ -56,6 +59,25 @@ const GROUPS: Omit<NavigationGroup, 'items'>[] = [
     description: 'Scorecards, insights, and compliance packages',
   },
   {
+    id: 'admin-people',
+    label: 'People & Training',
+    description: 'Workers, contractors, and competency records',
+  },
+  {
+    id: 'admin-platform',
+    label: 'Platform & Integrations',
+    description: 'Tenant configuration, identity, and outbound connections',
+  },
+  {
+    id: 'admin-records',
+    label: 'Records & Support',
+    description: 'Evidence, device inventory, manuals, and help',
+  },
+  // Kept as the destination for CATEGORY_FALLBACKS so an unmapped module can
+  // never fail to render. Nothing should actually land here — navigationCatalog
+  // .test.ts fails the build if a top-level module reaches it, which is how
+  // Administration silently grew to 16 rows in the first place.
+  {
     id: 'administration',
     label: 'Administration',
     description: 'Tenant setup, records, manuals, and support',
@@ -67,6 +89,7 @@ const MODULE_GROUPS: Record<string, NavigationGroupId> = {
   'toolbox-talks': 'pinned',
   strike: 'pinned',
 
+  operator: 'daily-work',
   loto: 'daily-work',
   'equipment-readiness': 'daily-work',
   jha: 'daily-work',
@@ -84,6 +107,12 @@ const MODULE_GROUPS: Record<string, NavigationGroupId> = {
   chemicals: 'permits-controls',
   'hazardous-waste': 'permits-controls',
   'working-at-heights': 'permits-controls',
+  prop65: 'permits-controls',
+  em385: 'permits-controls',
+  environmental: 'permits-controls',
+  // Internal (no drawer row), but mapped so the coverage test can assert
+  // MODULE_GROUPS is exhaustive without carving out an exception.
+  'osha-reg-watch': 'reporting',
 
   'reports-scorecard': 'reporting',
   'reports-insights': 'reporting',
@@ -91,15 +120,24 @@ const MODULE_GROUPS: Record<string, NavigationGroupId> = {
   'reports-compliance-calendar': 'reporting',
   'reports-inspector': 'reporting',
 
-  'admin-loto-devices': 'administration',
-  'admin-workers': 'administration',
-  'admin-configuration': 'administration',
-  'admin-webhooks': 'administration',
-  'admin-training': 'administration',
-  'admin-hygiene-log': 'administration',
-  'settings-notifications': 'administration',
-  manuals: 'administration',
-  support: 'administration',
+  'admin-workers': 'admin-people',
+  'admin-contractors': 'admin-people',
+  'admin-training': 'admin-people',
+  'admin-training-competency-matrix': 'admin-people',
+
+  'admin-configuration': 'admin-platform',
+  'admin-sso': 'admin-platform',
+  'admin-scim': 'admin-platform',
+  'admin-webhooks': 'admin-platform',
+  'admin-cmms': 'admin-platform',
+  'admin-ai-usage': 'admin-platform',
+  'settings-notifications': 'admin-platform',
+
+  'admin-loto-devices': 'admin-records',
+  'admin-hygiene-log': 'admin-records',
+  'admin-bbs-dashboard': 'admin-records',
+  manuals: 'admin-records',
+  support: 'admin-records',
 }
 
 const CATEGORY_FALLBACKS: Record<FeatureCategory, NavigationGroupId> = {
@@ -119,6 +157,7 @@ const KEYWORDS: Record<string, string[]> = {
   'working-at-heights': ['fall protection', 'harness', 'lanyard', 'srl', 'ladder', 'anchor', 'rescue', 'osha 1910.28', 'osha 1926.501', 'ansi z359'],
   'hot-work': ['permit', 'fire watch', 'spark'],
   'confined-spaces': ['permit', 'entry', 'atmosphere'],
+  environmental: ['iso 14001', 'ems', 'aspects', 'impacts', 'objectives', 'nonconformity', 'capa', 'management review', 'audit readiness', 'report card'],
   jha: ['job hazard analysis', 'task', 'hazard'],
   'fleet-safety': ['fleet', 'vehicle', 'truck', 'driver', 'journey', 'trip', 'road', 'dot', 'hazmat', 'placard', 'license', 'insurance', 'registration'],
   strike: ['training', 'microlearning', 'lesson'],

@@ -18,6 +18,7 @@ import {
   HOT_WORK_TYPE_LABELS,
 } from '@soteria/core/types'
 import { FIRE_EXTINGUISHER_TYPES } from '@soteria/core/hotWorkChecklist'
+import { useNow } from '@/hooks/useNow'
 
 // New Hot Work Permit form. Creates a row in pending_signature state —
 // the actual sign happens on the detail page once the PAI has reviewed
@@ -126,6 +127,11 @@ export default function NewHotWorkPermitPage() {
     return () => { cancelled = true }
   }, [tenantId])
 
+  // The expiry checks below compare against the clock, so the form has to
+  // re-render as time passes — otherwise an expiry that lapses while the
+  // form sits open still reads as valid.
+  const now = useNow(30_000)
+
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
@@ -147,8 +153,8 @@ export default function NewHotWorkPermitPage() {
   // sign gate enforces compliance — this gate just stops the user from
   // submitting an obviously-incomplete row.
   const expiresMs = new Date(expiresAt).getTime()
-  const validExpiry = !Number.isNaN(expiresMs) && expiresMs > Date.now()
-  const exceedsMax = validExpiry && (expiresMs - Date.now()) > MAX_HOURS * 3600_000
+  const validExpiry = !Number.isNaN(expiresMs) && expiresMs > now
+  const exceedsMax = validExpiry && (expiresMs - now) > MAX_HOURS * 3600_000
   const submitErrors: string[] = []
   if (!workLocation.trim())     submitErrors.push('Work location is required.')
   if (!workDescription.trim())  submitErrors.push('Work description is required.')

@@ -21,10 +21,14 @@ vi.mock('@/lib/supabase', () => ({
   supabase: { from: vi.fn() },
 }))
 
+vi.mock('@/components/TenantProvider', () => ({
+  useTenant: () => ({ tenantId: 'tenant-1', loading: false }),
+}))
+
 // ─── Supabase chain builder ──────────────────────────────────────────────────
 // The page uses two different chains on `supabase.from('loto_equipment')`:
-//   fetch  : .select('*').order('equipment_id', {ascending: true})       → await
-//   update : .update(...).eq|in('equipment_id', ...).select('equipment_id') → await
+//   fetch  : .select('*').eq('tenant_id', ...).order('equipment_id', {ascending: true}) → await
+//   update : .update(...).eq('tenant_id',...).eq|in('equipment_id', ...).select('equipment_id, decommissioned') → await
 // One `from` call must return a builder that supports BOTH. A shared thenable
 // approach works because both chains terminate in an awaited value with
 // { data, error } shape. The `updateResponses` queue lets individual tests
@@ -47,31 +51,40 @@ function installSupabase(opts: {
   const ferr  = opts.fetchError ?? null
   const queue: UpdateResp[] = [...(opts.updateResponses ?? [])]
 
-  // Fetch path
+  // Fetch path — loadAllEquipment runs:
+  //   .select('*').eq('tenant_id', …).order('equipment_id', …) → await
   const fetchEnd: Record<string, unknown> = {
     then: (r?: (v: unknown) => unknown) =>
       Promise.resolve({ data: rows, error: ferr }).then(r),
   }
   const order = vi.fn().mockReturnValue(fetchEnd)
-  const selectFetch = vi.fn().mockReturnValue({ order })
+  const eqFetch = vi.fn().mockReturnValue({ order })
+  const selectFetch = vi.fn().mockReturnValue({ eq: eqFetch })
 
-  // Update path
+  // Update path — both shapes scope by tenant first:
+  //   individual: .update(…).eq('tenant_id',…).eq('equipment_id',id).select(…)
+  //   bulk:       .update(…).eq('tenant_id',…).in('equipment_id',ids).select(…)
+  // One chainable object exposes `eq`, `in`, and the terminal `select` so the
+  // leading `.eq('tenant_id', …)` returns something that still has `.eq`/`.in`.
   const updateSelect = vi.fn().mockImplementation(() => ({
     then: (r?: (v: unknown) => unknown) => {
       const next = queue.shift() ?? { data: [{ equipment_id: '__default__' }], error: null }
       return Promise.resolve(next).then(r)
     },
   }))
-  const eq = vi.fn().mockReturnValue({ select: updateSelect })
-  const inFn = vi.fn().mockReturnValue({ select: updateSelect })
-  const update = vi.fn().mockReturnValue({ eq, in: inFn })
+  const updateChain: Record<string, unknown> = { select: updateSelect }
+  const eq = vi.fn().mockReturnValue(updateChain)
+  const inFn = vi.fn().mockReturnValue(updateChain)
+  updateChain.eq = eq
+  updateChain.in = inFn
+  const update = vi.fn().mockReturnValue(updateChain)
 
   vi.mocked(supabase.from).mockReturnValue({
     select: selectFetch,
     update,
   } as unknown as ReturnType<typeof supabase.from>)
 
-  return { selectFetch, order, update, eq, in: inFn, updateSelect, queue }
+  return { selectFetch, eqFetch, order, update, eq, in: inFn, updateSelect, queue }
 }
 
 // ─── Fixture helper ──────────────────────────────────────────────────────────
@@ -135,7 +148,7 @@ describe('DecommissionPage — load states', () => {
   it('renders a skeleton while fetch is pending', () => {
     const hanging: Record<string, unknown> = { then: () => new Promise(() => {}) }
     const order = vi.fn().mockReturnValue(hanging)
-    const selectFetch = vi.fn().mockReturnValue({ order })
+    const selectFetch = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ order }) })
     vi.mocked(supabase.from).mockReturnValue({ select: selectFetch } as unknown as ReturnType<typeof supabase.from>)
 
     render(<DecommissionPage />)
@@ -317,17 +330,21 @@ describe('DecommissionPage — individual toggle', () => {
 
   it('does not fire a second PATCH while one is already pending for the same row', async () => {
     // Build a response that never resolves so the first PATCH stays in flight.
+    // The individual update chains .eq('tenant_id',…).eq('equipment_id',…),
+    // so the chain object must keep returning itself on each .eq().
     const neverEnd: Record<string, unknown> = { then: () => new Promise(() => {}) }
     const updateSelect = vi.fn().mockReturnValue(neverEnd)
-    const eq = vi.fn().mockReturnValue({ select: updateSelect })
-    const update = vi.fn().mockReturnValue({ eq })
+    const updateChain: Record<string, unknown> = { select: updateSelect }
+    const eq = vi.fn().mockReturnValue(updateChain)
+    updateChain.eq = eq
+    const update = vi.fn().mockReturnValue(updateChain)
 
     // Fetch still resolves with SAMPLE
     const fetchEnd: Record<string, unknown> = {
       then: (r?: (v: unknown) => unknown) =>
         Promise.resolve({ data: SAMPLE, error: null }).then(r),
     }
-    const selectFetch = vi.fn().mockReturnValue({ order: vi.fn().mockReturnValue(fetchEnd) })
+    const selectFetch = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ order: vi.fn().mockReturnValue(fetchEnd) }) })
     vi.mocked(supabase.from).mockReturnValue({ select: selectFetch, update } as unknown as ReturnType<typeof supabase.from>)
 
     render(<DecommissionPage />)
@@ -498,17 +515,22 @@ describe('DecommissionPage — bulk selection', () => {
   it('individual toggle on a selected row is blocked while a bulk op is in flight', async () => {
     const user = userEvent.setup()
     // Bulk PATCH never resolves → bulkBusy stays true the whole test.
+    // The bulk update chains .eq('tenant_id',…).in('equipment_id',…), so the
+    // chain object must expose both `eq` and `in` and keep returning itself.
     const neverEnd: Record<string, unknown> = { then: () => new Promise(() => {}) }
     const updateSelect = vi.fn().mockReturnValue(neverEnd)
-    const eq = vi.fn().mockReturnValue({ select: updateSelect })
-    const inFn = vi.fn().mockReturnValue({ select: updateSelect })
-    const update = vi.fn().mockReturnValue({ eq, in: inFn })
+    const updateChain: Record<string, unknown> = { select: updateSelect }
+    const eq = vi.fn().mockReturnValue(updateChain)
+    const inFn = vi.fn().mockReturnValue(updateChain)
+    updateChain.eq = eq
+    updateChain.in = inFn
+    const update = vi.fn().mockReturnValue(updateChain)
 
     const fetchEnd: Record<string, unknown> = {
       then: (r?: (v: unknown) => unknown) =>
         Promise.resolve({ data: SAMPLE, error: null }).then(r),
     }
-    const selectFetch = vi.fn().mockReturnValue({ order: vi.fn().mockReturnValue(fetchEnd) })
+    const selectFetch = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ order: vi.fn().mockReturnValue(fetchEnd) }) })
     vi.mocked(supabase.from).mockReturnValue({ select: selectFetch, update } as unknown as ReturnType<typeof supabase.from>)
 
     render(<DecommissionPage />)

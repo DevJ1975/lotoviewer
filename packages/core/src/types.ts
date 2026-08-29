@@ -33,6 +33,21 @@ export interface Equipment {
   annotations: unknown[]
   // Same schema, but for the isolation photo (migration 022).
   iso_annotations: unknown[]
+  // ── LOTO multi-agent audit (migration 217) ────────────────────────────────
+  // Photo provenance. 'field' = a real photo captured at the machine;
+  // 'reference_placeholder' = a watermarked manufacturer/reference stand-in the
+  // audit attached because the real isolation point couldn't be confirmed. A
+  // placeholder ISO photo can never read as verified or complete — a DB trigger
+  // (migration 217) enforces it, so this is a guarantee, not a convention.
+  equip_photo_provenance?:           'field' | 'reference_placeholder'
+  iso_photo_provenance?:             'field' | 'reference_placeholder'
+  iso_photo_is_placeholder?:         boolean
+  iso_photo_placeholder_source_url?: string | null
+  // Denormalised last-audit result for the admin equipment list. NULL = never
+  // audited by the multi-agent pipeline.
+  last_audit_run_id?:                string | null
+  last_audit_verdict?:               string | null
+  last_audit_at?:                    string | null
   // §1910.147(c)(6) annual inspection (migration 141). Trigger sets
   // this to the latest signed inspection's next_due_at + 365 days.
   // NULL = never inspected, surfaced as "Never" in the admin list.
@@ -45,6 +60,11 @@ export interface Equipment {
   // should look like.
   manufacturer?:             string | null
   model?:                    string | null
+  // Opaque 16-hex token backing the public read-only placard route
+  // /qr/{qr_token} (migration 106; NOT NULL + unique in the DB). Optional
+  // here so existing Equipment literals/fixtures don't need to set it; it's
+  // always present at runtime.
+  qr_token?:                 string | null
   // Supervisor review flag (migration 189). A public-link reviewer or
   // admin marks equipment for closer admin follow-up; the admin queue
   // surface drains these. NULL on every row that's never been flagged.
@@ -74,6 +94,10 @@ export interface LotoEnergyStep {
   step_type: 'shutdown' | 'isolate' | 'release_stored_energy' | 'lockout' | 'verify_zero_energy'
   sequence_order: number
   tryout_required: boolean
+  // Audit Data-Scientist confidence in this isolation step (migration 217).
+  // NULL = never audited. confidence_source records the run that set it.
+  confidence?:        'high' | 'medium' | 'low' | null
+  confidence_source?: string | null
 }
 
 export interface LotoReview {

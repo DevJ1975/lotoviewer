@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { WifiOff } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Equipment } from '@soteria/core/types'
 import { reconcileEquipment, type RealtimePayload } from '@soteria/core/equipmentReconcile'
@@ -11,6 +12,7 @@ import DashboardSidebar     from '@/components/dashboard/DashboardSidebar'
 import EquipmentListPanel   from '@/components/dashboard/EquipmentListPanel'
 import PlacardDetailPanel   from '@/components/dashboard/PlacardDetailPanel'
 import BatchPrintModal      from '@/components/BatchPrintModal'
+import { EmptyState }       from '@/components/EmptyState'
 import PeriodicInspectionWidget from '@/components/loto/PeriodicInspectionWidget'
 import OpsSpinner           from '@/components/OpsSpinner'
 import { DashboardSkeleton } from '@/components/Skeleton'
@@ -193,7 +195,7 @@ function HomeDashboard() {
   // HomeDashboard) — blowing up the memoization inside EquipmentListPanel
   // and forcing every row to re-render on every DB change.
   const searchParamsRef = useRef(searchParams)
-  searchParamsRef.current = searchParams
+  useEffect(() => { searchParamsRef.current = searchParams }, [searchParams])
 
   const setUrlState = useCallback((next: { dept?: string | null; eq?: string | null }) => {
     // URL builder lives in lib/lotoNavigation.ts so the merge semantics
@@ -222,6 +224,13 @@ function HomeDashboard() {
     recordVisit(id)
     setUrlState({ eq: id })
   }, [cancelPendingAdvance, recordVisit, setUrlState])
+
+  // Below lg the detail panel presents as a slide-over sheet; closing it just
+  // clears the selection (buildLotoUrl deletes the param on null, dept stays).
+  const handleCloseDetail = useCallback(() => {
+    cancelPendingAdvance()
+    setUrlState({ eq: null })
+  }, [cancelPendingAdvance, setUrlState])
 
   const handleEquipmentAdded = useCallback((row: Equipment) => {
     setEquipment(prev =>
@@ -266,18 +275,23 @@ function HomeDashboard() {
   if (loadError) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-6rem)]">
-        <div className="text-center px-6 max-w-sm">
-          <div className="w-14 h-14 rounded-full bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center text-2xl mx-auto mb-3">⚠</div>
-          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Could not load equipment</p>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">Please check your connection and try again.</p>
-          <button
-            type="button"
-            onClick={() => { setLoading(true); setLoadError(false); fetchData() }}
-            className="px-4 py-2 rounded-lg bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 transition-colors"
-          >
-            Retry
-          </button>
-        </div>
+        {/* "Offline", not the default "All Clear": an empty screen here
+            means the fetch failed, not that the tenant has no equipment. */}
+        <EmptyState
+          eyebrow="Offline"
+          icon={WifiOff}
+          title="Could not load equipment"
+          description="Please check your connection and try again."
+          action={
+            <button
+              type="button"
+              onClick={() => { setLoading(true); setLoadError(false); fetchData() }}
+              className="px-4 py-2 rounded-lg bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 transition-colors"
+            >
+              Retry
+            </button>
+          }
+        />
       </div>
     )
   }
@@ -308,7 +322,7 @@ function HomeDashboard() {
           onSelectEquip={handleSelectEquip}
           decommissioned={decommissioned}
         />
-        <PlacardDetailPanel equipment={selectedEquipment} onPhotoSaved={handlePhotoSaved} />
+        <PlacardDetailPanel equipment={selectedEquipment} onPhotoSaved={handlePhotoSaved} onClose={handleCloseDetail} />
       </div>
 
       <BatchPrintModal

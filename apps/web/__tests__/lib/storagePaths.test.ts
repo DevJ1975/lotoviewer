@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { hotWorkPhotoPath, hazWasteInspectionPhotoPath, sanitizeId } from '@soteria/core/storagePaths'
+import { hotWorkPhotoPath, hazWasteInspectionPhotoPath, stagingReviewPhotoPath, sanitizeId } from '@soteria/core/storagePaths'
 
 const TENANT = '00000000-0000-0000-0000-000000000001'
+const REVIEW_LINK = '11111111-1111-1111-1111-111111111111'
 
 describe('hotWorkPhotoPath', () => {
   it('builds <tenant>/hot-work/<permit>/<ts>.jpg with the tenant UUID first', () => {
@@ -36,5 +37,25 @@ describe('hazWasteInspectionPhotoPath', () => {
   it('sanitizes the draft id and varies by timestamp', () => {
     expect(hazWasteInspectionPhotoPath(TENANT, 'a/b', 1)).toBe(`${TENANT}/hazardous-waste/inspections/a_b/1.jpg`)
     expect(hazWasteInspectionPhotoPath(TENANT, 'x', 1)).not.toBe(hazWasteInspectionPhotoPath(TENANT, 'x', 2))
+  })
+})
+
+describe('stagingReviewPhotoPath', () => {
+  it('parks the upload under staging/<review_link>/<equipment>/<slot>-<ts>.jpg', () => {
+    const path = stagingReviewPhotoPath(REVIEW_LINK, 'SKPF-210', 'ISO', 1_700_000_000_000)
+    expect(path).toBe(`staging/${REVIEW_LINK}/SKPF-210/ISO-1700000000000.jpg`)
+    // Deliberately NOT tenant-first: it is a service-role-only staging area,
+    // kept separate from the live equipmentPhotoPath until reconcile.
+    expect(path.split('/')[0]).toBe('staging')
+  })
+
+  it('separates EQUIP and ISO slots and varies by timestamp', () => {
+    expect(stagingReviewPhotoPath(REVIEW_LINK, 'EQ', 'EQUIP', 1)).toBe(`staging/${REVIEW_LINK}/EQ/EQUIP-1.jpg`)
+    expect(stagingReviewPhotoPath(REVIEW_LINK, 'EQ', 'ISO', 1)).not.toBe(stagingReviewPhotoPath(REVIEW_LINK, 'EQ', 'EQUIP', 1))
+    expect(stagingReviewPhotoPath(REVIEW_LINK, 'EQ', 'ISO', 1)).not.toBe(stagingReviewPhotoPath(REVIEW_LINK, 'EQ', 'ISO', 2))
+  })
+
+  it('sanitizes unsafe characters in the equipment id', () => {
+    expect(stagingReviewPhotoPath(REVIEW_LINK, 'a/b#c', 'EQUIP', 5)).toBe(`staging/${REVIEW_LINK}/a_b_c/EQUIP-5.jpg`)
   })
 })

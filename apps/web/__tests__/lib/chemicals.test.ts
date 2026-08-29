@@ -1,9 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import {
   isValidCas,
+  isValidHazardCode,
+  isValidPrecautionaryCode,
+  collectGhsCodeWarnings,
+  dialableTelHref,
   validateProductInput,
   chemicalSdsStoragePath,
   parseToProductFields,
+  firstAidEntries,
+  spillCleanupEntries,
   canAutoApplyParse,
   validateInventoryInput,
   validateExposureInput,
@@ -106,6 +112,104 @@ describe('isValidCas', () => {
   ])('rejects malformed CAS %s', cas => {
     expect(isValidCas(cas)).toBe(false)
   })
+
+  it.each([
+    '67-64-2',   // acetone with a wrong check digit (real is 67-64-1)
+    '7732-18-4', // water with a wrong check digit (real is 7732-18-5)
+  ])('rejects a well-formed CAS with a bad check digit %s', cas => {
+    expect(isValidCas(cas)).toBe(false)
+  })
+})
+
+describe('isValidHazardCode', () => {
+  it.each([
+    'H225', 'H319', 'H400',
+    'H315+H319',       // combined statement
+    'H300+H310+H330',  // triple-combined
+    'EUH066', 'EUH208', // EU-specific hazards
+    'H350i', 'H360FD',  // route-of-exposure suffixes
+  ])('accepts real hazard code %s', code => {
+    expect(isValidHazardCode(code)).toBe(true)
+  })
+
+  it.each([
+    'H999',       // no GHS block covers 999
+    'X100',       // wrong prefix
+    'H22',        // too few digits
+    'H2255',      // too many digits
+    'H315+X319',  // one segment is junk
+    'H315+',      // trailing combiner
+    'EUH22',      // EU code, too few digits
+    '',
+  ])('rejects junk hazard code %s', code => {
+    expect(isValidHazardCode(code)).toBe(false)
+  })
+})
+
+describe('isValidPrecautionaryCode', () => {
+  it.each([
+    'P210', 'P501',
+    'P305+P351+P338', // combined precautionary statement
+    'P301+P310',
+  ])('accepts real precautionary code %s', code => {
+    expect(isValidPrecautionaryCode(code)).toBe(true)
+  })
+
+  it.each([
+    'P000',       // below the P101 floor
+    'P999',       // above the P501 ceiling
+    'X100',       // wrong prefix
+    'P21',        // too few digits
+    'P305+P999',  // one segment out of range
+    'EUH066',     // not a precautionary code
+    '',
+  ])('rejects junk precautionary code %s', code => {
+    expect(isValidPrecautionaryCode(code)).toBe(false)
+  })
+})
+
+describe('collectGhsCodeWarnings', () => {
+  it('returns no warnings when every code is recognized', () => {
+    expect(collectGhsCodeWarnings({
+      hazard_statements:        [{ code: 'H225', text: '' }, { code: 'H315+H319', text: '' }],
+      precautionary_statements: [{ code: 'P210', text: '' }],
+    })).toEqual([])
+  })
+
+  it('flags unrecognized hazard and precautionary codes without blocking', () => {
+    const warnings = collectGhsCodeWarnings({
+      hazard_statements:        [{ code: 'H225', text: '' }, { code: 'H3l5', text: '' }],
+      precautionary_statements: [{ code: 'P999', text: '' }],
+    })
+    expect(warnings).toEqual([
+      { field: 'hazard_statements', code: 'H3l5', message: 'Unrecognized GHS hazard code "H3l5".' },
+      { field: 'precautionary_statements', code: 'P999', message: 'Unrecognized GHS precautionary code "P999".' },
+    ])
+  })
+
+  it('ignores blank codes and missing fields', () => {
+    expect(collectGhsCodeWarnings({ hazard_statements: [{ code: '  ', text: '' }] })).toEqual([])
+    expect(collectGhsCodeWarnings({})).toEqual([])
+  })
+})
+
+describe('dialableTelHref', () => {
+  it.each([
+    ['+1 (800) 555-0199', 'tel:+18005550199'],
+    ['800-555-0199',      'tel:8005550199'],
+    ['8005550199',        'tel:8005550199'],
+  ])('builds a clean tel: href for %s', (input, expected) => {
+    expect(dialableTelHref(input)).toBe(expected)
+  })
+
+  it.each([
+    'See section 1', // free-text junk → tel:1 if naively dialed
+    'N/A',
+    '',
+    '55-0199',       // 6 digits, below the 7-digit plausible-phone floor
+  ])('returns null for non-dialable value %s', value => {
+    expect(dialableTelHref(value)).toBeNull()
+  })
 })
 
 describe('validateProductInput', () => {
@@ -151,6 +255,30 @@ describe('validateProductInput', () => {
     })
     expect(errs.filter(e => e.field === 'cas_numbers')).toHaveLength(2)
   })
+
+  it('flags an unknown hazard code', () => {
+    const errs = validateProductInput({
+      name: 'X',
+      hazard_statements: [
+        { code: 'H225', text: 'Highly flammable.' },
+        { code: 'H999', text: 'Not a real code.' },
+      ],
+    })
+    const hit = errs.find(e => e.field === 'hazard_statements')
+    expect(hit?.message).toBe('Unknown hazard code: H999')
+  })
+
+  it('flags an unknown precautionary code', () => {
+    const errs = validateProductInput({
+      name: 'X',
+      precautionary_statements: [
+        { code: 'P210', text: 'Keep away from heat.' },
+        { code: 'P000', text: 'Not a real code.' },
+      ],
+    })
+    const hit = errs.find(e => e.field === 'precautionary_statements')
+    expect(hit?.message).toBe('Unknown precautionary code: P000')
+  })
 })
 
 describe('chemicalSdsStoragePath', () => {
@@ -192,6 +320,13 @@ describe('parseToProductFields', () => {
     expect(fields.flash_point_c).toBe(-20)
     expect(fields.dot_un_number).toBe('UN1090')
     expect(fields.first_aid?.inhalation).toBe('Move to fresh air')
+  })
+
+  it('persists the emergency phone when present and omits it when blank', () => {
+    expect(parseToProductFields(basePayload({ emergency_phone: '1-800-424-9300' })).emergency_phone)
+      .toBe('1-800-424-9300')
+    expect(parseToProductFields(basePayload({ emergency_phone: null })))
+      .not.toHaveProperty('emergency_phone')
   })
 
   it('drops invalid CAS numbers from the parse', () => {
@@ -269,6 +404,52 @@ describe('canAutoApplyParse', () => {
         spill_cleanup: 'low',
       },
     }))).toBe(true)
+  })
+})
+
+describe('firstAidEntries', () => {
+  it('returns entries in triage order, skipping blanks', () => {
+    const out = firstAidEntries({
+      inhalation: 'Move to fresh air',
+      skin:       '  ',          // blank → dropped
+      eyes:       'Rinse 15 min',
+      ingestion:  null,          // null → dropped
+      notes:      'Seek medical attention',
+    })
+    expect(out.map(e => e.label)).toEqual(['Inhalation', 'Eye contact', 'Notes'])
+    expect(out[1].text).toBe('Rinse 15 min')
+  })
+
+  it('trims surrounding whitespace from text', () => {
+    expect(firstAidEntries({ inhalation: '  Fresh air  ' })[0].text).toBe('Fresh air')
+  })
+
+  it('returns [] for null/undefined or an all-empty block', () => {
+    expect(firstAidEntries(null)).toEqual([])
+    expect(firstAidEntries(undefined)).toEqual([])
+    expect(firstAidEntries({ inhalation: null, skin: '', eyes: null, ingestion: null, notes: null })).toEqual([])
+  })
+})
+
+describe('spillCleanupEntries', () => {
+  it('returns entries in response order, skipping blanks', () => {
+    const out = spillCleanupEntries({
+      personal_precautions:      'Evacuate, ventilate',
+      environmental_precautions: 'Prevent entry to drains',
+      containment_methods:       null,
+      cleanup_methods:           'Absorb with inert material',
+    })
+    expect(out.map(e => e.label)).toEqual([
+      'Personal precautions', 'Cleanup', 'Environmental precautions',
+    ])
+  })
+
+  it('returns [] for null/undefined or an all-empty block', () => {
+    expect(spillCleanupEntries(null)).toEqual([])
+    expect(spillCleanupEntries({
+      personal_precautions: '', environmental_precautions: null,
+      containment_methods: null, cleanup_methods: '  ',
+    })).toEqual([])
   })
 })
 

@@ -53,6 +53,18 @@ export type FetchOutcome =
   | 'http_error'
   | 'network_error'
 
+export interface FetchSdsOptions {
+  // Relax the HOST allowlist for the discovery flow. Web search surfaces
+  // legitimate manufacturer hosts that aren't on the conservative default
+  // list, and a human has already picked the candidate before we fetch — so
+  // the allowlist's job (stop a tenant pointing the drift monitor at an
+  // arbitrary host) no longer applies. Every OTHER guard stays on: https-only,
+  // private/loopback-IP refusal (initial + post-redirect), size/timeout caps,
+  // and the pdf content-type check. The drift monitor passes nothing here, so
+  // its strict allowlisting is unchanged.
+  allowAnyHost?: boolean
+}
+
 export interface FetchResult {
   outcome:      FetchOutcome
   /** HTTP status (when we got that far). */
@@ -134,7 +146,7 @@ async function sha256Hex(buf: Uint8Array): Promise<string> {
  * Fetch a manufacturer SDS URL with guards. Never throws — returns a
  * Result whose `outcome` field reflects what happened.
  */
-export async function fetchSdsPdf(rawUrl: string): Promise<FetchResult> {
+export async function fetchSdsPdf(rawUrl: string, opts: FetchSdsOptions = {}): Promise<FetchResult> {
   let url: URL
   try { url = new URL(rawUrl) }
   catch { return { outcome: 'invalid_url', detail: rawUrl } }
@@ -143,7 +155,7 @@ export async function fetchSdsPdf(rawUrl: string): Promise<FetchResult> {
     return { outcome: 'invalid_scheme', detail: url.protocol }
   }
 
-  if (!isHostAllowed(url.hostname)) {
+  if (!opts.allowAnyHost && !isHostAllowed(url.hostname)) {
     return {
       outcome: 'allowlist_blocked',
       detail:  `Host "${url.hostname}" is not in CHEMICAL_SDS_HOST_ALLOWLIST.`,
@@ -188,7 +200,7 @@ export async function fetchSdsPdf(rawUrl: string): Promise<FetchResult> {
       if (finalUrl.protocol !== 'https:') {
         return { outcome: 'invalid_scheme', detail: `Redirected to ${finalUrl.protocol}` }
       }
-      if (!isHostAllowed(finalUrl.hostname)) {
+      if (!opts.allowAnyHost && !isHostAllowed(finalUrl.hostname)) {
         return {
           outcome:    'allowlist_blocked',
           finalUrl:   resp.url,

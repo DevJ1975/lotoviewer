@@ -17,12 +17,17 @@ vi.mock('@/lib/supabase', () => ({
   },
 }))
 
+vi.mock('@/components/TenantProvider', () => ({
+  useTenant: () => ({ tenantId: 'tenant-1', loading: false }),
+}))
+
 function makeChain(data: Equipment[]) {
   const chain: Record<string, unknown> = {
     then: (resolve?: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
       Promise.resolve({ data, error: null }).then(resolve, reject),
   }
   chain.select = vi.fn().mockReturnValue(chain)
+  chain.eq     = vi.fn().mockReturnValue(chain)
   chain.order  = vi.fn().mockReturnValue(chain)
   return chain
 }
@@ -51,6 +56,7 @@ describe('HomePage dashboard', () => {
   it('shows loading spinner while data is pending', () => {
     const hanging: Record<string, unknown> = { then: () => new Promise(() => {}) }
     hanging.select = vi.fn().mockReturnValue(hanging)
+    hanging.eq     = vi.fn().mockReturnValue(hanging)
     hanging.order  = vi.fn().mockReturnValue(hanging)
     vi.mocked(supabase.from).mockReturnValue(hanging as unknown as ReturnType<typeof supabase.from>)
     render(<HomePage />)
@@ -71,8 +77,10 @@ describe('HomePage dashboard', () => {
 
   it('lists all departments in the sidebar', async () => {
     render(<HomePage />)
-    await waitFor(() => screen.getByText('Alpha'))
-    expect(screen.getByText('Beta')).toBeInTheDocument()
+    // Each department name appears both in the sidebar and as a group header
+    // in the equipment list, so assert on presence (>= 1) rather than uniqueness.
+    await waitFor(() => expect(screen.getAllByText('Alpha').length).toBeGreaterThanOrEqual(1))
+    expect(screen.getAllByText('Beta').length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders stat chips Total / Cleared / Partial / Missing', async () => {
@@ -99,6 +107,7 @@ describe('HomePage dashboard', () => {
   it('renders Retry button on load error', async () => {
     const errChain: Record<string, unknown> = { then: (r?: (v: unknown) => unknown) => Promise.resolve({ data: null, error: new Error('x') }).then(r) }
     errChain.select = vi.fn().mockReturnValue(errChain)
+    errChain.eq     = vi.fn().mockReturnValue(errChain)
     errChain.order  = vi.fn().mockReturnValue(errChain)
     vi.mocked(supabase.from).mockReturnValue(errChain as unknown as ReturnType<typeof supabase.from>)
     render(<HomePage />)

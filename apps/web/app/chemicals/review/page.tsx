@@ -12,6 +12,7 @@ import {
   type ProductFieldsFromParse,
 } from '@soteria/core/chemicals'
 import { PictogramBadges, SignalWordBadge } from '../_components/PictogramBadges'
+import { SdsDiffPanel } from '../_components/SdsDiffPanel'
 
 interface PendingRow {
   id:               string
@@ -35,7 +36,7 @@ type FieldKey = keyof ProductFieldsFromParse
 // Order to render the proposed-field rows. Matches the SDS section flow
 // (1 → 16) so reviewers move top-to-bottom in regulatory order.
 const FIELD_ORDER: FieldKey[] = [
-  'name', 'manufacturer', 'product_code',
+  'name', 'manufacturer', 'product_code', 'emergency_phone',
   'cas_numbers', 'synonyms',
   'physical_state',
   'ghs_pictograms', 'ghs_signal_word',
@@ -54,6 +55,7 @@ const FIELD_LABEL: Record<FieldKey, string> = {
   name: 'Product name',
   manufacturer: 'Manufacturer',
   product_code: 'Product code',
+  emergency_phone: 'Emergency phone',
   cas_numbers: 'CAS numbers',
   synonyms: 'Synonyms',
   physical_state: 'Physical state',
@@ -91,6 +93,9 @@ export default function ChemicalsReviewPage() {
   const [busy,    setBusy]    = useState(false)
   const [selected, setSelected] = useState<Set<FieldKey>>(new Set())
   const [currentProduct, setCurrentProduct] = useState<Record<string, unknown> | null>(null)
+  // GHS codes the just-applied parse wrote that aren't recognized — applied
+  // anyway (a human approved it), but flagged here for a second look.
+  const [codeWarnings, setCodeWarnings] = useState<string[]>([])
 
   const buildHeaders = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
@@ -175,6 +180,7 @@ export default function ChemicalsReviewPage() {
     }
     setBusy(true)
     setError(null)
+    setCodeWarnings([])
     try {
       const headers = await buildHeaders()
       const res  = await fetch(
@@ -190,6 +196,8 @@ export default function ChemicalsReviewPage() {
         setError(body.error ?? `HTTP ${res.status}`)
         return
       }
+      const warnings: { message: string }[] = body.warnings ?? []
+      setCodeWarnings(warnings.map(w => w.message))
       // Move on to the next pending row.
       setActive(null)
       await loadQueue()
@@ -203,6 +211,7 @@ export default function ChemicalsReviewPage() {
     if (!confirm('Reject this AI parse? The proposed fields are discarded; the SDS remains attached.')) return
     setBusy(true)
     setError(null)
+    setCodeWarnings([])
     try {
       const headers = await buildHeaders()
       const res  = await fetch(
@@ -246,6 +255,15 @@ export default function ChemicalsReviewPage() {
       {error && (
         <div className="rounded border border-rose-300 bg-rose-50 dark:bg-rose-950/30 dark:border-rose-800 px-4 py-3 text-sm text-rose-800 dark:text-rose-200">
           {error}
+        </div>
+      )}
+
+      {codeWarnings.length > 0 && (
+        <div className="rounded border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+          <p className="font-semibold mb-1">Applied — but review these GHS codes:</p>
+          <ul className="list-disc list-inside space-y-0.5">
+            {codeWarnings.map((w, i) => <li key={i}>{w}</li>)}
+          </ul>
         </div>
       )}
 
@@ -330,6 +348,12 @@ export default function ChemicalsReviewPage() {
                   <strong className="font-semibold">Parser notes:</strong> {activeRow.parsed_payload.parser_notes}
                 </div>
               )}
+
+              <SdsDiffPanel
+                productId={activeRow.product_id}
+                sdsId={activeRow.id}
+                tenantId={tenant?.id ?? null}
+              />
 
               <div className="grid grid-cols-[24px_180px_1fr_1fr] gap-x-3 gap-y-2 items-start text-sm">
                 <div />

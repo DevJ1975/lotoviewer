@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type DragEvent } from 'react'
 import Image from 'next/image'
 import SignaturePad, { type SignaturePadRef } from '@/components/SignaturePad'
 import { compressImageInWorker, heicToJpeg, isHeic } from '@/lib/imageUtils'
+import { sanitizeId } from '@soteria/core/storagePaths'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 
 // Public reviewer client. Per-placard cards with notes + status; bottom
@@ -29,6 +30,12 @@ interface InitialReview {
   notes:        string | null
 }
 
+interface StagedPhoto {
+  equipment_id:  string
+  slot:          PhotoSlot
+  new_photo_url: string
+}
+
 interface Props {
   token:            string
   reviewLinkId:     string
@@ -43,6 +50,8 @@ interface Props {
   equipment:        Equipment[]
   stepsByEquipment: Record<string, LotoEnergyStep[] | undefined>
   initialReviews:   InitialReview[]
+  /** Photo replacements already staged (status='pending') for this link. */
+  initialStagedPhotos: StagedPhoto[]
 }
 
 const REVIEWER_NAME_KEY_PREFIX = 'soteria.review.reviewer-name:'
@@ -59,8 +68,22 @@ export default function ReviewClient({
   equipment,
   stepsByEquipment,
   initialReviews,
+  initialStagedPhotos,
 }: Props) {
-  const [equipmentRows, setEquipmentRows] = useState(equipment)
+  const [equipmentRows] = useState(equipment)
+
+  // Staged (pending-reconcile) photo per `${eqId}:${slot}`. The reviewer's
+  // upload is parked server-side until an admin reconciles it; here we just
+  // show the staged image with a "pending reconcile" badge in place of the
+  // live photo. Seeded from replacements already staged on a prior visit.
+  const [stagedByKey, setStagedByKey] = useState<Record<string, string | undefined>>(() => {
+    const initial: Record<string, string> = {}
+    for (const s of initialStagedPhotos) {
+      initial[photoUploadKey(s.equipment_id, s.slot)] = s.new_photo_url
+    }
+    return initial
+  })
+  const [undoBusyByKey, setUndoBusyByKey] = useState<Record<string, boolean>>({})
 
   // Public-link reviewer identity. The legacy per-reviewer link carries
   // the typed name from the admin's mint form; the public link doesn't,
@@ -197,6 +220,22 @@ export default function ReviewClient({
     }).catch(() => {})
   }, [isFirstView, token])
 
+  // Deep-link target highlight. When a worker arrives from a placard's /qr
+  // "Update photo" link (/review/<token>#eq-<id>), scroll that equipment's
+  // card into view and pulse a ring so they land on the right machine.
+  const [highlightAnchor, setHighlightAnchor] = useState<string | null>(null)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const anchor = window.location.hash.replace(/^#/, '')
+    if (!anchor.startsWith('eq-')) return
+    const el = document.getElementById(anchor)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setHighlightAnchor(anchor)
+    const t = setTimeout(() => setHighlightAnchor(null), 2600)
+    return () => clearTimeout(t)
+  }, [])
+
   // Per-placard local state. Keyed by equipment_id; undefined = not yet
   // touched, no row in the DB. status is required when saving notes.
   type LocalReview = { status: Status; notes: string }
@@ -271,26 +310,13 @@ export default function ReviewClient({
       const body = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
 
-      const publicUrl = typeof body.public_url === 'string' ? body.public_url : ''
-      if (!publicUrl) throw new Error('Upload succeeded but no photo URL was returned')
+      const stagedUrl = typeof body.staged_url === 'string' ? body.staged_url : ''
+      if (!stagedUrl) throw new Error('Upload succeeded but no photo URL was returned')
 
-      const urlField = slot === 'EQUIP' ? 'equip_photo_url' : 'iso_photo_url'
-      const photoStatus = isPhotoStatus(body.photo_status) ? body.photo_status : undefined
-      // The server-side regen returns the new placard_url inline. If
-      // regen failed (Sentry-logged, non-fatal), placard_url is null
-      // and the next admin viewer will trigger a fresh render.
-      const newPlacardUrl = typeof body.placard_url === 'string' ? body.placard_url : null
-      setEquipmentRows(rows => rows.map(eq =>
-        eq.equipment_id === eqId
-          ? {
-              ...eq,
-              [urlField]: publicUrl,
-              photo_status: photoStatus ?? eq.photo_status,
-              placard_url: newPlacardUrl,
-              signed_placard_url: null,
-            }
-          : eq,
-      ))
+      // Staged, not applied: park the new image under this slot so the tile
+      // shows it with a "pending reconcile" badge. The live loto_equipment
+      // row is untouched until an admin reconciles.
+      setStagedByKey(s => ({ ...s, [key]: stagedUrl }))
       setPhotoUploadByKey(s => ({ ...s, [key]: { status: 'saved' } }))
       setTimeout(() => {
         setPhotoUploadByKey(s => ({ ...s, [key]: undefined }))
@@ -303,6 +329,34 @@ export default function ReviewClient({
           message: e instanceof Error ? e.message : 'Photo upload failed',
         },
       }))
+    }
+  }
+
+  async function undoStagedPhoto(eqId: string, slot: PhotoSlot) {
+    const key = photoUploadKey(eqId, slot)
+    setUndoBusyByKey(s => ({ ...s, [key]: true }))
+    try {
+      const res = await fetch(`/api/review/${token}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ action: 'undo-photo-replace', equipment_id: eqId, slot }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? `HTTP ${res.status}`)
+      }
+      setStagedByKey(s => ({ ...s, [key]: undefined }))
+      setPhotoUploadByKey(s => ({ ...s, [key]: undefined }))
+    } catch (e) {
+      setPhotoUploadByKey(s => ({
+        ...s,
+        [key]: {
+          status: 'error',
+          message: e instanceof Error ? e.message : 'Could not undo this replacement',
+        },
+      }))
+    } finally {
+      setUndoBusyByKey(s => ({ ...s, [key]: false }))
     }
   }
 
@@ -432,7 +486,15 @@ export default function ReviewClient({
             const saving = savingByEqId[eq.equipment_id]
             const steps = stepsByEquipment[eq.equipment_id] ?? []
             return (
-              <article key={eq.equipment_id} className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+              <article
+                key={eq.equipment_id}
+                id={`eq-${sanitizeId(eq.equipment_id)}`}
+                className={`scroll-mt-4 bg-white rounded-xl p-4 space-y-3 border transition-shadow ${
+                  highlightAnchor === `eq-${sanitizeId(eq.equipment_id)}`
+                    ? 'border-brand-navy ring-2 ring-brand-navy/40'
+                    : 'border-slate-200'
+                }`}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="font-mono text-sm font-bold text-slate-900">{eq.equipment_id}</div>
@@ -458,15 +520,21 @@ export default function ReviewClient({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <PhotoTile
                     url={eq.equip_photo_url}
+                    stagedUrl={stagedByKey[photoUploadKey(eq.equipment_id, 'EQUIP')]}
                     label="Equipment"
                     upload={photoUploadByKey[photoUploadKey(eq.equipment_id, 'EQUIP')]}
                     onReplace={(file) => void replacePhoto(eq.equipment_id, 'EQUIP', file)}
+                    onUndo={() => void undoStagedPhoto(eq.equipment_id, 'EQUIP')}
+                    undoBusy={!!undoBusyByKey[photoUploadKey(eq.equipment_id, 'EQUIP')]}
                   />
                   <PhotoTile
                     url={eq.iso_photo_url}
+                    stagedUrl={stagedByKey[photoUploadKey(eq.equipment_id, 'ISO')]}
                     label="Isolation"
                     upload={photoUploadByKey[photoUploadKey(eq.equipment_id, 'ISO')]}
                     onReplace={(file) => void replacePhoto(eq.equipment_id, 'ISO', file)}
+                    onUndo={() => void undoStagedPhoto(eq.equipment_id, 'ISO')}
+                    undoBusy={!!undoBusyByKey[photoUploadKey(eq.equipment_id, 'ISO')]}
                   />
                 </div>
 
@@ -772,17 +840,42 @@ function NameModal({
 }
 
 function PhotoTile({
-  url, label, upload, onReplace,
+  url, stagedUrl, label, upload, onReplace, onUndo, undoBusy,
 }: {
   url: string | null
+  /** Pending-reconcile staged photo; shown in place of `url` when set. */
+  stagedUrl?: string
   label: string
   upload: { status: PhotoUploadState; message?: string } | undefined
   onReplace: (file: File) => void
+  onUndo?: () => void
+  undoBusy?: boolean
 }) {
   const reactId = useId()
   const inputId = `photo-${label}-${reactId}`
   const disabled = upload?.status === 'uploading'
   const [dragActive, setDragActive] = useState(false)
+
+  // A staged replacement takes over the tile until reconcile. The live
+  // loto_equipment photo (`url`) is untouched underneath.
+  const isStaged = Boolean(stagedUrl)
+  const displayUrl = stagedUrl ?? url
+
+  const stagedBadge = isStaged ? (
+    <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-2 bg-amber-500/95 px-2 py-1 text-[11px] font-bold text-white">
+      <span className="inline-flex items-center gap-1">⏳ Pending reconcile</span>
+      {onUndo && (
+        <button
+          type="button"
+          onClick={onUndo}
+          disabled={undoBusy}
+          className="rounded bg-white/20 px-1.5 py-0.5 font-semibold hover:bg-white/30 disabled:opacity-50"
+        >
+          {undoBusy ? 'Undoing…' : '↶ Undo'}
+        </button>
+      )}
+    </div>
+  ) : null
 
   function handleSelectedFile(file: File | undefined) {
     if (!file || disabled) return
@@ -856,7 +949,7 @@ function PhotoTile({
     </div>
   ) : null
 
-  if (!url) {
+  if (!displayUrl) {
     return (
       <div
         {...dropHandlers}
@@ -877,30 +970,36 @@ function PhotoTile({
       {/* next/image works for arbitrary remote URLs once the host is in
           next.config.ts remotePatterns — Supabase storage is. */}
       <Image
-        src={url}
+        src={displayUrl}
         alt={label}
         fill
         sizes="(max-width: 640px) 100vw, 320px"
         className="object-cover"
       />
-      <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/55 to-transparent px-2 py-1.5 text-[11px] font-semibold text-white">
-        Drag a photo here to replace
-      </div>
+      {stagedBadge}
+      {!isStaged && (
+        <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/55 to-transparent px-2 py-1.5 text-[11px] font-semibold text-white">
+          Drag a photo here to replace
+        </div>
+      )}
       {dropOverlay}
       {controls}
-      <PhotoUploadMessage upload={upload} />
+      <PhotoUploadMessage upload={upload} staged={isStaged} />
     </div>
   )
 }
 
 function PhotoUploadMessage({
-  upload,
-}: { upload: { status: PhotoUploadState; message?: string } | undefined }) {
+  upload, staged,
+}: { upload: { status: PhotoUploadState; message?: string } | undefined; staged?: boolean }) {
   if (!upload || upload.status === 'uploading') return null
+  // When the tile already shows the persistent "Pending reconcile" badge,
+  // suppress the transient "saved" toast so they don't stack.
   if (upload.status === 'saved') {
+    if (staged) return null
     return (
       <div className="absolute left-2 right-2 top-2 rounded-md bg-emerald-600 px-2 py-1 text-center text-[11px] font-semibold text-white">
-        Photo updated; regenerate placard
+        Staged for reconcile
       </div>
     )
   }
@@ -964,8 +1063,4 @@ function isReviewImageCandidate(file: File): boolean {
   if (file.type.toLowerCase().startsWith('image/')) return true
   if (isHeic(file)) return true
   return /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)
-}
-
-function isPhotoStatus(value: unknown): value is Equipment['photo_status'] {
-  return value === 'missing' || value === 'partial' || value === 'complete'
 }

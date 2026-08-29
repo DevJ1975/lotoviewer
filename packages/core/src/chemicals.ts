@@ -38,7 +38,7 @@ export type PhysicalState = typeof PHYSICAL_STATES[number]
 export const SDS_REVIEW_STATUSES = ['pending', 'approved', 'rejected'] as const
 export type SdsReviewStatus = typeof SDS_REVIEW_STATUSES[number]
 
-export const SDS_SOURCES = ['upload', 'ai_fetch', 'manufacturer_portal'] as const
+export const SDS_SOURCES = ['upload', 'ai_fetch', 'manufacturer_portal', 'photo_capture'] as const
 export type SdsSource = typeof SDS_SOURCES[number]
 
 export interface HazardStatement { code: string; text: string }
@@ -71,16 +71,142 @@ export interface ChemicalProductInput {
 
 // CAS Registry Number — three groups of digits separated by dashes:
 //   2..7 digits / 2 digits / 1 digit, last digit is a checksum.
-// We check the format only; checksum verification is a nice-to-have
-// but not required to store the value.
 const CAS_RE = /^\d{2,7}-\d{2}-\d$/
 
+/**
+ * Validate a CAS Registry Number's format AND its check digit.
+ *
+ * The check digit catches transcription errors (a swapped or mistyped
+ * digit) that a format check alone would wave through. CAS defines it as:
+ * drop the dashes and the trailing check digit, then number the remaining
+ * digits right-to-left starting at 1; the check digit equals
+ * Σ(digit × position) mod 10.
+ *
+ * Example 7732-18-5 → digits 7,7,3,2,1,8 (right-to-left positions 6..1):
+ *   8·1 + 1·2 + 2·3 + 3·4 + 7·5 + 7·6 = 105 → 105 mod 10 = 5 ✓
+ */
 export function isValidCas(value: string): boolean {
-  return CAS_RE.test(value.trim())
+  const trimmed = value.trim()
+  if (!CAS_RE.test(trimmed)) return false
+
+  const digits = trimmed.replace(/-/g, '')
+  const checkDigit = Number(digits[digits.length - 1])
+  const body = digits.slice(0, -1)
+
+  let sum = 0
+  for (let i = 0; i < body.length; i++) {
+    // Rightmost body digit gets position 1, increasing leftward.
+    const position = body.length - i
+    sum += Number(body[i]) * position
+  }
+  return sum % 10 === checkDigit
+}
+
+// GHS code validators. Beyond the simple "H225"/"P210" shape, real SDSs
+// (and the SDS parser, which is told to copy codes verbatim) carry:
+//   - combined statements joined with '+':  "H315+H319", "P305+P351+P338"
+//   - EU-specific hazards:                   "EUH066", "EUH208"
+//   - route-of-exposure suffixes:            "H350i", "H360FD"
+// So we validate the GRAMMAR (prefix + three digits + optional 1–2 letter
+// suffix), splitting combined codes on '+' and checking each segment, rather
+// than enumerating the full GHS list (which the standard revises). Standard
+// H-codes are additionally range-checked against the published blocks; EUH
+// codes carry their own numbering, so only their shape is validated.
+const HAZARD_CODE_RE = /^(EU)?H(\d{3})[A-Za-z]{0,2}$/
+const PRECAUTIONARY_CODE_RE = /^P(\d{3})$/
+
+function isValidHazardSegment(code: string): boolean {
+  const m = HAZARD_CODE_RE.exec(code)
+  if (!m) return false
+  if (m[1] === 'EU') return true // EUH0xx — EU-specific, own numbering
+  const n = Number(m[2])
+  return (n >= 200 && n <= 290)  // physical hazards
+      || (n >= 300 && n <= 373)  // health hazards
+      || (n >= 400 && n <= 420)  // environmental hazards
+}
+
+function isValidPrecautionarySegment(code: string): boolean {
+  const m = PRECAUTIONARY_CODE_RE.exec(code)
+  if (!m) return false
+  const n = Number(m[1])
+  return n >= 101 && n <= 501
+}
+
+/**
+ * Validate a GHS hazard statement code (e.g. "H225", "H315+H319", "EUH066",
+ * "H350i"). Combined codes are valid only if every '+'-joined segment is.
+ */
+export function isValidHazardCode(code: string): boolean {
+  return code.split('+').every(seg => isValidHazardSegment(seg.trim()))
+}
+
+/**
+ * Validate a GHS precautionary statement code (e.g. "P210",
+ * "P305+P351+P338"). Each '+'-joined segment must be a P-code in P101–P501.
+ */
+export function isValidPrecautionaryCode(code: string): boolean {
+  return code.split('+').every(seg => isValidPrecautionarySegment(seg.trim()))
+}
+
+/**
+ * A GHS code written onto a product that isn't a recognized statement —
+ * surfaced as a NON-BLOCKING warning. Unlike validateProductInput (which
+ * rejects), this lets a human-approved SDS through while flagging codes worth
+ * a second look (e.g. an OCR slip "H3l5" for "H315").
+ */
+export interface GhsCodeWarning {
+  field:   'hazard_statements' | 'precautionary_statements'
+  code:    string
+  message: string
+}
+
+/**
+ * Collect non-blocking warnings for unrecognized GHS codes among the given
+ * product fields. Empty/blank codes are ignored — they're dropped elsewhere
+ * and aren't worth a reviewer's attention.
+ */
+export function collectGhsCodeWarnings(fields: {
+  hazard_statements?:        readonly HazardStatement[] | null
+  precautionary_statements?: readonly PrecautionaryStatement[] | null
+}): GhsCodeWarning[] {
+  const warnings: GhsCodeWarning[] = []
+  for (const h of fields.hazard_statements ?? []) {
+    const code = h.code?.trim()
+    if (code && !isValidHazardCode(code)) {
+      warnings.push({ field: 'hazard_statements', code, message: `Unrecognized GHS hazard code "${code}".` })
+    }
+  }
+  for (const p of fields.precautionary_statements ?? []) {
+    const code = p.code?.trim()
+    if (code && !isValidPrecautionaryCode(code)) {
+      warnings.push({ field: 'precautionary_statements', code, message: `Unrecognized GHS precautionary code "${code}".` })
+    }
+  }
+  return warnings
+}
+
+// SDS §1 emergency-contact values are free text and routinely hold non-dial
+// junk ("See section 1", "N/A", "Contact supplier", blanks). A tel: link for
+// those would render a confident call button that dials garbage (e.g.
+// "See section 1" → tel:1) — dangerous in an incident. Treat a value as
+// dialable only when it carries enough digits to be a real phone number.
+const MIN_PHONE_DIGITS = 7
+
+/**
+ * Build a `tel:` href from a free-text phone string, or null when the value
+ * isn't a plausible phone number. A leading '+' (international dialing) is
+ * preserved; all other non-digit characters are dropped.
+ */
+export function dialableTelHref(phone: string): string | null {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length < MIN_PHONE_DIGITS) return null
+  const plus = phone.trim().startsWith('+') ? '+' : ''
+  return `tel:${plus}${digits}`
 }
 
 export interface ProductInputErrors {
   field:   keyof ChemicalProductInput | 'cas_numbers' | 'ghs_pictograms'
+         | 'hazard_statements' | 'precautionary_statements'
   message: string
 }
 
@@ -116,6 +242,18 @@ export function validateProductInput(input: ChemicalProductInput): ProductInputE
   if (input.ghs_signal_word
       && !(GHS_SIGNAL_WORDS as readonly string[]).includes(input.ghs_signal_word)) {
     errors.push({ field: 'ghs_signal_word', message: 'Must be "danger" or "warning"' })
+  }
+
+  for (const h of input.hazard_statements ?? []) {
+    if (!isValidHazardCode(h.code)) {
+      errors.push({ field: 'hazard_statements', message: `Unknown hazard code: ${h.code}` })
+    }
+  }
+
+  for (const p of input.precautionary_statements ?? []) {
+    if (!isValidPrecautionaryCode(p.code)) {
+      errors.push({ field: 'precautionary_statements', message: `Unknown precautionary code: ${p.code}` })
+    }
   }
 
   return errors
@@ -244,6 +382,7 @@ export interface ProductFieldsFromParse {
   name?:                     string
   manufacturer?:             string | null
   product_code?:             string | null
+  emergency_phone?:          string | null
   cas_numbers?:              string[]
   synonyms?:                 string[]
   physical_state?:           PhysicalState | null
@@ -294,6 +433,7 @@ export function parseToProductFields(parsed: ParsedSdsPayload): ProductFieldsFro
   if (parsed.product_name && parsed.product_name.trim()) out.name = parsed.product_name.trim()
   if (parsed.manufacturer)    out.manufacturer    = parsed.manufacturer
   if (parsed.product_code)    out.product_code    = parsed.product_code
+  if (parsed.emergency_phone) out.emergency_phone = parsed.emergency_phone
   if (parsed.cas_numbers && parsed.cas_numbers.length > 0)
     out.cas_numbers = parsed.cas_numbers.filter(c => isValidCas(c))
   if (parsed.synonyms && parsed.synonyms.length > 0) out.synonyms = parsed.synonyms
@@ -346,6 +486,52 @@ function hasAnyValue(obj: object | null | undefined): boolean {
     return true
   }
   return false
+}
+
+// ─── First-aid emergency mode ────────────────────────────────────────────
+//
+// The container scan flow can surface a "panic" view that shows ONLY the
+// life-safety information from the SDS: first aid by exposure route and
+// spill response steps. These helpers flatten the JSONB blobs stored on
+// chemical_products into an ordered, gap-free list of labeled entries so
+// the UI stays dumb and the ordering/omission rules are unit-tested here.
+//
+// Order matters: it mirrors how a responder triages — what entered the
+// body first (first aid by route), then how to contain the release.
+
+export interface EmergencyEntry { label: string; text: string }
+
+// Drop entries whose text is blank/null so the panic view never renders an
+// empty "Eyes:" heading with nothing under it.
+function toEntries(rows: ReadonlyArray<readonly [string, string | null | undefined]>): EmergencyEntry[] {
+  const out: EmergencyEntry[] = []
+  for (const [label, text] of rows) {
+    if (typeof text === 'string' && text.trim() !== '') {
+      out.push({ label, text: text.trim() })
+    }
+  }
+  return out
+}
+
+export function firstAidEntries(fa: ParsedSdsFirstAid | null | undefined): EmergencyEntry[] {
+  if (!fa) return []
+  return toEntries([
+    ['Inhalation',   fa.inhalation],
+    ['Skin contact', fa.skin],
+    ['Eye contact',  fa.eyes],
+    ['Ingestion',    fa.ingestion],
+    ['Notes',        fa.notes],
+  ])
+}
+
+export function spillCleanupEntries(sc: ParsedSdsSpillCleanup | null | undefined): EmergencyEntry[] {
+  if (!sc) return []
+  return toEntries([
+    ['Personal precautions',      sc.personal_precautions],
+    ['Containment',               sc.containment_methods],
+    ['Cleanup',                   sc.cleanup_methods],
+    ['Environmental precautions', sc.environmental_precautions],
+  ])
 }
 
 // ─── Inventory items (Phase D) ───────────────────────────────────────────

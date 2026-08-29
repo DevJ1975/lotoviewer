@@ -32,38 +32,33 @@ function setupStorageMock(uploadError: Error | null = null) {
   return bucket
 }
 
+// The pipeline filters every query by BOTH tenant_id and equipment_id, so
+// each SELECT/UPDATE chains two `.eq()` calls before terminating. The mock
+// must mirror that: the first `.eq()` returns a builder that also exposes
+// `.eq()`, and only the second `.eq()` resolves (UPDATE) or exposes
+// `.single()` (SELECT).
+function selectChain(data: unknown, error: Error | null) {
+  const terminal = { single: vi.fn().mockResolvedValue({ data, error }) }
+  return { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue(terminal) }) }) }
+}
+
+function updateChain(error: Error | null) {
+  return { update: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error }) }) }) }
+}
+
 function setupDbMock(selectError: Error | null = null, updateError: Error | null = null) {
   vi.mocked(supabase.from)
     // 1. Initial SELECT for current URLs
-    .mockImplementationOnce(() => ({
-      select: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          single: vi.fn().mockResolvedValue({
-            data: selectError ? null : { equip_photo_url: null, iso_photo_url: null },
-            error: selectError,
-          }),
-        }),
-      }),
-    } as unknown as ReturnType<typeof supabase.from>))
+    .mockImplementationOnce(() => selectChain(
+      selectError ? null : { equip_photo_url: null, iso_photo_url: null },
+      selectError,
+    ) as unknown as ReturnType<typeof supabase.from>)
     // 2. UPDATE with new URL + status
-    .mockImplementationOnce(() => ({
-      update: vi.fn().mockReturnValue({
-        eq: vi.fn().mockResolvedValue({ error: updateError }),
-      }),
-    } as unknown as ReturnType<typeof supabase.from>))
+    .mockImplementationOnce(() => updateChain(updateError) as unknown as ReturnType<typeof supabase.from>)
     // 3. Reconcile SELECT after patch (returns matching state so no extra write)
     .mockImplementation(() => ({
-      select: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          single: vi.fn().mockResolvedValue({
-            data: { equip_photo_url: null, iso_photo_url: null, photo_status: 'missing' },
-            error: null,
-          }),
-        }),
-      }),
-      update: vi.fn().mockReturnValue({
-        eq: vi.fn().mockResolvedValue({ error: null }),
-      }),
+      ...selectChain({ equip_photo_url: null, iso_photo_url: null, photo_status: 'missing' }, null),
+      ...updateChain(null),
     } as unknown as ReturnType<typeof supabase.from>))
 }
 

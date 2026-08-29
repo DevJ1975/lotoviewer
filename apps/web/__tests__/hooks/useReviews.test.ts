@@ -6,6 +6,13 @@ import type { LotoReview } from '@soteria/core/types'
 
 vi.mock('@/lib/supabase', () => ({ supabase: { from: vi.fn() } }))
 
+// useReviews reads `tenantId` from useTenant and early-returns when it is
+// absent. These tests don't exercise the real provider — mock with a stable
+// demo tenant id so fetch/submit run their real query chains.
+vi.mock('@/components/TenantProvider', () => ({
+  useTenant: () => ({ tenantId: '00000000-0000-0000-0000-0000000aabbb' }),
+}))
+
 const BASE_REVIEW: LotoReview = {
   id: 'r1', department: 'Electrical', reviewer_name: 'Jane Smith',
   reviewer_email: 'jane@example.com', signed_at: '2025-01-01T10:00:00Z',

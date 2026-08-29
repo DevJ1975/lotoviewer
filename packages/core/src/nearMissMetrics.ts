@@ -129,25 +129,63 @@ export function computeTopUnresolved(
 // Fetch
 // ──────────────────────────────────────────────────────────────────────────
 
-export async function fetchNearMissMetrics(): Promise<NearMissMetrics | null> {
-  const { data, error } = await supabase
-    .from('near_misses')
-    .select('id, report_number, description, status, severity_potential, reported_at, resolved_at')
+// Both 30-day tiles ("New (30 d)" and ">30 d open") pivot on the same
+// boundary, so they share one constant.
+const WINDOW_DAYS = 30
 
+// Backstop, not a business rule: a tenant with this many reports still
+// OPEN has a triage problem, not a reporting one. Hitting it warns
+// rather than silently shrinking the derived tiles.
+const MAX_ACTIVE_ROWS = 5_000
+
+export async function fetchNearMissMetrics(): Promise<NearMissMetrics | null> {
+  const nowMs = Date.now()
+  const windowStartIso = new Date(nowMs - WINDOW_DAYS * 86_400_000).toISOString()
+
+  // Every tile except the two totals is derived from the OPEN cohort, so
+  // that's the only thing worth shipping to the browser — the totals come
+  // back as counts, which keeps the payload proportional to the backlog
+  // instead of to the tenant's entire reporting history.
+  const [activeRes, totalRes, recentRes] = await Promise.all([
+    supabase
+      .from('near_misses')
+      .select(
+        'id, report_number, description, status, severity_potential, reported_at, resolved_at',
+        { count: 'exact' },
+      )
+      .in('status', ACTIVE_NEAR_MISS_STATUSES as readonly string[])
+      // Oldest first so that if the cap ever bites, the rows kept are the
+      // ones the aging + top-unresolved tiles care about.
+      .order('reported_at', { ascending: true })
+      .limit(MAX_ACTIVE_ROWS),
+    supabase
+      .from('near_misses')
+      .select('id', { count: 'exact', head: true }),
+    supabase
+      .from('near_misses')
+      .select('id', { count: 'exact', head: true })
+      .gte('reported_at', windowStartIso),
+  ])
+
+  const error = activeRes.error ?? totalRes.error ?? recentRes.error
   if (error) {
     console.warn('[nearMissMetrics] fetch failed', error)
     return null
   }
 
-  const rows = (data ?? []) as unknown as NearMissRowForMetrics[]
-  const active = selectActive(rows)
+  const active = (activeRes.data ?? []) as unknown as NearMissRowForMetrics[]
+  if (active.length >= MAX_ACTIVE_ROWS) {
+    console.warn(
+      `[nearMissMetrics] open-report cap (${MAX_ACTIVE_ROWS}) reached — severity, aging and top-unresolved cover the oldest ${MAX_ACTIVE_ROWS} open reports only`,
+    )
+  }
 
   return {
-    totalActive:    active.length,
-    totalAll:       rows.length,
+    totalActive:    activeRes.count ?? active.length,
+    totalAll:       totalRes.count ?? 0,
     bySeverity:     computeSeverityDistribution(active),
-    newLast30Days:  countReportedSince(rows, 30),
-    agingActive:    countAging(rows, 30),
-    topUnresolved:  computeTopUnresolved(rows, 5),
+    newLast30Days:  recentRes.count ?? 0,
+    agingActive:    countAging(active, WINDOW_DAYS, new Date(nowMs)),
+    topUnresolved:  computeTopUnresolved(active, 5),
   }
 }

@@ -70,8 +70,11 @@ describe('getModuleVisuals', () => {
   it('every top-level safety/reports/admin module resolves to a registered color', () => {
     // Catches regressions where a module gets added to FEATURES but
     // forgets to set color, AND the fallback to slate gets accepted
-    // silently. We assert the *explicit* declaration here.
+    // silently. We assert the *explicit* declaration here. Internal
+    // modules carry no visual identity — they render via inline UI (e.g.
+    // a dashboard panel), never as a drawer/grid tile — so they're exempt.
     const topLevel = [...getModules('safety'), ...getModules('reports'), ...getModules('admin')]
+      .filter(f => !f.internal)
     for (const f of topLevel) {
       expect(f.color, `module ${f.id} is missing a color`).toBeDefined()
       expect(f.icon,  `module ${f.id} is missing an icon`).toBeDefined()

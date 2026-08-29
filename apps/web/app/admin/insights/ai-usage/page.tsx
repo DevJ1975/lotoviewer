@@ -37,6 +37,7 @@ function fmtPct(n: number): string {
 
 export default function TenantAiUsagePage() {
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const [days, setDays]       = useState<number>(30)
   const [data, setData]       = useState<TenantUsageResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -50,7 +51,7 @@ export default function TenantAiUsagePage() {
       const res = await fetch(`/api/tenant/ai-usage?days=${days}`, {
         headers: {
           authorization:    `Bearer ${session.access_token}`,
-          'x-active-tenant': tenant?.id ?? '',
+          'x-active-tenant': tenantId ?? '',
         },
         cache: 'no-store',
       })
@@ -66,7 +67,7 @@ export default function TenantAiUsagePage() {
     } finally {
       setLoading(false)
     }
-  }, [days, tenant?.id])
+  }, [days, tenantId])
 
   useEffect(() => { void load() }, [load])
 

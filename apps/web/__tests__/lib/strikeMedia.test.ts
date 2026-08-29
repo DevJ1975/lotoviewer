@@ -1,45 +1,74 @@
 import { describe, expect, it } from 'vitest'
 import {
-  isValidStrikeStorageVideoPath,
-  resolveStrikeVideoSource,
+  parseVimeoReference,
+  resolveStrikeVideo,
+  vimeoEmbedUrl,
 } from '@soteria/core/strikeMedia'
 
-describe('resolveStrikeVideoSource', () => {
-  it('recognizes private STRIKE storage paths', () => {
-    expect(resolveStrikeVideoSource('global/loto/refresher.mp4')).toEqual({
-      kind: 'storage',
-      path: 'global/loto/refresher.mp4',
-    })
+describe('parseVimeoReference', () => {
+  it('accepts a bare numeric id', () => {
+    expect(parseVimeoReference('123456789')).toEqual({ videoId: '123456789', hash: null })
   })
 
-  it('recognizes tenant-scoped STRIKE storage paths', () => {
-    expect(resolveStrikeVideoSource('11111111-1111-4111-8111-111111111111/strike/video.webm')).toEqual({
-      kind: 'storage',
-      path: '11111111-1111-4111-8111-111111111111/strike/video.webm',
-    })
+  it('accepts a vimeo.com link, with or without a scheme', () => {
+    expect(parseVimeoReference('https://vimeo.com/123456789')).toEqual({ videoId: '123456789', hash: null })
+    expect(parseVimeoReference('vimeo.com/123456789')).toEqual({ videoId: '123456789', hash: null })
   })
 
-  it('rejects traversal and unsupported storage paths', () => {
-    expect(resolveStrikeVideoSource('global/../secret.mp4')).toMatchObject({ kind: 'unsupported' })
-    expect(resolveStrikeVideoSource('global/training.exe')).toMatchObject({ kind: 'unsupported' })
-    expect(resolveStrikeVideoSource('/global/training.mp4')).toMatchObject({ kind: 'unsupported' })
+  it('extracts the unlisted privacy hash from a path or a query string', () => {
+    expect(parseVimeoReference('https://vimeo.com/123456789/abcdef0123'))
+      .toEqual({ videoId: '123456789', hash: 'abcdef0123' })
+    expect(parseVimeoReference('https://player.vimeo.com/video/123456789?h=abcdef0123'))
+      .toEqual({ videoId: '123456789', hash: 'abcdef0123' })
   })
 
-  it('rejects external video URLs', () => {
-    expect(resolveStrikeVideoSource('https://vimeo.com/123456789?h=abc123')).toMatchObject({
-      kind: 'unsupported',
-      reason: 'STRIKE videos must be uploaded to Supabase Storage.',
-    })
-    expect(resolveStrikeVideoSource('https://example.com/training.mp4')).toMatchObject({
-      kind: 'unsupported',
-      reason: 'STRIKE videos must be uploaded to Supabase Storage.',
-    })
+  it('rejects non-Vimeo hosts and junk so no arbitrary src can slip through', () => {
+    expect(parseVimeoReference('https://youtube.com/watch?v=123456789')).toBeNull()
+    expect(parseVimeoReference('https://evil.example/123456789')).toBeNull()
+    expect(parseVimeoReference('not a url')).toBeNull()
+    expect(parseVimeoReference('')).toBeNull()
+    expect(parseVimeoReference('   ')).toBeNull()
+  })
+
+  it('rejects ids too short to be Vimeo ids', () => {
+    expect(parseVimeoReference('https://vimeo.com/123')).toBeNull()
   })
 })
 
-describe('isValidStrikeStorageVideoPath', () => {
-  it('requires global or tenant UUID path roots', () => {
-    expect(isValidStrikeStorageVideoPath('global/path/file.mp4')).toBe(true)
-    expect(isValidStrikeStorageVideoPath('tenant/path/file.mp4')).toBe(false)
+describe('resolveStrikeVideo', () => {
+  it('resolves a Vimeo id with its stored hash', () => {
+    expect(resolveStrikeVideo({ video_external_id: '123456789', video_meta: { vimeo_hash: 'abcdef0123' } }))
+      .toEqual({ kind: 'vimeo', videoId: '123456789', hash: 'abcdef0123' })
+  })
+
+  it('resolves a Vimeo id without a hash', () => {
+    expect(resolveStrikeVideo({ video_external_id: '123456789' }))
+      .toEqual({ kind: 'vimeo', videoId: '123456789', hash: null })
+  })
+
+  it('ignores a malformed stored hash rather than embedding it', () => {
+    expect(resolveStrikeVideo({ video_external_id: '123456789', video_meta: { vimeo_hash: 'NO!' } }))
+      .toEqual({ kind: 'vimeo', videoId: '123456789', hash: null })
+  })
+
+  it('returns none for a blank id', () => {
+    expect(resolveStrikeVideo({ video_external_id: null })).toEqual({ kind: 'none' })
+    expect(resolveStrikeVideo({ video_external_id: '  ' })).toEqual({ kind: 'none' })
+  })
+
+  it('fails closed for a non-Vimeo id (e.g. a stale Cloudflare UID on a legacy row)', () => {
+    expect(resolveStrikeVideo({ video_external_id: 'a'.repeat(32) }))
+      .toMatchObject({ kind: 'unsupported' })
+  })
+})
+
+describe('vimeoEmbedUrl', () => {
+  it('builds a do-not-track embed URL without a hash', () => {
+    expect(vimeoEmbedUrl('123456789', null)).toBe('https://player.vimeo.com/video/123456789?dnt=1')
+  })
+
+  it('includes the privacy hash when present', () => {
+    expect(vimeoEmbedUrl('123456789', 'abcdef0123'))
+      .toBe('https://player.vimeo.com/video/123456789?h=abcdef0123&dnt=1')
   })
 })

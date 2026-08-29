@@ -19,6 +19,34 @@ interface Props {
 
 type UploadState = 'idle' | 'uploading' | 'saved' | 'error'
 
+// Fetch a (WebP) tenant logo and re-encode it as PNG so pdf-lib can embed it
+// in the placard header. Browsers decode WebP natively via createImageBitmap;
+// the canvas re-encode yields PNG bytes. Best-effort — any failure returns
+// null and the placard falls back to the "SL" badge.
+async function loadLogoPngFromUrl(url: string | null): Promise<Uint8Array | null> {
+  if (!url || typeof document === 'undefined') return null
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const bmp = await createImageBitmap(await res.blob())
+    try {
+      const canvas = document.createElement('canvas')
+      canvas.width = bmp.width
+      canvas.height = bmp.height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return null
+      ctx.drawImage(bmp, 0, 0)
+      const out = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/png'))
+      if (!out) return null
+      return new Uint8Array(await out.arrayBuffer())
+    } finally {
+      bmp.close()
+    }
+  } catch {
+    return null
+  }
+}
+
 
 export default function PlacardPdfPreview({ open, onClose, equipment, steps, onSaved, onError }: Props) {
   const [pdfBytes, setPdfBytes]   = useState<Uint8Array | null>(null)
@@ -36,7 +64,8 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
   // a tablet doesn't doze and drop the upload mid-flight.
   useWakeLock(open && (generating || uploadState === 'uploading'))
   const iframeRef = useRef<HTMLIFrameElement>(null)
-  const { tenantId } = useTenant()
+  const { tenantId, tenant } = useTenant()
+  const tenantLogoUrl = tenant?.logo_url ?? null
 
   // Capture latest callbacks + data in refs so the effect only re-fires when
   // the modal opens (not on every parent render that gives us new closures).
@@ -45,11 +74,13 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
   const onCloseRef   = useRef(onClose)
   const stepsRef     = useRef(steps)
   const equipmentRef = useRef(equipment)
-  onSavedRef.current   = onSaved
-  onErrorRef.current   = onError
-  onCloseRef.current   = onClose
-  stepsRef.current     = steps
-  equipmentRef.current = equipment
+  useEffect(() => {
+    onSavedRef.current   = onSaved
+    onErrorRef.current   = onError
+    onCloseRef.current   = onClose
+    stepsRef.current     = steps
+    equipmentRef.current = equipment
+  }, [onSaved, onError, onClose, steps, equipment])
 
   const equipmentId = equipment.equipment_id
 
@@ -69,7 +100,10 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
         // Lazy-load pdf-lib — only needed when the preview actually opens.
         const { generatePlacardPdf, generateBilingualPlacardPdf } = await import('@/lib/pdfPlacard')
         const generator = bilingual ? generateBilingualPlacardPdf : generatePlacardPdf
-        const bytes = await generator({ equipment: equipmentRef.current, steps: stepsRef.current })
+        // Convert the tenant logo (WebP) to PNG in-browser for the placard
+        // header; best-effort, falls back to the "SL" badge on any failure.
+        const tenantLogoPng = await loadLogoPngFromUrl(tenantLogoUrl)
+        const bytes = await generator({ equipment: equipmentRef.current, steps: stepsRef.current, tenantLogoPng })
         if (cancelled) return
 
         const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' })

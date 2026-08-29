@@ -1,9 +1,10 @@
 // End-to-end-style invite flow test. Walks the full happy paths the
 // user reported as flaky:
-//   1. Invite a brand-new user → membership inserted, email sent with
-//      temp password, response carries emailSent=true + tempPassword
+//   1. Invite a brand-new user → membership inserted, email sent with a
+//      single-use accept-invite LINK (never a password), response
+//      carries emailSent=true + tempPassword (admin fallback) + inviteUrl
 //   2. Invite an existing user (already in profiles) → no createUser,
-//      no temp password, but notification email STILL sent
+//      no link, but notification email STILL sent
 //   3. Try to invite the same email twice → second attempt 409s with a
 //      "already a member" error
 //
@@ -20,7 +21,7 @@ import { POST as inviteMember } from '@/app/api/superadmin/tenants/[number]/memb
 describe('Member invite flow — end-to-end happy paths', () => {
   beforeEach(() => { resetMocks(); gateOk() })
 
-  it('NEW USER: creates auth row → patches profile → inserts membership → emails invite with temp password', async () => {
+  it('NEW USER: creates auth row → patches profile → inserts membership → emails invite with accept link', async () => {
     mockState.queue('tenants',  { data: { id: 'T1', tenant_number: '0001', name: 'Snak King' }, error: null })
     mockState.queue('profiles', { data: null, error: null })  // no existing profile
     authAdminMock.createUser.mockResolvedValue({
@@ -37,7 +38,8 @@ describe('Member invite flow — end-to-end happy paths', () => {
     expect(r.status).toBe(201)
     const body = await r.json()
     expect(body.alreadyExisted).toBe(false)
-    expect(body.tempPassword).toBeTruthy()
+    expect(body.tempPassword).toBeTruthy()      // admin copy-paste fallback
+    expect(body.inviteUrl).toContain('/accept-invite?token=')
     expect(body.emailSent).toBe(true)
 
     // Verify the side-effects fired in the right order with the right
@@ -47,11 +49,20 @@ describe('Member invite flow — end-to-end happy paths', () => {
       email_confirm: true,
       user_metadata: { full_name: 'New User' },
     }))
-    expect(sendInviteEmailMock).toHaveBeenCalledWith(expect.objectContaining({
-      to:           'new@example.com',
-      tenantName:   'Snak King',
-      tempPassword: 'TempPass123!',  // from generateTempPassword mock
-    }))
+    // The email carries the link, NEVER the temp password (passwords in
+    // email bodies were the main content-level spam trigger).
+    const emailArgs = sendInviteEmailMock.mock.calls[0]![0] as Record<string, unknown>
+    expect(emailArgs.to).toBe('new@example.com')
+    expect(emailArgs.tenantName).toBe('Snak King')
+    expect(emailArgs.inviteUrl).toBe(body.inviteUrl)
+    expect(emailArgs).not.toHaveProperty('tempPassword')
+    // The invite_tokens row stores only the hash — never the raw token.
+    const tokenInsert = mockState.inserts.find(i => i.table === 'invite_tokens')
+    expect(tokenInsert).toBeTruthy()
+    const tokenPayload = tokenInsert!.payload as Record<string, unknown>
+    expect(tokenPayload).toMatchObject({ user_id: 'NEW-UUID', tenant_id: 'T1', email: 'new@example.com' })
+    const rawToken = (body.inviteUrl as string).split('token=')[1]!
+    expect(tokenPayload.token_hash).not.toContain(rawToken)
     // Membership insert payload includes the inviter's user id.
     const membershipInsert = mockState.inserts.find(i => i.table === 'tenant_memberships')
     expect(membershipInsert).toBeTruthy()
@@ -60,7 +71,7 @@ describe('Member invite flow — end-to-end happy paths', () => {
     })
   })
 
-  it('EXISTING USER: skips createUser, sends notification email with empty password, returns alreadyExisted', async () => {
+  it('EXISTING USER: skips createUser, sends notification email with no link, returns alreadyExisted', async () => {
     mockState.queue('tenants',  { data: { id: 'T1', tenant_number: '0001', name: 'Snak King' }, error: null })
     mockState.queue('profiles', { data: { id: 'EXISTING-UUID', email: 'jane@x.com' }, error: null })
     mockState.queue('tenant_memberships', { data: null, error: null })
@@ -76,12 +87,12 @@ describe('Member invite flow — end-to-end happy paths', () => {
     expect(body.emailSent).toBe(true)
 
     expect(authAdminMock.createUser).not.toHaveBeenCalled()
-    // The notification path: empty tempPassword triggers the
+    // The notification path: empty inviteUrl triggers the
     // "you've been added to {tenant}" template.
     expect(sendInviteEmailMock).toHaveBeenCalledWith(expect.objectContaining({
-      to:           'jane@x.com',
-      tenantName:   'Snak King',
-      tempPassword: '',
+      to:         'jane@x.com',
+      tenantName: 'Snak King',
+      inviteUrl:  '',
     }))
   })
 

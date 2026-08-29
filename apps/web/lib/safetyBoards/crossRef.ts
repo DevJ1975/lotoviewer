@@ -45,19 +45,23 @@ export function findCrossRefs(input: string): CrossRefMatch[] {
 // Map prefix → entity URL builder. Unknown prefixes return null and
 // the renderer leaves them as plain text so a misspelled tag never
 // 404s.
+// The id is encoded for the same reason as entityHref: it comes out of
+// free-typed post text, so it can contain anything a user pressed. An
+// unencoded percent yields a path that decodeURIComponent rejects.
 export function hrefForCrossRef(match: CrossRefMatch): string | null {
+  const safeId = encodeURIComponent(match.id)
   switch (match.prefix) {
-    case 'INC':  return `/incidents/${match.id}`           // by id (or report_number; route handles both)
+    case 'INC':  return `/incidents/${safeId}`           // by id (or report_number; route handles both)
     case 'EQ':
-    case 'EQUIP':return `/equipment/${match.id}`
+    case 'EQUIP':return `/equipment/${safeId}`
     case 'NM':
-    case 'NEAR': return `/near-miss/${match.id}`
-    case 'HW':   return `/hot-work/${match.id}`
-    case 'CS':   return `/confined-spaces/${match.id}`
-    case 'JHA':  return `/jha/${match.id}`
+    case 'NEAR': return `/near-miss/${safeId}`
+    case 'HW':   return `/hot-work/${safeId}`
+    case 'CS':   return `/confined-spaces/${safeId}`
+    case 'JHA':  return `/jha/${safeId}`
     case 'ACT':
     case 'CAPA': return null  // actions are inline on incident; no detail page
-    case 'TBT':  return `/toolbox-talks/${match.id}`
+    case 'TBT':  return `/toolbox-talks/${safeId}`
     default:     return null
   }
 }

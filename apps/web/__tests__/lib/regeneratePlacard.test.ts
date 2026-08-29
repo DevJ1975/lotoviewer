@@ -30,7 +30,7 @@ interface AdminStubOpts {
  * Builds a minimal SupabaseClient-shaped object that satisfies the
  * regenerator's call graph:
  *   admin.from('loto_equipment').select('*').eq().eq().maybeSingle()
- *   admin.from('loto_steps').select('*').eq().eq().order()
+ *   admin.from('loto_energy_steps').select('*').eq().eq().order()
  *   admin.storage.from('loto-photos').upload(...)
  *   admin.storage.from('loto-photos').getPublicUrl(...)
  *   admin.from('loto_equipment').update().eq().eq()
@@ -102,7 +102,7 @@ function makeAdminStub(opts: AdminStubOpts) {
           // First call is the SELECT; second call is the UPDATE.
           return equipmentCallCount++ === 0 ? selectEquipment() : updateEquipment()
         }
-        if (name === 'loto_steps') return selectSteps()
+        if (name === 'loto_energy_steps') return selectSteps()
         throw new Error(`Unexpected table: ${name}`)
       }),
       storage: { from: vi.fn(() => bucket) },
@@ -166,9 +166,11 @@ describe('regenerateAndUploadPlacard', () => {
     // browsers (and the next admin viewer's <Image src>) won't pull a
     // stale copy from cache after a photo swap.
     expect(result.placardUrl).toMatch(/\?v=\d+$/)
-    // The patch nulls signed_placard_url because any prior signature
-    // was over the old bytes.
-    expect(updates[0]?.payload).toMatchObject({ signed_placard_url: null })
+    // The patch updates placard_url (cache-busted) but must NOT write
+    // signed_placard_url — that isn't a column on loto_equipment, and writing
+    // it errored against the live schema.
+    expect(updates[0]?.payload).toMatchObject({ placard_url: result.placardUrl })
+    expect(updates[0]?.payload).not.toHaveProperty('signed_placard_url')
   })
 
   it('throws when the storage upload fails', async () => {

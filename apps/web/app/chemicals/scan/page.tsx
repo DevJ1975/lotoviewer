@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Loader2, ScanLine } from 'lucide-react'
+import { ArrowLeft, Loader2, ScanLine, Siren } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 
@@ -32,6 +32,7 @@ export default function ChemicalScanPage() {
   const [code,   setCode]         = useState('')
   const [busy,   setBusy]         = useState(false)
   const [error,  setError]        = useState<string | null>(null)
+  const [emergency, setEmergency] = useState(false)
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach(t => t.stop())
@@ -51,10 +52,13 @@ export default function ChemicalScanPage() {
 
       // QR codes on labels encode an absolute URL to the chemical detail
       // page; if it looks like a URL with /chemicals/<uuid>, hop straight
-      // there. Otherwise treat it as an inventory barcode.
+      // there. In Emergency mode, jump to the chemical's emergency view so
+      // the toggle behaves the same for chemical QRs as for container codes.
+      // Otherwise treat it as an inventory barcode.
       const productMatch = rawCode.match(/\/chemicals\/([0-9a-f-]{36})/i)
       if (productMatch) {
-        router.push(`/chemicals/${productMatch[1]}`)
+        const productId = productMatch[1]
+        router.push(emergency ? `/chemicals/${productId}/emergency` : `/chemicals/${productId}`)
         return
       }
 
@@ -65,11 +69,14 @@ export default function ChemicalScanPage() {
         setError(body.error ?? `HTTP ${res.status}`)
         return
       }
-      router.push(`/chemicals/inventory/${body.item.id}`)
+      const dest = emergency
+        ? `/chemicals/inventory/${body.item.id}/emergency`
+        : `/chemicals/inventory/${body.item.id}`
+      router.push(dest)
     } finally {
       setBusy(false)
     }
-  }, [tenant, router])
+  }, [tenant, router, emergency])
 
   // Hold the latest resolve in a ref so the camera-tick closure can
   // call it without forcing the startCamera callback to re-create
@@ -140,6 +147,28 @@ export default function ChemicalScanPage() {
           Point your camera at a label QR or barcode. CHEM-… codes resolve to a container; chemical-detail QR codes jump straight to that chemical.
         </p>
       </header>
+
+      <label
+        className={`flex items-center gap-3 rounded-lg border px-4 py-3 cursor-pointer ${
+          emergency
+            ? 'border-red-400 bg-red-50 dark:border-red-800 dark:bg-red-950/30'
+            : 'border-slate-200 dark:border-slate-800'
+        }`}
+      >
+        <input
+          type="checkbox"
+          checked={emergency}
+          onChange={e => setEmergency(e.target.checked)}
+          className="h-4 w-4 accent-red-600"
+        />
+        <Siren className={`w-5 h-5 ${emergency ? 'text-red-600' : 'text-slate-400'}`} />
+        <span className="text-sm">
+          <span className="font-semibold text-slate-800 dark:text-slate-200">Emergency mode</span>
+          <span className="block text-xs text-slate-500 dark:text-slate-400">
+            Scanned containers and chemical QR codes open straight to first aid &amp; spill response.
+          </span>
+        </span>
+      </label>
 
       {error && (
         <div className="rounded border border-rose-300 bg-rose-50 dark:bg-rose-950/30 dark:border-rose-800 px-4 py-3 text-sm text-rose-800 dark:text-rose-200">
