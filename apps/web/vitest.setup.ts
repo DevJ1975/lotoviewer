@@ -25,17 +25,28 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 }
 
-// matchMedia is not available in jsdom
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: (query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => false,
-  }),
-})
+// The shims below patch jsdom gaps, so they only apply under it. A file that
+// opts into the node environment with `@vitest-environment node` — the pure
+// crypto and PDF suites do, because jsdom's Web Crypto and the buffers handed
+// to it live in different realms — has no Element and no window, and this
+// setup file runs for every suite regardless of environment.
+if (typeof window !== 'undefined') {
+  // scrollIntoView is called by cmdk when it moves the command-palette
+  // selection; jsdom implements no layout, so it ships no such method.
+  Element.prototype.scrollIntoView = Element.prototype.scrollIntoView ?? function () {}
+
+  // matchMedia is not available in jsdom
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  })
+}

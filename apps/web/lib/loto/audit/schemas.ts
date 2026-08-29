@@ -205,6 +205,11 @@ export const AUTHOR_SCHEMA = {
   properties: {
     steps: {
       type: 'array',
+      // minItems is load-bearing, not decorative: applying a draft replaces the
+      // machine's entire step set, so an empty array deletes the procedure.
+      // runAuthorAgent re-checks this at runtime — the schema is the first gate,
+      // not the only one.
+      minItems: 1,
       description: 'The corrected procedure: one step per independent energy source, ordered shutdown → isolate → release stored energy → lockout → verify zero energy. At least one step is required.',
       items: {
         type: 'object',

@@ -9,6 +9,7 @@ import LoginBackground from '@/components/LoginBackground'
 import PasswordField from '@/components/PasswordField'
 import SoteriaLogo from '@/components/SoteriaLogo'
 import { Avatar } from '@/components/ui/Avatar'
+import { safeRedirect } from '@/lib/security/safeRedirect'
 
 export default function LoginPage() {
   return (
@@ -21,7 +22,10 @@ export default function LoginPage() {
 function LoginForm() {
   const router = useRouter()
   const search = useSearchParams()
-  const next   = search.get('next') || '/'
+  // Sanitised here rather than at the redirect below: the bounce also fires
+  // for an already-signed-in visitor, so an off-site value would be followed
+  // on page load without any interaction.
+  const next   = safeRedirect(search.get('next'))
   const { userId, profile, loading, signIn } = useAuth()
 
   const [email, setEmail]       = useState('')

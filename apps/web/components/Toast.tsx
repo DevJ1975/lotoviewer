@@ -23,7 +23,7 @@ const ICON = { success: '✓', error: '✗', info: 'ⓘ' } as const
 // fresh onClose closure.
 export default function Toast({ message, type, action, onClose }: Props) {
   const onCloseRef = useRef(onClose)
-  onCloseRef.current = onClose
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
 
   useEffect(() => {
     const timeout = type === 'error' ? 9000 : action ? 6000 : 3500

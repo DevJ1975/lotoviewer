@@ -4,6 +4,7 @@ import { requireTenantMember, type TenantGate } from '@/lib/auth/tenantGate'
 
 type TenantGateOk = Extract<TenantGate, { ok: true }>
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { loadCareAccess } from '@/lib/incidents/careAccess'
 import {
   validateCareCasePatch,
   CARE_CASE_STATUSES,
@@ -83,51 +84,13 @@ async function logPhiAccess(
   }
 }
 
-// ─── Authorization helper ──────────────────────────────────────────────────
-//
-// Care data is PII-adjacent (diagnosis, restrictions). Members can
-// READ the care case if they're the assigned investigator or the
-// case manager; admins always can. Writes require admin or
-// investigator/case-manager.
-
-async function loadAuthContext(req: Request, incidentId: string): Promise<
-  | { ok: true; gate: TenantGateOk; isPriv: boolean }
-  | { ok: false; status: number; message: string }
-> {
-  const gate = await requireTenantMember(req)
-  if (!gate.ok) return { ok: false, status: gate.status, message: gate.message }
-
-  const admin = supabaseAdmin()
-  const { data: incident } = await admin
-    .from('incidents')
-    .select('id, assigned_investigator')
-    .eq('id', incidentId)
-    .eq('tenant_id', gate.tenantId)
-    .maybeSingle()
-  if (!incident) return { ok: false, status: 404, message: 'Incident not found' }
-
-  const { data: existingCase } = await admin
-    .from('incident_care_cases')
-    .select('case_manager_user_id')
-    .eq('incident_id', incidentId)
-    .eq('tenant_id', gate.tenantId)
-    .maybeSingle()
-
-  const isPriv =
-    gate.role === 'owner' || gate.role === 'admin' || gate.role === 'superadmin'
-    || incident.assigned_investigator === gate.userId
-    || existingCase?.case_manager_user_id === gate.userId
-
-  return { ok: true, gate, isPriv }
-}
-
 // ─── GET ───────────────────────────────────────────────────────────────────
 
 export async function GET(req: Request, ctx: RouteContext) {
   const { id: incidentId } = await ctx.params
   if (!UUID_RE.test(incidentId)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
 
-  const auth = await loadAuthContext(req, incidentId)
+  const auth = await loadCareAccess(req, incidentId)
   if (!auth.ok) return NextResponse.json({ error: auth.message }, { status: auth.status })
 
   if (!auth.isPriv) {
@@ -180,7 +143,7 @@ export async function POST(req: Request, ctx: RouteContext) {
   const { id: incidentId } = await ctx.params
   if (!UUID_RE.test(incidentId)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
 
-  const auth = await loadAuthContext(req, incidentId)
+  const auth = await loadCareAccess(req, incidentId)
   if (!auth.ok) return NextResponse.json({ error: auth.message }, { status: auth.status })
   if (!auth.isPriv)
     return NextResponse.json({ error: 'Admin or investigator only' }, { status: 403 })
@@ -279,7 +242,7 @@ export async function PATCH(req: Request, ctx: RouteContext) {
   const { id: incidentId } = await ctx.params
   if (!UUID_RE.test(incidentId)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
 
-  const auth = await loadAuthContext(req, incidentId)
+  const auth = await loadCareAccess(req, incidentId)
   if (!auth.ok) return NextResponse.json({ error: auth.message }, { status: auth.status })
   if (!auth.isPriv)
     return NextResponse.json({ error: 'Admin or investigator only' }, { status: 403 })
