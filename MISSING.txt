@@ -1,0 +1,7 @@
+Photos referenced by the database that could not be fetched.
+These placard slots keep the placeholder; fix the photo in
+Soteria Field and re-run the workflow.
+
+SKAP-305	equip	https://zwtnpyjifbdytlektxlc.supabase.co/storage/v1/object/public/loto-photos/FOCKE-3-EQ.jpg	HTTP Error 400: Bad Request
+SKAP-903	iso	https://zwtnpyjifbdytlektxlc.supabase.co/storage/v1/object/public/loto-photos/FOCKE-9-IP.jpg	HTTP Error 400: Bad Request
+SKAP-905	iso	https://zwtnpyjifbdytlektxlc.supabase.co/storage/v1/object/public/loto-photos/FOCKE-9-IP.jpg	HTTP Error 400: Bad Request
