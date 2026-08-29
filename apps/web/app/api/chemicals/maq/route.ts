@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireTenantMember } from '@/lib/auth/tenantGate'
+import { requireTenantAdmin, requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { INVENTORY_UNITS, type InventoryUnit } from '@soteria/core/chemicals'
 
@@ -11,6 +11,10 @@ import { INVENTORY_UNITS, type InventoryUnit } from '@soteria/core/chemicals'
 //     products.storage_class ILIKEs the rule's text.
 //   - product_id — applies to that specific chemical anywhere it lives.
 // One field must be set, not both — enforced by a CHECK in migration 086.
+//
+// Reads are member-level: a worker needs to see the cap that applies to them.
+// Writes are admin-only — a MAQ cap governs how much of a hazardous material
+// the whole organisation may store, which is not a per-member decision.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -55,7 +59,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const gate = await requireTenantMember(req)
+  const gate = await requireTenantAdmin(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   let body: Record<string, unknown>

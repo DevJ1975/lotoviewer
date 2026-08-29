@@ -28,6 +28,7 @@ import type { RiskDetailBundle } from '@soteria/core/queries/risks'
 export default function RiskDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const { profile } = useAuth()
 
   const [bundle, setBundle] = useState<RiskDetailBundle | null>(null)
@@ -41,7 +42,7 @@ export default function RiskDetailPage({ params }: { params: Promise<{ id: strin
       const { data: { session } } = await supabase.auth.getSession()
       const headers: Record<string, string> = {}
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
-      if (tenant?.id)            headers['x-active-tenant'] = tenant.id
+      if (tenantId)              headers['x-active-tenant'] = tenantId
 
       const res = await fetch(`/api/risk/${id}`, { headers })
       const body = await res.json()
@@ -53,7 +54,7 @@ export default function RiskDetailPage({ params }: { params: Promise<{ id: strin
     } finally {
       setLoading(false)
     }
-  }, [id, tenant?.id])
+  }, [id, tenantId])
 
   useEffect(() => { void fetchData() }, [fetchData])
 

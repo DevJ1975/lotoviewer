@@ -8,6 +8,14 @@ import { checkAiRateLimit, checkTenantBudget, logAiInvocation } from '@/lib/ai/r
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 import { CAUSAL_FACTOR_CATEGORIES, type EcfaNodeRow } from '@soteria/core/ecfaSchemas'
 
+// An AI route's worst case is `timeout x (retries + 1)`, and it must fit
+// inside maxDuration or the platform kills the function mid-flight and the
+// caller gets a raw 504 rather than any error this code produces. This route
+// asks for up to 1,800 tokens,
+// and previously declared no ceiling at all — so it inherited the platform
+// default, which is far shorter than a single model call.
+export const maxDuration = 60
+
 // POST /api/incidents/[id]/ecfa/assist
 //
 // AI co-pilot for the Events & Causal Factors Analysis. Two modes:
@@ -222,7 +230,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
 
     let client: Anthropic
     try {
-      client = await getAnthropic(gate.tenantId)
+      client = await getAnthropic(gate.tenantId, { timeoutMs: 40_000, maxRetries: 0 })
     } catch (err) {
       const mapped = aiErrorToResponse(err, SURFACE)
       Sentry.captureException(err, { tags: { ...mapped.tags, route: 'ecfa/assist' } })

@@ -28,6 +28,10 @@ import type { GasMeter } from '@soteria/core/types'
 // the URL on an interval.
 
 export const runtime = 'nodejs'
+// Every overdue meter is pushed to every registered subscription, so the send
+// count is meters × subscriptions — the one part of this job that grows on two
+// axes at once.
+export const maxDuration = 300
 
 // Skip alerting an instrument again within this window. 12h means a
 // reminder fires at most twice per day per meter, which is enough to
@@ -169,7 +173,7 @@ async function runCron(req: Request): Promise<NextResponse> {
   }
   const subscriptions = subs ?? []
 
-  let alertsSent = 0
+  const alertRows: { instrument_id: string; alert_kind: string; recipients: number }[] = []
   const stale: string[] = []
   for (const c of toAlert) {
     const title = c.alert_kind === 'never'
@@ -204,13 +208,25 @@ async function runCron(req: Request): Promise<NextResponse> {
     // Record the alert even if zero subscriptions received it — the
     // intent (dedup) is "we tried"; an admin can debug zero recipients
     // via the row count vs the subscription count separately.
-    await admin.from('loto_meter_alerts').insert({
+    alertRows.push({
       instrument_id: c.instrument_id,
       alert_kind:    c.alert_kind,
       recipients:    ok,
     })
+  }
 
-    alertsSent += 1
+  // One insert for the whole fan-out. The dedup rows only have to exist before
+  // the next tick, not before the next push, so batching them costs nothing and
+  // saves a round-trip per meter.
+  if (alertRows.length > 0) {
+    const { error: insertErr } = await admin.from('loto_meter_alerts').insert(alertRows)
+    if (insertErr) {
+      // Not fatal — the pushes already went out. But a lost dedup row means
+      // every one of these meters alerts again next tick, so it must be visible.
+      Sentry.captureException(insertErr, {
+        tags: { route: '/api/cron/meter-bump-reminders', stage: 'dedup-insert' },
+      })
+    }
   }
 
   if (stale.length > 0) {
@@ -221,7 +237,7 @@ async function runCron(req: Request): Promise<NextResponse> {
   return NextResponse.json({
     scanned:     meters.length,
     candidates:  candidates.length,
-    alerts_sent: alertsSent,
+    alerts_sent: alertRows.length,
     pruned:      stale.length,
   })
 }
