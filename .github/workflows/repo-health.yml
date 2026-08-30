@@ -32,3 +32,50 @@ jobs:
         env:
           WIKI_SYNC_BASE: origin/${{ github.base_ref }}
         run: npm run check:wiki
+
+  # Executes application code, which the `checks` job above deliberately does
+  # not. This job gates the WHOLE suite plus lint and the production build.
+  #
+  # It used to run a hand-picked 28-file subset, because `npm test` was
+  # recorded as having 127 failures and `eslint .` 82 errors, so a blanket
+  # gate would have landed red. Both numbers were re-measured on 2026-08-20:
+  # the suite is green and `tsc --noEmit` is clean. The subset is gone —
+  # a regression anywhere, not just on the auth surface, now blocks the merge.
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      # SENTRYCLI_SKIP_DOWNLOAD: @sentry/cli's postinstall fetches a binary
+      # from downloads.sentry-cdn.com. It is only needed for build-time
+      # source-map upload, never for tests, and the fetch is a hard install
+      # failure on a restricted network.
+      - name: Install dependencies
+        run: SENTRYCLI_SKIP_DOWNLOAD=1 npm ci
+
+      - name: Typecheck
+        run: npm --workspace web exec -- tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Test packages/core
+        run: npm run test:core
+
+      # ALLOW_DEEPLINK_PLACEHOLDERS: apps/web's `prebuild` runs the strict
+      # deep-link check, and the three .well-known / eas.json files still
+      # carry REPLACE_WITH_… values pending the mobile store rollout (D2.1,
+      # D2.2). Vercel sets the same flag. Drop this once those are real.
+      - name: Build
+        env:
+          ALLOW_DEEPLINK_PLACEHOLDERS: '1'
+        run: npm run build

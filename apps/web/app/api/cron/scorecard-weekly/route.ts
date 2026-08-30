@@ -14,6 +14,9 @@ import { buildWeatherReportData, type WeatherReportData } from '@/lib/weatherRep
 // preview route). Vercel schedule: 30 14 * * 1.
 
 export const runtime = 'nodejs'
+// Per tenant: buildWeatherReportData computes a week-over-week metric set, then
+// one email goes to every owner/admin. Both halves scale with tenant count.
+export const maxDuration = 300
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false

@@ -19,6 +19,7 @@ import {
 // Vercel schedule: 0 14 * * 1 (Monday 09:00 EST).
 
 export const runtime = 'nodejs'
+export const maxDuration = 300
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false

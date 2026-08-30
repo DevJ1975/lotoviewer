@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { AlertTriangle, CheckCircle2, Clock, ShieldAlert } from 'lucide-react'
 import type { HomeMetrics } from '@soteria/core/homeMetrics'
+import { PanelEyebrow } from '@/components/DashboardPanel'
 import { InfographicMetricCard, type InfographicTone } from './InfographicMetricCard'
 
 export type CommandCenterTone = 'critical' | 'warning' | 'attention' | 'ok'
@@ -177,9 +178,7 @@ export function CommandCenterPanel({ metrics, error = null }: {
     if (error) {
       return (
         <section className="rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20 p-4">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-            EHS Command Center
-          </p>
+          <PanelEyebrow>EHS Command Center</PanelEyebrow>
           <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Live signals unavailable</h2>
           <p className="mt-1 text-sm text-amber-900 dark:text-amber-100">
             Check the live metrics error below, then retry the dashboard refresh.
@@ -192,9 +191,7 @@ export function CommandCenterPanel({ metrics, error = null }: {
       <section className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-              EHS Command Center
-            </p>
+            <PanelEyebrow>EHS Command Center</PanelEyebrow>
             <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Loading live signals</h2>
           </div>
           <div className="h-9 w-9 rounded-md bg-slate-100 dark:bg-slate-800 animate-pulse" />
@@ -216,13 +213,14 @@ export function CommandCenterPanel({ metrics, error = null }: {
     ? 'No queue signals'
     : `${items.length} live signal${items.length === 1 ? '' : 's'}`
 
+  // Not a DashboardPanel: this panel's own surface encodes severity via
+  // sectionClass(highestTone), so it cannot take the fixed placard surface
+  // without losing the signal. Only the eyebrow vocabulary is shared.
   return (
     <section className={`rounded-xl border p-4 ${sectionClass(highestTone)}`}>
       <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-            EHS Command Center
-          </p>
+          <PanelEyebrow>EHS Command Center</PanelEyebrow>
           <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
             {highestTone === 'ok' ? 'Program queues stable' : 'Items needing attention'}
           </h2>

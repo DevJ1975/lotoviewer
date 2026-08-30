@@ -1,4 +1,12 @@
-# Dependencies for scripts/osha_1910_ingest.py (the OSHA 29 CFR 1910 RAG ingester).
+# Dependencies for the repo's Python scripts.
 # Install into a venv:  python -m venv .venv && . .venv/bin/activate && pip install -r scripts/requirements.txt
+
+# scripts/osha_1910_ingest.py — the OSHA 29 CFR 1910 RAG ingester.
 lxml>=5.2
 requests>=2.31
+
+# scripts/export_placards_xlsx.py — the LOTO placard workbook export.
+# Pillow downscales the placard photos before they are embedded; without it
+# 996 full-resolution captures would push the workbook past 300 MB.
+openpyxl>=3.1
+Pillow>=10.0

@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Menu } from 'lucide-react'
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
-import GlobalSearch from '@/components/GlobalSearch'
+import SearchTrigger from '@/components/SearchTrigger'
 import Greeting from '@/components/Greeting'
 import UserMenu from '@/components/UserMenu'
 import OfflineBanner from '@/components/OfflineBanner'
@@ -132,7 +132,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
             )}
 
             <div className="hidden md:block flex-1 min-w-0 max-w-md">
-              <GlobalSearch />
+              <SearchTrigger />
             </div>
 
             <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-auto">
@@ -143,9 +143,12 @@ export default function AppChrome({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          {/* Mobile search row — shows below md */}
+          {/* Mobile search row — shows below md. A separate element rather
+              than a second mount of the same component: the trigger is
+              stateless, so rendering it twice costs nothing, whereas the old
+              GlobalSearch registered a global keydown listener per mount. */}
           <div className="md:hidden pb-2 animate-panel-in">
-            <GlobalSearch />
+            <SearchTrigger />
           </div>
         </div>
       </header>
@@ -164,10 +167,11 @@ export default function AppChrome({ children }: { children: ReactNode }) {
 
       <AppDrawer onClose={() => setDrawerOpen(false)} />
 
-      {/* Global ⌘K / Ctrl+K command palette — listens for the chord
-          itself; we just mount it. Complements the per-resource
-          GlobalSearch above (equipment lookup) with cross-feature
-          navigation. */}
+      {/* The app's single search surface: pages, modules and equipment in one
+          list. Owns ⌘K / Ctrl+K itself — mounted exactly once, so there is
+          exactly one global handler for the chord. The header and drawer
+          triggers open it via the soteria:open-command-palette event rather
+          than binding the chord again. */}
       <CommandPalette />
 
       <PwaRegister />
@@ -196,8 +200,9 @@ export default function AppChrome({ children }: { children: ReactNode }) {
         <div className="-mt-4 mb-4 h-1 hazard-stripe-thin opacity-80" aria-hidden="true" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <span className="placard-label text-slate-500 dark:text-slate-500">
-            Powered by <span className="text-slate-700 dark:text-slate-300">Trainovate Technologies</span>
-            <span className="text-slate-400 dark:text-slate-500"> · © 2026</span>
+            Made with <span role="img" aria-label="love">❤️</span> in Las Vegas{' '}
+            <span className="text-slate-400 dark:text-slate-500">© 2026</span>{' '}
+            <span className="text-slate-700 dark:text-slate-300">Trainovate Technologies LLC</span>
           </span>
           <span className="flex items-center gap-3">
             <span className="placard-numeric text-[11px] text-slate-400 dark:text-slate-500" title={VERSION_LINE}>

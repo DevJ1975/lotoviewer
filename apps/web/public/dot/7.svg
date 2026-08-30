@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="DOT 7 — Radioactive">
+  <title>DOT 7 — Radioactive</title>
+  <defs>
+    <clipPath id="diamond7"><path d="M50 2 L98 50 L50 98 L2 50 Z"/></clipPath>
+  </defs>
+  <!-- top half yellow, bottom half white, clipped to the diamond -->
+  <g clip-path="url(#diamond7)">
+    <rect x="0" y="0" width="100" height="50" fill="#FFD200"/>
+    <rect x="0" y="50" width="100" height="50" fill="#FFFFFF"/>
+  </g>
+  <path d="M50 7 L93 50 L50 93 L7 50 Z" fill="none" stroke="#000" stroke-width="1.5"/>
+  <!-- radioactive trefoil (top quadrant), black: hub + three 60-deg blades -->
+  <g transform="translate(50 36)" fill="#000">
+    <!-- blade pointing up (-90 deg), spans -120 to -60 deg -->
+    <path d="M7 -12.124 A 14 14 0 0 0 -7 -12.124 L -3.5 -6.062 A 7 7 0 0 1 3.5 -6.062 Z"/>
+    <!-- blade lower-right (rotate 120) -->
+    <g transform="rotate(120)">
+      <path d="M7 -12.124 A 14 14 0 0 0 -7 -12.124 L -3.5 -6.062 A 7 7 0 0 1 3.5 -6.062 Z"/>
+    </g>
+    <!-- blade lower-left (rotate 240) -->
+    <g transform="rotate(240)">
+      <path d="M7 -12.124 A 14 14 0 0 0 -7 -12.124 L -3.5 -6.062 A 7 7 0 0 1 3.5 -6.062 Z"/>
+    </g>
+    <circle cx="0" cy="0" r="4"/>
+  </g>
+  <!-- class number (bottom corner) -->
+  <text x="50" y="86" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="bold" text-anchor="middle" fill="#000">7</text>
+</svg>

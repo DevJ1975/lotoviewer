@@ -27,6 +27,13 @@ interface EmergencyItem {
     first_aid:         ParsedSdsFirstAid | null
     spill_cleanup:     ParsedSdsSpillCleanup | null
     emergency_phone:   string | null
+    nfpa_health:       number | null
+    nfpa_flammability: number | null
+    nfpa_instability:  number | null
+    nfpa_special:      string | null
+    dot_un_number:     string | null
+    dot_hazard_class:  string | null
+    dot_packing_group: string | null
   } | null
   chemical_locations: { name: string; path: string | null } | null
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
-import { requireTenantMember } from '@/lib/auth/tenantGate'
+import { requireStrikeMember } from '@/lib/strike/gate'
 import { checkMemoryRateLimit } from '@/lib/rateLimit/memory'
 import { loadPublishedStrikeVersion } from '@/lib/strike/moduleAccess'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -37,7 +37,7 @@ interface RouteContext {
 }
 
 export async function POST(req: Request, ctx: RouteContext) {
-  const gate = await requireTenantMember(req)
+  const gate = await requireStrikeMember(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   const { moduleId } = await ctx.params
@@ -128,10 +128,22 @@ export async function POST(req: Request, ctx: RouteContext) {
 
     const { data: questions, error: questionErr } = await admin
       .from('strike_quiz_questions')
-      .select('id,question_type,required,points')
+      .select('id,question_type,required,points,explanation')
       .eq('module_version_id', moduleVersionId)
       .order('sort_order', { ascending: true })
     if (questionErr) throw new Error(questionErr.message)
+
+    // A version with no questions scores 100 by definition (possiblePoints
+    // is zero), so without this gate a bare `{"answers":{}}` POST writes a
+    // passing, version-bound completion — the exact record an auditor pulls.
+    // The learner UI has always sent an acknowledgement here; now the server
+    // requires it instead of trusting the client to have asked.
+    if ((questions ?? []).length === 0 && answersByQuestionId.acknowledgement !== true) {
+      return NextResponse.json(
+        { error: 'Acknowledge that you reviewed the instruction before submitting.' },
+        { status: 422 },
+      )
+    }
 
     const questionIds = (questions ?? []).map(q => q.id as string)
     const { data: answers, error: answerErr } = questionIds.length > 0
@@ -210,7 +222,25 @@ export async function POST(req: Request, ctx: RouteContext) {
       if (completionErr) throw new Error(completionErr.message)
     }
 
-    return NextResponse.json({ attempt_id: attempt.id, ...score }, { status: 201 })
+    // Explanations are revoked from `authenticated` by the
+    // strike_security_hardening migration precisely
+    // so they can't be read before answering. Returning them here — only for
+    // what the learner actually missed — is the feedback path that replaces
+    // the old give-away render.
+    const explanationByQuestionId = new Map(
+      (questions ?? [])
+        .filter(q => typeof q.explanation === 'string' && q.explanation.trim().length > 0)
+        .map(q => [q.id as string, (q.explanation as string).trim()]),
+    )
+    const missedFeedback = score.missedQuestionIds.map(questionId => ({
+      question_id: questionId,
+      explanation: explanationByQuestionId.get(questionId) ?? null,
+    }))
+
+    return NextResponse.json(
+      { attempt_id: attempt.id, ...score, missedFeedback },
+      { status: 201 },
+    )
   } catch (e) {
     Sentry.captureException(e, { tags: { route: 'strike/submit' } })
     return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 })
