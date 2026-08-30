@@ -226,6 +226,19 @@ deep pages carry a breadcrumb trail.
 > than grouping them honestly.
 
 ### Added
+- **Resend an invite, or share the invite link yourself.** Invite emails
+  regularly land in a recipient's junk folder, and until now the link was shown
+  once at invite time and then unrecoverable. Every pending invite on
+  **User Management** now carries two actions: **Resend invite email**, and
+  **Copy invite link** — which mints the link and hands it back *without*
+  emailing anything, alongside a ready-to-send message, so an admin can deliver
+  it through a channel the recipient actually reads. Both mint a fresh
+  single-use link that retires the previous one (the UI says so), both refuse
+  once the person has signed in (an invite link sets a password, so re-issuing
+  one to a live account would be a takeover, not a courtesy), and both
+  reactivate an invite the reminder cron had soft-cancelled so the fresh link
+  can't dead-end. Tenant admins previously had no resend at all — only
+  superadmins did.
 - **Drag-and-drop Events & Causal Factors, folded into Investigate & RCA.** The
   ECFA editor is now directly manipulable: drag to reorder events, and drag
   conditions between events and the above/below lanes, with the chart updating
