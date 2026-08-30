@@ -43,8 +43,10 @@ export default function SpacePhotoSlot({ spaceId, slot, label, existingUrl, onUp
   // re-renders during upload. Mirrors the pattern in PlacardPhotoSlot.
   const onUploadedRef = useRef(onUploaded)
   const onErrorRef    = useRef(onError)
-  onUploadedRef.current = onUploaded
-  onErrorRef.current    = onError
+  useEffect(() => {
+    onUploadedRef.current = onUploaded
+    onErrorRef.current    = onError
+  }, [onUploaded, onError])
 
   useEffect(() => {
     return () => { if (localPreview) URL.revokeObjectURL(localPreview) }

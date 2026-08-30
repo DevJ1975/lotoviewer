@@ -17,8 +17,7 @@ import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 //   1. Load equipment + energy steps (service role; tenant-scoped read).
 //   2. Render the PDF bytes via the shared pdfPlacard helper.
 //   3. Upsert into the canonical placard path in the loto-photos bucket.
-//   4. Patch loto_equipment.placard_url + null signed_placard_url so a
-//      stale signed copy doesn't shadow the fresh placard.
+//   4. Patch loto_equipment.placard_url (cache-busted) to the fresh copy.
 //   5. Return the new public URL.
 //
 // Failures throw — the public review route wraps the call in a try /
@@ -69,11 +68,11 @@ export async function regenerateAndUploadPlacard(
   admin: SupabaseClient,
   tenantId:   string,
   equipmentId: string,
-  // Optional pre-loaded logo. Callers that regenerate many placards in a loop
-  // (the audit apply route) load it once and pass it, so the tenants-select +
-  // logo fetch + sharp re-encode isn't repeated per machine. Omit to load it
-  // lazily as before.
-  tenantLogoPng?: Uint8Array | null,
+  // Optional pre-loaded tenant logo (PNG bytes). A bulk caller (the backfill
+  // cron) loads each tenant's logo once and threads it through so we don't
+  // re-fetch + re-encode the same logo per equipment. Omit to self-load; pass
+  // null to force the "no logo" fallback.
+  logoPngOverride?: Uint8Array | null,
 ): Promise<RegenerateResult> {
   const [eqRes, stepsRes] = await Promise.all([
     admin.from('loto_equipment')
@@ -95,8 +94,10 @@ export async function regenerateAndUploadPlacard(
   const equipment = eqRes.data
   const steps     = (stepsRes.data ?? []) as LotoEnergyStep[]
 
-  const logo = tenantLogoPng !== undefined ? tenantLogoPng : await loadTenantLogoPng(admin, tenantId)
-  const bytes = await generatePlacardPdf({ equipment, steps, tenantLogoPng: logo })
+  const tenantLogoPng = logoPngOverride !== undefined
+    ? logoPngOverride
+    : await loadTenantLogoPng(admin, tenantId)
+  const bytes = await generatePlacardPdf({ equipment, steps, tenantLogoPng })
   const path  = placardPdfPath(tenantId, equipmentId)
 
   const bucket = admin.storage.from(BUCKET)

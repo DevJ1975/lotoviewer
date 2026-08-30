@@ -25,7 +25,7 @@ function releaseScrollLock() {
 
 export function Sheet({ open, onClose, title, subtitle, children, widthClass = 'max-w-2xl' }: Props) {
   const onCloseRef = useRef(onClose)
-  onCloseRef.current = onClose
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
 
   useEffect(() => {
     if (!open) return

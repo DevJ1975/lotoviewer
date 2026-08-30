@@ -1,14 +1,14 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type VimeoPlayer from '@vimeo/player'
 
-// Hardened STRIKE playback surface. Three deterrents stack here:
-//   1. Download friction — no download control, no PiP, no context menu.
-//      (Determined users can still screen-record; the watermark is for them.)
-//   2. Visible watermark — viewer identity + live timestamp, cycling corners
-//      so a static crop can't remove it, tying any leaked capture to a person.
-//   3. Expiring sources — playback URLs die in minutes; onExpired lets the
-//      page mint a fresh one without interrupting the learner.
+// Hardened STRIKE playback surface for Vimeo embeds. A determined viewer can
+// still screen-record, so the deterrent is a visible watermark: viewer identity
+// + a live timestamp, cycling corners so a static crop can't remove it, tying
+// any leaked capture to a person. (Native no-download / no-PiP locks don't apply
+// to an iframe — the watermark is what we have.) Watch progress comes from the
+// Vimeo Player SDK and feeds the quiz's optional require-watch gate.
 
 export interface WatchProgress {
   percent_watched: number
@@ -18,11 +18,8 @@ export interface WatchProgress {
 
 interface StrikeVideoPlayerProps {
   src: string
-  provider: 'storage' | 'cloudflare'
-  captionsSrc?: string | null
   watermarkText: string
   onProgress?: (progress: WatchProgress) => void
-  onExpired?: () => void
 }
 
 const WATERMARK_CORNERS = [
@@ -32,59 +29,56 @@ const WATERMARK_CORNERS = [
   'left-3 bottom-12',
 ] as const
 
-export function StrikeVideoPlayer({
-  src,
-  provider,
-  captionsSrc,
-  watermarkText,
-  onProgress,
-  onExpired,
-}: StrikeVideoPlayerProps) {
-  const videoRef = useRef<HTMLVideoElement | null>(null)
+export function StrikeVideoPlayer({ src, watermarkText, onProgress }: StrikeVideoPlayerProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null)
   const maxPositionRef = useRef(0)
   const lastReportedPercentRef = useRef(-1)
   const [cornerIndex, setCornerIndex] = useState(0)
   const [clock, setClock] = useState(() => new Date().toLocaleTimeString())
 
   // Keep callback identity churn (inline lambdas from the page) from
-  // re-running the source effect and restarting playback.
-  const onExpiredRef = useRef(onExpired)
+  // re-running the source effect and reloading the player.
   const onProgressRef = useRef(onProgress)
-  useEffect(() => {
-    onExpiredRef.current = onExpired
-    onProgressRef.current = onProgress
-  }, [onExpired, onProgress])
+  useEffect(() => { onProgressRef.current = onProgress }, [onProgress])
+
+  // Report against the furthest point reached, so seeking backwards never
+  // lowers the recorded percentage. Throttled to whole-percent changes.
+  const reportProgress = useCallback((seconds: number, duration: number) => {
+    maxPositionRef.current = Math.max(maxPositionRef.current, seconds)
+    const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : null
+    const percent = safeDuration
+      ? Math.min(100, Math.round((maxPositionRef.current / safeDuration) * 100))
+      : 0
+    if (percent === lastReportedPercentRef.current) return
+    lastReportedPercentRef.current = percent
+    onProgressRef.current?.({
+      percent_watched: percent,
+      max_position_seconds: Math.round(maxPositionRef.current),
+      duration_seconds: safeDuration ? Math.round(safeDuration) : null,
+    })
+  }, [])
 
   useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
+    if (!containerRef.current) return
 
-    if (provider === 'storage' || video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = src
-      return
-    }
-
-    let hls: { destroy: () => void } | null = null
+    let player: VimeoPlayer | null = null
     let cancelled = false
-    void import('hls.js').then(({ default: Hls }) => {
-      if (cancelled || !videoRef.current) return
-      if (!Hls.isSupported()) {
-        videoRef.current.src = src
-        return
-      }
-      const instance = new Hls()
-      instance.loadSource(src)
-      instance.attachMedia(videoRef.current)
-      instance.on(Hls.Events.ERROR, (_event, data) => {
-        if (data.fatal) onExpiredRef.current?.()
+    void import('@vimeo/player').then(({ default: Player }) => {
+      if (cancelled || !containerRef.current) return
+      // vimeoEmbedUrl always yields a player.vimeo.com/video/* URL; the cast
+      // satisfies the SDK's template-literal VimeoUrl type for our string src.
+      const instance = new Player(containerRef.current, {
+        url: src as `https://player.vimeo.com/video/${string}`,
+        dnt: true,
       })
-      hls = instance
+      instance.on('timeupdate', data => reportProgress(data.seconds, data.duration))
+      player = instance
     })
     return () => {
       cancelled = true
-      hls?.destroy()
+      void player?.destroy()
     }
-  }, [src, provider])
+  }, [src, reportProgress])
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -94,44 +88,9 @@ export function StrikeVideoPlayer({
     return () => clearInterval(interval)
   }, [])
 
-  const handleTimeUpdate = useCallback(() => {
-    const video = videoRef.current
-    if (!video) return
-    maxPositionRef.current = Math.max(maxPositionRef.current, video.currentTime)
-    const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null
-    const percent = duration
-      ? Math.min(100, Math.round((maxPositionRef.current / duration) * 100))
-      : 0
-    if (percent === lastReportedPercentRef.current) return
-    lastReportedPercentRef.current = percent
-    onProgressRef.current?.({
-      percent_watched: percent,
-      max_position_seconds: Math.round(maxPositionRef.current),
-      duration_seconds: duration ? Math.round(duration) : null,
-    })
-  }, [])
-
-  const handleError = useCallback(() => {
-    // A media error after the source was healthy usually means the signed
-    // URL expired mid-session; let the page mint a fresh one.
-    if (maxPositionRef.current > 0) onExpiredRef.current?.()
-  }, [])
-
   return (
-    <div className="relative">
-      <video
-        ref={videoRef}
-        controls
-        controlsList="nodownload noremoteplayback"
-        disablePictureInPicture
-        crossOrigin="anonymous"
-        onContextMenu={e => e.preventDefault()}
-        onTimeUpdate={handleTimeUpdate}
-        onError={handleError}
-        className="aspect-video w-full rounded-lg bg-black"
-      >
-        {captionsSrc && <track kind="captions" src={captionsSrc} default />}
-      </video>
+    <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-black [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:h-full [&_iframe]:w-full">
+      <div ref={containerRef} className="h-full w-full" />
       <span
         aria-hidden
         className={`pointer-events-none absolute select-none rounded bg-black/30 px-2 py-0.5 text-[11px] font-medium text-white/60 ${WATERMARK_CORNERS[cornerIndex]}`}

@@ -24,18 +24,20 @@ interface VersionRow {
   id: string
   module_id: string
   version_number: number
-  video_path: string | null
-  captions_path: string | null
   transcript: string | null
   duration_seconds: number | null
   passing_score: number
 }
 
+// `explanation` is deliberately absent: it is a soft copy of the answer key
+// ("Correct, because ...") and the strike_security_hardening migration
+// revoked it from `authenticated`. (Referenced by slug, not number: that
+// migration's prefix has been renumbered three times by collisions on main.)
+// It comes back in the submit response, per missed question, after grading.
 interface QuestionRow {
   id: string
   question_type: StrikeQuestionType
   prompt: string
-  explanation: string | null
   sort_order: number
   required: boolean
   points: number
@@ -55,9 +57,8 @@ interface SubmitResult {
 }
 
 interface MediaSource {
-  provider: 'storage' | 'cloudflare' | null
+  provider: 'vimeo' | null
   url: string | null
-  captions_url: string | null
 }
 
 type MediaRequestResult =
@@ -149,7 +150,7 @@ export default function StrikeModulePage() {
 
       const { data: versions, error: versionErr } = await supabase
         .from('strike_module_versions')
-        .select('id,module_id,version_number,video_path,captions_path,transcript,duration_seconds,passing_score')
+        .select('id,module_id,version_number,transcript,duration_seconds,passing_score')
         .eq('module_id', nextModule.id)
         .eq('status', 'published')
         .order('version_number', { ascending: false })
@@ -167,7 +168,7 @@ export default function StrikeModulePage() {
 
       const { data: questionRows, error: questionErr } = await supabase
         .from('strike_quiz_questions')
-        .select('id,question_type,prompt,explanation,sort_order,required,points')
+        .select('id,question_type,prompt,sort_order,required,points')
         .eq('module_version_id', nextVersion.id)
         .order('sort_order', { ascending: true })
       if (questionErr) throw questionErr
@@ -293,24 +294,11 @@ export default function StrikeModulePage() {
       )}
 
       <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
-        {media?.url && media.provider ? (
+        {media?.url ? (
           <StrikeVideoPlayer
             src={media.url}
-            provider={media.provider}
-            captionsSrc={media.captions_url}
             watermarkText={email ?? 'SoteriaField viewer'}
             onProgress={progress => { watchProgressRef.current = progress }}
-            onExpired={() => {
-              if (!module || !version || !tenant?.id) return
-              void requestPlaybackUrl(module.id, version.id, tenant.id).then(mediaResult => {
-                if (mediaResult.ok) {
-                  setMedia(mediaResult.media)
-                } else {
-                  setMedia(null)
-                  setVideoNotice(mediaResult.notice)
-                }
-              })
-            }}
           />
         ) : (
           <div className="flex aspect-video items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-400">
@@ -437,7 +425,6 @@ function Question({
           ))}
         </div>
       )}
-      {question.explanation && <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{question.explanation}</p>}
     </fieldset>
   )
 }

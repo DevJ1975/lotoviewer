@@ -11,7 +11,8 @@ import { useNow } from '@/hooks/useNow'
 // re-render every second, and without a per-row setInterval cost.
 
 export function ActivePermitsPanel({ permits }: { permits: ActivePermitSummary[] | null }) {
-  const now = useNow(1000)
+  // useNow returns epoch ms; this component works in Date terms.
+  const now = new Date(useNow(1000))
   const count = permits?.length ?? 0
   return (
     <section className="placard-surface placard-corner-mark p-4 space-y-3">

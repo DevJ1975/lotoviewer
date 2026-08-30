@@ -1,28 +1,27 @@
 import { NextResponse } from 'next/server'
-import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
-import { sendInviteEmail, computeLoginUrl } from '@/lib/email/sendInvite'
+import { inviteIssueRateLimit } from '@/lib/rateLimit/inviteIssue'
+import {
+  ensureInvitedUser,
+  ensureTenantMembership,
+  issueAndSendInvite,
+  provisionFailureResponse,
+} from '@/lib/invites/provision'
+import { inviteLinkTtlDays } from '@/lib/invites/tokens'
 import { sanitizeError } from '@/lib/security/sanitizeError'
-import { generateTempPassword, supabaseAdmin } from '@/lib/supabaseAdmin'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { normalizeEmail } from '@/lib/validation/tenants'
 
 // POST /api/admin/members/[memberId]/grant-login
 //
 // Grants app login access to an existing members row that doesn't yet
-// have a profile_id. The shape mirrors /api/admin/users POST (creates
-// or reuses an auth.users row, ensures a profiles row, ensures a
-// tenant_memberships row) but UPDATES the existing members row instead
-// of inserting a fresh one — that's the whole point of the unified
-// roster.
-//
-// TODO(phase-2): extract a shared invite helper. The auth+profile+
-// membership block here is the second occurrence of that flow (first
-// is /api/admin/users POST); Rule of Three says extract on the third.
-// For now the two copies stay inline so each route reads top-to-bottom.
+// have a profile_id. The auth+profile+membership provisioning is the
+// shared lib/invites/provision helper (also used by /api/admin/users
+// and the superadmin members route); this route additionally UPDATES
+// the existing members row instead of inserting a fresh one — that's
+// the whole point of the unified roster.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const AUTH_PAGE_SIZE = 200
-const AUTH_MAX_PAGES = 50
 
 type TenantRole = 'owner' | 'admin' | 'member' | 'viewer'
 
@@ -35,18 +34,7 @@ interface MemberRow {
   email:        string | null
   legal_name:   string | null
   display_name: string
-}
-
-async function findAuthUserByEmail(admin: SupabaseClient, email: string): Promise<User | null> {
-  const wanted = email.toLowerCase()
-  for (let page = 1; page <= AUTH_MAX_PAGES; page++) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: AUTH_PAGE_SIZE })
-    if (error) throw error
-    const user = (data?.users ?? []).find(u => u.email?.toLowerCase() === wanted)
-    if (user) return user
-    if ((data?.users ?? []).length < AUTH_PAGE_SIZE) return null
-  }
-  return null
+  source:       string
 }
 
 export async function POST(req: Request, ctx: RouteContext) {
@@ -58,6 +46,9 @@ export async function POST(req: Request, ctx: RouteContext) {
   const gate = await requireTenantAdmin(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
+  const limited = inviteIssueRateLimit(gate.userId)
+  if (limited) return limited
+
   let body: { email?: unknown; fullName?: unknown }
   try { body = await req.json().catch(() => ({})) }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
@@ -66,7 +57,7 @@ export async function POST(req: Request, ctx: RouteContext) {
 
   const { data: memberData, error: memberErr } = await admin
     .from('members')
-    .select('id, tenant_id, profile_id, email, legal_name, display_name')
+    .select('id, tenant_id, profile_id, email, legal_name, display_name, source')
     .eq('id', memberId)
     .eq('tenant_id', gate.tenantId)
     .maybeSingle()
@@ -102,95 +93,23 @@ export async function POST(req: Request, ctx: RouteContext) {
   if (!tenantData) return NextResponse.json({ error: 'Active tenant not found' }, { status: 404 })
 
   // ── auth.users + profiles: reuse if email already exists, else create.
-  let userId: string
-  let tempPassword: string | undefined
+  const invited = await ensureInvitedUser(admin, { email, fullName })
+  if (!invited.ok) return provisionFailureResponse(invited, 'admin/members/grant-login')
+  const { userId, tempPassword } = invited
 
-  const { data: existingProfile, error: profileLookupErr } = await admin
-    .from('profiles')
-    .select('id, email, full_name')
-    .eq('email', email)
-    .maybeSingle()
-  if (profileLookupErr) return sanitizeError(profileLookupErr, 'admin/members/grant-login profile lookup')
-
-  if (existingProfile) {
-    userId = (existingProfile as { id: string }).id
-    // Patch the profile name only when caller supplied one and it's
-    // currently empty — never clobber a user-edited name.
-    if (fullName && !(existingProfile as { full_name: string | null }).full_name) {
-      await admin
-        .from('profiles')
-        .update({ full_name: fullName, updated_at: new Date().toISOString() })
-        .eq('id', userId)
-    }
-  } else {
-    tempPassword = generateTempPassword()
-    const { data: created, error: createErr } = await admin.auth.admin.createUser({
-      email,
-      password: tempPassword,
-      email_confirm: true,
-      user_metadata: fullName ? { full_name: fullName } : undefined,
-    })
-
-    if (createErr || !created?.user) {
-      // Stale auth.users row with no profiles row: reuse it.
-      let stale: User | null = null
-      try { stale = await findAuthUserByEmail(admin, email) }
-      catch (err) { return sanitizeError(err, 'admin/members/grant-login auth listUsers') }
-      if (!stale) {
-        return NextResponse.json({
-          error: createErr?.message ?? 'Could not create auth user',
-        }, { status: 400 })
-      }
-      userId = stale.id
-      tempPassword = undefined
-      const { error: insertProfileErr } = await admin
-        .from('profiles')
-        .insert({
-          id: userId,
-          email,
-          full_name: fullName || null,
-          must_change_password: false,
-        })
-      if (insertProfileErr && (insertProfileErr as { code?: string }).code !== '23505') {
-        return sanitizeError(insertProfileErr, 'admin/members/grant-login profile repair')
-      }
-    } else {
-      userId = created.user.id
-      const { error: profileUpdateErr } = await admin
-        .from('profiles')
-        .update({
-          full_name: fullName || null,
-          must_change_password: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', userId)
-      if (profileUpdateErr) {
-        await admin.auth.admin.deleteUser(userId)
-        return sanitizeError(profileUpdateErr, 'admin/members/grant-login profile patch')
-      }
-    }
-  }
-
-  // ── tenant_memberships: idempotent (a 23505 here just means the
-  // user was already a member of this tenant under a different members
-  // row — that's the merge candidate the admin probably wants).
-  const role: TenantRole = 'member'
-  const { error: membershipErr } = await admin
-    .from('tenant_memberships')
-    .insert({
-      user_id:    userId,
-      tenant_id:  gate.tenantId,
-      role,
-      invited_by: gate.userId,
-    })
-  if (membershipErr && (membershipErr as { code?: string }).code !== '23505') {
-    return sanitizeError(membershipErr, 'admin/members/grant-login membership insert')
-  }
-
-  // ── Attach the new profile to the existing member row. The 183
-  // partial unique index would reject this with 23505 if the same
-  // (tenant, profile) was already attached to a different member;
-  // surface that as 409 so the UI can suggest merging.
+  // ── Attach the new profile to the existing member row BEFORE inserting the
+  // membership. The tenant_memberships insert below fires
+  // trg_sync_membership_to_members (migration 180), which does
+  // `insert members(tenant, profile) ... on conflict (tenant_id, profile_id)
+  // do nothing`. Linking first makes THIS roster row the (tenant, profile)
+  // member, so the trigger no-ops. Do it the other way round and the trigger
+  // creates a *second* members row for (tenant, profile), which this UPDATE
+  // then collides with on the migration-183 partial unique index — a 23505
+  // that made grant-login 409 on its primary "roster worker gets a login"
+  // path and leak the auth user + a duplicate member row.
+  //
+  // A 23505 here means a *different* member row in this tenant is already
+  // linked to this login; surface that as 409 so the UI can suggest merging.
   const { error: linkErr } = await admin
     .from('members')
     .update({
@@ -212,6 +131,24 @@ export async function POST(req: Request, ctx: RouteContext) {
     return sanitizeError(linkErr, 'admin/members/grant-login member link')
   }
 
+  // ── tenant_memberships: idempotent (a 23505 here just means the user was
+  // already a member of this tenant). The sync trigger no-ops against the row
+  // we linked above.
+  const role: TenantRole = 'member'
+  const membership = await ensureTenantMembership(admin, {
+    userId, tenantId: gate.tenantId, role, invitedBy: gate.userId, onConflict: 'ignore',
+  })
+  if (!membership.ok) {
+    // Undo the link so a retry isn't blocked by the ALREADY_HAS_LOGIN guard
+    // at the top — the row must look roster-only again.
+    await admin
+      .from('members')
+      .update({ profile_id: null, source: member.source, updated_by: gate.userId })
+      .eq('id', memberId)
+      .eq('tenant_id', gate.tenantId)
+    return provisionFailureResponse(membership, 'admin/members/grant-login')
+  }
+
   // Audit insert is best-effort but failures must be visible — a
   // silently-missing login_granted event would compromise the audit
   // trail. We surface as 500 only after the link has already happened,
@@ -229,19 +166,30 @@ export async function POST(req: Request, ctx: RouteContext) {
     return sanitizeError(eventErr, 'admin/members/grant-login event insert')
   }
 
-  const loginUrl = computeLoginUrl(req)
-  const emailSent = await sendInviteEmail({
-    to:           email,
-    fullName,
-    tempPassword: tempPassword ?? '',
-    loginUrl,
-    tenantName:   (tenantData as { name: string }).name,
+  const { inviteUrl, emailSent } = await issueAndSendInvite(admin, {
+    userId,
+    email,
+    fullName:   invited.fullName || fullName,
+    tenantId:   gate.tenantId,
+    tenantName: (tenantData as { name: string }).name,
+    createdBy:  gate.userId,
+    req,
+    emailMode:  invited.createdAuthUser || invited.mustChangePassword ? 'invite_link' : 'added_notification',
   })
 
   return NextResponse.json({
     memberId,
     profileId: userId,
+    email,
     tempPassword,
+    // Same bound as /api/admin/users: the raw link is a password-set
+    // credential, so it is returned only for an account this call created.
+    // A reused never-signed-in account belongs to someone who may hold a
+    // pending invite in another tenant, and handing their link to this
+    // tenant's admin is an account takeover. They still get it by email.
+    inviteUrl: invited.createdAuthUser ? inviteUrl : undefined,
     emailSent,
+    expiresInDays: inviteLinkTtlDays(),
+    tenantName: (tenantData as { name: string }).name,
   })
 }

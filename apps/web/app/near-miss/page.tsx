@@ -32,16 +32,17 @@ const STATUS_LABEL: Record<NearMissStatus, string> = {
 
 export default function NearMissListPage() {
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const [rows,    setRows]    = useState<NearMissRow[] | null>(null)
   const [error,   setError]   = useState<string | null>(null)
   const [showAll, setShowAll] = useState(false)
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     setError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+      const headers: Record<string, string> = { 'x-active-tenant': tenantId }
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
 
       const params = new URLSearchParams()
@@ -55,7 +56,7 @@ export default function NearMissListPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [tenant?.id, showAll])
+  }, [tenantId, showAll])
 
   useEffect(() => { void load() }, [load])
 

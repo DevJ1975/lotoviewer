@@ -81,7 +81,9 @@ Migrations are the schema's version history and follow their own rules
 
 - Files live in `apps/web/migrations/`, named `NNN_slug.sql` with a 3-digit,
   zero-padded, **sequential** prefix (next is the current max + 1). An optional
-  single letter (`059b_…`) slots a follow-up between releases.
+  single letter (`059b_…`) slots a follow-up between releases. Run
+  **`npm run migration:next`** to print the next free prefix instead of eyeballing
+  the directory (`npm run migration:next my_feature` prints the full filename).
 - **Forward-only and idempotent:** `create table if not exists`,
   `drop policy if exists` before create, `create or replace function`. Re-runs
   must be safe.
@@ -91,6 +93,21 @@ Migrations are the schema's version history and follow their own rules
   (`active_tenant_id()` / `current_user_tenant_ids()` / `is_superadmin()`).
 - Migration numbers are **independent of** the SemVer string — they only ever
   increase; they are never renumbered to match a release.
+
+**Avoiding prefix collisions.** The guard above is a *detector*: it fails CI once a
+duplicate prefix exists, which then blocks every PR repo-wide until renamed. Two
+parallel branches can each pick the same "max + 1" and only clash on the second
+merge. To prevent that:
+
+- Allocate with `npm run migration:next` and rebase onto `main` right before
+  opening/merging so the max you see is current.
+- If a rebase across an in-flight migration transiently collides on a feature
+  branch, set `ALLOW_MIGRATION_COLLISIONS=1` to unblock locally — but resolve it
+  (rename to a fresh prefix) **before merge**.
+- **Recommended branch protection (repo setting):** make `Repo health` a required
+  check and enable *"Require branches to be up to date before merging"*. The
+  second PR adding the same number is then forced to rebase and goes red **before**
+  merge, so a duplicate can never reach `main`.
 
 ---
 

@@ -22,6 +22,9 @@ import { buildUnsubscribe } from '@/lib/email/unsubscribe'
 // other crons under /api/cron/.
 
 export const runtime = 'nodejs'
+// Multi-tenant email fan-out: one digest per tenant owner/admin. Runtime tracks
+// the recipient count, not the size of any single query.
+export const maxDuration = 300
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false

@@ -10,7 +10,8 @@ import { useNow } from '@/hooks/useNow'
 const CLOCK_TICK_MS = 1000
 
 export function Clock({ firstName }: { firstName: string }) {
-  const now = useNow(CLOCK_TICK_MS)
+  // useNow returns epoch ms; this component works in Date terms.
+  const now = new Date(useNow(CLOCK_TICK_MS))
 
   const greeting = useMemo(() => timeOfDayGreeting(now), [now])
   const quoteDateKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`

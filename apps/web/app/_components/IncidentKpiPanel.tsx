@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowRight, Loader2, ShieldCheck, ShieldAlert, TrendingUp, Activity } from 'lucide-react'
+import { ShieldCheck, ShieldAlert, TrendingUp, Activity } from 'lucide-react'
 import {
   fetchIncidentScorecardMetrics,
   type IncidentScorecardMetrics,
 } from '@soteria/core/incidentScorecardMetrics'
+import { DashboardPanel, PanelLink } from '@/components/DashboardPanel'
+import OpsSpinner from '@/components/OpsSpinner'
 import { useTenant } from '@/components/TenantProvider'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { InfographicMetricCard } from './InfographicMetricCard'
@@ -60,27 +62,14 @@ export default function IncidentKpiPanel() {
     : 0
 
   return (
-    <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5 space-y-4">
-      <header className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-            Incident program · OSHA 1904 / ISO 45001
-          </div>
-          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
-            Incident scorecard <span className="text-xs font-normal text-slate-500">· last 12 months</span>
-          </h2>
-        </div>
-        <Link
-          href="/incidents/scorecard"
-          className="text-xs font-semibold text-brand-navy hover:underline inline-flex items-center gap-1"
-        >
-          Full scorecard <ArrowRight className="h-3 w-3" />
-        </Link>
-      </header>
-
+    <DashboardPanel
+      eyebrow="Incident program · OSHA 1904 / ISO 45001"
+      title={<>Incident scorecard <span className="text-xs font-normal text-slate-500">· last 12 months</span></>}
+      action={<PanelLink href="/incidents/scorecard">Full scorecard</PanelLink>}
+    >
       {loading && metrics === null ? (
         <div className="flex items-center justify-center py-6">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+          <OpsSpinner size="sm" label={null} />
         </div>
       ) : metrics === null || total === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-4 text-center">
@@ -94,7 +83,7 @@ export default function IncidentKpiPanel() {
       ) : (
         <Inner metrics={metrics} />
       )}
-    </section>
+    </DashboardPanel>
   )
 }
 

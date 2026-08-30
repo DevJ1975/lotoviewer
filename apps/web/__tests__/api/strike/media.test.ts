@@ -1,22 +1,20 @@
-import { generateKeyPairSync } from 'node:crypto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { POST as issuePlaybackUrl } from '@/app/api/strike/[moduleId]/media/route'
 
 // Integration tests for POST /api/strike/[moduleId]/media.
 // Exercises:
 //   - Auth gate + per-user rate limit
-//   - Storage branch: 10-minute signed URL + audit row
-//   - Stream branch: token-bearing HLS URL; 503 when Stream env is absent
+//   - Vimeo branch: embed URL + who-watched-what audit row
+//   - "No video" branch: provider null, no audit row
 //   - Tenant-scoped modules stay invisible across tenants
 
-const { authGetUser, captured, createSignedUrl, queues, resetMockState, tableProxy } = vi.hoisted(() => {
+const { authGetUser, captured, queues, resetMockState, tableProxy } = vi.hoisted(() => {
   type ChainResult = { data?: unknown; error?: { message: string } | null }
   const queues = new Map<string, ChainResult[]>()
   const captured = {
     inserts: [] as Array<{ table: string; payload: unknown }>,
   }
   const authGetUser = vi.fn()
-  const createSignedUrl = vi.fn()
   function next(table: string): ChainResult {
     return queues.get(table)?.shift() ?? { data: null, error: null }
   }
@@ -39,9 +37,8 @@ const { authGetUser, captured, createSignedUrl, queues, resetMockState, tablePro
     queues.clear()
     captured.inserts.length = 0
     authGetUser.mockReset()
-    createSignedUrl.mockReset()
   }
-  return { authGetUser, captured, createSignedUrl, queues, resetMockState, tableProxy }
+  return { authGetUser, captured, queues, resetMockState, tableProxy }
 })
 
 vi.mock('@supabase/supabase-js', () => ({
@@ -53,8 +50,6 @@ vi.mock('@supabase/supabase-js', () => ({
 vi.mock('@/lib/supabaseAdmin', () => ({
   supabaseAdmin: () => ({
     from: (t: string) => tableProxy(t),
-    storage: { from: () => ({ createSignedUrl }) },
-    rpc: async (name: string) => queues.get(`rpc:${name}`)?.shift() ?? { data: null, error: null },
   }),
 }))
 
@@ -67,18 +62,8 @@ const TENANT_ID = '11111111-1111-1111-1111-111111111111'
 const OTHER_TENANT_ID = '99999999-9999-9999-9999-999999999999'
 const MODULE_ID = '22222222-2222-2222-2222-222222222222'
 const VERSION_ID = '33333333-3333-3333-3333-333333333333'
-const STREAM_UID = 'c'.repeat(32)
-
-const CF_ENV_KEYS = [
-  'CLOUDFLARE_ACCOUNT_ID',
-  'CLOUDFLARE_STREAM_API_TOKEN',
-  'CLOUDFLARE_STREAM_SIGNING_KEY_ID',
-  'CLOUDFLARE_STREAM_SIGNING_KEY_PEM',
-  'CLOUDFLARE_STREAM_CUSTOMER_DOMAIN',
-] as const
-
-const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
-const PRIVATE_PEM = privateKey.export({ type: 'pkcs1', format: 'pem' }).toString()
+const VIMEO_ID = '123456789'
+const VIMEO_HASH = 'abcdef0123'
 
 function queue(table: string, ...rs: Array<{ data?: unknown; error?: { message: string } | null }>) {
   queues.set(table, [...(queues.get(table) ?? []), ...rs])
@@ -99,19 +84,16 @@ function req(body: unknown, opts: { auth?: boolean } = {}) {
 function ctx() { return { params: Promise.resolve({ moduleId: MODULE_ID }) } }
 
 function queueGate() {
-  // The gate now resolves superadmin flag + tenant role + tenant context in
-  // one get_gate_context RPC call; return its single-row result.
-  queue('rpc:get_gate_context', {
-    data: [{
-      is_superadmin: false,
-      role: 'member',
-      tenant_exists: true,
-      tenant_name: 'Test Tenant',
-      tenant_modules: {},
-      tenant_settings: {},
-      tenant_disabled_at: null,
-    }],
+  queue('profiles', { data: { is_superadmin: false } })
+  // Shape matches the gate's select: the embedded tenant is what proves the
+  // tenant is not disabled. tenantGate fails closed without it.
+  queue('tenant_memberships', {
+    data: { role: 'member', invite_cancelled_at: null, tenants: { disabled_at: null } },
   })
+  // requireStrikeMember wraps requireTenantModuleMember, which resolves the
+  // tenant's module map before the route runs. Without STRIKE enabled here
+  // every request 403s well before the behaviour under test.
+  queue('tenants', { data: { name: 'Test Tenant', modules: { strike: true }, settings: {}, disabled_at: null } })
 }
 
 function queueModuleAndVersion(versionOverrides: Record<string, unknown> = {}, moduleOverrides: Record<string, unknown> = {}) {
@@ -127,10 +109,8 @@ function queueModuleAndVersion(versionOverrides: Record<string, unknown> = {}, m
       status: 'published',
       passing_score: 80,
       retake_limit: null,
-      video_provider: 'storage',
-      video_external_id: null,
-      video_path: 'global/loto/refresher.mp4',
-      captions_path: null,
+      video_external_id: VIMEO_ID,
+      video_meta: { vimeo_hash: VIMEO_HASH },
       ...versionOverrides,
     },
   })
@@ -143,12 +123,10 @@ describe('POST /api/strike/[moduleId]/media', () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co'
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon'
     process.env.SUPERADMIN_EMAILS = ''
-    for (const key of CF_ENV_KEYS) delete process.env[key]
     authGetUser.mockResolvedValue({
       data: { user: { id: 'learner-1', email: 'learner@example.com' } },
       error: null,
     })
-    createSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://example.supabase.co/signed/video' }, error: null })
   })
 
   it('401 when the bearer token is missing', async () => {
@@ -156,15 +134,15 @@ describe('POST /api/strike/[moduleId]/media', () => {
     expect(res.status).toBe(401)
   })
 
-  it('signs a 10-minute storage URL and writes an audit row', async () => {
+  it('returns a Vimeo embed URL and writes an audit row', async () => {
     queueGate()
     queueModuleAndVersion()
     const res = await issuePlaybackUrl(req({ module_version_id: VERSION_ID }), ctx())
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.provider).toBe('storage')
-    expect(body.url).toBe('https://example.supabase.co/signed/video')
-    expect(createSignedUrl).toHaveBeenCalledWith('global/loto/refresher.mp4', 600)
+    expect(body.provider).toBe('vimeo')
+    expect(body.url).toBe(`https://player.vimeo.com/video/${VIMEO_ID}?h=${VIMEO_HASH}&dnt=1`)
+    expect(body.expires_at).toBeNull()
 
     const audit = captured.inserts.find(i => i.table === 'strike_media_access')?.payload as Record<string, unknown>
     expect(audit).toMatchObject({
@@ -172,10 +150,20 @@ describe('POST /api/strike/[moduleId]/media', () => {
       user_id: 'learner-1',
       module_id: MODULE_ID,
       module_version_id: VERSION_ID,
-      provider: 'storage',
-      object_ref: 'global/loto/refresher.mp4',
-      token_ttl_seconds: 600,
+      provider: 'vimeo',
+      object_ref: VIMEO_ID,
     })
+  })
+
+  it('returns provider null and no audit row when the version has no video', async () => {
+    queueGate()
+    queueModuleAndVersion({ video_external_id: null, video_meta: {} })
+    const res = await issuePlaybackUrl(req({ module_version_id: VERSION_ID }), ctx())
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.provider).toBeNull()
+    expect(body.url).toBeNull()
+    expect(captured.inserts.find(i => i.table === 'strike_media_access')).toBeUndefined()
   })
 
   it('404 for tenant-scoped modules outside the caller tenant', async () => {
@@ -183,34 +171,6 @@ describe('POST /api/strike/[moduleId]/media', () => {
     queueModuleAndVersion({}, { library_scope: 'tenant', tenant_id: OTHER_TENANT_ID })
     const res = await issuePlaybackUrl(req({ module_version_id: VERSION_ID }), ctx())
     expect(res.status).toBe(404)
-  })
-
-  it('503 for stream versions while Cloudflare env is not configured', async () => {
-    queueGate()
-    queueModuleAndVersion({ video_provider: 'cloudflare', video_external_id: STREAM_UID })
-    const res = await issuePlaybackUrl(req({ module_version_id: VERSION_ID }), ctx())
-    expect(res.status).toBe(503)
-  })
-
-  it('returns a token-bearing HLS URL for stream versions', async () => {
-    process.env.CLOUDFLARE_ACCOUNT_ID = 'acct'
-    process.env.CLOUDFLARE_STREAM_API_TOKEN = 'token'
-    process.env.CLOUDFLARE_STREAM_SIGNING_KEY_ID = 'key-id-1'
-    process.env.CLOUDFLARE_STREAM_SIGNING_KEY_PEM = PRIVATE_PEM
-    process.env.CLOUDFLARE_STREAM_CUSTOMER_DOMAIN = 'customer-test.cloudflarestream.com'
-
-    queueGate()
-    queueModuleAndVersion({ video_provider: 'cloudflare', video_external_id: STREAM_UID })
-    const res = await issuePlaybackUrl(req({ module_version_id: VERSION_ID }), ctx())
-    expect(res.status).toBe(200)
-    const body = await res.json()
-    expect(body.provider).toBe('cloudflare')
-    expect(body.url).toMatch(/^https:\/\/customer-test\.cloudflarestream\.com\/.+\/manifest\/video\.m3u8$/)
-    // The path segment is the signed JWT, not the raw video UID.
-    expect(body.url).not.toContain(STREAM_UID)
-
-    const audit = captured.inserts.find(i => i.table === 'strike_media_access')?.payload as Record<string, unknown>
-    expect(audit).toMatchObject({ provider: 'cloudflare', object_ref: STREAM_UID })
   })
 
   it('429 once the per-user playback rate limit is exhausted', async () => {

@@ -10,14 +10,15 @@ import type { BBSLeaderboardRow } from '@soteria/core/bbsMetrics'
 
 export default function BBSLeaderboardPage() {
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const [rows, setRows] = useState<BBSLeaderboardRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     setError(null)
     const { data: { session } } = await supabase.auth.getSession()
-    const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+    const headers: Record<string, string> = { 'x-active-tenant': tenantId }
     if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
     const res = await fetch(`/api/bbs/leaderboard?limit=50`, { headers })
     const body = await res.json()
@@ -26,7 +27,7 @@ export default function BBSLeaderboardPage() {
       return
     }
     setRows(body.leaderboard ?? [])
-  }, [tenant?.id])
+  }, [tenantId])
 
   useEffect(() => { void load() }, [load])
 

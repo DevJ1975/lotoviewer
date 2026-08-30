@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import * as Sentry from '@sentry/nextjs'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { buildInspectorUrl, type InspectorTokenPayload } from '@/lib/inspectorToken'
+import { requireTenantAdmin } from '@/lib/auth/tenantGate'
 
 // POST /api/inspector/sign
 // Admin-only. Mints a signed inspector URL from a date range + label +
@@ -21,31 +20,16 @@ interface Body {
   expiresInDays?:  number
 }
 
-async function requireAdmin(authHeader: string | null): Promise<string | null> {
-  if (!authHeader?.startsWith('Bearer ')) return null
-  const token = authHeader.slice('Bearer '.length)
-  const url  = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !anon) return null
-  const client = createClient(url, anon, { auth: { persistSession: false } })
-  const { data: { user }, error } = await client.auth.getUser(token)
-  if (error || !user) return null
-  const admin = supabaseAdmin()
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('is_admin')
-    .eq('id', user.id)
-    .maybeSingle()
-  return profile?.is_admin ? user.id : null
-}
-
 const DATE_RE  = /^\d{4}-\d{2}-\d{2}$/
 const MAX_DAYS = 90      // Cap so a leak doesn't grant year-long access
 const MIN_DAYS = 1
 
 export async function POST(req: Request) {
-  const adminId = await requireAdmin(req.headers.get('authorization'))
-  if (!adminId) return NextResponse.json({ error: 'Admins only' }, { status: 401 })
+  // The minted URL is scoped to the tenant the admin is acting in, so the
+  // gate has to establish WHICH tenant — the old global `profiles.is_admin`
+  // check could not, which is how tenant-blind tokens got minted.
+  const gate = await requireTenantAdmin(req)
+  if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   const secret = process.env.INSPECTOR_TOKEN_SECRET
   if (!secret) {
@@ -83,7 +67,7 @@ export async function POST(req: Request) {
     origin = process.env.NEXT_PUBLIC_APP_URL ?? 'https://localhost:3000'
   }
 
-  const payload: InspectorTokenPayload = { start, end, label, exp }
+  const payload: InspectorTokenPayload = { tenantId: gate.tenantId, start, end, label, exp }
   try {
     const url = buildInspectorUrl({ origin, payload, secret })
     return NextResponse.json({ url, exp })
