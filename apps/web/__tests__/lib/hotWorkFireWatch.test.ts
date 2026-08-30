@@ -22,7 +22,7 @@ import { hotWorkState, hotWorkCountdown } from '@soteria/core/hotWorkPermitStatu
 import type { HotWorkPermit } from '@soteria/core/types'
 
 const migration = readFileSync(
-  resolve(process.cwd(), 'migrations/286_hot_work_fire_watch_enforcement.sql'), 'utf8')
+  resolve(process.cwd(), 'migrations/263_hot_work_fire_watch_enforcement.sql'), 'utf8')
 const dialog = readFileSync(
   resolve(process.cwd(), 'app/hot-work/[permitId]/_components/CancelDialog.tsx'), 'utf8')
 const newPermitForm = readFileSync(
