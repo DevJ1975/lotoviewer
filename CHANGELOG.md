@@ -10,6 +10,10 @@ app at `/superadmin/release-notes`.
 
 ## [Unreleased]
 
+_Nothing pending._
+
+## [1.18.0] — 2026-08-29
+
 ### Security
 - **STRIKE quiz answers are no longer readable by learners.** The RLS policy on
   the quiz tables grants row-level read to any signed-in member, and Postgres
@@ -25,6 +29,47 @@ app at `/superadmin/release-notes`.
   video extensions, so any other file type was readable by every signed-in user
   of every tenant. Audio now follows the same rule as video.
 
+- **A reachable remote-code-execution hole in image handling is closed.** The
+  image optimizer decoded AVIF uploads through a vulnerable library, and the
+  path was reachable in this deployment: members upload images into public
+  buckets with the file type passed through unchecked, and two pages that serve
+  them — the review-token page and the QR placard view — need no sign-in. Next
+  is upgraded to 16.3.3, which also carries nine further advisories the prior
+  version predated. Worth recording that `npm audit` did not report this one.
+- **Inspector links can no longer read another customer's permits.** The signed
+  token carried no tenant, and the routes behind it query with a key that
+  bypasses row-level security — so a token minted for one customer's Cal/OSHA
+  inspection returned every customer's confined-space and hot-work permits. The
+  tenant is now part of what the signature covers, and all six reads filter on
+  it. Every previously issued inspector URL stops working, which is the correct
+  direction to fail.
+- **A revoked member, or a member of a disabled organisation, is now refused.**
+  The server-side gate checked membership but not whether the invite had been
+  cancelled or the organisation switched off, while the database rules it was
+  meant to mirror checked both. Most routes reach the database with a key that
+  bypasses those rules, so for them the gate was the only thing standing there.
+
+### Added
+- **Hazard-communication symbols.** GHS pictograms, DOT hazard classes, NFPA 704
+  diamonds and waste-stream symbols, with printable labels.
+- **Post-work fire watch is enforced, not just documented.** NFPA 51B §8.7 sets a
+  floor on how long a watch must run after hot work stops; the form asked for it
+  and nothing checked it. The database now enforces the minimum too, because the
+  form is not the only writer.
+- **Behaviour-Based Safety coaching**, and a training and competency matrix.
+- **Placard export to Excel**, per site and per department.
+
+### Changed
+- **Continuous integration now gates the whole test suite**, typecheck, lint and
+  a production build, in place of a hand-picked 28-file subset. The subset
+  existed because the full suite was believed to have 127 failures; re-measured,
+  it had two, both stale assertions. Widening it immediately surfaced three real
+  problems that had been invisible: two typecheck errors, twelve tests that fail
+  only on the Node version CI runs, and a lockfile missing Linux binaries.
+- **Sign-in decides on a complete session.** The app could act on a half-loaded
+  session for one render, which sent a first-time user to the page they had
+  asked for before pulling them back to set a password.
+
 ### Fixed
 - **A module with no quiz questions no longer records itself as passed.** Such a
   module scores 100% by definition, and the "I reviewed this" confirmation was
@@ -37,7 +82,6 @@ app at `/superadmin/release-notes`.
 - **STRIKE assignment errors no longer echo database internals** to the caller.
   Every other STRIKE endpoint already returned a generic message.
 
-### Fixed
 - **Reset Demo no longer empties Equipment Readiness.** The reset wiped 31
   tables and re-seeded 17. Everything Equipment Readiness owns — inspections,
   their responses, defects, repairs and photo evidence — was in the first list
@@ -69,6 +113,19 @@ app at `/superadmin/release-notes`.
   the SQL, not to the admin reading the page. It now distinguishes three states
   properly: nothing logged yet, nothing matching the current filter, and a real
   load failure.
+- **The printed placard silently dropped isolation steps past the seventh.**
+- **The legal pages are reachable when signed out.** The login footer links to
+  Privacy and Terms, and clicking either bounced you back to the login screen.
+- **Equipment Readiness survives Reset Demo**, and the reset re-seeds any demo
+  organisation rather than only one.
+
+### Internal
+- The repository and the production database are reconciled in both directions,
+  and a drift check now compares them so it cannot silently recur. Seven tables
+  existed in production with no migration file anywhere; a rebuild would have
+  lost them.
+- 33 pull requests resolved: 24 merged, 5 closed as superseded, duplicated or
+  contradicted by shipped work.
 
 ## [1.17.1] — 2026-07-31
 
