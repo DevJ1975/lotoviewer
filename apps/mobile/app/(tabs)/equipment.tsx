@@ -33,11 +33,12 @@ export default function EquipmentListScreen() {
   const [query,    setQuery]    = useState('')
 
   const load = useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
+    if (!tenantId) return
     if (mode === 'initial') setLoading(true)
     else                    setRefreshing(true)
     setError(null)
     try {
-      const rows = await loadAllEquipment()
+      const rows = await loadAllEquipment(tenantId)
       setItems(rows)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
@@ -45,7 +46,7 @@ export default function EquipmentListScreen() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [tenantId])
 
   useEffect(() => {
     if (!tenantId) return

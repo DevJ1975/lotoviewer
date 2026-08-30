@@ -1,7 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="GHS04 — Compressed gas">
   <title>GHS04 — Compressed gas</title>
-  <path d="M32 3 L61 32 L32 61 L3 32 Z" fill="#fff" stroke="#e30613" stroke-width="3" stroke-linejoin="miter"/>
-  <rect x="22" y="22" width="20" height="28" rx="4" fill="none" stroke="#000" stroke-width="2.5"/>
-  <line x1="22" y1="28" x2="42" y2="28" stroke="#000" stroke-width="2"/>
-  <rect x="29" y="14" width="6" height="8" fill="#000"/>
+  <path d="M32 3 L61 32 L32 61 L3 32 Z" fill="#fff" stroke="#E30613" stroke-width="3" stroke-linejoin="miter"/>
+  <!-- gas cylinder lying at the GHS-canonical tilt -->
+  <g transform="rotate(-20 32 36)">
+    <!-- valve stem and cap -->
+    <rect x="29.5" y="11" width="5" height="6" fill="#000"/>
+    <rect x="26" y="16" width="12" height="5" rx="1.5" fill="#000"/>
+    <!-- cylinder body: rounded shoulders, rounded base -->
+    <path d="M25 26
+             C 25 23 27 21 32 21
+             C 37 21 39 23 39 26
+             L 39 50
+             C 39 52.5 37 54 32 54
+             C 27 54 25 52.5 25 50 Z"
+          fill="none" stroke="#000" stroke-width="3"/>
+  </g>
 </svg>

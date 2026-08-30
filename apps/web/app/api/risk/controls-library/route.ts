@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember, requireTenantAdmin } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { HAZARD_CATEGORIES } from '@soteria/core/queries/risks'
+import { HIERARCHY_ORDER as CORE_HIERARCHY_ORDER } from '@soteria/core/risk'
 
 // GET   /api/risk/controls-library     list controls (any tenant member)
 //   ?hazard_category=physical filter for the wizard panel
@@ -11,9 +13,12 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 // Returns ordered by hierarchy level (elimination → ppe per ISO
 // 45001 8.1.2) then by name.
 
-const HIERARCHY_ORDER = ['elimination','substitution','engineering','administrative','ppe']
-const VALID_HIERARCHY_LEVELS = ['elimination','substitution','engineering','administrative','ppe']
-const VALID_CATS = ['physical','chemical','biological','mechanical','electrical','ergonomic','psychosocial','environmental','radiological']
+// Canonical enum values live in @soteria/core next to their types;
+// widened to plain string lists for query-param / body filtering.
+// HIERARCHY_ORDER doubles as the valid-level whitelist — the sort
+// order and the accepted values are the same list by definition.
+const HIERARCHY_ORDER: readonly string[] = CORE_HIERARCHY_ORDER
+const VALID_CATS: readonly string[] = HAZARD_CATEGORIES
 
 export async function GET(req: Request) {
   const gate = await requireTenantMember(req)
@@ -69,8 +74,8 @@ export async function POST(req: Request) {
   try { body = await req.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
-  if (typeof body.hierarchy_level !== 'string' || !VALID_HIERARCHY_LEVELS.includes(body.hierarchy_level)) {
-    return NextResponse.json({ error: 'hierarchy_level must be one of ' + VALID_HIERARCHY_LEVELS.join(', ') }, { status: 400 })
+  if (typeof body.hierarchy_level !== 'string' || !HIERARCHY_ORDER.includes(body.hierarchy_level)) {
+    return NextResponse.json({ error: 'hierarchy_level must be one of ' + HIERARCHY_ORDER.join(', ') }, { status: 400 })
   }
   const name = typeof body.name === 'string' ? body.name.trim() : ''
   if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 })

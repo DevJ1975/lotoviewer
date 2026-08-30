@@ -30,8 +30,8 @@ describe('Working at Heights admin section', () => {
 
   it('every tile is reachable via getAdminTile', () => {
     for (const t of section?.tiles ?? []) {
-      const found = getAdminTile(t.slug)
-      expect(found?.href, `getAdminTile(${t.slug})`).toBe(t.href)
+      const found = getAdminTile('working-at-heights', t.slug)
+      expect(found?.href, `getAdminTile('working-at-heights', ${t.slug})`).toBe(t.href)
     }
   })
 

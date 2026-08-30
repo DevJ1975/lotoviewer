@@ -2,9 +2,13 @@ import { NextResponse } from 'next/server'
 import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
+  ACUTE_CLASSES,
   HAZARDOUS_WASTE_PHYSICAL_STATES,
   HAZARDOUS_WASTE_STREAM_STATUSES,
+  WASTE_JURISDICTIONS,
+  validateHazardSymbolFields,
 } from '@soteria/core/hazardousWaste'
+import { parseHazardSymbolFields } from '@/lib/hazardSymbolInput'
 
 // GET   /api/hazardous-waste/streams/[id]   Fetch a single stream row.
 // PATCH /api/hazardous-waste/streams/[id]   Partial update — only known
@@ -85,6 +89,26 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     patch.generator_category = raw
   }
 
+  if ('jurisdiction' in body) {
+    const raw = typeof body.jurisdiction === 'string' ? body.jurisdiction : null
+    if (!raw || !(WASTE_JURISDICTIONS as readonly string[]).includes(raw)) {
+      return NextResponse.json({ error: 'Invalid jurisdiction' }, { status: 400 })
+    }
+    patch.jurisdiction = raw
+  }
+
+  if ('acute_class' in body) {
+    const raw = typeof body.acute_class === 'string' ? body.acute_class : null
+    if (!raw || !(ACUTE_CLASSES as readonly string[]).includes(raw)) {
+      return NextResponse.json({ error: 'Invalid acute_class' }, { status: 400 })
+    }
+    patch.acute_class = raw
+  }
+
+  if ('ldr_restricted' in body)  patch.ldr_restricted = body.ldr_restricted === true
+  if ('ldr_notice_sent' in body) patch.ldr_notice_sent = body.ldr_notice_sent === true
+  if ('ldr_notice_date' in body) patch.ldr_notice_date = trimOrNull(body.ldr_notice_date, 30)
+
   if ('status' in body) {
     const raw = typeof body.status === 'string' ? body.status : null
     if (!raw || !(HAZARDOUS_WASTE_STREAM_STATUSES as readonly string[]).includes(raw)) {
@@ -97,6 +121,27 @@ export async function PATCH(req: Request, ctx: RouteContext) {
 
   if ('name' in body && (!patch.name || (patch.name as string).length < 1)) {
     return NextResponse.json({ error: 'name: Name is required' }, { status: 400 })
+  }
+
+  // Hazard-communication symbols (migration 239). Parse the whole set, then
+  // merge only the keys the caller actually sent so PATCH stays partial.
+  const symbols = parseHazardSymbolFields(body)
+  const SYMBOL_KEYS = [
+    'ghs_pictograms', 'ghs_signal_word',
+    'nfpa_health', 'nfpa_flammability', 'nfpa_instability', 'nfpa_special',
+    'dot_un_number', 'dot_hazard_class', 'dot_packing_group', 'dot_proper_shipping_name',
+  ] as const
+  for (const key of SYMBOL_KEYS) {
+    if (key in body) patch[key] = symbols[key]
+  }
+  // Validate against the catalog whenever any symbol field is being updated.
+  if (SYMBOL_KEYS.some(key => key in body)) {
+    const symbolErrors = validateHazardSymbolFields(symbols)
+    if (symbolErrors.length > 0) {
+      return NextResponse.json({
+        error: symbolErrors.map(e => `${e.field}: ${e.message}`).join('; '),
+      }, { status: 400 })
+    }
   }
 
   const { data, error } = await supabaseAdmin()

@@ -213,6 +213,7 @@ export async function POST(req: Request) {
     const response = await client.messages.create({
       model:      MODEL,
       max_tokens: 600,
+      thinking:   { type: 'disabled' },
       system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: brief }],
       output_config: { format: { type: 'json_schema', schema: SCHEMA } },

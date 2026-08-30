@@ -6,7 +6,7 @@
 // keeps cost math, time bucketing, and group-by logic in one place.
 //
 // Pricing posture: hardcoded per-million-token rates as documented
-// on docs.anthropic.com at the time of writing (Sonnet 4.6, Haiku 4.5, Opus 4.8).
+// on docs.anthropic.com at the time of writing (Sonnet 5, Haiku 4.5, Opus 5).
 // These are USD estimates — Anthropic's actual invoice will differ
 // (cache reads, batch discounts, prompt caching). The dashboard
 // surfaces this caveat in the UI; do not treat dollar figures here
@@ -16,7 +16,7 @@ import { SONNET, HAIKU, OPUS, SONNET_5 } from './models'
 
 // ─── Pricing ──────────────────────────────────────────────────────────
 // Rates expressed in USD per million tokens. Source: Anthropic public
-// pricing as of 2026-05. When Anthropic changes prices, update here +
+// pricing as of 2026-08. When Anthropic changes prices, update here +
 // the test in usageAggregator.test.ts.
 export interface ModelPricing {
   inputPerMTok:  number
@@ -24,13 +24,25 @@ export interface ModelPricing {
 }
 
 export const MODEL_PRICING: Record<string, ModelPricing> = {
+  // Current models. Note Sonnet 5 carries a $2/$10 introductory rate through
+  // 2026-08-31; the list rate is used here rather than a date-dependent one,
+  // so Sonnet spend reads slightly high until then. Deliberate — this table
+  // is an estimate surface, and a time-varying rate is not worth the branch.
+  // SONNET and SONNET_5 are the same id after the Claude 5 move, so this is
+  // the Sonnet 5 row. List price deliberately, not the introductory rate:
+  // over-estimating makes a tenant budget cap fire early rather than late.
   [SONNET]: { inputPerMTok: 3,  outputPerMTok: 15 },
   [HAIKU]:  { inputPerMTok: 1,  outputPerMTok: 5  },
   [OPUS]:   { inputPerMTok: 5,  outputPerMTok: 25 },
-  // Sonnet 5 list price. An introductory rate was in effect at time of
-  // writing; the list rate is used deliberately, because over-estimating
-  // spend makes a tenant budget cap fire early rather than late.
-  [SONNET_5]: { inputPerMTok: 3, outputPerMTok: 15 },
+
+  // Retired ids that still appear in ai_invocations history. Without these,
+  // the unknown-model fallback below prices them as Sonnet — which is right
+  // for the old Sonnet but silently under-reports every historical Opus row
+  // by 5x on input and output alike. The dashboard reads back months of
+  // rows, so dropping these would rewrite past spend, not just future.
+  'claude-sonnet-4-6': { inputPerMTok: 3, outputPerMTok: 15 },
+  'claude-opus-4-8':   { inputPerMTok: 5, outputPerMTok: 25 },
+  'claude-opus-4-7':   { inputPerMTok: 5, outputPerMTok: 25 },
 }
 
 // Anthropic prompt-cache rate multipliers relative to base input price.

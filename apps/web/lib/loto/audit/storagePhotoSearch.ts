@@ -113,6 +113,7 @@ async function classifyCandidate(
   const response = await client.messages.create({
     model:      MODEL,
     max_tokens: 600,
+    thinking:   { type: 'disabled' },
     system:     [{ type: 'text', text: FPE_SYSTEM, cache_control: { type: 'ephemeral' } }],
     messages:   [{
       role: 'user',

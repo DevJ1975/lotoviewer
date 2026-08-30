@@ -122,7 +122,7 @@ export async function POST(req: Request) {
 
   // Stale never-signed-in invitees get a fresh invite link too — a
   // passwordless "you've been added" notice would leave them stuck.
-  const { inviteUrl, emailSent } = await issueAndSendInvite(admin, {
+  const { inviteUrl, expiresAt, emailSent } = await issueAndSendInvite(admin, {
     userId,
     email,
     fullName:   profileFullName,
@@ -151,6 +151,9 @@ export async function POST(req: Request) {
     // owns it. tempPassword is already limited this way: provision.ts sets it
     // only on the create path.
     inviteUrl: createdAuthUser ? inviteUrl : undefined,
+    // expiresAt is metadata, not a credential — safe to return either way,
+    // and the resend UI needs it to show how long a link has left.
+    expiresAt,
     emailSent,
     alreadyExisted,
     tenantId: gate.tenantId,

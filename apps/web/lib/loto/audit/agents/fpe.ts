@@ -10,6 +10,7 @@ import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 import { FPE_SCHEMA, type FpeResult } from '../schemas'
 import { FPE_SYSTEM, describeEquipment, describeSteps } from '../prompts'
 import { fetchImageAsBase64 } from '../imageFetch'
+import { assertNotRefused } from '@/lib/ai/client'
 
 const MODEL = MODEL_BY_SURFACE['loto-audit-fpe']
 
@@ -65,11 +66,13 @@ export async function runFpeAgent(
   const response = await client.messages.create({
     model:      MODEL,
     max_tokens: 2000,
+    thinking:   { type: 'disabled' },
     system:     [{ type: 'text', text: FPE_SYSTEM, cache_control: { type: 'ephemeral' } }],
     messages:   [{ role: 'user', content }],
     output_config: { format: { type: 'json_schema', schema: FPE_SCHEMA } },
   })
 
+  assertNotRefused(response, 'loto-audit-fpe')
   const textBlock = response.content.find(b => b.type === 'text')
   if (!textBlock || textBlock.type !== 'text') throw new Error('FPE agent: no text block in response')
   const result = JSON.parse(textBlock.text) as FpeResult

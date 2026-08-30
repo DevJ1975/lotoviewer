@@ -1,13 +1,22 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.1.0'
-const LAST_UPDATED    = '2026-08-28'
+const CURRENT_VERSION = '1.2.0'
+const LAST_UPDATED    = '2026-08-29'
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.2.0',
+    date:    '2026-06-17',
+    changes: [
+      'Behavior-Based Safety now has its own dedicated wiki page at ' +
+      '/wiki/bbs (covering both BBS surfaces and the coaching upgrade). ' +
+      'This page links there instead of documenting BBS inline.',
+    ],
+  },
+  {
     version: '1.1.0',
-    date:    '2026-08-28',
+    date:    '2026-08-29',
     changes: [
       'SCIM provisioning tokens are now owner/admin only. The database rule ' +
       'behind the token table accepted any member of the organisation, ' +
@@ -27,6 +36,10 @@ const CHANGELOG: ChangelogEntry[] = [
       'value used to be spliced into the query and could match on fields the ' +
       'endpoint does not return; it now returns an empty result. Ordinary ' +
       'email addresses and employee IDs are unaffected.',
+      'Document the SP ACS URL correctly. The page used to default it to ' +
+      '/api/auth/saml/callback — a path in this application that does not ' +
+      'exist. Supabase Auth terminates SAML, so the ACS lives under the ' +
+      'Supabase project origin, and the field now defaults there.',
     ],
   },
   {
@@ -38,6 +51,20 @@ const CHANGELOG: ChangelogEntry[] = [
       'dashboard, the QR / location manager, and the observation log. ' +
       'The tile previously pointed at a URL that served no page, so it ' +
       '404ed.',
+    ],
+  },
+  {
+    version: '1.1.0',
+    date:    '2026-06-17',
+    changes: [
+      'BBS v2 coaching upgrade (Workplace Learning System methodology): ' +
+      'C.A.R.E.S. coaching notes + a structured safe-behavior checklist ' +
+      '(PPE, line of fire, tools, procedures, housekeeping, ergonomics); ' +
+      'recognition of safe behaviors with a dashboard recognition feed; ' +
+      'a "Hot Seat" 24-hour rapid review auto-flagged for critical unsafe ' +
+      'observations (due / overdue tracking); and Safety Action Teams — a ' +
+      'tenant-scoped lookup so follow-ups group by team. The scorecard now ' +
+      'surfaces these v2 leading indicators.',
     ],
   },
   {
@@ -58,7 +85,7 @@ export default function WikiPlatformFeaturesPage() {
   return (
     <WikiPage
       title="Platform Features"
-      subtitle="SSO + SCIM, CMMS sync, BBS v2, vendor prequal, i18n."
+      subtitle="SSO + SCIM, CMMS sync, vendor prequal, i18n."
       modulePath="/admin/people/sso"
       audience="admin"
       category="Admin"
@@ -70,7 +97,7 @@ export default function WikiPlatformFeaturesPage() {
         { id: 'sso',       label: 'SSO config' },
         { id: 'scim',      label: 'SCIM 2.0 provisioning' },
         { id: 'cmms',      label: 'CMMS bidirectional sync' },
-        { id: 'bbs',       label: 'BBS v2 observations' },
+        { id: 'bbs',       label: 'Behavior-Based Safety' },
         { id: 'prequal',   label: 'Vendor prequalification' },
         { id: 'i18n',      label: 'Multi-language (i18n)' },
         { id: 'faq',       label: 'FAQ' },
@@ -103,6 +130,20 @@ export default function WikiPlatformFeaturesPage() {
           the admin of the next step. The reason: SAML enablement on
           Supabase has irreversible side effects (the tenant&apos;s auth
           flow flips); we want a human gate on that.
+        </p>
+        <p>
+          <strong>The two SP values are not the same kind of thing.</strong>{' '}
+          The <em>entity ID</em> is an opaque SAML identifier — it names us to
+          the IdP and nothing ever fetches it, so the default derived from the
+          app URL is fine to keep. The <em>ACS URL</em> is the endpoint your IdP
+          POSTs the assertion to, so it has to be live. Supabase Auth terminates
+          SAML, not this application, which means the ACS sits under the
+          Supabase project origin —{' '}
+          <code>&lt;supabase-url&gt;/auth/v1/sso/saml/acs</code> — and the page
+          defaults to exactly that. If the field comes up blank, the deployment
+          is missing <code>NEXT_PUBLIC_SUPABASE_URL</code>; ask your superadmin
+          for the ACS rather than guessing, because an IdP pointed at the wrong
+          endpoint fails at the moment a user first tries to sign in.
         </p>
       </Section>
 
@@ -159,7 +200,7 @@ export default function WikiPlatformFeaturesPage() {
         </p>
       </Section>
 
-      <Section id="bbs" title="BBS v2 observations">
+      <Section id="bbs" title="Behavior-Based Safety">
         <p>
           A second, leaner BBS surface alongside the existing one (same
           intentional-parallel pattern Module 2 used for CAPAs vs
@@ -183,6 +224,12 @@ export default function WikiPlatformFeaturesPage() {
           banded red (&lt;2:1) / yellow (2–4:1) / green (≥4:1). The
           band is intentionally loud — a sustained red is a culture
           finding, not a data finding.
+          Behavior-Based Safety now has its own page — see the{' '}
+          <Link href="/wiki/bbs">Behavior-Based Safety wiki</Link> for the full
+          treatment: both surfaces (v1 gamified QR + leaderboard, v2 ratio-driven
+          coaching), the safe-to-unsafe ratio, C.A.R.E.S. coaching and
+          recognition, the 24-hour &ldquo;Hot Seat&rdquo; rapid review, and
+          Safety Action Teams.
         </p>
       </Section>
 

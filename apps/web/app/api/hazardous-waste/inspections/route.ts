@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nextjs'
 import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
+  HAZARDOUS_WASTE_AREA_TYPES,
   HAZARDOUS_WASTE_FIELD_CHECKS,
   type HazardousWasteAreaType,
   type HazardousWasteFindingStatus,
@@ -20,13 +21,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 const VALID_STATUSES: ReadonlyArray<HazardousWasteFindingStatus> = ['pass', 'fail', 'na']
 const VALID_INSPECTION_STATUSES = ['submitted', 'draft'] as const
-const VALID_AREA_TYPES: ReadonlyArray<HazardousWasteAreaType> = [
-  'satellite_accumulation',
-  'central_accumulation',
-  'universal_waste',
-  'used_oil',
-  'inspection_only',
-]
+const VALID_AREA_TYPES = HAZARDOUS_WASTE_AREA_TYPES
 
 // Lookup table built once: check_id → { critical }. Used to coerce the
 // client-supplied `flagged_critical` to the catalog truth so a client

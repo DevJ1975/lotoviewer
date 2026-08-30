@@ -1,6 +1,6 @@
 {
   "name": "lotoviewer-monorepo",
-  "version": "1.17.1",
+  "version": "1.18.0",
   "private": true,
   "workspaces": [
     "apps/*",
@@ -27,7 +27,5 @@
     "doctor:git": "bash scripts/repo-doctor.sh",
     "wiki:touch": "node scripts/wiki-touch.mjs"
   },
-  "dependencies": {
-    "expo-router": "~6.0.23"
-  }
+  "dependencies": {}
 }

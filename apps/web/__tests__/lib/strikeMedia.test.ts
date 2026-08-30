@@ -72,3 +72,98 @@ describe('vimeoEmbedUrl', () => {
       .toBe('https://player.vimeo.com/video/123456789?h=abcdef0123&dnt=1')
   })
 })
+
+// ── Edge cases: host allow-list, segment shapes, and boundary lengths ─────
+// The parser is the security boundary (it decides what id can ever reach a
+// player.vimeo.com iframe), so these hammer the host/segment/length rules.
+
+describe('parseVimeoReference — host & segment edge cases', () => {
+  it('accepts the www.vimeo.com host', () => {
+    expect(parseVimeoReference('https://www.vimeo.com/123456789'))
+      .toEqual({ videoId: '123456789', hash: null })
+  })
+
+  it('matches the host case-insensitively', () => {
+    expect(parseVimeoReference('HTTPS://VIMEO.COM/123456789'))
+      .toEqual({ videoId: '123456789', hash: null })
+  })
+
+  it('accepts a player.vimeo.com embed URL without a hash', () => {
+    expect(parseVimeoReference('https://player.vimeo.com/video/123456789'))
+      .toEqual({ videoId: '123456789', hash: null })
+  })
+
+  it('trims surrounding whitespace before parsing', () => {
+    expect(parseVimeoReference('  https://vimeo.com/123456789  '))
+      .toEqual({ videoId: '123456789', hash: null })
+  })
+
+  it('treats a trailing slash as no hash', () => {
+    expect(parseVimeoReference('https://vimeo.com/123456789/'))
+      .toEqual({ videoId: '123456789', hash: null })
+  })
+
+  it('treats an empty ?h= as no hash', () => {
+    expect(parseVimeoReference('https://player.vimeo.com/video/123456789?h='))
+      .toEqual({ videoId: '123456789', hash: null })
+  })
+
+  it('rejects a channel-style URL whose first segment is not the id', () => {
+    expect(parseVimeoReference('https://vimeo.com/channels/staffpicks/123456789')).toBeNull()
+  })
+
+  it('prefers the path hash over the query hash when both are present', () => {
+    expect(parseVimeoReference('https://vimeo.com/123456789/pathhash01?h=queryhash9'))
+      .toEqual({ videoId: '123456789', hash: 'pathhash01' })
+  })
+})
+
+describe('parseVimeoReference — id & hash length boundaries', () => {
+  it('accepts the shortest (6-digit) and longest (12-digit) ids', () => {
+    expect(parseVimeoReference('123456')).toEqual({ videoId: '123456', hash: null })
+    expect(parseVimeoReference('123456789012')).toEqual({ videoId: '123456789012', hash: null })
+  })
+
+  it('rejects a 13-digit id as out of range', () => {
+    expect(parseVimeoReference('1234567890123')).toBeNull()
+  })
+
+  it('drops a hash that is too short but keeps the valid id', () => {
+    expect(parseVimeoReference('https://vimeo.com/123456789/abc'))
+      .toEqual({ videoId: '123456789', hash: null })
+  })
+
+  it('drops a hash that is too long (>20) but keeps the valid id', () => {
+    expect(parseVimeoReference(`https://vimeo.com/123456789/${'a'.repeat(21)}`))
+      .toEqual({ videoId: '123456789', hash: null })
+  })
+
+  it('drops an uppercase hash that fails the lowercase-alnum rule', () => {
+    expect(parseVimeoReference('https://vimeo.com/123456789/ABCDEF0123'))
+      .toEqual({ videoId: '123456789', hash: null })
+  })
+})
+
+describe('resolveStrikeVideo — edge cases', () => {
+  it('trims surrounding whitespace on the stored id', () => {
+    expect(resolveStrikeVideo({ video_external_id: '  123456789  ' }))
+      .toEqual({ kind: 'vimeo', videoId: '123456789', hash: null })
+  })
+
+  it('resolves the shortest valid (6-digit) id and rejects a 5-digit one', () => {
+    expect(resolveStrikeVideo({ video_external_id: '123456' }))
+      .toEqual({ kind: 'vimeo', videoId: '123456', hash: null })
+    expect(resolveStrikeVideo({ video_external_id: '12345' }))
+      .toMatchObject({ kind: 'unsupported' })
+  })
+
+  it('ignores a non-string stored hash', () => {
+    expect(resolveStrikeVideo({ video_external_id: '123456789', video_meta: { vimeo_hash: 12345 } }))
+      .toEqual({ kind: 'vimeo', videoId: '123456789', hash: null })
+  })
+
+  it('returns a null hash when video_meta is an empty object', () => {
+    expect(resolveStrikeVideo({ video_external_id: '123456789', video_meta: {} }))
+      .toEqual({ kind: 'vimeo', videoId: '123456789', hash: null })
+  })
+})

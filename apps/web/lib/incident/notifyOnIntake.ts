@@ -82,9 +82,13 @@ export async function dispatchIntakeNotifications(
   const tenantName = (tenantData as { name?: string | null } | null)?.name ?? null
   const ruleNameById = new Map(rules.map(r => [r.id, r.name]))
 
-  const logRows: Array<Record<string, unknown>> = []
-
-  for (const { rule_id, recipient } of plans) {
+  // Sends go out together, not one after another. Every recipient's SMTP
+  // round-trip used to sit between the reporter and their 201 — with a
+  // handful of rules matching, that is seconds of a person staring at a
+  // spinner after reporting an injury. Ported from the version that lived
+  // in app/api/incidents/route.ts before this moved here; the move brought
+  // the sequential loop back with it.
+  const logRows = (await Promise.all(plans.map(async ({ rule_id, recipient }) => {
     const base = {
       tenant_id:         incident.tenant_id,
       incident_id:       incident.id,
@@ -110,33 +114,34 @@ export async function dispatchIntakeNotifications(
         triggeredBy,
         ruleName:       ruleNameById.get(rule_id) ?? null,
       })
-      logRows.push({
+      return {
         ...base,
         channel:         'email',
         recipient_email: recipient.email,
         status:          sent ? 'sent' : 'failed',
-      })
+      }
     } else if (recipient.channel === 'push') {
       // Phase 2 wires push via /api/push/dispatch. Log as 'skipped'
       // so the per-incident notifications tab shows what *would*
       // have been sent.
-      logRows.push({
+      return {
         ...base,
         channel:         'push',
         recipient_email: recipient.email,
         status:          'skipped',
         error_text:      'push channel ships in Phase 2',
-      })
+      }
     } else if (recipient.channel === 'sms') {
-      logRows.push({
+      return {
         ...base,
         channel:         'sms',
         recipient_phone: null,
         status:          'skipped',
         error_text:      'sms channel not configured',
-      })
+      }
     }
-  }
+    return null
+  }))).filter(r => r !== null)
 
   if (logRows.length === 0) return
 

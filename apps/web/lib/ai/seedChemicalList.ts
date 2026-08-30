@@ -99,6 +99,8 @@ export async function searchCommonChemicals(
     response = await client.messages.create({
       model:      MODEL,
       max_tokens: 8192,
+      thinking:   { type: 'adaptive' },
+      output_config: { effort: 'low' },
       system:     SEARCH_SYSTEM,
       messages,
       tools: [
@@ -135,6 +137,7 @@ export async function normalizeChemicalList(
   const response = await client.messages.create({
     model:      MODEL,
     max_tokens: 8192,
+    thinking:   { type: 'disabled' },
     system:     NORMALIZE_SYSTEM,
     messages:   [{ role: 'user', content: rawText }],
     output_config: { format: { type: 'json_schema', schema: LIST_SCHEMA } },

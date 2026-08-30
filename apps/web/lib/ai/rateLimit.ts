@@ -59,6 +59,8 @@ export type AiSurface =
   | 'vision-hazard-sweep'
   | 'draft-regulatory-document'
   | 'safety-briefing-narrate'
+  | 'hazard-hunt-csp'
+  | 'hazard-hunt-ds'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
@@ -161,6 +163,11 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   // authoring surfaces.
   'draft-regulatory-document':        { perHour: 20,  perDay: 100 },
   'safety-briefing-narrate':          { perHour: 20,  perDay: 100 },
+  // Hazard Hunt agents fire once each per submitted inspection (post-submit,
+  // via after()). A busy site submits a handful of hunts a day; caps sit well
+  // above honest volume while bounding a retry loop.
+  'hazard-hunt-csp':                  { perHour: 30, perDay: 150 },
+  'hazard-hunt-ds':                   { perHour: 30, perDay: 150 },
 }
 
 interface CheckArgs {
@@ -305,21 +312,19 @@ export async function checkTenantBudget(args: TenantBudgetArgs): Promise<TenantB
 
   // Hot path: a single SELECT for the tenant's settings + a sum of
   // today's invocations. Both are bounded + indexed; total < 50ms.
+  const startOfDay = new Date()
+  startOfDay.setUTCHours(0, 0, 0, 0)
   const [tenantRes, todayRes] = await Promise.all([
     admin.from('tenants')
       .select('settings')
       .eq('id', args.tenantId)
       .maybeSingle(),
-    (() => {
-      const startOfDay = new Date()
-      startOfDay.setUTCHours(0, 0, 0, 0)
-      return admin
-        .from('ai_invocations')
-        .select('model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens')
-        .eq('tenant_id', args.tenantId)
-        .eq('status', 'success')
-        .gte('occurred_at', startOfDay.toISOString())
-    })(),
+    // Per-model token sums for today (a handful of rows) instead of every
+    // successful invocation row — the DB does the aggregation.
+    admin.rpc('ai_invocation_token_totals', {
+      p_tenant: args.tenantId,
+      p_since:  startOfDay.toISOString(),
+    }),
   ])
 
   // Fail-open on infrastructure errors — same posture as
@@ -348,9 +353,10 @@ export async function checkTenantBudget(args: TenantBudgetArgs): Promise<TenantB
     return { ok: true }
   }
 
-  // Sum today's spend. Pure JS over a small row set — no DB-side
-  // aggregation because the cost math (which factors model + cache
-  // tiers) lives in usageAggregator and shouldn't be duplicated.
+  // Sum today's spend. todayRes is per-model token totals (the DB did the
+  // grouping); the cost math — which factors model + cache tiers — still
+  // lives in usageAggregator. Pricing each model group once equals pricing
+  // every row, because costForInvocation is linear in each token bucket.
   let spentUsd = 0
   for (const r of (todayRes.data ?? []) as Array<{
     model: string
@@ -361,8 +367,8 @@ export async function checkTenantBudget(args: TenantBudgetArgs): Promise<TenantB
   }>) {
     spentUsd += costForInvocation(
       r.model,
-      r.input_tokens, r.output_tokens,
-      r.cache_read_tokens, r.cache_write_tokens,
+      Number(r.input_tokens ?? 0),      Number(r.output_tokens ?? 0),
+      Number(r.cache_read_tokens ?? 0), Number(r.cache_write_tokens ?? 0),
     )
   }
   const spentCents = Math.round(spentUsd * 100)

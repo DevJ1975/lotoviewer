@@ -12,24 +12,30 @@ import type { Band, HierarchyLevel } from '../risk'
 // Types — narrowed for the views in this slice
 // ──────────────────────────────────────────────────────────────────────────
 
-export type RiskStatus =
-  | 'open'
-  | 'in_review'
-  | 'controls_in_progress'
-  | 'monitoring'
-  | 'closed'
-  | 'accepted_exception'
+// Canonical value lists. Exported so API routes and filter parsers
+// validate against the same source of truth as the types below.
+export const RISK_STATUSES = [
+  'open',
+  'in_review',
+  'controls_in_progress',
+  'monitoring',
+  'closed',
+  'accepted_exception',
+] as const
+export type RiskStatus = (typeof RISK_STATUSES)[number]
 
-export type HazardCategory =
-  | 'physical'
-  | 'chemical'
-  | 'biological'
-  | 'mechanical'
-  | 'electrical'
-  | 'ergonomic'
-  | 'psychosocial'
-  | 'environmental'
-  | 'radiological'
+export const HAZARD_CATEGORIES = [
+  'physical',
+  'chemical',
+  'biological',
+  'mechanical',
+  'electrical',
+  'ergonomic',
+  'psychosocial',
+  'environmental',
+  'radiological',
+] as const
+export type HazardCategory = (typeof HAZARD_CATEGORIES)[number]
 
 export interface RiskSummary {
   id:                   string

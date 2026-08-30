@@ -389,6 +389,11 @@ async function processPhoto(
   const response = await client.messages.create({
     model:      MODEL,
     max_tokens: 1024,
+    // Explicit, per the posture rule: these are structured-output calls and
+    // extended thinking pushes them past the shared token budget. Silence
+    // here used to mean "whatever the model defaults to", which changed
+    // under the Claude 5 move.
+    thinking:   { type: 'disabled' },
     system:     [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
     messages: [{
       role: 'user',

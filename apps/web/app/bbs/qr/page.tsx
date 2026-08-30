@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Plus, RefreshCcw, Loader2, Printer, QrCode, Power } from 'lucide-react'
-import QRCode from 'qrcode'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 
@@ -45,13 +44,17 @@ export default function BBSQrAdminPage() {
   useEffect(() => {
     if (!rows) return
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
-    void Promise.all(rows.map(async loc => {
-      const url = `${origin}/r/bbs/${loc.token}`
-      const dataUrl = await QRCode.toDataURL(url, { errorCorrectionLevel: 'M', margin: 1, scale: 6 })
-      return [loc.id, dataUrl] as const
-    })).then(pairs => {
+    // Lazy-load qrcode (~30KB gz) off the page's first-load JS; it's only
+    // needed once locations arrive.
+    void (async () => {
+      const QRCode = (await import('qrcode')).default
+      const pairs = await Promise.all(rows.map(async loc => {
+        const url = `${origin}/r/bbs/${loc.token}`
+        const dataUrl = await QRCode.toDataURL(url, { errorCorrectionLevel: 'M', margin: 1, scale: 6 })
+        return [loc.id, dataUrl] as const
+      }))
       setQrImages(Object.fromEntries(pairs))
-    })
+    })()
   }, [rows])
 
   async function api(path: string, init: RequestInit) {

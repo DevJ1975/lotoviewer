@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { regenerateAndUploadPlacard } from '@/lib/loto/regeneratePlacard'
+import { regenerateAndUploadPlacard, loadTenantLogoPng } from '@/lib/loto/regeneratePlacard'
 
 // POST /api/admin/loto/audit/[runId]/apply — apply the APPROVED changes.
 //
@@ -73,16 +73,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
       .map((c: { equipment_id: string }) => c.equipment_id),
   )]
 
+  // Load the tenant logo once — it's identical for every placard, but
+  // regenerateAndUploadPlacard would otherwise re-fetch + sharp-re-encode it
+  // per machine. Regenerate with bounded concurrency so a large change-set
+  // finishes inside the route's maxDuration.
+  const tenantLogoPng = await loadTenantLogoPng(admin, gate.tenantId)
   const regen = { ok: 0, failed: 0 }
-  for (const equipmentId of affected) {
-    try {
-      await regenerateAndUploadPlacard(admin, gate.tenantId, equipmentId)
-      regen.ok += 1
-    } catch (err) {
-      regen.failed += 1
-      Sentry.captureException(err, { tags: { route: 'admin/loto/audit/apply', stage: 'regen' }, extra: { equipmentId } })
-    }
-  }
+  const REGEN_CONCURRENCY = 4
+  let cursor = 0
+  await Promise.all(
+    Array.from({ length: Math.min(REGEN_CONCURRENCY, affected.length) }, async () => {
+      while (cursor < affected.length) {
+        const equipmentId = affected[cursor++]!
+        try {
+          await regenerateAndUploadPlacard(admin, gate.tenantId, equipmentId, tenantLogoPng)
+          regen.ok += 1
+        } catch (err) {
+          regen.failed += 1
+          Sentry.captureException(err, { tags: { route: 'admin/loto/audit/apply', stage: 'regen' }, extra: { equipmentId } })
+        }
+      }
+    }),
+  )
 
   return NextResponse.json({
     applied: typeof appliedCount === 'number' ? appliedCount : 0,

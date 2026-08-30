@@ -220,7 +220,10 @@ Kept here so nothing leaks out of the plan.
 - **Unblocks**: Removing "manual reset" instructions from the LOTO
   Devices runbook.
 
-### D3.4 — Web `loto_steps` typo (parallel to mobile fix)
+### ~~D3.4 — Web `loto_steps` typo (parallel to mobile fix)~~ — RESOLVED
+- **Resolution**: Fixed in commit 657bb10 ("fix(review): query
+  loto_energy_steps in public review portal"); verified gone in the
+  2026-06-10 audit (`grep loto_steps` finds no remaining hits).
 - **Status**: Surfaced in 2026-05-09 mobile devjr audit (mobile side
   fixed in same audit).
 - **Surface**: [apps/web/app/review/[token]/page.tsx:82](../apps/web/app/review/[token]/page.tsx#L82). Queries
@@ -320,9 +323,122 @@ holding a valid token:
   identity, so the 14-day TTL does not bound a leaked link that was never
   redeemed. Bounded in practice by the already-signed-in guard.
 
+## Deep-debug audit — 2026-08-13 (v1.17.0 + v1.17.1)
+
+Items surfaced auditing the regulatory/Cal-OSHA and nav/search feature set.
+Confirmed bugs found in the same audit were fixed in the audit commit; the
+entries below were consciously deferred (need signoff, a real DB, or are
+low-severity polish).
+
+### D4.7 — `facilities`/`osha_establishments.state` is un-normalized; one jurisdiction reader is case-sensitive
+- **Why deferred**: The real fix normalizes `state` (upper-case + trim) at the
+  write boundary AND backfills existing rows — a migration touching live data,
+  which needs signoff.
+- **Symptom**: `fetchTenantJurisdictions` matches `.eq('state','CA')`
+  (case-sensitive) while `resolveReportingJurisdiction` uses
+  `.trim().toUpperCase() === 'CA'`. A facility stored as `ca`/`Ca` (the
+  establishments form only *visually* upper-cases via a CSS class) is treated as
+  federal-only by the dashboard "Coming Up"/reg-watch panels while the
+  severe-injury panel recognizes it — so a California site can see the correct 8h
+  incident deadline yet have every Title 8 upcoming-change hidden.
+- **Action**: normalize `state` on write in the facilities + establishments
+  paths; backfill; make both readers agree. Low-risk interim: reader →
+  `.ilike('state','CA')`.
+- **Files**: `packages/core/src/oshaRegWatch.ts:210`,
+  `apps/web/app/osha/establishments/page.tsx`, facilities write path.
+
+### D4.8 — grant-login needs a real-Postgres integration test (trigger-aware)
+- **Why deferred**: No Postgres in the sandbox, and the mock harness cannot model
+  the `trg_sync_membership_to_members` trigger (migration 180) whose collision
+  this audit fixed. The fix ships with unit tests asserting link-before-membership
+  ordering + rollback, but those can't reproduce the trigger itself.
+- **Action**: integration test against real Postgres (triggers enabled) that runs
+  grant-login end-to-end for a roster-only member and asserts exactly one
+  `(tenant, profile)` members row and a 200.
+- **Files**: `apps/web/app/api/admin/members/[memberId]/grant-login/route.ts`,
+  `apps/web/migrations/180_member_sync_triggers.sql`.
+
+### D4.9 — osha-reg-watch cron can return 200 on a wholly-unproductive run
+- **Why deferred**: Low severity (Sentry already captures the federal AI failure).
+  A correct fix needs a careful pass over the `SKIPPED_PASS`/`reachable`/`error`
+  state machine so a *legitimately*-skipped California pass doesn't start paging.
+- **Symptom**: federal `{reachable:true, error:'AI extraction failed'}` +
+  california `SKIPPED_PASS {reachable:false}` → `bothFailed`/`bothErrored` both
+  false → HTTP 200 despite nothing scanned or written.
+- **Action**: treat a pass as productive only when `reachable && !error`; return
+  non-2xx when neither pass was productive.
+- **Files**: `apps/web/app/api/cron/osha-reg-watch/route.ts:398`.
+
+### D4.10 — Low-severity error-handling gaps on rare double-failure paths
+- **Why deferred**: Each needs a real failure of a normally-reliable write to
+  observe; batched for a focused pass.
+- **Items**:
+  - grant-login writes the `login_granted` audit row *before* `issueAndSendInvite`,
+    so an audit-insert failure 500s without sending the invite or returning the
+    temp password (contradicts the route's own comment). Move the invite before
+    the audit insert, or make the audit best-effort.
+    (`grant-login/route.ts` audit insert)
+  - reset-access returns 500 on an audit-insert failure *after* the password is
+    already rotated, withholding the temp password/invite from the response.
+    Make the audit best-effort like the `must_change_password` flag above it.
+    (`admin/members/[memberId]/reset-access/route.ts`)
+  - superadmin resend-invite discards the `must_change_password` update error (no
+    check, no Sentry), unlike its siblings. Destructure + `captureException`.
+    (`superadmin/tenants/[number]/members/[user_id]/resend-invite/route.ts`)
+
+### D4.11 — ComingUpPanel date-boundary polish (product calls)
+- **Why deferred**: Low severity, debatable product decisions.
+- **Items**: `todayIso` is computed in UTC while deadline days render/parse in
+  local time, so an item can shift in/out near UTC midnight for non-UTC users;
+  and `selectComingUp`'s strict `> todayIso` drops an item whose effective/comment
+  date is exactly today — the single day it is most urgent.
+- **Files**: `apps/web/app/_components/ComingUpPanel.tsx`,
+  `packages/core/src/oshaRegWatch.ts` (`selectComingUp`).
+## Phase 4 — 2026-06-10 full-SaaS audit (open)
+
+### D4.1 — SCIM token + witness-statement token expiry
+- **Status**: Surfaced in the 2026-06-10 auth audit (low risk).
+- **Surface**: SCIM tokens (`/api/scim/v2/*`) are gated only by a
+  SHA-256 hash lookup + `revoked_at`; they never auto-expire.
+  Witness-statement tokens carry `token_expires_at` but rotation is
+  manual.
+- **Fix**: Add an `expires_at` check to the SCIM token gate (with a
+  long default, e.g. 1 year) and an admin "rotate token" action.
+  Touches live tenant integrations — needs user signoff + a
+  coordinated rotation window before shipping.
+
+### D4.2 — Per-cron secrets for audit-trail granularity
+- **Status**: Surfaced in the 2026-06-10 auth audit (low risk).
+- **Surface**: All 21 `/api/cron/*` routes share one `CRON_SECRET`
+  (constant-time compared — the comparison itself is sound).
+- **Fix**: Optional hardening — derive per-route secrets
+  (HMAC(CRON_SECRET, path)) so a leaked value can be traced and
+  revoked per route. Only worth doing alongside a secret-rotation
+  runbook.
+
+### D4.3 — ESLint debt: 152 pre-existing problems (83 errors)
+- **Status**: Measured in the 2026-06-10 audit; identical count
+  before and after the audit's changes. Lint is not CI-gated, so
+  the debt accrues silently.
+- **Surface**: Mostly `no-unused-vars` warnings in test mocks plus
+  `no-this-alias` / hook-reassignment errors in test helpers.
+- **Fix**: A dedicated lint-repair pass, then add `npm run lint` to
+  `repo-health.yml` so the count can't regress.
+
+### D4.4 — Mobile app has no test suite
+- **Status**: Confirmed in the 2026-06-10 audit — zero test files
+  under `apps/mobile`. This audit's mobile fix (equipment screens
+  crashed on a core query-signature change) is exactly the class of
+  regression a smoke suite would have caught; web tsc/vitest never
+  see mobile screens.
+- **Fix**: Start with `tsc --noEmit` for `apps/mobile` in
+  `repo-health.yml` (free, would have caught this regression),
+  then add component tests for the Tier-1 screens as parity work
+  lands (see docs/mobile-parity-plan.md).
+
 ## Conventions
 
-- Add new entries with the next sequential ID (D4.7, D4.8, …).
+- Add new entries with the next sequential ID (D4.12, D4.13, …).
 - Cross-link by ID from commit messages and PRs ("unblocks D1.1").
 - Strike out a row (`~~D…~~`) when complete; don't delete — keep
   the audit trail.

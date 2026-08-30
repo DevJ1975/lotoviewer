@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hotWorkPhotoPath, hazWasteInspectionPhotoPath, stagingReviewPhotoPath, sanitizeId } from '@soteria/core/storagePaths'
+import { hotWorkPhotoPath, hazWasteInspectionPhotoPath, hazWasteAreaPhotoPath, stagingReviewPhotoPath, sanitizeId } from '@soteria/core/storagePaths'
 
 const TENANT = '00000000-0000-0000-0000-000000000001'
 const REVIEW_LINK = '11111111-1111-1111-1111-111111111111'
@@ -37,6 +37,19 @@ describe('hazWasteInspectionPhotoPath', () => {
   it('sanitizes the draft id and varies by timestamp', () => {
     expect(hazWasteInspectionPhotoPath(TENANT, 'a/b', 1)).toBe(`${TENANT}/hazardous-waste/inspections/a_b/1.jpg`)
     expect(hazWasteInspectionPhotoPath(TENANT, 'x', 1)).not.toBe(hazWasteInspectionPhotoPath(TENANT, 'x', 2))
+  })
+})
+
+describe('hazWasteAreaPhotoPath', () => {
+  it('builds <tenant>/hazardous-waste/areas/<area>/<ts>.jpg, tenant first', () => {
+    const path = hazWasteAreaPhotoPath(TENANT, 'area-7', 1_700_000_000_000)
+    expect(path).toBe(`${TENANT}/hazardous-waste/areas/area-7/1700000000000.jpg`)
+    expect(path.split('/')[0]).toBe(TENANT)
+  })
+
+  it('sanitizes the area id and varies by timestamp', () => {
+    expect(hazWasteAreaPhotoPath(TENANT, 'a/b', 1)).toBe(`${TENANT}/hazardous-waste/areas/a_b/1.jpg`)
+    expect(hazWasteAreaPhotoPath(TENANT, 'x', 1)).not.toBe(hazWasteAreaPhotoPath(TENANT, 'x', 2))
   })
 })
 

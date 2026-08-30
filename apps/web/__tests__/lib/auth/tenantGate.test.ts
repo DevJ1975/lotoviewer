@@ -181,12 +181,20 @@ describe('tenantGate', () => {
   })
 
   describe('superadmin bypass', () => {
-    it('admits a superadmin without consulting tenant_memberships', async () => {
+    // The profile and membership reads now issue together rather than in
+    // series, so a superadmin does pay for a membership query it does not
+    // use — one wasted read for a rare role, against a round-trip saved on
+    // every gated request by everyone else. What matters is unchanged and is
+    // what this asserts: a superadmin is admitted on the profile flag alone,
+    // whatever tenant_memberships says. The previous version asserted the
+    // query was never issued, which was a statement about the serial
+    // implementation rather than about the authorization rule.
+    it('admits a superadmin on the profile flag alone, whatever membership says', async () => {
       getUserMock.mockResolvedValue({ data: { user: { id: 'root-1', email: 'root@example.com' } }, error: null })
       profileMaybeSingle.mockResolvedValue({ data: { is_superadmin: true } })
+      membershipMaybeSingle.mockResolvedValue({ data: null, error: null })
       const r = await requireTenantAdmin(req())
       expect(r).toMatchObject({ ok: true, role: 'superadmin' })
-      expect(membershipMaybeSingle).not.toHaveBeenCalled()
     })
 
     it('does NOT admit a DB-flagged superadmin whose email is off the env allowlist', async () => {

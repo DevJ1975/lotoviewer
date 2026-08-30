@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { SORT_DIRS } from '@/lib/listParams'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -28,7 +29,7 @@ import { buildIncidentSafetyAlertInsert } from '@soteria/core/incidentSafetyAler
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const VALID_SORTS = ['reported_at', 'occurred_at', 'severity_actual', 'report_number'] as const
-const VALID_DIRS  = ['asc', 'desc'] as const
+const VALID_DIRS  = SORT_DIRS
 
 const SELECT_COLS = [
   'id', 'tenant_id', 'report_number', 'incident_type',
@@ -88,29 +89,65 @@ export async function GET(req: Request) {
   const offset = Math.max(0, parseInt(offsetRaw ?? '0', 10) || 0)
 
   try {
-    let q = gate.authedClient
-      .from('incidents')
-      .select(SELECT_COLS, { count: 'exact' })
-      .eq('tenant_id', gate.tenantId)
+    // One definition of "which incidents match this request", applied to
+    // both the page query and the severity tallies below. Keeping it in a
+    // single place is what stops the tallies from drifting away from the
+    // rows they are supposed to describe.
+    const matching = (columns: string, headOnly: boolean) => {
+      let q = gate.authedClient
+        .from('incidents')
+        .select(columns, { count: 'exact', head: headOnly })
+        .eq('tenant_id', gate.tenantId)
 
-    if (types.length      > 0) q = q.in('incident_type',   types)
-    if (statuses.length   > 0) q = q.in('status',          statuses)
-    if (severities.length > 0) q = q.in('severity_actual', severities)
-    if (activeOnly)            q = q.in('status', ACTIVE_INCIDENT_STATUSES as unknown as string[])
-    if (assignee && UUID_RE.test(assignee)) q = q.eq('assigned_investigator', assignee)
-    if (search) {
-      const safe = search.replace(/[,()]/g, ' ').trim()
-      if (safe) q = q.or(`description.ilike.%${safe}%,report_number.ilike.%${safe}%`)
+      if (types.length      > 0) q = q.in('incident_type',   types)
+      if (statuses.length   > 0) q = q.in('status',          statuses)
+      if (severities.length > 0) q = q.in('severity_actual', severities)
+      if (activeOnly)            q = q.in('status', ACTIVE_INCIDENT_STATUSES as unknown as string[])
+      if (assignee && UUID_RE.test(assignee)) q = q.eq('assigned_investigator', assignee)
+      if (search) {
+        const safe = search.replace(/[,()]/g, ' ').trim()
+        if (safe) q = q.or(`description.ilike.%${safe}%,report_number.ilike.%${safe}%`)
+      }
+      return q
     }
 
-    q = q.order(sort, { ascending: dir === 'asc' }).range(offset, offset + limit - 1)
+    const pageQuery = matching(SELECT_COLS, false)
+      .order(sort, { ascending: dir === 'asc' })
+      .range(offset, offset + limit - 1)
 
-    const { data, count, error } = await q
+    // Severity tallies are counted across the whole matching set, not the
+    // page. The triage tiles drive where a safety lead looks first, so a
+    // count that silently stops at `limit` is worse than no count at all.
+    // head:true makes each of these a count-only round trip, no rows.
+    //
+    // Always intersected with the active statuses, whatever the caller
+    // asked for: these answer "what is still open and how bad is it",
+    // which is why the field is named for that and not for the page.
+    const severityQueries = INCIDENT_SEVERITY_ACTUAL.map(sev =>
+      matching('id', true)
+        .eq('severity_actual', sev)
+        .in('status', ACTIVE_INCIDENT_STATUSES as unknown as string[]),
+    )
+
+    const [pageResult, ...severityResults] = await Promise.all([
+      pageQuery,
+      ...severityQueries,
+    ])
+
+    const { data, count, error } = pageResult
     if (error) throw new Error(error.message)
 
+    const activeSeverityCounts = {} as Record<IncidentSeverityActual, number>
+    INCIDENT_SEVERITY_ACTUAL.forEach((sev, i) => {
+      const r = severityResults[i]
+      if (r.error) throw new Error(r.error.message)
+      activeSeverityCounts[sev] = r.count ?? 0
+    })
+
     return NextResponse.json({
-      reports: data ?? [],
-      total:   count ?? 0,
+      reports:                data ?? [],
+      total:                  count ?? 0,
+      active_severity_counts: activeSeverityCounts,
       limit,
       offset,
     })

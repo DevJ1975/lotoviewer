@@ -116,7 +116,9 @@ export function EvidencePhotos({ tenantId, draftId, value, onChange }: Props) {
               sizes="(max-width: 640px) 33vw, 25vw"
               className="object-cover"
               style={{ imageOrientation: 'from-image' }}
-              unoptimized
+              // Remote bucket photos go through the optimizer; only local blob
+              // previews (createObjectURL) can't be optimized.
+              unoptimized={url.startsWith('blob:')}
             />
             <button
               type="button"

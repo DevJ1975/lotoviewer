@@ -1,10 +1,18 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.1.0'
-const LAST_UPDATED    = '2026-05-15'
+const CURRENT_VERSION = '1.1.1'
+const LAST_UPDATED    = '2026-06-23'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.1',
+    date:    '2026-06-23',
+    changes: [
+      'Cross-linked the new Training & Competency Matrix (org-wide, ' +
+      'course-driven required-training view). See /wiki/training-competency-matrix.',
+    ],
+  },
   {
     version: '1.1.0',
     date:    '2026-05-15',
@@ -117,6 +125,7 @@ export default function WikiTrainingPage() {
 
       <Section id="related" title="Related modules">
         <Related items={[
+          { href: '/wiki/training-competency-matrix', label: 'Training & Competency Matrix' },
           { href: '/wiki/confined-spaces',   label: 'Confined Spaces' },
           { href: '/wiki/users',             label: 'Users & Roles' },
           { href: '/wiki/audit',             label: 'Audit Log' },

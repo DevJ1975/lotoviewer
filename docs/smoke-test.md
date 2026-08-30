@@ -331,3 +331,56 @@ These are documented behaviors, not bugs:
 2. Check tsc + tests: `cd apps/web && npx tsc --noEmit && npx vitest run`
 3. If it's a real bug, file an issue and add a regression test
    under `__tests__/` that reproduces it
+
+---
+
+# Addendum — 2026-06-10 full-SaaS audit
+
+Manual checks for what changed since the list above was written:
+the LOTO register a11y/touch work (#208), and the mobile equipment
+fixes from the 2026-06-10 audit. Run with one admin and one member
+account against a tenant with LOTO enabled.
+
+## LOTO register (web, browser + iPad)
+
+- [ ] Keyboard only: Tab from the address bar — the first stop is
+      the "skip to content" link; activating it jumps past the shell
+- [ ] Register rows are real buttons: Tab reaches each row, Enter
+      opens the placard panel, focus is visibly outlined
+- [ ] Below `lg` width (or iPad portrait): selecting a row opens the
+      placard as a slide-over sheet; dismissing restores focus
+- [ ] Touch: the review flag on a row is tappable on an iPad without
+      opening the row underneath it
+- [ ] Empty register (fresh tenant) shows the shared EmptyState, not
+      a blank panel; load failure shows the retry affordance
+
+## Admin catalog (web)
+
+- [ ] `/admin/loto/audit` (Multi-agent audit) and
+      `/admin/evidence/audit` (Audit log) both load — these two tiles
+      now intentionally share the `audit` leaf slug
+- [ ] Legacy flat URLs still 301 to their section paths (spot-check
+      `/admin/scorecard` → `/admin/insights/scorecard`)
+
+## Mobile equipment (Expo Go on iPad — fixed in this audit)
+
+- [ ] With NO tenant selected: equipment tab and a deep-linked
+      equipment detail both show "No tenant selected", not a spinner
+      or an error
+- [ ] Select a tenant: equipment list loads; search filters by id,
+      description, and department
+- [ ] Open an equipment detail: row + energy steps load; equipment
+      with no documented procedure shows the "no isolation procedure"
+      note rather than an error
+- [ ] Switch tenants on the dashboard, return to equipment: the list
+      re-fetches for the new tenant (no stale rows from the previous
+      tenant)
+
+## API spot-checks (curl or REST client, member token)
+
+- [ ] `GET /api/risk?status=open,bogus` — bogus value is dropped, not
+      a 400 (filter lists now come from @soteria/core)
+- [ ] `POST /api/hazardous-waste/containers` with `area_type:
+      "rooftop"` — 400 with "Invalid area type"
+- [ ] `POST /api/risk/controls-library` with `hierarchy_level:
+      "ppe "` (trailing space) — 400 listing the five valid levels

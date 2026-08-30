@@ -11,6 +11,8 @@ import {
   type HazardousWasteAreaRow,
   type HazardousWasteAreaType,
 } from '@soteria/core/hazardousWaste'
+import { AreaPhotos } from './_components/AreaPhotos'
+import PrintSignageButton from './PrintSignageButton'
 
 // /hazardous-waste/areas — tenant-admin surface to list, add, rename,
 // retune cadence, and archive accumulation areas. Read access is open
@@ -164,15 +166,27 @@ export default function HazardousWasteAreasPage() {
                   Cadence every {area.weekly_cadence_days} day{area.weekly_cadence_days === 1 ? '' : 's'}
                   {area.location_notes ? ` · ${area.location_notes}` : ''}
                 </p>
+                {tenant?.id && (
+                  <AreaPhotos
+                    tenantId={tenant.id}
+                    areaId={area.id}
+                    value={area.photo_urls ?? []}
+                    canWrite={canWrite && !area.archived_at}
+                    onChange={urls => patchArea(area.id, { photo_urls: urls })}
+                  />
+                )}
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 {!area.archived_at && (
-                  <Link
-                    href={`/hazardous-waste/inspections/new?area=${encodeURIComponent(area.id)}`}
-                    className="text-xs font-semibold text-brand-navy hover:underline"
-                  >
-                    Inspect
-                  </Link>
+                  <>
+                    <Link
+                      href={`/hazardous-waste/inspections/new?area=${encodeURIComponent(area.id)}`}
+                      className="text-xs font-semibold text-brand-navy hover:underline"
+                    >
+                      Inspect
+                    </Link>
+                    <PrintSignageButton areaId={area.id} onError={setError} />
+                  </>
                 )}
                 {canWrite && (
                   <>

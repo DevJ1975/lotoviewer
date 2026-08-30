@@ -15,6 +15,7 @@ import { EHS_SCHEMA, type EhsResult, type DsResult, type FpeResult, type Regulat
 import { EHS_SYSTEM, describeEquipment, describeSteps } from '../prompts'
 import { isIsolationUnverified } from '../safetySignals'
 import type { AgentOutput } from './fpe'
+import { assertNotRefused } from '@/lib/ai/client'
 
 const MODEL = MODEL_BY_SURFACE['loto-audit-ehs']
 
@@ -83,11 +84,13 @@ export async function runEhsAgent(
   const response = await client.messages.create({
     model:      MODEL,
     max_tokens: 4000,
+    thinking:   { type: 'disabled' },
     system:     [{ type: 'text', text: EHS_SYSTEM, cache_control: { type: 'ephemeral' } }],
     messages:   [{ role: 'user', content: userText }],
     output_config: { format: { type: 'json_schema', schema: EHS_SCHEMA } },
   })
 
+  assertNotRefused(response, 'loto-audit-ehs')
   const textBlock = response.content.find(b => b.type === 'text')
   if (!textBlock || textBlock.type !== 'text') throw new Error('EHS agent: no text block in response')
   const result = JSON.parse(textBlock.text) as EhsResult
@@ -160,11 +163,13 @@ export async function runEhsCorrection(
   const response = await client.messages.create({
     model:      MODEL,
     max_tokens: 4000,
+    thinking:   { type: 'disabled' },
     system:     [{ type: 'text', text: EHS_SYSTEM, cache_control: { type: 'ephemeral' } }],
     messages:   [{ role: 'user', content: userText }],
     output_config: { format: { type: 'json_schema', schema: EHS_SCHEMA } },
   })
 
+  assertNotRefused(response, 'loto-audit-ehs')
   const textBlock = response.content.find(b => b.type === 'text')
   if (!textBlock || textBlock.type !== 'text') throw new Error('EHS correction: no text block in response')
   const result = JSON.parse(textBlock.text) as EhsResult

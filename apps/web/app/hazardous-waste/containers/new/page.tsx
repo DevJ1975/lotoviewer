@@ -15,6 +15,7 @@ import {
   type HazardousWasteStreamRow,
   type HazardousWasteVolumeUnit,
 } from '@soteria/core/hazardousWaste'
+import { StreamSymbolDetail } from '../../streams/_components/StreamSymbolBadges'
 
 const AREA_TYPES: HazardousWasteAreaType[] = [
   'satellite_accumulation', 'central_accumulation',
@@ -56,6 +57,8 @@ export default function NewHazardousWasteContainerPage() {
   }, [tenantId, streamId])
 
   useEffect(() => { void loadStreams() }, [loadStreams])
+
+  const selectedStream = (streams ?? []).find(s => s.id === streamId) ?? null
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -133,6 +136,15 @@ export default function NewHazardousWasteContainerPage() {
             </span>
           )}
         </Field>
+
+        {selectedStream && (
+          <div className="rounded-md border border-slate-200 dark:border-slate-800 p-3 space-y-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+              Stream hazards
+            </span>
+            <StreamSymbolDetail source={selectedStream} />
+          </div>
+        )}
 
         <Field label="Container label *" hint="A label that field workers can read (e.g. drum number or barcode)">
           <input

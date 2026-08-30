@@ -67,8 +67,11 @@ const DRAFT_SEQUENCE_SCHEMA = {
   properties: {
     events: {
       type: 'array',
+      description: 'The chronological event chain, at most 12 events. Prefer fewer, well-supported events.',
+      // Anthropic's structured-output endpoint rejects `maxItems` and allows
+      // `minItems` only with 0 or 1 — count bounds live in the descriptions
+      // (here and on the other arrays in this file).
       minItems: 1,
-      maxItems: 12,
       items: {
         type: 'object',
         required: ['title'],
@@ -77,7 +80,7 @@ const DRAFT_SEQUENCE_SCHEMA = {
           title:      { type: 'string', description: 'One subject + one action verb, active voice, past tense.' },
           conditions: {
             type: 'array',
-            maxItems: 4,
+            description: 'Up to 4 conditions that shaped this event.',
             items: { type: 'string', description: 'A state/circumstance that shaped this event.' },
           },
         },
@@ -96,7 +99,7 @@ const CAUSAL_FACTOR_SCHEMA = {
   properties: {
     causal_factors: {
       type: 'array',
-      maxItems: 8,
+      description: 'At most 8 causal factors.',
       items: {
         type: 'object',
         required: ['node_id', 'reason'],
@@ -110,7 +113,7 @@ const CAUSAL_FACTOR_SCHEMA = {
     },
     unverified_gaps: {
       type: 'array',
-      maxItems: 8,
+      description: 'Up to 8 presumptive items or missing links that still need evidence.',
       items: { type: 'string', description: 'A presumptive item or missing link that still needs evidence.' },
     },
     rationale: { type: 'string', description: '1 sentence framing the systemic pattern across the causal factors.' },
