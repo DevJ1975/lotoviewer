@@ -137,7 +137,7 @@ export default function ClientReviewPanel({ department }: Props) {
         <div>
           <h2 className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Client review portal</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Send a tokenized link to a non-Soteria reviewer (e.g. the customer's safety officer). They can leave per-placard notes and sign off without an account.
+            Send a tokenized link to a non-Soteria reviewer (e.g. the customer&apos;s safety officer). They can leave per-placard notes and sign off without an account.
           </p>
         </div>
         <button
@@ -224,7 +224,7 @@ function LinkRow({
             <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${status.tone}`}>{status.label}</span>
           </div>
           {link.admin_message && (
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 italic">"{link.admin_message}"</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 italic">&quot;{link.admin_message}&quot;</p>
           )}
           <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
             {link.email_channel === 'manual' ? 'Created' : 'Sent'} {formatRelative(link.sent_at ?? link.created_at)}
@@ -410,7 +410,7 @@ function SendForReviewModal({
         <header>
           <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Send {department} for review</h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Up to {MAX_REVIEWERS} reviewers per send. They don't need a Soteria account.
+            Up to {MAX_REVIEWERS} reviewers per send. They don&apos;t need a Soteria account.
           </p>
         </header>
 

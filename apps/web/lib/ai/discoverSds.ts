@@ -109,6 +109,8 @@ export async function searchSdsCandidates(
     response = await client.messages.create({
       model:      MODEL,
       max_tokens: 4096,
+      thinking:   { type: 'adaptive' },
+      output_config: { effort: 'low' },
       system:     SEARCH_SYSTEM,
       messages,
       tools: [
@@ -147,6 +149,7 @@ export async function normalizeCandidates(
   const response = await client.messages.create({
     model:      MODEL,
     max_tokens: 2048,
+    thinking:   { type: 'disabled' },
     system:     NORMALIZE_SYSTEM,
     messages:   [{ role: 'user', content: rawText }],
     output_config: { format: { type: 'json_schema', schema: CANDIDATE_SCHEMA } },

@@ -621,6 +621,12 @@ export function buildAdminLinks(canManage: boolean): AdminManageLink[] {
       href:   '/admin/loto/training-records',
     },
     {
+      id:     'matrix',
+      label:  'Training & Competency Matrix',
+      detail: 'Org-wide required training by worker and course',
+      href:   '/admin/people/training-competency-matrix',
+    },
+    {
       id:     'equipment',
       label:  'Manage equipment authorizations',
       detail: 'Forklift, lift, and PIT badges',

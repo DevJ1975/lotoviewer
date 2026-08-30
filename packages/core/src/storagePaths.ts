@@ -121,6 +121,31 @@ export function hazWasteInspectionPhotoPath(
   return `${tenantId}/hazardous-waste/inspections/${sanitizeId(draftId)}/${timestamp}.jpg`
 }
 
+// EM-385 compliance evidence document (APP, AHA, plans, certs, permits, …).
+// One register item can carry several versions, so the register_item_id folder
+// groups them. Tenant-uuid-first so the migration 033 RLS gates writes.
+//   loto-photos/<tenant_uuid>/em385/<sanitized_register_item_id>/<ts>_<sanitized_file_name>
+export function em385DocumentPath(
+  tenantId: string,
+  registerItemId: string,
+  fileName: string,
+  timestamp: number = Date.now(),
+): string {
+  return `${tenantId}/em385/${sanitizeId(registerItemId)}/${timestamp}_${sanitizeId(fileName)}`
+}
+
+// Hazardous-waste accumulation-area reference photo (signage, layout,
+// containment, spill-kit/eyewash location). Attached to an existing area row,
+// so the area_id folder groups the area's photos.
+//   loto-photos/<tenant_uuid>/hazardous-waste/areas/<area_id>/<ts>.jpg
+export function hazWasteAreaPhotoPath(
+  tenantId: string,
+  areaId: string,
+  timestamp: number = Date.now(),
+): string {
+  return `${tenantId}/hazardous-waste/areas/${sanitizeId(areaId)}/${timestamp}.jpg`
+}
+
 // Cal. Code Regs tit. 27 §25602 — photo of the actual posted Prop 65
 // sign. Stored under prop65/<tenant>/warning_photos/<site_id>/<ts>.jpg
 // so the tenant-scoped RLS (migration 033) gates writes.

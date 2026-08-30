@@ -148,6 +148,41 @@ describe('findExistingIsoPhoto — excludes the current iso photo', () => {
   })
 })
 
+// EVASION GUARD — Fable 5 audit finding A-C3 (placeholder laundering), closed
+// by the isGeneratedArtifact candidate exclusion.
+//
+// A watermarked placeholder written by a prior run lives in the SAME folder and
+// is also a `.jpg` whose basename is not the current iso — without the
+// exclusion it was a candidate, and one generous vision verdict returned it as
+// a verified field photo (provenance='field', no placeholder flag), bypassing
+// the migration-217 trigger. A `_ISO_PLACEHOLDER_` basename must be excluded no
+// matter what the vision model says.
+describe('EVASION GUARD [A-C3] — a leftover placeholder cannot launder into a field photo', () => {
+  it('never proposes an _ISO_PLACEHOLDER_ object even when the model rates it a match', async () => {
+    // Folder holds only the known-bad iso (excluded) and a prior placeholder.
+    const { admin } = makeAdmin({
+      list: () => ({
+        data: [
+          { name: 'EQ-001_ISO_bad.jpg' },
+          { name: 'EQ-001_ISO_PLACEHOLDER_1700000000000.jpg' },
+        ],
+        error: null,
+      }),
+    })
+    // A maximally generous model: every image is a high-confidence isolation point.
+    const create = vi.fn(async () => visionVerdict(MATCH))
+    const client = { messages: { create } } as unknown as Anthropic
+    // No equip photo, so the placeholder is the only candidate left.
+    const eq = { ...EQUIPMENT, equip_photo_url: null } as Equipment
+
+    const result = await findExistingIsoPhoto(client, admin, TENANT, eq, STEPS)
+
+    expect(result).toBeNull()
+    // The exclusion is by filename, before any spend: no vision call was made.
+    expect(create).not.toHaveBeenCalled()
+  })
+})
+
 describe('findExistingIsoPhoto — degrades to null on error', () => {
   it('returns null when the storage list call errors', async () => {
     const { admin } = makeAdmin({ list: () => ({ data: null, error: { message: 'boom' } }) })

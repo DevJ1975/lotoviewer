@@ -2,29 +2,60 @@
 //
 // Pinning posture: alias-style.
 //
-//   - SONNET = 'claude-sonnet-4-6'   (NOT claude-sonnet-4-6-20250930)
-//   - HAIKU  = 'claude-haiku-4-5'    (NOT claude-haiku-4-5-20251001)
+//   - SONNET = 'claude-sonnet-5'   (NOT claude-sonnet-5-<date>)
+//   - HAIKU  = 'claude-haiku-4-5'  (NOT claude-haiku-4-5-20251001)
+//   - OPUS   = 'claude-opus-5'     (NOT claude-opus-5-<date>)
 //
 // The alias auto-rolls forward within a model's lifecycle (e.g.
-// Anthropic ships claude-sonnet-4-6-20260101 and the alias starts
+// Anthropic ships claude-sonnet-5-20260101 and the alias starts
 // pointing at it); this is desirable for non-regressive bug fixes.
-// Major-version transitions (4.6 → 4.7) require a deliberate edit
+// Major-version transitions (4.6 → 5) require a deliberate edit
 // to this file, which is the right blast radius — one PR review,
 // one test pass, one env-var unchanged.
+//
+// ⚠️ Thinking defaults inverted at the 5 boundary. On Sonnet 4.6 and
+// Opus 4.8, OMITTING `thinking` meant no thinking. On Sonnet 5 and
+// Opus 5 it means ADAPTIVE thinking, and `max_tokens` caps thinking
+// PLUS response text — so a surface that omits `thinking` and parses
+// JSON out of a tight budget will truncate and throw. Every call site
+// that relied on the old default now says `thinking: { type: 'disabled' }`
+// out loud. If you add a surface, state its thinking posture explicitly;
+// do not rely on the default. (Note `disabled` is only accepted at
+// effort `high` or below on Opus 5 — we set no `effort`, so the default
+// `high` applies. Do not add `xhigh`/`max` to a disabled-thinking site.)
 //
 // Photo-related AI surfaces were dropped per the operator's call:
 // every uploaded photo gets reviewed by a human before sign-off
 // anyway, so an AI gate added latency + cost without changing the
 // review burden. validate-photo (the per-upload subject check),
 // plus the image-content blocks in the two generation routes, are
-// gone. Sonnet 4.6 stays on the chat + structured-output surfaces.
-// Haiku is kept available in this module in case a future
-// lightweight text-only surface wants it.
+// gone. Sonnet 5 stays on the chat + structured-output surfaces.
+//
+// The multi-agent LOTO audit uses cost-tiered ("barbell") routing: its
+// high-volume perception + consistency passes (FPE vision, DS) run on
+// Haiku, while the safety-critical Cal/OSHA gate (EHS) and the
+// adversarial regulator review run on Opus — strongest reasoning where a
+// wrong call is most costly. See the audit block in MODEL_BY_SURFACE.
 
-export const SONNET = 'claude-sonnet-4-6' as const
-export const HAIKU  = 'claude-haiku-4-5'  as const
+export const SONNET = 'claude-sonnet-5' as const
+export const HAIKU  = 'claude-haiku-4-5' as const
+export const OPUS   = 'claude-opus-5'    as const
 
-export type ModelId = typeof SONNET | typeof HAIKU
+// Newer generation, used ONLY by surfaces added after it shipped. Migrating the
+// forty-odd existing mappings above is a deliberate, separately testable change:
+// doing it as a drive-by inside a feature PR would put every shipped surface's
+// behaviour up for re-validation in a review about something else.
+//
+// Adding a constant here is not enough on its own — MODEL_PRICING in
+// lib/ai/usageAggregator.ts falls back to SONNET's rate for an unrecognized
+// model id, so a routed model with no pricing row silently under-bills and
+// checkTenantBudget stops enforcing. modelPricingCoverage.test.ts fails the
+// build if the two ever drift.
+export const SONNET_5 = 'claude-sonnet-5' as const
+
+export type ModelId =
+  | typeof SONNET | typeof HAIKU | typeof OPUS
+  | typeof SONNET_5
 
 /**
  * Surface → model selection. Single point of override if a surface
@@ -46,6 +77,10 @@ export const MODEL_BY_SURFACE = {
   // structured-output pass to normalize candidates. Sonnet — the search
   // reasoning is the same class as parse-sds, and web_search is supported.
   'discover-sds':                     SONNET,
+  // Seeding the global SDS library: web-search to PROPOSE the most common
+  // industrial chemicals (name + CAS + manufacturer), then a structured pass
+  // to normalize the list. Sonnet — same search-reasoning class as discover.
+  'seed-sds-list':                    SONNET,
   // Cross-module assistant on the home page. Tool-use heavy, must
   // reason across LOTO + confined-spaces + chemicals + incidents +
   // uploaded company policies. Sonnet for the chat itself.
@@ -65,38 +100,112 @@ export const MODEL_BY_SURFACE = {
   // right cost/accuracy trade. Admin always reviews before any
   // mutation; the model never auto-edits severity_actual.
   'predict-incident-escalation':      HAIKU,
-  // ── Multi-agent LOTO audit (FPE / DS / EHS) ───────────────────────────────
-  // These DELIBERATELY reintroduce vision + structured reasoning over photos,
-  // which the comment at the top of this file notes was removed as a per-upload
-  // gate. The difference: this is an OFFLINE AUDIT pass over already-stored
-  // photos whose every proposed fix is surfaced through a human-approval review
-  // link before it touches the SaaS — so it does NOT reintroduce the
-  // latency/cost-on-every-upload that drove the original removal.
+  // ── Multi-agent LOTO audit (FPE / DS / EHS / Author / Regulator) ──────────
+  // An OFFLINE audit pass over already-stored photos + procedures whose every
+  // proposed fix is surfaced through a human-approval review link before it
+  // touches live data — so it does NOT reintroduce the latency/cost-on-every-
+  // upload that drove the original per-upload photo gate's removal.
   //
-  // loto-audit-fpe: Food-Production-Engineer vision agent. Sonnet for the same
-  //   reason assistant-scan-photo uses it — OCR/robustness on degraded
-  //   industrial photos is what makes the equipment/isolation-point judgement
-  //   trustworthy.
-  'loto-audit-fpe':                   SONNET,
-  // loto-audit-ds: Data-Scientist consistency agent. Must reconcile equipment
-  //   description ↔ energy codes ↔ steps ↔ OSHA phases ↔ FPE verdicts — same
-  //   reasoning class as parse-sds. Sonnet.
-  'loto-audit-ds':                    SONNET,
+  // Cost-tiered ("barbell") routing for this high-fan-out sweep: the two
+  // high-volume perception/consistency passes run on Haiku; the safety-critical
+  // Cal/OSHA judgement runs on Opus. The bulk of the calls get ~3x cheaper while
+  // the gate gets the strongest reasoning where a wrong call is most costly.
+  //
+  // loto-audit-fpe: Food-Production-Engineer vision agent — judges the equipment
+  //   + isolation photos. Haiku 4.5 (vision-capable). Once per machine on image-
+  //   heavy input, so it dominates token spend; the conservative downstream hard
+  //   gate (placeholder/missing/mismatch ⇒ fail) plus human review bound the risk
+  //   of a cheaper photo read.
+  'loto-audit-fpe':                   HAIKU,
+  // loto-audit-ds: Data-Scientist consistency agent. Reconciles description ↔
+  //   energy codes ↔ steps ↔ OSHA phases ↔ FPE verdicts — structured, text-only,
+  //   high volume. Haiku.
+  'loto-audit-ds':                    HAIKU,
   // loto-audit-ehs: Senior EHS Specialist gate. Cites Cal/OSHA T8 §3314 +
-  //   1910.147 + Z244.1 over RAG — same class as assistant-hazards. Sonnet.
-  'loto-audit-ehs':                   SONNET,
-  // loto-audit-author: drafts a CORRECTED energy-control procedure for a machine
-  //   the EHS gate failed. Same reasoning + structured-output class as
-  //   generate-loto-steps (whose proven prompt it reuses). Sonnet. The draft is
-  //   staged for a qualified safety professional to review/sign — never applied
-  //   automatically.
+  //   1910.147 + Z244.1 and holds pass/fail authority — the safety-critical
+  //   decision. Opus 5 for the strongest compliance reasoning.
+  'loto-audit-ehs':                   OPUS,
+  // loto-audit-author: drafts a CORRECTED, bilingual energy-control procedure for
+  //   a machine the gate failed. Reuses the proven generate-loto-steps prompt and
+  //   stays on Sonnet — draft quality matters (a reviewer reads every one) but it
+  //   is never applied automatically, and its long output makes Opus costly here.
+  //   Bump to OPUS if top-tier draft prose is worth the spend.
   'loto-audit-author':                SONNET,
-  // loto-audit-regulator: veteran Cal/OSHA compliance officer (CSHO) who
-  //   adversarially re-reviews the internal EHS audit (per machine) and audits
-  //   the program end-to-end. Same Cal/OSHA-citation reasoning class as
-  //   loto-audit-ehs — Sonnet. Critique is staged for the human review gate;
-  //   it never writes live data.
-  'loto-audit-regulator':             SONNET,
+  // loto-audit-regulator: veteran Cal/OSHA CSHO who adversarially re-reviews the
+  //   EHS audit per machine and audits the program end-to-end, driving EHS
+  //   corrections. Same safety-critical class as the gate — Opus 5. Critique is
+  //   staged for the human review gate; it never writes live data.
+  'loto-audit-regulator':             OPUS,
+  // EHS scorecard "where to focus" — an advisory narrative over the
+  // deterministic risk drivers + forecast. A human reads the bullets and the
+  // LLM never computes the risk score (it is fed it). Same advisory class as
+  // summarize-audit / superadmin-daily-report → Sonnet.
+  'scorecard-focus':                  SONNET,
+  // RCA assist — suggests the next "why", flags symptom/blame answers, and
+  // drafts a root-cause statement + corrective actions for a 5 Whys
+  // investigation. Causal reasoning over a chain + incident context, with
+  // narrative output a human edits and signs off — same advisory class as
+  // the other structured-output surfaces. The route never writes RCA nodes
+  // or actions; acceptance is an explicit human step. Sonnet.
+  'rca-assist':                       SONNET,
+  // ECFA assist — drafts the chronological event sequence from the incident
+  // narrative and flags candidate causal factors (with coding + presumptive-
+  // evidence gaps). Causal reasoning over the incident context + the current
+  // chart, narrative output a human accepts node-by-node; the route never
+  // writes ECFA nodes. Same advisory structured-output class as rca-assist →
+  // Sonnet.
+  'ecfa-assist':                      SONNET,
+  // ── Operator Console (multi-agent: orchestrator + domain sub-agents) ──────
+  // A dedicated conversational surface where an agent operates the SaaS and
+  // reconfigures the home page. Barbell routing, same posture as the LOTO
+  // audit: the orchestrator (routing + recognizing life-safety carve-outs) and
+  // the three sub-agents that CONTAIN carve-out actions (loto, permits, osha)
+  // run on Opus — the strongest reasoning where a wrong call is most costly.
+  // The remaining sub-agents do ordinary, reversible work and run on Sonnet.
+  // Every regulated action is staged for human approval regardless of model.
+  'operator-orchestrator':            OPUS,
+  'operator-incidents':               SONNET,
+  'operator-risk':                    SONNET,
+  'operator-loto':                    OPUS,
+  'operator-permits':                 OPUS,
+  'operator-chem':                    SONNET,
+  'operator-inspections':             SONNET,
+  'operator-training':                SONNET,
+  'operator-bbs':                     SONNET,
+  'operator-osha':                    OPUS,
+  'operator-admin':                   SONNET,
+  'operator-home':                    SONNET,
+  'operator-knowledge':               SONNET,
+  // ── Predictive Safety Intelligence ───────────────────────────────────────
+  // vision-hazard-sweep: reads hazards out of field photos already stored
+  //   against BBS observations, incidents, permits, and hazwaste inspections.
+  //   Haiku for the same reason loto-audit-fpe uses it — high-volume perception
+  //   behind a conservative deterministic gate (closed taxonomy, per-source
+  //   eligible codes, per-code confidence floors) plus mandatory human review.
+  //   It runs OFFLINE and batched, so it does not reintroduce the per-upload
+  //   latency that got the original photo gate removed.
+  'vision-hazard-sweep':              HAIKU,
+  // draft-regulatory-document: first drafts of risk assessments, method
+  //   statements, JSA checklists, and incident reports. A qualified safety
+  //   professional reads and signs every one, and the draft is grounded on
+  //   retrieved regulation chunks with unresolvable citations stripped — draft
+  //   quality is what the whole feature is for, so it gets the stronger model.
+  'draft-regulatory-document':        SONNET_5,
+  // safety-briefing-narrate: optional prose over the deterministic briefing.
+  //   The ranking, the scores, and the score-reduction arithmetic are all
+  //   computed in @soteria/core before the model is called; it narrates and
+  //   never reorders. Same advisory class as scorecard-focus.
+  'safety-briefing-narrate':          SONNET_5,
+  // ── Hazard Hunt (CSP write-up / DS analytics) ─────────────────────────────
+  // hazard-hunt-csp: a Certified Safety Professional authoring a citation-backed
+  //   write-up of a completed workplace inspection — safety-critical authoring a
+  //   human reviews before it is finalized to the wiki + KB. Opus 4.8, the same
+  //   class as the loto-audit-ehs gate.
+  'hazard-hunt-csp':                  OPUS,
+  // hazard-hunt-ds: a Data Scientist narrating deterministic hazard-finding
+  //   trends. Advisory, text-only, never computes the EHS score — same advisory
+  //   class as scorecard-focus. Sonnet (drop to Haiku if volume dominates).
+  'hazard-hunt-ds':                   SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

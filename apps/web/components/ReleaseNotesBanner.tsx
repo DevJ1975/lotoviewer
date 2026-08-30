@@ -4,21 +4,37 @@ import { useEffect, useState } from 'react'
 import { Megaphone, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { renderReleaseNoteMd } from '@/lib/markdown'
+import { isReleaseNoteFresh, RELEASE_NOTE_BANNER_DAYS } from '@soteria/core/releaseNotes'
 import type { LatestReleaseNote } from '@/app/api/release-notes/latest/route'
 
-// Banner that surfaces the most recent published release note to
-// every authenticated user. Dismissed state lives in localStorage
-// keyed on the note id, so dismissing one note doesn't hide the
-// next one. No server-side per-user read-state — at this scale
-// it's not worth a table.
+// Banner that surfaces the most recent published release note to every
+// authenticated user. It goes away on whichever comes first:
+//
+//   • the user dismisses it — a seen-stamp in localStorage keyed on the note
+//     id, so dismissing one note doesn't hide the next one. No server-side
+//     per-user read-state; at this scale it isn't worth a table.
+//
+//   • the note ages past its window (RELEASE_NOTE_BANNER_DAYS from
+//     published_at). The API already filters stale notes out, so this is the
+//     second line of defence for the case the server can't cover: a tab left
+//     open across the boundary, which would otherwise keep rendering a note
+//     that has since expired. Re-checked on the same interval that ticks the
+//     clock, so it clears itself without a refresh.
 //
 // Mounted in AppChrome above the page content. No-op on /login.
 
 const SEEN_KEY = 'soteria.releaseNote.seenId'
 
+// How often the open tab re-checks the age boundary. Generous on purpose —
+// the window is measured in days, so a minute of overhang is immaterial and
+// a tighter interval would just burn wakeups.
+const FRESHNESS_CHECK_MS = 60_000
+
 export function ReleaseNotesBanner() {
   const [note, setNote]       = useState<LatestReleaseNote | null>(null)
+  const [windowDays, setWindowDays] = useState(RELEASE_NOTE_BANNER_DAYS)
   const [dismissed, setDismissed] = useState(false)
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   useEffect(() => {
     let cancelled = false
@@ -31,13 +47,14 @@ export function ReleaseNotesBanner() {
           cache: 'no-store',
         })
         if (!res.ok) return
-        const j = await res.json() as { note: LatestReleaseNote | null }
+        const j = await res.json() as { note: LatestReleaseNote | null; windowDays?: number }
         if (cancelled || !j.note) return
         // Already-seen check — localStorage holds the most recently
         // dismissed note's id. A new note with a higher id resurfaces.
         let seenId = 0
         try { seenId = Number(localStorage.getItem(SEEN_KEY) ?? '0') } catch { /* private mode */ }
         if (Number.isFinite(seenId) && seenId >= j.note.id) return
+        if (typeof j.windowDays === 'number') setWindowDays(j.windowDays)
         setNote(j.note)
       } catch {
         // Best-effort; banner is informational, never block the page.
@@ -46,6 +63,14 @@ export function ReleaseNotesBanner() {
     return () => { cancelled = true }
   }, [])
 
+  // Keep the age check live on a tab that outlives the window boundary.
+  // Only armed while a note is actually on screen.
+  useEffect(() => {
+    if (!note || dismissed) return
+    const t = setInterval(() => setNowMs(Date.now()), FRESHNESS_CHECK_MS)
+    return () => clearInterval(t)
+  }, [note, dismissed])
+
   function dismiss() {
     if (!note) return
     setDismissed(true)
@@ -53,6 +78,7 @@ export function ReleaseNotesBanner() {
   }
 
   if (!note || dismissed) return null
+  if (!isReleaseNoteFresh(note.published_at, nowMs, windowDays)) return null
 
   return (
     <div className="bg-brand-yellow/40 dark:bg-brand-yellow/10 border-b border-brand-yellow/60 dark:border-brand-yellow/30 px-4 py-3">

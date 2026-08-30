@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Download, Loader2, Search, Wrench } from 'lucide-react'
+import { ArrowLeft, Download, Loader2, Search, SearchX, TriangleAlert, Wrench } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { EmptyState } from '@/components/EmptyState'
 import { useAuth } from '@/components/AuthProvider'
 import type { HygieneAction, HygieneLogRow } from '@soteria/core/types'
 
@@ -188,19 +189,25 @@ export default function HygieneLogPage() {
         {loading ? (
           <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-slate-400 dark:text-slate-500" /></div>
         ) : loadError ? (
-          <div className="px-5 py-6 space-y-1">
-            <p className="text-sm font-semibold text-rose-700 dark:text-rose-300">{loadError}</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              If this says <span className="font-mono">relation &quot;loto_hygiene_log&quot; does not exist</span>, run the
-              data-hygiene SQL script first — the table is created in Section -1.
-            </p>
-          </div>
+          <EmptyState
+            icon={TriangleAlert}
+            eyebrow="Unavailable"
+            title="Could not load the hygiene log"
+            description={loadError}
+          />
+        ) : rows.length === 0 ? (
+          <EmptyState
+            icon={Wrench}
+            title="No hygiene operations logged"
+            description="Decommissions, renames, FK repairs and batch note appends appear here once a data-hygiene run records them."
+          />
         ) : filtered.length === 0 ? (
-          <p className="px-5 py-10 text-sm text-slate-500 dark:text-slate-400 text-center">
-            {rows.length === 0
-              ? 'No hygiene operations logged yet.'
-              : 'No rows match your filters.'}
-          </p>
+          <EmptyState
+            icon={SearchX}
+            eyebrow="No matches"
+            title="No rows match your filters"
+            description="Clear the search or widen the action filter to see the full log."
+          />
         ) : (
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {filtered.map(r => {

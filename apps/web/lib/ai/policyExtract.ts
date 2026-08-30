@@ -83,6 +83,7 @@ export async function extractPolicyText(args: ExtractArgs): Promise<ExtractResul
     const response = (await client.messages.create({
       model:      SONNET,
       max_tokens: 16000,
+      thinking:   { type: 'disabled' },
       system:     PDF_EXTRACT_SYSTEM,
       messages: [{
         role: 'user',

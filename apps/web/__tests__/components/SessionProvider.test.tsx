@@ -1,11 +1,15 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { act, render } from '@testing-library/react'
+import { useEffect } from 'react'
 import { SessionProvider, useSession } from '@/components/SessionProvider'
 
 let captured: ReturnType<typeof useSession> | null = null
 
+// Publishes the hook value from an effect, not from render: assigning to
+// module scope during render is a side effect React forbids.
 function Capture() {
-  captured = useSession()
+  const value = useSession()
+  useEffect(() => { captured = value })
   return null
 }
 

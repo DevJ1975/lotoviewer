@@ -5,6 +5,7 @@
 // that hasn't been wired up yet runs without errors.
 
 import * as Sentry from '@sentry/nextjs'
+import { scrubSentryEvent, scrubBreadcrumb } from '@/lib/security/scrubEvent'
 
 const dsn = process.env.SENTRY_DSN
 
@@ -27,5 +28,14 @@ if (dsn) {
       'NetworkError',
       'Failed to fetch',
     ],
+    // Server events carry request snapshots, and every gated route is called
+    // with an Authorization: Bearer <JWT> header. Same scrubbing as the
+    // browser init — this side had none at all.
+    beforeSend(event) {
+      return scrubSentryEvent(event)
+    },
+    beforeBreadcrumb(crumb) {
+      return scrubBreadcrumb(crumb)
+    },
   })
 }

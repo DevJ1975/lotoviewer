@@ -13,7 +13,9 @@ import type { LotoStepType } from '@soteria/core/lotoProcedureValidation'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 import { EHS_SCHEMA, type EhsResult, type DsResult, type FpeResult, type RegulatorMachineResult, type EhsCitation } from '../schemas'
 import { EHS_SYSTEM, describeEquipment, describeSteps } from '../prompts'
+import { isIsolationUnverified } from '../safetySignals'
 import type { AgentOutput } from './fpe'
+import { assertNotRefused } from '@/lib/ai/client'
 
 const MODEL = MODEL_BY_SURFACE['loto-audit-ehs']
 
@@ -57,10 +59,7 @@ export async function runEhsAgent(
 ): Promise<AgentOutput<EhsResult>> {
   // What the deterministic + upstream signals already tell us. The model is
   // asked to reason as the authority, but these are the non-negotiables.
-  const isoUnverified =
-    fpe.iso_photo.verdict === 'missing' ||
-    fpe.iso_photo.verdict === 'mismatch' ||
-    ds.low_confidence_iso
+  const isoUnverified = isIsolationUnverified(equipment, fpe, ds)
   const missingZeroEnergy = missingPhases.includes('verify_zero_energy')
 
   const userText = [
@@ -73,6 +72,7 @@ export async function runEhsAgent(
     '',
     `OSHA phases missing: ${missingPhases.length ? missingPhases.join(', ') : 'none'}`,
     `Isolation photo verdict: ${fpe.iso_photo.verdict}; Data-Scientist low_confidence_iso: ${ds.low_confidence_iso}`,
+    `Isolation photo on file is a known reference placeholder (not a field photo): ${equipment.iso_photo_is_placeholder === true || equipment.iso_photo_provenance === 'reference_placeholder'}`,
     `Data-Scientist notes: ${ds.notes}`,
     '',
     'Decide pass, cite each deficiency with its regulation code, and recommend fixes. Reply with JSON only.',
@@ -84,11 +84,13 @@ export async function runEhsAgent(
   const response = await client.messages.create({
     model:      MODEL,
     max_tokens: 4000,
+    thinking:   { type: 'disabled' },
     system:     [{ type: 'text', text: EHS_SYSTEM, cache_control: { type: 'ephemeral' } }],
     messages:   [{ role: 'user', content: userText }],
     output_config: { format: { type: 'json_schema', schema: EHS_SCHEMA } },
   })
 
+  assertNotRefused(response, 'loto-audit-ehs')
   const textBlock = response.content.find(b => b.type === 'text')
   if (!textBlock || textBlock.type !== 'text') throw new Error('EHS agent: no text block in response')
   const result = JSON.parse(textBlock.text) as EhsResult
@@ -104,12 +106,14 @@ export async function runEhsAgent(
 // This re-runs the EHS Specialist with a CORRECTION prompt that folds in the
 // regulator's critique, MERGES citations, sharpens recommendations, and sets the
 // final verdict. The SAME hard gate is re-applied so a corrected assessment can
-// never fall below the safety floor — even if the model returns pass:true. No
-// photo signals are passed (the photos didn't change since the audit), so the
-// isolation-point floor is recomputed from missingPhases the same way the audit
-// computed it: verify_zero_energy missing ⇒ pass=false; the placeholder/missing
-// photo floor was already encoded as a citation in priorEhs and is preserved by
-// the merge.
+// never fall below the safety floor — even if the model returns pass:true.
+//
+// `isoUnverified` is the DETERMINISTIC isolation-point signal (safetySignals,
+// computed from the stored FPE/DS verdicts + the equipment row — the photos
+// didn't change since the audit). It must come from the caller, never be
+// re-derived from the correction model's returned citations: a correction that
+// dropped the photo citation used to evaporate the floor and flip a missing-ISO
+// machine to pass=true (Fable 5 finding A-C1).
 export async function runEhsCorrection(
   client: Anthropic,
   equipment: Equipment,
@@ -117,6 +121,7 @@ export async function runEhsCorrection(
   priorEhs: EhsResult,
   regulator: RegulatorMachineResult,
   missingPhases: LotoStepType[],
+  isoUnverified: boolean,
 ): Promise<AgentOutput<EhsResult>> {
   const priorCitationLines = priorEhs.citations.length > 0
     ? priorEhs.citations.map((c, i) => `  ${i + 1}. [${c.severity}] ${c.code}: ${c.text}`).join('\n')
@@ -158,25 +163,29 @@ export async function runEhsCorrection(
   const response = await client.messages.create({
     model:      MODEL,
     max_tokens: 4000,
+    thinking:   { type: 'disabled' },
     system:     [{ type: 'text', text: EHS_SYSTEM, cache_control: { type: 'ephemeral' } }],
     messages:   [{ role: 'user', content: userText }],
     output_config: { format: { type: 'json_schema', schema: EHS_SCHEMA } },
   })
 
+  assertNotRefused(response, 'loto-audit-ehs')
   const textBlock = response.content.find(b => b.type === 'text')
   if (!textBlock || textBlock.type !== 'text') throw new Error('EHS correction: no text block in response')
   const result = JSON.parse(textBlock.text) as EhsResult
 
-  // Belt-and-braces: the model is told to merge the regulator's additions, but
-  // union+dedupe them here too so a dropped citation can't quietly weaken the
-  // corrected record. Dedupe key is code+text, matching the prompt's contract.
-  result.citations = dedupeCitations([...result.citations, ...regulator.additional_citations])
+  // Belt-and-braces: the model is told to merge the prior citations and the
+  // regulator's additions, but union+dedupe them here too so a dropped citation
+  // can't quietly weaken the corrected record. Nothing changed on the ground
+  // between the audit and this correction, so a prior finding the model
+  // "resolved" in prose is still a finding. Dedupe key is code+text, matching
+  // the prompt's contract.
+  result.citations = dedupeCitations([...result.citations, ...priorEhs.citations, ...regulator.additional_citations])
 
-  // Same hard gate as the first pass. The placeholder/missing-photo floor lives
-  // in the merged citations (carried from priorEhs); the verify floor is
-  // recomputed from missingPhases so it survives even a charitable correction.
+  // Same hard gate as the first pass, on the same deterministic signals: the
+  // verify floor recomputed from missingPhases, the isolation floor from the
+  // caller-supplied boolean — never from the model's own text.
   const missingZeroEnergy = missingPhases.includes('verify_zero_energy')
-  const isoUnverified = result.citations.some(c => /isolation point|placeholder|photo/i.test(`${c.code} ${c.text}`))
   applyHardGate(result, { missingZeroEnergy, isoUnverified })
 
   return { result, usage: response.usage ?? null, model: MODEL }
@@ -186,7 +195,7 @@ function dedupeCitations(citations: EhsCitation[]): EhsCitation[] {
   const seen = new Set<string>()
   const out: EhsCitation[] = []
   for (const c of citations) {
-    const key = `${c.code} ${c.text}`
+    const key = `${c.code}\u0000${c.text}`
     if (seen.has(key)) continue
     seen.add(key)
     out.push(c)

@@ -20,6 +20,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const ALLOWED_PATHS = new Set<string>([
+  '/api/cron/regenerate-loto-placards',
   '/api/cron/meter-bump-reminders',
   '/api/cron/daily-health-report',
   '/api/cron/risk-review-reminders',
@@ -28,6 +29,8 @@ const ALLOWED_PATHS = new Set<string>([
   '/api/cron/webhook-reconcile',
   '/api/cron/superadmin-daily-report',
   '/api/cron/check-regulation-updates',
+  '/api/cron/sds-library-seed-drip',
+  '/api/cron/sds-library-verify',
 ])
 
 function publicAppUrl(req: Request): string {

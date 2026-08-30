@@ -52,6 +52,7 @@ interface ActionRow {
 export default function BBSDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const [obs, setObs] = useState<Observation | null>(null)
   const [actions, setActions] = useState<ActionRow[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -60,10 +61,10 @@ export default function BBSDetailPage({ params }: { params: Promise<{ id: string
   const [dueDate, setDueDate] = useState('')
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     setError(null)
     const { data: { session } } = await supabase.auth.getSession()
-    const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+    const headers: Record<string, string> = { 'x-active-tenant': tenantId }
     if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
     const res = await fetch(`/api/bbs/observations/${id}`, { headers })
     const body = await res.json()
@@ -75,7 +76,7 @@ export default function BBSDetailPage({ params }: { params: Promise<{ id: string
     setActions(body.actions ?? [])
     setCorrectiveAction(body.observation.corrective_action ?? '')
     setDueDate(body.observation.due_date ?? '')
-  }, [tenant?.id, id])
+  }, [tenantId, id])
 
   useEffect(() => { void load() }, [load])
 

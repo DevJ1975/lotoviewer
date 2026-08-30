@@ -44,6 +44,10 @@ vi.mock('@/lib/auth/tenantGate', () => ({
 vi.mock('@/lib/loto/regeneratePlacard', () => ({
   regenerateAndUploadPlacard: (admin: unknown, tenantId: string, equipmentId: string) =>
     regenerateAndUploadPlacardMock(admin, tenantId, equipmentId),
+  // Added when the backfill cron landed: the module is fully mocked, so every
+  // export the route imports has to be present here or the import throws
+  // before a single assertion runs.
+  loadTenantLogoPng: async () => null,
 }))
 
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }))
@@ -138,6 +142,38 @@ describe('POST /api/admin/loto/audit/[runId]/apply — snapshot-before-apply', (
 
     expect(res.status).toBe(403)
     expect(rpcCalls).toHaveLength(0)
+  })
+})
+
+// EVASION GUARD — Fable 5 audit finding B-C2 (no server-side sign-off gate),
+// closed by the route's APPLY_ELIGIBLE status check (and, independently, by the
+// sign-off proof inside apply_approved_audit_changes — migration 222).
+//
+// Previously the route's only check on the run was that it EXISTS; the sole
+// "is this approved?" gate was the client button, trivially bypassed by POSTing
+// directly — an in_progress (unreviewed) run snapshotted and applied. A run not
+// in an apply-eligible state must be rejected with a 4xx BEFORE any RPC runs.
+describe('EVASION GUARD [B-C2] — apply requires a reviewed run', () => {
+  it('rejects a run that is not awaiting_review, before snapshot or apply', async () => {
+    // The run exists but no review has happened — it is still being built.
+    state.runRow = { data: { id: 'run-1', status: 'in_progress' } }
+    rpcResults.set('capture_audit_snapshot', { data: 'snap-1', error: null })
+    rpcResults.set('apply_approved_audit_changes', { data: 5, error: null })
+
+    const res = await POST(req(), ctx())
+
+    expect(res.status).toBe(409)
+    expect(rpcCalls).toHaveLength(0) // No snapshot, no apply on an unreviewed run.
+  })
+
+  it('still allows a partially_applied run to be retried', async () => {
+    state.runRow = { data: { id: 'run-1', status: 'partially_applied' } }
+    rpcResults.set('capture_audit_snapshot', { data: 'snap-1', error: null })
+    rpcResults.set('apply_approved_audit_changes', { data: 1, error: null })
+
+    const res = await POST(req(), ctx())
+
+    expect(res.status).toBe(200)
   })
 })
 

@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { ArrowLeft, Camera, ClipboardCheck, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
@@ -234,8 +235,7 @@ function WalkdownForm() {
                   />
                 </label>
                 {it.photo_url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={it.photo_url} alt={`Evidence for ${it.label}`} className="h-12 w-12 object-cover rounded-md border border-slate-200 dark:border-slate-700" />
+                  <Image src={it.photo_url} alt={`Evidence for ${it.label}`} width={48} height={48} className="h-12 w-12 object-cover rounded-md border border-slate-200 dark:border-slate-700" />
                 )}
               </div>
             </li>

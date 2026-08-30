@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { regenerateAndUploadPlacard } from '@/lib/loto/regeneratePlacard'
+import { regenerateAndUploadPlacard, loadTenantLogoPng } from '@/lib/loto/regeneratePlacard'
 
 // POST /api/admin/loto/audit/[runId]/apply — apply the APPROVED changes.
 //
@@ -18,7 +18,12 @@ export const runtime     = 'nodejs'
 export const maxDuration = 300
 
 // Applied changes of these kinds alter the printed placard and need a re-render.
-const PLACARD_AFFECTING = new Set(['placeholder_photo', 'equipment_field_edit', 'step_field_edit'])
+// procedure_draft replaces the machine's entire step set — every printed line.
+const PLACARD_AFFECTING = new Set(['placeholder_photo', 'equipment_field_edit', 'step_field_edit', 'procedure_draft'])
+
+// Only a run whose change-set has been through human review may be applied.
+// partially_applied is re-eligible so an errored apply can be retried.
+const APPLY_ELIGIBLE = new Set(['awaiting_review', 'partially_applied'])
 
 export async function POST(req: Request, ctx: { params: Promise<{ runId: string }> }) {
   const gate = await requireTenantAdmin(req)
@@ -29,6 +34,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
   const { data: run } = await admin
     .from('loto_audit_runs').select('id, status').eq('id', runId).eq('tenant_id', gate.tenantId).maybeSingle()
   if (!run) return NextResponse.json({ error: 'Run not found' }, { status: 404 })
+  // Server-side review gate: an unreviewed run must never reach the snapshot or
+  // apply RPCs, no matter what a client button allowed. The apply RPC itself
+  // additionally proves the reviewer sign-off (migration 222).
+  if (!APPLY_ELIGIBLE.has(run.status as string)) {
+    return NextResponse.json(
+      { error: `Run is '${run.status}' — only a reviewed run (awaiting_review / partially_applied) can be applied` },
+      { status: 409 },
+    )
+  }
 
   // 1. Snapshot FIRST (rollback save point). If this fails, apply nothing.
   const { data: snapshotId, error: snapErr } = await admin.rpc('capture_audit_snapshot', {
@@ -59,16 +73,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
       .map((c: { equipment_id: string }) => c.equipment_id),
   )]
 
+  // Load the tenant logo once — it's identical for every placard, but
+  // regenerateAndUploadPlacard would otherwise re-fetch + sharp-re-encode it
+  // per machine. Regenerate with bounded concurrency so a large change-set
+  // finishes inside the route's maxDuration.
+  const tenantLogoPng = await loadTenantLogoPng(admin, gate.tenantId)
   const regen = { ok: 0, failed: 0 }
-  for (const equipmentId of affected) {
-    try {
-      await regenerateAndUploadPlacard(admin, gate.tenantId, equipmentId)
-      regen.ok += 1
-    } catch (err) {
-      regen.failed += 1
-      Sentry.captureException(err, { tags: { route: 'admin/loto/audit/apply', stage: 'regen' }, extra: { equipmentId } })
-    }
-  }
+  const REGEN_CONCURRENCY = 4
+  let cursor = 0
+  await Promise.all(
+    Array.from({ length: Math.min(REGEN_CONCURRENCY, affected.length) }, async () => {
+      while (cursor < affected.length) {
+        const equipmentId = affected[cursor++]!
+        try {
+          await regenerateAndUploadPlacard(admin, gate.tenantId, equipmentId, tenantLogoPng)
+          regen.ok += 1
+        } catch (err) {
+          regen.failed += 1
+          Sentry.captureException(err, { tags: { route: 'admin/loto/audit/apply', stage: 'regen' }, extra: { equipmentId } })
+        }
+      }
+    }),
+  )
 
   return NextResponse.json({
     applied: typeof appliedCount === 'number' ? appliedCount : 0,

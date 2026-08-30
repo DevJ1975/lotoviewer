@@ -23,6 +23,7 @@ import { runAuthorAgent } from './agents/author'
 import { runRegulatorMachineReview, runRegulatorProgramReview } from './agents/regulator'
 import { buildPlaceholderPhoto } from './placeholderPhoto'
 import { findExistingIsoPhoto } from './storagePhotoSearch'
+import { isIsolationUnverified } from './safetySignals'
 import { describeRunAggregate, type RunAggregate } from './prompts'
 import type { AuditSeverity, AuthorResult, DsResult, EhsResult, FpeResult, RegulatorMachineResult } from './schemas'
 
@@ -44,6 +45,12 @@ export interface RunAuditOptions {
 export interface RunAuditSummary { total: number; processed: number; failed: number }
 
 const DEFAULT_CONCURRENCY = 3
+
+// The processed-equipment counter only drives a progress bar. Writing it on
+// every machine means one UPDATE to loto_audit_runs per machine (~500 on a full
+// run); writing every Nth (and always on the last) keeps the bar fresh while
+// cutting that write load ~10x.
+const PROGRESS_WRITE_EVERY = 10
 
 export async function runAudit(opts: RunAuditOptions): Promise<RunAuditSummary> {
   const admin  = supabaseAdmin()
@@ -81,7 +88,9 @@ export async function runAudit(opts: RunAuditOptions): Promise<RunAuditSummary> 
       }, { onConflict: 'run_id,equipment_id' })
     } finally {
       processed += 1
-      await admin.from('loto_audit_runs').update({ processed_equipment: processed }).eq('id', opts.runId)
+      if (processed % PROGRESS_WRITE_EVERY === 0 || processed === equipment.length) {
+        await admin.from('loto_audit_runs').update({ processed_equipment: processed }).eq('id', opts.runId)
+      }
     }
   })
 
@@ -133,7 +142,7 @@ export async function runRegulatorPhase(opts: RunAuditOptions): Promise<RunRegul
   // Program-level review over the whole run aggregate. Best-effort: a failed
   // program review must not lose the per-machine critiques already stored.
   try {
-    const aggregate = await buildRunAggregate(admin, opts)
+    const aggregate = await buildRunAggregate(admin, opts, equipment)
     const program = await callAgent(opts, 'loto-audit-regulator', () => runRegulatorProgramReview(client, describeRunAggregate(aggregate)))
     await admin.from('loto_audit_runs').update({ regulator_report: program.result }).eq('id', opts.runId)
   } catch (err) {
@@ -194,9 +203,12 @@ async function reviewEquipment(
 
   let outcome: ReviewOutcome = 'reviewed'
   if (material) {
-    // (a) Correct the EHS assessment, folding in the regulator's critique.
+    // (a) Correct the EHS assessment, folding in the regulator's critique. The
+    // isolation floor is the deterministic signal recomputed from the STORED
+    // verdicts + the live equipment row — the photos didn't change since the
+    // audit, and the floor must never come from the correction model's text.
     const corrected = await callAgent(opts, 'loto-audit-ehs', () =>
-      runEhsCorrection(client, eq, steps, ehs, regulator.result, missingPhases))
+      runEhsCorrection(client, eq, steps, ehs, regulator.result, missingPhases, isIsolationUnverified(eq, fpe, ds)))
     await upsertResult(admin, opts, eq.equipment_id, {
       ehs_pass:            corrected.result.pass,
       ehs_citations:       corrected.result.citations,
@@ -344,7 +356,7 @@ function projectStepForDraft(s: LotoEnergyStep) {
 // Build the run aggregate the program-level review summarizes: pass/fail counts,
 // top recurring citation codes, # placeholder-photo changes, # machines missing
 // a zero-energy verification (from ds_consistency.missing_phases), departments.
-async function buildRunAggregate(admin: SupabaseClient, opts: RunAuditOptions): Promise<RunAggregate> {
+async function buildRunAggregate(admin: SupabaseClient, opts: RunAuditOptions, equipment: Equipment[]): Promise<RunAggregate> {
   const [{ data: results }, { data: changes }] = await Promise.all([
     admin.from('loto_audit_equipment_results')
       .select('equipment_id, ehs_pass, ehs_citations, ds_consistency')
@@ -380,8 +392,9 @@ async function buildRunAggregate(admin: SupabaseClient, opts: RunAuditOptions): 
     .filter(c => c.change_kind === 'placeholder_photo').length
 
   // Departments come from the in-scope equipment list, not the results, so a
-  // machine that errored still counts toward its department's footprint.
-  const equipment = await loadEquipment(admin, opts.tenantId, opts.scope)
+  // machine that errored still counts toward its department's footprint. The
+  // caller already loaded this exact list (same tenant + scope), so it's
+  // threaded in rather than re-running the full loto_equipment select.
   const deptCounts = new Map<string, number>()
   for (const e of equipment) {
     const dept = e.department || '(none)'
@@ -526,12 +539,10 @@ async function emitChanges(
     })
   }
 
-  // (b) Placeholder ISO photo when the isolation point is low-confidence.
-  const isoUnverified =
-    ds.low_confidence_iso ||
-    fpe.iso_photo.verdict === 'missing' ||
-    fpe.iso_photo.verdict === 'mismatch' ||
-    fpe.iso_photo.verdict === 'low_confidence'
+  // (b) Placeholder ISO photo when the isolation point is unverified — the
+  // SAME deterministic signal the EHS gate uses, so the emitter can never
+  // disagree with the gate about whether this machine's ISO needs help.
+  const isoUnverified = isIsolationUnverified(eq, fpe, ds)
   if (isoUnverified) {
     // Prefer a REAL in-house photo over an internet placeholder. ISO photos are
     // often cross-wired between machines, so a correct shot of this isolation

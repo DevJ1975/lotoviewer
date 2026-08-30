@@ -39,6 +39,7 @@ Investigation-SLA escalations and the annual OSHA-300A posting prompt intentiona
 
 ## 6. From the principal test (2026-05-24)
 - [ ] **Mobile deep-link placeholders** — `apps/web/public/.well-known/apple-app-site-association`, `apps/web/public/.well-known/assetlinks.json`, and `apps/mobile/eas.json` still contain `REPLACE_WITH_…` values (Apple Team ID, Android release SHA-256, App Store Connect app id). Fill these before the mobile launch / universal-link rollout.
+  - [ ] For the iOS build/TestFlight path specifically, the `eas.json` submit block now uses an **App Store Connect API key** (`ascApiKeyId`, `ascApiKeyIssuerId`, `ascAppId`, `appleTeamId` + a gitignored `apps/mobile/credentials/asc_api_key.p8`). Step-by-step in **`apps/mobile/docs/testflight.md`**. Note: TestFlight does **not** require the `.well-known` universal-link files — those gate deep links at runtime, not store submission.
   - [ ] Confirm `ALLOW_DEEPLINK_PLACEHOLDERS=1` is set in the **Vercel** build env (the web `prebuild` runs the strict deep-link check and would otherwise fail the deploy until the placeholders above are real).
 - [x] **Test-suite health — RESOLVED by PR #188 (2026-06-05):** the 81 stale failing unit tests (Spectrum-restyle text matchers, hardcoded `features` registry counts) were repaired and the suite went back to green (~3,377 passing). Vitest still does not gate CI (CI runs the repo/wiki guards only).
 

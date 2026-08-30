@@ -36,6 +36,19 @@ describe('buildWeatherRow — tone (good/bad/neutral)', () => {
   })
 })
 
+describe('buildWeatherRow — significance gate', () => {
+  it('does not color a within-noise ±1 move (stays neutral)', () => {
+    const row = buildWeatherRow(mk({ current: 6, previous: 5, higherIsBetter: false }))
+    expect(row.significant).toBe(false)
+    expect(row.tone).toBe('neutral') // +1 on a base of 5 is noise, not "bad"
+  })
+  it('colors a move that clears ~1 Poisson standard deviation', () => {
+    const row = buildWeatherRow(mk({ current: 10, previous: 4, higherIsBetter: false }))
+    expect(row.significant).toBe(true)
+    expect(row.tone).toBe('bad')
+  })
+})
+
 describe('buildWeatherRow — deltaPct baseline', () => {
   it('computes percent vs last week', () => {
     expect(buildWeatherRow(mk({ current: 12, previous: 10 })).deltaPct).toBe(20)

@@ -1,14 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { AlertTriangle, ArrowLeft, CheckCircle2, Loader2, PlayCircle, Send, Video } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
+import { StrikeVideoPlayer, type WatchProgress } from '@/components/strike/StrikeVideoPlayer'
 import { supabase } from '@/lib/supabase'
 import type { StrikeQuestionType } from '@soteria/core/strike'
-import { resolveStrikeVideoSource } from '@soteria/core/strikeMedia'
 
 interface ModuleRow {
   id: string
@@ -24,18 +24,20 @@ interface VersionRow {
   id: string
   module_id: string
   version_number: number
-  video_path: string | null
-  captions_path: string | null
   transcript: string | null
   duration_seconds: number | null
   passing_score: number
 }
 
+// `explanation` is deliberately absent: it is a soft copy of the answer key
+// ("Correct, because ...") and the strike_security_hardening migration
+// revoked it from `authenticated`. (Referenced by slug, not number: that
+// migration's prefix has been renumbered three times by collisions on main.)
+// It comes back in the submit response, per missed question, after grading.
 interface QuestionRow {
   id: string
   question_type: StrikeQuestionType
   prompt: string
-  explanation: string | null
   sort_order: number
   required: boolean
   points: number
@@ -54,18 +56,53 @@ interface SubmitResult {
   missedQuestionIds: string[]
 }
 
+interface MediaSource {
+  provider: 'vimeo' | null
+  url: string | null
+}
+
+type MediaRequestResult =
+  | { ok: true; media: MediaSource }
+  | { ok: false; notice: string }
+
+// Playback URLs are short-lived and minted server-side so every view is
+// authenticated, rate-limited, and audit-logged. Called again on expiry.
+async function requestPlaybackUrl(
+  moduleId: string,
+  moduleVersionId: string,
+  tenantId: string,
+): Promise<MediaRequestResult> {
+  const { data: sessionData } = await supabase.auth.getSession()
+  const token = sessionData.session?.access_token
+  if (!token) return { ok: false, notice: 'Sign in again to load the video.' }
+
+  const res = await fetch(`/api/strike/${moduleId}/media`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+      'x-active-tenant': tenantId,
+    },
+    body: JSON.stringify({ module_version_id: moduleVersionId }),
+  })
+  const payload = await res.json()
+  if (!res.ok) return { ok: false, notice: payload.error ?? 'Video is unavailable right now.' }
+  return { ok: true, media: payload as MediaSource }
+}
+
 export default function StrikeModulePage() {
   const params = useParams<{ slug: string }>()
   const searchParams = useSearchParams()
   const router = useRouter()
   const { tenant } = useTenant()
-  const { userId } = useAuth()
+  const { userId, email } = useAuth()
   const [module, setModule] = useState<ModuleRow | null>(null)
   const [version, setVersion] = useState<VersionRow | null>(null)
   const [questions, setQuestions] = useState<QuestionRow[]>([])
   const [answers, setAnswers] = useState<AnswerRow[]>([])
-  const [signedVideoUrl, setSignedVideoUrl] = useState<string | null>(null)
+  const [media, setMedia] = useState<MediaSource | null>(null)
   const [videoNotice, setVideoNotice] = useState<string | null>(null)
+  const watchProgressRef = useRef<WatchProgress | null>(null)
   const [responses, setResponses] = useState<Record<string, string[] | string | boolean>>({})
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -81,7 +118,7 @@ export default function StrikeModulePage() {
       setVersion(null)
       setQuestions([])
       setAnswers([])
-      setSignedVideoUrl(null)
+      setMedia(null)
       setVideoNotice(null)
       return
     }
@@ -89,7 +126,7 @@ export default function StrikeModulePage() {
     setError(null)
     setResult(null)
     setResponses({})
-    setSignedVideoUrl(null)
+    setMedia(null)
     setVideoNotice(null)
 
     try {
@@ -113,7 +150,7 @@ export default function StrikeModulePage() {
 
       const { data: versions, error: versionErr } = await supabase
         .from('strike_module_versions')
-        .select('id,module_id,version_number,video_path,captions_path,transcript,duration_seconds,passing_score')
+        .select('id,module_id,version_number,transcript,duration_seconds,passing_score')
         .eq('module_id', nextModule.id)
         .eq('status', 'published')
         .order('version_number', { ascending: false })
@@ -131,7 +168,7 @@ export default function StrikeModulePage() {
 
       const { data: questionRows, error: questionErr } = await supabase
         .from('strike_quiz_questions')
-        .select('id,question_type,prompt,explanation,sort_order,required,points')
+        .select('id,question_type,prompt,sort_order,required,points')
         .eq('module_version_id', nextVersion.id)
         .order('sort_order', { ascending: true })
       if (questionErr) throw questionErr
@@ -150,23 +187,20 @@ export default function StrikeModulePage() {
         setAnswers([])
       }
 
-      const videoSource = resolveStrikeVideoSource(nextVersion.video_path)
-      if (videoSource.kind === 'storage') {
-        const { data } = await supabase.storage
-          .from('strike-media')
-          .createSignedUrl(videoSource.path, 60 * 30)
-        setSignedVideoUrl(data?.signedUrl ?? null)
-      } else if (videoSource.kind === 'unsupported') {
-        setVideoNotice(videoSource.reason)
+      const mediaResult = await requestPlaybackUrl(nextModule.id, nextVersion.id, tenant.id)
+      if (mediaResult.ok) {
+        setMedia(mediaResult.media)
       } else {
-        setSignedVideoUrl(null)
+        setVideoNotice(mediaResult.notice)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
-  }, [params.slug, tenant?.id])
+    // The React Compiler infers `tenant` (object) as the dependency; listing
+    // the narrower `tenant?.id` here blocks compilation of the component.
+  }, [params.slug, tenant])
 
   useEffect(() => { void load() }, [load])
 
@@ -203,6 +237,7 @@ export default function StrikeModulePage() {
         module_version_id: version.id,
         assignment_id: assignmentId,
         answers: responses,
+        watch: watchProgressRef.current,
       }),
     })
     const payload = await res.json()
@@ -259,8 +294,12 @@ export default function StrikeModulePage() {
       )}
 
       <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
-        {signedVideoUrl ? (
-          <video controls className="aspect-video w-full rounded-lg bg-black" src={signedVideoUrl} />
+        {media?.url ? (
+          <StrikeVideoPlayer
+            src={media.url}
+            watermarkText={email ?? 'SoteriaField viewer'}
+            onProgress={progress => { watchProgressRef.current = progress }}
+          />
         ) : (
           <div className="flex aspect-video items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-400">
             <div className="text-center">
@@ -386,7 +425,6 @@ function Question({
           ))}
         </div>
       )}
-      {question.explanation && <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{question.explanation}</p>}
     </fieldset>
   )
 }

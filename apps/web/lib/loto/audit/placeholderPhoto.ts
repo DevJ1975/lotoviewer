@@ -14,6 +14,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Equipment } from '@soteria/core/types'
 import { placeholderIsoPhotoPath } from '@soteria/core/storagePaths'
+import { SONNET } from '@/lib/ai/models'
 
 const BUCKET = 'loto-photos'
 const WATERMARK_TEXT = 'REFERENCE ONLY — NOT A VERIFIED ISOLATION POINT'
@@ -45,8 +46,16 @@ async function findReferenceImageUrl(
   let response: Anthropic.Message | null = null
   for (let i = 0; i <= MAX_CONTINUATIONS; i++) {
     response = await client.messages.create({
-      model:      'claude-sonnet-4-6',
-      max_tokens: 1024,
+      model:      SONNET,
+      // Raised from 1024: the answer is one URL, but on Claude 5 the budget
+      // is shared with thinking, which this call keeps on to decide whether
+      // to search at all.
+      max_tokens: 2048,
+      // Passes server tools (web_search/web_fetch), so it keeps thinking on
+      // — with it disabled the model reaches for tools less — but at low
+      // effort, since the task is "return one URL or NONE".
+      thinking:   { type: 'adaptive' },
+      output_config: { effort: 'low' },
       messages,
       tools: [
         { type: 'web_search_20260209', name: 'web_search', max_uses: 2 },

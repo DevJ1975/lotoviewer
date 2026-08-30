@@ -96,29 +96,65 @@ export async function GET(req: Request) {
   const offset = Math.max(0, parseInt(offsetRaw ?? '0', 10) || 0)
 
   try {
-    let q = gate.authedClient
-      .from('incidents')
-      .select(SELECT_COLS, { count: 'exact' })
-      .eq('tenant_id', gate.tenantId)
+    // One definition of "which incidents match this request", applied to
+    // both the page query and the severity tallies below. Keeping it in a
+    // single place is what stops the tallies from drifting away from the
+    // rows they are supposed to describe.
+    const matching = (columns: string, headOnly: boolean) => {
+      let q = gate.authedClient
+        .from('incidents')
+        .select(columns, { count: 'exact', head: headOnly })
+        .eq('tenant_id', gate.tenantId)
 
-    if (types.length      > 0) q = q.in('incident_type',   types)
-    if (statuses.length   > 0) q = q.in('status',          statuses)
-    if (severities.length > 0) q = q.in('severity_actual', severities)
-    if (activeOnly)            q = q.in('status', ACTIVE_INCIDENT_STATUSES as unknown as string[])
-    if (assignee && UUID_RE.test(assignee)) q = q.eq('assigned_investigator', assignee)
-    if (search) {
-      const safe = search.replace(/[,()]/g, ' ').trim()
-      if (safe) q = q.or(`description.ilike.%${safe}%,report_number.ilike.%${safe}%`)
+      if (types.length      > 0) q = q.in('incident_type',   types)
+      if (statuses.length   > 0) q = q.in('status',          statuses)
+      if (severities.length > 0) q = q.in('severity_actual', severities)
+      if (activeOnly)            q = q.in('status', ACTIVE_INCIDENT_STATUSES as unknown as string[])
+      if (assignee && UUID_RE.test(assignee)) q = q.eq('assigned_investigator', assignee)
+      if (search) {
+        const safe = search.replace(/[,()]/g, ' ').trim()
+        if (safe) q = q.or(`description.ilike.%${safe}%,report_number.ilike.%${safe}%`)
+      }
+      return q
     }
 
-    q = q.order(sort, { ascending: dir === 'asc' }).range(offset, offset + limit - 1)
+    const pageQuery = matching(SELECT_COLS, false)
+      .order(sort, { ascending: dir === 'asc' })
+      .range(offset, offset + limit - 1)
 
-    const { data, count, error } = await q
+    // Severity tallies are counted across the whole matching set, not the
+    // page. The triage tiles drive where a safety lead looks first, so a
+    // count that silently stops at `limit` is worse than no count at all.
+    // head:true makes each of these a count-only round trip, no rows.
+    //
+    // Always intersected with the active statuses, whatever the caller
+    // asked for: these answer "what is still open and how bad is it",
+    // which is why the field is named for that and not for the page.
+    const severityQueries = INCIDENT_SEVERITY_ACTUAL.map(sev =>
+      matching('id', true)
+        .eq('severity_actual', sev)
+        .in('status', ACTIVE_INCIDENT_STATUSES as unknown as string[]),
+    )
+
+    const [pageResult, ...severityResults] = await Promise.all([
+      pageQuery,
+      ...severityQueries,
+    ])
+
+    const { data, count, error } = pageResult
     if (error) throw new Error(error.message)
 
+    const activeSeverityCounts = {} as Record<IncidentSeverityActual, number>
+    INCIDENT_SEVERITY_ACTUAL.forEach((sev, i) => {
+      const r = severityResults[i]
+      if (r.error) throw new Error(r.error.message)
+      activeSeverityCounts[sev] = r.count ?? 0
+    })
+
     return NextResponse.json({
-      reports: data ?? [],
-      total:   count ?? 0,
+      reports:                data ?? [],
+      total:                  count ?? 0,
+      active_severity_counts: activeSeverityCounts,
       limit,
       offset,
     })
@@ -306,28 +342,39 @@ async function dispatchInitialNotifications(
   // Build a rule-id → name lookup for audit/email rendering.
   const ruleNameById = new Map(rules.map(r => [r.id, r.name]))
 
-  const logRows: Array<Record<string, unknown>> = []
-
-  for (const plan of plans) {
+  // One send per recipient, all in flight together. These run inside the
+  // request that returns the reporter's 201, so sending them in sequence
+  // put every recipient's SMTP round trip between the reporter and their
+  // confirmation — a ten-recipient rule made filing an incident feel broken.
+  const logRows = await Promise.all(plans.map(async (plan) => {
     const { recipient, rule_id } = plan
     if (recipient.channel === 'email' && recipient.email) {
-      const ok = await sendIncidentAlertEmail({
-        to:             recipient.email,
-        recipientName:  null,
-        reportNumber:   incident.report_number,
-        incidentType:   incident.incident_type,
-        severityActual: incident.severity_actual,
-        occurredAt:     incident.occurred_at,
-        locationText:   incident.location_text,
-        description:    incident.description,
-        appUrl,
-        incidentId:     incident.id,
-        tenantName,
-        tenantId:       incident.tenant_id,
-        triggeredBy,
-        ruleName:       ruleNameById.get(rule_id) ?? null,
-      })
-      logRows.push({
+      // A recipient whose send throws is logged as failed like one that
+      // returns false; it must not take the other recipients down with it.
+      let ok = false
+      try {
+        ok = await sendIncidentAlertEmail({
+          to:             recipient.email,
+          recipientName:  null,
+          reportNumber:   incident.report_number,
+          incidentType:   incident.incident_type,
+          severityActual: incident.severity_actual,
+          occurredAt:     incident.occurred_at,
+          locationText:   incident.location_text,
+          description:    incident.description,
+          appUrl,
+          incidentId:     incident.id,
+          tenantName,
+          tenantId:       incident.tenant_id,
+          triggeredBy,
+          ruleName:       ruleNameById.get(rule_id) ?? null,
+        })
+      } catch (e) {
+        Sentry.captureException(e, {
+          tags: { route: 'incidents/POST', stage: 'notify-send' },
+        })
+      }
+      return {
         tenant_id:          incident.tenant_id,
         incident_id:        incident.id,
         rule_id,
@@ -336,12 +383,12 @@ async function dispatchInitialNotifications(
         recipient_user_id:  recipient.user_id,
         recipient_email:    recipient.email,
         status:             ok ? 'sent' : 'failed',
-      })
+      }
     } else if (recipient.channel === 'push') {
       // Phase 2 wires push via /api/push/dispatch. Log as 'skipped'
       // so the per-incident notifications tab shows what *would*
       // have been sent.
-      logRows.push({
+      return {
         tenant_id:          incident.tenant_id,
         incident_id:        incident.id,
         rule_id,
@@ -351,10 +398,10 @@ async function dispatchInitialNotifications(
         recipient_email:    recipient.email,
         status:             'skipped',
         error_text:         'push channel ships in Phase 2',
-      })
+      }
     } else if (recipient.channel === 'sms') {
       // SMS channel reserved for a future provider integration.
-      logRows.push({
+      return {
         tenant_id:          incident.tenant_id,
         incident_id:        incident.id,
         rule_id,
@@ -364,9 +411,10 @@ async function dispatchInitialNotifications(
         recipient_phone:    null,
         status:             'skipped',
         error_text:         'sms channel not configured',
-      })
+      }
     }
-  }
+    return null
+  })).then(rows => rows.flatMap(r => (r ? [r] : [])))
 
   // _ to silence the unused-var lint for triggeredByEmail — kept in the
   // signature so a future audit-context tag can use it.

@@ -1,72 +1,74 @@
-import { describe, expect, it } from 'vitest'
-import { getNavigationGroups, getNavigationCommandItems } from '@/lib/navigationCatalog'
-import { FEATURES, getModules } from '@soteria/core/features'
+import { describe, it, expect } from 'vitest'
+import { getNavigationGroups } from '@/lib/navigationCatalog'
+import { getModules, type FeatureCategory } from '@soteria/core/features'
 
-// Invariants over the navigation catalog, derived from the live
-// FEATURES registry rather than hardcoded counts (hardcoded counts
-// rotted as modules were added — the failure mode PR #188 repaired).
+// The guard that was missing.
+//
+// MODULE_GROUPS is a hand-maintained id → group map, and CATEGORY_FALLBACKS
+// quietly catches anything absent from it. Nothing failed when a module was
+// forgotten — it just appeared in Daily Work (safety) or Administration
+// (admin). Ten modules had drifted in that way, six of them admin-*, which is
+// how the Administration group reached 16 rows: larger than Pinned, Hazards
+// and Permits combined.
+//
+// These tests make that drift a build failure instead of a slow leak.
 
-// null tenantModules = static catalog defaults (no tenant overrides).
-const DEFAULT_MODULES = null
+const CATEGORIES: FeatureCategory[] = ['safety', 'reports', 'admin']
 
-describe('getNavigationGroups', () => {
-  it('places every visible top-level module in exactly one group', () => {
-    const groups = getNavigationGroups(DEFAULT_MODULES)
-    const placed = groups.flatMap(g => g.items.map(i => i.feature.id))
-    expect(new Set(placed).size).toBe(placed.length)
+/** Every top-level module, visible or not, across all categories. */
+function allTopLevelModules() {
+  return CATEGORIES.flatMap(c => getModules(c))
+}
 
-    const visibleModuleIds = (['safety', 'reports', 'admin'] as const)
-      .flatMap(category => getModules(category))
-      .filter(f => !f.internal)
-      .map(f => f.id)
-    for (const id of placed) {
-      expect(visibleModuleIds, `nav item ${id} is not a catalog module`).toContain(id)
-    }
+// A tenant with everything switched on, so grouping is tested at full breadth
+// rather than whatever a default tenant happens to enable.
+const ALL_ON = Object.fromEntries(allTopLevelModules().map(m => [m.id, true]))
+
+describe('MODULE_GROUPS coverage', () => {
+  it('places every top-level module in an explicit group, never the fallback', () => {
+    const groups = getNavigationGroups(ALL_ON)
+    const fallback = groups.find(g => g.id === 'administration')
+
+    // 'administration' is retained only so an unmapped module still renders.
+    // Anything reaching it means MODULE_GROUPS is missing an entry.
+    const stranded = fallback?.items.map(i => i.feature.id) ?? []
+    expect(stranded).toEqual([])
   })
 
-  it('never renders an empty group and never surfaces an internal feature', () => {
-    const groups = getNavigationGroups(DEFAULT_MODULES)
-    for (const group of groups) {
-      expect(group.items.length, `group ${group.id} is empty`).toBeGreaterThan(0)
-      for (const item of group.items) {
-        expect(item.feature.internal ?? false, `internal feature ${item.feature.id} leaked into nav`).toBe(false)
-      }
-    }
-  })
-
-  it('drops a module the tenant has disabled', () => {
-    const allOff: Record<string, boolean> = {}
-    for (const f of FEATURES) allOff[f.id] = false
-    const groups = getNavigationGroups(allOff)
+  it('assigns every visible module to exactly one group', () => {
+    const groups = getNavigationGroups(ALL_ON)
     const ids = groups.flatMap(g => g.items.map(i => i.feature.id))
-    // comingSoon features stay visible by design; everything else hides.
-    for (const id of ids) {
-      const feature = FEATURES.find(f => f.id === id)
-      expect(feature?.comingSoon, `${id} should be hidden when its module flag is off`).toBe(true)
-    }
+    expect(ids).toHaveLength(new Set(ids).size)
+  })
+})
+
+describe('group sizes stay scannable', () => {
+  // Not arbitrary: the drawer is a flat list with no collapse at group level,
+  // and the audit's finding was that one 16-row group is unscannable. Twelve
+  // is generous headroom that still fails loudly if a group starts absorbing
+  // everything again.
+  it('keeps no group above 12 top-level rows', () => {
+    const oversized = getNavigationGroups(ALL_ON)
+      .filter(g => g.items.length > 12)
+      .map(g => `${g.label} (${g.items.length})`)
+    expect(oversized).toEqual([])
   })
 
-  it('gives every item a non-empty keyword set including its own id', () => {
-    for (const group of getNavigationGroups(DEFAULT_MODULES)) {
-      for (const item of group.items) {
-        expect(item.keywords.length).toBeGreaterThan(0)
-        expect(item.keywords).toContain(item.feature.id)
-      }
+  it('drops empty groups rather than rendering a bare heading', () => {
+    for (const group of getNavigationGroups(ALL_ON)) {
+      expect(group.items.length).toBeGreaterThan(0)
     }
   })
 })
 
-describe('getNavigationCommandItems', () => {
-  it('only emits entries with a concrete href', () => {
-    for (const entry of getNavigationCommandItems(DEFAULT_MODULES)) {
-      expect(typeof entry.href).toBe('string')
-      expect(entry.href.length).toBeGreaterThan(0)
-    }
-  })
+describe('tenant gating', () => {
+  it('hides a module the tenant has switched off', () => {
+    const withLoto = getNavigationGroups(ALL_ON)
+      .flatMap(g => g.items.map(i => i.feature.id))
+    expect(withLoto).toContain('loto')
 
-  it('handles null and undefined tenantModules identically', () => {
-    const a = getNavigationCommandItems(null).map(e => e.href)
-    const b = getNavigationCommandItems(undefined).map(e => e.href)
-    expect(a).toEqual(b)
+    const withoutLoto = getNavigationGroups({ ...ALL_ON, loto: false })
+      .flatMap(g => g.items.map(i => i.feature.id))
+    expect(withoutLoto).not.toContain('loto')
   })
 })

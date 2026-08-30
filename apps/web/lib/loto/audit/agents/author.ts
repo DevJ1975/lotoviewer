@@ -14,11 +14,12 @@
 
 import type Anthropic from '@anthropic-ai/sdk'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
-import type { LotoStepType } from '@soteria/core/lotoProcedureValidation'
+import { LOTO_STEP_ORDER, validateProcedure, type LotoStepType } from '@soteria/core/lotoProcedureValidation'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 import { AUTHOR_SCHEMA, type AuthorResult, type EhsCitation } from '../schemas'
 import { AUTHOR_SYSTEM, describeEquipment, describeSteps, describeFindings } from '../prompts'
 import type { AgentOutput } from './fpe'
+import { assertNotRefused } from '@/lib/ai/client'
 
 const MODEL = MODEL_BY_SURFACE['loto-audit-author']
 
@@ -51,6 +52,7 @@ export async function runAuthorAgent(
   const response = await client.messages.create({
     model:      MODEL,
     max_tokens: 8000,
+    thinking:   { type: 'disabled' },
     // Cache the static system prompt — a full audit run drafts for many failed
     // machines in one burst, all sharing this prompt.
     system:     [{ type: 'text', text: AUTHOR_SYSTEM, cache_control: { type: 'ephemeral' } }],
@@ -58,9 +60,51 @@ export async function runAuthorAgent(
     output_config: { format: { type: 'json_schema', schema: AUTHOR_SCHEMA } },
   })
 
+  assertNotRefused(response, 'loto-audit-author')
   const textBlock = response.content.find(b => b.type === 'text')
   if (!textBlock || textBlock.type !== 'text') throw new Error('Author agent: no text block in response')
   const result = JSON.parse(textBlock.text) as AuthorResult
 
+  assertUsableDraft(result, equipment.equipment_id)
+
   return { result, usage: response.usage ?? null, model: MODEL }
+}
+
+/**
+ * Refuse a draft that would make the machine LESS safe if approved.
+ *
+ * Applying a `procedure_draft` REPLACES the machine's whole step set
+ * (migration 220: delete-then-insert from `new_value -> 'steps'`). A draft
+ * with zero steps therefore deletes the procedure outright and reprints a
+ * blank placard for the panel; a draft still missing a required phase ships a
+ * shorter, still non-compliant procedure that the audit existed to prevent.
+ *
+ * Structured output makes both unlikely, not impossible — a truncated or
+ * degraded response still parses. `/api/generate-loto-steps` already refuses an
+ * empty step list; this is the same guard on the path that can overwrite live
+ * data, plus the phase check that path doesn't need.
+ *
+ * Throwing (rather than staging a bad draft) is deliberate: `processEquipment`
+ * records the failure against the machine, so the deficiency stays visible to
+ * the reviewer instead of being silently "corrected".
+ */
+function assertUsableDraft(result: AuthorResult, equipmentId: string): void {
+  if (!Array.isArray(result.steps) || result.steps.length === 0) {
+    throw new Error(`Author agent: empty step list for ${equipmentId} — refusing to stage a draft that would delete the procedure`)
+  }
+
+  const allowed = new Set<string>(LOTO_STEP_ORDER)
+  const bad = result.steps.map(s => s.step_type).filter(t => !allowed.has(t))
+  if (bad.length > 0) {
+    throw new Error(`Author agent: unknown step_type(s) for ${equipmentId}: ${[...new Set(bad)].join(', ')}`)
+  }
+
+  // The same validator that flagged the original procedure. A "correction" that
+  // still fails it is not a correction.
+  const { missing } = validateProcedure(
+    result.steps.map((s, i) => ({ step_type: s.step_type as LotoStepType, sequence_order: i })),
+  )
+  if (missing.length > 0) {
+    throw new Error(`Author agent: draft for ${equipmentId} is still missing required phase(s): ${missing.join(', ')}`)
+  }
 }

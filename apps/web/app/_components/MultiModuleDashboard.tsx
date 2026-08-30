@@ -1,11 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { UserRoundCog } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
-import { dailyQuote, timeOfDayGreeting } from '@/components/Greeting'
 import { fetchHomeMetrics, type HomeMetrics } from '@soteria/core/homeMetrics'
 import ThemeToggle from '@/components/ThemeToggle'
 import { Hero }                 from './Hero'
@@ -26,6 +25,9 @@ import JhaKpiPanel              from './JhaKpiPanel'
 import IncidentKpiPanel         from './IncidentKpiPanel'
 import BBSKpiPanel              from './BBSKpiPanel'
 import OpenActionsPanel         from './OpenActionsPanel'
+import OshaRegWatchPanel        from './OshaRegWatchPanel'
+import ComingUpPanel            from './ComingUpPanel'
+import TrainingMatrixNavCard    from './TrainingMatrixNavCard'
 
 // Multi-module dashboard — the legacy default home rendered by
 // app/page.tsx for tenants who use more than one safety module.
@@ -46,7 +48,6 @@ import OpenActionsPanel         from './OpenActionsPanel'
 // modules render as advertisements only — no fake metrics on a real
 // safety dashboard.
 
-const CLOCK_TICK_MS      = 1000        // every second so active-permit countdowns tick visibly
 const METRICS_REFRESH_MS = 60 * 1000   // permits / equipment / activity: every minute
 
 export default function MultiModuleDashboard({ embedded = false }: { embedded?: boolean } = {}) {
@@ -55,25 +56,6 @@ export default function MultiModuleDashboard({ embedded = false }: { embedded?: 
   const tenantId = tenant?.id ?? null
   const tenantModules = tenant?.modules ?? null
   const firstName = (profile?.full_name?.trim().split(/\s+/)[0]) || (email?.split('@')[0]) || 'there'
-
-  const [now, setNow] = useState<Date>(() => new Date())
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), CLOCK_TICK_MS)
-    return () => clearInterval(id)
-  }, [])
-
-  const greeting = useMemo(() => timeOfDayGreeting(now), [now])
-  const quoteDateKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`
-  const quote = useMemo(() => {
-    const [year, month, day] = quoteDateKey.split('-').map(Number)
-    return dailyQuote(new Date(year!, month!, day!)).text
-  }, [quoteDateKey])
-  const dateLabel = useMemo(() =>
-    now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }),
-  [now])
-  const timeLabel = useMemo(() =>
-    now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
-  [now])
 
   const [metrics, setMetrics] = useState<HomeMetrics | null>(null)
   const [metricsError, setMetricsError] = useState<string | null>(null)
@@ -107,7 +89,7 @@ export default function MultiModuleDashboard({ embedded = false }: { embedded?: 
   return (
     <div className="animate-panel-in mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">
       {!embedded && (
-        <Hero greeting={greeting} firstName={firstName} dateLabel={dateLabel} timeLabel={timeLabel} quote={quote} />
+        <Hero firstName={firstName} />
       )}
 
       {/* Theme switch — right-aligned strip directly under the hero so
@@ -161,12 +143,11 @@ export default function MultiModuleDashboard({ embedded = false }: { embedded?: 
         error={metricsError}
         loadedAt={metricsLoadedAt}
         refreshing={refreshing}
-        now={now}
         onRefresh={loadMetrics}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <ActivePermitsPanel permits={metrics?.activePermits ?? null} now={now} />
+        <ActivePermitsPanel permits={metrics?.activePermits ?? null} />
         <RecentActivityPanel events={metrics?.recentActivity ?? null} />
       </div>
 
@@ -192,7 +173,20 @@ export default function MultiModuleDashboard({ embedded = false }: { embedded?: 
           gamification leaderboard. Self-gates via isModuleVisible. */}
       <BBSKpiPanel />
 
+      {/* Regulatory Watch — AI-summarized regulation updates, then what is
+          still ahead. Both self-gate via isModuleVisible('osha-reg-watch').
+          The feed rows are global, but each panel filters them to the
+          jurisdictions the tenant operates in, so Cal/OSHA items reach only
+          tenants with a California site. */}
+      <ComingUpPanel />
+      <OshaRegWatchPanel />
+
       <OpenActionsPanel />
+
+      {/* Training & Competency Matrix — admin-only discoverability card.
+          Pure link (no data read), self-hides for non-admins and tenants
+          without the module visible. */}
+      <TrainingMatrixNavCard />
 
       <ComingSoonStrip />
       <ModulesGrid />

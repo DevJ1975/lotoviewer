@@ -25,6 +25,9 @@ import {
 // emails at the same minute).
 
 export const runtime = 'nodejs'
+// One email per active care case across every tenant, and the admin fallback
+// multiplies the sends whenever a case has no manager.
+export const maxDuration = 300
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false

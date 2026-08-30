@@ -10,6 +10,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 import { runRegulatorMachineReview, runRegulatorProgramReview } from '@/lib/loto/audit/agents/regulator'
 import type { DsResult, EhsResult, FpeResult, RegulatorMachineResult, RegulatorProgramResult } from '@/lib/loto/audit/schemas'
+import { OPUS } from '@/lib/ai/models'
 
 const MACHINE_RESULT: RegulatorMachineResult = {
   concurs_with_ehs: false,
@@ -114,7 +115,9 @@ describe('runRegulatorMachineReview — response parsing', () => {
   it('parses the dissent, additional citations, escalations, and narrative', async () => {
     const { result, model } = await runRegulatorMachineReview(client, EQUIPMENT, [step('s1', 'x')], fpe(), ds(), ehs())
 
-    expect(model).toBe('claude-sonnet-4-6')
+    // Assert the registry constant, not a literal — see models.test.ts.
+    // What matters here is that the regulator runs on the OPUS tier.
+    expect(model).toBe(OPUS)
     expect(result.concurs_with_ehs).toBe(false)
     expect(result.additional_citations).toHaveLength(1)
     expect(result.severity_escalations[0]!.to).toBe('critical')

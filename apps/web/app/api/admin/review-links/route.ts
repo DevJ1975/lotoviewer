@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sendReviewLinkEmail } from '@/lib/email/sendReviewLink'
+import { requireTenantAdmin } from '@/lib/auth/tenantGate'
 
 // /api/admin/review-links
 //   GET ?department=Mechanical    — list review_links for the active tenant
@@ -15,73 +15,25 @@ import { sendReviewLinkEmail } from '@/lib/email/sendReviewLink'
 //
 // Tenant scoping: caller's JWT identifies the user; the
 // `x-active-tenant` header identifies the tenant they're acting on.
-// We verify (user, tenant) is a tenant_memberships row with role
-// owner|admin, OR the caller is a superadmin (DB flag + env allowlist).
+// Authorization is lib/auth/tenantGate — owner|admin on the active tenant,
+// or a superadmin (DB flag + env allowlist).
+//
+// That import is load-bearing. This file used to carry its OWN copy of
+// requireTenantAdmin, which checked the membership row's role and nothing
+// else. When the shared gate was hardened to mirror migration 190's RLS
+// functions — rejecting a membership whose invite was cancelled, and any
+// membership in a disabled tenant — the copies here did not follow, so a
+// revoked admin kept full access to this family of routes. That mattered
+// precisely because, as below, RLS is not load-bearing on this path: every
+// query runs through the service-role client, which makes the gate the only
+// access control there is.
+//
 // All inserts are made with the service-role client so RLS isn't
 // load-bearing for this admin path — but we still set tenant_id on
 // every row so the RLS policy from migration 035 lets future admin
 // reads work.
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
-
-type Gate =
-  | { ok: true;  userId: string; userEmail: string | null; tenantId: string }
-  | { ok: false; status: number; message: string }
-
-async function requireTenantAdmin(req: Request): Promise<Gate> {
-  const authHeader = req.headers.get('authorization')
-  if (!authHeader?.startsWith('Bearer ')) {
-    return { ok: false, status: 401, message: 'Missing bearer token' }
-  }
-  const token = authHeader.slice('Bearer '.length)
-
-  const url  = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !anon) {
-    return { ok: false, status: 500, message: 'Supabase env not configured' }
-  }
-
-  const userClient = createClient(url, anon, { auth: { persistSession: false } })
-  const { data: { user }, error } = await userClient.auth.getUser(token)
-  if (error || !user) return { ok: false, status: 401, message: 'Invalid session' }
-
-  const tenantId = req.headers.get('x-active-tenant')?.trim() ?? ''
-  if (!UUID_RE.test(tenantId)) {
-    return { ok: false, status: 400, message: 'Missing or malformed x-active-tenant header' }
-  }
-
-  const admin = supabaseAdmin()
-
-  // Superadmin shortcut — DB flag + env allowlist.
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('is_superadmin')
-    .eq('id', user.id)
-    .maybeSingle()
-  const allow = (process.env.SUPERADMIN_EMAILS ?? '')
-    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
-  const isSuperadmin = !!profile?.is_superadmin
-                    && !!user.email
-                    && allow.includes(user.email.toLowerCase())
-  if (isSuperadmin) {
-    return { ok: true, userId: user.id, userEmail: user.email ?? null, tenantId }
-  }
-
-  // Tenant-membership check — role must be owner or admin to send a
-  // review link. Members and viewers can't reach this endpoint.
-  const { data: membership } = await admin
-    .from('tenant_memberships')
-    .select('role')
-    .eq('user_id',   user.id)
-    .eq('tenant_id', tenantId)
-    .maybeSingle()
-  if (!membership || !['owner', 'admin'].includes(membership.role)) {
-    return { ok: false, status: 403, message: 'Tenant admin or owner required' }
-  }
-
-  return { ok: true, userId: user.id, userEmail: user.email ?? null, tenantId }
-}
 
 // ─── GET ───────────────────────────────────────────────────────────────────
 

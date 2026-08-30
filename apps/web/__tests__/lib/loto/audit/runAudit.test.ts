@@ -152,11 +152,15 @@ function equipment(id: string) {
 }
 
 function fpeOutput(isoVerdict: FpeResult['iso_photo']['verdict']) {
+  // Sub-flags agree with the verdict: a contradictory "match" (flags false) is
+  // itself an unverified signal (safetySignals, Fable finding A-H7), which
+  // would make every "clean machine" test trip the placeholder path.
+  const isoVerified = isoVerdict === 'match'
   const result: FpeResult = {
     equip_photo: { verdict: 'match', confidence: 'high', notes: '' },
     iso_photo: {
-      verdict: isoVerdict, confidence: 'low',
-      shows_isolation_point: false, consistent_with_energy_steps: false, notes: '',
+      verdict: isoVerdict, confidence: isoVerified ? 'high' : 'low',
+      shows_isolation_point: isoVerified, consistent_with_energy_steps: isoVerified, notes: '',
     },
   }
   return { result, usage: null, model: 'm-fpe' }

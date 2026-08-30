@@ -63,6 +63,17 @@ interface Candidate {
   name: string
 }
 
+// A prior run's watermarked placeholder (storagePaths.placeholderIsoPhotoPath
+// writes `<id>_ISO_PLACEHOLDER_<ts>.jpg` into this SAME folder) must never be a
+// candidate: a match here is staged as a VERIFIED field photo (provenance
+// 'field', is_placeholder false), so one generous vision verdict would launder
+// the stand-in past the migration-217 placeholder trigger (Fable 5 finding
+// A-C3). Placard renders are excluded on the same principle — generated
+// artifacts are not field evidence.
+function isGeneratedArtifact(name: string): boolean {
+  return /_ISO_PLACEHOLDER_/i.test(name) || /_placard\./i.test(name)
+}
+
 // Read a stored object as base64 for a vision block. Prefer a direct
 // service-role download by key (the bucket is public for SELECT, but the key
 // read is the most direct and avoids depending on the public-URL host); fall
@@ -102,6 +113,7 @@ async function classifyCandidate(
   const response = await client.messages.create({
     model:      MODEL,
     max_tokens: 600,
+    thinking:   { type: 'disabled' },
     system:     [{ type: 'text', text: FPE_SYSTEM, cache_control: { type: 'ephemeral' } }],
     messages:   [{
       role: 'user',
@@ -147,6 +159,7 @@ export async function findExistingIsoPhoto(
     const folderImages: Candidate[] = (objects ?? [])
       .filter(o => o.name.toLowerCase().endsWith('.jpg'))
       .filter(o => o.name !== currentIsoName)
+      .filter(o => !isGeneratedArtifact(o.name))
       .map(o => ({ key: `${folder}/${o.name}`, name: o.name }))
 
     // Add the wide equipment shot as a candidate: it often frames the
@@ -156,7 +169,7 @@ export async function findExistingIsoPhoto(
     const equipAlreadyListed = equipName != null && folderImages.some(c => c.name === equipName)
     const equipIsCurrentIso = equipName != null && equipName === currentIsoName
     const candidates: Candidate[] =
-      equipName && !equipAlreadyListed && !equipIsCurrentIso
+      equipName && !equipAlreadyListed && !equipIsCurrentIso && !isGeneratedArtifact(equipName)
         ? [...folderImages, { key: `${folder}/${equipName}`, name: equipName }]
         : folderImages
 
