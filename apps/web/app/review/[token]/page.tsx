@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { parseReviewEquipmentParam } from '@/lib/reviewFocus'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 import ReviewClient from './_components/ReviewClient'
 
@@ -48,10 +49,24 @@ interface ReviewLinkEquipmentRow {
   sort_order:   number
 }
 
+interface StagedPhotoRow {
+  equipment_id:  string
+  slot:          'EQUIP' | 'ISO'
+  new_photo_url: string
+}
+
 export default async function ReviewPage({
   params,
-}: { params: Promise<{ token: string }> }) {
+  searchParams,
+}: {
+  params:        Promise<{ token: string }>
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
   const { token } = await params
+  // /qr "Update photo" deep-links here as ?equipment=<id> to focus a single
+  // machine — the public link otherwise renders every active placard, which
+  // is too heavy for a phone.
+  const focusEquipmentId = parseReviewEquipmentParam((await searchParams)?.equipment)
 
   if (!TOKEN_RE.test(token)) notFound()
 
@@ -77,7 +92,7 @@ export default async function ReviewPage({
     return <ErrorScreen title="Link expired" body={`This review link expired on ${formatDate(link.expires_at)}. Reach out to the sender for a fresh one.`} />
   }
 
-  const [{ data: snapshotRows }, { data: prevReviews }, { data: tenantRow }] = await Promise.all([
+  const [{ data: snapshotRows }, { data: prevReviews }, { data: tenantRow }, { data: stagedRows }] = await Promise.all([
     // For per-reviewer (legacy) links, the snapshot pins which equipment
     // the reviewer can see. For public (tenant-wide) links the snapshot
     // is intentionally absent — we render every active equipment row in
@@ -99,12 +114,42 @@ export default async function ReviewPage({
       .select('name')
       .eq('id', link.tenant_id)
       .maybeSingle(),
+    // Pending photo replacements the reviewer already staged on a prior
+    // visit — so a refresh shows the staged image + "pending reconcile"
+    // badge instead of reverting to the live photo.
+    admin
+      .from('loto_review_photo_replacements')
+      .select('equipment_id, slot, new_photo_url')
+      .eq('review_link_id', link.id)
+      .eq('status', 'pending'),
   ])
 
   let equipment: unknown[] = []
   let steps:     unknown[] = []
   let equipmentList: Equipment[] = []
-  if (link.is_public) {
+  if (link.is_public && focusEquipmentId) {
+    // Focused (deep-link) load — one machine only. Keeps the page tiny for a
+    // field worker who scanned a single placard, instead of shipping every
+    // placard's photos + energy-step text to their phone.
+    const [equipmentRes, stepsRes] = await Promise.all([
+      admin
+        .from('loto_equipment')
+        .select('*')
+        .eq('tenant_id', link.tenant_id)
+        .eq('decommissioned', false)
+        .eq('equipment_id', focusEquipmentId)
+        .limit(1),
+      admin
+        .from('loto_energy_steps')
+        .select('*')
+        .eq('tenant_id', link.tenant_id)
+        .eq('equipment_id', focusEquipmentId)
+        .order('step_number', { ascending: true }),
+    ])
+    equipment     = equipmentRes.data ?? []
+    steps         = stepsRes.data ?? []
+    equipmentList = equipment as Equipment[]
+  } else if (link.is_public) {
     // Tenant-wide load — every active equipment row. Sort by department
     // then equipment_id so the supervisor on the floor sees the rows
     // grouped how they walk.
@@ -117,7 +162,7 @@ export default async function ReviewPage({
         .order('department',   { ascending: true })
         .order('equipment_id', { ascending: true }),
       admin
-        .from('loto_steps')
+        .from('loto_energy_steps')
         .select('*')
         .eq('tenant_id', link.tenant_id)
         .order('equipment_id', { ascending: true })
@@ -137,7 +182,7 @@ export default async function ReviewPage({
           .eq('tenant_id', link.tenant_id)
           .in('equipment_id', equipmentIds),
         admin
-          .from('loto_steps')
+          .from('loto_energy_steps')
           .select('*')
           .eq('tenant_id', link.tenant_id)
           .in('equipment_id', equipmentIds)
@@ -159,6 +204,7 @@ export default async function ReviewPage({
     stepsByEquipment.set(s.equipment_id, list)
   }
   const initialReviews = (prevReviews ?? []) as PlacardReviewRow[]
+  const initialStagedPhotos = (stagedRows ?? []) as StagedPhotoRow[]
   const tenantName = tenantRow?.name ?? 'your client'
 
   // If the reviewer is already done, show the read-only thank-you.
@@ -189,6 +235,7 @@ export default async function ReviewPage({
       equipment={equipmentList}
       stepsByEquipment={Object.fromEntries(stepsByEquipment)}
       initialReviews={initialReviews}
+      initialStagedPhotos={initialStagedPhotos}
     />
   )
 }

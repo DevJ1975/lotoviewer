@@ -4,6 +4,7 @@ import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { withCronLogging } from '@/lib/cronInstrumentation'
 import { renderSupportTicketSection, type DigestTicket, type DigestFeedback } from '@/lib/support/digest'
+import { describeSignupGate } from '@/lib/auth/signupGate'
 
 // Daily app-health digest. Aggregates the last 24h of bug reports +
 // audit log + tenant metrics + (when configured) Sentry top issues,
@@ -20,6 +21,9 @@ import { renderSupportTicketSection, type DigestTicket, type DigestFeedback } fr
 // debugging.
 
 export const runtime = 'nodejs'
+// Aggregates 24h across five subsystems, optionally calls the Sentry API, then
+// renders and sends the digest. The external calls are the slow part.
+export const maxDuration = 300
 
 const RECIPIENT  = process.env.DEV_DIGEST_EMAIL ?? 'jamil@trainovations.com'
 const FROM_EMAIL = process.env.DIGEST_FROM_EMAIL
@@ -208,6 +212,27 @@ async function run(req: Request): Promise<NextResponse> {
     }
   }
 
+  // ─── Auth config drift (public signup) ──────────────────────────────────
+  // The setting lives in the Supabase dashboard, so nothing in this repo can
+  // enforce it. GoTrue publishes its own config unauthenticated, so reading
+  // it back once a day is how we notice it drifting open.
+  let signupSection = '_Skipped — NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY not set._'
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey     = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (supabaseUrl && anonKey) {
+    try {
+      const gres = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/settings`, {
+        headers: { apikey: anonKey },
+      })
+      signupSection = gres.ok
+        ? describeSignupGate(await gres.json()).line
+        : `_GoTrue settings returned ${gres.status} — signup state unknown._`
+    } catch (err) {
+      Sentry.captureException(err, { tags: { route: '/api/cron/daily-health-report', stage: 'signup-gate' } })
+      signupSection = '_Signup-config fetch threw — see Sentry for details._'
+    }
+  }
+
   // ─── Compose ────────────────────────────────────────────────────────────
   const dayLabel = new Date().toISOString().slice(0, 10)
   const subject = `SoteriaField — daily health · ${dayLabel}`
@@ -218,7 +243,7 @@ async function run(req: Request): Promise<NextResponse> {
     audit, auditByOp, topAuditTables,
     allTenants, newTenantsLast24h, tenantsByStatus,
     totalMembers, pendingInvites,
-    sentrySection,
+    sentrySection, signupSection,
   })
   const html = `<pre style="font-family: ui-monospace, Menlo, monospace; font-size: 13px; line-height: 1.5; white-space: pre-wrap;">${escapeHtml(text)}</pre>`
 
@@ -264,6 +289,7 @@ interface RenderArgs {
   totalMembers:      number
   pendingInvites:    number
   sentrySection:     string
+  signupSection:     string
 }
 
 function renderText(a: RenderArgs): string {
@@ -299,6 +325,11 @@ function renderText(a: RenderArgs): string {
   // Sentry
   lines.push(`▶ SENTRY — top unresolved issues (last 24h)`)
   for (const line of a.sentrySection.split('\n')) lines.push(`  ${line}`)
+  lines.push('')
+
+  // Auth config
+  lines.push(`▶ AUTH CONFIG`)
+  for (const line of a.signupSection.split('\n')) lines.push(`  ${line}`)
   lines.push('')
 
   // Tenants

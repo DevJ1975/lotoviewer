@@ -1,6 +1,6 @@
 # SoteriaField Security Posture
 
-_Last reviewed: 2026-05-09. Owner: platform team._
+_Last reviewed: 2026-07-28. Owner: platform team._
 
 This document is the customer-facing summary of how SoteriaField protects sensitive data. It is intended for due-diligence reviews. Each section names the control, the implementation file(s), and the verifiable test or check.
 
@@ -21,6 +21,8 @@ Compromising one layer does not by itself expose data.
 - Bearer tokens are required on all `/api/*` routes except the public anonymous-intake (`/api/anonymous-report/*`), public review portal (`/api/review/[token]`), and webhook receivers.
 - Superadmin status requires **both** the `is_superadmin` flag in `profiles` and the user's email present in the `SUPERADMIN_EMAILS` deploy env var. Compromising one is insufficient.
 - `is_admin` (platform admin, distinct from tenant admin) is reserved for internal staff and never granted to tenant users. Audited quarterly.
+- `profiles.is_admin`, `profiles.is_superadmin`, `profiles.email` and `profiles.id` are writable only by the service role. Enforced in the database by the `trg_profiles_guard_privileged_columns` trigger (`migrations/249_profiles_privileged_columns.sql`), because an RLS `UPDATE` policy is row-scoped and cannot restrict which columns move. Self-service edits (name, avatar, onboarding, password-change flag) are unaffected.
+- Post-authentication redirects are constrained to same-origin paths by `lib/security/safeRedirect.ts`.
 
 ## 3. Cross-tenant isolation
 
@@ -28,8 +30,10 @@ Every domain table is protected by RLS using the `active_tenant_id()` PL/pgSQL f
 
 Service-role queries that bypass RLS are audited in `apps/web/lib/supabaseAdmin.ts` callers. Each call site filters by `tenant_id = gate.tenantId`. Regression coverage:
 
-- `apps/web/__tests__/middleware.test.ts` — Origin/Host CSRF defence.
-- (Existing) every tenant-scoped route has a unit test asserting that a forged `x-active-tenant` returns 403.
+- `apps/web/__tests__/proxy.test.ts` — Origin/Host CSRF defence. (Next.js 16 renamed the `middleware` convention to `proxy`; this file was previously listed here under its old name.)
+- `apps/web/__tests__/lib/auth/superadmin.test.ts` — both superadmin gates: the `SUPERADMIN_EMAILS` env allowlist and the `profiles.is_superadmin` DB flag.
+- `apps/web/__tests__/api/invites/acceptFlow.test.ts` — invite redemption, including the already-signed-in takeover guard and the concurrent-claim race.
+- Most tenant-scoped routes have a unit test asserting that a forged `x-active-tenant` returns 403. This is not yet universal; `lib/auth/tenantGate.ts` itself has no direct unit test.
 
 ### Known historical exposure window
 
@@ -82,7 +86,18 @@ Storage paths are tenant- or user-scoped (`{tenant_id}/…` or `{user_id}.{ext}`
 ## 9. CSRF / Origin defences
 
 - Primary defence: SameSite=Lax cookies + `Authorization: Bearer` JWT. No state-changing route reads cookies for auth.
-- Secondary defence (added in this hardening pass): `apps/web/middleware.ts` cross-checks `Origin` against `Host` on every POST/PATCH/PUT/DELETE under `/api/*`. Mismatches return 403. Bypass list: `/api/cron/*`, `/api/webhooks/*`, `/api/anon*`, `/api/review/*`, `/api/scan/*`, `/api/health` — each has its own primary defence (cron secret, webhook signature, captcha, token-as-credential).
+- Secondary defence: `apps/web/proxy.ts` cross-checks `Origin` against `Host` on every POST/PATCH/PUT/DELETE under `/api/*`. Mismatches return 403. Bypass list: `/api/cron/*`, `/api/webhooks/*`, `/api/anon*`, `/api/review/*`, `/api/scan/*`, `/api/health` — each has its own primary defence (cron secret, webhook signature, captcha, token-as-credential).
+
+## 9a. Response security headers
+
+Set globally in `apps/web/next.config.ts`:
+
+- `Strict-Transport-Security: max-age=63072000; includeSubDomains` (no `preload` — deliberately reversible).
+- `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`.
+- `Referrer-Policy: no-referrer`. Chosen over `strict-origin-when-cross-origin` because that still sends the full URL, query string included, on same-origin requests — and the invite token travels in `/accept-invite?token=…`.
+- `Permissions-Policy` denying microphone, payment and USB; camera and geolocation remain `self` for QR scanning, photo capture and incident/weather location.
+- `Content-Security-Policy` enforcing `frame-ancestors 'none'`, `base-uri 'self'`, `object-src 'none'`, `form-action 'self'` — directives that constrain no scripts and so carry no breakage risk.
+- `Content-Security-Policy-Report-Only` carries the fuller policy we intend to enforce. It is report-only pending a violation-collection pass; `script-src` retains `'unsafe-inline'` because Next.js injects inline bootstrap scripts.
 
 ## 10. Open items / scheduled work
 
@@ -90,9 +105,15 @@ The hardening pass landing alongside this document closes the customer-visible C
 
 | Item | Severity | Why deferred | Target |
 |---|---|---|---|
-| Tenant API key envelope encryption (`tenants.settings.anthropic_api_key` → `tenant_secrets` table with `pgp_sym_encrypt`) | Critical | Requires KEK provisioning + customer coordination. Dry-run migration prepared as `migrations/114_*.sql`. | Within 2 weeks. |
-| `loto-photos` storage SELECT — restrict to tenant scope | Critical | Requires verification that no client component fetches via public URL. Migration drafted as `migrations/115_*.sql`. | Within 1 week. |
-| `fire_webhooks()` URL safety (private-IP rejection, scheme allowlist) | High | Requires audit of live tenant webhook configs to avoid breaking legit deliveries. Migration drafted as `migrations/116_*.sql`. | Within 2 weeks. |
+| Tenant API key envelope encryption (`tenants.settings.anthropic_api_key` → `tenant_secrets` table with `pgp_sym_encrypt`) | Critical | Requires KEK provisioning + customer coordination. Not yet drafted. (An earlier revision cited `migrations/114_*.sql`; that slot holds `114_strike_core.sql`, unrelated.) | Within 2 weeks. |
+| `loto-photos` storage SELECT — restrict to tenant scope | Critical | Requires verification that no client component fetches via public URL. Not yet drafted. (An earlier revision cited `migrations/115_*.sql`; that slot holds `115_command_center_safety_alerts.sql`, unrelated.) | Within 1 week. |
+| `fire_webhooks()` URL safety (private-IP rejection, scheme allowlist) | High | Requires audit of live tenant webhook configs to avoid breaking legit deliveries. Not yet drafted. (An earlier revision cited `migrations/116_*.sql`; that slot holds `116_strike_studio_superadmin_only.sql`, unrelated. `is_safe_webhook_url(text)` does exist, added in `165_advisor_sweep.sql`.) | Within 2 weeks. |
+| Server-side page protection for `/admin` and `/superadmin` | Medium | Page gating is client-side (`components/AuthGate.tsx`); the API layer is gated server-side, so this is defence-in-depth. A server-side fix needs `@supabase/ssr` and a session-handling change across the app. | Roadmap. |
+| Supabase leaked-password protection is off | Medium | Dashboard setting, not in this repo. Password length (8) is enforced server-side only on `/api/invites/accept`; `/welcome` and `/reset-password` call `supabase.auth.updateUser` from the browser, so the real policy is the project setting. | Next config review. |
+| Invite lifecycle absent from `audit_log` | Medium | `invite_tokens` rows record state (`used_at`, `superseded_at`) but no actor-attributed event. | Roadmap. |
+| `/api/invites/refresh` accepts arbitrarily old tokens | Low | Possession of any unused token, however stale, re-issues a link, so the 14-day TTL does not bound a leaked unused link. Bounded by the already-signed-in guard. | Roadmap. |
+| `consumeInviteToken` claims on `used_at` only | Low | Does not re-check `superseded_at`/`expires_at`, leaving a narrow window after `verifyInviteToken`. Impact is accepting a link that was valid moments earlier. | Roadmap. |
+| `issueInviteToken` supersede+insert is not transactional | Low | Concurrent issues can leave two active tokens. Both are single-use and claimed atomically. A partial unique index cannot be built `CONCURRENTLY` inside this repo's transactional migration convention. | Roadmap. |
 | Webhook secret encryption at rest | Low | Same envelope path as the tenant API key fix. | Within 4 weeks. |
 | Per-tenant Voyage API key override | Low | Feature gap, not vulnerability. | Roadmap. |
 | Review token entropy 128-bit → 256-bit | Low | Requires reissue flow for live links. | Roadmap. |
@@ -100,7 +121,8 @@ The hardening pass landing alongside this document closes the customer-visible C
 
 ## 11. Verification
 
-- Continuous integration: `tsc --noEmit` clean, **2336/2336** vitest passing including 37 security regression tests covering magic-byte verification, error sanitisation, constant-time comparison, and Origin/Host enforcement.
+- Continuous integration: `.github/workflows/repo-health.yml` runs the repository guards (migration numbering, nav/version sync, wiki sync) and a scoped **auth and security regression suite** (`npm run test:security`, 216 assertions) covering the superadmin gate, the invite lifecycle, Origin/Host enforcement, the redirect guard, the Sentry scrubber, magic-byte verification, error sanitisation and constant-time comparison. A merge is blocked if any of those fail.
+- Not yet gated in CI: the full vitest suite, `eslint`, `tsc --noEmit` and `next build`. The full suite has 127 pre-existing failures and eslint 82 pre-existing errors (stale UI fixtures after the Spectrum restyle), so a blanket gate would land red; widening the gate is tracked in `docs/deferred-work.md`. An earlier revision of this document claimed CI ran `tsc --noEmit` clean with 2336/2336 vitest passing — it never did.
 - The hardening pass commit (this PR) includes the full set of code changes referenced in §4–§9.
 - Manual probe scripts can be supplied on request (forged `x-active-tenant`, raw-error fuzz, malformed-PNG signature, mismatched-Origin POST).
 

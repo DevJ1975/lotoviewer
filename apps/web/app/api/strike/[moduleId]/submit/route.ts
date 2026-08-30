@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
-import { requireTenantMember } from '@/lib/auth/tenantGate'
+import { requireStrikeMember } from '@/lib/strike/gate'
+import { checkMemoryRateLimit } from '@/lib/rateLimit/memory'
+import { loadPublishedStrikeVersion } from '@/lib/strike/moduleAccess'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
   isStrikeAssignmentApplicable,
@@ -8,6 +10,7 @@ import {
   type StrikeAssignmentTargetType,
   type StrikeQuestionType,
 } from '@soteria/core/strike'
+import { resolveStrikeVideo } from '@soteria/core/strikeMedia'
 
 export const runtime = 'nodejs'
 
@@ -17,6 +20,16 @@ interface SubmitBody {
   module_version_id?: unknown
   assignment_id?: unknown
   answers?: unknown
+  watch?: unknown
+}
+
+// Self-reported playback progress from the learner's player. Recorded as
+// evidence and enforced against the tenant's require_watch_percent knob;
+// it is client-claimed, so it deters skipping rather than proving viewing.
+interface WatchProgress {
+  percent_watched: number
+  max_position_seconds: number | null
+  duration_seconds: number | null
 }
 
 interface RouteContext {
@@ -24,11 +37,19 @@ interface RouteContext {
 }
 
 export async function POST(req: Request, ctx: RouteContext) {
-  const gate = await requireTenantMember(req)
+  const gate = await requireStrikeMember(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   const { moduleId } = await ctx.params
   if (!UUID_RE.test(moduleId)) return NextResponse.json({ error: 'Invalid module id' }, { status: 400 })
+
+  const limit = checkMemoryRateLimit(`strike-submit:${gate.tenantId}:${gate.userId}`, 10, 60_000)
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: 'Too many submissions. Try again in a minute.' },
+      { status: 429, headers: { 'retry-after': String(limit.retryAfterSec ?? 60) } },
+    )
+  }
 
   let body: SubmitBody
   try { body = await req.json() as SubmitBody }
@@ -41,37 +62,40 @@ export async function POST(req: Request, ctx: RouteContext) {
     ? body.assignment_id
     : null
   const answersByQuestionId = isAnswerMap(body.answers) ? body.answers : {}
+  const watch = parseWatchProgress(body.watch)
 
   try {
     const admin = supabaseAdmin()
 
-    const { data: moduleRow, error: moduleErr } = await admin
-      .from('strike_modules')
-      .select('id,tenant_id,library_scope,status')
-      .eq('id', moduleId)
-      .maybeSingle()
-    if (moduleErr) throw new Error(moduleErr.message)
-    if (!moduleRow || moduleRow.status !== 'published') {
-      return NextResponse.json({ error: 'Module not found' }, { status: 404 })
-    }
-    if (
-      moduleRow.library_scope === 'tenant'
-      && moduleRow.tenant_id !== gate.tenantId
-      && gate.role !== 'superadmin'
-    ) {
-      return NextResponse.json({ error: 'Module not found' }, { status: 404 })
+    const lookup = await loadPublishedStrikeVersion(admin, {
+      moduleId,
+      moduleVersionId,
+      tenantId: gate.tenantId,
+      role: gate.role,
+    })
+    if (!lookup.ok) return NextResponse.json({ error: lookup.message }, { status: lookup.status })
+    const { version } = lookup
+
+    if (version.retake_limit != null) {
+      const { count, error: attemptCountErr } = await admin
+        .from('strike_attempts')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', gate.userId)
+        .eq('module_version_id', moduleVersionId)
+        .not('submitted_at', 'is', null)
+      if (attemptCountErr) throw new Error(attemptCountErr.message)
+      // Count-then-insert race accepted: this is a pacing limit, not a
+      // security boundary, and concurrent submits from one learner are rare.
+      if ((count ?? 0) >= version.retake_limit) {
+        return NextResponse.json(
+          { error: 'Retake limit reached for this module version.' },
+          { status: 409 },
+        )
+      }
     }
 
-    const { data: version, error: versionErr } = await admin
-      .from('strike_module_versions')
-      .select('id,module_id,tenant_id,library_scope,status,passing_score')
-      .eq('id', moduleVersionId)
-      .eq('module_id', moduleId)
-      .maybeSingle()
-    if (versionErr) throw new Error(versionErr.message)
-    if (!version || version.status !== 'published') {
-      return NextResponse.json({ error: 'Published version not found' }, { status: 404 })
-    }
+    const watchGate = await checkWatchRequirement(admin, gate.tenantId, version, watch)
+    if (!watchGate.ok) return NextResponse.json({ error: watchGate.message }, { status: 422 })
 
     if (assignmentId) {
       const { data: assignment, error: assignmentErr } = await admin
@@ -104,10 +128,22 @@ export async function POST(req: Request, ctx: RouteContext) {
 
     const { data: questions, error: questionErr } = await admin
       .from('strike_quiz_questions')
-      .select('id,question_type,required,points')
+      .select('id,question_type,required,points,explanation')
       .eq('module_version_id', moduleVersionId)
       .order('sort_order', { ascending: true })
     if (questionErr) throw new Error(questionErr.message)
+
+    // A version with no questions scores 100 by definition (possiblePoints
+    // is zero), so without this gate a bare `{"answers":{}}` POST writes a
+    // passing, version-bound completion — the exact record an auditor pulls.
+    // The learner UI has always sent an acknowledgement here; now the server
+    // requires it instead of trusting the client to have asked.
+    if ((questions ?? []).length === 0 && answersByQuestionId.acknowledgement !== true) {
+      return NextResponse.json(
+        { error: 'Acknowledge that you reviewed the instruction before submitting.' },
+        { status: 422 },
+      )
+    }
 
     const questionIds = (questions ?? []).map(q => q.id as string)
     const { data: answers, error: answerErr } = questionIds.length > 0
@@ -155,6 +191,7 @@ export async function POST(req: Request, ctx: RouteContext) {
         client_context: {
           mode: 'learner_player',
           missed_question_ids: score.missedQuestionIds,
+          ...(watch ? { watch, watch_evidence: 'client_claimed' } : {}),
         },
       })
       .select('id')
@@ -179,17 +216,81 @@ export async function POST(req: Request, ctx: RouteContext) {
             mode: 'quiz',
             earned_points: score.earnedPoints,
             possible_points: score.possiblePoints,
+            ...(watch ? { watch, watch_evidence: 'client_claimed' } : {}),
           },
         })
       if (completionErr) throw new Error(completionErr.message)
     }
 
-    return NextResponse.json({ attempt_id: attempt.id, ...score }, { status: 201 })
+    // Explanations are revoked from `authenticated` by the
+    // strike_security_hardening migration precisely
+    // so they can't be read before answering. Returning them here — only for
+    // what the learner actually missed — is the feedback path that replaces
+    // the old give-away render.
+    const explanationByQuestionId = new Map(
+      (questions ?? [])
+        .filter(q => typeof q.explanation === 'string' && q.explanation.trim().length > 0)
+        .map(q => [q.id as string, (q.explanation as string).trim()]),
+    )
+    const missedFeedback = score.missedQuestionIds.map(questionId => ({
+      question_id: questionId,
+      explanation: explanationByQuestionId.get(questionId) ?? null,
+    }))
+
+    return NextResponse.json(
+      { attempt_id: attempt.id, ...score, missedFeedback },
+      { status: 201 },
+    )
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
     Sentry.captureException(e, { tags: { route: 'strike/submit' } })
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 })
   }
+}
+
+async function checkWatchRequirement(
+  admin: ReturnType<typeof supabaseAdmin>,
+  tenantId: string,
+  version: { video_external_id: string | null; video_meta: Record<string, unknown> | null },
+  watch: WatchProgress | null,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  // Modules without a playable video have nothing to watch.
+  const source = resolveStrikeVideo(version)
+  if (source.kind !== 'vimeo') return { ok: true }
+
+  const { data: settings, error } = await admin
+    .from('strike_tenant_settings')
+    .select('require_watch_percent')
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+
+  const required = settings?.require_watch_percent
+  if (typeof required !== 'number' || required <= 0) return { ok: true }
+
+  if (!watch || watch.percent_watched < required) {
+    return { ok: false, message: `Watch at least ${required}% of the video before submitting the quiz.` }
+  }
+  return { ok: true }
+}
+
+function parseWatchProgress(value: unknown): WatchProgress | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const percent = toFiniteNumber(record.percent_watched)
+  if (percent === null) return null
+  return {
+    percent_watched: Math.min(100, Math.max(0, Math.round(percent))),
+    max_position_seconds: clampNonNegative(toFiniteNumber(record.max_position_seconds)),
+    duration_seconds: clampNonNegative(toFiniteNumber(record.duration_seconds)),
+  }
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function clampNonNegative(value: number | null): number | null {
+  return value === null ? null : Math.max(0, Math.round(value))
 }
 
 function isAnswerMap(value: unknown): value is Record<string, string[] | string | boolean> {

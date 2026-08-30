@@ -76,6 +76,26 @@
     {
       "path": "/api/cron/fleet-document-expiry-reminders",
       "schedule": "45 12 * * *"
+    },
+    {
+      "path": "/api/cron/check-regulation-updates",
+      "schedule": "0 8 1 */2 *"
+    },
+    {
+      "path": "/api/cron/osha-reg-watch",
+      "schedule": "0 8 1 * *"
+    },
+    {
+      "path": "/api/cron/loto-audit-resume",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/vision-hazard-sweep",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/vision-sweep-resume",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

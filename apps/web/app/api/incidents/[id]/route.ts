@@ -101,6 +101,18 @@ export async function PATCH(req: Request, ctx: RouteContext) {
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
   const requestedFields = Object.keys(body) as Array<keyof PatchBody>
+
+  // Choosing the guard needs the field names, so that much has to happen
+  // before the gate — but it only reads keys and tells the caller nothing.
+  // Everything that *does* describe the schema (unknown-field rejection,
+  // enum validation) runs after the gate, so an unauthenticated caller
+  // gets a flat 401 instead of a 400/401 oracle for probing field names.
+  const needsAdmin = requestedFields.some(k => ADMIN_FIELDS.includes(k))
+  const gate = needsAdmin
+    ? await requireTenantAdmin(req)
+    : await requireTenantMember(req)
+  if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
   if (requestedFields.length === 0) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
   }
@@ -110,11 +122,6 @@ export async function PATCH(req: Request, ctx: RouteContext) {
       return NextResponse.json({ error: `Unknown field: ${k}` }, { status: 400 })
     }
   }
-  const needsAdmin = requestedFields.some(k => ADMIN_FIELDS.includes(k))
-  const gate = needsAdmin
-    ? await requireTenantAdmin(req)
-    : await requireTenantMember(req)
-  if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   // Validate enum values early — DB CHECK constraint is the authority
   // but we want a 400 with a helpful message instead of a 500.

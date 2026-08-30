@@ -28,6 +28,7 @@ function RiskListPageInner() {
   const search = useSearchParams()
   const router = useRouter()
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
 
   const filters = useMemo<RiskFilterState>(() => parseRiskFilters(search), [search])
   const config  = useMemo(() => readRiskConfig(tenant?.settings ?? null), [tenant?.settings])
@@ -43,7 +44,7 @@ function RiskListPageInner() {
       const { data: { session } } = await supabase.auth.getSession()
       const headers: Record<string, string> = {}
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
-      if (tenant?.id)            headers['x-active-tenant'] = tenant.id
+      if (tenantId)              headers['x-active-tenant'] = tenantId
 
       const params = toApiParams(filters)
       const res = await fetch(`/api/risk?${params.toString()}`, { headers })
@@ -56,7 +57,7 @@ function RiskListPageInner() {
     } finally {
       setLoading(false)
     }
-  }, [filters, tenant?.id])
+  }, [filters, tenantId])
 
   useEffect(() => { void fetchData() }, [fetchData])
 

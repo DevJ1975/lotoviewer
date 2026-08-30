@@ -7,6 +7,15 @@ import { getAnthropic, aiErrorToResponse } from '@/lib/ai/client'
 import { checkAiRateLimit, logAiInvocation } from '@/lib/ai/rateLimit'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 
+// An AI route's worst case is `timeout x (retries + 1)`, and it must fit
+// inside maxDuration or the platform kills the function mid-flight and the
+// caller gets a raw 504 rather than any error this code produces. This route
+// asks for up to 4,096 tokens,
+// and previously declared no ceiling at all — so it inherited the platform
+// default, which is far shorter than a single model call.
+export const runtime     = 'nodejs'
+export const maxDuration = 90
+
 // POST /api/incidents/[id]/classify/ai-suggest
 //
 // Hands the incident description + injury detail to Claude Haiku
@@ -158,7 +167,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
 
     let client: Anthropic
     try {
-      client = await getAnthropic(gate.tenantId)
+      client = await getAnthropic(gate.tenantId, { timeoutMs: 60_000, maxRetries: 0 })
     } catch (err) {
       const mapped = aiErrorToResponse(err, 'classify-recordability')
       Sentry.captureException(err, { tags: { ...mapped.tags, route: '/api/incidents/classify/ai-suggest' } })

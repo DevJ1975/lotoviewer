@@ -2,9 +2,8 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { verifyJPEG } from '@/lib/security/magicBytes'
-import { equipmentPhotoPath, type PhotoSlot } from '@soteria/core/storagePaths'
+import { stagingReviewPhotoPath, type PhotoSlot } from '@soteria/core/storagePaths'
 import { sealReviewPlacards } from '@/lib/sealedArtifact'
-import { regenerateAndUploadPlacard } from '@/lib/loto/regeneratePlacard'
 
 // Public review-portal API. No auth — the URL token is the auth.
 // Service-role under the hood; every request:
@@ -73,8 +72,10 @@ async function lookupLink(token: string): Promise<LinkLookup> {
 
 interface PostBody {
   action?:        unknown
-  // submit-note, mark-for-review
+  // submit-note, mark-for-review, undo-photo-replace
   equipment_id?:  unknown
+  // undo-photo-replace
+  slot?:          unknown
   status?:        unknown
   notes?:         unknown
   // signoff, mark-for-review
@@ -254,6 +255,53 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     return NextResponse.json({ ok: true })
   }
 
+  // ─── undo-photo-replace ─────────────────────────────────────────────────
+  // Drop a staged (pending) replacement before sign-off: delete the row and
+  // its staged object so the tile reverts to the live photo. Idempotent —
+  // no pending row is a no-op. Blocked once the review is signed off.
+  if (action === 'undo-photo-replace') {
+    if (lookup.link.signed_off_at) {
+      return NextResponse.json({ error: 'This review has already been signed off.' }, { status: 409 })
+    }
+    const equipmentId = typeof body.equipment_id === 'string' ? body.equipment_id.trim() : ''
+    const slot        = typeof body.slot === 'string' ? body.slot : ''
+    if (!equipmentId) {
+      return NextResponse.json({ error: 'equipment_id required' }, { status: 400 })
+    }
+    if (slot !== 'EQUIP' && slot !== 'ISO') {
+      return NextResponse.json({ error: 'slot must be EQUIP or ISO' }, { status: 400 })
+    }
+    const { data: row, error: findErr } = await admin
+      .from('loto_review_photo_replacements')
+      .select('id, storage_path')
+      .eq('review_link_id', lookup.link.id)
+      .eq('equipment_id',   equipmentId)
+      .eq('slot',           slot)
+      .eq('status',         'pending')
+      .maybeSingle()
+    if (findErr) {
+      Sentry.captureException(findErr, { tags: { route: 'review/[token]', stage: 'undo-photo-lookup' } })
+      return NextResponse.json({ error: findErr.message }, { status: 500 })
+    }
+    if (row) {
+      const { error: delErr } = await admin
+        .from('loto_review_photo_replacements')
+        .delete()
+        .eq('id', row.id)
+      if (delErr) {
+        Sentry.captureException(delErr, { tags: { route: 'review/[token]', stage: 'undo-photo-delete' } })
+        return NextResponse.json({ error: delErr.message }, { status: 500 })
+      }
+      if (row.storage_path) {
+        const { error: rmErr } = await admin.storage.from('loto-photos').remove([row.storage_path])
+        if (rmErr) {
+          Sentry.captureException(rmErr, { tags: { route: 'review/[token]', stage: 'undo-photo-object' } })
+        }
+      }
+    }
+    return NextResponse.json({ ok: true })
+  }
+
   // ─── signoff ────────────────────────────────────────────────────────────
   // Final write. Sets signed_off_at + the signature payload + IP / UA
   // for audit. Capping at one signoff per link — if the reviewer has
@@ -331,6 +379,24 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       Sentry.captureException(sealErr, { tags: { route: 'review/[token]', stage: 'seal-artifacts' } })
     }
 
+    // Reconcile-on-signoff hook. Apply any photos the reviewer staged so
+    // sign-off "swaps them at the end" without an admin round-trip. Runs
+    // after sealing (the sealed artifact captures the signed-off placards;
+    // the staged improvements then land and null placard_url for re-render).
+    // Idempotent and best-effort — a miss surfaces in Sentry and the admin
+    // "Apply photo replacements" action can still finish the job.
+    try {
+      const { error: reconcileErr } = await admin.rpc('reconcile_review_link_photos', {
+        p_review_link_id: lookup.link.id,
+        p_applied_by:     null,
+      })
+      if (reconcileErr) {
+        Sentry.captureException(reconcileErr, { tags: { route: 'review/[token]', stage: 'reconcile-on-signoff' } })
+      }
+    } catch (reconcileErr) {
+      Sentry.captureException(reconcileErr, { tags: { route: 'review/[token]', stage: 'reconcile-on-signoff' } })
+    }
+
     return NextResponse.json({ ok: true })
   }
 
@@ -388,7 +454,9 @@ async function handlePhotoReplace(
   }
 
   const admin = supabaseAdmin()
-  const storagePath = equipmentPhotoPath(link.tenant_id, equipmentId, slot as PhotoSlot)
+  // Park the upload in the staging area (NOT the live equipmentPhotoPath).
+  // Nothing on loto_equipment changes until an admin reconciles.
+  const storagePath = stagingReviewPhotoPath(link.id, equipmentId, slot as PhotoSlot)
   const bucket = admin.storage.from('loto-photos')
   const { error: uploadErr } = await bucket.upload(storagePath, bytes, {
     contentType: 'image/jpeg',
@@ -406,64 +474,45 @@ async function handlePhotoReplace(
     null
   const userAgent = req.headers.get('user-agent') ?? null
 
-  const { data: result, error: replaceErr } = await admin.rpc('apply_loto_review_photo_replacement', {
-    p_review_link_id: link.id,
-    p_equipment_id: equipmentId,
-    p_slot: slot,
-    p_new_photo_url: publicUrl,
-    p_storage_path: storagePath,
-    p_ip: ip,
-    p_user_agent: userAgent,
+  // Stage the replacement as a pending row. The RPC supersedes any prior
+  // pending row for this slot and returns its storage path so we can drop
+  // the now-orphaned object.
+  const { data: staged, error: stageErr } = await admin.rpc('stage_loto_review_photo_replacement', {
+    p_review_link_id:   link.id,
+    p_equipment_id:     equipmentId,
+    p_slot:             slot,
+    p_new_photo_url:    publicUrl,
+    p_storage_path:     storagePath,
+    p_replaced_by_name: reviewerName,
+    p_ip:               ip,
+    p_user_agent:       userAgent,
   })
 
-  if (replaceErr) {
-    Sentry.captureException(replaceErr, { tags: { route: 'review/[token]', stage: 'replace-photo-apply' } })
+  if (stageErr) {
+    Sentry.captureException(stageErr, { tags: { route: 'review/[token]', stage: 'replace-photo-stage' } })
     const { error: cleanupErr } = await bucket.remove([storagePath])
     if (cleanupErr) {
       Sentry.captureException(cleanupErr, { tags: { route: 'review/[token]', stage: 'replace-photo-cleanup' } })
     }
-    return rpcErrorResponse(replaceErr)
+    return rpcErrorResponse(stageErr)
   }
 
-  // Patch the audit row created by the RPC with the typed reviewer name.
-  // The RPC predates the supervisor flow and only captures IP + UA; we
-  // attribute by name post-hoc rather than push the column through the
-  // RPC signature (which would require a SECURITY DEFINER migration).
-  // The row we want is the most recent replacement for (link, eq, slot)
-  // — there's exactly one per call because the RPC inserts before
-  // returning.
-  await admin
-    .from('loto_review_photo_replacements')
-    .update({ replaced_by_name: reviewerName })
-    .eq('review_link_id', link.id)
-    .eq('equipment_id',   equipmentId)
-    .eq('slot',           slot)
-    .order('replaced_at', { ascending: false })
-    .limit(1)
-
-  const photoStatus = Array.isArray(result) && typeof result[0]?.photo_status === 'string'
-    ? result[0].photo_status
-    : 'partial'
-
-  // Inline placard regeneration. Errors here are non-fatal — the photo
-  // is already in storage and the equipment row points to it, so a
-  // later admin viewer can re-render. We surface in Sentry so a
-  // recurring failure is visible.
-  let placardUrl: string | null = null
-  try {
-    const regen = await regenerateAndUploadPlacard(admin, link.tenant_id, equipmentId)
-    placardUrl = regen.placardUrl
-  } catch (regenErr) {
-    Sentry.captureException(regenErr, { tags: { route: 'review/[token]', stage: 'placard-regen' } })
+  const supersededPath = Array.isArray(staged) && typeof staged[0]?.superseded_storage_path === 'string'
+    ? staged[0].superseded_storage_path
+    : null
+  if (supersededPath && supersededPath !== storagePath) {
+    const { error: orphanErr } = await bucket.remove([supersededPath])
+    if (orphanErr) {
+      Sentry.captureException(orphanErr, { tags: { route: 'review/[token]', stage: 'replace-photo-supersede-cleanup' } })
+    }
   }
 
   return NextResponse.json({
-    ok: true,
+    ok:           true,
     equipment_id: equipmentId,
     slot,
-    public_url:   publicUrl,
-    photo_status: photoStatus,
-    placard_url:  placardUrl,
+    staged_url:   publicUrl,
+    status:       'pending',
   })
 }
 

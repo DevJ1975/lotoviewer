@@ -9,17 +9,25 @@ import {
   SEVERE_INJURY_TRIGGER_LABEL,
   REPORT_METHODS,
   REPORT_METHOD_LABEL,
+  REPORTING_BASIS_LABEL,
+  REPORTING_JURISDICTION_LABEL,
   evaluateSevereInjuryReport,
   reportingWindowHours,
   type SevereInjuryTrigger,
   type ReportMethod,
+  type ReportingJurisdiction,
   type SevereInjuryReportStatus,
 } from '@soteria/core/oshaSevereInjuryReport'
 
-// OSHA 1904.39 severe-injury reporting tracker. Surfaces a live countdown
-// to the 8h (fatality) / 24h (hospitalization, amputation, loss of an eye)
-// reporting deadline per flagged trigger, and records the filing
-// (method + OSHA case number) so there's proof the obligation was met.
+// Severe-injury reporting tracker. Surfaces a live countdown to the
+// reporting deadline per flagged trigger, and records the filing (method +
+// case number) so there's proof the obligation was met.
+//
+// The window depends on jurisdiction — federal 1904.39 splits 8h (fatality)
+// / 24h (the rest), while Cal/OSHA requires 8h for all four. Each saved row
+// carries the jurisdiction it was created under, and the countdown uses THAT
+// rather than re-deriving it, so re-pointing a facility later never silently
+// moves a deadline someone was already held to.
 
 interface ReportRow {
   id:               string
@@ -29,6 +37,7 @@ interface ReportRow {
   report_method:    ReportMethod | null
   osha_case_number: string | null
   notes:            string | null
+  reporting_jurisdiction: ReportingJurisdiction | null
 }
 
 interface Props {
@@ -52,15 +61,21 @@ function toLocalInput(iso: string): string {
 }
 
 function humanizeHours(hours: number): string {
-  const abs = Math.abs(hours)
-  const h = Math.floor(abs)
-  const m = Math.round((abs - h) * 60)
+  // Round to whole minutes FIRST, then split. Flooring the hours and rounding
+  // the minutes independently lets a value like 7.999 render as "7h 60m"
+  // (round(0.999·60) === 60) instead of "8h".
+  const totalMinutes = Math.round(Math.abs(hours) * 60)
+  const h = Math.floor(totalMinutes / 60)
+  const m = totalMinutes % 60
   return m === 0 ? `${h}h` : `${h}h ${m}m`
 }
 
 export default function RegulatoryReportingPanel({ incidentId, defaultBasisAt }: Props) {
   const { tenant } = useTenant()
   const [rows, setRows]   = useState<ReportRow[] | null>(null)
+  // Jurisdiction a NEW trigger would be filed under, resolved server-side
+  // from the incident's facility. Saved rows carry their own.
+  const [jurisdiction, setJurisdiction] = useState<ReportingJurisdiction>('federal')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy]   = useState(false)
   const [showAdd, setShowAdd] = useState(false)
@@ -88,11 +103,13 @@ export default function RegulatoryReportingPanel({ incidentId, defaultBasisAt }:
 
   const load = useCallback(async () => {
     if (!tenant?.id) return
+    setError(null)
     try {
       const res = await fetch(`/api/incidents/${incidentId}/severe-injury-report`, { headers: await buildHeaders() })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
       setRows(body.reports as ReportRow[])
+      if (body.jurisdiction) setJurisdiction(body.jurisdiction as ReportingJurisdiction)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load reporting status.')
     }
@@ -158,22 +175,42 @@ export default function RegulatoryReportingPanel({ incidentId, defaultBasisAt }:
   }
 
   if (rows === null) {
+    // A load failure leaves rows null with error set. This guard runs before
+    // the error banner further down is ever reached, so surface the error and
+    // a retry HERE — otherwise a failed GET spins forever with no way out.
     return (
       <section className="rounded-xl border border-slate-200 dark:border-slate-800 p-4">
-        <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading reporting status…
-        </div>
+        {error ? (
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-rose-900 dark:text-rose-100">{error}</span>
+            <button type="button" onClick={() => void load()}
+              className="text-xs font-semibold text-brand-navy hover:underline dark:text-brand-yellow">
+              Try again
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading reporting status…
+          </div>
+        )}
       </section>
     )
   }
 
   const tracked = new Set(rows.map(r => r.trigger_type))
   const available = SEVERE_INJURY_TRIGGERS.filter(t => !tracked.has(t))
+
+  // Rows written before migration 252 were backfilled to 'federal'; a null
+  // here means the same thing, so don't substitute the tenant's current
+  // jurisdiction — that would retroactively shorten an old deadline.
+  const rowJurisdiction = (r: ReportRow): ReportingJurisdiction => r.reporting_jurisdiction ?? 'federal'
+
   // Lift the whole card's border when any trigger is unreported and late.
   const anyUrgent = rows.some(r => {
     if (r.reported_at) return false
     const s = evaluateSevereInjuryReport({
-      trigger: r.trigger_type, basisMs: Date.parse(r.basis_at), reportedAtMs: null, nowMs,
+      trigger: r.trigger_type, jurisdiction: rowJurisdiction(r),
+      basisMs: Date.parse(r.basis_at), reportedAtMs: null, nowMs,
     })
     return s.status === 'overdue' || s.status === 'due_soon'
   })
@@ -183,7 +220,7 @@ export default function RegulatoryReportingPanel({ incidentId, defaultBasisAt }:
       <header className="flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
           <Siren className={`h-4 w-4 ${anyUrgent ? 'text-rose-600' : 'text-slate-400'}`} />
-          OSHA 1904.39 reporting ({rows.length})
+          {jurisdiction === 'CA' ? 'Cal/OSHA §342 reporting' : 'OSHA 1904.39 reporting'} ({rows.length})
         </h2>
         {available.length > 0 && (
           <button type="button" onClick={() => setShowAdd(s => !s)}
@@ -206,16 +243,19 @@ export default function RegulatoryReportingPanel({ incidentId, defaultBasisAt }:
               <select value={draftTrigger} onChange={e => setDraftTrigger(e.target.value as SevereInjuryTrigger)}
                 className="mt-0.5 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1 text-xs">
                 {available.map(t => (
-                  <option key={t} value={t}>{SEVERE_INJURY_TRIGGER_LABEL[t]} · {reportingWindowHours(t)}h</option>
+                  <option key={t} value={t}>{SEVERE_INJURY_TRIGGER_LABEL[t]} · {reportingWindowHours(t, jurisdiction)}h</option>
                 ))}
               </select>
             </label>
             <label className="block">
-              <span className="text-[10px] font-semibold text-slate-500 uppercase">Employer learned at</span>
+              <span className="text-[10px] font-semibold text-slate-500 uppercase">{REPORTING_BASIS_LABEL[jurisdiction]}</span>
               <input type="datetime-local" value={draftBasis} onChange={e => setDraftBasis(e.target.value)}
                 className="mt-0.5 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1 text-xs" />
             </label>
           </div>
+          <p className="text-[10px] text-slate-500 dark:text-slate-400">
+            Filing under {REPORTING_JURISDICTION_LABEL[jurisdiction]}
+          </p>
           <div className="flex justify-end">
             <button type="button" onClick={() => void addTrigger()} disabled={busy}
               className="px-3 py-1.5 rounded-md bg-brand-navy text-white text-xs font-semibold disabled:opacity-40 hover:bg-brand-navy/90 dark:bg-brand-yellow dark:text-slate-950">
@@ -227,13 +267,17 @@ export default function RegulatoryReportingPanel({ incidentId, defaultBasisAt }:
 
       {rows.length === 0 ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          No 1904.39 reportable event flagged. A work-related fatality (8h), or in-patient hospitalization, amputation, or loss of an eye (24h) must be reported to OSHA.
+          No reportable event flagged. A work-related fatality, in-patient hospitalization, amputation, or loss of an eye must be reported —
+          {jurisdiction === 'CA'
+            ? ' within 8 hours for all four, under Cal/OSHA.'
+            : ' within 8 hours for a fatality and 24 hours for the other three, under federal OSHA.'}
         </p>
       ) : (
         <ul className="space-y-2">
           {rows.map(row => {
             const state = evaluateSevereInjuryReport({
-              trigger: row.trigger_type, basisMs: Date.parse(row.basis_at),
+              trigger: row.trigger_type, jurisdiction: rowJurisdiction(row),
+              basisMs: Date.parse(row.basis_at),
               reportedAtMs: row.reported_at ? Date.parse(row.reported_at) : null, nowMs,
             })
             const style = STATUS_STYLE[state.status]

@@ -6,8 +6,20 @@ import type { Equipment } from '@soteria/core/types'
 
 vi.mock('@/lib/supabase', () => ({ supabase: { from: vi.fn() } }))
 
+vi.mock('@/components/TenantProvider', () => ({
+  useTenant: () => ({ tenantId: 'tenant-1', loading: false }),
+}))
+
 vi.mock('next/navigation', () => ({
   useParams: vi.fn().mockReturnValue({ dept: 'Mechanical' }),
+}))
+
+// DepartmentDetailPage and useReviews both call useTenant() to scope
+// their supabase queries. Without this mock the context default has
+// tenantId=null / loading=true, so the page resolves to empty equipment
+// immediately and the loading spinner never appears.
+vi.mock('@/components/TenantProvider', () => ({
+  useTenant: () => ({ tenantId: 'tenant-1', loading: false }),
 }))
 
 vi.mock('next/link', () => ({

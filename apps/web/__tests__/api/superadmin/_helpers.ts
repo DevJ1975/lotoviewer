@@ -53,6 +53,10 @@ class MockChain {
   public updates: Array<{ table: string; payload: unknown }>  = []
   public deletes: Array<{ table: string }>                    = []
   public rpcCalls: Array<{ name: string; args?: unknown }>    = []
+  // Unified, ordered log of write ops across every table, so a test can assert
+  // the RELATIVE order of, say, an update on one table vs. an insert on another
+  // (the per-table arrays above can't express cross-table ordering).
+  public calls: Array<{ op: 'insert' | 'update' | 'delete'; table: string }> = []
 
   queue(table: string, ...results: ChainResult[]) {
     if (!this.queues.has(table)) this.queues.set(table, [])
@@ -66,25 +70,26 @@ class MockChain {
   }
 
   buildAdmin() {
-    const self = this
-    function tableProxy(table: string) {
-      const result = (): Promise<ChainResult> => Promise.resolve(self.next(table))
+    const tableProxy = (table: string) => {
+      const result = (): Promise<ChainResult> => Promise.resolve(this.next(table))
       const chain: Record<string, unknown> = {
         select: () => chain,
         eq:     () => chain,
         neq:    () => chain,
         in:     () => chain,
+        is:     () => chain,
+        not:    () => chain,
         order:  () => chain,
         range:  () => chain,
         limit:  () => chain,
         single: result,
         maybeSingle: result,
-        insert: (payload: unknown) => { self.inserts.push({ table, payload }); return chain },
-        update: (payload: unknown) => { self.updates.push({ table, payload }); return chain },
-        delete: () => { self.deletes.push({ table }); return chain },
+        insert: (payload: unknown) => { this.inserts.push({ table, payload }); this.calls.push({ op: 'insert', table }); return chain },
+        update: (payload: unknown) => { this.updates.push({ table, payload }); this.calls.push({ op: 'update', table }); return chain },
+        delete: () => { this.deletes.push({ table }); this.calls.push({ op: 'delete', table }); return chain },
         // Terminal awaits also work directly via .then on the chain:
         then: (onFulfilled: (v: ChainResult) => unknown) =>
-          Promise.resolve(self.next(table)).then(onFulfilled),
+          Promise.resolve(this.next(table)).then(onFulfilled),
       }
       return chain
     }
@@ -92,8 +97,8 @@ class MockChain {
     return {
       from: (table: string) => tableProxy(table),
       rpc:  (name: string, args?: unknown) => {
-        self.rpcCalls.push({ name, args })
-        const r = self.queues.get(`rpc:${name}`)?.shift() ?? { data: null, error: null }
+        this.rpcCalls.push({ name, args })
+        const r = this.queues.get(`rpc:${name}`)?.shift() ?? { data: null, error: null }
         return Promise.resolve(r)
       },
       auth: { admin: authAdminMock },
@@ -110,10 +115,11 @@ class MockChain {
 }
 
 export const authAdminMock = {
-  createUser:   vi.fn(),
-  deleteUser:   vi.fn(),
-  getUserById:  vi.fn(),
-  listUsers:    vi.fn(),
+  createUser:     vi.fn(),
+  deleteUser:     vi.fn(),
+  getUserById:    vi.fn(),
+  listUsers:      vi.fn(),
+  updateUserById: vi.fn(),
 }
 
 export const mockState = new MockChain()
@@ -128,6 +134,7 @@ export const sendInviteEmailMock = vi.fn().mockResolvedValue(true)
 vi.mock('@/lib/email/sendInvite', () => ({
   sendInviteEmail: sendInviteEmailMock,
   computeLoginUrl: () => 'https://soteriafield.app',
+  inviteReplyTo:   () => 'jamil@trainovations.com',
 }))
 
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }))
@@ -139,12 +146,14 @@ export function resetMocks() {
   authAdminMock.deleteUser.mockReset()
   authAdminMock.getUserById.mockReset()
   authAdminMock.listUsers.mockReset()
+  authAdminMock.updateUserById.mockReset()
   sendInviteEmailMock.mockReset()
   sendInviteEmailMock.mockResolvedValue(true)
   mockState.inserts.length = 0
   mockState.updates.length = 0
   mockState.deletes.length = 0
   mockState.rpcCalls.length = 0
+  mockState.calls.length = 0
   // Clear queues
   ;(mockState as unknown as { queues: Map<string, unknown> }).queues = new Map()
 }

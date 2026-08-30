@@ -62,9 +62,12 @@ describe('POST /api/superadmin/tenants', () => {
     expect(body.tenant.tenant_number).toBe('0003')
     expect(body.tenant.slug).toBe('acme')
 
-    // Insert payload should carry the allocated number + sanitized modules.
-    expect(mockState.inserts).toHaveLength(1)
-    const insert = mockState.inserts[0]!.payload as Record<string, unknown>
+    // Creating a tenant also seeds its primary facility (migrations 209-211),
+    // so the route performs two inserts: tenants + facilities. Assert against
+    // the tenants insert specifically — its payload is the contract under test.
+    const tenantInserts = mockState.inserts.filter(i => i.table === 'tenants')
+    expect(tenantInserts).toHaveLength(1)
+    const insert = tenantInserts[0]!.payload as Record<string, unknown>
     expect(insert.tenant_number).toBe('0003')
     expect(insert.slug).toBe('acme')
     expect((insert.modules as Record<string, unknown>).loto).toBe(true)

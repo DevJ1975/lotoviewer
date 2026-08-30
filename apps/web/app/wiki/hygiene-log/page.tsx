@@ -1,9 +1,10 @@
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-05'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-08-01'
 
 const CHANGELOG: ChangelogEntry[] = [
+  { version: '1.1.0', date: '2026-08-01', changes: ['Document what an empty log means, now that the page distinguishes "nothing logged" from "nothing matches your filter" and no longer prints setup instructions to admins.'] },
   { version: '1.0.0', date: '2026-05-05', changes: ['Initial hygiene-log wiki page.'] },
 ]
 
@@ -70,6 +71,18 @@ export default function WikiHygienePage() {
             q: 'How is this filterable?',
             a: <>By action kind and by date range. The default view is the
               last 90 days.</>,
+          },
+          {
+            q: 'The log is empty — is something broken?',
+            a: <>Almost certainly not. The page tells the two cases apart:
+              <em> No hygiene operations logged</em> means nothing has been
+              recorded yet, which is the normal state for a tenant that has
+              never needed a one-off data correction. <em>No rows match your
+              filters</em> means there are entries, but your search or action
+              filter excluded them — clear the filter to see the full log. A
+              third state, <em>Could not load the hygiene log</em>, is a real
+              failure and shows the underlying error; send that text to
+              support rather than acting on it yourself.</>,
           },
           {
             q: 'Do hygiene-log entries show up in compliance bundles?',

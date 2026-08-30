@@ -80,6 +80,14 @@ export interface IncidentActionRow {
   verified_by:             string | null
   verification_evidence:   string | null
   source_rca_node_id:      string | null
+  /** Soft link to the ECFA causal-factor node that justified this action
+   *  (migration 244). Optional on the type so callers selecting a narrower
+   *  column set still type-check. */
+  source_ecfa_node_id?:    string | null
+  /** AI provenance (migration 236): ai_origin=true when Claude drafted the
+   *  action, ai_edited=true when a human changed it before saving. */
+  ai_origin?:              boolean
+  ai_edited?:              boolean
   cancel_reason:           string | null
   created_at:              string
   updated_at:              string
@@ -94,6 +102,11 @@ export interface IncidentActionCreateInput {
   owner_user_id?:         string | null
   due_at?:                string | null
   source_rca_node_id?:    string | null
+  source_ecfa_node_id?:   string | null
+  // AI provenance — set true when the action was drafted by the co-pilot
+  // and accepted by a human (badged in the UI). See migration 236.
+  ai_origin?:             boolean
+  ai_edited?:             boolean
 }
 
 export interface IncidentActionPatchInput {

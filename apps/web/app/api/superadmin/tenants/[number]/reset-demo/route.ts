@@ -47,6 +47,19 @@ const DELETE_ORDER: readonly string[] = [
   'position_training_requirements',
   'position_equipment_requirements',
   'worker_position_assignments',
+  // ISO 14001 EMS registers (migrations 204-207), children first.
+  // seed_wls_iso14001_demo() re-creates these with deterministic ids and
+  // ON CONFLICT DO NOTHING, so without the wipe an edited demo row would
+  // survive a "reset" forever. compliance_calendar_obligations is
+  // deliberately NOT wiped — it also holds system-seeded rows this route
+  // cannot restore.
+  'iso14001_clause_evidence',
+  'environmental_objective_readings',
+  'nonconformity_actions',
+  'nonconformities',
+  'environmental_objectives',
+  'environmental_aspects',
+  'management_reviews',
   // Parents.
   'loto_equipment',
   'loto_confined_space_permits',
@@ -165,13 +178,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
       seedResult = seedResult ? `${seedResult}; ${readinessData}` : readinessData
     }
 
-    // Module seeds added after the original WLS demo seed (migration 200):
-    // incidents/investigations, dedicated near-miss reports, and BBS
-    // observations. The wipe above clears bbs_observations, so these
-    // restore them; incidents/near_misses re-seed idempotently. Older
-    // databases without these functions return 42883/PGRST202 and are
-    // skipped so the reset still succeeds.
-    for (const fn of ['seed_wls_incidents_demo', 'seed_wls_near_miss_demo', 'seed_wls_bbs_demo'] as const) {
+    // Module seeds added after the original WLS demo seed: incidents /
+    // investigations, dedicated near-miss reports, and BBS observations
+    // (migration 200), plus the ISO 14001 EMS registers (migration 256).
+    // The wipe above clears bbs_observations, so these restore them;
+    // incidents/near_misses re-seed idempotently. Older databases without
+    // these functions return 42883/PGRST202 and are skipped so the reset
+    // still succeeds.
+    for (const fn of ['seed_wls_incidents_demo', 'seed_wls_near_miss_demo', 'seed_wls_bbs_demo', 'seed_wls_iso14001_demo'] as const) {
       const { data: modData, error: modErr } = await admin.rpc(fn)
       if (modErr) {
         const code = (modErr as { code?: string }).code

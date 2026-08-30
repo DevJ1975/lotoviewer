@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -91,15 +92,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfileState((data ?? null) as Profile | null)
   }, [])
 
+  // Which user the published `profile` describes. Consumers route on
+  // (userId, profile) as one decision — AuthGate on must_change_password,
+  // the login page on where to send the user next — so publishing a new
+  // userId ahead of its profile makes them decide on half a session.
+  const loadedFor = useRef<string | null>(null)
+
+  // Resolves the profile for `uid` and only then drops out of `loading`,
+  // so `loading === false` always means the pair is whole.
+  const loadSession = useCallback(async (uid: string | null) => {
+    loadedFor.current = uid
+    if (uid) await fetchProfile(uid)
+    else setProfileState(null)
+    setLoading(false)
+  }, [fetchProfile])
+
   const refresh = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
     const uid = session?.user?.id ?? null
     setUserId(uid)
     setEmail(session?.user?.email ?? null)
-    if (uid) await fetchProfile(uid)
-    else setProfileState(null)
-    setLoading(false)
-  }, [fetchProfile])
+    await loadSession(uid)
+  }, [loadSession])
 
   useEffect(() => {
     refresh()
@@ -107,11 +121,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const uid = session?.user?.id ?? null
       setUserId(uid)
       setEmail(session?.user?.email ?? null)
-      if (uid) fetchProfile(uid)
-      else setProfileState(null)
+      // Same user, new token — TOKEN_REFRESHED fires roughly hourly, and
+      // re-entering `loading` for it would flash the "Authorizing" screen
+      // over a page the user is working in.
+      if (uid === loadedFor.current) return
+      setLoading(true)
+      void loadSession(uid)
     })
     return () => { data.subscription.unsubscribe() }
-  }, [refresh, fetchProfile])
+  }, [refresh, loadSession])
 
   // Persist a "welcome back" hint (email + avatar) for the login screen.
   // Written whenever the profile loads or changes; never cleared on
@@ -129,6 +147,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
+    // Clear the marker alongside the state it describes, so the
+    // SIGNED_OUT event that follows is a no-op rather than a second
+    // pass that flashes the "Authorizing" screen on the way out.
+    loadedFor.current = null
     setUserId(null)
     setEmail(null)
     setProfileState(null)

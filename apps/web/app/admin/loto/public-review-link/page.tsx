@@ -16,6 +16,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
+import PhotoReconcilePanel from './_components/PhotoReconcilePanel'
 
 // /admin/loto/public-review-link — tenant-wide anonymous floor-walk
 // link for supervisors. Three states:
@@ -247,10 +248,14 @@ export default function PublicReviewLinkPage() {
             </div>
           </div>
 
+          {tenantId && (
+            <PhotoReconcilePanel reviewLinkId={link.id} authHeaders={() => authHeaders(tenantId)} />
+          )}
+
           <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
             <p className="font-semibold text-slate-800 dark:text-slate-200">On this link supervisors can:</p>
             <ul className="mt-2 ml-4 list-disc space-y-1">
-              <li>Replace EQUIP or ISO photos — the placard regenerates automatically</li>
+              <li>Replace EQUIP or ISO photos — staged for your review, then applied above under <strong>Photo replacements</strong></li>
               <li>Mark equipment for review — admins triage the queue at <Link href="/admin/loto/review-queue" className="underline">/admin/loto/review-queue</Link></li>
             </ul>
             <p className="mt-3">They cannot view internal notes, sign off, or see other tenants. The link is the only auth.</p>

@@ -1,8 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import Link from 'next/link'
-import { Printer, BookOpen, ClipboardCheck, Users, Building2, ClipboardList, FileCheck2, Archive, BookText, Cable, Eye, KeyRound, ShieldCheck, ShieldAlert } from 'lucide-react'
+import { Printer } from 'lucide-react'
 import type { Equipment } from '@soteria/core/types'
 import { computePhotoStatusFromEquipment } from '@soteria/core/photoStatus'
 import { useSession } from '@/components/SessionProvider'
@@ -73,7 +72,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
   return (
     <aside className="shrink-0 w-full lg:w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col">
       {/* Action toolbar */}
-      <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-800 flex items-center gap-1">
+      <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2">
         <StatusReportButton equipment={equipment} decommissioned={decommissioned} />
         <ExportCsvButton    equipment={equipment} decommissioned={decommissioned} />
         <AddEquipmentButton equipment={equipment} onAdded={onEquipmentAdded} />
@@ -82,114 +81,10 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
           onClick={onBatchPrint}
           title="Batch print by department"
           aria-label="Batch print by department"
-          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
+          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md h-11 w-11 flex items-center justify-center transition-colors"
         >
-          <Printer className="h-3.5 w-3.5" />
+          <Printer className="h-5 w-5" />
         </button>
-        <Link
-          href="/loto/manual"
-          title="LOTO user manual"
-          aria-label="Open the LOTO user manual"
-          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
-        >
-          <BookOpen className="h-3.5 w-3.5" />
-        </Link>
-        <Link
-          href="/admin/loto/periodic-inspections"
-          title="Annual periodic inspections (§147(c)(6))"
-          aria-label="Periodic procedure inspections"
-          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
-        >
-          <ClipboardCheck className="h-3.5 w-3.5" />
-        </Link>
-        <Link
-          href="/loto/group-permits"
-          title="Group LOTO permits (§147(f)(3))"
-          aria-label="Group LOTO permits"
-          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
-        >
-          <Users className="h-3.5 w-3.5" />
-        </Link>
-        <Link
-          href="/admin/people/contractors"
-          title="Contractor companies (§147(f)(2))"
-          aria-label="Contractor companies"
-          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
-        >
-          <Building2 className="h-3.5 w-3.5" />
-        </Link>
-        <Link
-          href="/admin/loto/competency-exams"
-          title="Competency exams (§147(c)(7))"
-          aria-label="Competency exams"
-          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
-        >
-          <ClipboardList className="h-3.5 w-3.5" />
-        </Link>
-        <Link
-          href="/admin/evidence/signed-artifacts"
-          title="Sealed PDF audit artifacts"
-          aria-label="Sealed PDF audit artifacts"
-          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
-        >
-          <FileCheck2 className="h-3.5 w-3.5" />
-        </Link>
-        <Link
-          href="/admin/compliance/retention"
-          title="Data retention policy and legal holds"
-          aria-label="Retention and legal holds"
-          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
-        >
-          <Archive className="h-3.5 w-3.5" />
-        </Link>
-        <Link
-          href="/admin/evidence/iso45001"
-          title="ISO 45001 clause evidence map"
-          aria-label="ISO 45001 clause evidence map"
-          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
-        >
-          <BookText className="h-3.5 w-3.5" />
-        </Link>
-        <Link
-          href="/admin/chemicals/prop65"
-          title="California Proposition 65 / Title 8 §5194"
-          aria-label="California Proposition 65"
-          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
-        >
-          <ShieldAlert className="h-3.5 w-3.5" />
-        </Link>
-        <Link
-          href="/admin/people/sso"
-          title="Single sign-on (SAML / OIDC)"
-          aria-label="Single sign-on"
-          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
-        >
-          <ShieldCheck className="h-3.5 w-3.5" />
-        </Link>
-        <Link
-          href="/admin/people/scim"
-          title="SCIM 2.0 provisioning tokens"
-          aria-label="SCIM tokens"
-          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
-        >
-          <KeyRound className="h-3.5 w-3.5" />
-        </Link>
-        <Link
-          href="/admin/platform/cmms"
-          title="CMMS integrations"
-          aria-label="CMMS integrations"
-          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
-        >
-          <Cable className="h-3.5 w-3.5" />
-        </Link>
-        <Link
-          href="/admin/observations/bbs/dashboard"
-          title="BBS leading-indicator dashboard"
-          aria-label="BBS leading-indicator dashboard"
-          className="text-slate-400 dark:text-slate-500 hover:text-brand-navy hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md w-7 h-7 flex items-center justify-center transition-colors"
-        >
-          <Eye className="h-3.5 w-3.5" />
-        </Link>
       </div>
 
       {/* Completion summary */}
@@ -200,7 +95,14 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
             {pct.toString().padStart(3, '0')}%
           </span>
         </div>
-        <div className="relative h-2 rounded-sm bg-slate-100 dark:bg-slate-800 overflow-hidden">
+        <div
+          role="progressbar"
+          aria-valuenow={pct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Overall photo completion"
+          className="relative h-2 rounded-sm bg-slate-100 dark:bg-slate-800 overflow-hidden"
+        >
           <div
             className={`h-full transition-all ${pct === 100 ? 'bg-emerald-500' : 'bg-brand-navy'}`}
             style={{ width: `${pct}%` }}
@@ -219,6 +121,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
         <button
           type="button"
           onClick={() => onSelectDept(null)}
+          aria-current={selectedDept === null ? 'true' : undefined}
           className={`relative w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors ${
             selectedDept === null
               ? 'bg-brand-yellow/10 dark:bg-brand-yellow/5'
@@ -243,6 +146,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
               key={d.name}
               type="button"
               onClick={() => onSelectDept(d.name)}
+              aria-current={active ? 'true' : undefined}
               className={`relative w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors ${
                 active
                   ? 'bg-brand-yellow/10 dark:bg-brand-yellow/5'
@@ -258,7 +162,11 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
                   {d.complete.toString().padStart(2, '0')}/{d.total.toString().padStart(2, '0')}
                 </span>
               </div>
-              <div className="h-1.5 rounded-sm bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              {/* aria-hidden, not role="progressbar": this track sits INSIDE the
+                  dept <button>, so a named progressbar would be folded into the
+                  button's accessible name as noise — the 08/12 text above
+                  already announces the same data. */}
+              <div aria-hidden="true" className="h-1.5 rounded-sm bg-slate-100 dark:bg-slate-800 overflow-hidden">
                 <div
                   className={`h-full transition-all ${d.pct === 100 ? 'bg-emerald-500' : 'bg-brand-navy'}`}
                   style={{ width: `${d.pct}%` }}
@@ -281,6 +189,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
                     <button
                       type="button"
                       onClick={() => onSelectEquip(eq.equipment_id)}
+                      aria-current={active ? 'true' : undefined}
                       className={`relative w-full text-left px-4 py-2 border-b border-slate-100 dark:border-slate-800 transition-colors ${
                         active
                           ? 'bg-brand-yellow/10 dark:bg-brand-yellow/5'
@@ -291,7 +200,7 @@ export default function DashboardSidebar({ equipment, selectedDept, selectedEqId
                         <span aria-hidden="true" className="absolute left-0 top-1 bottom-1 w-1 rounded-r-sm bg-brand-yellow" />
                       )}
                       <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-sm ${statusDotClass(computePhotoStatusFromEquipment(eq))} shrink-0`} />
+                        <span aria-hidden="true" className={`w-2 h-2 rounded-sm ${statusDotClass(computePhotoStatusFromEquipment(eq))} shrink-0`} />
                         <div className="min-w-0 flex-1">
                           <p className="placard-numeric text-xs font-bold text-brand-navy dark:text-brand-yellow truncate">{eq.equipment_id}</p>
                           <p className="text-[11px] text-slate-500 dark:text-slate-500 truncate">{shortName(eq.description)}</p>
