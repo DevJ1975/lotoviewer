@@ -206,7 +206,7 @@ export default function WikiBbsPage() {
           {
             q: 'What makes an observation trigger a 24-hour rapid review?',
             a: <>An unsafe act or unsafe condition logged at <strong>critical</strong>{' '}
-              severity is auto-flagged at capture. You\'ll see a banner on the
+              severity is auto-flagged at capture. You&apos;ll see a banner on the
               form; the dashboard then tracks it as due, and overdue once 24
               hours pass without a completed review.</>,
           },
