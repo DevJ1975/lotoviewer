@@ -38,6 +38,21 @@ app at `/superadmin/release-notes`.
   Every other STRIKE endpoint already returned a generic message.
 
 ### Fixed
+- **Reset Demo no longer empties Equipment Readiness.** The reset wiped 31
+  tables and re-seeded 17. Everything Equipment Readiness owns — inspections,
+  their responses, defects, repairs and photo evidence — was in the first list
+  and not the second, so every reset silently emptied the module and nothing
+  put it back. A new seed restores a five-unit mobile fleet with inspections,
+  three open defects and a repair returned to service. A wipe followed by a
+  re-seed now leaves the tenant identical.
+- **Reset Demo re-seeds any demo tenant, not just #0002.** The wipe ran against
+  any tenant flagged `is_demo`, but the re-seed was gated on the tenant number.
+  A second demo tenant was therefore emptied and never restored. The seeds
+  resolve their own tenant by `is_demo`, so the number check was both wrong and
+  redundant. (Audit item A10.)
+- **A missing seed function is reported instead of silently skipped.** The
+  response now carries `seedsMissing`, so a partially-migrated database is
+  visible rather than quietly under-seeding.
 - **The SSO setup page handed admins a callback URL that goes nowhere.** The SP
   ACS URL — the address your identity provider posts a sign-in to — defaulted to
   a path inside this application that does not exist. An admin who pasted it
@@ -273,6 +288,19 @@ deep pages carry a breadcrumb trail.
   `/incidents/[id]/rca` tab redirects there. Migration 234 adds 5-Whys
   branching, multi-root support, and AI provenance; new wiki page at
   `/wiki/incident-investigation`.
+- **BBS coaching upgrade (Workplace Learning System methodology)** — the BBS v2
+  observation surface (`/bbs/observe`) gains a structured safe-behavior checklist
+  (PPE, line of fire, tools, procedures, housekeeping, ergonomics), C.A.R.E.S.
+  coaching notes on the in-the-moment feedback conversation, and a one-tap
+  *recognize* toggle for safe behaviors. Critical unsafe observations are
+  auto-flagged for a non-punitive **24-hour "Hot Seat" rapid review** (due/overdue
+  tracking). New **Safety Action Teams** (tenant-scoped lookup, managed inline on
+  the dashboard) let follow-ups group by team. The admin dashboard
+  (`/admin/observations/bbs/dashboard`) adds rapid-review, safe-behavior-trend,
+  recognition-feed, and follow-ups-by-team sections; the BBS scorecard
+  (`/bbs/scorecard`) surfaces the v2 leading indicators. Additive migration
+  (`234_bbs_v2_coaching_teams.sql`) — existing rows and flows are unchanged.
+  Documented in a dedicated wiki page at `/wiki/bbs`.
 - **Public QR placard view** (`/qr/{qr_token}`) — scanning a printed placard QR
   opens a read-only, no-login view of that machine's isolation photo (with
   annotation markers), ordered energy-control steps, and verified badge. Reads

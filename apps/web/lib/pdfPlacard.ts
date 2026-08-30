@@ -834,11 +834,24 @@ async function addPlacardPages(
   equipment: Equipment,
   steps: LotoEnergyStep[],
   tenantLogoPng?: Uint8Array | null,
-) {
+): Promise<PhotoTally> {
   const [equipImage, isoImage] = await Promise.all([
     fetchAndEmbedImage(pdfDoc, equipment.equip_photo_url),
     fetchAndEmbedImage(pdfDoc, equipment.iso_photo_url),
   ])
+
+  // A photo that fails to fetch renders as the "no photo" slot, which looks
+  // identical to a machine that never had one. On a batch of hundreds that
+  // difference is invisible, so it is counted and reported to the caller.
+  const tally: PhotoTally = { referenced: 0, embedded: 0 }
+  for (const [url, image] of [
+    [equipment.equip_photo_url, equipImage],
+    [equipment.iso_photo_url, isoImage],
+  ] as const) {
+    if (!url) continue
+    tally.referenced += 1
+    if (image) tally.embedded += 1
+  }
 
   // Parse once; reuse on both EN and ES pages.
   const equipAnnotations = parseAnnotations(equipment.annotations)
@@ -872,6 +885,8 @@ async function addPlacardPages(
     equipAnnotations, isoAnnotations,
     dateStr, draft: equipment.spanish_reviewed === false, qrImage, logoImage,
   })
+
+  return tally
 }
 
 export async function generatePlacardPdf({ equipment, steps, tenantLogoPng }: GeneratePlacardArgs): Promise<Uint8Array> {
@@ -936,23 +951,37 @@ export async function generateBilingualPlacardPdf(
   return doc.save()
 }
 
+/** How many of a placard's referenced photos actually made it into the PDF. */
+export interface PhotoTally {
+  referenced: number
+  embedded:   number
+}
+
 export interface BatchItem {
   equipment: Equipment
   steps:     LotoEnergyStep[]
 }
 
+export interface BatchResult {
+  bytes:  Uint8Array
+  photos: PhotoTally
+}
+
 export async function generateBatchPlacardPdf(
   items: BatchItem[],
   onProgress?: (done: number, total: number) => void,
-): Promise<Uint8Array> {
+): Promise<BatchResult> {
   const pdfDoc  = await PDFDocument.create()
   const regular = await pdfDoc.embedFont(StandardFonts.Helvetica)
   const bold    = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
   const fonts   = { regular, bold }
 
+  const photos: PhotoTally = { referenced: 0, embedded: 0 }
   for (let i = 0; i < items.length; i++) {
-    await addPlacardPages(pdfDoc, fonts, items[i].equipment, items[i].steps)
+    const tally = await addPlacardPages(pdfDoc, fonts, items[i].equipment, items[i].steps)
+    photos.referenced += tally.referenced
+    photos.embedded   += tally.embedded
     onProgress?.(i + 1, items.length)
   }
-  return pdfDoc.save()
+  return { bytes: await pdfDoc.save(), photos }
 }
