@@ -2,10 +2,14 @@ import { NextResponse } from 'next/server'
 import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
+  ACUTE_CLASSES,
   HAZARDOUS_WASTE_PHYSICAL_STATES,
   HAZARDOUS_WASTE_STREAM_STATUSES,
+  WASTE_JURISDICTIONS,
   validateHazardousWasteStreamInput,
+  type AcuteClass,
   type HazardousWasteStreamInput,
+  type WasteJurisdiction,
 } from '@soteria/core/hazardousWaste'
 import { parseHazardSymbolFields } from '@/lib/hazardSymbolInput'
 
@@ -79,6 +83,17 @@ export async function POST(req: Request) {
     ? (status_raw as typeof HAZARDOUS_WASTE_STREAM_STATUSES[number])
     : 'draft'
 
+  // California-forward default: when the client doesn't say, assume California.
+  const jurisdiction_raw = typeof body.jurisdiction === 'string' ? body.jurisdiction : 'california'
+  const jurisdiction = (WASTE_JURISDICTIONS as readonly string[]).includes(jurisdiction_raw)
+    ? (jurisdiction_raw as WasteJurisdiction)
+    : 'california'
+
+  const acute_class_raw = typeof body.acute_class === 'string' ? body.acute_class : 'none'
+  const acute_class = (ACUTE_CLASSES as readonly string[]).includes(acute_class_raw)
+    ? (acute_class_raw as AcuteClass)
+    : 'none'
+
   const input: HazardousWasteStreamInput = {
     name:                trimOrNull(body.name, 200) ?? '',
     generating_process:  trimOrNull(body.generating_process, 500),
@@ -87,8 +102,13 @@ export async function POST(req: Request) {
     hazards:             pickStringArray(body.hazards),
     waste_codes:         pickStringArray(body.waste_codes).map(c => c.toUpperCase()),
     generator_category,
+    jurisdiction,
+    acute_class,
     long_haul:           body.long_haul === true,
     determination_basis: trimOrNull(body.determination_basis, 2000),
+    ldr_restricted:      body.ldr_restricted === true,
+    ldr_notice_sent:     body.ldr_notice_sent === true,
+    ldr_notice_date:     trimOrNull(body.ldr_notice_date, 30),
     status,
     owner_user_id:       typeof body.owner_user_id === 'string' && body.owner_user_id ? body.owner_user_id : null,
     review_due_date:     trimOrNull(body.review_due_date, 30),

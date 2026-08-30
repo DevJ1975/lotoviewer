@@ -47,6 +47,7 @@ export async function GET(req: Request) {
         // Inline the only stream columns the UI needs for aging + display.
         `*, stream:stream_id (
           id, name, generator_category, long_haul, waste_codes,
+          jurisdiction, acute_class,
           ghs_pictograms, ghs_signal_word, dot_un_number, dot_hazard_class, dot_packing_group
         )`,
         { count: 'exact' },
@@ -153,9 +154,10 @@ export async function POST(req: Request) {
         ...input,
       })
       .select(`*, stream:stream_id (
-          id, name, generator_category, long_haul, waste_codes,
-          ghs_pictograms, ghs_signal_word, dot_un_number, dot_hazard_class, dot_packing_group
-        )`)
+        id, name, generator_category, long_haul, waste_codes,
+        jurisdiction, acute_class,
+        ghs_pictograms, ghs_signal_word, dot_un_number, dot_hazard_class, dot_packing_group
+      )`)
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ container: data }, { status: 201 })

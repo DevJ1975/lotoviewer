@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server'
 import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
+  ACUTE_CLASSES,
   HAZARDOUS_WASTE_PHYSICAL_STATES,
   HAZARDOUS_WASTE_STREAM_STATUSES,
+  WASTE_JURISDICTIONS,
   validateHazardSymbolFields,
 } from '@soteria/core/hazardousWaste'
 import { parseHazardSymbolFields } from '@/lib/hazardSymbolInput'
@@ -86,6 +88,26 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     }
     patch.generator_category = raw
   }
+
+  if ('jurisdiction' in body) {
+    const raw = typeof body.jurisdiction === 'string' ? body.jurisdiction : null
+    if (!raw || !(WASTE_JURISDICTIONS as readonly string[]).includes(raw)) {
+      return NextResponse.json({ error: 'Invalid jurisdiction' }, { status: 400 })
+    }
+    patch.jurisdiction = raw
+  }
+
+  if ('acute_class' in body) {
+    const raw = typeof body.acute_class === 'string' ? body.acute_class : null
+    if (!raw || !(ACUTE_CLASSES as readonly string[]).includes(raw)) {
+      return NextResponse.json({ error: 'Invalid acute_class' }, { status: 400 })
+    }
+    patch.acute_class = raw
+  }
+
+  if ('ldr_restricted' in body)  patch.ldr_restricted = body.ldr_restricted === true
+  if ('ldr_notice_sent' in body) patch.ldr_notice_sent = body.ldr_notice_sent === true
+  if ('ldr_notice_date' in body) patch.ldr_notice_date = trimOrNull(body.ldr_notice_date, 30)
 
   if ('status' in body) {
     const raw = typeof body.status === 'string' ? body.status : null

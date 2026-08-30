@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   BookOpen,
+  Building2,
   CalendarClock,
   ChevronDown,
   ClipboardCheck,
@@ -13,6 +14,8 @@ import {
   Loader2,
   MapPin,
   Plus,
+  ShieldAlert,
+  ShieldCheck,
 } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
@@ -155,6 +158,27 @@ export default function HazardousWastePage() {
               Manage areas
             </Link>
           )}
+          <Link
+            href="/hazardous-waste/facility"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <Building2 className="h-4 w-4" />
+            Facility profile
+          </Link>
+          <Link
+            href="/hazardous-waste/worker-protection"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <ShieldAlert className="h-4 w-4" />
+            Worker protection
+          </Link>
+          <Link
+            href="/hazardous-waste/contingency-plan"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <ShieldCheck className="h-4 w-4" />
+            Contingency plan
+          </Link>
           <Link
             href="/hazardous-waste/inspections/new"
             className={

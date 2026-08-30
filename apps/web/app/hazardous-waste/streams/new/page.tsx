@@ -9,10 +9,12 @@ import { supabase } from '@/lib/supabase'
 import {
   HAZARDOUS_WASTE_PHYSICAL_STATES,
   HAZARDOUS_WASTE_STREAM_STATUSES,
+  type AcuteClass,
   type HazardousWastePhysicalState,
   type HazardousWasteStreamRow,
   type HazardousWasteStreamStatus,
   type RcraGeneratorCategory,
+  type WasteJurisdiction,
 } from '@soteria/core/hazardousWaste'
 import {
   HazardSymbolFields,
@@ -36,7 +38,10 @@ export default function NewHazardousWasteStreamPage() {
   const [hazardsRaw, setHazardsRaw]                 = useState('')
   const [wasteCodesRaw, setWasteCodesRaw]           = useState('')
   const [generatorCategory, setGeneratorCategory]   = useState<RcraGeneratorCategory>('lqg')
+  const [jurisdiction, setJurisdiction]             = useState<WasteJurisdiction>('california')
+  const [acuteClass, setAcuteClass]                 = useState<AcuteClass>('none')
   const [longHaul, setLongHaul]                     = useState(false)
+  const [ldrRestricted, setLdrRestricted]           = useState(false)
   const [determinationBasis, setDeterminationBasis] = useState('')
   const [status, setStatus]                         = useState<HazardousWasteStreamStatus>('draft')
   const [symbols, setSymbols]                       = useState<HazardSymbolValue>(EMPTY_HAZARD_SYMBOLS)
@@ -67,7 +72,10 @@ export default function NewHazardousWasteStreamPage() {
         hazards:             splitTokens(hazardsRaw),
         waste_codes:         splitTokens(wasteCodesRaw),
         generator_category:  generatorCategory,
-        long_haul:           longHaul && generatorCategory === 'sqg',
+        jurisdiction,
+        acute_class:         acuteClass,
+        long_haul:           longHaul && (generatorCategory === 'sqg' || (generatorCategory === 'vsqg' && jurisdiction === 'california')),
+        ldr_restricted:      ldrRestricted,
         determination_basis: determinationBasis || null,
         status,
         ...hazardSymbolsToBody(symbols),
@@ -167,7 +175,7 @@ export default function NewHazardousWasteStreamPage() {
           />
         </Field>
 
-        <Field label="Waste codes" hint="EPA / state codes; comma- or newline-separated (e.g. F003, D001)">
+        <Field label="Waste codes" hint="EPA (D/F/K/P/U) and California 3-digit codes; comma- or newline-separated (e.g. D001, F003, 134)">
           <textarea
             value={wasteCodesRaw}
             onChange={e => setWasteCodesRaw(e.target.value)}
@@ -175,6 +183,31 @@ export default function NewHazardousWasteStreamPage() {
             className={inputCls}
           />
         </Field>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field label="Jurisdiction" hint="California holds a VSQG to the SQG limit (it did not adopt the federal VSQG exemption)">
+            <select
+              value={jurisdiction}
+              onChange={e => setJurisdiction(e.target.value as WasteJurisdiction)}
+              className={inputCls}
+            >
+              <option value="california">California (DTSC / 22 CCR)</option>
+              <option value="federal">Federal only (40 CFR)</option>
+            </select>
+          </Field>
+
+          <Field label="Acute classification" hint="Drives the satellite cap: non-acute 55 gal vs. acute 1 qt liquid / 1 kg solid">
+            <select
+              value={acuteClass}
+              onChange={e => setAcuteClass(e.target.value as AcuteClass)}
+              className={inputCls}
+            >
+              <option value="none">Non-acute</option>
+              <option value="acute">Acute (federal P-list / acute F-waste)</option>
+              <option value="extremely_hazardous">Extremely hazardous (California)</option>
+            </select>
+          </Field>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Generator category">
@@ -185,12 +218,14 @@ export default function NewHazardousWasteStreamPage() {
             >
               <option value="lqg">LQG — 90-day accumulation</option>
               <option value="sqg">SQG — 180-day accumulation</option>
-              <option value="vsqg">VSQG — no federal limit</option>
+              <option value="vsqg">
+                {jurisdiction === 'california' ? 'VSQG — SQG limit in California' : 'VSQG — no federal limit'}
+              </option>
             </select>
           </Field>
 
-          {generatorCategory === 'sqg' && (
-            <Field label="TSDF distance" hint="SQG only; >200 mi extends to 270 days">
+          {(generatorCategory === 'sqg' || (generatorCategory === 'vsqg' && jurisdiction === 'california')) && (
+            <Field label="TSDF distance" hint=">200 mi extends the limit to 270 days">
               <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
                 <input type="checkbox" checked={longHaul} onChange={e => setLongHaul(e.target.checked)} />
                 Long-haul (&gt;200 mi)
@@ -198,6 +233,13 @@ export default function NewHazardousWasteStreamPage() {
             </Field>
           )}
         </div>
+
+        <Field label="Land Disposal Restrictions" hint="40 CFR 268.7 — a one-time LDR notice goes to the TSDF with the first shipment">
+          <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+            <input type="checkbox" checked={ldrRestricted} onChange={e => setLdrRestricted(e.target.checked)} />
+            This stream is LDR-restricted
+          </label>
+        </Field>
 
         <Field label="Determination basis" hint="Generator knowledge, SDS, lab analysis, prior approved profile…">
           <textarea
