@@ -208,10 +208,14 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
               src={displayUrl}
               alt={label}
               fill
-              sizes="(max-width: 768px) 100vw, 50vw"
+              // Two slots in a grid-cols-2 panel (~520px) → ~260px each on
+              // desktop, half-width on mobile.
+              sizes="(max-width: 768px) 50vw, 260px"
               className={`object-cover transition-opacity duration-150 ${isBusy ? 'opacity-40' : 'opacity-100'}`}
               style={{ imageOrientation: 'from-image' }}
-              unoptimized
+              // Remote bucket photos route through the Next image optimizer;
+              // only local blob previews (createObjectURL) can't be optimized.
+              unoptimized={displayUrl.startsWith('blob:')}
             />
             {/* Annotation overlay sits between the image and the
                 hover/busy/badge layers. Hidden during upload (the photo

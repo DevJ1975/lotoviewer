@@ -79,13 +79,22 @@ async function gate(req: Request, opts: GateOptions = {}): Promise<TenantGate> {
 
   const admin = supabaseAdmin()
 
-  // Superadmin shortcut: DB flag + env allowlist (same posture as
-  // /api/admin/review-links).
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('is_superadmin')
-    .eq('id', user.id)
-    .maybeSingle()
+  // Superadmin shortcut (DB flag + env allowlist) and the tenant-membership
+  // role check are independent — fire both in parallel so a non-superadmin
+  // (the common case) pays one round-trip instead of two. A superadmin pays
+  // for a membership query it won't use, but superadmins are rare.
+  // Both reads are independent, so they go together rather than in series —
+  // this is the hot path of every gated route. The membership select carries
+  // the lifecycle columns the RLS helpers check (migration 190): a cancelled
+  // invite or a disabled tenant revokes access, and most routes reach the
+  // database with a key that bypasses those policies, so this gate is the
+  // only thing enforcing them.
+  const [{ data: profile }, { data: membership, error: membershipErr }] = await Promise.all([
+    admin.from('profiles').select('is_superadmin').eq('id', user.id).maybeSingle(),
+    admin.from('tenant_memberships')
+      .select('role, invite_cancelled_at, tenants:tenant_id(disabled_at)')
+      .eq('user_id', user.id).eq('tenant_id', tenantId).maybeSingle(),
+  ])
   const allow = (process.env.SUPERADMIN_EMAILS ?? '')
     .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
   const isSuperadmin = !!profile?.is_superadmin && !!user.email && allow.includes(user.email.toLowerCase())
@@ -94,18 +103,9 @@ async function gate(req: Request, opts: GateOptions = {}): Promise<TenantGate> {
     return makeOk(user, tenantId, facilityId, 'superadmin', token, url, anon)
   }
 
-  // The embedded tenants row makes this agree with current_user_tenant_ids()
-  // in one round-trip rather than two.
-  const { data: membership, error: membershipErr } = await admin
-    .from('tenant_memberships')
-    .select('role, invite_cancelled_at, tenants:tenant_id(disabled_at)')
-    .eq('user_id',   user.id)
-    .eq('tenant_id', tenantId)
-    .maybeSingle()
-  // Distinguish "no such membership" from "the lookup failed". Discarding the
-  // error made every DB or PostgREST fault present as 403 Not a member — a
-  // permanent-looking denial for a transient fault, on the hot path of every
-  // gated route. A 500 is honest and retryable.
+  // A failed lookup is not a non-member. Discarding the error made every DB or
+  // PostgREST fault present as a permanent-looking 403; a 500 is honest and
+  // retryable.
   if (membershipErr) {
     return { ok: false, status: 500, message: 'Could not verify tenant membership' }
   }

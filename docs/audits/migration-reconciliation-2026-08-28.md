@@ -114,7 +114,7 @@ Also checked and **confirmed applied** despite having no ledger row or being pre
 by `266`), `139` (live `signoff_loto_review_link` no longer contains the readiness gate), `242`
 (all 4 `pg_cron` jobs live), `243` (`_photo_backup_pre_v2.relrowsecurity = true`), `241`/`245`
 (all indexes present except `idx_loto_audit_results_run`, which out-of-band ledger row
-`20260612205718 226_drop_duplicate_audit_results_index` **deliberately dropped** as a duplicate),
+`20260612205718 291_drop_duplicate_audit_results_index` **deliberately dropped** as a duplicate),
 and `251` (constraint contains `'access_reset'`; ledger `20260729175441`).
 
 ---
@@ -168,7 +168,7 @@ A rebuild from `migrations/` loses all of this. Verified live objects with no ow
 | Review-link field flags | `20260520103243 loto_review_link_equipment_field_flag` | field-flag columns on `loto_review_link_equipment` |
 | PHI storage bucket | `20260524202855 medical_records_bucket` | private `medical-records` bucket (referenced by `201`'s header, created nowhere) |
 | Placard QR backfill marker | `20260606155006 289_loto_placard_qr_backfill_marker` | `loto_equipment.placard_qr_backfilled` + index |
-| Perf index drop | `20260612205718 226_drop_duplicate_audit_results_index` | drop of `idx_loto_audit_results_run` (repo `218` recreates it on rebuild — mild perf regression only) |
+| Perf index drop | `20260612205718 291_drop_duplicate_audit_results_index` | drop of `idx_loto_audit_results_run` (repo `218` recreates it on rebuild — mild perf regression only) |
 | Perf consolidation RPCs | `20260613012950 227_perf_consolidation_rpcs` | N+1-collapsing read RPCs |
 | Waitlist | `20260613032726 228_waitlist_signups` | table `waitlist_signups` (0 rows) |
 | Hazmat catalogs (seeded!) | `20260614232545/232621/232742/232802/232820/232837` | `ghs_pictogram_catalog` (9 rows), `dot_hazard_class_catalog` (20 rows), `nfpa704_legend` (18 rows), `hazardous_waste_label_prints`, stream-symbol/tier-two columns |

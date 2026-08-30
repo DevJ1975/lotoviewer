@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import QRCode from 'qrcode'
 import { Download, QrCode } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
@@ -44,6 +43,9 @@ export default function EquipmentQrLabelsPage() {
       return
     }
     const origin = window.location.origin
+    // Lazy-load qrcode (~30KB gz) off the page's first-load JS; it's only
+    // needed once equipment rows arrive.
+    const QRCode = (await import('qrcode')).default
     const next: LabelRow[] = []
     for (const row of (data ?? []) as EquipmentRow[]) {
       const url = row.qr_token
