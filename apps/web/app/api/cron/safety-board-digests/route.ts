@@ -18,6 +18,11 @@ import { sendBoardDigest, type BoardDigestThreadEntry } from '@/lib/email/sendBo
 //   - The user has no boards visible to them (RLS-safe by virtue of
 //     using the same access predicate the UI uses).
 
+export const runtime = 'nodejs'
+// Hourly global pass that can emit one email per (user, tenant) board
+// subscription — the widest recipient set of any digest cron here.
+export const maxDuration = 300
+
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false
   let mismatch = 0

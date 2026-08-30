@@ -40,30 +40,47 @@ function ResetPasswordForm() {
   const [error,       setError]       = useState<string | null>(null)
   const [done,        setDone]        = useState(false)
 
-  // On mount: check if Supabase has already exchanged the URL hash for
-  // a session, OR wait briefly for a PASSWORD_RECOVERY event.
+  // On mount, decide whether the recovery link is usable:
+  //   1. GoTrue redirects failed links back with explicit error params
+  //      (#error_code=otp_expired etc.) — detect those immediately
+  //      instead of waiting for a timeout that will never resolve.
+  //   2. Subscribe to onAuthStateChange BEFORE checking getSession so
+  //      the PASSWORD_RECOVERY/SIGNED_IN event can't fire in the gap
+  //      between the check and the subscription.
+  //   3. Only then fall back to a generous timeout for the pathological
+  //      case (no token, no error, no session) — 10s so a slow network
+  //      exchanging a VALID token isn't misreported as expired.
   useEffect(() => {
     let cancelled = false
 
-    async function check() {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (cancelled) return
-      if (session) { setTokenStatus('valid'); return }
-      // No session yet — wait for Supabase to process the hash.
-      // Onauthstatechange fires within ~100ms in practice. If 3s pass
-      // with no event, the link is bad/expired.
-      const timeout = setTimeout(() => { if (!cancelled) setTokenStatus('invalid') }, 3000)
-      const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
-        if (cancelled) return
-        if ((event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') && sess) {
-          clearTimeout(timeout)
-          setTokenStatus('valid')
-        }
-      })
-      return () => { sub.subscription.unsubscribe(); clearTimeout(timeout) }
+    const urlParams = new URLSearchParams(
+      window.location.hash.replace(/^#/, '') + '&' + window.location.search.replace(/^\?/, ''),
+    )
+    if (urlParams.get('error') || urlParams.get('error_code')) {
+      setTokenStatus('invalid')
+      return
     }
-    void check()
-    return () => { cancelled = true }
+
+    const timeout = setTimeout(() => { if (!cancelled) setTokenStatus('invalid') }, 10_000)
+    const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
+      if (cancelled) return
+      if ((event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') && sess) {
+        clearTimeout(timeout)
+        setTokenStatus('valid')
+      }
+    })
+
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      if (cancelled || !session) return
+      clearTimeout(timeout)
+      setTokenStatus('valid')
+    })
+
+    return () => {
+      cancelled = true
+      sub.subscription.unsubscribe()
+      clearTimeout(timeout)
+    }
   }, [])
 
   async function onSubmit(e: React.FormEvent) {

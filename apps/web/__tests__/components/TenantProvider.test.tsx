@@ -1,6 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { act, render, waitFor } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 
 // Active-tenant key written by the provider; also read by the supabase
 // fetch wrapper to forward as x-active-tenant. Hoisted because the
@@ -31,8 +31,11 @@ import { TenantProvider, useTenant } from '@/components/TenantProvider'
 // Capture hook output via a render-prop component.
 type TenantState = ReturnType<typeof useTenant>
 let captured: TenantState | null = null
+// Publishes the hook value from an effect, not from render: assigning to
+// module scope during render is a side effect React forbids.
 function Capture() {
-  captured = useTenant()
+  const value = useTenant()
+  useEffect(() => { captured = value })
   return null
 }
 

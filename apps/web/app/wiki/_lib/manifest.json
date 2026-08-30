@@ -155,11 +155,23 @@
     {
       "slug":     "iso-14001",
       "module":   "ISO 14001",
-      "tagline":  "Environmental management-system standard — a plain-language, clause-by-clause implementation guide (aspects/impacts, life-cycle perspective, compliance obligations).",
-      "category": "admin",
-      "href":     null,
+      "tagline":  "Environmental management-system standard — the EMS registers, a clause-by-clause evidence map, and an audit-readiness report card.",
+      "category": "safety",
+      "href":     "/environmental",
       "wikiPage": "apps/web/app/wiki/iso-14001/page.tsx",
-      "sources":  ["apps/web/app/wiki/iso-14001/**"]
+      "sources":  [
+        "apps/web/app/wiki/iso-14001/**",
+        "apps/web/app/environmental/**",
+        "apps/web/app/admin/evidence/iso14001/**",
+        "apps/web/lib/iso14001Signals.ts",
+        "apps/web/lib/pdfIso14001ReportCard.ts",
+        "packages/core/src/iso14001.ts",
+        "packages/core/src/iso14001Readiness.ts",
+        "packages/core/src/environmentalAspect.ts",
+        "packages/core/src/environmentalObjective.ts",
+        "packages/core/src/managementReview.ts",
+        "packages/core/src/nonconformity.ts"
+      ]
     },
     {
       "slug":     "loto-compliance",
@@ -227,6 +239,25 @@
       "href":     "/near-miss",
       "wikiPage": "apps/web/app/wiki/near-miss/page.tsx",
       "sources":  ["apps/web/app/near-miss/**"]
+    },
+    {
+      "slug":     "incident-reporting",
+      "module":   "Incident Reporting",
+      "tagline":  "File incidents, triage by severity, notify the right people, and hand off to investigation — with anonymous QR reporting and OSHA recordability built in.",
+      "category": "safety",
+      "href":     "/incidents",
+      "wikiPage": "apps/web/app/wiki/incident-reporting/page.tsx",
+      "sources":  [
+        "apps/web/app/incidents/page.tsx",
+        "apps/web/app/incidents/new/**",
+        "apps/web/app/incidents/qr/**",
+        "apps/web/app/incidents/[id]/page.tsx",
+        "apps/web/app/incidents/[id]/classify/**",
+        "apps/web/app/incidents/[id]/care/**",
+        "apps/web/app/report/**",
+        "apps/web/app/api/incidents/route.ts",
+        "packages/core/src/incident.ts"
+      ]
     },
     {
       "slug":     "incident-investigation",

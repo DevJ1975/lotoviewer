@@ -248,7 +248,7 @@ Find every `supabase.from('loto_...')` call and add `.eq('tenant_id', tenantId)`
 - [app/equipment/[id]/page.tsx](../app/equipment/[id]/page.tsx)
 - [app/import/page.tsx](../app/import/page.tsx)
 - [app/departments/page.tsx](../app/departments/page.tsx)
-- [components/GlobalSearch.tsx](../components/GlobalSearch.tsx)
+- [components/CommandPalette.tsx](../components/CommandPalette.tsx) — was `GlobalSearch.tsx`; that component is gone but its `loto_equipment` query moved here verbatim, so the scoping requirement moved with it
 - [components/equipment/AddEquipmentDialog.tsx](../components/equipment/AddEquipmentDialog.tsx)
 - [components/placard/PlacardPdfPreview.tsx](../components/placard/PlacardPdfPreview.tsx)
 - [components/BatchPrintModal.tsx](../components/BatchPrintModal.tsx)

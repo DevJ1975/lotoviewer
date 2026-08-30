@@ -22,6 +22,8 @@ const AREA_TYPES: HazardousWasteAreaType[] = [
   'universal_waste', 'used_oil', 'inspection_only',
 ]
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 function trimOrNull(value: unknown, max?: number): string | null {
   if (typeof value !== 'string') return null
   const t = value.trim()
@@ -116,8 +118,30 @@ export async function POST(req: Request) {
     }, { status: 400 })
   }
 
+  if (!UUID_RE.test(input.stream_id)) {
+    return NextResponse.json({ error: 'stream_id: Invalid stream' }, { status: 400 })
+  }
+
+  const admin = supabaseAdmin()
+
+  // Confirm the stream belongs to this tenant before linking a container
+  // to it. The insert runs through the service-role client (RLS bypassed),
+  // and the FK alone doesn't constrain the stream's tenant — so without
+  // this check a member could point a container at another tenant's stream
+  // and read its name/waste codes back from the embedded `stream` join.
+  // Mirrors the area_id guard in the inspections POST route.
+  const { data: stream, error: streamErr } = await admin
+    .from('hazardous_waste_streams')
+    .select('id, archived_at')
+    .eq('tenant_id', gate.tenantId)
+    .eq('id', input.stream_id)
+    .maybeSingle()
+  if (streamErr) return NextResponse.json({ error: streamErr.message }, { status: 500 })
+  if (!stream) return NextResponse.json({ error: 'Stream not found' }, { status: 404 })
+  if (stream.archived_at) return NextResponse.json({ error: 'Stream is archived' }, { status: 409 })
+
   try {
-    const { data, error } = await supabaseAdmin()
+    const { data, error } = await admin
       .from('hazardous_waste_containers')
       .insert({
         tenant_id:  gate.tenantId,

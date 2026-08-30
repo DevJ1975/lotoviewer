@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { ADMIN_SECTIONS, getAdminRedirects, getAllAdminTiles, SETTINGS_NOTIFICATIONS_TILE } from '@/lib/adminCatalog'
+import { ADMIN_SECTIONS, MOVED_ADMIN_ROUTES, getAdminRedirects, getAllAdminTiles, SETTINGS_NOTIFICATIONS_TILE } from '@/lib/adminCatalog'
 import { calculateRequiredClearance } from '@soteria/core/workingAtHeights'
 import { daysUntil, expiryBand, EXPIRY_BAND_CLASS } from '@/lib/wah/inventoryHelpers'
 import { resolveHref } from '@/lib/resolveHref'
@@ -111,7 +111,14 @@ describe('Regression #104 — admin URL renames + 301 redirects', () => {
     // /admin/insights (scorecard, ai-usage, …) and (b) infinitely re-match its
     // own destination (ERR_TOO_MANY_REDIRECTS). Those redirects intentionally
     // map the bare legacy path exactly, with NO wildcard. See getAdminRedirects.
-    const tileRedirects = getAdminRedirects().filter(r => r.destination !== '/admin')
+    // Moved subtrees (MOVED_ADMIN_ROUTES) are not tile redirects and follow a
+    // different rule: each contributes BOTH a `/:path*` rule and a bare-path
+    // rule, so the bare one legitimately carries no wildcard.
+    const movedSources = new Set(
+      MOVED_ADMIN_ROUTES.flatMap(m => [m.from, `${m.from}/:path*`]),
+    )
+    const tileRedirects = getAdminRedirects()
+      .filter(r => r.destination !== '/admin' && !movedSources.has(r.source))
     for (const r of tileRedirects) {
       const nested = r.destination.startsWith(`${r.source}/`)
       if (nested) {
