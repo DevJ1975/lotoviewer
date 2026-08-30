@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { SORT_DIRS } from '@/lib/listParams'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -25,7 +26,7 @@ import {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const VALID_SORTS = ['reported_at', 'occurred_at', 'severity_potential', 'report_number'] as const
-const VALID_DIRS  = ['asc', 'desc'] as const
+const VALID_DIRS  = SORT_DIRS
 
 // ─── GET ───────────────────────────────────────────────────────────────────
 

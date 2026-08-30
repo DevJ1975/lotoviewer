@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { SORT_DIRS } from '@/lib/listParams'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -17,7 +18,7 @@ import {
 // POST /api/chemicals/inventory   Add a container; allocates barcode if omitted.
 
 const VALID_SORTS = ['created_at', 'expiration_date', 'received_date', 'barcode'] as const
-const VALID_DIRS  = ['asc', 'desc'] as const
+const VALID_DIRS  = SORT_DIRS
 
 export async function GET(req: Request) {
   const gate = await requireTenantMember(req)

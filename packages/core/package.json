@@ -5,6 +5,9 @@
   "description": "Cross-platform business logic shared between apps/web (Next.js) and apps/mobile (Expo). No DOM, no Node, no React.",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*.ts",

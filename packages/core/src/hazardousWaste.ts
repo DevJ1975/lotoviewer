@@ -12,12 +12,14 @@ import {
   type DotPackingGroup,
 } from './hazardSymbols'
 
-export type HazardousWasteAreaType =
-  | 'satellite_accumulation'
-  | 'central_accumulation'
-  | 'universal_waste'
-  | 'used_oil'
-  | 'inspection_only'
+export const HAZARDOUS_WASTE_AREA_TYPES = [
+  'satellite_accumulation',
+  'central_accumulation',
+  'universal_waste',
+  'used_oil',
+  'inspection_only',
+] as const
+export type HazardousWasteAreaType = (typeof HAZARDOUS_WASTE_AREA_TYPES)[number]
 
 export interface HazardousWasteFieldCheck {
   id: string
@@ -896,11 +898,7 @@ export function validateHazardousWasteContainerInput(input: HazardousWasteContai
   if (label.length < 1) errors.push({ field: 'label', message: 'Label is required' })
   if (label.length > 120) errors.push({ field: 'label', message: 'Label must be 120 characters or fewer' })
   if (!input.stream_id) errors.push({ field: 'stream_id', message: 'Stream is required' })
-  const validAreas: HazardousWasteAreaType[] = [
-    'satellite_accumulation', 'central_accumulation',
-    'universal_waste', 'used_oil', 'inspection_only',
-  ]
-  if (!validAreas.includes(input.area_type)) {
+  if (!HAZARDOUS_WASTE_AREA_TYPES.includes(input.area_type)) {
     errors.push({ field: 'area_type', message: 'Invalid area type' })
   }
   if (!HAZARDOUS_WASTE_CONTAINER_STATUSES.includes(input.status)) {

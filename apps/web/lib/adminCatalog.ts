@@ -325,8 +325,10 @@ export function getAllAdminTiles(): AdminTile[] {
   return ADMIN_SECTIONS.flatMap(s => s.tiles)
 }
 
-export function getAdminTile(slug: string): AdminTile | undefined {
-  return getAllAdminTiles().find(t => t.slug === slug)
+// Tile identity is the (section, slug) pair — that's the URL shape — so
+// slugs may repeat across sections (e.g. loto/audit and evidence/audit).
+export function getAdminTile(sectionId: string, slug: string): AdminTile | undefined {
+  return ADMIN_SECTIONS.find(s => s.id === sectionId)?.tiles.find(t => t.slug === slug)
 }
 
 // Routes that left /admin entirely for a top-level module. A tile's

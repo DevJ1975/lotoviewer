@@ -41,11 +41,14 @@ export default function EquipmentDetailScreen() {
       try {
         // Run both fetches in parallel; the steps table can be empty
         // for equipment that hasn't had its procedure documented yet.
+        // Both are tenant-scoped: equipment IDs repeat across tenants,
+        // so equipment_id alone is not a unique key.
         const [eq, stepsRes] = await Promise.all([
           loadEquipment(equipmentId!, tenantId!),
           supabase
             .from('loto_energy_steps')
             .select('*')
+            .eq('tenant_id', tenantId!)
             .eq('equipment_id', equipmentId!)
             .order('step_number', { ascending: true }),
         ])
@@ -63,6 +66,14 @@ export default function EquipmentDetailScreen() {
     void load()
     return () => { cancelled = true }
   }, [equipmentId, tenantId])
+
+  if (!tenantId) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.muted}>No tenant selected. Open the dashboard to pick one.</Text>
+      </View>
+    )
+  }
 
   if (loading) {
     return (

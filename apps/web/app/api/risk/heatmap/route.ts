@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
-import { loadHeatmapCells, type HeatmapView, type HeatmapFilters } from '@soteria/core/queries/risks'
+import { HAZARD_CATEGORIES, RISK_STATUSES, loadHeatmapCells, type HeatmapView, type HeatmapFilters } from '@soteria/core/queries/risks'
 
 // GET /api/risk/heatmap
 // Query params:
@@ -15,8 +15,10 @@ import { loadHeatmapCells, type HeatmapView, type HeatmapFilters } from '@soteri
 //
 // Auth: any tenant member.
 
-const VALID_STATUSES = ['open','in_review','controls_in_progress','monitoring','closed','accepted_exception']
-const VALID_CATS     = ['physical','chemical','biological','mechanical','electrical','ergonomic','psychosocial','environmental','radiological']
+// Canonical enum values live in @soteria/core next to their types;
+// widened to plain string lists for query-param filtering.
+const VALID_STATUSES: readonly string[] = RISK_STATUSES
+const VALID_CATS:     readonly string[] = HAZARD_CATEGORIES
 
 export async function GET(req: Request) {
   const gate = await requireTenantMember(req)

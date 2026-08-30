@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantAdmin, requireTenantModuleMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import type { HazardousWasteAreaType } from '@soteria/core/hazardousWaste'
+import { HAZARDOUS_WASTE_AREA_TYPES, type HazardousWasteAreaType } from '@soteria/core/hazardousWaste'
 
 // /api/hazardous-waste/areas
 //   GET   — list this tenant's accumulation areas with each area's most
@@ -10,13 +10,7 @@ import type { HazardousWasteAreaType } from '@soteria/core/hazardousWaste'
 //           show "X days since last walk-through" without an N+1 fetch).
 //   POST  — create a new area. Tenant admin/owner only.
 
-const AREA_TYPES: ReadonlyArray<HazardousWasteAreaType> = [
-  'satellite_accumulation',
-  'central_accumulation',
-  'universal_waste',
-  'used_oil',
-  'inspection_only',
-]
+const AREA_TYPES = HAZARDOUS_WASTE_AREA_TYPES
 
 function badRequest(message: string) {
   return NextResponse.json({ error: message }, { status: 400 })

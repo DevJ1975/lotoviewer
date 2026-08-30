@@ -48,6 +48,7 @@ _Nothing pending._
   cancelled or the organisation switched off, while the database rules it was
   meant to mirror checked both. Most routes reach the database with a key that
   bypasses those rules, so for them the gate was the only thing standing there.
+## [1.10.0] - 2026-06-10
 
 ### Added
 - **Hazard-communication symbols.** GHS pictograms, DOT hazard classes, NFPA 704
@@ -393,6 +394,15 @@ deep pages carry a breadcrumb trail.
 - Version-control scheme: `check:version` drift guard, this changelog, and the
   versioning runbook.
 
+### Fixed
+- **Mobile equipment screens crashed on open** — the equipment list and detail
+  screens called core queries without the now-required explicit `tenantId`,
+  crashing for every signed-in user. Both screens pass the active tenant again.
+- **LOTO register accessibility + field-iPad usability** — register rows are
+  real buttons, the review flag works on touch, a skip-to-content link is the
+  first Tab stop, caution-orange tags meet WCAG AA contrast, and the placard
+  panel opens as a slide-over sheet on narrow screens.
+
 ### Notes
 - **Planned — LOTO verification-packet report generator.** The printed packet's
   per-placard QR codes were repointed to the new `/qr/{qr_token}` convention
@@ -411,4 +421,6 @@ from 1.9.0.
 [1.17.1]: https://github.com/devj1975/lotoviewer/compare/v1.17.0...v1.17.1
 [1.17.0]: https://github.com/devj1975/lotoviewer/compare/v1.16.0...v1.17.0
 [1.10.0 – 1.16.0]: https://github.com/devj1975/lotoviewer/compare/v1.9.0...v1.16.0
+[Unreleased]: https://github.com/devj1975/lotoviewer/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/devj1975/lotoviewer/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/devj1975/lotoviewer/releases/tag/v1.9.0

@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantMember, requireTenantAdmin } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { loadRisksFiltered, type RiskListFilters } from '@soteria/core/queries/risks'
-import type { Band, HierarchyLevel } from '@soteria/core/risk'
+import { HAZARD_CATEGORIES, RISK_STATUSES, loadRisksFiltered, type RiskListFilters } from '@soteria/core/queries/risks'
+import { HIERARCHY_ORDER, RISK_ACTIVITY_TYPES, RISK_BANDS, RISK_EXPOSURE_FREQUENCIES, type Band, type HierarchyLevel } from '@soteria/core/risk'
+import { SORT_DIRS } from '@/lib/listParams'
 
 // GET  /api/risk   List with filters + pagination (any tenant member).
 // POST /api/risk   Create a new risk + (optionally) attach controls
@@ -27,16 +28,18 @@ import type { Band, HierarchyLevel } from '@soteria/core/risk'
 
 // ─── Shared validators ─────────────────────────────────────────────────────
 
-const VALID_STATUSES = ['open','in_review','controls_in_progress','monitoring','closed','accepted_exception']
-const VALID_BANDS    = ['low','moderate','high','extreme']
-const VALID_CATS     = ['physical','chemical','biological','mechanical','electrical','ergonomic','psychosocial','environmental','radiological']
+// Canonical enum values live in @soteria/core next to their types;
+// widened to plain string lists for query-param / body filtering.
+const VALID_STATUSES: readonly string[] = RISK_STATUSES
+const VALID_BANDS:    readonly string[] = RISK_BANDS
+const VALID_CATS:     readonly string[] = HAZARD_CATEGORIES
 const VALID_VIEWS    = ['inherent','residual']
 const VALID_SORTS    = ['created_at','residual_score','inherent_score','next_review_date','risk_number']
-const VALID_DIRS     = ['asc','desc']
+const VALID_DIRS:    readonly string[] = SORT_DIRS
 const VALID_SOURCES         = ['inspection','jsa','incident','worker_report','audit','moc','other']
-const VALID_ACTIVITY_TYPES  = ['routine','non_routine','emergency']
-const VALID_EXPOSURE_FREQS  = ['continuous','daily','weekly','monthly','rare']
-const VALID_HIERARCHY_LEVELS: HierarchyLevel[] = ['elimination','substitution','engineering','administrative','ppe']
+const VALID_ACTIVITY_TYPES: readonly string[] = RISK_ACTIVITY_TYPES
+const VALID_EXPOSURE_FREQS: readonly string[] = RISK_EXPOSURE_FREQUENCIES
+const VALID_HIERARCHY_LEVELS: ReadonlyArray<HierarchyLevel> = HIERARCHY_ORDER
 const VALID_CONTROL_STATUSES = ['planned','implemented','verified','superseded']
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
