@@ -1,4 +1,4 @@
--- Migration 256: seed_wls_equipment_readiness_demo() — so "Reset Demo"
+-- Migration 287: seed_wls_equipment_readiness_demo() — so "Reset Demo"
 -- restores Equipment Readiness instead of emptying it.
 --
 -- WHY THIS EXISTS

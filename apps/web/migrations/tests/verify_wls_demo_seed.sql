@@ -1,6 +1,6 @@
 -- Verification test for the WLS Demo seed (migration 200 + the
 -- seed_wls_incidents_demo / seed_wls_near_miss_demo / seed_wls_bbs_demo
--- functions, and migration 256 + seed_wls_equipment_readiness_demo).
+-- functions, and migration 287 + seed_wls_equipment_readiness_demo).
 -- Asserts that the seed reconciles with the EHS scorecard.
 --
 -- Usage (run AFTER the seed has been applied — migration 200 self-seeds on
@@ -154,7 +154,7 @@ begin
   end if;
   raise notice 'CHECK 8 ok: 300A summary = 3 recordables, 96720 hours';
 
-  -- ── 9. Equipment Readiness fleet (migration 256) ─────────────────────
+  -- ── 9. Equipment Readiness fleet (migration 287) ─────────────────────
   -- The module Reset Demo used to empty. Assert the five mobile units and
   -- their readiness statuses, not just that "some rows exist".
   select count(*) into v_n

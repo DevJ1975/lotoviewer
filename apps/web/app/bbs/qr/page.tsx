@@ -19,6 +19,7 @@ interface Location {
 
 export default function BBSQrAdminPage() {
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const [rows, setRows] = useState<Location[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -27,16 +28,16 @@ export default function BBSQrAdminPage() {
   const [qrImages, setQrImages] = useState<Record<string, string>>({})
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     setError(null)
     const { data: { session } } = await supabase.auth.getSession()
-    const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+    const headers: Record<string, string> = { 'x-active-tenant': tenantId }
     if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
     const res = await fetch('/api/bbs/locations', { headers })
     const body = await res.json()
     if (!res.ok) { setError(body.error ?? `HTTP ${res.status}`); return }
     setRows(body.locations ?? [])
-  }, [tenant?.id])
+  }, [tenantId])
 
   useEffect(() => { void load() }, [load])
 

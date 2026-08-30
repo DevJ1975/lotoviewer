@@ -65,6 +65,7 @@ const FREQUENCY_LABEL: Record<JhaFrequency, string> = {
 export default function JhaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const { profile } = useAuth()
   const canEdit = !!profile?.is_admin || !!profile?.is_superadmin
 
@@ -72,11 +73,11 @@ export default function JhaDetailPage({ params }: { params: Promise<{ id: string
   const [error,  setError]  = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     setError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+      const headers: Record<string, string> = { 'x-active-tenant': tenantId }
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
       const res = await fetch(`/api/jha/${id}`, { headers })
       const body = await res.json()
@@ -85,7 +86,7 @@ export default function JhaDetailPage({ params }: { params: Promise<{ id: string
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [tenant?.id, id])
+  }, [tenantId, id])
 
   useEffect(() => { void load() }, [load])
 

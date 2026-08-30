@@ -64,6 +64,19 @@ const DELETE_ORDER: readonly string[] = [
   'position_training_requirements',
   'position_equipment_requirements',
   'worker_position_assignments',
+  // ISO 14001 EMS registers (migrations 204-207), children first.
+  // seed_wls_iso14001_demo() re-creates these with deterministic ids and
+  // ON CONFLICT DO NOTHING, so without the wipe an edited demo row would
+  // survive a "reset" forever. compliance_calendar_obligations is
+  // deliberately NOT wiped — it also holds system-seeded rows this route
+  // cannot restore.
+  'iso14001_clause_evidence',
+  'environmental_objective_readings',
+  'nonconformity_actions',
+  'nonconformities',
+  'environmental_objectives',
+  'environmental_aspects',
+  'management_reviews',
   // Parents.
   'loto_equipment',
   'loto_confined_space_permits',
@@ -96,6 +109,7 @@ const SEED_FUNCTIONS = [
   'seed_wls_incidents_demo',
   'seed_wls_near_miss_demo',
   'seed_wls_bbs_demo',
+  'seed_wls_iso14001_demo',
   'seed_wls_equipment_readiness_demo',
 ] as const
 

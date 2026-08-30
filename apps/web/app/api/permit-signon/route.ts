@@ -91,6 +91,24 @@ function statusFor(p: ConfinedSpacePermit): LookupResponse['permit']['status'] {
   return 'active'
 }
 
+// "The training table isn't in the schema yet" — the ONLY error the training
+// gate is allowed to shrug off.
+//
+//   42P01   Postgres undefined_table (pre-migration-017 deployments)
+//   PGRST205 PostgREST cannot find the table in its schema cache
+//
+// Everything else — statement timeout, connection reset, revoked grant — is a
+// real failure. Treating those as "no records on file" would default-PASS the
+// §1910.146(g) / §1910.147(c)(7) gate, letting a worker whose training has
+// expired sign in and enter a permit-required space during a transient blip.
+// This is the one read in the module where failing open grants access rather
+// than denying it, so it fails closed instead.
+const SCHEMA_MISSING_CODES = new Set(['42P01', 'PGRST205'])
+
+function isTrainingTableMissing(err: { code?: string } | null): boolean {
+  return !!err && SCHEMA_MISSING_CODES.has(err.code ?? '')
+}
+
 async function loadPermitByToken(token: string): Promise<SignonPermit | null> {
   const admin = supabaseAdmin()
   const { data, error } = await admin
@@ -138,6 +156,13 @@ async function loadRoster(permit: SignonPermit): Promise<RosterEntry[]> {
   // "missing" but the supervisor can override). For QR sign-on with no
   // records on file we DEFAULT-PASS so a brand-new deployment isn't
   // locked out; once records exist the gate kicks in normally.
+  //
+  // A real read failure is NOT that case — rendering every worker green off a
+  // timed-out query is the fail-open this gate exists to prevent. Throw so the
+  // roster refuses to render and the POST handler reports it.
+  if (trainingErr && !isTrainingTableMissing(trainingErr)) {
+    throw new Error(`training records unavailable: ${trainingErr.message}`)
+  }
   const records: TrainingGateRecord[] = !trainingErr && trainingRows
     ? trainingRows as TrainingGateRecord[]
     : []
@@ -244,7 +269,19 @@ async function handleSignIn(token: string, name: string): Promise<NextResponse> 
     .from('loto_training_records')
     .select('worker_name, role, completed_at, expires_at')
     .eq('tenant_id', permit.tenant_id)
-  if (!trainingErr && trainingRows && trainingRows.length > 0) {
+  // Refuse the sign-in when the gate could not be evaluated. Proceeding here
+  // would admit an untrained worker to a permit-required space on the strength
+  // of a failed query; a 503 tells them to try again or see the supervisor.
+  if (trainingErr && !isTrainingTableMissing(trainingErr)) {
+    Sentry.captureException(new Error(trainingErr.message), {
+      tags: { route: '/api/permit-signon', stage: 'training-gate' },
+    })
+    return NextResponse.json(
+      { error: 'Cannot verify training right now. Try again in a moment, or ask your entry supervisor to sign you in.' },
+      { status: 503 },
+    )
+  }
+  if (trainingRows && trainingRows.length > 0) {
     const issues = validateTraining({
       entrants:   [trimmed],
       attendants: [],

@@ -37,13 +37,23 @@ export interface InviteEmailArgs {
 
 // Pick the public origin to put in invite emails. Order:
 //   1. NEXT_PUBLIC_APP_URL env (set in Vercel for branded links)
-//   2. The request's Origin / Host header
+//   2. The request's Host header
 //   3. Generic fallback
+//
+// Deliberately NOT the Origin header. Origin is chosen by whoever makes the
+// request and is never validated by the platform, whereas Vercel matches Host
+// against the deployment's configured domains. That distinction matters
+// because the value returned here becomes the base of an emailed invite LINK,
+// and /api/invites/refresh is unauthenticated: a caller holding any invite
+// token could send `Origin: https://evil.example` and have us mail the
+// invitee a genuine, freshly-minted token pointed at a domain the attacker
+// controls — a phishing page with the app's own credibility behind it.
+//
+// Dropping the Origin fallback costs nothing: Host is mandatory on every
+// HTTP/1.1+ request, so the chain still resolves whenever Origin would have.
 export function computeLoginUrl(req: Request): string {
   const envUrl = process.env.NEXT_PUBLIC_APP_URL?.trim()
   if (envUrl) return envUrl.replace(/\/$/, '')
-  const origin = req.headers.get('origin')
-  if (origin) return origin.replace(/\/$/, '')
   const host = req.headers.get('host')
   if (host) return `https://${host}`
   return 'https://soteriafield.app'

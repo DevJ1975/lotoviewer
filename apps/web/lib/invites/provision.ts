@@ -273,25 +273,31 @@ export interface IssueAndSendInviteArgs {
 }
 
 /**
- * Undo a prior soft-cancel so a freshly issued invite is actually usable.
+ * Put the membership's invite bookkeeping back to "freshly invited".
  *
- * The invite-reminders cron stamps `invite_cancelled_at` once an invitee
- * ignores all four reminders, and /api/invites/{validate,accept,refresh} all
- * refuse a cancelled membership. Nothing used to clear that stamp — so an
- * admin could grant access, mint a valid token, email it, and the invitee
- * would still hit "this invitation was cancelled" with no way out. An admin
- * deliberately re-issuing access IS the reactivation the cron's comment
- * ("an admin can clear invite_cancelled_at") always assumed existed.
+ * An admin issuing access is starting the invite lifecycle over, so every
+ * counter the cron reads has to start over with it:
  *
- * The reminder counter has to reset too: leaving it at the maximum means the
- * next cron run re-cancels the invite we just revived. `invite_last_reminder_at`
- * anchors the cadence in planInviteAction, so stamping it now gives the
- * invitee the usual interval before the first nudge instead of one immediately.
+ * - `invite_cancelled_at` blocks /api/invites/{validate,accept,refresh}.
+ *   Without clearing it an admin could grant access, mint a valid token,
+ *   email it, and the invitee would still hit "this invitation was
+ *   cancelled" with no way out.
+ * - `invite_reminders_sent` left at the maximum makes the next cron run
+ *   cancel the invite we just issued instead of reminding about it.
+ * - `invite_last_reminder_at` anchors the cadence in planInviteAction.
+ *   Clearing it hands the anchor to the new invite's own timestamp, which
+ *   is the honest clock for a lifecycle that just restarted.
+ *
+ * Runs on every admin-initiated send, not only on cancelled memberships:
+ * an access reset for someone mid-cadence is a new invite, not a nudge
+ * about the old one. The reminder cron mints its tokens through
+ * issueInviteToken directly, so its own sends never land here — otherwise
+ * this would reset the counter it is trying to advance.
  *
  * Best-effort: the invite itself is already valid, and failing the whole
- * request here would strand the caller worse than a stale cancel flag.
+ * request here would strand the caller worse than stale bookkeeping.
  */
-async function reactivateInvite(
+async function restartInviteLifecycle(
   admin: SupabaseClient,
   args: { userId: string; tenantId: string },
 ): Promise<void> {
@@ -301,15 +307,14 @@ async function reactivateInvite(
       invite_cancelled_at:     null,
       invite_cancelled_reason: null,
       invite_reminders_sent:   0,
-      invite_last_reminder_at: new Date().toISOString(),
+      invite_last_reminder_at: null,
     })
     .eq('user_id', args.userId)
     .eq('tenant_id', args.tenantId)
-    .not('invite_cancelled_at', 'is', null)
 
   if (error) {
     Sentry.captureException(error, {
-      tags: { module: 'issueAndSendInvite', stage: 'reactivate-invite' },
+      tags: { module: 'issueAndSendInvite', stage: 'restart-invite-lifecycle' },
     })
   }
 }
@@ -320,9 +325,9 @@ export async function issueAndSendInvite(
 ): Promise<{ inviteUrl?: string; emailSent: boolean }> {
   const appUrl = computeLoginUrl(args.req)
 
-  // Runs for both modes: an admin re-adding someone who was cancelled should
-  // clear the block whether or not this particular send carries a link.
-  await reactivateInvite(admin, { userId: args.userId, tenantId: args.tenantId })
+  // Runs for both modes: an admin re-adding someone should restart the
+  // cadence whether or not this particular send carries a link.
+  await restartInviteLifecycle(admin, { userId: args.userId, tenantId: args.tenantId })
 
   if (args.emailMode === 'added_notification') {
     const emailSent = await sendInviteEmail({

@@ -16,7 +16,7 @@ import {
   type ReviewStatus,
 } from '@soteria/core/managementReview'
 
-// /admin/environmental/management-review — ISO 14001:2015 §9.3.
+// /environmental/management-review — ISO 14001:2015 §9.3.
 // A review is one record (inputs summary + conclusions + decisions).
 // Action items are nonconformities with source_type = management_review.
 
@@ -168,7 +168,7 @@ export default function ManagementReviewPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-5">
       <div>
-        <Link href="/" className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300">
+        <Link href="/environmental" className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300">
           <ArrowLeft className="h-3 w-3" /> Back
         </Link>
         <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">

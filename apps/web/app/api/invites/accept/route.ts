@@ -57,12 +57,17 @@ export async function POST(req: Request) {
   if (status !== 'valid' || !row) return NextResponse.json({ status }, { status: 400 })
 
   if (row.tenant_id) {
-    const { data: membership } = await admin
+    const { data: membership, error: membershipErr } = await admin
       .from('tenant_memberships')
       .select('invite_cancelled_at')
       .eq('user_id', row.user_id)
       .eq('tenant_id', row.tenant_id)
       .maybeSingle()
+    // A failed lookup is not evidence the invite is live. Discarding the
+    // error made a transient DB fault read as "not cancelled" and let a
+    // revoked invitee set a password — the same fail-open tenantGate was
+    // hardened against. Refuse instead; the invitee can retry.
+    if (membershipErr) return sanitizeError(membershipErr, 'invites/accept membership lookup')
     if (membership?.invite_cancelled_at) {
       return NextResponse.json({ status: 'cancelled' }, { status: 400 })
     }
@@ -71,8 +76,17 @@ export async function POST(req: Request) {
   // Guard 1: never rotate the password of an account that has already
   // signed in. Mirrors validate/refresh; without it a live token is a
   // takeover primitive against an active user.
-  const { data: authUser } = await admin.auth.admin.getUserById(row.user_id)
-  if (authUser?.user?.last_sign_in_at) {
+  //
+  // Fail CLOSED on a lookup fault. The error was previously discarded, so a
+  // GoTrue outage left `authUser` null, `last_sign_in_at` undefined, and the
+  // guard silently satisfied — turning the one check that stands between a
+  // leaked token and a live account into a no-op exactly when the system was
+  // least healthy. An unreadable account state is not a dormant one.
+  const { data: authUser, error: authUserErr } = await admin.auth.admin.getUserById(row.user_id)
+  if (authUserErr || !authUser?.user) {
+    return sanitizeError(authUserErr ?? new Error('invite target not found'), 'invites/accept user lookup')
+  }
+  if (authUser.user.last_sign_in_at) {
     return NextResponse.json({ status: 'already_active' }, { status: 400 })
   }
 
