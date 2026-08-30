@@ -12,6 +12,55 @@ app at `/superadmin/release-notes`.
 
 _Nothing pending._
 
+## [1.19.0] — 2026-08-29
+
+Cut the same day as 1.18.0. That release went out mid-way through clearing
+the pull-request backlog; this one covers everything that landed after it.
+
+### Added
+- **Hazard Hunt** — customisable daily, weekly and monthly OSHA and Cal/OSHA
+  inspection rounds, with findings and write-ups feeding the risk model. Note
+  the risk model version moves to 2.1.0: the new indicator re-normalises every
+  existing one, so scores either side of this release are not comparable.
+- **Hazardous waste gains jurisdiction, acute classification, land-disposal
+  restriction notices and contingency plans.** Federal versus California rules
+  are decisive for several thresholds, and the module could not previously
+  express which applied.
+- **A dedicated wiki page for Behaviour-Based Safety**, and coaching teams.
+
+### Changed
+- **The AI surfaces move to the Claude 5 family**, and every call site now
+  declares its thinking posture explicitly. Silence used to mean "whatever the
+  model defaults to", and that default changed underneath us.
+- **Database round-trips consolidated.** Chat unread counts, tenant health and
+  the AI budget check each collapse several queries into one; the auth gate
+  issues its two reads together rather than in series.
+- **Mobile moves to Expo SDK 57** (React Native 0.86). Nothing here ships in
+  the web bundle.
+
+### Fixed
+- **Incident notifications no longer serialise ahead of the reporter's
+  response.** Each recipient's mail round-trip sat between the reporter and
+  their confirmation, so someone who had just reported an injury watched a
+  spinner while messages went out one at a time.
+- **Two dead journeys in the incident reporter**, and the divergence that hid
+  them from both the tests and the UI.
+- **The rapid-review overdue badge was frozen.** It compared against a clock
+  read during render, so it only updated when something unrelated re-rendered
+  the page.
+- Legal pages, the placard step limit, and Reset Demo — see 1.18.0.
+
+### Internal
+- **The pull-request backlog is empty.** 39 open at the start of the day: 33
+  merged, 6 closed as superseded, duplicated, or contradicted by shipped work.
+- Eight migrations were renumbered around collisions that GitHub reported as
+  mergeable, because the numbering clash only fails after the merge. Three
+  carried by-path references — a test, a wiki manifest, and the drift baseline
+  — that would have rotted silently.
+- Two cross-PR integration gaps that only a full-suite gate could find: a new
+  risk driver unclassified by the integral model, and three AI call sites
+  missing the thinking declaration a concurrently-merged PR began requiring.
+
 ## [1.18.0] — 2026-08-29
 
 ### Security
@@ -48,86 +97,6 @@ _Nothing pending._
   cancelled or the organisation switched off, while the database rules it was
   meant to mirror checked both. Most routes reach the database with a key that
   bypasses those rules, so for them the gate was the only thing standing there.
-## [1.10.0] - 2026-06-10
-
-### Added
-- **Hazard-communication symbols.** GHS pictograms, DOT hazard classes, NFPA 704
-  diamonds and waste-stream symbols, with printable labels.
-- **Post-work fire watch is enforced, not just documented.** NFPA 51B §8.7 sets a
-  floor on how long a watch must run after hot work stops; the form asked for it
-  and nothing checked it. The database now enforces the minimum too, because the
-  form is not the only writer.
-- **Behaviour-Based Safety coaching**, and a training and competency matrix.
-- **Placard export to Excel**, per site and per department.
-
-### Changed
-- **Continuous integration now gates the whole test suite**, typecheck, lint and
-  a production build, in place of a hand-picked 28-file subset. The subset
-  existed because the full suite was believed to have 127 failures; re-measured,
-  it had two, both stale assertions. Widening it immediately surfaced three real
-  problems that had been invisible: two typecheck errors, twelve tests that fail
-  only on the Node version CI runs, and a lockfile missing Linux binaries.
-- **Sign-in decides on a complete session.** The app could act on a half-loaded
-  session for one render, which sent a first-time user to the page they had
-  asked for before pulling them back to set a password.
-
-### Fixed
-- **A module with no quiz questions no longer records itself as passed.** Such a
-  module scores 100% by definition, and the "I reviewed this" confirmation was
-  only enforced in the browser — so a submission that skipped it still wrote a
-  passing training record. The server now requires the acknowledgement.
-- **Turning STRIKE off for a tenant now also turns off its APIs.** The module
-  toggle was enforced on the pages but not the endpoints behind them, so a
-  tenant without STRIKE still had working submit, playback, and assignment
-  endpoints.
-- **STRIKE assignment errors no longer echo database internals** to the caller.
-  Every other STRIKE endpoint already returned a generic message.
-
-- **Reset Demo no longer empties Equipment Readiness.** The reset wiped 31
-  tables and re-seeded 17. Everything Equipment Readiness owns — inspections,
-  their responses, defects, repairs and photo evidence — was in the first list
-  and not the second, so every reset silently emptied the module and nothing
-  put it back. A new seed restores a five-unit mobile fleet with inspections,
-  three open defects and a repair returned to service. A wipe followed by a
-  re-seed now leaves the tenant identical.
-- **Reset Demo re-seeds any demo tenant, not just #0002.** The wipe ran against
-  any tenant flagged `is_demo`, but the re-seed was gated on the tenant number.
-  A second demo tenant was therefore emptied and never restored. The seeds
-  resolve their own tenant by `is_demo`, so the number check was both wrong and
-  redundant. (Audit item A10.)
-- **A missing seed function is reported instead of silently skipped.** The
-  response now carries `seedsMissing`, so a partially-migrated database is
-  visible rather than quietly under-seeding.
-- **The SSO setup page handed admins a callback URL that goes nowhere.** The SP
-  ACS URL — the address your identity provider posts a sign-in to — defaulted to
-  a path inside this application that does not exist. An admin who pasted it
-  into Okta or Azure AD would have configured a dead endpoint and only found out
-  when the first user tried to sign in. SAML is terminated by Supabase Auth, not
-  by this app, so the field now defaults to the real Supabase endpoint, and is
-  left blank rather than guessing when the deployment cannot determine it.
-- **Fleet no longer advertises journey management.** The module description
-  promised "monitored journey plans", which are not built — the module home
-  already said "(coming soon)", but the drawer and catalog tile did not.
-- **The Data Hygiene Log showed operator instructions to admins.** When the log
-  could not load, the page told the reader to "run the data-hygiene SQL script
-  first — the table is created in Section -1", which is a note to whoever runs
-  the SQL, not to the admin reading the page. It now distinguishes three states
-  properly: nothing logged yet, nothing matching the current filter, and a real
-  load failure.
-- **The printed placard silently dropped isolation steps past the seventh.**
-- **The legal pages are reachable when signed out.** The login footer links to
-  Privacy and Terms, and clicking either bounced you back to the login screen.
-- **Equipment Readiness survives Reset Demo**, and the reset re-seeds any demo
-  organisation rather than only one.
-
-### Internal
-- The repository and the production database are reconciled in both directions,
-  and a drift check now compares them so it cannot silently recur. Seven tables
-  existed in production with no migration file anywhere; a rebuild would have
-  lost them.
-- 33 pull requests resolved: 24 merged, 5 closed as superseded, duplicated or
-  contradicted by shipped work.
-
 ## [1.17.1] — 2026-07-31
 
 A navigation and search release. The version is a patch, but the most visible
@@ -275,7 +244,7 @@ deep pages carry a breadcrumb trail.
   when the standard and the regulation disagree, the regulation decides
   pass/fail.
 
-## [1.10.0 – 1.16.0]
+## [1.11.0 – 1.16.0]
 
 > These six releases shipped without being cut into versioned sections, so
 > their entries accumulated under `[Unreleased]`. They are preserved verbatim
@@ -410,6 +379,86 @@ deep pages carry a breadcrumb trail.
   `qrcode` script. This packet assembly + QR-stamping pipeline is the
   groundwork for an in-app **report generator** that builds and refreshes the
   verification packet from live equipment data.
+
+## [1.10.0] - 2026-06-10
+
+### Added
+- **Hazard-communication symbols.** GHS pictograms, DOT hazard classes, NFPA 704
+  diamonds and waste-stream symbols, with printable labels.
+- **Post-work fire watch is enforced, not just documented.** NFPA 51B §8.7 sets a
+  floor on how long a watch must run after hot work stops; the form asked for it
+  and nothing checked it. The database now enforces the minimum too, because the
+  form is not the only writer.
+- **Behaviour-Based Safety coaching**, and a training and competency matrix.
+- **Placard export to Excel**, per site and per department.
+
+### Changed
+- **Continuous integration now gates the whole test suite**, typecheck, lint and
+  a production build, in place of a hand-picked 28-file subset. The subset
+  existed because the full suite was believed to have 127 failures; re-measured,
+  it had two, both stale assertions. Widening it immediately surfaced three real
+  problems that had been invisible: two typecheck errors, twelve tests that fail
+  only on the Node version CI runs, and a lockfile missing Linux binaries.
+- **Sign-in decides on a complete session.** The app could act on a half-loaded
+  session for one render, which sent a first-time user to the page they had
+  asked for before pulling them back to set a password.
+
+### Fixed
+- **A module with no quiz questions no longer records itself as passed.** Such a
+  module scores 100% by definition, and the "I reviewed this" confirmation was
+  only enforced in the browser — so a submission that skipped it still wrote a
+  passing training record. The server now requires the acknowledgement.
+- **Turning STRIKE off for a tenant now also turns off its APIs.** The module
+  toggle was enforced on the pages but not the endpoints behind them, so a
+  tenant without STRIKE still had working submit, playback, and assignment
+  endpoints.
+- **STRIKE assignment errors no longer echo database internals** to the caller.
+  Every other STRIKE endpoint already returned a generic message.
+
+- **Reset Demo no longer empties Equipment Readiness.** The reset wiped 31
+  tables and re-seeded 17. Everything Equipment Readiness owns — inspections,
+  their responses, defects, repairs and photo evidence — was in the first list
+  and not the second, so every reset silently emptied the module and nothing
+  put it back. A new seed restores a five-unit mobile fleet with inspections,
+  three open defects and a repair returned to service. A wipe followed by a
+  re-seed now leaves the tenant identical.
+- **Reset Demo re-seeds any demo tenant, not just #0002.** The wipe ran against
+  any tenant flagged `is_demo`, but the re-seed was gated on the tenant number.
+  A second demo tenant was therefore emptied and never restored. The seeds
+  resolve their own tenant by `is_demo`, so the number check was both wrong and
+  redundant. (Audit item A10.)
+- **A missing seed function is reported instead of silently skipped.** The
+  response now carries `seedsMissing`, so a partially-migrated database is
+  visible rather than quietly under-seeding.
+- **The SSO setup page handed admins a callback URL that goes nowhere.** The SP
+  ACS URL — the address your identity provider posts a sign-in to — defaulted to
+  a path inside this application that does not exist. An admin who pasted it
+  into Okta or Azure AD would have configured a dead endpoint and only found out
+  when the first user tried to sign in. SAML is terminated by Supabase Auth, not
+  by this app, so the field now defaults to the real Supabase endpoint, and is
+  left blank rather than guessing when the deployment cannot determine it.
+- **Fleet no longer advertises journey management.** The module description
+  promised "monitored journey plans", which are not built — the module home
+  already said "(coming soon)", but the drawer and catalog tile did not.
+- **The Data Hygiene Log showed operator instructions to admins.** When the log
+  could not load, the page told the reader to "run the data-hygiene SQL script
+  first — the table is created in Section -1", which is a note to whoever runs
+  the SQL, not to the admin reading the page. It now distinguishes three states
+  properly: nothing logged yet, nothing matching the current filter, and a real
+  load failure.
+- **The printed placard silently dropped isolation steps past the seventh.**
+- **The legal pages are reachable when signed out.** The login footer links to
+  Privacy and Terms, and clicking either bounced you back to the login screen.
+- **Equipment Readiness survives Reset Demo**, and the reset re-seeds any demo
+  organisation rather than only one.
+
+### Internal
+- The repository and the production database are reconciled in both directions,
+  and a drift check now compares them so it cannot silently recur. Seven tables
+  existed in production with no migration file anywhere; a rebuild would have
+  lost them.
+- 33 pull requests resolved: 24 merged, 5 closed as superseded, duplicated or
+  contradicted by shipped work.
 
 ## [1.9.0]
 
