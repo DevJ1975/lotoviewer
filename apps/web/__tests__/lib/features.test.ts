@@ -175,6 +175,8 @@ describe('getChildren', () => {
       'loto-import',
       'loto-decommission',
       'loto-review-portal',
+      'loto-group-permits',
+      'loto-manual',
     ])
   })
 
@@ -291,3 +293,26 @@ describe('FEATURES registry invariants', () => {
     }
   })
 })
+
+// ── EM-385 module registration ─────────────────────────────────────────────
+
+describe('EM-385 module', () => {
+  it('registers a live, accessible top-level safety module at /em385', () => {
+    const f = getFeature('em385')
+    expect(f).not.toBeNull()
+    expect(f?.category).toBe('safety')
+    expect(f?.parent).toBeUndefined()
+    expect(f?.href).toBe('/em385')
+    expect(isFeatureAccessible('em385')).toBe(true)
+    expect(getModules('safety').map(m => m.id)).toContain('em385')
+  })
+
+  it('keeps the New Contract entry internal (not a drawer row)', () => {
+    const child = getFeature('em385-new')
+    expect(child?.parent).toBe('em385')
+    expect(child?.internal).toBe(true)
+    // internal children are reached via in-page buttons, not the drawer.
+    expect(getChildren('em385').map(c => c.id)).toContain('em385-new')
+  })
+})
+

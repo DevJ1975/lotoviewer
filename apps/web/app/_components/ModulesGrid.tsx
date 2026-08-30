@@ -10,12 +10,15 @@ import { getModuleVisuals } from '@/lib/moduleVisuals'
 // because the drawer is the primary navigation surface. Filters out
 // coming-soon modules; those render as ads via ComingSoonStrip. Also
 // filters out modules the active tenant doesn't have visibility on so
-// the dashboard mirrors the drawer's per-tenant gating.
+// the dashboard mirrors the drawer's per-tenant gating. Internal modules
+// (href:null, surfaced via inline UI rather than a tile) are excluded too —
+// same posture as the drawer's navigationCatalog isVisibleFeature.
 
 export function ModulesGrid() {
   const { tenant } = useTenant()
   const modules = getModules('safety')
     .filter(m => !m.comingSoon)
+    .filter(m => !m.internal)
     .filter(m => isModuleVisible(m.id, tenant?.modules))
   if (modules.length === 0) return null
   return (

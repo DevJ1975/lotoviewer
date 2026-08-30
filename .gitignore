@@ -45,3 +45,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# python (scripts/osha_1910_ingest.py work dir + venv + caches)
+scripts/.osha-build/
+.venv*/
+**/__pycache__/

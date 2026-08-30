@@ -110,7 +110,9 @@ export async function regenerateAndUploadPlacard(
   const { data: { publicUrl } } = bucket.getPublicUrl(path)
 
   // Cache-bust the placard_url so the browser image fetch + the next
-  // PDF embed don't show the stale copy.
+  // PDF embed don't show the stale copy. (We don't touch signed_placard_url
+  // here — it isn't a column on loto_equipment; the signed artifact lives in
+  // loto_signed_pdf_artifacts. Writing it errored against the live schema.)
   const cacheBusted = `${publicUrl}?v=${Date.now()}`
   const { error: patchErr } = await admin
     .from('loto_equipment')

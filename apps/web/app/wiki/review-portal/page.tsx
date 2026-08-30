@@ -1,10 +1,24 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.2.2'
-const LAST_UPDATED    = '2026-06-06'
+const CURRENT_VERSION = '1.4.0'
+const LAST_UPDATED    = '2026-06-08'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.4.0',
+    date: '2026-06-08',
+    changes: [
+      'Cal/OSHA Inspector’s Report on the audit review link. After the multi-agent audit runs, a fifth agent — a veteran Cal/OSHA compliance officer (CSHO) — adversarially re-reviews every machine and the program as a whole BEFORE you review it. The audit review surface now opens with that program-level report (an §3314 program-element checklist, systemic patterns with affected counts, and ordered top priorities), and each machine carries the inspector’s narrative plus a "Regulator sharpened" badge wherever the regulator dissented from the internal EHS verdict and drove a correction. Corrected procedures are drafted bilingually (EN/ES) and, like every audit change, stay staged until you approve them.',
+    ],
+  },
+  {
+    version: '1.3.0',
+    date: '2026-06-08',
+    changes: [
+      'Audit review link — a second tokenized review surface, for the multi-agent LOTO audit (admin → LOTO Program → Multi-agent audit). The audit proposes fixes (per-step confidence grades, watermarked manufacturer/reference placeholders for low-confidence isolation points, and Cal/OSHA Title 8 §3314 findings) and STAGES them. A reviewer opens /review/audit/{token} to see a per-equipment summary plus an old→new diff for every proposed change, then Approves or Rejects each one and signs off. Nothing is written to the live placard data until an admin applies the approved set — snapshot-first, with an emergency rollback. This is a sibling of the floor-walk public link: read-only diffs + per-item approve/reject, not on-site photo capture.',
+    ],
+  },
   {
     version: '1.2.2',
     date: '2026-06-06',
@@ -92,6 +106,28 @@ export default function WikiReviewPortalPage() {
 
       <Section id="faq" title="Frequently asked questions">
         <Faq items={[
+          {
+            q: 'What is the audit review link vs. the floor-walk link?',
+            a: <>Two different tokenized surfaces. The <strong>floor-walk</strong>{' '}
+              link is for a supervisor capturing/replacing photos on site. The{' '}
+              <strong>audit review</strong> link (<code>/review/audit/{'{'}token{'}'}</code>)
+              shows the fixes the multi-agent audit proposed — a summary plus an
+              old→new diff per change — and lets a reviewer approve or reject each
+              one. No change touches the live placard until it is approved here{' '}
+              <em>and</em> an admin applies it (snapshot-first, with rollback).</>,
+          },
+          {
+            q: 'What is the Cal/OSHA Inspector\'s Report at the top of the audit review?',
+            a: <>After the audit runs, a fifth agent — a veteran Cal/OSHA
+              compliance officer — re-reviews every machine and the whole
+              program adversarially, <em>before</em> you do. Its program-level
+              report (an §3314 program-element checklist, systemic patterns, and
+              ordered priorities) heads the review surface, and individual
+              machines show its inspector narrative plus a <strong>Regulator
+              sharpened</strong> badge wherever it dissented from the internal
+              EHS verdict and drove a correction. It is advisory — every fix it
+              prompts is still staged for your approval.</>,
+          },
           {
             q: 'How long is the link valid?',
             a: <>30 days by default. Revoke takes effect immediately. Once

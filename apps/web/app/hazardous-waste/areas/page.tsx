@@ -11,6 +11,7 @@ import {
   type HazardousWasteAreaRow,
   type HazardousWasteAreaType,
 } from '@soteria/core/hazardousWaste'
+import PrintSignageButton from './PrintSignageButton'
 
 // /hazardous-waste/areas — tenant-admin surface to list, add, rename,
 // retune cadence, and archive accumulation areas. Read access is open
@@ -27,6 +28,7 @@ const AREA_TYPE_OPTIONS: ReadonlyArray<{ value: HazardousWasteAreaType; label: s
 
 export default function HazardousWasteAreasPage() {
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const { profile } = useAuth()
   const canWrite = !!profile?.is_admin || !!profile?.is_superadmin
 
@@ -35,11 +37,11 @@ export default function HazardousWasteAreasPage() {
   const [showArchived, setShowArchived] = useState(false)
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     setError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+      const headers: Record<string, string> = { 'x-active-tenant': tenantId }
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
       const url = `/api/hazardous-waste/areas${showArchived ? '?include_archived=true' : ''}`
       const res = await fetch(url, { headers })
@@ -49,7 +51,7 @@ export default function HazardousWasteAreasPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [tenant?.id, showArchived])
+  }, [tenantId, showArchived])
 
   useEffect(() => { void load() }, [load])
 
@@ -166,12 +168,15 @@ export default function HazardousWasteAreasPage() {
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 {!area.archived_at && (
-                  <Link
-                    href={`/hazardous-waste/inspections/new?area=${encodeURIComponent(area.id)}`}
-                    className="text-xs font-semibold text-brand-navy hover:underline"
-                  >
-                    Inspect
-                  </Link>
+                  <>
+                    <Link
+                      href={`/hazardous-waste/inspections/new?area=${encodeURIComponent(area.id)}`}
+                      className="text-xs font-semibold text-brand-navy hover:underline"
+                    >
+                      Inspect
+                    </Link>
+                    <PrintSignageButton areaId={area.id} onError={setError} />
+                  </>
                 )}
                 {canWrite && (
                   <>

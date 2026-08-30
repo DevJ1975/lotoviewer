@@ -15,6 +15,7 @@ import {
   type HazardousWasteStreamRow,
   type HazardousWasteVolumeUnit,
 } from '@soteria/core/hazardousWaste'
+import { StreamSymbolDetail } from '../../streams/_components/StreamSymbolBadges'
 
 const AREA_TYPES: HazardousWasteAreaType[] = [
   'satellite_accumulation', 'central_accumulation',
@@ -25,6 +26,7 @@ export default function NewHazardousWasteContainerPage() {
   const router = useRouter()
   const search = useSearchParams()
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const prefilledStream = search?.get('stream_id') ?? ''
 
   const [streams, setStreams]                       = useState<HazardousWasteStreamRow[] | null>(null)
@@ -41,9 +43,9 @@ export default function NewHazardousWasteContainerPage() {
   const [error, setError]                           = useState<string | null>(null)
 
   const loadStreams = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     const { data: { session } } = await supabase.auth.getSession()
-    const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+    const headers: Record<string, string> = { 'x-active-tenant': tenantId }
     if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
     const res = await fetch('/api/hazardous-waste/streams?status=active', { headers })
     const json = await res.json()
@@ -52,9 +54,11 @@ export default function NewHazardousWasteContainerPage() {
     if (!streamId && (json.streams?.length ?? 0) > 0) {
       setStreamId(json.streams[0].id)
     }
-  }, [tenant?.id, streamId])
+  }, [tenantId, streamId])
 
   useEffect(() => { void loadStreams() }, [loadStreams])
+
+  const selectedStream = (streams ?? []).find(s => s.id === streamId) ?? null
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -132,6 +136,15 @@ export default function NewHazardousWasteContainerPage() {
             </span>
           )}
         </Field>
+
+        {selectedStream && (
+          <div className="rounded-md border border-slate-200 dark:border-slate-800 p-3 space-y-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+              Stream hazards
+            </span>
+            <StreamSymbolDetail source={selectedStream} />
+          </div>
+        )}
 
         <Field label="Container label *" hint="A label that field workers can read (e.g. drum number or barcode)">
           <input

@@ -7,6 +7,7 @@ import {
   AlertCircle, ArrowLeft, BookOpenCheck, Clock, FileVideo, Loader2, Plus,
   RefreshCw, Sparkles,
 } from 'lucide-react'
+import { StudioVideoLink } from '@/components/strike/StudioVideoLink'
 import { superadminJson } from '@/lib/superadminFetch'
 import type {
   StrikeStudioModuleRow,
@@ -338,6 +339,14 @@ export default function StrikeStudioPage() {
                         </p>
                         {module.description && (
                           <p className="text-sm text-slate-600 dark:text-slate-300 mt-2 line-clamp-2">{module.description}</p>
+                        )}
+                        {module.latest_version && (
+                          <StudioVideoLink
+                            versionId={module.latest_version.id}
+                            videoExternalId={module.latest_version.video_external_id}
+                            vimeoHash={module.latest_version.vimeo_hash}
+                            onChanged={() => void load()}
+                          />
                         )}
                       </div>
                       <div className="text-right text-xs text-slate-500 dark:text-slate-400 shrink-0">

@@ -1,7 +1,9 @@
 'use client'
 
 import { memo, useCallback, useMemo, useState, type MouseEvent } from 'react'
+import { FilterX } from 'lucide-react'
 import type { Equipment } from '@soteria/core/types'
+import { EmptyState } from '@/components/EmptyState'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useUploadQueue } from '@/components/UploadQueueProvider'
 import { useSession } from '@/components/SessionProvider'
@@ -144,6 +146,7 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
           <button
             type="button"
             onClick={() => setSort(s => s === 'id' ? 'status' : 'id')}
+            aria-label={sort === 'id' ? 'Sorted by ID. Activate to sort by status' : 'Sorted by status. Activate to sort by ID'}
             className="placard-label rounded-sm px-3 py-1.5 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors"
             title="Toggle sort order"
           >
@@ -156,6 +159,7 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by ID, description, or department…"
+          aria-label="Search equipment by ID, description, or department"
           className="w-full rounded-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
         />
 
@@ -165,6 +169,7 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
               key={b.value}
               type="button"
               onClick={() => setFilter(b.value)}
+              aria-pressed={filter === b.value}
               className={`placard-label shrink-0 px-3 py-1.5 rounded-sm border transition-colors ${
                 filter === b.value
                   ? 'bg-brand-navy text-white border-brand-navy'
@@ -210,9 +215,24 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-center h-48 text-slate-400 dark:text-slate-500 text-sm">
-              No equipment matches your filters.
-            </div>
+            // Clear Filters resets panel-owned state only. `dept` stays: it is
+            // URL navigation state owned by the sidebar, and clearing it would
+            // teleport the user out of the department they chose.
+            <EmptyState
+              icon={FilterX}
+              eyebrow="No Match"
+              title="No equipment matches your filters"
+              description="Try a different search term, or clear the search and status filters."
+              action={
+                <button
+                  type="button"
+                  onClick={() => { setSearch(''); setFilter('all') }}
+                  className="placard-label rounded-sm px-3 py-1.5 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Clear Filters
+                </button>
+              }
+            />
           )
         ) : (
           grouped.map(group => (
@@ -251,8 +271,10 @@ export default function EquipmentListPanel({ equipment, selectedDept, selectedEq
 function StatusDot({ status }: { status: PhotoStatus }) {
   // Square dots read more as a status LED on a control panel than the
   // generic round dots that ship with every B2B template.
+  // aria-hidden: the StatusPill beside it carries the same state as text, and
+  // aria-label on a bare <span> is unreliable — when honored it double-announces.
   const cls = status === 'complete' ? 'bg-emerald-500' : status === 'partial' ? 'bg-amber-400' : 'bg-rose-500'
-  return <span className={`w-2.5 h-2.5 rounded-sm ${cls} shrink-0`} aria-label={status} />
+  return <span className={`w-2.5 h-2.5 rounded-sm ${cls} shrink-0`} aria-hidden="true" />
 }
 
 function StatusPill({ status }: { status: PhotoStatus }) {
@@ -287,26 +309,41 @@ const EquipmentRow = memo(function EquipmentRow({ eq, status, isSelected, isFlag
   const photoCount = (eq.equip_photo_url?.trim() ? 1 : 0) + (eq.iso_photo_url?.trim() ? 1 : 0)
   const handleClick = () => onSelect(eq.equipment_id)
   const handleContext = (e: MouseEvent) => { e.preventDefault(); onToggleFlag(eq.equipment_id) }
-  const handleFlagClick = (e: MouseEvent) => { e.stopPropagation(); onToggleFlag(eq.equipment_id) }
+  const handleFlagClick = () => onToggleFlag(eq.equipment_id)
   // content-visibility skips layout+paint for off-screen rows — near-virtualization
   // without a dep. intrinsic-size matches the row's rendered height (~68px) so
   // the scrollbar stays correct.
+  //
+  // Structure: the row is a real <button> (Tab/Enter/Space + SR operable); the
+  // flag is its SIBLING, absolutely positioned over right padding the row
+  // reserves for it — nesting it would be invalid HTML (button-in-button).
+  // `group` sits on the <li> so hovering anywhere on the row — flag included —
+  // drives both the row highlight and the flag reveal, and onContextMenu sits
+  // here so right-click toggles the flag from anywhere on the row, as before.
+  // The focus ring is INSET because content-visibility implies paint
+  // containment on the <li>: an outward ring would be clipped at its bounds.
   return (
-    <li style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 68px' }}>
-      <div
+    <li
+      className="relative group"
+      style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 68px' }}
+      onContextMenu={handleContext}
+    >
+      <button
+        type="button"
         onClick={handleClick}
-        onContextMenu={handleContext}
-        className={`relative w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors cursor-pointer group ${
+        aria-current={isSelected ? 'true' : undefined}
+        className={`w-full text-left cursor-pointer pl-4 pr-12 pointer-coarse:pr-16 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-navy dark:focus-visible:ring-brand-yellow ${
           isSelected
             ? 'bg-brand-yellow/10 dark:bg-brand-yellow/5'
             : isFlagged
-              ? 'bg-orange-50/60 hover:bg-orange-50'
-              : 'bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-900/40'
+              ? 'bg-orange-50/60 group-hover:bg-orange-50'
+              : 'bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-900/40'
         }`}
       >
         {/* Selection rail — same hazard-yellow vocabulary used by the
             sidebar and page headers, so the active row reads as
-            "currently locked out" instead of a faint shadcn highlight. */}
+            "currently locked out" instead of a faint shadcn highlight.
+            Anchors to the relative <li>. */}
         {isSelected && (
           <span aria-hidden="true" className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-sm bg-brand-yellow" />
         )}
@@ -315,7 +352,12 @@ const EquipmentRow = memo(function EquipmentRow({ eq, status, isSelected, isFlag
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="placard-numeric text-sm font-bold text-brand-navy dark:text-brand-yellow truncate">{eq.equipment_id}</span>
-              {eq.verified && <span className="text-emerald-500 text-xs" title="Verified">✓</span>}
+              {eq.verified && (
+                <>
+                  <span className="text-emerald-500 text-xs" title="Verified" aria-hidden="true">✓</span>
+                  <span className="sr-only">Verified</span>
+                </>
+              )}
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{shortName(eq.description)}</div>
           </div>
@@ -329,22 +371,28 @@ const EquipmentRow = memo(function EquipmentRow({ eq, status, isSelected, isFlag
               {photoCount}/2
             </span>
             <StatusPill status={status} />
-            <button
-              type="button"
-              onClick={handleFlagClick}
-              aria-label={isFlagged ? 'Unflag' : 'Flag for follow-up'}
-              title={isFlagged ? 'Unflag' : 'Flag for follow-up'}
-              className={`text-[10px] font-black uppercase tracking-wider w-6 h-6 flex items-center justify-center rounded-sm transition-all ${
-                isFlagged
-                  ? 'bg-orange-500 text-white opacity-100'
-                  : 'border border-slate-300 dark:border-slate-700 text-slate-400 opacity-0 group-hover:opacity-100 hover:text-orange-500 hover:border-orange-300'
-              }`}
-            >
-              !
-            </button>
           </div>
         </div>
-      </div>
+      </button>
+
+      {/* Flag — desktop keeps the 24px hover-reveal; coarse pointers (iPad,
+          gloved hands) get it always visible at 44px, since there is no hover
+          to reveal it with. focus-visible:opacity-100 so the tabbable control
+          is never an invisible focus stop. */}
+      <button
+        type="button"
+        onClick={handleFlagClick}
+        aria-pressed={isFlagged}
+        aria-label={isFlagged ? `Unflag ${eq.equipment_id}` : `Flag ${eq.equipment_id} for follow-up`}
+        title={isFlagged ? 'Unflag' : 'Flag for follow-up'}
+        className={`absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 pointer-coarse:w-11 pointer-coarse:h-11 pointer-coarse:right-1.5 flex items-center justify-center rounded-sm text-[10px] font-black uppercase tracking-wider transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy dark:focus-visible:ring-brand-yellow ${
+          isFlagged
+            ? 'bg-orange-500 text-white'
+            : 'border border-slate-300 dark:border-slate-700 text-slate-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100 hover:text-orange-500 hover:border-orange-300'
+        }`}
+      >
+        !
+      </button>
     </li>
   )
 })

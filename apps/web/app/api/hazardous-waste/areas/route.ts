@@ -44,7 +44,7 @@ export async function GET(req: Request) {
     // time into each area row. The DB is the cheap place to do this;
     // doing it in JS would mean fetching every inspection row.
     const areaIds = (areas ?? []).map(a => a.id)
-    let lastInspectedByArea = new Map<string, string>()
+    const lastInspectedByArea = new Map<string, string>()
     if (areaIds.length > 0) {
       const { data: lastRows, error: lastErr } = await gate.authedClient
         .from('hazardous_waste_inspections')

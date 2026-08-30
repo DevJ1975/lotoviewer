@@ -43,14 +43,29 @@ export class AnthropicNotConfiguredError extends Error {
  *   - AnthropicNotConfiguredError — neither tenant nor env has a key.
  *
  * Routes catch these and return 502/500 with a clear operator message.
+ *
+ * `opts.timeoutMs` overrides the default 30s request timeout — needed by
+ * surfaces whose structured output runs long (e.g. the multi-agent audit's
+ * EHS citations). Bounded by the caller's function maxDuration.
  */
-export async function getAnthropic(tenantId: string | null): Promise<Anthropic> {
+export async function getAnthropic(
+  tenantId: string | null,
+  opts?: { timeoutMs?: number; maxRetries?: number },
+): Promise<Anthropic> {
   const apiKey = await getTenantApiKey(tenantId)
   if (!apiKey) throw new AnthropicNotConfiguredError()
   return new Anthropic({
     apiKey,
-    timeout: DEFAULT_TIMEOUT_MS,
-    maxRetries: DEFAULT_MAX_RETRIES,
+    timeout: opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    // Retries multiply the wall-clock budget: the worst case is
+    // `timeout × (maxRetries + 1)`, and that has to leave room for
+    // everything else in the request or the platform kills the function and
+    // the caller gets a raw 504 instead of any error this module produced.
+    // A surface doing one long generation should usually set this to 0 —
+    // re-running a call that already exceeded its timeout will exceed it
+    // again, and the second attempt only spends the budget that would have
+    // carried a useful error back to the user.
+    maxRetries: opts?.maxRetries ?? DEFAULT_MAX_RETRIES,
   })
 }
 
@@ -110,6 +125,17 @@ export function aiErrorToResponse(err: unknown, surface: string): AiErrorRespons
         ? `The AI service rejected the request: ${upstream}`
         : 'The AI service rejected the request.' },
       tags: { surface, kind: `upstream-${status}` },
+    }
+  }
+  // A client-side timeout carries no HTTP status, so without this branch it
+  // fell through to the catch-all and surfaced as "unexpected error" — which
+  // tells the operator nothing about the one thing they can actually do,
+  // which is try again on a smaller piece of work.
+  if (err instanceof Anthropic.APIConnectionTimeoutError) {
+    return {
+      status: 504,
+      body: { error: 'The AI service took too long to respond. Try again — if it keeps happening, the request is probably too large.' },
+      tags: { surface, kind: 'timeout' },
     }
   }
   // Catch-all. Include the underlying message when it's an Error so

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { checkMemoryRateLimit } from '@/lib/rateLimit/memory'
+import { clientIp } from '@/lib/rateLimit/clientIp'
 import {
   BBS_KINDS,
   BBS_SEVERITY,
@@ -20,6 +22,19 @@ import {
 // the receiver.
 
 const TOKEN_RE = /^[a-f0-9]{16,64}$/i
+
+// The token grants anonymous INSERT into bbs_observations, and a printed QR
+// is world-readable by design — anyone who photographs a poster can replay
+// the URL. Bucket per (token, IP) so one abusive scanner cannot drown a
+// location's feed, while a genuine crew all reporting from one site NAT
+// still gets a workable allowance.
+//
+// This brake is per-process (see lib/rateLimit/memory.ts): the real ceiling
+// is limit x live instances. That is a deliberate interim — the durable
+// shape is a bbs_intake_throttle table mirroring migration 067, which needs
+// a sequenced migration slot. Tracked as D3.1 in docs/deferred-work.md.
+const INTAKE_LIMIT_PER_WINDOW = 12
+const INTAKE_WINDOW_MS        = 10 * 60 * 1000
 
 interface QRLocationRow {
   id:        string
@@ -62,6 +77,22 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
 export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params
   if (!TOKEN_RE.test(token)) return NextResponse.json({ error: 'Invalid token' }, { status: 400 })
+
+  // Throttle before parsing the body or touching the database, so a flood
+  // costs us as little as possible.
+  const throttle = checkMemoryRateLimit(
+    `bbs-intake:${token}:${clientIp(req)}`,
+    INTAKE_LIMIT_PER_WINDOW,
+    INTAKE_WINDOW_MS,
+  )
+  if (!throttle.ok) {
+    // Generic message and no detail about the limit — never help a caller
+    // calibrate around it.
+    return NextResponse.json(
+      { error: 'Too many submissions. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(throttle.retryAfterSec ?? 60) } },
+    )
+  }
 
   let body: Record<string, unknown>
   try { body = await req.json() }

@@ -51,7 +51,6 @@ interface StrikeVersionRow {
   id: string
   module_id: string
   version_number: number
-  video_path: string | null
   transcript: string | null
   duration_seconds: number | null
   passing_score: number
@@ -154,7 +153,7 @@ export default function StrikePage() {
       if (moduleIds.length > 0) {
         const { data: versionRows, error: versionErr } = await supabase
           .from('strike_module_versions')
-          .select('id,module_id,version_number,video_path,transcript,duration_seconds,passing_score,published_at')
+          .select('id,module_id,version_number,transcript,duration_seconds,passing_score,published_at')
           .in('module_id', moduleIds)
           .eq('status', 'published')
           .order('version_number', { ascending: false })

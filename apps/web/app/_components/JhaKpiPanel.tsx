@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
-import { ArrowRight, ClipboardCheck, Clock, Loader2, ShieldAlert } from 'lucide-react'
+import { ClipboardCheck, Clock, ShieldAlert } from 'lucide-react'
 import { fetchJhaMetrics, type JhaMetrics } from '@soteria/core/jhaMetrics'
+import { DashboardPanel, PanelEyebrow, PanelLink } from '@/components/DashboardPanel'
+import OpsSpinner from '@/components/OpsSpinner'
 import { useTenant } from '@/components/TenantProvider'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { SEVERITY_TW } from '@soteria/core/severityColors'
@@ -49,27 +51,14 @@ export default function JhaKpiPanel() {
   if (error && !metrics) return null
 
   return (
-    <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5 space-y-4">
-      <header className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-            Job Hazard Analysis · ISO 45001 6.1.2.2
-          </div>
-          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
-            JHA intelligence
-          </h2>
-        </div>
-        <Link
-          href="/jha"
-          className="text-xs font-semibold text-brand-navy hover:underline inline-flex items-center gap-1"
-        >
-          All JHAs <ArrowRight className="h-3 w-3" />
-        </Link>
-      </header>
-
+    <DashboardPanel
+      eyebrow="Job Hazard Analysis · ISO 45001 6.1.2.2"
+      title="JHA intelligence"
+      action={<PanelLink href="/jha">All JHAs</PanelLink>}
+    >
       {loading && metrics === null ? (
         <div className="flex items-center justify-center py-6">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+          <OpsSpinner size="sm" label={null} />
         </div>
       ) : metrics === null || metrics.totalAll === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-4 text-center">
@@ -81,7 +70,7 @@ export default function JhaKpiPanel() {
       ) : (
         <Inner metrics={metrics} />
       )}
-    </section>
+    </DashboardPanel>
   )
 }
 
@@ -122,9 +111,7 @@ function Inner({ metrics }: { metrics: JhaMetrics }) {
 
       {topByWorstCase.length > 0 && (
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">
-            Top by worst-case severity
-          </div>
+          <PanelEyebrow className="mb-2">Top by worst-case severity</PanelEyebrow>
           <ul className="space-y-1">
             {topByWorstCase.map(r => (
               <li key={r.id} className="flex items-center gap-2 text-sm">

@@ -1,11 +1,16 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
-import { supabaseAdmin, generateTempPassword } from '@/lib/supabaseAdmin'
-import { sendInviteEmail, computeLoginUrl } from '@/lib/email/sendInvite'
+import { inviteIssueRateLimit } from '@/lib/rateLimit/inviteIssue'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import {
+  ensureInvitedUser,
+  ensureTenantMembership,
+  issueAndSendInvite,
+  provisionFailureResponse,
+} from '@/lib/invites/provision'
 import { isValidRole, isValidTenantNumber, normalizeEmail } from '@/lib/validation/tenants'
 import type { TenantRole } from '@soteria/core/types'
-import type { SupabaseClient, User } from '@supabase/supabase-js'
 
 // GET  /api/superadmin/tenants/[number]/members
 // POST /api/superadmin/tenants/[number]/members
@@ -16,10 +21,10 @@ import type { SupabaseClient, User } from '@supabase/supabase-js'
 //
 // POST adds a user to a tenant. If the email already maps to a profiles
 // row, just creates the tenant_memberships link. If not, creates auth.users
-// + profile (must_change_password = true), generates a one-time password,
-// and emails the invite via Resend (lib/email/sendInvite). The temp
-// password is also returned in the response so the superadmin has a
-// copy-paste fallback when Resend isn't configured.
+// + profile (must_change_password = true) and emails a single-use
+// accept-invite LINK via Resend (lib/invites/provision). The temp
+// password + invite link are also returned in the response so the
+// superadmin has a copy-paste fallback when Resend isn't configured.
 
 // ─── GET ───────────────────────────────────────────────────────────────────
 
@@ -35,78 +40,6 @@ export interface EnrichedMember {
   last_sign_in_at:      string | null
   // Computed: 'invited' (never logged in) | 'active' (has signed in)
   status:               'invited' | 'active'
-}
-
-type ProfileLookup = {
-  id: string
-  email: string | null
-  full_name?: string | null
-  must_change_password?: boolean | null
-}
-type MessageError = { message: string }
-
-function profileNameFromAuthUser(user: User): string | null {
-  const value = user.user_metadata?.full_name
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
-async function findAuthUserByEmail(
-  admin: SupabaseClient,
-  email: string,
-): Promise<{ user: User | null; error: MessageError | null }> {
-  const wanted = email.toLowerCase()
-  const PAGE_SIZE = 200
-  const MAX_PAGES = 50
-
-  for (let page = 1; page <= MAX_PAGES; page++) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: PAGE_SIZE })
-    if (error) return { user: null, error }
-
-    const user = (data?.users ?? []).find(u => u.email?.toLowerCase() === wanted)
-    if (user) return { user, error: null }
-    if ((data?.users ?? []).length < PAGE_SIZE) break
-  }
-
-  return { user: null, error: null }
-}
-
-async function ensureProfileForExistingAuthUser(
-  admin: SupabaseClient,
-  user: User,
-  email: string,
-  fullName: string,
-): Promise<{ ok: true } | { ok: false; error: MessageError }> {
-  const { data: profile, error: lookupErr } = await admin
-    .from('profiles')
-    .select('id, email, full_name, must_change_password')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  if (lookupErr) return { ok: false, error: lookupErr }
-
-  const existing = profile as ProfileLookup | null
-  if (existing) {
-    const patch: Partial<Pick<ProfileLookup, 'email' | 'full_name'>> & { updated_at?: string } = {}
-    if ((existing.email ?? '').toLowerCase() !== email) patch.email = email
-    if (fullName && !existing.full_name) patch.full_name = fullName
-
-    if (Object.keys(patch).length > 0) {
-      patch.updated_at = new Date().toISOString()
-      const { error } = await admin.from('profiles').update(patch).eq('id', user.id)
-      if (error) return { ok: false, error }
-    }
-    return { ok: true }
-  }
-
-  const { error: insertErr } = await admin.from('profiles').insert({
-    id:                   user.id,
-    email,
-    full_name:            fullName || profileNameFromAuthUser(user),
-    must_change_password: false,
-  })
-  if (insertErr) return { ok: false, error: insertErr }
-
-  return { ok: true }
 }
 
 export async function GET(req: Request, ctx: { params: Promise<{ number: string }> }) {
@@ -187,6 +120,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
   const gate = await requireSuperadmin(req.headers.get('authorization'))
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
+  const limited = inviteIssueRateLimit(gate.userId)
+  if (limited) return limited
+
   const { number } = await ctx.params
   if (!isValidTenantNumber(number)) {
     return NextResponse.json({ error: 'Invalid tenant number' }, { status: 400 })
@@ -221,102 +157,39 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
   }
   if (!tenant) return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
 
-  // Find existing profile by email.
-  const { data: existing, error: profileLookupErr } = await admin
-    .from('profiles')
-    .select('id, email')
-    .eq('email', email)
-    .maybeSingle()
-  if (profileLookupErr) {
-    Sentry.captureException(profileLookupErr, {
-      tags: { route: '/api/superadmin/tenants/[number]/members', stage: 'profile-lookup' },
-    })
-    return NextResponse.json({ error: profileLookupErr.message }, { status: 500 })
-  }
-
-  let userId: string
-  let tempPassword: string | undefined
-  let alreadyExisted = !!existing
-
-  if (existing) {
-    userId = existing.id
-  } else {
-    // Create auth user + profile (handle_new_user trigger from migration 003
-    // auto-creates the profiles row). Random temp password; rotation forced
-    // on first login via must_change_password = true.
-    tempPassword = generateTempPassword()
-    const { data: created, error: createErr } = await admin.auth.admin.createUser({
-      email,
-      password: tempPassword,
-      email_confirm: true,
-      user_metadata: fullName ? { full_name: fullName } : undefined,
-    })
-    if (createErr || !created.user) {
-      const { user: authUser, error: authLookupErr } = await findAuthUserByEmail(admin, email)
-      if (authLookupErr) {
-        Sentry.captureException(authLookupErr, {
-          tags: { route: '/api/superadmin/tenants/[number]/members', stage: 'auth-user-lookup-after-create-fail' },
-        })
-        return NextResponse.json({ error: authLookupErr.message }, { status: 500 })
-      }
-      if (!authUser) {
-        return NextResponse.json({
-          error: createErr?.message ?? 'Could not create user',
-        }, { status: 400 })
-      }
-
-      const profileResult = await ensureProfileForExistingAuthUser(admin, authUser, email, fullName)
-      if (!profileResult.ok) {
-        Sentry.captureException(profileResult.error, {
-          tags: { route: '/api/superadmin/tenants/[number]/members', stage: 'profile-ensure-existing-auth-user' },
-        })
-        return NextResponse.json({ error: profileResult.error.message }, { status: 500 })
-      }
-
-      userId = authUser.id
-      tempPassword = undefined
-      alreadyExisted = true
-    } else {
-      userId = created.user.id
-
-      // Patch the auto-created profiles row with full_name + must_change_password.
-      await admin.from('profiles').update({
-        full_name:            fullName || null,
-        must_change_password: true,
-      }).eq('id', userId)
-    }
-  }
+  const invited = await ensureInvitedUser(admin, { email, fullName })
+  if (!invited.ok) return provisionFailureResponse(invited, 'superadmin/members/POST')
+  const { userId, createdAuthUser, tempPassword, alreadyExisted } = invited
 
   // Insert membership. PK is (user_id, tenant_id) so re-invites collide.
-  const { error: insertErr } = await admin
-    .from('tenant_memberships')
-    .insert({ user_id: userId, tenant_id: tenant.id, role, invited_by: gate.userId })
-
-  if (insertErr) {
-    const code = (insertErr as { code?: string }).code
-    if (code === '23505') {
+  const membership = await ensureTenantMembership(admin, {
+    userId, tenantId: tenant.id, role, invitedBy: gate.userId, onConflict: 'error',
+  })
+  if (!membership.ok) {
+    if (createdAuthUser) await admin.auth.admin.deleteUser(userId)
+    if (membership.status === 409) {
       return NextResponse.json({
         error: `${email} is already a member of this tenant`,
       }, { status: 409 })
     }
-    Sentry.captureException(insertErr, { tags: { route: '/api/superadmin/tenants/[number]/members', stage: 'membership-insert' } })
-    return NextResponse.json({ error: insertErr.message }, { status: 500 })
+    return provisionFailureResponse(membership, 'superadmin/members/POST')
   }
 
   // Send an invite email in BOTH cases:
-  //   - new user → email with the temp password
-  //   - existing user → notification email with no password (the helper
-  //     renders a different template when tempPassword is empty)
+  //   - new (or never-signed-in) user → single-use accept-invite link
+  //   - active existing user → notification email (no link, no secrets)
   // Best-effort: emailSent=false surfaces in the UI so the superadmin
-  // can fall back to copy-pasting the password (new user) or telling
-  // the existing user about the new tenant out-of-band.
-  const loginUrl = computeLoginUrl(req)
-  const emailSent = await sendInviteEmail({
-    to:           email,
-    fullName,
-    tempPassword: tempPassword ?? '',
-    loginUrl,
-    tenantName:   tenant.name,
+  // can fall back to copy-pasting the invite link / password (new user)
+  // or telling the existing user about the new tenant out-of-band.
+  const { inviteUrl, emailSent } = await issueAndSendInvite(admin, {
+    userId,
+    email,
+    fullName:   invited.fullName,
+    tenantId:   tenant.id,
+    tenantName: tenant.name,
+    createdBy:  gate.userId,
+    req,
+    emailMode:  createdAuthUser || invited.mustChangePassword ? 'invite_link' : 'added_notification',
   })
 
   return NextResponse.json({
@@ -324,6 +197,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     email,
     role,
     tempPassword,
+    inviteUrl,
     emailSent,
     alreadyExisted,
   }, { status: 201 })

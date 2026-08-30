@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireTenantMember } from '@/lib/auth/tenantGate'
+import { requireTenantAdmin, requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
   RESTRICTION_SEVERITIES,
@@ -9,6 +9,10 @@ import {
 
 // GET  /api/chemicals/restricted   List the tenant's restricted-list rules.
 // POST /api/chemicals/restricted   Add a rule (CAS or name pattern).
+//
+// Reads are member-level: every worker needs to see what is banned.
+// Writes are admin-only — a restriction rule bans a chemical for the whole
+// organisation, which is not a decision any single member should make.
 
 export async function GET(req: Request) {
   const gate = await requireTenantMember(req)
@@ -28,7 +32,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const gate = await requireTenantMember(req)
+  const gate = await requireTenantAdmin(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   let body: Record<string, unknown>

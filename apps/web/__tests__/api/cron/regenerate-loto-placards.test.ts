@@ -60,8 +60,14 @@ vi.mock('@/lib/supabaseAdmin', () => ({
   }),
 }))
 
-const loadLogoMock = vi.fn(async () => null)
-const regenMock = vi.fn(async () => ({ placardUrl: 'https://x/p.pdf?v=1' }))
+// Typed with their real parameters: `vi.fn(async () => …)` infers a zero-arg
+// signature, so the call sites below and the mockImplementation that reads
+// equipmentId both fail tsc even though they run fine.
+const loadLogoMock = vi.fn(async (_admin: unknown, _tenantId: string): Promise<Uint8Array | null> => null)
+const regenMock = vi.fn(
+  async (_admin: unknown, _tenantId: string, _equipmentId: string): Promise<{ placardUrl: string }> =>
+    ({ placardUrl: 'https://x/p.pdf?v=1' }),
+)
 vi.mock('@/lib/loto/regeneratePlacard', () => ({
   loadTenantLogoPng: (admin: unknown, tenantId: string) => loadLogoMock(admin, tenantId),
   regenerateAndUploadPlacard: (admin: unknown, t: string, e: string) => regenMock(admin, t, e),
