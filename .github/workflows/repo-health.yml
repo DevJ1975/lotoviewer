@@ -27,6 +27,12 @@ jobs:
       - name: Run repository guards
         run: npm run check:repo
 
+      # Fails the build on a new critical/high advisory. Moderates and lows are
+      # reported by `npm audit` locally but do not block, so the gate stays
+      # actionable rather than permanently red.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
       - name: Typecheck mobile
         run: npm run typecheck --workspace mobile
 
