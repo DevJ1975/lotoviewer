@@ -37,7 +37,7 @@ const DEFAULT_HOURS = 4
 // NFPA 51B §8.7 post-work fire watch. The floor is not a preference: the watch
 // exists because hot work leaves smouldering ignition that develops after the
 // torch stops, so anything materially below an hour is the same as no watch.
-// Enforced in the database too (migration 286) — this form is not the only
+// Enforced in the database too (migration 263) — this form is not the only
 // writer, since the insert goes straight through PostgREST.
 const POST_WATCH_MIN_MINUTES = 60
 const POST_WATCH_MAX_MINUTES = 240
