@@ -87,8 +87,10 @@ const DRAFT_SCHEMA = {
     },
     actions: {
       type: 'array',
+      description: '1-3 corrective actions that would prevent recurrence.',
+      // Anthropic's structured-output endpoint rejects `maxItems` and allows
+      // `minItems` only with 0 or 1 — the 1-3 bound lives in the description.
       minItems: 1,
-      maxItems: 3,
       items: {
         type: 'object',
         required: ['description', 'action_type'],
