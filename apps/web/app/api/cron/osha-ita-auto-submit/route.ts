@@ -28,6 +28,7 @@ import { submitToItaForEstablishment } from '@/lib/oshaItaSubmit'
 // fires outside the window.
 
 export const runtime = 'nodejs'
+export const maxDuration = 300
 
 const BACKOFF_HOURS = 6
 

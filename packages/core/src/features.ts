@@ -87,6 +87,17 @@ export const FEATURES: FeatureDef[] = [
     icon:        'ShieldCheck',
     color:       'emerald',
   },
+  {
+    id:          'operator',
+    name:        'Operator Console',
+    description: 'Multi-agent assistant that operates your modules — delegates to specialists for incidents, permits, LOTO, chemicals, training, and more.',
+    href:        '/operator',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'Bot',
+    color:       'indigo',
+  },
 
   // ── LOTO module + sub-pages ─────────────────────────────────────────────
   // The "LOTO" row navigates to /, the equipment dashboard. Status,
@@ -510,6 +521,16 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
   },
   {
+    id:          'chemicals-library',
+    name:        'SDS Library',
+    description: 'Search the shared library and adopt common chemicals into your catalog',
+    href:        '/chemicals/library',
+    category:    'safety',
+    parent:      'chemicals',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
     id:          'chemicals-review',
     name:        'SDS Review Queue',
     description: 'Review AI-parsed SDS fields awaiting approval',
@@ -830,6 +851,17 @@ export const FEATURES: FeatureDef[] = [
     color:       'slate',
   },
   {
+    id:          'admin-training-competency-matrix',
+    name:        'Training & Competency Matrix',
+    description: 'Required training by worker and course, with expiry status and per-position requirements',
+    href:        '/admin/people/training-competency-matrix',
+    category:    'admin',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'LayoutGrid',
+    color:       'slate',
+  },
+  {
     id:          'admin-hygiene-log',
     name:        'Data Hygiene Log',
     description: 'One-off LOTO data ops — decommissions, renames, FK repairs',
@@ -962,6 +994,74 @@ export const FEATURES: FeatureDef[] = [
     icon:        'ShieldAlert',
     color:       'amber',
   },
+
+  // ISO 14001:2015 Environmental Management System. The registers
+  // (aspects, objectives, management review, nonconformities) shipped
+  // in migrations 204-207 but lived as orphan pages under /admin with
+  // no module of their own; this entry gives them a home, a tenant
+  // toggle, and a drawer row. The report card is the module's reason
+  // to exist — it reads the registers and says what an auditor would.
+  {
+    id:          'environmental',
+    name:        'Environmental (ISO 14001)',
+    description: 'EMS aspects & impacts, objectives, management review, nonconformities, and an audit-readiness report card',
+    href:        '/environmental',
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    icon:        'Mountain',
+    color:       'emerald',
+  },
+  {
+    id:          'environmental-report-card',
+    name:        'Audit Readiness',
+    description: 'Clause-by-clause ISO 14001 readiness with evidence coverage and blocking findings',
+    href:        '/environmental/report-card',
+    category:    'safety',
+    parent:      'environmental',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'environmental-aspects',
+    name:        'Aspects & Impacts',
+    description: 'Clause 6.1.2 register — activities, aspects, impacts, and significance scoring',
+    href:        '/environmental/aspects',
+    category:    'safety',
+    parent:      'environmental',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'environmental-objectives',
+    name:        'Objectives & Targets',
+    description: 'Clauses 6.2 & 9.1.1 — measurable objectives tracked by periodic readings',
+    href:        '/environmental/objectives',
+    category:    'safety',
+    parent:      'environmental',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'environmental-management-review',
+    name:        'Management Review',
+    description: 'Clause 9.3 — periodic EMS reviews with the standard input/output agenda',
+    href:        '/environmental/management-review',
+    category:    'safety',
+    parent:      'environmental',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'environmental-nonconformities',
+    name:        'Nonconformities & CAPA',
+    description: 'Clause 10.2 — findings from audits, reviews, compliance, or aspects with verified corrective actions',
+    href:        '/environmental/nonconformities',
+    category:    'safety',
+    parent:      'environmental',
+    enabled:     true,
+    comingSoon:  false,
+  },
   {
     // Working at Heights module entry. Phase 1 shipped the manual +
     // AI ingest + calculator math; Phase 2 shipped the admin
@@ -988,6 +1088,22 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
     icon:        'ClipboardList',
     color:       'teal',
+  },
+
+  // ── OSHA Regulatory Watch module ────────────────────────────────────────
+  // AI-summarized OSHA regulation updates + upcoming changes, surfaced ONLY
+  // as a self-gated panel on the home dashboard — there's no page or drawer
+  // link, so href:null + internal:true (the loto-review-portal precedent:
+  // live + tenant-toggleable, surfaced via inline UI rather than the drawer).
+  {
+    id:          'osha-reg-watch',
+    name:        'OSHA Regulatory Watch',
+    description: 'AI-summarized OSHA regulation updates and upcoming changes, on the home dashboard',
+    href:        null,
+    category:    'safety',
+    enabled:     true,
+    comingSoon:  false,
+    internal:    true,
   },
 
   // ── EM-385 Compliance module ────────────────────────────────────────────
@@ -1032,7 +1148,11 @@ export const FEATURES: FeatureDef[] = [
   {
     id:          'fleet-safety',
     name:        'Fleet Safety & Journeys',
-    description: 'Vehicle register, driver licensing, DOT + hazmat records, and monitored journey plans',
+    // Journey plans are not built — no journey tables exist in any
+    // migration. /fleet already labels them "(coming soon)"; this
+    // description is what the drawer and catalog tile render, so it says
+    // the same thing rather than promising a module that isn't there.
+    description: 'Vehicle register, driver licensing, and DOT + hazmat records',
     href:        '/fleet',
     category:    'safety',
     enabled:     true,

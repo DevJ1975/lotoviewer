@@ -155,11 +155,23 @@
     {
       "slug":     "iso-14001",
       "module":   "ISO 14001",
-      "tagline":  "Environmental management-system standard — a plain-language, clause-by-clause implementation guide (aspects/impacts, life-cycle perspective, compliance obligations).",
-      "category": "admin",
-      "href":     null,
+      "tagline":  "Environmental management-system standard — the EMS registers, a clause-by-clause evidence map, and an audit-readiness report card.",
+      "category": "safety",
+      "href":     "/environmental",
       "wikiPage": "apps/web/app/wiki/iso-14001/page.tsx",
-      "sources":  ["apps/web/app/wiki/iso-14001/**"]
+      "sources":  [
+        "apps/web/app/wiki/iso-14001/**",
+        "apps/web/app/environmental/**",
+        "apps/web/app/admin/evidence/iso14001/**",
+        "apps/web/lib/iso14001Signals.ts",
+        "apps/web/lib/pdfIso14001ReportCard.ts",
+        "packages/core/src/iso14001.ts",
+        "packages/core/src/iso14001Readiness.ts",
+        "packages/core/src/environmentalAspect.ts",
+        "packages/core/src/environmentalObjective.ts",
+        "packages/core/src/managementReview.ts",
+        "packages/core/src/nonconformity.ts"
+      ]
     },
     {
       "slug":     "loto-compliance",
@@ -229,6 +241,57 @@
       "sources":  ["apps/web/app/near-miss/**"]
     },
     {
+      "slug":     "incident-reporting",
+      "module":   "Incident Reporting",
+      "tagline":  "File incidents, triage by severity, notify the right people, and hand off to investigation — with anonymous QR reporting and OSHA recordability built in.",
+      "category": "safety",
+      "href":     "/incidents",
+      "wikiPage": "apps/web/app/wiki/incident-reporting/page.tsx",
+      "sources":  [
+        "apps/web/app/incidents/page.tsx",
+        "apps/web/app/incidents/new/**",
+        "apps/web/app/incidents/qr/**",
+        "apps/web/app/incidents/[id]/page.tsx",
+        "apps/web/app/incidents/[id]/classify/**",
+        "apps/web/app/incidents/[id]/care/**",
+        "apps/web/app/report/**",
+        "apps/web/app/api/incidents/route.ts",
+        "packages/core/src/incident.ts"
+      ]
+    },
+    {
+      "slug":     "incident-investigation",
+      "module":   "Incident Investigation & RCA",
+      "tagline":  "Guided, AI-assisted 5 Whys root cause analysis — multiple roots, anti-blame guardrails, and one-click corrective actions.",
+      "category": "safety",
+      "href":     "/incidents",
+      "wikiPage": "apps/web/app/wiki/incident-investigation/page.tsx",
+      "sources":  [
+        "apps/web/app/incidents/[id]/investigate/**",
+        "apps/web/app/incidents/[id]/rca/**",
+        "apps/web/app/api/incidents/[id]/investigation/**",
+        "apps/web/app/api/incidents/[id]/rca/**",
+        "packages/core/src/rcaSchemas.ts",
+        "apps/web/migrations/236_rca_multi_root_branching_ai.sql"
+      ]
+    },
+    {
+      "slug":     "ecfa",
+      "module":   "Events & Causal Factors Analysis",
+      "tagline":  "Chart the event/condition timeline, code causal factors, and turn each into a corrective action — with a human-approved AI co-pilot.",
+      "category": "safety",
+      "href":     "/incidents",
+      "wikiPage": "apps/web/app/wiki/ecfa/page.tsx",
+      "sources":  [
+        "apps/web/app/incidents/[id]/ecfa/**",
+        "apps/web/app/api/incidents/[id]/ecfa/**",
+        "apps/web/app/incidents/[id]/actions/route.ts",
+        "apps/web/app/incidents/scorecard/_components/CausalFactorTrendPanel.tsx",
+        "packages/core/src/ecfaSchemas.ts",
+        "apps/web/migrations/244_incident_ecfa.sql"
+      ]
+    },
+    {
       "slug":     "jha",
       "module":   "Job Hazard Analysis",
       "tagline":  "Per-task hazard breakdowns with steps, hazards, controls, and review cadence.",
@@ -244,7 +307,11 @@
       "category": "reports",
       "href":     "/admin/insights/scorecard",
       "wikiPage": "apps/web/app/wiki/scorecard/page.tsx",
-      "sources":  ["apps/web/app/admin/insights/scorecard/**"]
+      "sources":  ["apps/web/app/admin/insights/scorecard/**",
+                   "apps/web/components/scorecard/**",
+                   "packages/core/src/incidentScorecardMetrics.ts",
+                   "packages/core/src/scorecardMetrics.ts",
+                   "packages/core/src/monthOverMonth.ts"]
     },
     {
       "slug":     "insights",

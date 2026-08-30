@@ -86,10 +86,56 @@ describe('summarizeIncidentRisk', () => {
     expect(bbs.pressure).toBeGreaterThan(0)
   })
 
+  it('tags every driver as leading or lagging, with recordables lagging', () => {
+    const { drivers } = summarizeIncidentRisk(BAD)
+    for (const d of drivers) {
+      expect(['leading', 'lagging']).toContain(d.kind)
+    }
+    expect(drivers.find(d => d.key === 'recordable_trend')!.kind).toBe('lagging')
+    expect(drivers.find(d => d.key === 'near_miss_reporting')!.kind).toBe('leading')
+    // The model is predominantly leading indicators (that is the point of a
+    // *predictive* risk model) — there is at least one of each.
+    expect(drivers.some(d => d.kind === 'leading')).toBe(true)
+    expect(drivers.some(d => d.kind === 'lagging')).toBe(true)
+  })
+
   it('a rising recordable count raises the recordable driver', () => {
     const rising = summarizeIncidentRisk({ ...CLEAN, recordablesRecent: 3, recordablesPrior: 1 })
     const flat   = summarizeIncidentRisk({ ...CLEAN, recordablesRecent: 3, recordablesPrior: 3 })
     const dr = (x: ReturnType<typeof summarizeIncidentRisk>) => x.drivers.find(d => d.key === 'recordable_trend')!.pressure
     expect(dr(rising)).toBeGreaterThan(dr(flat))
+  })
+
+  // ── Cross-module leading indicators (v2.0.0) ────────────────────────────────
+  const CROSS_KEYS = [
+    'inspection_failing', 'bbs_followup_overdue', 'jha_reviews_overdue',
+    'permit_noncompliance', 'training_gaps', 'ecfa_weak_controls',
+  ]
+
+  it('surfaces the new cross-module leading drivers when their inputs are present', () => {
+    const r = summarizeIncidentRisk({
+      ...CLEAN,
+      inspectionsFailed: 4, inspectionsTotal: 10,   // 40% fail
+      bbsFollowupsOpen: 3, jhaReviewsOverdue: 2, permitExpiredOpen: 1, trainingGaps: 5,
+      ecfaCausalFactors: 4, ecfaWeakControls: 3,    // 75% weak-control
+    })
+    const byKey = new Map(r.drivers.map(d => [d.key, d]))
+    for (const k of CROSS_KEYS) {
+      expect(byKey.has(k)).toBe(true)
+      expect(byKey.get(k)!.kind).toBe('leading')
+      expect(byKey.get(k)!.href).toBeTruthy()
+    }
+    expect(byKey.get('inspection_failing')!.pressure).toBeCloseTo(40, 5)
+    expect(byKey.get('ecfa_weak_controls')!.pressure).toBeCloseTo(75, 5)
+    // Cross-module pressure raises the score above the clean baseline.
+    expect(r.score).toBeGreaterThan(summarizeIncidentRisk(CLEAN).score)
+    expect(r.modelVersion).toBe('2.0.0')
+  })
+
+  it('cross-module drivers stay at zero pressure when their module inputs are absent', () => {
+    const { drivers } = summarizeIncidentRisk(CLEAN) // no v2 fields set
+    for (const k of CROSS_KEYS) {
+      expect(drivers.find(d => d.key === k)!.pressure).toBe(0)
+    }
   })
 })

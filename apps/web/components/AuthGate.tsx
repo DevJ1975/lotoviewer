@@ -14,10 +14,9 @@ import OpsSpinner from '@/components/OpsSpinner'
 // link from that email and the user technically becomes authenticated
 // momentarily (Supabase exchanges the token for a recovery session)
 // — but we still allow it as "public" so the redirect below doesn't
-// fight the recovery flow. /privacy and /terms are static legal pages
-// linked from the signed-out login footer; without them here, clicking
-// those links would bounce the visitor straight back to /login.
-const PUBLIC_PATHS = new Set(['/login', '/welcome', '/forgot-password', '/reset-password', '/privacy', '/terms'])
+// fight the recovery flow. /accept-invite is where invite-email links
+// land — the URL token is the credential; there is no session yet.
+const PUBLIC_PATHS = new Set(['/login', '/welcome', '/forgot-password', '/reset-password', '/accept-invite', '/privacy', '/terms'])
 
 // Token-gated public routes. Each entry matches when the pathname
 // equals the prefix or starts with `${prefix}/`. Used for QR-scanned

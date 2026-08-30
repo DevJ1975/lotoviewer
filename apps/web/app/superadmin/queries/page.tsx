@@ -173,7 +173,7 @@ export default function SavedQueriesPage() {
   // draft. Without this, the handler closes over the original empty
   // state and re-running after edits sends nothing.
   const runRef = useRef(runDraft)
-  runRef.current = runDraft
+  useEffect(() => { runRef.current = runDraft })
 
   function onSqlKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     // Cmd+Enter (mac) / Ctrl+Enter (win/linux) — runs the current SQL.

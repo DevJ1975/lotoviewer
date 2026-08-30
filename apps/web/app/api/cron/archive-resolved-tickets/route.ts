@@ -19,6 +19,9 @@ import { withCronLogging } from '@/lib/cronInstrumentation'
 // Vercel schedule: 0 7 * * * (02:00 EST / 03:00 EDT — quiet hours).
 
 export const runtime = 'nodejs'
+// One bulk UPDATE over an indexed predicate — it returns in seconds or the
+// database itself is in trouble. 60s is headroom, not a work budget.
+export const maxDuration = 60
 
 const ARCHIVE_AFTER_DAYS = 30
 

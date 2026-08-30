@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vitest run *)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx tsc --noEmit *)",
+      "Bash(tsc --noEmit)",
+      "Bash(tsc --noEmit *)",
+      "Bash(npx eslint *)",
+      "Bash(semgrep scan *)",
+      "Bash(npm run check:repo)",
+      "Bash(npm run check:migrations)",
+      "Bash(npm run lint)",
+      "Bash(npm run test)",
+      "Bash(npm run test:core)",
+      "Bash(npm run typecheck)",
+      "Bash(vercel ls *)",
+      "Bash(vercel inspect *)",
+      "mcp__claude_ai_Vercel__list_deployments",
+      "mcp__claude_ai_Vercel__get_deployment",
+      "mcp__claude_ai_Vercel__get_deployment_build_logs",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__get_advisors",
+      "mcp__github__search_repositories",
+      "mcp__openclaw__session_status"
+    ]
+  }
+}

@@ -120,10 +120,22 @@ export async function POST(req: Request) {
     }
 
     if (orphans.length > 0) {
-      // Best effort cleanup. Storage RLS on the bucket is tenant-
-      // scoped on the path prefix; service role bypasses but we
-      // should still clean up only what we created.
-      const valid = orphans.filter(p => p.startsWith(`${inc.tenant_id}/`))
+      // Best effort cleanup, scoped to THIS report's own upload prefix.
+      //
+      // Every path here came from the request body, and a path lands in
+      // `orphans` precisely because it failed a check — including the
+      // expectedPrefix check. Filtering the delete list by the tenant prefix
+      // alone therefore re-admitted exactly what was just rejected: any path
+      // of the form `<tenant>/…` was accepted for deletion, and this route is
+      // unauthenticated. That turned "clean up the files we just rejected"
+      // into an arbitrary delete of any object in the tenant's bucket —
+      // placard photos, LOTO evidence, signed permits — for anyone who could
+      // file an anonymous report and name a path.
+      //
+      // Service role bypasses storage RLS, so this filter is the only bound:
+      // it must be the prefix we would have accepted an upload under, not the
+      // tenant's whole namespace.
+      const valid = orphans.filter(p => p.startsWith(expectedPrefix))
       if (valid.length > 0) {
         await admin.storage.from(ATTACH_BUCKET).remove(valid).catch(() => { /* ignore */ })
       }

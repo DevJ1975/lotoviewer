@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Loader2, Search, Filter, Sparkles, ScanLine, Package, FileBarChart2, ClipboardCheck, FlameKindling } from 'lucide-react'
+import { Plus, Loader2, Search, Filter, Sparkles, ScanLine, Package, FileBarChart2, ClipboardCheck, FlameKindling, Library } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { useDebounce } from '@/hooks/useDebounce'
@@ -155,6 +155,13 @@ export default function ChemicalsListPage() {
             className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
           >
             <Package className="w-4 h-4" /> Inventory
+          </Link>
+          <Link
+            href="/chemicals/library"
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+            title="Search the shared SDS library and adopt common chemicals"
+          >
+            <Library className="w-4 h-4" /> Library
           </Link>
           <Link
             href="/chemicals/new"

@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ChevronDown, ChevronRight, Clock, Search, Settings2, Shield, X } from 'lucide-react'
@@ -26,6 +27,10 @@ import {
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { getModuleVisuals } from '@/lib/moduleVisuals'
+import {
+  readExpansion, writeExpansion, toggleExpansion, isExpanded,
+  NAV_EXPANSION_EVENT, type NavExpansion,
+} from '@/lib/navExpansion'
 import SoteriaLogo from '@/components/SoteriaLogo'
 import { isFeatureAccessible, type FeatureDef } from '@soteria/core/features'
 import { cn } from '@/lib/utils'
@@ -46,6 +51,32 @@ export default function AppDrawer({ onClose }: Props) {
   const { profile } = useAuth()
   const { setOpen } = useSidebar()
   const groups = getNavigationGroups(tenant?.modules ?? null)
+  const tenantId = tenant?.id ?? null
+
+  // Which modules the user has opened by hand. Read on mount rather than in a
+  // useState initialiser so the server render and the first client render
+  // agree — localStorage is unavailable during SSR and a mismatch hydrates
+  // into a React warning.
+  const [expansion, setExpansion] = useState<NavExpansion>({})
+
+  useEffect(() => {
+    setExpansion(readExpansion(tenantId))
+    function sync() { setExpansion(readExpansion(tenantId)) }
+    window.addEventListener(NAV_EXPANSION_EVENT, sync)
+    window.addEventListener('storage', sync)
+    return () => {
+      window.removeEventListener(NAV_EXPANSION_EVENT, sync)
+      window.removeEventListener('storage', sync)
+    }
+  }, [tenantId])
+
+  function handleToggleExpanded(moduleId: string, active: boolean) {
+    setExpansion(prev => {
+      const next = toggleExpansion(prev, moduleId, active)
+      writeExpansion(tenantId, next)
+      return next
+    })
+  }
 
   function close() {
     setOpen(false)
@@ -102,6 +133,8 @@ export default function AppDrawer({ onClose }: Props) {
             pathname={pathname}
             onNavigate={close}
             animationDelayMs={index * 35}
+            expansion={expansion}
+            onToggleExpanded={handleToggleExpanded}
           />
         ))}
       </SidebarContent>
@@ -140,11 +173,15 @@ function NavigationGroupSection({
   pathname,
   onNavigate,
   animationDelayMs,
+  expansion,
+  onToggleExpanded,
 }: {
   group: NavigationGroup
   pathname: string | null
   onNavigate: () => void
   animationDelayMs: number
+  expansion: NavExpansion
+  onToggleExpanded: (moduleId: string, active: boolean) => void
 }) {
   return (
     <SidebarGroup className="animate-panel-in" style={{ animationDelay: `${animationDelayMs}ms` }}>
@@ -156,6 +193,8 @@ function NavigationGroupSection({
             item={item}
             pathname={pathname}
             onNavigate={onNavigate}
+            expansion={expansion}
+            onToggleExpanded={onToggleExpanded}
           />
         ))}
       </SidebarMenu>
@@ -167,17 +206,26 @@ function ModuleRow({
   item,
   pathname,
   onNavigate,
+  expansion,
+  onToggleExpanded,
 }: {
   item: NavigationItem
   pathname: string | null
   onNavigate: () => void
+  expansion: NavExpansion
+  onToggleExpanded: (moduleId: string, active: boolean) => void
 }) {
   const mod = item.feature
   const hasChildren = item.children.length > 0
   const active = isNavigationItemActive(item, pathname)
-  const expanded = hasChildren && active
   const isClickable = isFeatureAccessible(mod.id)
   const { Icon, classes } = getModuleVisuals(mod.id)
+
+  // Defaults to the old behaviour — the active module opens itself — but an
+  // explicit choice wins either way, so a user can peek into a module they are
+  // not in, and collapse the one they are.
+  const expanded = hasChildren && isExpanded(expansion, mod.id, active)
+  const subListId = `nav-sub-${mod.id}`
 
   const content = (
     <>
@@ -197,30 +245,46 @@ function ModuleRow({
           Soon
         </span>
       )}
-      {hasChildren && (
-        <span className="shrink-0 text-sidebar-foreground/45">
-          {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-        </span>
-      )}
     </>
   )
 
   return (
     <SidebarMenuItem>
-      {isClickable ? (
-        <SidebarMenuButton asChild isActive={active} className="motion-reactive">
-          <Link href={mod.href!} onClick={onNavigate}>
-            {content}
-          </Link>
-        </SidebarMenuButton>
-      ) : (
-        <SidebarMenuButton type="button" disabled isActive={active} className="motion-reactive cursor-not-allowed opacity-70">
-          {content}
-        </SidebarMenuButton>
-      )}
+      <div className="flex items-center gap-0.5">
+        <div className="min-w-0 flex-1">
+          {isClickable ? (
+            <SidebarMenuButton asChild isActive={active} className="motion-reactive">
+              <Link href={mod.href!} onClick={onNavigate}>
+                {content}
+              </Link>
+            </SidebarMenuButton>
+          ) : (
+            <SidebarMenuButton type="button" disabled isActive={active} className="motion-reactive cursor-not-allowed opacity-70">
+              {content}
+            </SidebarMenuButton>
+          )}
+        </div>
+
+        {/* A real control, not decoration. It sits OUTSIDE the link because it
+            used to be rendered inside it — so the only way to see a module's
+            children was to navigate into the module, and clicking the chevron
+            did the one thing it should not. 44px square for gloved hands. */}
+        {hasChildren && (
+          <button
+            type="button"
+            onClick={() => onToggleExpanded(mod.id, active)}
+            aria-expanded={expanded}
+            aria-controls={expanded ? subListId : undefined}
+            aria-label={`${expanded ? 'Collapse' : 'Expand'} ${mod.name} pages`}
+            className="motion-press flex size-11 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+          >
+            {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+          </button>
+        )}
+      </div>
 
       {expanded && (
-        <SidebarMenuSub>
+        <SidebarMenuSub id={subListId}>
           {item.children.map(child => (
             <ChildRow
               key={child.id}
@@ -285,9 +349,10 @@ function RecentsSection({
 }) {
   const recents = useRecentRoutes(tenantId)
 
-  // Resolve to display-ready rows; drop anything we can't render with a
-  // proper label (e.g. deep detail pages not in the catalog) so the
-  // section stays curated rather than a raw URL bar.
+  // Resolve to display-ready rows. Detail pages now resolve against their
+  // owning module (see resolveHref), so this filter only drops a path with no
+  // catalogued ancestor at all — it is no longer silently discarding every
+  // incident, chemical and equipment page the user visited.
   const rows = recents
     .map(href => resolveHref(href))
     .filter((r): r is NonNullable<ReturnType<typeof resolveHref>> => r !== null)
