@@ -23,10 +23,27 @@ import { isValidTenantNumber } from '@/lib/validation/tenants'
 //   parent's delete.
 //
 // SEEDING:
-//   For WLS Demo (#0002), this RPCs into seed_wls_demo() defined in
-//   migration 030 to restore canonical demo data. Other is_demo tenants
-//   without a seed function are wiped only — the response surfaces
-//   seedSkipped:true so the UI explains.
+//   Every seed function in SEED_FUNCTIONS runs, in order, against any tenant
+//   with is_demo = true. A function missing from the database (42883 /
+//   PGRST202) is skipped so a partially-migrated DB still resets.
+//
+//   This used to be gated on `tenant_number === '0002'`, which meant a second
+//   demo tenant was wiped and never re-seeded — audit item A10 in
+//   apps/web/docs/multi-tenancy-audit-plan.md. The seeds resolve their own
+//   tenant by `is_demo`, so the tenant-number check was both wrong and
+//   redundant.
+//
+// WIPED BUT DELIBERATELY NOT SEEDED:
+//   Three tables in DELETE_ORDER have no seed and should not get one. They
+//   are registrations and audit trails, not demo content, and an empty table
+//   after a reset is the correct outcome:
+//     - loto_hygiene_log         written only by hand-run hygiene SQL
+//     - loto_push_subscriptions  per-browser Web Push registrations
+//     - loto_webhook_subscriptions  per-integration endpoints
+//
+//   Anything else added to DELETE_ORDER needs a matching seed, or the module
+//   it belongs to silently empties on every reset and never comes back. That
+//   is exactly how Equipment Readiness was lost.
 
 const DELETE_ORDER: readonly string[] = [
   // Children (FK to a parent in this list).
@@ -47,6 +64,19 @@ const DELETE_ORDER: readonly string[] = [
   'position_training_requirements',
   'position_equipment_requirements',
   'worker_position_assignments',
+  // ISO 14001 EMS registers (migrations 204-207), children first.
+  // seed_wls_iso14001_demo() re-creates these with deterministic ids and
+  // ON CONFLICT DO NOTHING, so without the wipe an edited demo row would
+  // survive a "reset" forever. compliance_calendar_obligations is
+  // deliberately NOT wiped — it also holds system-seeded rows this route
+  // cannot restore.
+  'iso14001_clause_evidence',
+  'environmental_objective_readings',
+  'nonconformity_actions',
+  'nonconformities',
+  'environmental_objectives',
+  'environmental_aspects',
+  'management_reviews',
   // Parents.
   'loto_equipment',
   'loto_confined_space_permits',
@@ -66,6 +96,25 @@ const DELETE_ORDER: readonly string[] = [
   // the response are correct as of the start-of-request snapshot).
   'audit_log',
 ]
+
+// Seed functions, in dependency order. seed_wls_demo() lays down the
+// equipment, spaces and permits every later seed references, so it is first.
+//
+// Adding a seed migration means adding it here. A function that exists in the
+// database but is not listed never runs on reset, so its module stays empty
+// until someone calls it by hand.
+const SEED_FUNCTIONS = [
+  'seed_wls_demo',
+  'seed_wls_worker_readiness_demo',
+  'seed_wls_incidents_demo',
+  'seed_wls_near_miss_demo',
+  'seed_wls_bbs_demo',
+  'seed_wls_iso14001_demo',
+  'seed_wls_equipment_readiness_demo',
+] as const
+
+/** Postgres/PostgREST codes meaning "this function is not in the database". */
+const MISSING_FUNCTION_CODES = new Set(['42883', 'PGRST202'])
 
 export async function POST(req: Request, ctx: { params: Promise<{ number: string }> }) {
   const gate = await requireSuperadmin(req.headers.get('authorization'))
@@ -133,62 +182,33 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     }
   }
 
-  // Re-seed canonical demo data via the SQL function defined in
-  // migration 030. Slug-based, so this only works for slug='wls-demo'
-  // today; future demo tenants would need their own seed function.
-  let seedResult: string | null = null
-  let seedSkipped = false
-  if (tenant.tenant_number === '0002') {
-    const { data, error: seedErr } = await admin.rpc('seed_wls_demo')
+  // Re-seed. Every function runs against any demo tenant; each resolves the
+  // demo tenant itself by is_demo. A function absent from this database is
+  // skipped so older/partial schemas still reset cleanly.
+  const seedMessages: string[] = []
+  const seedsMissing: string[] = []
+
+  for (const fn of SEED_FUNCTIONS) {
+    const { data, error: seedErr } = await admin.rpc(fn)
     if (seedErr) {
-      Sentry.captureException(seedErr, { tags: { route: '/api/superadmin/tenants/[number]/reset-demo', stage: 'rpc-seed' } })
+      const code = (seedErr as { code?: string }).code
+      if (code && MISSING_FUNCTION_CODES.has(code)) {
+        seedsMissing.push(fn)
+        continue
+      }
+      Sentry.captureException(seedErr, { tags: { route: '/api/superadmin/tenants/[number]/reset-demo', stage: `rpc-${fn}` } })
       return NextResponse.json({
-        error: `Re-seed failed: ${seedErr.message}`,
+        error: `Re-seed (${fn}) failed: ${seedErr.message}`,
         wiped,
       }, { status: 500 })
     }
-    seedResult = typeof data === 'string' ? data : null
-
-    // Optional add-on seed introduced after the original WLS demo seed.
-    // Older databases without migration 119 should still reset cleanly.
-    const { data: readinessData, error: readinessErr } = await admin.rpc('seed_wls_worker_readiness_demo')
-    if (readinessErr) {
-      const code = (readinessErr as { code?: string }).code
-      if (code !== '42883' && code !== 'PGRST202') {
-        Sentry.captureException(readinessErr, { tags: { route: '/api/superadmin/tenants/[number]/reset-demo', stage: 'rpc-readiness-seed' } })
-        return NextResponse.json({
-          error: `Worker readiness re-seed failed: ${readinessErr.message}`,
-          wiped,
-        }, { status: 500 })
-      }
-    } else if (typeof readinessData === 'string') {
-      seedResult = seedResult ? `${seedResult}; ${readinessData}` : readinessData
-    }
-
-    // Module seeds added after the original WLS demo seed (migration 200):
-    // incidents/investigations, dedicated near-miss reports, and BBS
-    // observations. The wipe above clears bbs_observations, so these
-    // restore them; incidents/near_misses re-seed idempotently. Older
-    // databases without these functions return 42883/PGRST202 and are
-    // skipped so the reset still succeeds.
-    for (const fn of ['seed_wls_incidents_demo', 'seed_wls_near_miss_demo', 'seed_wls_bbs_demo'] as const) {
-      const { data: modData, error: modErr } = await admin.rpc(fn)
-      if (modErr) {
-        const code = (modErr as { code?: string }).code
-        if (code !== '42883' && code !== 'PGRST202') {
-          Sentry.captureException(modErr, { tags: { route: '/api/superadmin/tenants/[number]/reset-demo', stage: `rpc-${fn}` } })
-          return NextResponse.json({
-            error: `Re-seed (${fn}) failed: ${modErr.message}`,
-            wiped,
-          }, { status: 500 })
-        }
-      } else if (typeof modData === 'string') {
-        seedResult = seedResult ? `${seedResult}; ${modData}` : modData
-      }
-    }
-  } else {
-    seedSkipped = true
+    if (typeof data === 'string') seedMessages.push(data)
   }
+
+  const seedResult = seedMessages.length > 0 ? seedMessages.join('; ') : null
+  // Only true when the database has none of the seed functions at all — not
+  // when a single optional one is missing.
+  const seedSkipped = seedsMissing.length === SEED_FUNCTIONS.length
 
   return NextResponse.json({
     ok: true,
@@ -197,8 +217,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     skipped,
     seed:    seedResult,
     seedSkipped,
+    // Surfaced so a partially-migrated database is visible rather than
+    // silently under-seeded — the failure mode this route already had.
+    seedsMissing,
     note: seedSkipped
-      ? 'No seed function for this tenant — only the wipe ran. WLS Demo (#0002) auto-reseeds.'
-      : 'Wiped and re-seeded canonical demo data.',
+      ? 'No seed functions found in this database — only the wipe ran. Apply the seed migrations to re-seed.'
+      : seedsMissing.length > 0
+        ? `Wiped and re-seeded. ${seedsMissing.length} seed function(s) not present in this database: ${seedsMissing.join(', ')}.`
+        : 'Wiped and re-seeded canonical demo data.',
   })
 }

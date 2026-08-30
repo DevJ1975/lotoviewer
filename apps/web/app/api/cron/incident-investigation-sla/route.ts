@@ -31,6 +31,10 @@ import {
 // Vercel schedule: 0 * * * * (top of every hour).
 
 export const runtime = 'nodejs'
+// Hourly, but the unit of work is (tenant rule × matching incident): an
+// idempotency lookup, an email, and an audit row for each. Bounded only by how
+// far behind the tenants' investigations have fallen.
+export const maxDuration = 300
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false

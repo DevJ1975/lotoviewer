@@ -74,11 +74,13 @@ export default function PlacardPdfPreview({ open, onClose, equipment, steps, onS
   const onCloseRef   = useRef(onClose)
   const stepsRef     = useRef(steps)
   const equipmentRef = useRef(equipment)
-  onSavedRef.current   = onSaved
-  onErrorRef.current   = onError
-  onCloseRef.current   = onClose
-  stepsRef.current     = steps
-  equipmentRef.current = equipment
+  useEffect(() => {
+    onSavedRef.current   = onSaved
+    onErrorRef.current   = onError
+    onCloseRef.current   = onClose
+    stepsRef.current     = steps
+    equipmentRef.current = equipment
+  }, [onSaved, onError, onClose, steps, equipment])
 
   const equipmentId = equipment.equipment_id
 

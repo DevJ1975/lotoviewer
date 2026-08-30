@@ -126,7 +126,8 @@ function FreshnessIndicator({
   refreshing: boolean
   onRefresh:  () => void
 }) {
-  const now = useNow(1000)
+  // useNow returns epoch ms; this component works in Date terms.
+  const now = new Date(useNow(1000))
   const label = loadedAt == null
     ? (refreshing ? 'Loading…' : '—')
     : refreshing ? 'Updating…' : `Updated ${formatAgo(now.getTime() - loadedAt)}`

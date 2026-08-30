@@ -110,6 +110,16 @@ export const PLACARD_TEXT = {
     es: 'No hay pasos de energía definidos para este equipo.',
   },
 
+  // Shown in place of the last row when the procedure has more steps than the
+  // placard can legibly hold. It exists because the alternative — dropping the
+  // remainder silently, as this did — lets a worker complete every step the
+  // posted sheet shows and believe the machine is at zero energy while
+  // un-isolated sources are still live. `{n}` is the number not shown.
+  stepsTruncated: {
+    en: 'INCOMPLETE — {n} MORE STEP(S) NOT SHOWN. DO NOT USE THIS PLACARD AS THE FULL PROCEDURE.',
+    es: 'INCOMPLETO — {n} PASO(S) MÁS NO MOSTRADOS. NO USE ESTE CARTEL COMO EL PROCEDIMIENTO COMPLETO.',
+  },
+
   // ── Footer note on page 1 of the bilingual PDF ───────────────────
   printNote: {
     en: 'Spanish translation on reverse — print double-sided.',

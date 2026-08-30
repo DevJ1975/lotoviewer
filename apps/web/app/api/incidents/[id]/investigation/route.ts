@@ -4,6 +4,7 @@ import { requireTenantMember, requireTenantAdmin } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
   RCA_METHODS,
+  canCompleteInvestigation,
   type IncidentInvestigationCreateInput,
   type IncidentInvestigationPatchInput,
   type RcaMethod,
@@ -241,23 +242,33 @@ export async function PATCH(req: Request, ctx: RouteContext) {
         icam:       'incident_rca_icam_factors',
         none_yet:   null,
       }
+      // Count nodes + roots for the chosen method's table, then delegate
+      // the decision to the shared canCompleteInvestigation gate so the
+      // rule (method picked, ≥1 node, ≥1 root — multiple roots allowed)
+      // lives in one place. none_yet has no table; the gate rejects it.
       const tbl = tableByMethod[method]
-      if (!tbl) {
-        return NextResponse.json({ error: 'Pick an RCA method before completing' }, { status: 400 })
+      let hasNodes = false
+      let hasRoot  = false
+      if (tbl) {
+        const { count: nodeCount } = await admin
+          .from(tbl)
+          .select('id', { count: 'exact', head: true })
+          .eq('investigation_id', existing.id)
+        const { count: rootCount } = await admin
+          .from(tbl)
+          .select('id', { count: 'exact', head: true })
+          .eq('investigation_id', existing.id)
+          .eq('is_root', true)
+        hasNodes = (nodeCount ?? 0) > 0
+        hasRoot  = (rootCount ?? 0) > 0
       }
-      const { count: nodeCount } = await admin
-        .from(tbl)
-        .select('id', { count: 'exact', head: true })
-        .eq('investigation_id', existing.id)
-      const { count: rootCount } = await admin
-        .from(tbl)
-        .select('id', { count: 'exact', head: true })
-        .eq('investigation_id', existing.id)
-        .eq('is_root', true)
-      if (!nodeCount || nodeCount === 0)
-        return NextResponse.json({ error: 'Add at least one RCA node before completing' }, { status: 400 })
-      if (!rootCount || rootCount === 0)
-        return NextResponse.json({ error: 'Mark one RCA node as the identified root before completing' }, { status: 400 })
+      const gateResult = canCompleteInvestigation({
+        rca_method: method,
+        has_nodes:  hasNodes,
+        has_root:   hasRoot,
+      })
+      if (!gateResult.ok)
+        return NextResponse.json({ error: gateResult.reason }, { status: 400 })
     }
 
     // Signoff timestamp + signer when the user types a name.

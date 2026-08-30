@@ -13,6 +13,12 @@ import { isModuleVisible } from '@soteria/core/moduleVisibility'
 //     Used for read endpoints.
 //   - requireTenantAdmin: only owner / admin roles on the active
 //     tenant. Used for mutation endpoints.
+//
+// Both reject a membership whose invite has been cancelled, and any
+// membership in a disabled tenant, so the gate agrees with the RLS
+// functions in migration 190. That matters most for the routes that pass
+// the gate and then query with the RLS-bypassing service-role client, where
+// this gate is the only access control in the path.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -77,9 +83,17 @@ async function gate(req: Request, opts: GateOptions = {}): Promise<TenantGate> {
   // role check are independent — fire both in parallel so a non-superadmin
   // (the common case) pays one round-trip instead of two. A superadmin pays
   // for a membership query it won't use, but superadmins are rare.
-  const [{ data: profile }, { data: membership }] = await Promise.all([
+  // Both reads are independent, so they go together rather than in series —
+  // this is the hot path of every gated route. The membership select carries
+  // the lifecycle columns the RLS helpers check (migration 190): a cancelled
+  // invite or a disabled tenant revokes access, and most routes reach the
+  // database with a key that bypasses those policies, so this gate is the
+  // only thing enforcing them.
+  const [{ data: profile }, { data: membership, error: membershipErr }] = await Promise.all([
     admin.from('profiles').select('is_superadmin').eq('id', user.id).maybeSingle(),
-    admin.from('tenant_memberships').select('role').eq('user_id', user.id).eq('tenant_id', tenantId).maybeSingle(),
+    admin.from('tenant_memberships')
+      .select('role, invite_cancelled_at, tenants:tenant_id(disabled_at)')
+      .eq('user_id', user.id).eq('tenant_id', tenantId).maybeSingle(),
   ])
   const allow = (process.env.SUPERADMIN_EMAILS ?? '')
     .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
@@ -89,8 +103,39 @@ async function gate(req: Request, opts: GateOptions = {}): Promise<TenantGate> {
     return makeOk(user, tenantId, facilityId, 'superadmin', token, url, anon)
   }
 
+  // A failed lookup is not a non-member. Discarding the error made every DB or
+  // PostgREST fault present as a permanent-looking 403; a 500 is honest and
+  // retryable.
+  if (membershipErr) {
+    return { ok: false, status: 500, message: 'Could not verify tenant membership' }
+  }
   if (!membership) {
     return { ok: false, status: 403, message: 'Not a member of this tenant' }
+  }
+
+  // Mirror the RLS definition, which this gate had drifted from.
+  //
+  // Migration 190 put `invite_cancelled_at is null` — and migration 190's
+  // join puts `t.disabled_at is null` — inside current_user_tenant_ids() and
+  // current_user_admin_tenant_ids(), the security-definer functions every
+  // domain-table policy consults. This gate checked neither. That is only
+  // invisible while a route queries through gate.authedClient, which carries
+  // the user's JWT and is subject to those policies; the many routes that
+  // pass the gate and then reach for supabaseAdmin() bypass RLS entirely, so
+  // for them the gate IS the access control. A revoked member or a member of
+  // a disabled tenant still passed it.
+  const cancelledAt = (membership as { invite_cancelled_at?: string | null }).invite_cancelled_at ?? null
+  if (cancelledAt) {
+    return { ok: false, status: 403, message: 'Access to this tenant has been revoked' }
+  }
+
+  // PostgREST returns an embedded to-one either as an object or as a
+  // single-element array depending on how it infers the relationship, so
+  // accept both rather than depending on the inference.
+  const embedded = (membership as { tenants?: { disabled_at?: string | null } | Array<{ disabled_at?: string | null }> | null }).tenants
+  const tenantRow = Array.isArray(embedded) ? embedded[0] : embedded
+  if (tenantRow?.disabled_at) {
+    return { ok: false, status: 403, message: 'This tenant is disabled' }
   }
 
   const role = membership.role as 'owner' | 'admin' | 'member' | 'viewer'

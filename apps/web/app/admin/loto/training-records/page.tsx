@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, GraduationCap, Loader2, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, GraduationCap, LayoutGrid, Loader2, Plus, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
 import { TRAINING_ROLE_LABELS } from '@/lib/trainingRecords'
@@ -145,6 +145,22 @@ export default function TrainingRecordsPage() {
           Add record
         </button>
       </header>
+
+      <Link
+        href="/admin/people/training-competency-matrix"
+        className="group flex items-center gap-3 rounded-xl border border-brand-navy/20 bg-brand-navy/5 px-4 py-3 transition-colors hover:border-brand-navy/40 hover:bg-brand-navy/10 dark:border-brand-yellow/20 dark:bg-brand-yellow/5 dark:hover:border-brand-yellow/40"
+      >
+        <LayoutGrid className="h-5 w-5 shrink-0 text-brand-navy dark:text-brand-yellow" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            New: org-wide Training &amp; Competency Matrix
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            See required training across every worker and course — not just §1910.146(g) certs.
+          </p>
+        </div>
+        <ArrowRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5 dark:text-slate-500" />
+      </Link>
 
       {loadError && (
         <p className="text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">{loadError}</p>

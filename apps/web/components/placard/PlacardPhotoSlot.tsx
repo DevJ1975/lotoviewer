@@ -44,8 +44,10 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
   // parent passes new inline closures — would cause an infinite re-render loop.
   const onSuccessRef = useRef(onSuccess)
   const onErrorRef   = useRef(onError)
-  onSuccessRef.current = onSuccess
-  onErrorRef.current   = onError
+  useEffect(() => {
+    onSuccessRef.current = onSuccess
+    onErrorRef.current   = onError
+  }, [onSuccess, onError])
 
   // Fire success callback only when status/url transitions — NOT when the
   // parent hands us a new closure reference.

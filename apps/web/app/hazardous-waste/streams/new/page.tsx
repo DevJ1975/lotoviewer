@@ -14,6 +14,12 @@ import {
   type HazardousWasteStreamStatus,
   type RcraGeneratorCategory,
 } from '@soteria/core/hazardousWaste'
+import {
+  HazardSymbolFields,
+  EMPTY_HAZARD_SYMBOLS,
+  hazardSymbolsToBody,
+  type HazardSymbolValue,
+} from '../_components/HazardSymbolFields'
 
 function splitTokens(value: string): string[] {
   return value.split(/[,\n]/).map(t => t.trim()).filter(Boolean)
@@ -33,6 +39,7 @@ export default function NewHazardousWasteStreamPage() {
   const [longHaul, setLongHaul]                     = useState(false)
   const [determinationBasis, setDeterminationBasis] = useState('')
   const [status, setStatus]                         = useState<HazardousWasteStreamStatus>('draft')
+  const [symbols, setSymbols]                       = useState<HazardSymbolValue>(EMPTY_HAZARD_SYMBOLS)
   const [submitting, setSubmitting]                 = useState(false)
   const [error, setError]                           = useState<string | null>(null)
 
@@ -63,6 +70,7 @@ export default function NewHazardousWasteStreamPage() {
         long_haul:           longHaul && generatorCategory === 'sqg',
         determination_basis: determinationBasis || null,
         status,
+        ...hazardSymbolsToBody(symbols),
       }),
     })
     const json = await res.json() as { stream?: HazardousWasteStreamRow; error?: string }
@@ -200,6 +208,17 @@ export default function NewHazardousWasteStreamPage() {
             className={inputCls}
           />
         </Field>
+
+        <section className="space-y-4 rounded-lg border border-slate-200 dark:border-slate-800 p-4">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Hazard symbols</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Structured GHS / NFPA / DOT markings. They print on container labels and area signage,
+              and carry onto the uniform manifest. All optional — fill in what the determination supports.
+            </p>
+          </div>
+          <HazardSymbolFields value={symbols} onChange={setSymbols} disabled={submitting} />
+        </section>
 
         <div className="flex items-center gap-2">
           <button

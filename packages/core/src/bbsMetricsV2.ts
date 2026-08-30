@@ -23,6 +23,28 @@ export type ObservationCategory =
   | 'unsafe_act'
   | 'unsafe_condition'
 
+// Structured safe-behavior checklist (WLS BBS practice). The catalog is
+// a small, stable, app-owned enum — observations persist only the keys
+// (as text[]), so labels and ordering can change here without a
+// migration. Keep these keys in sync with the text[] column written by
+// /bbs/observe.
+export type BehaviorTag =
+  | 'ppe'
+  | 'line_of_fire'
+  | 'tools_equipment'
+  | 'procedures'
+  | 'housekeeping'
+  | 'ergonomics'
+
+export const BEHAVIOR_TAG_CATALOG: { key: BehaviorTag; label: string }[] = [
+  { key: 'ppe',             label: 'PPE' },
+  { key: 'line_of_fire',    label: 'Body position / line of fire' },
+  { key: 'tools_equipment', label: 'Tools & equipment' },
+  { key: 'procedures',      label: 'Procedures' },
+  { key: 'housekeeping',    label: 'Housekeeping' },
+  { key: 'ergonomics',      label: 'Ergonomics' },
+]
+
 export interface BbsObservationV2Row {
   id:                      string
   category:                ObservationCategory
@@ -30,6 +52,13 @@ export interface BbsObservationV2Row {
   follow_up_required?:     boolean
   follow_up_completed_at?: string | null
   feedback_given_at?:      string | null
+  // Concept additions (migration 234). Optional so existing callers and
+  // fixtures stay valid.
+  behavior_tags?:             string[] | null
+  recognized?:                boolean
+  rapid_review_required?:     boolean
+  rapid_review_completed_at?: string | null
+  action_team_id?:            string | null
   created_at:              string
 }
 
@@ -46,6 +75,10 @@ export interface BbsObservationsV2Summary {
   followUpsDue:                number
   /** Total observations with feedback_given_at populated. */
   feedbackDelivered:           number
+  /** Safe behaviors flagged for recognition. */
+  recognizedCount:             number
+  /** Observations where rapid_review_required = true and rapid_review_completed_at is null. */
+  rapidReviewsDue:             number
 }
 
 export type BbsRatioBand = 'red' | 'yellow' | 'green'
@@ -60,6 +93,8 @@ export function summarizeObservations(rows: readonly BbsObservationV2Row[]): Bbs
   let unsafeConditionCount = 0
   let followUpsDue         = 0
   let feedbackDelivered    = 0
+  let recognizedCount      = 0
+  let rapidReviewsDue      = 0
 
   for (const r of rows) {
     if (r.category === 'safe_behavior')      safeBehaviorCount++
@@ -68,6 +103,8 @@ export function summarizeObservations(rows: readonly BbsObservationV2Row[]): Bbs
 
     if (r.follow_up_required && !r.follow_up_completed_at) followUpsDue++
     if (r.feedback_given_at) feedbackDelivered++
+    if (r.recognized) recognizedCount++
+    if (r.rapid_review_required && !r.rapid_review_completed_at) rapidReviewsDue++
   }
 
   const unsafeCount = unsafeActCount + unsafeConditionCount
@@ -82,6 +119,8 @@ export function summarizeObservations(rows: readonly BbsObservationV2Row[]): Bbs
     safeToUnsafeRatio,
     followUpsDue,
     feedbackDelivered,
+    recognizedCount,
+    rapidReviewsDue,
   }
 }
 
@@ -107,4 +146,51 @@ export const RATIO_BAND_LABEL: Record<BbsRatioBand, string> = {
   red:    'Too few safe observations',
   yellow: 'Coaching catching up',
   green:  'Healthy coaching ratio',
+}
+
+/**
+ * Count observations per behavior-checklist tag. Seeds every catalog key
+ * at zero so the dashboard can render a stable row order, and ignores any
+ * tag not in the catalog (defensive — the form only emits catalog keys,
+ * but stored rows may predate a catalog change).
+ */
+export function tallyBehaviorTags(
+  rows: readonly BbsObservationV2Row[],
+): Record<BehaviorTag, number> {
+  const tally = Object.fromEntries(
+    BEHAVIOR_TAG_CATALOG.map(t => [t.key, 0]),
+  ) as Record<BehaviorTag, number>
+
+  for (const r of rows) {
+    for (const tag of r.behavior_tags ?? []) {
+      if (tag in tally) tally[tag as BehaviorTag]++
+    }
+  }
+  return tally
+}
+
+/**
+ * Count "Hot Seat" rapid reviews against a 24h SLA. `due` is any review
+ * required but not yet completed; `overdue` is the subset whose age
+ * exceeds the SLA. Clock is injected so the helper stays pure.
+ *
+ * Fail-safe: an unparseable created_at counts as due but never overdue —
+ * we don't escalate on bad data.
+ */
+export function countRapidReviews(
+  rows: readonly BbsObservationV2Row[],
+  now: Date,
+  slaHours = 24,
+): { due: number; overdue: number } {
+  const slaMs = slaHours * 3_600_000
+  let due = 0
+  let overdue = 0
+
+  for (const r of rows) {
+    if (!r.rapid_review_required || r.rapid_review_completed_at) continue
+    due++
+    const createdMs = Date.parse(r.created_at)
+    if (Number.isFinite(createdMs) && now.getTime() - createdMs > slaMs) overdue++
+  }
+  return { due, overdue }
 }

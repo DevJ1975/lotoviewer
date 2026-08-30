@@ -16,6 +16,13 @@ import {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.4.1',
+    date: '2026-08-28',
+    changes: [
+      'Fall Clearance Calculator — impossible entries no longer shrink the required clearance. Every field on the calculator is a distance, and a negative one used to subtract from the total: a lanyard length of −6 ft reported 6 ft of required clearance instead of 18 ft, and negatives across the board produced a NEGATIVE requirement, which made the SAFE verdict pass at any available clearance including none. A zero was wrong in the same way for the two distances that cannot be zero — a worker always extends some way below their dorsal D-ring, and a zero-length lanyard also divided by zero in the swing-fall term. Those entries are now treated as a missing measurement and the conservative default is used instead, so the verdict can only ever err long. The number inputs also clamp to the min/max shown beside them, so the value on screen is the value the math used. Zero remains valid where it is a real choice: no safety margin, and an anchor directly overhead with no swing-fall offset.',
+    ],
+  },
+  {
     version: '1.4.0',
     date: '2026-05-19',
     changes: [

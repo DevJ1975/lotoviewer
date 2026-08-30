@@ -1,5 +1,6 @@
 import Image from 'next/image'
 import { GHS_PICTOGRAM_LABEL, type GhsPictogram } from '@soteria/core/chemicals'
+import { GHS_PICTOGRAM_DETAIL } from '@soteria/core/hazardSymbols'
 
 // GHS pictogram badge row. SVGs live at /public/ghs/<code>.svg —
 // canonical UN GHS designs (red diamond border + black symbol on
@@ -36,12 +37,17 @@ export function PictogramBadges({ pictograms, size = 'sm', showLabel = false }: 
       {pictograms.map(code => {
         const label = GHS_PICTOGRAM_LABEL[code as GhsPictogram] ?? code
         const known = KNOWN.has(code)
+        // For known codes, the symbol description ("Flame", "Skull and
+        // crossbones") makes a more honest title/alt than the hazard-class
+        // label alone — a screen reader announces what the pictogram depicts.
+        const detail = GHS_PICTOGRAM_DETAIL[code as GhsPictogram]
+        const title = detail ? `${label} — ${detail.symbolDescription}` : label
         return (
-          <span key={code} className="inline-flex flex-col items-center gap-0.5" title={label}>
+          <span key={code} className="inline-flex flex-col items-center gap-0.5" title={title}>
             {known ? (
               <Image
                 src={`/ghs/${code}.svg`}
-                alt={label}
+                alt={title}
                 width={s.icon}
                 height={s.icon}
                 className={`${s.box} shrink-0`}

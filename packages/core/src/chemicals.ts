@@ -38,7 +38,7 @@ export type PhysicalState = typeof PHYSICAL_STATES[number]
 export const SDS_REVIEW_STATUSES = ['pending', 'approved', 'rejected'] as const
 export type SdsReviewStatus = typeof SDS_REVIEW_STATUSES[number]
 
-export const SDS_SOURCES = ['upload', 'ai_fetch', 'manufacturer_portal'] as const
+export const SDS_SOURCES = ['upload', 'ai_fetch', 'manufacturer_portal', 'photo_capture'] as const
 export type SdsSource = typeof SDS_SOURCES[number]
 
 export interface HazardStatement { code: string; text: string }
@@ -785,6 +785,15 @@ export interface TierTwoRow {
   average_daily_quantity: number
   container_count:        number
   earliest_expiration:    string | null
+  // Responder-facing classification (migration 241) — the LEPC / fire
+  // department use these for emergency planning alongside the GHS hazards.
+  nfpa_health:        number | null
+  nfpa_flammability:  number | null
+  nfpa_instability:   number | null
+  nfpa_special:       string | null
+  dot_un_number:      string | null
+  dot_hazard_class:   string | null
+  dot_packing_group:  string | null
 }
 
 const TIER_TWO_COLUMNS = [
@@ -795,6 +804,13 @@ const TIER_TWO_COLUMNS = [
   'physical_state',
   'ghs_signal_word',
   'ghs_pictograms',
+  'nfpa_health',
+  'nfpa_flammability',
+  'nfpa_instability',
+  'nfpa_special',
+  'dot_un_number',
+  'dot_hazard_class',
+  'dot_packing_group',
   'location_path',
   'unit',
   'total_quantity',

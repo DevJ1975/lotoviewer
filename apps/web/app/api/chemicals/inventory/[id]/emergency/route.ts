@@ -28,7 +28,8 @@ export async function GET(req: Request, ctx: Ctx) {
           id, name, manufacturer,
           ghs_signal_word, ghs_pictograms, hazard_statements, ppe_required,
           first_aid, spill_cleanup, emergency_phone,
-          nfpa_health, nfpa_flammability, nfpa_instability
+          nfpa_health, nfpa_flammability, nfpa_instability, nfpa_special,
+          dot_un_number, dot_hazard_class, dot_packing_group
         ),
         chemical_locations ( name, path )
       `)

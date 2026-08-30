@@ -89,7 +89,15 @@ function ctx() { return { params: Promise.resolve({ moduleId: MODULE_ID }) } }
 
 function queueGate() {
   queue('profiles', { data: { is_superadmin: false } })
-  queue('tenant_memberships', { data: { role: 'member' } })
+  // Shape matches the gate's select: the embedded tenant is what proves the
+  // tenant is not disabled. tenantGate fails closed without it.
+  queue('tenant_memberships', {
+    data: { role: 'member', invite_cancelled_at: null, tenants: { disabled_at: null } },
+  })
+  // requireStrikeMember wraps requireTenantModuleMember, which resolves the
+  // tenant's module map before the route runs. Without STRIKE enabled here
+  // every request 403s well before the behaviour under test.
+  queue('tenants', { data: { name: 'Test Tenant', modules: { strike: true }, settings: {}, disabled_at: null } })
 }
 
 function queueModuleAndVersion(versionOverrides: Record<string, unknown> = {}) {
@@ -105,10 +113,8 @@ function queueModuleAndVersion(versionOverrides: Record<string, unknown> = {}) {
       status: 'published',
       passing_score: 80,
       retake_limit: null,
-      video_provider: 'storage',
-      video_external_id: null,
-      video_path: 'global/loto/refresher.mp4',
-      captions_path: null,
+      video_external_id: '123456789',
+      video_meta: { vimeo_hash: 'abcdef0123' },
       ...versionOverrides,
     },
   })
@@ -185,7 +191,7 @@ describe('POST /api/strike/[moduleId]/submit', () => {
 
   it('skips the watch gate when the module has no video', async () => {
     queueGate()
-    queueModuleAndVersion({ video_path: null })
+    queueModuleAndVersion({ video_external_id: null })
     queue('strike_attempts', { data: { id: 'attempt-1' } })
     const res = await submitStrikeQuiz(req(baseBody()), ctx())
     expect(res.status).toBe(201)
@@ -218,5 +224,42 @@ describe('POST /api/strike/[moduleId]/submit', () => {
     expect(body.error).toBe('Something went wrong. Please try again.')
     expect(JSON.stringify(body)).not.toContain('secret_internal_table')
     expect(sentryCaptureException).toHaveBeenCalled()
+  })
+
+  // A version with no questions scores 100 by definition (possiblePoints is
+  // zero), so before this gate a bare `{"answers":{}}` POST wrote a passing,
+  // version-bound completion. The learner UI always sent an acknowledgement;
+  // nothing made the server require one.
+  it('422 when a question-less module is submitted without an acknowledgement', async () => {
+    queueGate()
+    queueModuleAndVersion({ video_external_id: null, video_meta: null })
+    const res = await submitStrikeQuiz(
+      req({ module_version_id: VERSION_ID, answers: {} }),
+      ctx(),
+    )
+    expect(res.status).toBe(422)
+    expect(captured.inserts.find(i => i.table === 'strike_completions')).toBeUndefined()
+    expect(captured.inserts.find(i => i.table === 'strike_attempts')).toBeUndefined()
+  })
+
+  it('accepts a question-less module when the acknowledgement is present', async () => {
+    queueGate()
+    queueModuleAndVersion({ video_external_id: null, video_meta: null })
+    queue('strike_attempts', { data: { id: 'attempt-ack' } })
+    const res = await submitStrikeQuiz(req(baseBody()), ctx())
+    expect(res.status).toBe(201)
+    expect(captured.inserts.find(i => i.table === 'strike_completions')).toBeDefined()
+  })
+
+  // The page tree is wrapped in <ModuleGuard moduleId="strike">, but the API
+  // routes were not doing the equivalent check — a tenant with STRIKE turned
+  // off had a hidden page and a fully working submit endpoint.
+  it('403 when STRIKE is not enabled for the tenant', async () => {
+    queue('profiles', { data: { is_superadmin: false } })
+    queue('tenant_memberships', { data: { role: 'member' } })
+    queue('tenants', { data: { name: 'Test Tenant', modules: { strike: false }, settings: {}, disabled_at: null } })
+    const res = await submitStrikeQuiz(req(baseBody()), ctx())
+    expect(res.status).toBe(403)
+    expect(captured.inserts).toHaveLength(0)
   })
 })

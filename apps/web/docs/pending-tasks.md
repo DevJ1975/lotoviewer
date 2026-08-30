@@ -4,6 +4,40 @@ Quick capture of things to come back to. Newest first.
 
 ---
 
+## 2026-06-14 — STRIKE quiz submit: make attempt + completion atomic
+
+**Status:** deferred — documenting the contract. The real fix changes the write
+path, so it needs a product call rather than a silent drive-by.
+
+**What's wrong:** `app/api/strike/[moduleId]/submit/route.ts` inserts the
+`strike_attempts` row, then — on a pass — inserts the `strike_completions` row
+as a *separate* statement with no surrounding transaction. If the completion
+insert throws (a transient DB error, or a future unique constraint), the route's
+catch returns 500 while the **passed attempt is already persisted**. Two
+user-visible consequences:
+
+1. When `version.retake_limit` is set, the orphaned passed attempt counts toward
+   the limit (it has `submitted_at`), so a retry can burn a retake.
+2. The learner sees "Something went wrong" and retries — ending up with two
+   passed attempts and one completion, or (if at the retake cap) locked out
+   despite having passed.
+
+**Options (need a product call):**
+- Move both inserts into a Postgres function / RPC so they commit atomically
+  (preferred — keeps `attempt.id` as the completion FK).
+- Or make the completion insert best-effort (Sentry on failure, still return
+  201) like `recordAccess` in the media route — but then a learner can pass with
+  no completion row, which is worse for an evidence-of-training product.
+
+**Why deferred:** no data loss on the happy path, low probability (a same-DB
+second insert), and the correct fix alters the write contract. Tracked here so
+the audit trail is preserved.
+
+**Related code:**
+- `app/api/strike/[moduleId]/submit/route.ts` — attempt insert (~L167), completion insert (~L190)
+
+---
+
 ## 2026-05-04 — Verify member-invite email delivery
 
 **Status:** waiting on user to test in the deployed app.

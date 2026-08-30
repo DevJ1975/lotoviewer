@@ -7,6 +7,8 @@ import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { type TierTwoRow } from '@soteria/core/chemicals'
 import { PictogramBadges, SignalWordBadge } from '../_components/PictogramBadges'
+import { Nfpa704Diamond } from '../_components/Nfpa704Diamond'
+import { PlacardBadges } from '../_components/PlacardBadges'
 
 export default function TierTwoPage() {
   const { tenant } = useTenant()
@@ -198,6 +200,23 @@ export default function TierTwoPage() {
                       )}
                       <SignalWordBadge word={r.ghs_signal_word ?? null} />
                       <PictogramBadges pictograms={r.ghs_pictograms ?? []} />
+                      {(r.nfpa_health !== null || r.nfpa_flammability !== null || r.nfpa_instability !== null || r.nfpa_special) && (
+                        <Nfpa704Diamond
+                          health={r.nfpa_health}
+                          flammability={r.nfpa_flammability}
+                          instability={r.nfpa_instability}
+                          special={r.nfpa_special}
+                          size="sm"
+                        />
+                      )}
+                      {r.dot_hazard_class && (
+                        <PlacardBadges
+                          hazardClass={r.dot_hazard_class}
+                          unNumber={r.dot_un_number}
+                          packingGroup={r.dot_packing_group}
+                          size="sm"
+                        />
+                      )}
                       <span className="ml-auto font-mono text-sm text-slate-900 dark:text-slate-100">
                         {r.total_quantity} {r.unit}
                       </span>

@@ -1,7 +1,7 @@
 import type { AuditSeverity, LotoAuditChange, RegulatorMachineResult } from '@/lib/loto/audit/schemas'
 import {
   SEVERITY_BADGE,
-} from '@/app/admin/loto/audit/_lib/changeDisplay'
+} from '@/app/admin/loto/multi-agent-audit/_lib/changeDisplay'
 
 // Read-only banner at the top of the reviewer surface. Summarizes the change-set
 // the reviewer is about to walk: counts by severity, how many reference photos
