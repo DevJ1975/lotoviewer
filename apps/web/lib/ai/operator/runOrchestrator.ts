@@ -28,7 +28,7 @@ import { roleMeets, type OperatorAgentId } from './types'
 // runSubAgent (a later slice).
 
 export const ORCHESTRATOR_MAX_LOOPS = 6
-const ORCHESTRATOR_MAX_TOKENS = 2000
+const ORCHESTRATOR_MAX_TOKENS = 4000
 const DELEGATE_TOOL = 'delegate_to_agent'
 
 export interface OrchestratorDelegation {
@@ -153,6 +153,8 @@ export async function runOrchestrator(args: RunOrchestratorArgs): Promise<Orches
     const response = await client.messages.create({
       model,
       max_tokens: ORCHESTRATOR_MAX_TOKENS,
+      thinking:   { type: 'adaptive' },
+      output_config: { effort: 'low' },
       system: [
         { type: 'text', text: staticBlock, cache_control: { type: 'ephemeral' } },
         { type: 'text', text: dynamicBlock },

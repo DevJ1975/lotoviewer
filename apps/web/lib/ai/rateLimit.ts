@@ -42,6 +42,7 @@ export type AiSurface =
   | 'loto-audit-regulator'
   | 'scorecard-focus'
   | 'rca-assist'
+  | 'ecfa-assist'
   | 'operator-orchestrator'
   | 'operator-incidents'
   | 'operator-risk'
@@ -55,6 +56,11 @@ export type AiSurface =
   | 'operator-admin'
   | 'operator-home'
   | 'operator-knowledge'
+  | 'vision-hazard-sweep'
+  | 'draft-regulatory-document'
+  | 'safety-briefing-narrate'
+  | 'hazard-hunt-csp'
+  | 'hazard-hunt-ds'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
@@ -123,6 +129,10 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   // case and iterates. Conversational-class caps keep an active investigation
   // unblocked while bounding a retry loop.
   'rca-assist':                       { perHour: 40, perDay: 200 },
+  // ECFA assist — interactive during an investigation: an admin clicks "draft
+  // sequence" / "suggest causal factors" a handful of times per case and
+  // iterates. Conversational-class caps, same as rca-assist.
+  'ecfa-assist':                      { perHour: 40, perDay: 200 },
   // Operator Console. The orchestrator is the one surface rate-limited per user
   // turn (conversational — same caps as the home assistant). The domain
   // sub-agents are fanned out BY the orchestrator within a single turn (often
@@ -142,6 +152,22 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   'operator-admin':                   { perHour: 600, perDay: 4000 },
   'operator-home':                    { perHour: 600, perDay: 4000 },
   'operator-knowledge':               { perHour: 600, perDay: 4000 },
+  // ── Predictive Safety Intelligence ─────────────────────────────────────
+  // The sweep is a batch fan-out under one engine identity, so its ceiling
+  // is a runaway guard rather than a per-user quota — the real cost control
+  // is the per-run photo cap plus the upfront tenant budget check. Same
+  // posture as the loto-audit-* surfaces above.
+  'vision-hazard-sweep':              { perHour: 900, perDay: 6000 },
+  // Interactive and expensive: a retrieval pass plus a long structured
+  // generation, then a human reads every word. Capped like the other
+  // authoring surfaces.
+  'draft-regulatory-document':        { perHour: 20,  perDay: 100 },
+  'safety-briefing-narrate':          { perHour: 20,  perDay: 100 },
+  // Hazard Hunt agents fire once each per submitted inspection (post-submit,
+  // via after()). A busy site submits a handful of hunts a day; caps sit well
+  // above honest volume while bounding a retry loop.
+  'hazard-hunt-csp':                  { perHour: 30, perDay: 150 },
+  'hazard-hunt-ds':                   { perHour: 30, perDay: 150 },
 }
 
 interface CheckArgs {
@@ -286,21 +312,19 @@ export async function checkTenantBudget(args: TenantBudgetArgs): Promise<TenantB
 
   // Hot path: a single SELECT for the tenant's settings + a sum of
   // today's invocations. Both are bounded + indexed; total < 50ms.
+  const startOfDay = new Date()
+  startOfDay.setUTCHours(0, 0, 0, 0)
   const [tenantRes, todayRes] = await Promise.all([
     admin.from('tenants')
       .select('settings')
       .eq('id', args.tenantId)
       .maybeSingle(),
-    (() => {
-      const startOfDay = new Date()
-      startOfDay.setUTCHours(0, 0, 0, 0)
-      return admin
-        .from('ai_invocations')
-        .select('model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens')
-        .eq('tenant_id', args.tenantId)
-        .eq('status', 'success')
-        .gte('occurred_at', startOfDay.toISOString())
-    })(),
+    // Per-model token sums for today (a handful of rows) instead of every
+    // successful invocation row — the DB does the aggregation.
+    admin.rpc('ai_invocation_token_totals', {
+      p_tenant: args.tenantId,
+      p_since:  startOfDay.toISOString(),
+    }),
   ])
 
   // Fail-open on infrastructure errors — same posture as
@@ -329,9 +353,10 @@ export async function checkTenantBudget(args: TenantBudgetArgs): Promise<TenantB
     return { ok: true }
   }
 
-  // Sum today's spend. Pure JS over a small row set — no DB-side
-  // aggregation because the cost math (which factors model + cache
-  // tiers) lives in usageAggregator and shouldn't be duplicated.
+  // Sum today's spend. todayRes is per-model token totals (the DB did the
+  // grouping); the cost math — which factors model + cache tiers — still
+  // lives in usageAggregator. Pricing each model group once equals pricing
+  // every row, because costForInvocation is linear in each token bucket.
   let spentUsd = 0
   for (const r of (todayRes.data ?? []) as Array<{
     model: string
@@ -342,8 +367,8 @@ export async function checkTenantBudget(args: TenantBudgetArgs): Promise<TenantB
   }>) {
     spentUsd += costForInvocation(
       r.model,
-      r.input_tokens, r.output_tokens,
-      r.cache_read_tokens, r.cache_write_tokens,
+      Number(r.input_tokens ?? 0),      Number(r.output_tokens ?? 0),
+      Number(r.cache_read_tokens ?? 0), Number(r.cache_write_tokens ?? 0),
     )
   }
   const spentCents = Math.round(spentUsd * 100)

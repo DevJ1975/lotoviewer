@@ -3,6 +3,8 @@
 import { useMemo, type ReactNode } from 'react'
 import { Phone, AlertTriangle } from 'lucide-react'
 import { PictogramBadges, SignalWordBadge } from './PictogramBadges'
+import { Nfpa704Diamond } from './Nfpa704Diamond'
+import { PlacardBadges } from './PlacardBadges'
 import {
   dialableTelHref,
   firstAidEntries,
@@ -24,6 +26,20 @@ export interface EmergencyProduct {
   first_aid:       ParsedSdsFirstAid | null
   spill_cleanup:   ParsedSdsSpillCleanup | null
   emergency_phone: string | null
+  nfpa_health:        number | null
+  nfpa_flammability:  number | null
+  nfpa_instability:   number | null
+  nfpa_special:       string | null
+  dot_un_number:      string | null
+  dot_hazard_class:   string | null
+  dot_packing_group:  string | null
+}
+
+function hasNfpaRating(p: EmergencyProduct): boolean {
+  return p.nfpa_health !== null
+    || p.nfpa_flammability !== null
+    || p.nfpa_instability !== null
+    || (p.nfpa_special?.trim().length ?? 0) > 0
 }
 
 // The single, scannable emergency layout: tap-to-call pinned at the top, then
@@ -66,9 +82,27 @@ export function EmergencyView({ product, footer }: { product: EmergencyProduct; 
         {product.manufacturer && (
           <div className="text-sm text-slate-600 dark:text-slate-300">{product.manufacturer}</div>
         )}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-4">
           <SignalWordBadge word={product.ghs_signal_word} />
           <PictogramBadges pictograms={product.ghs_pictograms ?? []} size="lg" showLabel />
+          {hasNfpaRating(product) && (
+            <Nfpa704Diamond
+              health={product.nfpa_health}
+              flammability={product.nfpa_flammability}
+              instability={product.nfpa_instability}
+              special={product.nfpa_special}
+              size="md"
+            />
+          )}
+          {product.dot_hazard_class && (
+            <PlacardBadges
+              hazardClass={product.dot_hazard_class}
+              unNumber={product.dot_un_number}
+              packingGroup={product.dot_packing_group}
+              size="lg"
+              showLabel
+            />
+          )}
         </div>
       </section>
 

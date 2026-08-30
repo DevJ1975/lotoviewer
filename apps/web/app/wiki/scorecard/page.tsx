@@ -1,10 +1,47 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.13.1'
-const LAST_UPDATED    = '2026-06-17'
+const CURRENT_VERSION = '1.15.0'
+const LAST_UPDATED    = '2026-07-29'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.15.0',
+    date:    '2026-07-29',
+    changes: [
+      'New “Month over month” strip: compares the last two complete calendar ' +
+      'months across leading indicators (corrective actions and investigations ' +
+      'completed) and lagging ones (recordable cases, all incidents). The ' +
+      'current month is deliberately excluded while it is still running, and a ' +
+      'change is coloured only when it falls outside the control limits set by ' +
+      'your own preceding months — so on a small program the strip is grey most ' +
+      'of the time, which is the honest reading.',
+      'New docs: “The math, metric by metric” gives the actual formula behind ' +
+      'every rate and percentage, including what the 200,000 constant means and ' +
+      'where hours worked come from.',
+      'New docs: “Confidence intervals” explains why a rate has a range and how ' +
+      'to tell a real move from normal variation.',
+      'New docs: “Scope & period” sets out which tiles follow the facility ' +
+      'filter and which stay client-wide, and which period each part of the ' +
+      'page actually covers — the two things most often misread.',
+    ],
+  },
+  {
+    version: '1.14.0',
+    date:    '2026-07-14',
+    changes: [
+      'Cross-module risk engine (model v2.0.0): the site-health score now also ' +
+      'reads failing inspections, open BBS follow-ups, overdue JHA reviews, ' +
+      'permits left open past expiry, competency-matrix training gaps, and ECFA ' +
+      'causal factors on weak controls — each surfaced as a leading driver.',
+      'New “Leading Indicator Signals” panel: shows which leading indicators ' +
+      'historically precede your recordables and by how many months — presented ' +
+      'as exploratory correlation, not proof of cause.',
+      'Statistical honesty: OSHA rates now show confidence intervals (Poisson ' +
+      'for rates, Wilson for RCA completion) so a rate built on a few events no ' +
+      'longer reads as precise.',
+    ],
+  },
   {
     version: '1.13.1',
     date:    '2026-06-17',
@@ -207,6 +244,10 @@ export default function WikiScorecardPage() {
       toc={[
         { id: 'overview',     label: 'What it\'s for' },
         { id: 'metrics',      label: 'What it measures' },
+        { id: 'math',         label: 'The math, metric by metric' },
+        { id: 'uncertainty',  label: 'Confidence intervals' },
+        { id: 'momentum',     label: 'Month over month' },
+        { id: 'scope',        label: 'Scope & period' },
         { id: 'using',        label: 'How to read the board' },
         { id: 'distribution', label: 'Distributions & forecast' },
         { id: 'sharing',      label: 'Present, export & email' },
@@ -253,6 +294,182 @@ export default function WikiScorecardPage() {
           <li>Atmospheric-test failures and the spaces that drove them</li>
           <li>LOTO photo-completion percentage trend</li>
         </ul>
+      </Section>
+
+      <Section id="math" title="The math, metric by metric">
+        <p>
+          Every number below is computed in the browser from rows the page
+          fetches — nothing is pre-aggregated, so what you see is always
+          derived from the current contents of the tables. Tap any tile on the
+          scorecard to see the same formula with <em>your</em> numbers
+          substituted in.
+        </p>
+
+        <h4>The OSHA rate family</h4>
+        <p>
+          All four share the same shape. The constant <strong>200,000</strong> is
+          100 full-time-equivalent workers × 2,000 hours a year — so a rate of
+          3.0 means &quot;3 cases per 100 full-time workers per year.&quot; It is
+          fixed by OSHA/BLS convention and never changes.
+        </p>
+        <ul>
+          <li><strong>TRIR</strong> = (all recordable cases × 200,000) ÷ hours worked</li>
+          <li><strong>DART</strong> = ((deaths + days-away cases + restricted/transfer cases) × 200,000) ÷ hours worked</li>
+          <li><strong>LTIR</strong> = ((deaths + days-away cases) × 200,000) ÷ hours worked</li>
+          <li><strong>Severity rate</strong> = (total days away × 200,000) ÷ hours worked</li>
+        </ul>
+        <p>
+          A case counts as recordable when its classification meets the OSHA
+          1904 recording criteria. <strong>Hours worked</strong> comes from the
+          annual figure entered per establishment under OSHA → Establishments.
+          If nobody has entered hours for the current year, every rate renders
+          as <code>—</code> rather than zero, because a rate with no denominator
+          is not a rate.
+        </p>
+        <p>
+          <strong>Two caveats you should know before quoting these.</strong> The
+          numerator counts cases in a rolling trailing-365-day window while the
+          denominator is the calendar-year hours entry, so the two do not cover
+          exactly the same period — mid-year the rate reads high if you record
+          hours as they accrue rather than budgeting them annually. And the
+          hours figure is summed across <em>all</em> of a client&apos;s
+          establishments, so when a facility filter is active the numerator
+          narrows and the denominator does not. Both are known and tracked; see{' '}
+          <strong>Scope &amp; period</strong> below.
+        </p>
+
+        <h4>Process and investigation quality</h4>
+        <ul>
+          <li>
+            <strong>CAPA on-time %</strong> = corrective actions closed on or before
+            their due date ÷ all closed actions. An action with no due date counts
+            as on time, so a blank due date flatters this number.
+          </li>
+          <li>
+            <strong>RCA completion %</strong> = recordable cases with a completed
+            investigation ÷ all recordable cases in the window.
+          </li>
+          <li>
+            <strong>Mean time to close</strong> = average of (closed − reported)
+            across incidents closed in the window.
+          </li>
+          <li>
+            <strong>Days since last recordable</strong> = whole days since the most
+            recent recordable&apos;s occurrence date. Shown as <code>—</code> when
+            none is on file. Read it alongside near-miss reporting — a long quiet
+            streak and a low reporting rate together usually mean under-reporting
+            rather than safety.
+          </li>
+        </ul>
+
+        <h4>Permit and program metrics (selected window)</h4>
+        <ul>
+          <li><strong>Cancel pressure</strong> = permits canceled for a reason other than &quot;task complete&quot; ÷ all permits</li>
+          <li><strong>Atmospheric failure rate</strong> = gas tests outside the acceptable range ÷ all tests</li>
+          <li><strong>Photo completion</strong> = active equipment with both required photos ÷ all active equipment</li>
+          <li><strong>Average permit duration</strong> = mean (closed − started), excluding permits still open</li>
+        </ul>
+      </Section>
+
+      <Section id="uncertainty" title="Confidence intervals — why a number has a range">
+        <p>
+          Safety data is thin. A site with two recordables in a year is not
+          meaningfully different from one with four — the difference is well
+          inside what chance produces. So the rate cards show a{' '}
+          <strong>95% confidence interval</strong> underneath the headline
+          figure, and the interval is the honest part of the tile.
+        </p>
+        <ul>
+          <li>
+            <strong>Rates</strong> use a Poisson interval, which is the right model
+            for counting rare events over an exposure period.
+          </li>
+          <li>
+            <strong>Percentages</strong> (RCA completion) use a Wilson interval,
+            which stays sensible when the percentage is near 0 or 100.
+          </li>
+        </ul>
+        <p>
+          <strong>How to use it:</strong> if this period&apos;s interval overlaps
+          last period&apos;s, you cannot claim the metric moved. That is not a
+          technicality — acting on a move that is inside the interval is how
+          programs end up crediting an intervention for what was chance, and then
+          repeating it.
+        </p>
+        <p>
+          The forecast and control chart carry the same discipline: the forecast
+          needs at least 6 months of history, the c-chart at least 2, and the
+          Poisson distribution at least 8, and each stays hidden below its
+          threshold rather than drawing a line through too few points.
+        </p>
+      </Section>
+
+      <Section id="momentum" title="Month over month — and why it is often grey">
+        <p>
+          The momentum strip compares the <strong>last two complete calendar
+          months</strong>, split into leading indicators (corrective actions
+          completed, investigations completed) and lagging ones (recordable
+          cases, all reported incidents). It always names the two months it
+          compared.
+        </p>
+        <p>
+          <strong>The current month is never shown.</strong> A month that is
+          eleven days old compared against a full month will always look like an
+          improvement, and that improvement would reset every time the page
+          rendered. Waiting for the month to close is the only way the comparison
+          means anything.
+        </p>
+        <p>
+          <strong>A change is coloured only when it is outside normal
+          variation.</strong> Rather than judging a move from just two numbers,
+          the panel builds control limits from the months that came before and
+          colours the change only when the latest month falls outside them. On a
+          small program most months land inside — so the strip is grey most of the
+          time. That is the correct reading, not a fault. Grey means &quot;this is
+          what your normal looks like.&quot;
+        </p>
+        <p>
+          Where there are fewer than 10 events across the two months, or fewer
+          than 6 closed months of history, the panel shows both counts and
+          withholds the verdict, saying which of the two applies.
+        </p>
+        <p>
+          Several metrics are deliberately <em>absent</em> from this strip because
+          a monthly comparison of them would be misleading — near-miss reports,
+          the OSHA rates, CAPA on-time %, and RCA completion %. The panel lists
+          each one and the specific reason, under &quot;Why some metrics are not
+          shown here.&quot;
+        </p>
+      </Section>
+
+      <Section id="scope" title="Scope &amp; period — what each number covers">
+        <p>
+          Two things vary between tiles on this page, and neither is currently
+          labelled on the tile itself. Knowing them prevents the most common
+          misreading.
+        </p>
+        <p>
+          <strong>Period.</strong> The window selector (7 / 30 / 90 days) drives
+          the permit and program strip. The injury and OSHA block is always
+          trailing 12 months regardless of the selector. The risk model looks at
+          90 days, the momentum strip at whole calendar months, and the
+          leading-signal panel at 18 months. So &quot;risk is up but recordables
+          are flat&quot; may simply be two different periods.
+        </p>
+        <p>
+          <strong>Facility.</strong> When a facility is selected in the header,
+          most record tables filter to it automatically. Three things do{' '}
+          <em>not</em> currently follow that filter and stay client-wide: the
+          predicted-risk score and its drivers, the atmospheric failure rate, and
+          the year-over-year history. The exported PDF, the Excel workbook and the
+          weekly email are also client-wide.
+        </p>
+        <p>
+          Until every tile carries its own scope label, the safe habit is: read
+          the OSHA rates and permit counts as scoped to your selected facility,
+          and read the risk score and year-over-year chart as covering the whole
+          client.
+        </p>
       </Section>
 
       <Section id="using" title="How to read the board">

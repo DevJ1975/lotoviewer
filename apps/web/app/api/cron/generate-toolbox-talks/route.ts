@@ -388,6 +388,7 @@ async function generateTalkBody(
   const response = await client.messages.create({
     model:      AI_MODEL,
     max_tokens: 4000,
+    thinking:   { type: 'disabled' },
     system:     `${SYSTEM_PROMPT}\n\n${toolboxTalkIndustryPrompt(industry)}`,
     messages:   [{ role: 'user', content: userPrompt }],
     output_config: {

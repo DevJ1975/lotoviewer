@@ -142,7 +142,26 @@ export async function POST(req: Request) {
   const retrieved = await retrieveContext({ query: ragQuery, tenantId: gate.tenantId, k: 10 })
 
   let client: Anthropic
-  try { client = await getAnthropic(gate.tenantId) }
+  // The AI call has to fit inside maxDuration with room for the rest of the
+  // request, and it did not. getAnthropic's defaults are a 30s timeout with 2
+  // retries, so the worst case was 3 × 30s = 90s of Anthropic time alone —
+  // exactly this route's maxDuration, leaving nothing for the rate-limit
+  // check, the equipment lookup, the k=10 RAG retrieval, key resolution and
+  // JSON parsing that also have to happen. Whenever the model ran long the
+  // platform killed the function mid-flight and the browser got a raw 504,
+  // which is what operators were seeing on the hazard report.
+  //
+  // One attempt, given more time than it had before (45s vs 30s), and sized so
+  // the whole request lands near 60s even if the platform clamps maxDuration
+  // below the 90 declared above. Retrying is the wrong trade here: a
+  // generation that blew a 45s budget will blow it again, and the retry only
+  // spends the headroom that carries a real error message back to the user.
+  //
+  // Every other long-running surface in this codebase already passes an
+  // explicit timeout (drafts and the LOTO audit use 120s); this route was the
+  // one that took the defaults, and its 4,000-token structured report is
+  // exactly the "structured output runs long" case getAnthropic documents.
+  try { client = await getAnthropic(gate.tenantId, { timeoutMs: 45_000, maxRetries: 0 }) }
   catch (err) {
     const mapped = aiErrorToResponse(err, 'assistant-hazards')
     Sentry.captureException(err, { tags: { ...mapped.tags, route: '/api/assistant/hazards' } })
@@ -167,6 +186,7 @@ export async function POST(req: Request) {
     response = await client.messages.create({
       model:      MODEL,
       max_tokens: MAX_TOKENS,
+      thinking:   { type: 'disabled' },
       system:     SYSTEM_PROMPT,
       messages:   [{ role: 'user', content: userPrompt }],
     })

@@ -181,14 +181,19 @@ a second caller or is genuinely complex enough to deserve isolation.
 
 ```tsx
 const Ctx = createContext<MyShape>(defaultValue)
-function Provider({ children }) { return <Ctx.Provider value={...}>{children}</Ctx.Provider> }
+function Provider({ children }) { return <Ctx value={...}>{children}</Ctx> }
 function useMe() { return useContext(Ctx) }
 ```
 
-- `<Provider value={...}>` makes a value available to all descendants.
+- `<Ctx value={...}>` makes a value available to all descendants.
 - `useContext(Ctx)` reads it from any descendant.
-- **EVERY consumer re-renders when the Provider's `value` changes
+- **EVERY consumer re-renders when the provider's `value` changes
   identity** — that's why we wrap value in useMemo.
+
+**Note on `<Ctx.Provider>`**: React 19 lets you render the context object
+itself as the provider. The older `<Ctx.Provider>` form still works and is
+what most of this codebase still uses (12 sites), but it's slated for
+deprecation — write new code with `<Ctx>`.
 
 **Where in this repo:**
 - `components/AuthProvider.tsx` — current user + profile
@@ -197,13 +202,44 @@ function useMe() { return useContext(Ctx) }
 
 **Common bug**: passing a fresh object literal as `value`:
 ```tsx
-<Ctx.Provider value={{ a, b }}>  // BAD: new object every render
+<Ctx value={{ a, b }}>  // BAD: new object every render
 ```
 Use useMemo to stabilize it.
 
 ---
 
+## 7b. React 19 APIs — what to reach for in new code
+
+We run React 19.2. The patterns above are all still correct, but React 19
+ships purpose-built hooks for several things this codebase currently does
+by hand. Prefer these in new code.
+
+| Instead of… | Use | Why |
+|---|---|---|
+| `useState` for `saving` + `error` around a form submit | **`useActionState`** | Returns the pending flag and the error for you. One hook replaces the pair. |
+| Prop-drilling `saving` down to a submit button | **`useFormStatus`** | The button reads its own form's pending state. No prop needed. |
+| A hand-rolled "optimistic set" of pending IDs (§8) | **`useOptimistic`** | Built-in, and auto-reverts when the real value arrives. |
+| The ref-mirror trick in §2, when you only need it *inside an effect* | **`useEffectEvent`** | Lets an effect read the latest prop without listing it as a dep — no ref, no stale closure. |
+| A `[]`-dep effect that reads `navigator` / `localStorage` / `matchMedia` into state | **`useSyncExternalStore`** | Handles the server snapshot too, so it can't hydration-mismatch. |
+| `forwardRef` | **a plain `ref` prop** | Function components take `ref` like any other prop now. |
+| `useEffect` + `fetch` to load a page's data | **a Server Component**, or `use(promise)` + `<Suspense>` | No client waterfall, no loading boolean. |
+
+**Where in this repo**: nowhere yet — adoption of all of these is currently
+zero. See [`docs/react-audit-2026-07-28.md`](../../../docs/react-audit-2026-07-28.md)
+for the counts and the migration sequence.
+
+The ref-mirror pattern in §2 is still correct for the non-effect cases
+(timers, "did this fire yet" flags, DOM nodes). `useEffectEvent` replaces
+it only where the ref exists purely to keep an effect's dep array empty —
+this codebase has five of those.
+
+---
+
 ## 8. Optimistic UI — feel snappy by lying briefly
+
+> React 19 ships **`useOptimistic`** for exactly this. The hand-rolled
+> pattern below is what the codebase does today and is worth understanding
+> — but reach for the hook in new code.
 
 The user clicks Delete. Two possible UX:
 - A) Wait for the API → show a spinner → row disappears after 200ms.
@@ -274,7 +310,10 @@ take it back BEFORE the API call fires.
 1. **Start with state.** Add useEffect when you need a side effect.
 2. **Add useCallback / useMemo only when something downstream cares
    about identity stability.** Premature memoization adds cost without
-   benefit.
+   benefit. (This guidance is provisional: the codebase has 542 manual
+   memoization sites and the React Compiler — which makes most of them
+   unnecessary — is a live proposal. See
+   [`docs/react-audit-2026-07-28.md`](../../../docs/react-audit-2026-07-28.md) §6.2.)
 3. **Trust the linter.** `react-hooks/exhaustive-deps` and
    `react-hooks/rules-of-hooks` catch real bugs. Disabling them with
    `eslint-disable-next-line` is a code smell — try harder first.

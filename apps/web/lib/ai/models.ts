@@ -2,23 +2,34 @@
 //
 // Pinning posture: alias-style.
 //
-//   - SONNET = 'claude-sonnet-4-6'   (NOT claude-sonnet-4-6-20250930)
-//   - HAIKU  = 'claude-haiku-4-5'    (NOT claude-haiku-4-5-20251001)
-//   - OPUS   = 'claude-opus-4-8'     (NOT claude-opus-4-8-<date>)
+//   - SONNET = 'claude-sonnet-5'   (NOT claude-sonnet-5-<date>)
+//   - HAIKU  = 'claude-haiku-4-5'  (NOT claude-haiku-4-5-20251001)
+//   - OPUS   = 'claude-opus-5'     (NOT claude-opus-5-<date>)
 //
 // The alias auto-rolls forward within a model's lifecycle (e.g.
-// Anthropic ships claude-sonnet-4-6-20260101 and the alias starts
+// Anthropic ships claude-sonnet-5-20260101 and the alias starts
 // pointing at it); this is desirable for non-regressive bug fixes.
-// Major-version transitions (4.6 → 4.7) require a deliberate edit
+// Major-version transitions (4.6 → 5) require a deliberate edit
 // to this file, which is the right blast radius — one PR review,
 // one test pass, one env-var unchanged.
+//
+// ⚠️ Thinking defaults inverted at the 5 boundary. On Sonnet 4.6 and
+// Opus 4.8, OMITTING `thinking` meant no thinking. On Sonnet 5 and
+// Opus 5 it means ADAPTIVE thinking, and `max_tokens` caps thinking
+// PLUS response text — so a surface that omits `thinking` and parses
+// JSON out of a tight budget will truncate and throw. Every call site
+// that relied on the old default now says `thinking: { type: 'disabled' }`
+// out loud. If you add a surface, state its thinking posture explicitly;
+// do not rely on the default. (Note `disabled` is only accepted at
+// effort `high` or below on Opus 5 — we set no `effort`, so the default
+// `high` applies. Do not add `xhigh`/`max` to a disabled-thinking site.)
 //
 // Photo-related AI surfaces were dropped per the operator's call:
 // every uploaded photo gets reviewed by a human before sign-off
 // anyway, so an AI gate added latency + cost without changing the
 // review burden. validate-photo (the per-upload subject check),
 // plus the image-content blocks in the two generation routes, are
-// gone. Sonnet 4.6 stays on the chat + structured-output surfaces.
+// gone. Sonnet 5 stays on the chat + structured-output surfaces.
 //
 // The multi-agent LOTO audit uses cost-tiered ("barbell") routing: its
 // high-volume perception + consistency passes (FPE vision, DS) run on
@@ -26,11 +37,25 @@
 // adversarial regulator review run on Opus — strongest reasoning where a
 // wrong call is most costly. See the audit block in MODEL_BY_SURFACE.
 
-export const SONNET = 'claude-sonnet-4-6' as const
-export const HAIKU  = 'claude-haiku-4-5'  as const
-export const OPUS   = 'claude-opus-4-8'   as const
+export const SONNET = 'claude-sonnet-5' as const
+export const HAIKU  = 'claude-haiku-4-5' as const
+export const OPUS   = 'claude-opus-5'    as const
 
-export type ModelId = typeof SONNET | typeof HAIKU | typeof OPUS
+// Newer generation, used ONLY by surfaces added after it shipped. Migrating the
+// forty-odd existing mappings above is a deliberate, separately testable change:
+// doing it as a drive-by inside a feature PR would put every shipped surface's
+// behaviour up for re-validation in a review about something else.
+//
+// Adding a constant here is not enough on its own — MODEL_PRICING in
+// lib/ai/usageAggregator.ts falls back to SONNET's rate for an unrecognized
+// model id, so a routed model with no pricing row silently under-bills and
+// checkTenantBudget stops enforcing. modelPricingCoverage.test.ts fails the
+// build if the two ever drift.
+export const SONNET_5 = 'claude-sonnet-5' as const
+
+export type ModelId =
+  | typeof SONNET | typeof HAIKU | typeof OPUS
+  | typeof SONNET_5
 
 /**
  * Surface → model selection. Single point of override if a surface
@@ -98,7 +123,7 @@ export const MODEL_BY_SURFACE = {
   'loto-audit-ds':                    HAIKU,
   // loto-audit-ehs: Senior EHS Specialist gate. Cites Cal/OSHA T8 §3314 +
   //   1910.147 + Z244.1 and holds pass/fail authority — the safety-critical
-  //   decision. Opus 4.8 for the strongest compliance reasoning.
+  //   decision. Opus 5 for the strongest compliance reasoning.
   'loto-audit-ehs':                   OPUS,
   // loto-audit-author: drafts a CORRECTED, bilingual energy-control procedure for
   //   a machine the gate failed. Reuses the proven generate-loto-steps prompt and
@@ -108,7 +133,7 @@ export const MODEL_BY_SURFACE = {
   'loto-audit-author':                SONNET,
   // loto-audit-regulator: veteran Cal/OSHA CSHO who adversarially re-reviews the
   //   EHS audit per machine and audits the program end-to-end, driving EHS
-  //   corrections. Same safety-critical class as the gate — Opus 4.8. Critique is
+  //   corrections. Same safety-critical class as the gate — Opus 5. Critique is
   //   staged for the human review gate; it never writes live data.
   'loto-audit-regulator':             OPUS,
   // EHS scorecard "where to focus" — an advisory narrative over the
@@ -123,6 +148,13 @@ export const MODEL_BY_SURFACE = {
   // the other structured-output surfaces. The route never writes RCA nodes
   // or actions; acceptance is an explicit human step. Sonnet.
   'rca-assist':                       SONNET,
+  // ECFA assist — drafts the chronological event sequence from the incident
+  // narrative and flags candidate causal factors (with coding + presumptive-
+  // evidence gaps). Causal reasoning over the incident context + the current
+  // chart, narrative output a human accepts node-by-node; the route never
+  // writes ECFA nodes. Same advisory structured-output class as rca-assist →
+  // Sonnet.
+  'ecfa-assist':                      SONNET,
   // ── Operator Console (multi-agent: orchestrator + domain sub-agents) ──────
   // A dedicated conversational surface where an agent operates the SaaS and
   // reconfigures the home page. Barbell routing, same posture as the LOTO
@@ -144,6 +176,36 @@ export const MODEL_BY_SURFACE = {
   'operator-admin':                   SONNET,
   'operator-home':                    SONNET,
   'operator-knowledge':               SONNET,
+  // ── Predictive Safety Intelligence ───────────────────────────────────────
+  // vision-hazard-sweep: reads hazards out of field photos already stored
+  //   against BBS observations, incidents, permits, and hazwaste inspections.
+  //   Haiku for the same reason loto-audit-fpe uses it — high-volume perception
+  //   behind a conservative deterministic gate (closed taxonomy, per-source
+  //   eligible codes, per-code confidence floors) plus mandatory human review.
+  //   It runs OFFLINE and batched, so it does not reintroduce the per-upload
+  //   latency that got the original photo gate removed.
+  'vision-hazard-sweep':              HAIKU,
+  // draft-regulatory-document: first drafts of risk assessments, method
+  //   statements, JSA checklists, and incident reports. A qualified safety
+  //   professional reads and signs every one, and the draft is grounded on
+  //   retrieved regulation chunks with unresolvable citations stripped — draft
+  //   quality is what the whole feature is for, so it gets the stronger model.
+  'draft-regulatory-document':        SONNET_5,
+  // safety-briefing-narrate: optional prose over the deterministic briefing.
+  //   The ranking, the scores, and the score-reduction arithmetic are all
+  //   computed in @soteria/core before the model is called; it narrates and
+  //   never reorders. Same advisory class as scorecard-focus.
+  'safety-briefing-narrate':          SONNET_5,
+  // ── Hazard Hunt (CSP write-up / DS analytics) ─────────────────────────────
+  // hazard-hunt-csp: a Certified Safety Professional authoring a citation-backed
+  //   write-up of a completed workplace inspection — safety-critical authoring a
+  //   human reviews before it is finalized to the wiki + KB. Opus 4.8, the same
+  //   class as the loto-audit-ehs gate.
+  'hazard-hunt-csp':                  OPUS,
+  // hazard-hunt-ds: a Data Scientist narrating deterministic hazard-finding
+  //   trends. Advisory, text-only, never computes the EHS score — same advisory
+  //   class as scorecard-focus. Sonnet (drop to Haiku if volume dominates).
+  'hazard-hunt-ds':                   SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

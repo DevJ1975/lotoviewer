@@ -195,6 +195,31 @@ export function wilsonInterval(successes: number, trials: number, z = 1.96): Con
   return { point: p, lower: Math.max(0, center - half), upper: Math.min(1, center + half) }
 }
 
+/**
+ * Normal-approximation confidence interval for a Poisson COUNT (rare events):
+ * count ± z·√count, lower floored at 0. Same form as the Poisson prediction
+ * interval in forecast.ts. Approximate for very small counts — its purpose is
+ * to show that a headline built on a handful of events is not precise.
+ */
+export function poissonCountInterval(count: number, z = 1.96): ConfidenceInterval {
+  const c = Math.max(0, count)
+  const half = z * Math.sqrt(c)
+  return { point: c, lower: Math.max(0, c - half), upper: c + half }
+}
+
+/**
+ * Confidence interval for an OSHA-style rate = count · base / hours. The count
+ * is Poisson, so the rate interval is the count interval scaled by base/hours.
+ * Null when hours <= 0 (caller renders "—"). This is what turns "TRIR 1.33"
+ * into "TRIR 1.33 (0.2–3.9)" and stops a 1-recordable tenant reading as precise.
+ */
+export function rateInterval(count: number, hours: number, base = 200_000, z = 1.96): ConfidenceInterval | null {
+  if (hours <= 0) return null
+  const ci = poissonCountInterval(count, z)
+  const scale = base / hours
+  return { point: ci.point * scale, lower: ci.lower * scale, upper: ci.upper * scale }
+}
+
 // ── Smoothing & trend ───────────────────────────────────────────────────────
 
 /**

@@ -11,6 +11,7 @@ import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 import { DS_SCHEMA, type DsResult, type FpeResult } from '../schemas'
 import { DS_SYSTEM, describeEquipment, describeSteps } from '../prompts'
 import type { AgentOutput } from './fpe'
+import { assertNotRefused } from '@/lib/ai/client'
 
 const MODEL = MODEL_BY_SURFACE['loto-audit-ds']
 
@@ -51,11 +52,13 @@ export async function runDsAgent(
   const response = await client.messages.create({
     model:      MODEL,
     max_tokens: 4000,
+    thinking:   { type: 'disabled' },
     system:     [{ type: 'text', text: DS_SYSTEM, cache_control: { type: 'ephemeral' } }],
     messages:   [{ role: 'user', content: userText }],
     output_config: { format: { type: 'json_schema', schema: DS_SCHEMA } },
   })
 
+  assertNotRefused(response, 'loto-audit-ds')
   const textBlock = response.content.find(b => b.type === 'text')
   if (!textBlock || textBlock.type !== 'text') throw new Error('DS agent: no text block in response')
   const result = JSON.parse(textBlock.text) as DsResult

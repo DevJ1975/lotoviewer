@@ -26,8 +26,8 @@ export interface ManualSection {
 
 export const MANUAL_TITLE       = 'Working at Heights'
 export const MANUAL_SUBTITLE    = 'Federal OSHA + Cal/OSHA fall protection — equipment, people, paperwork.'
-export const MANUAL_VERSION     = '1.4.0'
-export const MANUAL_LAST_UPDATED = '2026-05-19'
+export const MANUAL_VERSION     = '1.4.1'
+export const MANUAL_LAST_UPDATED = '2026-08-28'
 
 export const SECTIONS: ManualSection[] = [
   // ────────────────────────────────────────────────────────────────

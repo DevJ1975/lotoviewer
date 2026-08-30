@@ -33,6 +33,48 @@ export class AnthropicNotConfiguredError extends Error {
 }
 
 /**
+ * The model's safety classifiers declined the request.
+ *
+ * This is NOT an HTTP error — a refused request returns 200 with
+ * `stop_reason: 'refusal'` and content that is empty or cut off partway.
+ * Every surface here reads its answer with `.find(b => b.type === 'text')`
+ * and treats a miss as a malformed response, so without this the operator
+ * sees "no text block in response" or a JSON parse failure and goes looking
+ * for a bug that isn't there.
+ *
+ * The Claude 5 models carry stronger safety classifiers than 4.6/4.8 did,
+ * and this app's subject matter — hazardous energy, confined spaces,
+ * chemical exposure — sits close enough to the categories they screen for
+ * that a false positive is plausible on otherwise ordinary input.
+ */
+export class AiRefusalError extends Error {
+  readonly category: string | null
+
+  constructor(surface: string, category: string | null, explanation: string | null) {
+    super(
+      `The model declined the ${surface} request`
+      + (category ? ` (category: ${category})` : '')
+      + (explanation ? `: ${explanation}` : '.'),
+    )
+    this.name = 'AiRefusalError'
+    this.category = category
+  }
+}
+
+/**
+ * Throws {@link AiRefusalError} when the model refused. Call this on any
+ * response before reading `content` — a refusal leaves nothing useful there.
+ *
+ * `stop_details` is the informative part but is not guaranteed present, so
+ * branch on `stop_reason` and treat the details as optional.
+ */
+export function assertNotRefused(response: Anthropic.Message, surface: string): void {
+  if (response.stop_reason !== 'refusal') return
+  const details = (response as { stop_details?: { category?: string | null; explanation?: string | null } }).stop_details
+  throw new AiRefusalError(surface, details?.category ?? null, details?.explanation ?? null)
+}
+
+/**
  * Returns an Anthropic SDK client configured for the given tenant.
  *
  * Throws:
@@ -50,14 +92,22 @@ export class AnthropicNotConfiguredError extends Error {
  */
 export async function getAnthropic(
   tenantId: string | null,
-  opts?: { timeoutMs?: number },
+  opts?: { timeoutMs?: number; maxRetries?: number },
 ): Promise<Anthropic> {
   const apiKey = await getTenantApiKey(tenantId)
   if (!apiKey) throw new AnthropicNotConfiguredError()
   return new Anthropic({
     apiKey,
     timeout: opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-    maxRetries: DEFAULT_MAX_RETRIES,
+    // Retries multiply the wall-clock budget: the worst case is
+    // `timeout × (maxRetries + 1)`, and that has to leave room for
+    // everything else in the request or the platform kills the function and
+    // the caller gets a raw 504 instead of any error this module produced.
+    // A surface doing one long generation should usually set this to 0 —
+    // re-running a call that already exceeded its timeout will exceed it
+    // again, and the second attempt only spends the budget that would have
+    // carried a useful error back to the user.
+    maxRetries: opts?.maxRetries ?? DEFAULT_MAX_RETRIES,
   })
 }
 
@@ -86,6 +136,16 @@ export function aiErrorToResponse(err: unknown, surface: string): AiErrorRespons
       status: 503,
       body: { error: 'The AI assistant is not configured for this deployment. Contact your administrator.' },
       tags: { surface, kind: 'not-configured' },
+    }
+  }
+  if (err instanceof AiRefusalError) {
+    // 422, not 502: the upstream call succeeded and the service is healthy —
+    // this specific request was declined. Retrying it verbatim will be
+    // declined again, so the message says to rephrase rather than retry.
+    return {
+      status: 422,
+      body: { error: 'The AI declined to answer this request. Rephrase it, or remove any content it may have read as unsafe, and try again.' },
+      tags: { surface, kind: 'refusal', refusalCategory: err.category ?? 'unknown' },
     }
   }
   // Anthropic.RateLimitError extends APIError; identify by status.
@@ -117,6 +177,17 @@ export function aiErrorToResponse(err: unknown, surface: string): AiErrorRespons
         ? `The AI service rejected the request: ${upstream}`
         : 'The AI service rejected the request.' },
       tags: { surface, kind: `upstream-${status}` },
+    }
+  }
+  // A client-side timeout carries no HTTP status, so without this branch it
+  // fell through to the catch-all and surfaced as "unexpected error" — which
+  // tells the operator nothing about the one thing they can actually do,
+  // which is try again on a smaller piece of work.
+  if (err instanceof Anthropic.APIConnectionTimeoutError) {
+    return {
+      status: 504,
+      body: { error: 'The AI service took too long to respond. Try again — if it keeps happening, the request is probably too large.' },
+      tags: { surface, kind: 'timeout' },
     }
   }
   // Catch-all. Include the underlying message when it's an Error so
@@ -167,6 +238,7 @@ export async function callMessages(
   const start = Date.now()
   try {
     const response = await client.messages.create(args)
+    assertNotRefused(response, meta.surface)
     Sentry.addBreadcrumb({
       category: 'ai',
       level:    'info',

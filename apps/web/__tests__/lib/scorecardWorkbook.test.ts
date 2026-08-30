@@ -13,6 +13,7 @@ const risk = summarizeIncidentRisk({
   recordablesRecent: 4, recordablesPrior: 2, nearMissRecent: 1,
   bbsSafe: 2, bbsUnsafe: 5, capasOverdue: 3, riskReviewsOverdue: 2,
   highRisksUncontrolled: 1, trainingExpired: 2, atmFailed: 1, atmTotal: 4,
+  hazardHuntsDue: 4, hazardHuntsDone: 2, hhFindingsOpened: 3, hhFindingsResolved: 1,
 })
 
 function months(n: number): { month: string; count: number }[] {

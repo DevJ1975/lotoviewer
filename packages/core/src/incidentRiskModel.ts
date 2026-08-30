@@ -46,6 +46,37 @@ export interface IncidentRiskFeatures {
   atmFailed:           number
   /** Total atmospheric tests in the recent window (denominator). */
   atmTotal:            number
+
+  // ── Cross-module leading indicators (v2.0.0) ──────────────────────────────
+  // These extend the model beyond incidents/CAPA/risk/training/atmospheric to
+  // the inspection, BBS-v2, JHA, permit, competency-matrix, and ECFA signals
+  // the program already captures. All are gathered best-effort — a tenant
+  // without a given module simply contributes 0 pressure from it.
+  // Optional so pre-v2 callers/fixtures still type-check; absent → 0 pressure.
+  /** Failed inspections in the recent window. */
+  inspectionsFailed?:   number
+  /** Total pass+fail inspections in the recent window (denominator). */
+  inspectionsTotal?:    number
+  /** BBS-v2 observations with an open (required, not-completed) follow-up. */
+  bbsFollowupsOpen?:    number
+  /** Approved JHAs whose next_review_date has passed. */
+  jhaReviewsOverdue?:   number
+  /** Permits (confined-space + hot-work) that ran past expiry without close-out. */
+  permitExpiredOpen?:   number
+  /** Required course assignments that are missing or overdue (v_training_matrix). */
+  trainingGaps?:        number
+  /** ECFA causal factors flagged in the recent window (denominator). */
+  ecfaCausalFactors?:   number
+  /** …of which are coded to weak controls (administrative/PPE) or uncoded. */
+  ecfaWeakControls?:    number
+  /** Hazard Hunt inspections due in the recent window. */
+  hazardHuntsDue:      number
+  /** Hazard Hunt inspections actually submitted in the recent window. */
+  hazardHuntsDone:     number
+  /** Hazard Hunt findings opened in the recent window. */
+  hhFindingsOpened:    number
+  /** Hazard Hunt findings closed or escalated in the recent window. */
+  hhFindingsResolved:  number
 }
 
 export interface IncidentRiskDriver {
@@ -73,7 +104,11 @@ export interface IncidentRiskResult {
   modelVersion: string
 }
 
-export const INCIDENT_RISK_MODEL_VERSION = '1.0.0'
+// 2.1.0: main reached 2.0.0 while this branch sat at 1.1.0, and adding the
+// hazard-hunt indicator raises TOTAL_WEIGHT from 100 to 110, re-normalizing
+// every existing indicator. Scores computed before this are not comparable
+// with scores after it, which is the whole reason this constant exists.
+export const INCIDENT_RISK_MODEL_VERSION = '2.1.0'
 
 const clamp = (n: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n))
 const round1 = (n: number) => Math.round(n * 10) / 10
@@ -192,6 +227,102 @@ const INDICATORS: IndicatorSpec[] = [
     // Fail rate over the window. No tests → 0 (no signal).
     pressure: f => (f.atmTotal === 0 ? 0 : clamp((f.atmFailed / f.atmTotal) * 100)),
     describe: f => ({ value: `${f.atmFailed}/${f.atmTotal} failed`, target: '0% fail rate' }),
+  },
+  // ── Cross-module leading indicators (v2.0.0) ────────────────────────────────
+  {
+    key: 'inspection_failing',
+    label: 'Failing inspections',
+    kind: 'leading',
+    weight: 8,
+    href: '/inspections',
+    suggestedAction: 'Investigate failing inspections; a rising fail rate signals conditions drifting out of standard.',
+    // Fail rate over the window. No inspections → 0 (no signal, not a pass).
+    pressure: f => { const t = f.inspectionsTotal ?? 0; return t === 0 ? 0 : clamp(((f.inspectionsFailed ?? 0) / t) * 100) },
+    describe: f => ({ value: `${f.inspectionsFailed ?? 0}/${f.inspectionsTotal ?? 0} failed`, target: '0% fail rate' }),
+  },
+  {
+    key: 'bbs_followup_overdue',
+    label: 'Open BBS follow-ups',
+    kind: 'leading',
+    weight: 6,
+    href: '/bbs',
+    suggestedAction: 'Close out open BBS follow-ups; unaddressed at-risk observations leave known exposures in place.',
+    // 15 pressure per open follow-up, caps at 100.
+    pressure: f => clamp((f.bbsFollowupsOpen ?? 0) * 15),
+    describe: f => ({ value: `${f.bbsFollowupsOpen ?? 0} open`, target: '0 open' }),
+  },
+  {
+    key: 'jha_reviews_overdue',
+    label: 'Overdue JHA reviews',
+    kind: 'leading',
+    weight: 8,
+    href: '/jha',
+    suggestedAction: 'Re-review overdue JHAs; a stale task hazard analysis no longer reflects how the work is done.',
+    pressure: f => clamp((f.jhaReviewsOverdue ?? 0) * 15),
+    describe: f => ({ value: `${f.jhaReviewsOverdue ?? 0} overdue`, target: '0 overdue' }),
+  },
+  {
+    key: 'permit_noncompliance',
+    label: 'Permits expired without close-out',
+    kind: 'leading',
+    weight: 8,
+    href: '/confined-spaces/status',
+    suggestedAction: 'Close out permits at end of work; permits left open past expiry mean high-energy work without live authorization.',
+    pressure: f => clamp((f.permitExpiredOpen ?? 0) * 20),
+    describe: f => ({ value: `${f.permitExpiredOpen ?? 0} expired open`, target: '0 open past expiry' }),
+  },
+  {
+    key: 'training_gaps',
+    label: 'Training gaps (missing / overdue)',
+    kind: 'leading',
+    weight: 8,
+    href: '/admin/people/training-competency-matrix',
+    suggestedAction: 'Close competency-matrix gaps; workers missing or overdue on required training raise incident odds.',
+    // Richer than raw expiry: counts required assignments that are missing OR
+    // overdue from the competency matrix. 10 pressure each, caps at 100.
+    pressure: f => clamp((f.trainingGaps ?? 0) * 10),
+    describe: f => ({ value: `${f.trainingGaps ?? 0} missing/overdue`, target: '0 gaps' }),
+  },
+  {
+    key: 'ecfa_weak_controls',
+    label: 'Causal factors on weak controls',
+    kind: 'leading',
+    weight: 6,
+    href: '/incidents/scorecard',
+    suggestedAction: 'Push corrective actions up the hierarchy of controls; leaning on PPE/administrative fixes leaves the hazard in place.',
+    // Share of recent ECFA causal factors coded to weak controls (or uncoded).
+    // No causal factors → 0 (no signal).
+    pressure: f => { const t = f.ecfaCausalFactors ?? 0; return t === 0 ? 0 : clamp(((f.ecfaWeakControls ?? 0) / t) * 100) },
+    describe: f => ({ value: `${f.ecfaWeakControls ?? 0}/${f.ecfaCausalFactors ?? 0} weak-control`, target: 'controls above PPE/admin' }),
+  },
+  {
+    key: 'hazard_hunt_proactive',
+    label: 'Proactive hazard hunting (cadence + findings closure)',
+    kind: 'leading',
+    href: '/hazard-hunt',
+    // Adding this 10-weight indicator raises TOTAL_WEIGHT from 100 to 110, which
+    // proportionally re-normalizes every existing indicator (each scales by
+    // 100/110). That is intended: proactive hunting now shares the budget.
+    weight: 10,
+    suggestedAction: 'Keep daily/weekly/monthly hazard hunts on cadence and close out findings — proactive hunting is the cheapest leading indicator.',
+    // Leading, inverted: strong proactive behavior → low pressure. Two equally
+    // weighted sub-terms:
+    //   adherence = hunts missed vs. due (no hunts scheduled → 50, a blind spot,
+    //               mirroring bbs_ratio); all hunts done → 0.
+    //   closure   = findings left unresolved vs. opened (no findings → 0).
+    pressure: f => {
+      const adherence = f.hazardHuntsDue === 0
+        ? (f.hazardHuntsDone > 0 ? 0 : 50)
+        : clamp((1 - f.hazardHuntsDone / f.hazardHuntsDue) * 100)
+      const closure = f.hhFindingsOpened === 0
+        ? 0
+        : clamp((1 - f.hhFindingsResolved / f.hhFindingsOpened) * 100)
+      return clamp((adherence + closure) / 2)
+    },
+    describe: f => ({
+      value: `${f.hazardHuntsDone}/${f.hazardHuntsDue} hunts on cadence, ${f.hhFindingsResolved}/${f.hhFindingsOpened} findings resolved`,
+      target: 'all hunts on cadence; findings resolved',
+    }),
   },
 ]
 

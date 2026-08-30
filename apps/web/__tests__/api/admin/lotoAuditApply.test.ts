@@ -44,6 +44,10 @@ vi.mock('@/lib/auth/tenantGate', () => ({
 vi.mock('@/lib/loto/regeneratePlacard', () => ({
   regenerateAndUploadPlacard: (admin: unknown, tenantId: string, equipmentId: string) =>
     regenerateAndUploadPlacardMock(admin, tenantId, equipmentId),
+  // Added when the backfill cron landed: the module is fully mocked, so every
+  // export the route imports has to be present here or the import throws
+  // before a single assertion runs.
+  loadTenantLogoPng: async () => null,
 }))
 
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }))

@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib'
 import { embedQrCode, sanitizeForWinAnsi } from '@/lib/pdfShared'
 import { drawGhsPictogram } from '@/lib/ghsPictograms'
+import { drawNfpa704Diamond } from '@/lib/nfpa704'
 import {
   GHS_PICTOGRAMS,
   type GhsPictogram,
@@ -275,7 +276,7 @@ async function drawPlacard(
   }
 
   // NFPA 704 diamond (top right). 200pt total, four quadrants.
-  drawNfpaDiamond(page, font, bold, {
+  drawNfpa704Diamond(page, font, bold, {
     cx: W - 36 - 100,
     cy: H - 64 - 100,
     size: 200,
@@ -390,65 +391,6 @@ async function drawInventoryTag(
       height: qrSize,
     })
   }
-}
-
-// ── NFPA 704 diamond ───────────────────────────────────────────────────────
-function drawNfpaDiamond(
-  page: PDFPage,
-  font: PDFFont,
-  bold: PDFFont,
-  args: {
-    cx: number; cy: number; size: number
-    health: number | null; flammability: number | null
-    instability: number | null; special: string | null
-  },
-): void {
-  const half = args.size / 2
-  const cx = args.cx
-  const cy = args.cy
-
-  // Outer diamond
-  page.drawSvgPath(`M 0 -${half} L ${half} 0 L 0 ${half} L -${half} 0 Z`, {
-    x: cx, y: cy, color: rgb(0, 0, 0),
-  })
-
-  // Quadrants — translate the diamond so each quadrant is a smaller
-  // diamond filled with its color, drawn slightly inset from the
-  // outer border so the black diamond reads as the frame.
-  const inset = args.size * 0.04
-  const q = (half - inset) / 2
-
-  // Blue (health) — left
-  page.drawSvgPath(`M 0 -${q} L ${q} 0 L 0 ${q} L -${q} 0 Z`, {
-    x: cx - q, y: cy, color: rgb(0.0, 0.4, 0.9),
-  })
-  // Red (flammability) — top
-  page.drawSvgPath(`M 0 -${q} L ${q} 0 L 0 ${q} L -${q} 0 Z`, {
-    x: cx, y: cy + q, color: rgb(0.85, 0.10, 0.10),
-  })
-  // Yellow (instability) — right
-  page.drawSvgPath(`M 0 -${q} L ${q} 0 L 0 ${q} L -${q} 0 Z`, {
-    x: cx + q, y: cy, color: rgb(0.95, 0.85, 0.05),
-  })
-  // White (special) — bottom
-  page.drawSvgPath(`M 0 -${q} L ${q} 0 L 0 ${q} L -${q} 0 Z`, {
-    x: cx, y: cy - q, color: rgb(1, 1, 1),
-    borderColor: rgb(0, 0, 0), borderWidth: 0.5,
-  })
-
-  const fontSize = args.size * 0.18
-  const drawCenter = (text: string, color: ReturnType<typeof rgb>, ox: number, oy: number) => {
-    const w = bold.widthOfTextAtSize(text, fontSize)
-    page.drawText(text, {
-      x: cx + ox - w / 2,
-      y: cy + oy - fontSize / 2 + 2,
-      font: bold, size: fontSize, color,
-    })
-  }
-  drawCenter(args.health        !== null ? String(args.health)       : '–', rgb(1, 1, 1), -q, 0)
-  drawCenter(args.flammability  !== null ? String(args.flammability) : '–', rgb(1, 1, 1),  0, q)
-  drawCenter(args.instability   !== null ? String(args.instability)  : '–', rgb(0, 0, 0),  q, 0)
-  drawCenter(args.special && args.special.trim() ? args.special.trim().slice(0, 3) : '–', rgb(0, 0, 0), 0, -q)
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────

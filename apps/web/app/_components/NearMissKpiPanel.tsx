@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
-import { AlertTriangle, ArrowRight, Clock, Loader2, TrendingUp } from 'lucide-react'
+import { AlertTriangle, Clock, TrendingUp } from 'lucide-react'
 import { fetchNearMissMetrics, type NearMissMetrics } from '@soteria/core/nearMissMetrics'
+import { DashboardPanel, PanelEyebrow, PanelLink } from '@/components/DashboardPanel'
+import OpsSpinner from '@/components/OpsSpinner'
 import { useTenant } from '@/components/TenantProvider'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { SEVERITY_TW } from '@soteria/core/severityColors'
@@ -53,27 +55,14 @@ export default function NearMissKpiPanel() {
   if (error && !metrics) return null
 
   return (
-    <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5 space-y-4">
-      <header className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-            Near-Miss Reporting · ISO 45001 9.1
-          </div>
-          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
-            Near-miss intelligence
-          </h2>
-        </div>
-        <Link
-          href="/near-miss"
-          className="text-xs font-semibold text-brand-navy hover:underline inline-flex items-center gap-1"
-        >
-          All reports <ArrowRight className="h-3 w-3" />
-        </Link>
-      </header>
-
+    <DashboardPanel
+      eyebrow="Near-Miss Reporting · ISO 45001 9.1"
+      title="Near-miss intelligence"
+      action={<PanelLink href="/near-miss">All reports</PanelLink>}
+    >
       {loading && metrics === null ? (
         <div className="flex items-center justify-center py-6">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+          <OpsSpinner size="sm" label={null} />
         </div>
       ) : metrics === null || metrics.totalAll === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-4 text-center">
@@ -85,7 +74,7 @@ export default function NearMissKpiPanel() {
       ) : (
         <Inner metrics={metrics} />
       )}
-    </section>
+    </DashboardPanel>
   )
 }
 
@@ -127,9 +116,7 @@ function Inner({ metrics }: { metrics: NearMissMetrics }) {
 
       {topUnresolved.length > 0 && (
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">
-            Top unresolved
-          </div>
+          <PanelEyebrow className="mb-2">Top unresolved</PanelEyebrow>
           <ul className="space-y-1">
             {topUnresolved.map(r => (
               <li key={r.id} className="flex items-center gap-2 text-sm">

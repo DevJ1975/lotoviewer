@@ -9,6 +9,14 @@ import { computeIncidentRisk } from '@/lib/incidentRiskFeatures'
 import { forecastCount, assessTrend } from '@soteria/core/forecast'
 import type { IncidentRiskResult } from '@soteria/core/incidentRiskModel'
 
+// An AI route's worst case is `timeout x (retries + 1)`, and it must fit
+// inside maxDuration or the platform kills the function mid-flight and the
+// caller gets a raw 504 rather than any error this code produces. This route
+// asks for up to 900 tokens,
+// and previously declared no ceiling at all — so it inherited the platform
+// default, which is far shorter than a single model call.
+export const maxDuration = 60
+
 // POST /api/insights/scorecard-focus
 //
 // Advisory "where to focus" narrative for the EHS Scorecard. The score and the
@@ -211,10 +219,11 @@ export async function POST(req: Request) {
   const driverByKey = new Map(risk.drivers.map(d => [d.key, d]))
 
   try {
-    const client = await getAnthropic(gate.tenantId)
+    const client = await getAnthropic(gate.tenantId, { timeoutMs: 40_000, maxRetries: 0 })
     const response = await client.messages.create({
       model:      MODEL,
       max_tokens: 900,
+      thinking:   { type: 'disabled' },
       system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: buildBrief(risk, inc) }],
       output_config: { format: { type: 'json_schema', schema: SCHEMA } },

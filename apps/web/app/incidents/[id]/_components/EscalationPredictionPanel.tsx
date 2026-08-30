@@ -31,6 +31,7 @@ interface PredictionRow {
 export default function EscalationPredictionPanel({ incidentId, currentSeverity }: Props) {
   const { profile } = useAuth()
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const isAdmin = !!profile?.is_admin
 
   const [latest, setLatest] = useState<PredictionRow | null>(null)
@@ -38,12 +39,12 @@ export default function EscalationPredictionPanel({ incidentId, currentSeverity 
   const [error,  setError]  = useState<string | null>(null)
 
   const loadLatest = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     try {
       const { data, error } = await supabase
         .from('incident_predictions')
         .select('id, predicted_severity, confidence, model, prompt_version, predicted_at, raw_response')
-        .eq('tenant_id', tenant.id)
+        .eq('tenant_id', tenantId)
         .eq('incident_id', incidentId)
         .order('predicted_at', { ascending: false })
         .limit(1)
@@ -53,7 +54,7 @@ export default function EscalationPredictionPanel({ incidentId, currentSeverity 
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load prediction history.')
     }
-  }, [tenant?.id, incidentId])
+  }, [tenantId, incidentId])
 
   useEffect(() => { void loadLatest() }, [loadLatest])
 

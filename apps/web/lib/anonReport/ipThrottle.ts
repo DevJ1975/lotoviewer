@@ -25,19 +25,12 @@ type Outcome =
   | 'verify_ok' | 'verify_invalid'
   | 'receipt_ok' | 'receipt_invalid'
 
-// Header order matters: Vercel / Cloudflare set x-forwarded-for as
-// "client, proxy1, proxy2"; the leftmost is the original client.
-// Falls back to x-real-ip and finally cf-connecting-ip.
-export function clientIp(req: Request): string {
-  const xff = req.headers.get('x-forwarded-for')
-  if (xff) {
-    const first = xff.split(',')[0]?.trim()
-    if (first) return first
-  }
-  return req.headers.get('cf-connecting-ip')
-       ?? req.headers.get('x-real-ip')
-       ?? '0.0.0.0'
-}
+// Re-exported so this module stays the one import for the anon-report
+// throttle. The derivation moved to lib/rateLimit/clientIp.ts once the invite
+// routes needed it too; the previous local copy read the leftmost
+// x-forwarded-for hop, which a caller can prepend to mint a fresh bucket per
+// request.
+export { clientIp } from '@/lib/rateLimit/clientIp'
 
 const DEV_FALLBACK_SALT = 'dev-only-fallback-salt-do-not-use-in-prod'
 

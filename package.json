@@ -1,6 +1,6 @@
 {
   "name": "lotoviewer-monorepo",
-  "version": "1.13.0",
+  "version": "1.18.0",
   "private": true,
   "workspaces": [
     "apps/*",
@@ -12,6 +12,7 @@
     "start": "npm --workspace web run start",
     "lint": "npm --workspace web run lint",
     "test": "npm --workspace web run test",
+    "test:security": "npm --workspace web run test:security",
     "test:core": "vitest run --root packages/core",
     "check:migrations": "node scripts/check-migration-numbers.mjs",
     "migration:next": "node scripts/next-migration-number.mjs",

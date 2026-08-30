@@ -1,9 +1,10 @@
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-23'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-06-19'
 
 const CHANGELOG: ChangelogEntry[] = [
+  { version: '1.1.0', date: '2026-06-19', changes: ['Submitting a template in the "hazard_hunt" category now records a Hazard Hunt finding per failed item and drafts a CSP write-up. See the Hazard Hunt module.'] },
   { version: '1.0.0', date: '2026-05-23', changes: ['Initial inspections module page.'] },
 ]
 

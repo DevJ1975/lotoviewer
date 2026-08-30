@@ -14,8 +14,18 @@ import {
 } from '@/lib/support/types'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 import { getAnthropic, aiErrorToResponse } from '@/lib/ai/client'
+import { toSendableHistory } from '@/lib/ai/conversationWindow'
 import { checkTenantBudget, logAiInvocation } from '@/lib/ai/rateLimit'
 import { executeTool, isDataFetchTool, visibleDataFetchTools } from '@/lib/support/tools'
+
+// An AI route's worst case is `timeout x (retries + 1)`, and it must fit
+// inside maxDuration or the platform kills the function mid-flight and the
+// caller gets a raw 504 rather than any error this code produces. This route
+// asks for three sequential calls of up to 1,500 tokens each,
+// and previously declared no ceiling at all — so it inherited the platform
+// default, which is far shorter than a single model call.
+export const runtime     = 'nodejs'
+export const maxDuration = 90
 
 // Only the two roles Anthropic accepts in messages[]. Internally
 // ChatMessage allows system/tool for transcript rendering, but we never
@@ -42,8 +52,8 @@ interface ApiTurn {
 // Phase 1 contract: non-streaming. Streaming (SSE) lands in Phase 2.
 
 const MODEL = MODEL_BY_SURFACE['support-chat']
-const MAX_TOKENS = 1500
-const HISTORY_TURNS = 20    // last N messages from the conversation
+const MAX_TOKENS = 3000
+const HISTORY_TURNS = 20    // most recent N messages from the conversation
 const MAX_USER_MESSAGES_PER_HOUR = 30
 const MAX_USER_MESSAGES_PER_DAY  = 200
 
@@ -302,19 +312,23 @@ export async function POST(req: Request) {
     content:         userText,
   })
 
-  // Pull recent history for context. We sort ascending and trim to the last
-  // HISTORY_TURNS so the prompt stays small.
+  // Pull the most recent HISTORY_TURNS for context, newest-first, so the
+  // prompt stays small. Newest-first is load-bearing: LIMIT applies after
+  // ORDER BY, so an ascending read returns the OLDEST rows and the window
+  // would freeze at the start of a long conversation — see toSendableHistory.
   const { data: priorRows } = await admin
     .from('support_messages')
     .select('role, content, created_at')
     .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(HISTORY_TURNS)
-  const prior: ApiTurn[] = (priorRows ?? [])
-    .filter((r): r is { role: 'user' | 'assistant'; content: string; created_at: string } =>
-      r.role === 'user' || r.role === 'assistant',
-    )
-    .map(r => ({ role: r.role, content: r.content }))
+  const prior: ApiTurn[] = toSendableHistory(
+    (priorRows ?? [])
+      .filter((r): r is { role: 'user' | 'assistant'; content: string; created_at: string } =>
+        r.role === 'user' || r.role === 'assistant',
+      )
+      .map(r => ({ role: r.role, content: r.content })),
+  )
 
   const kb = resolveKb({ pathname: body.pathname ?? null, tenantModules })
   // Language directive sits between the persona and the KB so the model
@@ -329,7 +343,7 @@ export async function POST(req: Request) {
   // the escalation tool.
   let client: Anthropic
   try {
-    client = await getAnthropic(reporter.tenantId)
+    client = await getAnthropic(reporter.tenantId, { timeoutMs: 25_000, maxRetries: 0 })
   } catch (err) {
     const mapped = aiErrorToResponse(err, 'support-chat')
     Sentry.captureException(err, { tags: { ...mapped.tags, route: '/api/support/chat' } })
@@ -347,6 +361,8 @@ export async function POST(req: Request) {
     response = await client.messages.create({
       model:      MODEL,
       max_tokens: MAX_TOKENS,
+      thinking:   { type: 'adaptive' },
+      output_config: { effort: 'low' },
       system: [{
         type: 'text',
         text: systemPrompt,
@@ -412,6 +428,8 @@ export async function POST(req: Request) {
       next = await client.messages.create({
         model:      MODEL,
         max_tokens: MAX_TOKENS,
+        thinking:   { type: 'adaptive' },
+        output_config: { effort: 'low' },
         system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
         tools:    allTools,
         messages: [
@@ -466,7 +484,10 @@ export async function POST(req: Request) {
         tenantName,
         originPath: body.pathname ?? null,
         input,
-        priorTranscript: prior.concat([{ role: 'user', content: userText }]),
+        // `prior` already ends with the turn persisted at the top of this
+        // request, so it is the whole transcript — appending userText again
+        // duplicated the reporter's last line on the ticket.
+        priorTranscript: prior,
       })
       ticketId = created.ticketId
       toolResultText = created.ok
@@ -480,7 +501,12 @@ export async function POST(req: Request) {
     try {
       secondResponse = await client.messages.create({
         model:      MODEL,
-        max_tokens: 600,
+        // 600 was ample for a one-line confirmation when nothing else drew on
+        // it; on Claude 5 max_tokens covers thinking as well, and truncating
+        // here would drop the ticket ID the user needs.
+        max_tokens: 1500,
+        thinking:   { type: 'adaptive' },
+        output_config: { effort: 'low' },
         system: [{
           type: 'text',
           text: systemPrompt,

@@ -66,29 +66,35 @@ function EquipmentDetail() {
       setLoading(tenantLoading)
       return
     }
-    const { data, error } = await supabase
-      .from('loto_equipment')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .eq('equipment_id', equipmentId)
-      .single()
+    // Equipment and its energy steps are independent reads (both keyed by
+    // tenant + equipment_id), so fetch them together. Siblings can't join the
+    // batch — it needs the equipment's department, known only after this.
+    const [eqRes, stepsRes] = await Promise.all([
+      supabase
+        .from('loto_equipment')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .eq('equipment_id', equipmentId)
+        .single(),
+      supabase
+        .from('loto_energy_steps')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .eq('equipment_id', equipmentId)
+        .order('energy_type', { ascending: true })
+        .order('step_number', { ascending: true }),
+    ])
 
-    if (error || !data) {
+    if (eqRes.error || !eqRes.data) {
       setNotFound(true)
       setLoading(false)
       return
     }
 
-    const eq = data as Equipment
+    const eq = eqRes.data as Equipment
     setEquipment(eq)
 
-    const { data: stepRows, error: stepErr } = await supabase
-      .from('loto_energy_steps')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .eq('equipment_id', equipmentId)
-      .order('energy_type', { ascending: true })
-      .order('step_number', { ascending: true })
+    const { data: stepRows, error: stepErr } = stepsRes
     // Surface fetch failures so "No energy steps defined" can be traced
     // back to auth / RLS / network rather than looking like empty data.
     if (stepErr) {

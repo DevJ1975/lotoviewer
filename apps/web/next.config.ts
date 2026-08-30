@@ -34,6 +34,59 @@ function supabaseImageHost(): string {
   }
 }
 
+// Origin of a configured URL, or null when it's unset/unparseable at build
+// time. Same tolerance as supabaseImageHost() — a local `next build` without
+// .env.local should still succeed.
+function originOf(url: string | undefined): string | null {
+  if (!url) return null
+  try {
+    return new URL(url).origin
+  } catch {
+    return null
+  }
+}
+
+// Directives that say nothing about scripts, so they cannot break a page that
+// renders today. frame-ancestors backs up X-Frame-Options (which is ignored by
+// some browsers when a CSP is present), base-uri blocks <base> injection, and
+// form-action blocks form-based exfiltration — both relevant given session
+// tokens live in localStorage and are readable by any injected script.
+const ENFORCED_CSP = [
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "form-action 'self'",
+].join('; ')
+
+// The policy we intend to enforce, shipped Report-Only first so violations can
+// be collected before anything is blocked.
+//
+// script-src keeps 'unsafe-inline' deliberately: Next injects inline bootstrap
+// scripts and app/layout.tsx renders NO_FLASH_SCRIPT via
+// dangerouslySetInnerHTML, so a nonce would mean reading headers() in the root
+// layout and making every page dynamic. Even with it, this still blocks the
+// main token-theft vector — pulling in an attacker-controlled external script.
+function reportOnlyCsp(): string {
+  const supabase = originOf(process.env.NEXT_PUBLIC_SUPABASE_URL)
+  const sentry   = originOf(process.env.NEXT_PUBLIC_SENTRY_DSN)
+
+  // Realtime rides a websocket on the Supabase origin.
+  const connect = ["'self'", supabase, supabase?.replace(/^https:/, 'wss:'), sentry]
+    .filter(Boolean)
+    .join(' ')
+
+  return [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    `img-src 'self' data: blob: ${supabase ?? ''}`.trim(),
+    "font-src 'self' data:",
+    `connect-src ${connect}`,
+    "worker-src 'self' blob:",
+    ENFORCED_CSP,
+  ].join('; ')
+}
+
 const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
@@ -85,6 +138,31 @@ const nextConfig: NextConfig = {
       {
         source: '/.well-known/assetlinks.json',
         headers: [{ key: 'content-type', value: 'application/json' }],
+      },
+      {
+        source: '/:path*',
+        headers: [
+          // No `preload`. Preloading is a one-way door — it breaks any
+          // non-HTTPS subdomain and removal takes months to propagate.
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          // no-referrer rather than strict-origin-when-cross-origin: the
+          // latter still sends the full URL, query string included, on
+          // same-origin requests — and the raw invite token rides in
+          // /accept-invite?token=…, which would put it in our own access logs
+          // via Referer. Nothing here depends on outbound referrals.
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          // camera and geolocation stay 'self': the QR scanner and photo
+          // capture need the camera, the weather card and incident reporter
+          // need location. Locking those to () would break shipped features.
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(self), geolocation=(self), microphone=(), payment=(), usb=()',
+          },
+          { key: 'Content-Security-Policy', value: ENFORCED_CSP },
+          { key: 'Content-Security-Policy-Report-Only', value: reportOnlyCsp() },
+        ],
       },
     ]
   },
