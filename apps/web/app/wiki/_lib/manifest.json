@@ -307,7 +307,11 @@
       "category": "reports",
       "href":     "/admin/insights/scorecard",
       "wikiPage": "apps/web/app/wiki/scorecard/page.tsx",
-      "sources":  ["apps/web/app/admin/insights/scorecard/**"]
+      "sources":  ["apps/web/app/admin/insights/scorecard/**",
+                   "apps/web/components/scorecard/**",
+                   "packages/core/src/incidentScorecardMetrics.ts",
+                   "packages/core/src/scorecardMetrics.ts",
+                   "packages/core/src/monthOverMonth.ts"]
     },
     {
       "slug":     "insights",
