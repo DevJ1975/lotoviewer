@@ -20,13 +20,19 @@ import {
   type HazardousWasteStreamRow,
   type SatelliteCapResult,
 } from '@soteria/core/hazardousWaste'
+import {
+  StreamSymbolBadges,
+  type StreamBadgeSource,
+} from '../streams/_components/StreamSymbolBadges'
 
 // Container list — surfaces accumulation aging using the containerAgeStatus
 // helper. Open containers with an old start date appear first so the
 // operator's eye lands on the highest-risk drum.
 
 type ContainerWithStream = HazardousWasteContainerRow & {
-  stream: Pick<HazardousWasteStreamRow, 'id' | 'name' | 'generator_category' | 'long_haul' | 'jurisdiction' | 'acute_class' | 'waste_codes'> | null
+  stream:
+    | (Pick<HazardousWasteStreamRow, 'id' | 'name' | 'generator_category' | 'long_haul' | 'waste_codes' | 'jurisdiction' | 'acute_class'> & StreamBadgeSource)
+    | null
 }
 
 const STATUS_LABEL: Record<HazardousWasteContainerStatus, string> = {
@@ -55,6 +61,7 @@ const AGE_LABEL: Record<ContainerAgeStatus, string> = {
 export default function HazardousWasteContainersPage() {
   const { tenant } = useTenant()
   const { facility } = useFacility()
+  const tenantId = tenant?.id
   const search = useSearchParams()
   const streamId = search?.get('stream_id') ?? ''
 
@@ -71,10 +78,10 @@ export default function HazardousWasteContainersPage() {
   }, [])
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     setError(null)
     const { data: { session } } = await supabase.auth.getSession()
-    const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+    const headers: Record<string, string> = { 'x-active-tenant': tenantId }
     if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
 
     const params = new URLSearchParams()
@@ -85,7 +92,7 @@ export default function HazardousWasteContainersPage() {
     const json = await res.json()
     if (!res.ok) { setError(json.error ?? 'Failed to load'); setRows([]); return }
     setRows(json.containers ?? [])
-  }, [tenant?.id, filter, streamId])
+  }, [tenantId, filter, streamId])
 
   useEffect(() => { void load() }, [load])
 
@@ -230,6 +237,11 @@ export default function HazardousWasteContainersPage() {
                         {container.stream.name}
                       </Link>
                     </p>
+                  )}
+                  {container.stream && (
+                    <div className="mt-1.5">
+                      <StreamSymbolBadges source={container.stream} />
+                    </div>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 shrink-0">

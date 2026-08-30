@@ -146,11 +146,11 @@ export async function embedQrCode(
       width: 240,
       color: { dark: '#000000', light: '#ffffff' },
     })
-    const base64 = dataUrl.split(',')[1]
-    const binary = atob(base64)
-    const bytes = new Uint8Array(binary.length)
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-    return await doc.embedPng(bytes)
+    // pdf-lib's embedPng accepts a base64 data-URI string directly, so we
+    // hand it the QRCode.toDataURL output as-is. This avoids `atob` (which is
+    // browser-only) so the helper works in both the client and the server
+    // render paths — e.g. the placard generator runs in both.
+    return await doc.embedPng(dataUrl)
   } catch (err) {
     // Don't break PDF generation if QR encoding fails — just skip the
     // QR. The serial + permit ID are also on the page so the document

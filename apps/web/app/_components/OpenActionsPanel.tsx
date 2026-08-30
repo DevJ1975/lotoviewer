@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowRight, Clock, ListChecks, Loader2 } from 'lucide-react'
+import { ArrowRight, Clock, ListChecks } from 'lucide-react'
+import { DashboardPanel } from '@/components/DashboardPanel'
+import OpsSpinner from '@/components/OpsSpinner'
 import { useTenant } from '@/components/TenantProvider'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { supabase } from '@/lib/supabase'
@@ -67,9 +69,9 @@ export default function OpenActionsPanel() {
   if (tenantLoading || !visible) return null
   if (rows === null) {
     return (
-      <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5">
+      <section className="placard-surface p-5">
         <div className="flex items-center justify-center py-3">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+          <OpsSpinner size="sm" label={null} />
         </div>
       </section>
     )
@@ -91,37 +93,34 @@ export default function OpenActionsPanel() {
   }).length
 
   return (
-    <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5 space-y-3">
-      <header className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <ListChecks className="h-4 w-4 text-brand-navy" />
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-              Your open CAPAs
-            </div>
-            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-              {rows.length} action{rows.length === 1 ? '' : 's'} assigned
-              {overdueCount > 0 && (
-                <span className="ml-2 inline-block rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200 px-2 py-0.5 text-[10px] font-bold">
-                  {overdueCount} OVERDUE
-                </span>
-              )}
-            </h2>
-          </div>
-        </div>
-        {rows.length > ROW_LIMIT && (
+    <DashboardPanel
+      className="space-y-3"
+      icon={ListChecks}
+      eyebrow="Your open CAPAs"
+      title={
+        <>
+          {rows.length} action{rows.length === 1 ? '' : 's'} assigned
+          {overdueCount > 0 && (
+            <span className="ml-2 inline-block rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200 px-2 py-0.5 text-[10px] font-bold">
+              {overdueCount} OVERDUE
+            </span>
+          )}
+        </>
+      }
+      action={
+        rows.length > ROW_LIMIT && (
           <span className="text-[11px] text-slate-500 dark:text-slate-400">
             Showing {ROW_LIMIT} of {rows.length}
           </span>
-        )}
-      </header>
-
+        )
+      }
+    >
       <ul className="divide-y divide-slate-100 dark:divide-slate-800">
         {sorted.map(a => (
           <ActionLink key={a.id} action={a} />
         ))}
       </ul>
-    </section>
+    </DashboardPanel>
   )
 }
 

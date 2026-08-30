@@ -40,6 +40,8 @@ export interface StrikeStudioModuleRow {
     published_at: string | null
     duration_seconds: number | null
     passing_score: number
+    video_external_id: string | null
+    vimeo_hash: string | null
   } | null
 }
 
@@ -89,6 +91,8 @@ interface VersionRow {
   published_at: string | null
   duration_seconds: number | null
   passing_score: number
+  video_external_id: string | null
+  video_meta: Record<string, unknown> | null
 }
 
 interface RequestRow {
@@ -123,7 +127,7 @@ export async function GET(req: Request) {
       .limit(300),
     admin
       .from('strike_module_versions')
-      .select('id, module_id, version_number, status, published_at, duration_seconds, passing_score')
+      .select('id, module_id, version_number, status, published_at, duration_seconds, passing_score, video_external_id, video_meta')
       .order('version_number', { ascending: false }),
     admin
       .from('strike_studio_requests')
@@ -161,6 +165,8 @@ export async function GET(req: Request) {
         published_at: latest.published_at,
         duration_seconds: latest.duration_seconds,
         passing_score: latest.passing_score,
+        video_external_id: latest.video_external_id,
+        vimeo_hash: readVimeoHash(latest.video_meta),
       } : null,
     } satisfies StrikeStudioModuleRow
   })
@@ -191,7 +197,6 @@ export async function POST(req: Request) {
     tags?: unknown
     estimated_minutes?: unknown
     transcript?: unknown
-    video_path?: unknown
     passing_score?: unknown
   }
   try { body = await req.json() }
@@ -268,7 +273,6 @@ export async function POST(req: Request) {
       library_scope: libraryScope,
       version_number: 1,
       status: 'draft',
-      video_path: normalizeOptionalString(body.video_path),
       transcript: normalizeOptionalString(body.transcript),
       passing_score: passingScore,
       created_by: gate.userId,
@@ -289,6 +293,12 @@ function normalizeSlug(value: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 80)
     .replace(/-+$/g, '')
+}
+
+// Display-only read of the stored Vimeo privacy hash for the Studio UI; the
+// authoritative validation lives in resolveStrikeVideo (@soteria/core).
+function readVimeoHash(meta: Record<string, unknown> | null): string | null {
+  return typeof meta?.vimeo_hash === 'string' && meta.vimeo_hash ? meta.vimeo_hash : null
 }
 
 function normalizeOptionalString(value: unknown): string | null {

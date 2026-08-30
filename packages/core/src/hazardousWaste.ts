@@ -1,3 +1,17 @@
+import {
+  GHS_PICTOGRAMS,
+  GHS_SIGNAL_WORDS,
+  type GhsPictogram,
+  type GhsSignalWord,
+} from './chemicals'
+import {
+  DOT_PACKING_GROUPS,
+  NFPA_SPECIAL_SYMBOLS,
+  isValidDotHazardClass,
+  isValidNfpaRating,
+  type DotPackingGroup,
+} from './hazardSymbols'
+
 export type HazardousWasteAreaType =
   | 'satellite_accumulation'
   | 'central_accumulation'
@@ -690,6 +704,21 @@ export interface HazardousWasteStreamRow {
   owner_user_id:        string | null
   review_due_date:      string | null
   notes:                string | null
+  // Hazard-communication symbols (migration 239). Mirror chemical_products:
+  // GHS pictograms + signal word, NFPA 704 ratings, and DOT placard fields.
+  // dot_hazard_class stays a plain string (not the DotHazardClass union) so a
+  // legacy or partial value round-trips through the row rather than being
+  // dropped — display components validate before rendering.
+  ghs_pictograms:           GhsPictogram[]
+  ghs_signal_word:          GhsSignalWord | null
+  nfpa_health:              number | null
+  nfpa_flammability:        number | null
+  nfpa_instability:         number | null
+  nfpa_special:             string | null
+  dot_un_number:            string | null
+  dot_hazard_class:         string | null
+  dot_packing_group:        DotPackingGroup | null
+  dot_proper_shipping_name: string | null
   created_at:           string
   created_by:           string | null
   updated_at:           string
@@ -735,6 +764,16 @@ export interface HazardousWasteStreamInput {
   owner_user_id:        string | null
   review_due_date:      string | null
   notes:                string | null
+  ghs_pictograms:           GhsPictogram[]
+  ghs_signal_word:          GhsSignalWord | null
+  nfpa_health:              number | null
+  nfpa_flammability:        number | null
+  nfpa_instability:         number | null
+  nfpa_special:             string | null
+  dot_un_number:            string | null
+  dot_hazard_class:         string | null
+  dot_packing_group:        DotPackingGroup | null
+  dot_proper_shipping_name: string | null
 }
 
 export interface HazardousWasteContainerInput {
@@ -777,10 +816,14 @@ export function validateHazardousWasteStreamInput(input: HazardousWasteStreamInp
   if (!(['lqg', 'sqg', 'vsqg'] as RcraGeneratorCategory[]).includes(input.generator_category)) {
     errors.push({ field: 'generator_category', message: 'Invalid generator category' })
   }
-  if (!WASTE_JURISDICTIONS.includes(input.jurisdiction)) {
+  // Both columns are `not null default` in migration 272, so omitting them is
+  // valid — the database supplies 'california' / 'none'. Only a value that is
+  // present and wrong is an error; rejecting absence would break every caller
+  // that predates these fields, including the symbol-only update path.
+  if (input.jurisdiction !== undefined && !WASTE_JURISDICTIONS.includes(input.jurisdiction)) {
     errors.push({ field: 'jurisdiction', message: 'Invalid jurisdiction' })
   }
-  if (!ACUTE_CLASSES.includes(input.acute_class)) {
+  if (input.acute_class !== undefined && !ACUTE_CLASSES.includes(input.acute_class)) {
     errors.push({ field: 'acute_class', message: 'Invalid acute class' })
   }
   if (input.ldr_notice_date) {
@@ -789,6 +832,58 @@ export function validateHazardousWasteStreamInput(input: HazardousWasteStreamInp
       errors.push({ field: 'ldr_notice_date', message: 'Invalid LDR notice date' })
     }
   }
+  errors.push(...validateHazardSymbolFields(input))
+  return errors
+}
+
+/**
+ * Validate the hazard-communication symbol fields shared by streams and
+ * (one day) other symbol-carrying records. Mirrors the chemical_products
+ * check constraints from migration 239: GHS codes against the catalog,
+ * signal word/NFPA/DOT against their enumerations. Trim before calling.
+ */
+export function validateHazardSymbolFields(input: {
+  ghs_pictograms:    GhsPictogram[]
+  ghs_signal_word:   GhsSignalWord | null
+  nfpa_health:       number | null
+  nfpa_flammability: number | null
+  nfpa_instability:  number | null
+  nfpa_special:      string | null
+  dot_hazard_class:  string | null
+  dot_packing_group: DotPackingGroup | null
+}): FieldError[] {
+  const errors: FieldError[] = []
+
+  for (const code of input.ghs_pictograms) {
+    if (!(GHS_PICTOGRAMS as readonly string[]).includes(code)) {
+      errors.push({ field: 'ghs_pictograms', message: `Unknown GHS pictogram: ${code}` })
+    }
+  }
+
+  if (input.ghs_signal_word && !(GHS_SIGNAL_WORDS as readonly string[]).includes(input.ghs_signal_word)) {
+    errors.push({ field: 'ghs_signal_word', message: 'Signal word must be "danger" or "warning"' })
+  }
+
+  const nfpaFields = ['nfpa_health', 'nfpa_flammability', 'nfpa_instability'] as const
+  for (const field of nfpaFields) {
+    const value = input[field]
+    if (value !== null && !isValidNfpaRating(value)) {
+      errors.push({ field, message: 'NFPA rating must be an integer 0-4' })
+    }
+  }
+
+  if (input.nfpa_special && !(NFPA_SPECIAL_SYMBOLS as readonly string[]).includes(input.nfpa_special)) {
+    errors.push({ field: 'nfpa_special', message: `NFPA special symbol must be one of ${NFPA_SPECIAL_SYMBOLS.join(', ')}` })
+  }
+
+  if (input.dot_hazard_class && !isValidDotHazardClass(input.dot_hazard_class)) {
+    errors.push({ field: 'dot_hazard_class', message: `Invalid DOT hazard class: ${input.dot_hazard_class}` })
+  }
+
+  if (input.dot_packing_group && !(DOT_PACKING_GROUPS as readonly string[]).includes(input.dot_packing_group)) {
+    errors.push({ field: 'dot_packing_group', message: 'DOT packing group must be I, II, or III' })
+  }
+
   return errors
 }
 

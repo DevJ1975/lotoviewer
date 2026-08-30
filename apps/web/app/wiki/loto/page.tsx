@@ -1,10 +1,24 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.1.0'
-const LAST_UPDATED    = '2026-05-15'
+const CURRENT_VERSION = '1.2.0'
+const LAST_UPDATED    = '2026-06-10'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.2.0',
+    date:    '2026-06-10',
+    changes: [
+      'On iPad portrait (any screen narrower than the three-column ' +
+      'desktop layout) the placard preview now opens as a slide-over ' +
+      'panel with a close button, instead of rendering below the ' +
+      'equipment list where it was easy to miss.',
+      'Register usability: rows are reachable and operable from the ' +
+      'keyboard, the follow-up flag is always visible on touch screens ' +
+      'with a glove-friendly target (it was hover-only), and filtering ' +
+      'to zero results now offers a one-tap Clear Filters action.',
+    ],
+  },
   {
     version: '1.1.0',
     date:    '2026-05-15',

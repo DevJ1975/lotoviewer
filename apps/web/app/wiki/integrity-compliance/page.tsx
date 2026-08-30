@@ -56,7 +56,7 @@ export default function WikiIntegrityCompliancePage() {
         <p>
           Modules in the rest of the platform produce records — incidents,
           permits, training, placards. The Integrity & Compliance module
-          is what makes those records <em>defensible</em> in a regulator's
+          is what makes those records <em>defensible</em> in a regulator&apos;s
           office: each artifact is chain-of-custody hashed, retained for
           the right window (or held indefinitely under a legal hold),
           rolls up against the ISO 45001 clauses it satisfies, and gets

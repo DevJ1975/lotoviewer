@@ -381,7 +381,7 @@ implements the regulatory logic for the remaining recommendations.
 - `wasteCodes.ts` (new) — `classifyWasteCode` / `partitionWasteCodes` (EPA vs.
   California) + the full D-list characteristic catalog.
 
-**Schema:** migration `217_hazardous_waste_stream_jurisdiction_acute_ldr.sql`
+**Schema:** migration `272_hazardous_waste_stream_jurisdiction_acute_ldr.sql`
 — additive, idempotent columns (`jurisdiction` default `california`,
 `acute_class`, `ldr_restricted` / `ldr_notice_sent` / `ldr_notice_date`). No
 RLS change. No NOT-NULL lockdown (existing rows backfill to safe defaults).

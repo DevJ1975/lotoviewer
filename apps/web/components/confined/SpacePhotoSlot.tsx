@@ -43,8 +43,10 @@ export default function SpacePhotoSlot({ spaceId, slot, label, existingUrl, onUp
   // re-renders during upload. Mirrors the pattern in PlacardPhotoSlot.
   const onUploadedRef = useRef(onUploaded)
   const onErrorRef    = useRef(onError)
-  onUploadedRef.current = onUploaded
-  onErrorRef.current    = onError
+  useEffect(() => {
+    onUploadedRef.current = onUploaded
+    onErrorRef.current    = onError
+  }, [onUploaded, onError])
 
   useEffect(() => {
     return () => { if (localPreview) URL.revokeObjectURL(localPreview) }
@@ -167,7 +169,9 @@ export default function SpacePhotoSlot({ spaceId, slot, label, existingUrl, onUp
               sizes="(max-width: 768px) 100vw, 50vw"
               className={`object-cover transition-opacity duration-150 ${busy ? 'opacity-40' : 'opacity-100'}`}
               style={{ imageOrientation: 'from-image' }}
-              unoptimized
+              // Remote bucket photos go through the optimizer; only local blob
+              // previews (createObjectURL) can't be optimized.
+              unoptimized={displayUrl.startsWith('blob:')}
             />
             {busy ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/30 dark:bg-slate-900/30 backdrop-blur-[1px]">

@@ -1,84 +1,84 @@
 # RAG seed corpus
 
-Markdown source material for the platform-wide knowledge base. The
-`/api/superadmin/knowledge/seed-regulations` endpoint walks the
-manifest in that route's source and ingests each entry as a
-`source_type = 'regulation'` row in `knowledge_documents` (with
-`tenant_id = NULL` so every tenant's RAG sees them).
+Source material for the platform-wide knowledge base — the `regulation` /
+`state_reg` / `dot` / `epa` / `rcra` documents the assistant retrieves from, all
+ingested as global rows (`tenant_id = NULL`) so every tenant's RAG sees them.
 
-## Currently ingested
+There are two ingestion paths, by source size:
 
-| File | Source | Status |
-|---|---|---|
-| `29-cfr-1910-1200-hazcom-001-250.md` | OSHA HazCom 29 CFR 1910.1200 (federal), pages 1-250 of the 495-page regulatory packet | ✅ in manifest, `regulation` |
-| `federal-osha-29-cfr-1910-master.md` | OSHA 29 CFR Part 1910 (full part — 24 subparts, ~600 sections) generated from eCFR API | 🟡 in manifest; `.gitignore`-d so the file is generated locally via `scripts/ingest-osha-1910.mjs` |
-| `federal-osha-29-cfr-1910-source-map.md` | Build brief from the user; checked in for traceability | 📌 reference only — drives the generator script |
+## Federal OSHA 29 CFR Part 1910 (General Industry) — `scripts/osha_1910_ingest.py`
 
-Run after deploy:
+Part 1910 is fetched live from the eCFR API and ingested **one
+`knowledge_documents` row per section / appendix**, so the assistant can cite a
+pinpoint section (`[29 CFR 1910.147 § 1910.147(c)(4)]`) instead of a single
+"[29 CFR Part 1910]". eCFR is several MB and Voyage embedding is slow + costs
+money, so this runs **offline** (not on Vercel), then the generated SQL is applied
+to Supabase.
 
 ```bash
-curl -X POST -H "Authorization: Bearer <token>" \
-  https://soteriafield.app/api/superadmin/knowledge/seed-regulations
+python -m venv .venv && . .venv/bin/activate
+pip install -r scripts/requirements.txt
+
+# Stage-by-stage (recommended first time):
+python scripts/osha_1910_ingest.py fetch  --date 2026-05-07
+python scripts/osha_1910_ingest.py parse
+python scripts/osha_1910_ingest.py verify        # diff parsed sections vs the source-map checklist
+python scripts/osha_1910_ingest.py chunk
+VOYAGE_API_KEY=... python scripts/osha_1910_ingest.py embed
+python scripts/osha_1910_ingest.py emit-sql      # -> scripts/.osha-build/sql/batch-*.sql + record-snapshot.sql
+
+# …or all at once:
+VOYAGE_API_KEY=... python scripts/osha_1910_ingest.py all --date 2026-05-07
 ```
 
-The endpoint is idempotent — re-running deletes prior rows for each
-manifest key and re-inserts. Useful when a seed file is updated.
+Then apply the generated SQL to Supabase (Supabase SQL editor / `psql` / the
+Supabase MCP `execute_sql` tool), **in order**:
+
+1. every `batch-NNN.sql` (upserts each current section),
+2. `prune.sql` (deletes any 1910 section eCFR no longer carries),
+3. `record-snapshot.sql` last (stamps the snapshot date the freshness cron
+   compares against — see migration `222_regulation_update_checks.sql`).
+
+Each batch is idempotent: it deletes a section's prior global row by its eCFR
+deep-link `source_url` (cascading its chunks) before re-inserting, so re-running
+after an annual eCFR amendment rewrites only what changed. Cost ≈ $2–3 in Voyage
+credits per full ingest.
+
+> Note: `VOYAGE_API_KEY` must also be set in the **deployment** env — the
+> assistant embeds each user query at retrieval time (`lib/ai/embeddings.ts`).
+
+### Staying current — `/api/cron/check-regulation-updates`
+
+A bi-monthly cron (~every 60 days, `vercel.json`) polls eCFR's versions API for
+Part 1910, compares the newest amendment date against
+`regulation_update_checks.ingested_snapshot`, and emails the operator to re-run
+the ingester when an update is due. It never re-ingests on its own (Voyage cost +
+function-timeout); re-running the tool above is the deliberate operator step.
+
+## Other ship-with-the-product regulations — `seed-regulations` endpoint
+
+Smaller markdown corpora that aren't on the federal eCFR (e.g. Cal/OSHA Title 8)
+go through `/api/superadmin/knowledge/seed-regulations`: drop a markdown file in
+this directory, add an entry to the `MANIFEST` array in that route, and POST the
+endpoint (idempotent). Federal OSHA Part 1910 is no longer in this manifest — it
+moved to the Python ingester above, and the partial OCR'd HazCom seed it
+superseded was removed.
+
+```bash
+curl -X POST -H "Authorization: Bearer <CRON_SECRET or INTERNAL_PUSH_SECRET>" \
+  https://soteriafield.app/api/superadmin/knowledge/seed-regulations
+```
 
 ## Queued — needs a crawler
 
 | Folder | Source | Status |
 |---|---|---|
-| `calosha-giso/` | Cal/OSHA Title 8 CCR Subchapter 7 General Industry Safety Orders — 5 group source maps | ⏸ source maps only; needs a crawler to fetch each `dir.ca.gov/title8/<section>.html` and pull the regulation body before it can be ingested as `state_reg` |
-
-The CalOSHA files in `calosha-giso/` are **source maps** — front matter
-`source_type: source_map_only`. They list the URLs that need to be
-fetched to build the actual regulation corpus. A follow-up should add
-`scripts/crawl-calosha-giso.mjs` that:
-
-1. Walks each source map and resolves every `dir.ca.gov/title8/<n>.html` link
-2. Fetches the HTML, strips chrome, converts to markdown
-3. Writes one markdown file per section into `apps/web/seed/calosha-giso/sections/`
-4. Adds entries to the `seed-regulations` manifest with
-   `source_type: 'state_reg'`, `jurisdiction: 'CA'`
-
-Once the crawler runs and the manifest is updated, the existing
-`/api/superadmin/knowledge/seed-regulations` endpoint will ingest them
-the same way it ingests the federal HazCom file.
-
-## Generating Federal OSHA 1910 from eCFR
-
-The full Part 1910 corpus (~24 subparts, ~600 sections) is fetched
-live from eCFR rather than tracked in git. Re-run after each annual
-eCFR update.
-
-```bash
-# Fetch + write the master MD only (default date 2026-05-07):
-node scripts/ingest-osha-1910.mjs
-
-# Pin to a specific eCFR snapshot date:
-node scripts/ingest-osha-1910.mjs --date 2026-05-07
-
-# One shot: fetch, write, and POST to the seed-regulations endpoint.
-# Requires SOTERIA_BASE_URL + SOTERIA_SUPERADMIN_TOKEN env vars.
-SOTERIA_BASE_URL=https://soteriafield.app \
-SOTERIA_SUPERADMIN_TOKEN=<bearer> \
-  node scripts/ingest-osha-1910.mjs --ingest
-```
-
-Cost: roughly $2-3 in Voyage embedding credits per full re-ingest.
-
-## Adding a new file
-
-1. Drop the markdown into `apps/web/seed/`.
-2. Add a row to the `MANIFEST` array in
-   `app/api/superadmin/knowledge/seed-regulations/route.ts`.
-3. Re-run the endpoint. Idempotent.
+| `calosha-giso/` | Cal/OSHA Title 8 CCR Subchapter 7 General Industry Safety Orders — 5 group source maps | ⏸ source maps only; needs a crawler to fetch each `dir.ca.gov/title8/<section>.html`, strip chrome, convert to markdown, then ingest as `state_reg` (`jurisdiction: 'CA'`) via the seed-regulations endpoint |
 
 ## What this isn't for
 
-- Per-tenant company policies — those go through
-  `/superadmin/policies/upload` (Supabase Storage staging + AI extraction
-  for PDFs). The seed corpus is reserved for platform-wide regulations
-  we ship with the product.
-- Soteria user manuals — those flow through
-  `/api/superadmin/manuals/sync-rag` and live in `manuals` table.
+- **Per-tenant company policies** — those go through `/superadmin/policies/upload`
+  (Supabase Storage staging + AI extraction for PDFs). The seed corpus is reserved
+  for platform-wide regulations we ship with the product.
+- **Soteria user manuals** — those flow through `/api/superadmin/manuals/sync-rag`
+  and live in the `manuals` table.

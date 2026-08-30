@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="DOT 6.2 — Infectious Substance">
+  <title>DOT 6.2 — Infectious Substance</title>
+  <path d="M50 2 L98 50 L50 98 L2 50 Z" fill="#FFFFFF"/>
+  <path d="M50 7 L93 50 L50 93 L7 50 Z" fill="none" stroke="#000" stroke-width="1.5"/>
+  <!-- biohazard trefoil (top quadrant): three rings at 120 deg around a hub -->
+  <g transform="translate(50 39)" fill="#000" fill-rule="evenodd">
+    <!-- three rings; each ring sits at radius 12 from the hub, rotated 120 deg -->
+    <g>
+      <path d="M0 -12 m -8 0 a 8 8 0 1 0 16 0 a 8 8 0 1 0 -16 0 Z
+               M0 -12 m -3.6 0 a 3.6 3.6 0 1 0 7.2 0 a 3.6 3.6 0 1 0 -7.2 0 Z"/>
+    </g>
+    <g transform="rotate(120)">
+      <path d="M0 -12 m -8 0 a 8 8 0 1 0 16 0 a 8 8 0 1 0 -16 0 Z
+               M0 -12 m -3.6 0 a 3.6 3.6 0 1 0 7.2 0 a 3.6 3.6 0 1 0 -7.2 0 Z"/>
+    </g>
+    <g transform="rotate(240)">
+      <path d="M0 -12 m -8 0 a 8 8 0 1 0 16 0 a 8 8 0 1 0 -16 0 Z
+               M0 -12 m -3.6 0 a 3.6 3.6 0 1 0 7.2 0 a 3.6 3.6 0 1 0 -7.2 0 Z"/>
+    </g>
+    <!-- central hub linking the three rings -->
+    <circle cx="0" cy="0" r="6"/>
+    <circle cx="0" cy="0" r="2.6" fill="#fff"/>
+  </g>
+  <!-- class number (bottom corner) -->
+  <text x="50" y="86" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="bold" text-anchor="middle" fill="#000">6</text>
+</svg>

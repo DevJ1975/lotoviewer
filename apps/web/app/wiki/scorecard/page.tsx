@@ -1,10 +1,121 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.9.0'
-const LAST_UPDATED    = '2026-05-24'
+const CURRENT_VERSION = '1.15.0'
+const LAST_UPDATED    = '2026-07-29'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.15.0',
+    date:    '2026-07-29',
+    changes: [
+      'New “Month over month” strip: compares the last two complete calendar ' +
+      'months across leading indicators (corrective actions and investigations ' +
+      'completed) and lagging ones (recordable cases, all incidents). The ' +
+      'current month is deliberately excluded while it is still running, and a ' +
+      'change is coloured only when it falls outside the control limits set by ' +
+      'your own preceding months — so on a small program the strip is grey most ' +
+      'of the time, which is the honest reading.',
+      'New docs: “The math, metric by metric” gives the actual formula behind ' +
+      'every rate and percentage, including what the 200,000 constant means and ' +
+      'where hours worked come from.',
+      'New docs: “Confidence intervals” explains why a rate has a range and how ' +
+      'to tell a real move from normal variation.',
+      'New docs: “Scope & period” sets out which tiles follow the facility ' +
+      'filter and which stay client-wide, and which period each part of the ' +
+      'page actually covers — the two things most often misread.',
+    ],
+  },
+  {
+    version: '1.14.0',
+    date:    '2026-07-14',
+    changes: [
+      'Cross-module risk engine (model v2.0.0): the site-health score now also ' +
+      'reads failing inspections, open BBS follow-ups, overdue JHA reviews, ' +
+      'permits left open past expiry, competency-matrix training gaps, and ECFA ' +
+      'causal factors on weak controls — each surfaced as a leading driver.',
+      'New “Leading Indicator Signals” panel: shows which leading indicators ' +
+      'historically precede your recordables and by how many months — presented ' +
+      'as exploratory correlation, not proof of cause.',
+      'Statistical honesty: OSHA rates now show confidence intervals (Poisson ' +
+      'for rates, Wilson for RCA completion) so a rate built on a few events no ' +
+      'longer reads as precise.',
+    ],
+  },
+  {
+    version: '1.13.1',
+    date:    '2026-06-17',
+    changes: [
+      'Docs: expanded the usage guide — how to read the board and drill into ' +
+      'any metric, how to read the distribution + forecast (c-chart / Poisson), ' +
+      'how the “Where to focus” assistant works (including its deterministic ' +
+      'fallback when AI is unavailable), and the multi-tab Excel / Google ' +
+      'Sheets export.',
+    ],
+  },
+  {
+    version: '1.13.0',
+    date:    '2026-06-15',
+    changes: [
+      'PDF parity: the branded PDF now includes the recordable distribution + ' +
+      'next-month forecast (mean, median, spread, c-chart control limits, and ' +
+      'the Poisson prediction interval) — the same numbers as the Excel ' +
+      '“Distribution” tab, computed once and shared by both exports.',
+      'Where to focus: the card now clearly flags when it is showing the ' +
+      'deterministic top drivers because AI analysis was unavailable, so the ' +
+      'fallback is never mistaken for an AI-written read. Screen readers now ' +
+      'announce the results as they load.',
+    ],
+  },
+  {
+    version: '1.12.0',
+    date:    '2026-06-15',
+    changes: [
+      'Where to focus: an on-demand AI card that reads your deterministic risk ' +
+      'drivers + forecast and ranks, in plain language, where to work next to ' +
+      'lower predicted risk — each item deep-links to the module. The risk score ' +
+      'is always computed by the model, never the assistant; if AI is ' +
+      'unavailable the card falls back to the top deterministic drivers.',
+      'Excel export: the new “Excel” button downloads a multi-tab .xlsx ' +
+      '(Summary, Leading, Lagging, Trends, Distribution, Targets, Risk drivers) ' +
+      'that opens in Excel and imports cleanly into Google Sheets. The risk ' +
+      'headline is recomputed server-side and every cell is guarded against ' +
+      'spreadsheet formula injection.',
+    ],
+  },
+  {
+    version: '1.11.0',
+    date:    '2026-06-15',
+    changes: [
+      'Predictive section — “where things are going”: a forecast of next ' +
+      'month’s recordable count (EWMA + a reliability-gated linear trend) with ' +
+      'a Poisson 95% prediction interval, plus an improving/worsening/flat ' +
+      'trend read. The number is deterministic, never an AI guess.',
+      'Statistically honest distributions: recordables are shown as a c-chart ' +
+      '(control chart with mean and ±3σ limits) and a Poisson fit — the right ' +
+      'view for rare counts — rather than a bell curve, which would imply ' +
+      'impossible negative counts. Views suppress themselves when there is too ' +
+      'little data to be honest (e.g. < 8 months for a distribution).',
+    ],
+  },
+  {
+    version: '1.10.0',
+    date:    '2026-06-15',
+    changes: [
+      'Tap-to-drill: every KPI card and risk driver opens a detail sheet with ' +
+      'the metric’s definition, its live formula, supporting stats, and a ' +
+      'plain-language explanation of what it means and where to act — the ' +
+      'interactive replacement for a separate “simple metrics” view.',
+      'Predicted-risk gauge + leading-vs-lagging panel: the 0–100 score now ' +
+      'reads as a graphical gauge, and the drivers are split into leading ' +
+      '(preventive) and lagging (outcome) indicators you can drill into.',
+      'Comprehensive branded PDF: the “PDF” button now exports a multi-page ' +
+      'report — executive summary, predicted risk + drivers, leading/lagging ' +
+      'tables, a recordable & near-miss trend chart, reporting/investigation ' +
+      'quality, and the LOTO program — with your tenant logo and brand mark. ' +
+      'The risk score is recomputed server-side so the headline is authoritative.',
+    ],
+  },
   {
     version: '1.9.0',
     date:    '2026-05-24',
@@ -123,7 +234,7 @@ export default function WikiScorecardPage() {
   return (
     <WikiPage
       title="EHS Scorecard"
-      subtitle="Strategic KPI dashboard with selectable time windows."
+      subtitle="Strategic BI board — drill-down KPIs, predictive analytics, an AI focus assistant, and branded PDF / Excel exports."
       modulePath="/admin/insights/scorecard"
       audience="admin"
       category="Reports"
@@ -131,13 +242,20 @@ export default function WikiScorecardPage() {
       lastUpdated={LAST_UPDATED}
       changelog={CHANGELOG}
       toc={[
-        { id: 'overview', label: 'What it\'s for' },
-        { id: 'metrics',  label: 'What it measures' },
-        { id: 'sharing',  label: 'Present, export & email' },
-        { id: 'predict',  label: 'Predicted incident risk' },
-        { id: 'faq',      label: 'FAQ' },
-        { id: 'dodonts',  label: 'Do\'s & Don\'ts' },
-        { id: 'related',  label: 'Related modules' },
+        { id: 'overview',     label: 'What it\'s for' },
+        { id: 'metrics',      label: 'What it measures' },
+        { id: 'math',         label: 'The math, metric by metric' },
+        { id: 'uncertainty',  label: 'Confidence intervals' },
+        { id: 'momentum',     label: 'Month over month' },
+        { id: 'scope',        label: 'Scope & period' },
+        { id: 'using',        label: 'How to read the board' },
+        { id: 'distribution', label: 'Distributions & forecast' },
+        { id: 'sharing',      label: 'Present, export & email' },
+        { id: 'predict',      label: 'Predicted incident risk' },
+        { id: 'focus',        label: 'Where to focus (AI)' },
+        { id: 'faq',          label: 'FAQ' },
+        { id: 'dodonts',      label: 'Do\'s & Don\'ts' },
+        { id: 'related',      label: 'Related modules' },
       ]}
     >
       <Section id="overview" title="What it's for">
@@ -146,6 +264,15 @@ export default function WikiScorecardPage() {
           The scorecard answers &quot;how are we trending?&quot; — chartable
           KPIs over a selectable 7d / 30d / 90d window, intended for the
           weekly EHS director&apos;s review and monthly leadership reports.
+        </p>
+        <p>
+          It&apos;s built to be read graphically and explored: the headline is a
+          predicted-risk score, every KPI tile and risk driver is{' '}
+          <strong>tap-to-drill</strong> (definition, live formula, and where to
+          act), and on top of the deterministic numbers sit a next-month{' '}
+          <em>forecast</em> and an on-demand AI{' '}
+          <em>&quot;Where to focus&quot;</em> assistant. Export the whole picture
+          to a branded PDF or a multi-tab Excel workbook.
         </p>
       </Section>
 
@@ -162,15 +289,253 @@ export default function WikiScorecardPage() {
           <li>Where &amp; how people are getting hurt — body-part and nature-of-injury breakdowns</li>
           <li>When incidents cluster — a shift × weekday heatmap</li>
           <li>Goals vs. actuals + your TRIR/DART vs. the BLS industry benchmark for your sector</li>
+          <li>Predictive — next-month recordable forecast (Poisson interval) plus a c-chart and Poisson distribution of monthly counts</li>
           <li>Confined-space permits issued, completed, expired, canceled</li>
           <li>Atmospheric-test failures and the spaces that drove them</li>
           <li>LOTO photo-completion percentage trend</li>
         </ul>
       </Section>
 
+      <Section id="math" title="The math, metric by metric">
+        <p>
+          Every number below is computed in the browser from rows the page
+          fetches — nothing is pre-aggregated, so what you see is always
+          derived from the current contents of the tables. Tap any tile on the
+          scorecard to see the same formula with <em>your</em> numbers
+          substituted in.
+        </p>
+
+        <h4>The OSHA rate family</h4>
+        <p>
+          All four share the same shape. The constant <strong>200,000</strong> is
+          100 full-time-equivalent workers × 2,000 hours a year — so a rate of
+          3.0 means &quot;3 cases per 100 full-time workers per year.&quot; It is
+          fixed by OSHA/BLS convention and never changes.
+        </p>
+        <ul>
+          <li><strong>TRIR</strong> = (all recordable cases × 200,000) ÷ hours worked</li>
+          <li><strong>DART</strong> = ((deaths + days-away cases + restricted/transfer cases) × 200,000) ÷ hours worked</li>
+          <li><strong>LTIR</strong> = ((deaths + days-away cases) × 200,000) ÷ hours worked</li>
+          <li><strong>Severity rate</strong> = (total days away × 200,000) ÷ hours worked</li>
+        </ul>
+        <p>
+          A case counts as recordable when its classification meets the OSHA
+          1904 recording criteria. <strong>Hours worked</strong> comes from the
+          annual figure entered per establishment under OSHA → Establishments.
+          If nobody has entered hours for the current year, every rate renders
+          as <code>—</code> rather than zero, because a rate with no denominator
+          is not a rate.
+        </p>
+        <p>
+          <strong>Two caveats you should know before quoting these.</strong> The
+          numerator counts cases in a rolling trailing-365-day window while the
+          denominator is the calendar-year hours entry, so the two do not cover
+          exactly the same period — mid-year the rate reads high if you record
+          hours as they accrue rather than budgeting them annually. And the
+          hours figure is summed across <em>all</em> of a client&apos;s
+          establishments, so when a facility filter is active the numerator
+          narrows and the denominator does not. Both are known and tracked; see{' '}
+          <strong>Scope &amp; period</strong> below.
+        </p>
+
+        <h4>Process and investigation quality</h4>
+        <ul>
+          <li>
+            <strong>CAPA on-time %</strong> = corrective actions closed on or before
+            their due date ÷ all closed actions. An action with no due date counts
+            as on time, so a blank due date flatters this number.
+          </li>
+          <li>
+            <strong>RCA completion %</strong> = recordable cases with a completed
+            investigation ÷ all recordable cases in the window.
+          </li>
+          <li>
+            <strong>Mean time to close</strong> = average of (closed − reported)
+            across incidents closed in the window.
+          </li>
+          <li>
+            <strong>Days since last recordable</strong> = whole days since the most
+            recent recordable&apos;s occurrence date. Shown as <code>—</code> when
+            none is on file. Read it alongside near-miss reporting — a long quiet
+            streak and a low reporting rate together usually mean under-reporting
+            rather than safety.
+          </li>
+        </ul>
+
+        <h4>Permit and program metrics (selected window)</h4>
+        <ul>
+          <li><strong>Cancel pressure</strong> = permits canceled for a reason other than &quot;task complete&quot; ÷ all permits</li>
+          <li><strong>Atmospheric failure rate</strong> = gas tests outside the acceptable range ÷ all tests</li>
+          <li><strong>Photo completion</strong> = active equipment with both required photos ÷ all active equipment</li>
+          <li><strong>Average permit duration</strong> = mean (closed − started), excluding permits still open</li>
+        </ul>
+      </Section>
+
+      <Section id="uncertainty" title="Confidence intervals — why a number has a range">
+        <p>
+          Safety data is thin. A site with two recordables in a year is not
+          meaningfully different from one with four — the difference is well
+          inside what chance produces. So the rate cards show a{' '}
+          <strong>95% confidence interval</strong> underneath the headline
+          figure, and the interval is the honest part of the tile.
+        </p>
+        <ul>
+          <li>
+            <strong>Rates</strong> use a Poisson interval, which is the right model
+            for counting rare events over an exposure period.
+          </li>
+          <li>
+            <strong>Percentages</strong> (RCA completion) use a Wilson interval,
+            which stays sensible when the percentage is near 0 or 100.
+          </li>
+        </ul>
+        <p>
+          <strong>How to use it:</strong> if this period&apos;s interval overlaps
+          last period&apos;s, you cannot claim the metric moved. That is not a
+          technicality — acting on a move that is inside the interval is how
+          programs end up crediting an intervention for what was chance, and then
+          repeating it.
+        </p>
+        <p>
+          The forecast and control chart carry the same discipline: the forecast
+          needs at least 6 months of history, the c-chart at least 2, and the
+          Poisson distribution at least 8, and each stays hidden below its
+          threshold rather than drawing a line through too few points.
+        </p>
+      </Section>
+
+      <Section id="momentum" title="Month over month — and why it is often grey">
+        <p>
+          The momentum strip compares the <strong>last two complete calendar
+          months</strong>, split into leading indicators (corrective actions
+          completed, investigations completed) and lagging ones (recordable
+          cases, all reported incidents). It always names the two months it
+          compared.
+        </p>
+        <p>
+          <strong>The current month is never shown.</strong> A month that is
+          eleven days old compared against a full month will always look like an
+          improvement, and that improvement would reset every time the page
+          rendered. Waiting for the month to close is the only way the comparison
+          means anything.
+        </p>
+        <p>
+          <strong>A change is coloured only when it is outside normal
+          variation.</strong> Rather than judging a move from just two numbers,
+          the panel builds control limits from the months that came before and
+          colours the change only when the latest month falls outside them. On a
+          small program most months land inside — so the strip is grey most of the
+          time. That is the correct reading, not a fault. Grey means &quot;this is
+          what your normal looks like.&quot;
+        </p>
+        <p>
+          Where there are fewer than 10 events across the two months, or fewer
+          than 6 closed months of history, the panel shows both counts and
+          withholds the verdict, saying which of the two applies.
+        </p>
+        <p>
+          Several metrics are deliberately <em>absent</em> from this strip because
+          a monthly comparison of them would be misleading — near-miss reports,
+          the OSHA rates, CAPA on-time %, and RCA completion %. The panel lists
+          each one and the specific reason, under &quot;Why some metrics are not
+          shown here.&quot;
+        </p>
+      </Section>
+
+      <Section id="scope" title="Scope &amp; period — what each number covers">
+        <p>
+          Two things vary between tiles on this page, and neither is currently
+          labelled on the tile itself. Knowing them prevents the most common
+          misreading.
+        </p>
+        <p>
+          <strong>Period.</strong> The window selector (7 / 30 / 90 days) drives
+          the permit and program strip. The injury and OSHA block is always
+          trailing 12 months regardless of the selector. The risk model looks at
+          90 days, the momentum strip at whole calendar months, and the
+          leading-signal panel at 18 months. So &quot;risk is up but recordables
+          are flat&quot; may simply be two different periods.
+        </p>
+        <p>
+          <strong>Facility.</strong> When a facility is selected in the header,
+          most record tables filter to it automatically. Three things do{' '}
+          <em>not</em> currently follow that filter and stay client-wide: the
+          predicted-risk score and its drivers, the atmospheric failure rate, and
+          the year-over-year history. The exported PDF, the Excel workbook and the
+          weekly email are also client-wide.
+        </p>
+        <p>
+          Until every tile carries its own scope label, the safe habit is: read
+          the OSHA rates and permit counts as scoped to your selected facility,
+          and read the risk score and year-over-year chart as covering the whole
+          client.
+        </p>
+      </Section>
+
+      <Section id="using" title="How to read the board">
+        <p>
+          Start by picking a <strong>time window</strong> (7d / 30d / 90d) in the
+          top bar. The OSHA recordkeeping picture is always trailing 12 months,
+          but the permit, atmospheric, and equipment tiles follow the window you
+          choose — stick to one (30d is the usual choice) so week-to-week reads
+          stay comparable.
+        </p>
+        <p>
+          The board is <strong>graphical-first and interactive</strong>: every
+          KPI tile, gauge, and risk driver is <strong>tap-to-drill</strong>. Tap
+          one (or focus it and press Enter) to open a <em>detail sheet</em> with
+          the metric&apos;s plain-English definition, its <strong>live
+          formula</strong> with your actual numbers plugged in, the supporting
+          stats behind it, and a short &quot;what this means / where to act&quot;
+          read that deep-links to the module where the work happens. This is the
+          interactive replacement for a separate &quot;simple view&quot; — the
+          depth is one tap away instead of behind a toggle.
+        </p>
+        <p>
+          Below the predicted-risk gauge, the <strong>leading vs lagging</strong>
+          panel splits the drivers into <em>preventive</em> signals you can still
+          act on (near-miss reporting rate, BBS safe-to-unsafe ratio, overdue
+          corrective actions, expiring training) and <em>lagging</em> outcomes
+          that have already happened (recordable trend). Work the top driver
+          first — it&apos;s contributing the most points to the score.
+        </p>
+      </Section>
+
+      <Section id="distribution" title="Distributions & forecast (reading them right)">
+        <p>
+          Recordables are <strong>rare counts</strong>, so the scorecard does{' '}
+          <em>not</em> draw them as a bell curve — a normal curve would imply
+          impossible negative months and overstate the spread. Instead you get
+          two honest views:
+        </p>
+        <ul>
+          <li><strong>c-chart (control chart).</strong> Monthly counts plotted
+            against a center line (the mean) and <strong>±3σ control
+            limits</strong>. A point <em>above the upper limit (UCL)</em> is a
+            real signal worth investigating — not normal variation. Points inside
+            the band are ordinary month-to-month noise; resist reading a story
+            into them.</li>
+          <li><strong>Poisson distribution.</strong> The shape rare counts
+            actually follow, with the mean (λ) marked — the right reference for
+            &quot;is this month unusual?&quot;</li>
+        </ul>
+        <p>
+          The <strong>next-month forecast</strong> projects the recordable count
+          from your recent history (an EWMA level plus a linear trend that is only
+          applied when the fit is reliable; otherwise it holds a flat run-rate and
+          says so), with a <strong>95% Poisson prediction interval</strong> —
+          read the band, not just the point. Both the chart and the forecast{' '}
+          <strong>suppress themselves when there isn&apos;t enough data</strong>{' '}
+          (a control chart needs at least two months; a forecast about six),
+          showing an &quot;insufficient data&quot; note rather than a fabricated
+          line. Every number here is <strong>deterministic</strong> and advisory —
+          a planning aid, never a compliance prediction.
+        </p>
+      </Section>
+
       <Section id="sharing" title="Present, export & email">
         <p>
-          Three ways to get the scorecard in front of people who aren&apos;t
+          Several ways to get the scorecard in front of people who aren&apos;t
           looking at the screen:
         </p>
         <ul>
@@ -179,10 +544,22 @@ export default function WikiScorecardPage() {
             hidden — clean enough to project in a leadership review. Press
             Esc (or &quot;Exit&quot;) to return to the normal layout.</li>
           <li><strong>PDF.</strong> The &quot;PDF&quot; button downloads a
-            one-page report of the current window&apos;s program metrics with
-            your tenant logo affixed in the header — drop it straight into a
-            board pack. Set the logo under tenant settings if the header looks
-            empty.</li>
+            comprehensive, multi-page report — executive summary, predicted
+            risk and its drivers, leading vs lagging indicators, a recordable
+            &amp; near-miss trend chart, the <strong>recordable distribution +
+            next-month forecast</strong>, reporting/investigation quality, and the
+            permit/LOTO program — with your tenant logo and brand mark in the
+            header. The risk score is recomputed server-side so the board-pack
+            headline is authoritative. Set the logo under tenant settings if the
+            header looks empty.</li>
+          <li><strong>Excel.</strong> The &quot;Excel&quot; button downloads a
+            multi-tab workbook (<em>Summary, Leading, Lagging, Trends,
+            Distribution, Targets, Risk drivers</em>) for analysts who want to
+            pivot the numbers themselves. It opens in Excel and{' '}
+            <strong>imports cleanly into Google Sheets</strong> (File ▸ Import) —
+            the &quot;Google spreadsheet&quot; route, with no add-on to install.
+            The risk headline is recomputed server-side, and every cell is
+            guarded against spreadsheet formula injection.</li>
           <li><strong>Weekly weather report.</strong> Every Monday, owners and
             admins get an automated email summarizing week-over-week movement
             on the key leading and lagging indicators (recordables, near-miss
@@ -203,11 +580,38 @@ export default function WikiScorecardPage() {
           always produces the same number.
         </p>
         <p>
-          Below the score is a ranked <strong>&quot;where to work to lower
-          it&quot;</strong> list — the specific drivers pushing the score up,
-          each linking straight to the module where you fix it. Work the top
-          driver first; it&apos;s contributing the most points. The same score
-          and top focus area are included in the weekly weather-report email.
+          The score reads as a graphical <strong>gauge</strong>, and below it a
+          ranked <strong>&quot;where to work to lower it&quot;</strong> list
+          shows the specific drivers pushing the score up. A separate
+          <strong> leading vs lagging</strong> panel splits those drivers into
+          preventive signals (near-miss reporting, BBS ratio, overdue actions,
+          expiring training) and outcomes (recordable trend). Tap any driver —
+          or any KPI card on the board — to open a detail sheet with its
+          definition, live formula, and where to act. Work the top driver
+          first; it&apos;s contributing the most points. The same score and top
+          focus area are included in the weekly weather-report email.
+        </p>
+      </Section>
+
+      <Section id="focus" title="Where to focus (AI assistant)">
+        <p>
+          Next to the predicted-risk card,{' '}
+          <strong>&quot;Where to focus&quot;</strong> is an on-demand assistant:
+          press <strong>Analyze</strong> and it turns your <em>deterministic</em>{' '}
+          risk drivers and forecast into a short, ranked, plain-language list of
+          where to work next — each item deep-linking to the module to act in.
+        </p>
+        <p>
+          It is deliberately <strong>honest about its limits</strong>. The risk
+          score is <em>always</em> computed by the model, <strong>never</strong>{' '}
+          by the AI; the assistant only writes the prose and picks which drivers
+          to highlight, and the deep links are resolved server-side (the model
+          can&apos;t invent a destination). If the AI is unavailable the card
+          falls back to the top deterministic drivers and shows an amber{' '}
+          <em>&quot;deterministic — AI analysis unavailable&quot;</em> pill, so a
+          fallback is never mistaken for an AI-written read. It&apos;s
+          rate-limited per tenant (about 20 runs an hour) and is advisory
+          guidance for a human to review — not a compliance determination.
         </p>
       </Section>
 
@@ -228,8 +632,8 @@ export default function WikiScorecardPage() {
           },
           {
             q: 'Can I export the scorecard?',
-            a: <>Yes — the &quot;PDF&quot; button produces a branded one-page
-              summary for the current window (see{' '}
+            a: <>Yes — the &quot;PDF&quot; button produces a branded,
+              comprehensive multi-page report for the current window (see{' '}
               <Link href="#sharing">Present, export &amp; email</Link>). For the
               raw underlying rows, use the{' '}
               <Link href="/admin/compliance/compliance-bundle">compliance bundle</Link>{' '}
@@ -255,6 +659,29 @@ export default function WikiScorecardPage() {
             a: <>The tile collapses to a &quot;no data&quot; placeholder so you
               don&apos;t mistake an empty module for zero activity.</>,
           },
+          {
+            q: 'Is "Where to focus" an AI that decides my risk score?',
+            a: <>No. The 0–100 score is computed deterministically from your
+              indicators; the AI only writes the plain-language ranking on top of
+              those numbers and never sets or changes the score. If the AI is
+              down, the card shows the top deterministic drivers with an
+              &quot;AI analysis unavailable&quot; note.</>,
+          },
+          {
+            q: 'How do I get this into Google Sheets?',
+            a: <>Click <strong>Excel</strong> to download the workbook, then in
+              Google Sheets use <strong>File ▸ Import</strong> and upload it — all
+              seven tabs come across. There&apos;s no Google sign-in or add-on to
+              install.</>,
+          },
+          {
+            q: 'Why a c-chart instead of a bell curve?',
+            a: <>Recordables are rare counts, so a normal (bell) curve is the
+              wrong model — it would imply negative months. A c-chart with ±3σ
+              control limits (plus a Poisson fit) is the standard, honest way to
+              tell a real signal from ordinary variation. See{' '}
+              <Link href="#distribution">Distributions &amp; forecast</Link>.</>,
+          },
         ]} />
       </Section>
 
@@ -262,6 +689,9 @@ export default function WikiScorecardPage() {
         <DoDont
           dos={[
             'Walk through the scorecard at the same cadence each week so trend reads stay comparable.',
+            'Tap into a metric\'s detail sheet to see its formula and supporting stats before you quote a number.',
+            'Use the c-chart\'s upper control limit to tell a real signal from week-to-week noise before you escalate.',
+            'Treat "Where to focus" as a starting point — confirm in the linked module before you act.',
             'Pair scorecard trends with the Risk Intelligence module to find the drivers behind the numbers.',
             'Screenshot the 30d view at month-end for the leadership pack — it\'s the cleanest comparison view.',
             'Check the scorecard before issuing tenant-wide changes; you\'ll spot regressions sooner.',
@@ -270,6 +700,8 @@ export default function WikiScorecardPage() {
             'Don\'t use scorecard numbers in incentive plans — gaming them undermines the data.',
             'Don\'t compare two tenants on this page; switch tenants to compare side-by-side.',
             'Don\'t take a single week\'s spike at face value — open the underlying module to confirm before raising it.',
+            'Don\'t paste the "Where to focus" narrative into a compliance record as a determination — it\'s advisory.',
+            'Don\'t read the forecast band as a guarantee; it\'s a deterministic projection, not a promise.',
             'Don\'t treat "zero permits" as healthy. Zero usually means under-reporting, not perfect safety.',
           ]}
         />

@@ -17,6 +17,14 @@ import {
 } from '@soteria/core/hazardousWaste'
 import { buildLdrNotice, ldrNoticeStatus } from '@soteria/core/ldrNotice'
 import { partitionWasteCodes } from '@soteria/core/wasteCodes'
+import { StreamSymbolDetail } from '../_components/StreamSymbolBadges'
+import PrintContainerLabelPanel from '../_components/PrintContainerLabelPanel'
+import {
+  HazardSymbolFields,
+  hazardSymbolsFromStream,
+  hazardSymbolsToBody,
+  type HazardSymbolValue,
+} from '../_components/HazardSymbolFields'
 
 const STATUS_LABEL: Record<HazardousWasteStreamStatus, string> = {
   draft:    'Draft',
@@ -45,21 +53,26 @@ export default function HazardousWasteStreamDetailPage() {
   const params = useParams<{ id: string }>()
   const { tenant } = useTenant()
   const { facility } = useFacility()
+  const tenantId = tenant?.id
+  const paramsId = params?.id
   const [stream, setStream] = useState<HazardousWasteStreamRow | null>(null)
   const [error, setError]   = useState<string | null>(null)
   const [busy, setBusy]     = useState(false)
+  const [editingSymbols, setEditingSymbols] = useState(false)
+  const [symbolDraft, setSymbolDraft]       = useState<HazardSymbolValue | null>(null)
+  const [savingSymbols, setSavingSymbols]   = useState(false)
 
   const load = useCallback(async () => {
-    if (!tenant?.id || !params?.id) return
+    if (!tenantId || !paramsId) return
     setError(null)
     const { data: { session } } = await supabase.auth.getSession()
-    const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+    const headers: Record<string, string> = { 'x-active-tenant': tenantId }
     if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
-    const res = await fetch(`/api/hazardous-waste/streams/${params.id}`, { headers })
+    const res = await fetch(`/api/hazardous-waste/streams/${paramsId}`, { headers })
     const json = await res.json()
     if (!res.ok) { setError(json.error ?? 'Failed to load'); return }
     setStream(json.stream)
-  }, [tenant?.id, params?.id])
+  }, [tenantId, paramsId])
 
   useEffect(() => { void load() }, [load])
 
@@ -106,6 +119,35 @@ export default function HazardousWasteStreamDetailPage() {
     setBusy(false)
     if (!res.ok) { setError(json.error ?? 'Failed to update'); return }
     setStream(json.stream)
+  }
+
+  function startEditingSymbols() {
+    if (!stream) return
+    setSymbolDraft(hazardSymbolsFromStream(stream))
+    setEditingSymbols(true)
+  }
+
+  async function saveSymbols() {
+    if (!tenant?.id || !stream || !symbolDraft) return
+    setSavingSymbols(true)
+    setError(null)
+    const { data: { session } } = await supabase.auth.getSession()
+    const headers: Record<string, string> = {
+      'x-active-tenant': tenant.id,
+      'content-type':    'application/json',
+    }
+    if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
+    const res = await fetch(`/api/hazardous-waste/streams/${stream.id}`, {
+      method:  'PATCH',
+      headers,
+      body:    JSON.stringify(hazardSymbolsToBody(symbolDraft)),
+    })
+    const json = await res.json()
+    setSavingSymbols(false)
+    if (!res.ok) { setError(json.error ?? 'Failed to save hazard symbols'); return }
+    setStream(json.stream)
+    setEditingSymbols(false)
+    setSymbolDraft(null)
   }
 
   if (error) {
@@ -170,11 +212,57 @@ export default function HazardousWasteStreamDetailPage() {
         </div>
       </section>
 
+      <section className="rounded-lg border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Hazard symbols</h2>
+          {!editingSymbols && (
+            <button
+              type="button"
+              onClick={startEditingSymbols}
+              className="text-xs font-semibold text-brand-navy hover:underline"
+            >
+              Edit symbols
+            </button>
+          )}
+        </div>
+
+        {editingSymbols && symbolDraft ? (
+          <div className="space-y-4">
+            <HazardSymbolFields value={symbolDraft} onChange={setSymbolDraft} disabled={savingSymbols} />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void saveSymbols()}
+                disabled={savingSymbols}
+                className="inline-flex items-center gap-2 rounded-md bg-brand-navy px-4 py-2 text-sm font-semibold text-white hover:bg-brand-navy/90 disabled:opacity-60"
+              >
+                {savingSymbols && <Loader2 className="h-4 w-4 animate-spin" />}
+                Save symbols
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEditingSymbols(false); setSymbolDraft(null) }}
+                disabled={savingSymbols}
+                className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <StreamSymbolDetail source={stream} />
+        )}
+      </section>
+
+      {!stream.archived_at && <PrintContainerLabelPanel streamId={stream.id} />}
+
       <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
         {stream.description && <Detail label="Description" value={stream.description} wide />}
         {stream.physical_state && <Detail label="Physical state" value={stream.physical_state} />}
         {stream.hazards.length > 0 && <Detail label="Hazards" value={stream.hazards.join(', ')} />}
         {stream.waste_codes.length > 0 && <WasteCodesDetail codes={stream.waste_codes} />}
+        {stream.waste_codes.length > 0 && <Detail label="Waste codes" value={stream.waste_codes.join(', ')} />}
+        {stream.dot_proper_shipping_name && <Detail label="Proper shipping name" value={stream.dot_proper_shipping_name} />}
         {stream.determination_basis && <Detail label="Determination basis" value={stream.determination_basis} wide />}
         {stream.review_due_date && <Detail label="Review due" value={stream.review_due_date} />}
         {stream.notes && <Detail label="Notes" value={stream.notes} wide />}

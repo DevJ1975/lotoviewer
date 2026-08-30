@@ -13,12 +13,16 @@ interface Props {
   initialDepartment?: string | null
 }
 
+// Chosen so it can never collide with a real department name.
+const ALL_DEPARTMENTS = '\u0000all'
+
 export default function BatchPrintModal({ open, onClose, equipment, initialDepartment }: Props) {
   const [dept, setDept]           = useState<string>('')
   const [busy, setBusy]           = useState(false)
   const [progress, setProgress]   = useState(0)
   const [phase, setPhase]         = useState<'idle' | 'fetching' | 'rendering' | 'done' | 'error'>('idle')
   const [errorMsg, setErrorMsg]   = useState<string | null>(null)
+  const [photoTally, setPhotoTally] = useState<{ referenced: number; embedded: number } | null>(null)
   const { tenantId }              = useTenant()
   // Batch placard PDFs can take 30–60s for a full department. Hold the
   // screen awake so the tablet doesn't sleep mid-render.
@@ -26,7 +30,7 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
 
   // Ref keeps onClose current without forcing the keydown effect to re-bind
   const onCloseRef = useRef(onClose)
-  onCloseRef.current = onClose
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
 
   // Track timers so we can clear them on unmount / re-open
   const autoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -45,6 +49,7 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
       setPhase('idle')
       setProgress(0)
       setErrorMsg(null)
+      setPhotoTally(null)
     }
   }, [open, initialDepartment])
 
@@ -59,9 +64,12 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
     }
   }, [open, busy])
 
+  // Sentinel for the whole site. Empty string already means "nothing picked
+  // yet", so the all-departments choice needs a value of its own.
+  const isAll = dept === ALL_DEPARTMENTS
   const deptEquipment = useMemo(
-    () => (dept ? equipment.filter(e => e.department === dept) : []),
-    [equipment, dept],
+    () => (isAll ? equipment : dept ? equipment.filter(e => e.department === dept) : []),
+    [equipment, dept, isAll],
   )
   const withPhotos = useMemo(
     () => deptEquipment.filter(e => e.has_equip_photo || e.has_iso_photo).length,
@@ -81,19 +89,40 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
     setErrorMsg(null)
 
     try {
-      // One query for all dept equipment — previously fired N requests in parallel.
+      // Paged, because PostgREST caps a response at 1,000 rows and this
+      // tenant has more energy steps than that across the whole site. An
+      // unpaged read silently returns the first page, and a placard whose
+      // steps fell off the end prints with an incomplete isolation
+      // procedure — the one failure this document cannot have.
+      //
+      // The whole-site read also drops the equipment_id filter: 499 ids in
+      // an `in.()` makes a URL long enough to be refused, and every step
+      // belongs to some placard in the batch anyway.
       const equipmentIds = deptEquipment.map(eq => eq.equipment_id)
-      const { data: allSteps, error: stepsError } = await supabase
-        .from('loto_energy_steps')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .in('equipment_id', equipmentIds)
-        .order('energy_type', { ascending: true })
-        .order('step_number', { ascending: true })
-      if (stepsError) throw stepsError
+      const wanted = new Set(equipmentIds)
+      const PAGE = 1000
+      const allSteps: LotoEnergyStep[] = []
+      for (let from = 0; ; from += PAGE) {
+        let query = supabase
+          .from('loto_energy_steps')
+          .select('*')
+          .eq('tenant_id', tenantId)
+        if (!isAll) query = query.in('equipment_id', equipmentIds)
+        const { data, error: stepsError } = await query
+          .order('equipment_id', { ascending: true })
+          .order('energy_type', { ascending: true })
+          .order('step_number', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, from + PAGE - 1)
+        if (stepsError) throw stepsError
+        const rows = (data as LotoEnergyStep[] | null) ?? []
+        allSteps.push(...rows)
+        if (rows.length < PAGE) break
+      }
 
       const stepsByEquipment = new Map<string, LotoEnergyStep[]>()
-      for (const step of (allSteps as LotoEnergyStep[] | null) ?? []) {
+      for (const step of allSteps) {
+        if (!wanted.has(step.equipment_id)) continue
         const list = stepsByEquipment.get(step.equipment_id) ?? []
         list.push(step)
         stepsByEquipment.set(step.equipment_id, list)
@@ -110,14 +139,21 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
         import('@/lib/pdfPlacard'),
         import('@/lib/pdfUtils'),
       ])
-      const bytes = await generateBatchPlacardPdf(items, (done: number, total: number) => {
+      const { bytes, photos } = await generateBatchPlacardPdf(items, (done: number, total: number) => {
         setProgress(Math.round((done / total) * 100))
       })
+      setPhotoTally(photos)
 
-      downloadPdf(bytes, `${dept}_LOTO_Placards.pdf`)
+      const label = isAll ? 'All_Departments' : dept.replace(/[^\w -]+/g, '-')
+      downloadPdf(bytes, `${label}_LOTO_Placards.pdf`)
       setPhase('done')
       if (autoCloseTimer.current) clearTimeout(autoCloseTimer.current)
-      autoCloseTimer.current = setTimeout(() => onCloseRef.current(), 900)
+      // Stay open when photos are missing. Auto-closing would flash the
+      // warning past the one person who can act on it, which is the same
+      // silent failure as not reporting it at all.
+      if (photos.embedded >= photos.referenced) {
+        autoCloseTimer.current = setTimeout(() => onCloseRef.current(), 900)
+      }
     } catch {
       setPhase('error')
       setErrorMsg('Could not generate batch PDF. Please try again.')
@@ -135,7 +171,7 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
     >
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="px-6 pt-5 pb-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Batch Print by Department</h2>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Batch Print Placards</h2>
           <button
             type="button"
             onClick={onClose}
@@ -158,6 +194,9 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
               className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy transition-colors"
             >
               <option value="">Select a department…</option>
+              <option value={ALL_DEPARTMENTS}>
+                All departments ({equipment.length} placards)
+              </option>
               {departments.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
           </div>
@@ -172,6 +211,13 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                 Output: {deptEquipment.length * 2} pages (English + Spanish per item)
               </p>
+              {isAll && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
+                  The whole site renders every photo into one file — expect
+                  several minutes and a large PDF. Keep this tab open; the
+                  screen is held awake while it runs.
+                </p>
+              )}
             </div>
           )}
 
@@ -192,9 +238,20 @@ export default function BatchPrintModal({ open, onClose, equipment, initialDepar
             </div>
           )}
 
-          {phase === 'done' && (
+          {phase === 'done' && photoTally && photoTally.embedded < photoTally.referenced && (
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 rounded-lg px-3 py-2">
+              PDF downloaded, but {photoTally.referenced - photoTally.embedded} of{' '}
+              {photoTally.referenced} photos could not be loaded and print as
+              “— No photo —”. Check your connection and generate again before
+              posting these.
+            </p>
+          )}
+
+          {phase === 'done' && (!photoTally || photoTally.embedded >= photoTally.referenced) && (
             <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg px-3 py-2">
-              ✓ PDF downloaded.
+              ✓ PDF downloaded{photoTally && photoTally.referenced > 0
+                ? ` — all ${photoTally.referenced} photos embedded.`
+                : '.'}
             </p>
           )}
 

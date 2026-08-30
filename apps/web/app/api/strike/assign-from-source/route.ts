@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
-import { requireTenantAdmin } from '@/lib/auth/tenantGate'
+import { requireStrikeAdmin } from '@/lib/strike/gate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { STRIKE_REQUIREMENT_SOURCE_TYPES, type StrikeRequirementSourceType } from '@soteria/core/strike'
 
@@ -16,7 +16,7 @@ interface Body {
 }
 
 export async function POST(req: Request) {
-  const gate = await requireTenantAdmin(req)
+  const gate = await requireStrikeAdmin(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   let body: Body
@@ -80,8 +80,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ assignments_created: data?.length ?? 0, assignments: data ?? [] }, { status: 201 })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
     Sentry.captureException(e, { tags: { route: 'strike/assign-from-source' } })
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 })
   }
 }

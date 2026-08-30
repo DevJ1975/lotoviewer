@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { inferUploadHint } from '@/app/superadmin/policies/page'
+import { inferUploadHint } from '@/lib/policyUploadHints'
 
 // Pattern-match unit tests for the policies-upload error hint.
 // Triggers operators see most often when uploading regulatory PDFs:

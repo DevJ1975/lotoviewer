@@ -43,6 +43,21 @@ export function stagingReviewPhotoPath(
   return `staging/${reviewLinkId}/${sanitizeId(equipmentId)}/${slot}-${timestamp}.jpg`
 }
 
+// Watermarked manufacturer/reference ISO placeholder image (migration 217 +
+// the multi-agent audit). Attached to the ISO slot when the real isolation
+// point can't be confirmed. Tenant-uuid-first so the migration 033 RLS gates
+// writes; the _PLACEHOLDER_ infix makes it obvious in the bucket that this is
+// NOT a verified field photo.
+//   loto-photos/<tenant_uuid>/<sanitized_id>/<sanitized_id>_ISO_PLACEHOLDER_<ts>.jpg
+export function placeholderIsoPhotoPath(
+  tenantId: string,
+  equipmentId: string,
+  timestamp: number = Date.now(),
+): string {
+  const id = sanitizeId(equipmentId)
+  return `${tenantId}/${id}/${id}_ISO_PLACEHOLDER_${timestamp}.jpg`
+}
+
 // Generated placard PDF — one per equipment, overwritten on regenerate.
 //   loto-photos/<tenant_uuid>/<sanitized_id>/<sanitized_id>_placard.pdf
 export function placardPdfPath(tenantId: string, equipmentId: string): string {
@@ -104,6 +119,19 @@ export function hazWasteInspectionPhotoPath(
   timestamp: number = Date.now(),
 ): string {
   return `${tenantId}/hazardous-waste/inspections/${sanitizeId(draftId)}/${timestamp}.jpg`
+}
+
+// EM-385 compliance evidence document (APP, AHA, plans, certs, permits, …).
+// One register item can carry several versions, so the register_item_id folder
+// groups them. Tenant-uuid-first so the migration 033 RLS gates writes.
+//   loto-photos/<tenant_uuid>/em385/<sanitized_register_item_id>/<ts>_<sanitized_file_name>
+export function em385DocumentPath(
+  tenantId: string,
+  registerItemId: string,
+  fileName: string,
+  timestamp: number = Date.now(),
+): string {
+  return `${tenantId}/em385/${sanitizeId(registerItemId)}/${timestamp}_${sanitizeId(fileName)}`
 }
 
 // Hazardous-waste accumulation-area reference photo (signage, layout,

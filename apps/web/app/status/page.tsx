@@ -1,18 +1,30 @@
 'use client'
 
 import { useEffect, useMemo, useState, useCallback } from 'react'
+import dynamic from 'next/dynamic'
 import { supabase } from '@/lib/supabase'
 import type { Equipment } from '@soteria/core/types'
 import { loadAllEquipment } from '@/lib/queries/equipment'
 import StatsCards from '@/components/StatsCards'
 import ProgressRing from '@/components/ProgressRing'
-import DepartmentChart from '@/components/DepartmentChart'
 import PeriodicInspectionWidget from '@/components/loto/PeriodicInspectionWidget'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { buildDeptStats } from '@/lib/utils'
 import { useVisibilityRefetch } from '@/hooks/useVisibilityRefetch'
 import { StatusSkeleton } from '@/components/Skeleton'
 import { useTenant } from '@/components/TenantProvider'
+
+// recharts (~150KB gz) is the heaviest dependency on this page and only
+// renders the one department bar chart. Lazy-load it client-side so it leaves
+// the route's first-load JS; the chart fills in after the metrics resolve.
+const DepartmentChart = dynamic(() => import('@/components/DepartmentChart'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[380px] items-center justify-center text-sm text-gray-400">
+      Loading chart…
+    </div>
+  ),
+})
 
 export default function StatusPage() {
   const [equipment, setEquipment]     = useState<Equipment[]>([])

@@ -1,8 +1,19 @@
-import { PDFDocument, PDFFont, PDFPage, RGB, StandardFonts, degrees, rgb } from 'pdf-lib'
+import { PDFDocument, PDFFont, PDFImage, PDFPage, RGB, StandardFonts, degrees, rgb } from 'pdf-lib'
 import { ENERGY_CODES, energyCodeFor, hexToRgb01 } from '@soteria/core/energyCodes'
 import { PLACARD_TEXT } from '@/lib/placardText'
 import { type Annotation, parseAnnotations } from '@/lib/photoAnnotations'
+import { embedQrCode } from '@/lib/pdfShared'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
+
+// Absolute URL for a machine's read-only public placard view (/qr/{qr_token}),
+// the target the placard's QR encodes. Returns null when the equipment has no
+// token, so the QR is simply skipped. Base-URL precedence matches the rest of
+// the app (NEXT_PUBLIC_APP_URL, else the production host).
+export function placardQrUrl(qrToken: string | null | undefined): string | null {
+  if (!qrToken) return null
+  const base = (process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, '')) || 'https://soteriafield.app'
+  return `${base}/qr/${qrToken}`
+}
 
 // ── Constants ───────────────────────────────────────────────────────────────
 const PAGE_W = 792
@@ -269,6 +280,13 @@ export interface PlacardPageOptions {
   isoAnnotations?:   Annotation[]
   dateStr:          string
   draft:            boolean  // show "BORRADOR — NO REVISADO" watermark
+  // Pre-embedded QR for the machine's /qr/{qr_token} view. Embedded once per
+  // document (same image on both language pages); null when unavailable, in
+  // which case the header simply omits it.
+  qrImage?:         PDFImage | null
+  // Pre-embedded tenant logo (PNG/JPEG). Embedded once per document; null
+  // falls back to the "SL" badge.
+  logoImage?:       PDFImage | null
 }
 
 export function drawPlacardPage(
@@ -280,7 +298,7 @@ export function drawPlacardPage(
     language, equipment, steps,
     equipImage, isoImage,
     equipAnnotations = [], isoAnnotations = [],
-    dateStr, draft,
+    dateStr, draft, qrImage = null, logoImage = null,
   } = opts
   const isEn = language === 'en'
   const { regular, bold } = fonts
@@ -319,39 +337,72 @@ export function drawPlacardPage(
     x: 0, y: Y_YELLOW_BOT, width: PAGE_W, height: 44,
     color: COLOR_YELLOW_BAND,
   })
-  // Logo badge left (simple navy square with "SL" text)
-  page.drawRectangle({
-    x: 12, y: Y_YELLOW_BOT + 7, width: 30, height: 30,
-    color: COLOR_NAVY_HEADER,
-  })
-  page.drawText('SL', {
-    x: 20, y: Y_YELLOW_BOT + 16, size: 13, font: bold, color: COLOR_YELLOW_BAND,
-  })
-  // Title centered
+  // Tenant logo top-left, scaled to fit a box (aspect preserved), on a white
+  // tile so a dark/transparent mark reads against the yellow band. Falls back
+  // to the "SL" navy badge when no logo is supplied or embedding failed.
+  if (logoImage) {
+    const BOX_H = 32, BOX_MAX_W = 150, BOX_X = 12, BOX_Y = Y_YELLOW_BOT + 6
+    const scale = Math.min(BOX_H / logoImage.height, BOX_MAX_W / logoImage.width)
+    const lw = logoImage.width * scale, lh = logoImage.height * scale
+    page.drawRectangle({ x: BOX_X - 2, y: BOX_Y - 2, width: lw + 4, height: lh + 4, color: COLOR_WHITE })
+    page.drawImage(logoImage, { x: BOX_X, y: BOX_Y + (BOX_H - lh) / 2, width: lw, height: lh })
+  } else {
+    page.drawRectangle({
+      x: 12, y: Y_YELLOW_BOT + 7, width: 30, height: 30, color: COLOR_NAVY_HEADER,
+    })
+    page.drawText('SL', {
+      x: 20, y: Y_YELLOW_BOT + 16, size: 13, font: bold, color: COLOR_YELLOW_BAND,
+    })
+  }
+  // Title centered (nudged up to leave room for the date/language sub-line)
   const title = PLACARD_TEXT.title[language]
-  const titleW = bold.widthOfTextAtSize(title, 17)
+  const titleW = bold.widthOfTextAtSize(title, 16)
   page.drawText(title, {
-    x: (PAGE_W - titleW) / 2, y: Y_YELLOW_BOT + 15,
-    size: 17, font: bold, color: COLOR_BLACK,
+    x: (PAGE_W - titleW) / 2, y: Y_YELLOW_BOT + 22,
+    size: 16, font: bold, color: COLOR_BLACK,
   })
-  // Date right
+  // QR (top-right) → read-only digital placard at /qr/{qr_token}. The yellow
+  // band is 44pt tall, so a ~40pt code fits with a hair of margin. Drawn on a
+  // white tile (its own quiet zone) so it scans cleanly off the yellow band.
+  // Same code on the EN + ES pages. Skipped (null) if encoding failed.
+  const QR_SIZE = 40
+  const QR_X = PAGE_W - QR_SIZE - 8
+  const QR_Y = Y_YELLOW_BOT + 2
+  if (qrImage) {
+    page.drawRectangle({
+      x: QR_X - 1, y: QR_Y - 1, width: QR_SIZE + 2, height: QR_SIZE + 2,
+      color: COLOR_WHITE,
+    })
+    page.drawImage(qrImage, { x: QR_X, y: QR_Y, width: QR_SIZE, height: QR_SIZE })
+    // Two-line caption to the left of the QR, right-aligned against it.
+    const capLines = isEn ? ['Scan for', 'digital placard'] : ['Escanee para', 'placa digital']
+    const capRight = QR_X - 4
+    capLines.forEach((line, i) => {
+      const w = bold.widthOfTextAtSize(line, 6)
+      page.drawText(line, {
+        x: capRight - w, y: Y_YELLOW_BOT + 24 - i * 8,
+        size: 6, font: bold, color: COLOR_BLACK,
+      })
+    })
+  }
+  // Centered sub-line under the title: a small language chip + the date, as
+  // one group — keeps the left (logo) and right (QR) corners clear.
+  const subY = Y_YELLOW_BOT + 5
   const dateLabel = isEn ? `Date: ${dateStr}` : `Fecha: ${dateStr}`
-  const dateW = regular.widthOfTextAtSize(dateLabel, 10)
-  page.drawText(dateLabel, {
-    x: PAGE_W - dateW - 14, y: Y_YELLOW_BOT + 17,
-    size: 10, font: regular, color: COLOR_BLACK,
-  })
-  // Small EN/ES tag top-right corner
-  const tagText = isEn ? 'EN' : 'ES'
+  const dateW = regular.widthOfTextAtSize(dateLabel, 9)
+  const CHIP_W = 18, CHIP_GAP = 5
+  const groupX = (PAGE_W - (CHIP_W + CHIP_GAP + dateW)) / 2
   const tagColor = isEn ? COLOR_NAVY_HEADER : COLOR_RED_BLOCK
   page.drawRectangle({
-    x: PAGE_W - 28, y: PAGE_H - 14, width: 22, height: 12,
-    color: tagColor,
-    borderColor: COLOR_WHITE, borderWidth: 0.5,
+    x: groupX, y: subY - 1, width: CHIP_W, height: 11,
+    color: tagColor, borderColor: COLOR_WHITE, borderWidth: 0.5,
   })
-  page.drawText(tagText, {
-    x: PAGE_W - 22, y: PAGE_H - 11,
-    size: 8, font: bold, color: COLOR_WHITE,
+  page.drawText(isEn ? 'EN' : 'ES', {
+    x: groupX + 3.5, y: subY + 1.5, size: 7, font: bold, color: COLOR_WHITE,
+  })
+  page.drawText(dateLabel, {
+    x: groupX + CHIP_W + CHIP_GAP, y: subY + 1,
+    size: 9, font: regular, color: COLOR_BLACK,
   })
 
   // ── 2. Blue bar ──────────────────────────────────────────────────────────
@@ -561,8 +612,29 @@ export function drawPlacardPage(
   const rowCount = Math.max(steps.length, 1)
   const rowH     = Math.max(30, Math.min(80, dataH / rowCount))
 
+  // How many rows physically fit. rowH has a 30pt floor (below that the text
+  // stops being legible at arm's length, which is its own hazard on a posted
+  // placard), so a long procedure cannot simply be squeezed in.
+  //
+  // This used to be left implicit: the loop just stopped when it ran out of
+  // vertical space. On a letter-landscape sheet that is SEVEN steps — step 8
+  // and everything after it vanished with no notice, no marker, and no
+  // warning to whoever printed it. For a lockout placard that is the worst
+  // possible failure: a worker performs every step the sheet shows, reaches
+  // the end, and believes the machine is at zero energy while un-isolated
+  // sources are still live. Machines with electrical, pneumatic, hydraulic,
+  // steam, water and stored-gravity energy routinely exceed seven.
+  //
+  // The remainder still cannot be shown on a fixed-size placard, but it must
+  // never be shown SILENTLY: when the procedure overflows, the last row is
+  // given over to a warning instead of a step, so the sheet declares itself
+  // incomplete.
+  const rowCapacity  = Math.max(1, Math.floor((dataTop - (tableBottom - 2)) / rowH))
+  const overflows    = steps.length > rowCapacity
+  const visibleSteps = overflows ? rowCapacity - 1 : steps.length
+
   let rowY = dataTop
-  for (let i = 0; i < steps.length && rowY - rowH >= tableBottom - 2; i++) {
+  for (let i = 0; i < visibleSteps && rowY - rowH >= tableBottom - 2; i++) {
     const s = rowY - rowH
     if (i % 2 === 1) {
       page.drawRectangle({
@@ -625,6 +697,27 @@ export function drawPlacardPage(
     page.drawLine({ start: { x: MARGIN + colBadgeW + col1W, y: s }, end: { x: MARGIN + colBadgeW + col1W, y: rowY }, thickness: 0.3, color: COLOR_TABLE_BORDER })
 
     rowY = s
+  }
+
+  // Overflow banner, drawn in the row slot the loop deliberately left free.
+  // Red on white at the table's own width so it reads as a warning rather
+  // than another procedure row.
+  if (overflows) {
+    const hidden  = steps.length - visibleSteps
+    const bannerH = Math.min(rowH, Math.max(18, rowY - tableBottom))
+    const bannerY = rowY - bannerH
+    page.drawRectangle({
+      x: MARGIN, y: bannerY, width: PAGE_W - MARGIN * 2, height: bannerH,
+      color: COLOR_RED_BLOCK,
+    })
+    const msg = PLACARD_TEXT.stepsTruncated[language].replace('{n}', String(hidden))
+    const size = 8
+    const w = bold.widthOfTextAtSize(msg, size)
+    page.drawText(sanitizeForWinAnsi(msg), {
+      x: Math.max(MARGIN + 4, (PAGE_W - w) / 2),
+      y: bannerY + bannerH / 2 - size / 2 + 1,
+      size, font: bold, color: COLOR_WHITE,
+    })
   }
 
   if (steps.length === 0) {
@@ -728,6 +821,11 @@ export function drawPlacardPage(
 export interface GeneratePlacardArgs {
   equipment: Equipment
   steps:     LotoEnergyStep[]
+  // Tenant logo as pdf-lib-embeddable bytes (PNG or JPEG — convert WebP first;
+  // pdf-lib can't decode WebP). Drawn top-left; omitted (→ "SL" badge) when
+  // absent or unembeddable. The caller converts, so the generator stays
+  // browser/server-agnostic.
+  tenantLogoPng?: Uint8Array | null
 }
 
 async function addPlacardPages(
@@ -735,15 +833,42 @@ async function addPlacardPages(
   fonts: { regular: PDFFont; bold: PDFFont },
   equipment: Equipment,
   steps: LotoEnergyStep[],
-) {
+  tenantLogoPng?: Uint8Array | null,
+): Promise<PhotoTally> {
   const [equipImage, isoImage] = await Promise.all([
     fetchAndEmbedImage(pdfDoc, equipment.equip_photo_url),
     fetchAndEmbedImage(pdfDoc, equipment.iso_photo_url),
   ])
 
+  // A photo that fails to fetch renders as the "no photo" slot, which looks
+  // identical to a machine that never had one. On a batch of hundreds that
+  // difference is invisible, so it is counted and reported to the caller.
+  const tally: PhotoTally = { referenced: 0, embedded: 0 }
+  for (const [url, image] of [
+    [equipment.equip_photo_url, equipImage],
+    [equipment.iso_photo_url, isoImage],
+  ] as const) {
+    if (!url) continue
+    tally.referenced += 1
+    if (image) tally.embedded += 1
+  }
+
   // Parse once; reuse on both EN and ES pages.
   const equipAnnotations = parseAnnotations(equipment.annotations)
   const isoAnnotations   = parseAnnotations(equipment.iso_annotations)
+
+  // Embed the placard's /qr QR once and reuse on both pages — embedding twice
+  // would bloat the PDF. Same URL for EN + ES (the /qr view is one page).
+  // embedQrCode swallows failures (returns null) so the placard still renders.
+  const qrUrl = placardQrUrl(equipment.qr_token)
+  const qrImage = qrUrl ? await embedQrCode(pdfDoc, qrUrl, 'placard') : null
+
+  // Embed the tenant logo once. Never let a bad logo break the placard — on
+  // any failure we fall back to the "SL" badge.
+  let logoImage: PDFImage | null = null
+  if (tenantLogoPng && tenantLogoPng.byteLength > 0) {
+    try { logoImage = await pdfDoc.embedPng(tenantLogoPng) } catch { logoImage = null }
+  }
 
   const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
@@ -751,22 +876,24 @@ async function addPlacardPages(
   drawPlacardPage(pageEn, fonts, {
     language: 'en', equipment, steps, equipImage, isoImage,
     equipAnnotations, isoAnnotations,
-    dateStr, draft: false,
+    dateStr, draft: false, qrImage, logoImage,
   })
 
   const pageEs = pdfDoc.addPage([PAGE_W, PAGE_H])
   drawPlacardPage(pageEs, fonts, {
     language: 'es', equipment, steps, equipImage, isoImage,
     equipAnnotations, isoAnnotations,
-    dateStr, draft: equipment.spanish_reviewed === false,
+    dateStr, draft: equipment.spanish_reviewed === false, qrImage, logoImage,
   })
+
+  return tally
 }
 
-export async function generatePlacardPdf({ equipment, steps }: GeneratePlacardArgs): Promise<Uint8Array> {
+export async function generatePlacardPdf({ equipment, steps, tenantLogoPng }: GeneratePlacardArgs): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create()
   const regular = await pdfDoc.embedFont(StandardFonts.Helvetica)
   const bold    = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
-  await addPlacardPages(pdfDoc, { regular, bold }, equipment, steps)
+  await addPlacardPages(pdfDoc, { regular, bold }, equipment, steps, tenantLogoPng)
   return pdfDoc.save()
 }
 
@@ -783,7 +910,7 @@ export async function generatePlacardPdf({ equipment, steps }: GeneratePlacardAr
 // full-size single-language form, generatePlacardPdf above is still
 // the canonical generator.
 export async function generateBilingualPlacardPdf(
-  { equipment, steps }: GeneratePlacardArgs,
+  { equipment, steps, tenantLogoPng }: GeneratePlacardArgs,
 ): Promise<Uint8Array> {
   // Step 1: render EN + ES at full size into a temporary doc. Reuse
   // addPlacardPages so any future fix to the per-language layout
@@ -791,7 +918,7 @@ export async function generateBilingualPlacardPdf(
   const tmp = await PDFDocument.create()
   const tmpRegular = await tmp.embedFont(StandardFonts.Helvetica)
   const tmpBold    = await tmp.embedFont(StandardFonts.HelveticaBold)
-  await addPlacardPages(tmp, { regular: tmpRegular, bold: tmpBold }, equipment, steps)
+  await addPlacardPages(tmp, { regular: tmpRegular, bold: tmpBold }, equipment, steps, tenantLogoPng)
   // Tmp now has [EN, ES].
 
   // Step 2: embed both pages into the output doc, place side-by-side.
@@ -824,23 +951,37 @@ export async function generateBilingualPlacardPdf(
   return doc.save()
 }
 
+/** How many of a placard's referenced photos actually made it into the PDF. */
+export interface PhotoTally {
+  referenced: number
+  embedded:   number
+}
+
 export interface BatchItem {
   equipment: Equipment
   steps:     LotoEnergyStep[]
 }
 
+export interface BatchResult {
+  bytes:  Uint8Array
+  photos: PhotoTally
+}
+
 export async function generateBatchPlacardPdf(
   items: BatchItem[],
   onProgress?: (done: number, total: number) => void,
-): Promise<Uint8Array> {
+): Promise<BatchResult> {
   const pdfDoc  = await PDFDocument.create()
   const regular = await pdfDoc.embedFont(StandardFonts.Helvetica)
   const bold    = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
   const fonts   = { regular, bold }
 
+  const photos: PhotoTally = { referenced: 0, embedded: 0 }
   for (let i = 0; i < items.length; i++) {
-    await addPlacardPages(pdfDoc, fonts, items[i].equipment, items[i].steps)
+    const tally = await addPlacardPages(pdfDoc, fonts, items[i].equipment, items[i].steps)
+    photos.referenced += tally.referenced
+    photos.embedded   += tally.embedded
     onProgress?.(i + 1, items.length)
   }
-  return pdfDoc.save()
+  return { bytes: await pdfDoc.save(), photos }
 }

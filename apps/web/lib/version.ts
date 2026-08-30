@@ -16,8 +16,19 @@
 //   2. Edit apps/web/package.json to match
 //   3. Author a release note at /superadmin/release-notes
 //   4. Commit + push; Vercel rebuilds + redeploys
+//   5. Tag the merge commit once it lands on main:
+//        git tag -a v<version> <sha> -m "v<version>" && git push origin v<version>
+//
+// Step 5 is here because it was missing, and following the other four
+// perfectly still produced no tag: v1.9.0 through v1.17.0 all shipped
+// untagged, so `git describe` and "what's deployed?" had nothing to answer
+// with. Tags are cheap; reconstructing which commit was v1.13.0 a year later
+// is not.
+//
+// (v1.12.0 and v1.14.0 were never released — VERSION never held either value.
+// The sequence skips them; that is not a gap in the tags.)
 
-export const VERSION = '1.9.0'
+export const VERSION = '1.18.0'
 
 const COMMIT_RAW = process.env.NEXT_PUBLIC_COMMIT_SHA
                 ?? process.env.VERCEL_GIT_COMMIT_SHA

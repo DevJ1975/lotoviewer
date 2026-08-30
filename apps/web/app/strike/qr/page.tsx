@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import QRCode from 'qrcode'
 import { ArrowLeft, Loader2, QrCode } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
@@ -39,6 +38,9 @@ export default function StrikeQrPage() {
     const rows = (data ?? []) as ModuleRow[]
     setModules(rows)
     const origin = typeof window === 'undefined' ? '' : window.location.origin
+    // Lazy-load qrcode (~30KB gz) off the page's first-load JS; it's only
+    // needed once module rows arrive.
+    const QRCode = (await import('qrcode')).default
     const nextCodes: Record<string, string> = {}
     await Promise.all(rows.map(async module => {
       nextCodes[module.id] = await QRCode.toDataURL(`${origin}/strike/${module.slug}`, {

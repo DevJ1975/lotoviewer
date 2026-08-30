@@ -5,7 +5,7 @@ import {
   MODEL_PRICING,
   type InvocationRow,
 } from '@/lib/ai/usageAggregator'
-import { SONNET, HAIKU } from '@/lib/ai/models'
+import { SONNET, HAIKU, OPUS } from '@/lib/ai/models'
 
 // Cost math + roll-up tests for the AI usage dashboard. Pure
 // function — no DB, no network. If Anthropic changes pricing,
@@ -17,6 +17,9 @@ describe('MODEL_PRICING', () => {
   })
   it('Haiku 4.5 is $1/MTok in, $5/MTok out', () => {
     expect(MODEL_PRICING[HAIKU]).toEqual({ inputPerMTok: 1, outputPerMTok: 5 })
+  })
+  it('Opus 4.8 is $5/MTok in, $25/MTok out', () => {
+    expect(MODEL_PRICING[OPUS]).toEqual({ inputPerMTok: 5, outputPerMTok: 25 })
   })
 })
 

@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   summarizeObservations,
   bandRatio,
+  tallyBehaviorTags,
+  countRapidReviews,
   type BbsObservationV2Row,
 } from '@soteria/core/bbsMetricsV2'
 
@@ -17,6 +19,11 @@ function obs(over: Partial<BbsObservationV2Row> = {}): BbsObservationV2Row {
     follow_up_required:     false,
     follow_up_completed_at: null,
     feedback_given_at:      null,
+    behavior_tags:             null,
+    recognized:                false,
+    rapid_review_required:     false,
+    rapid_review_completed_at: null,
+    action_team_id:            null,
     created_at: '2026-05-15T12:00:00.000Z',
     ...over,
   }
@@ -31,6 +38,8 @@ describe('summarizeObservations', () => {
     expect(s.safeToUnsafeRatio).toBeNull()
     expect(s.followUpsDue).toBe(0)
     expect(s.feedbackDelivered).toBe(0)
+    expect(s.recognizedCount).toBe(0)
+    expect(s.rapidReviewsDue).toBe(0)
   })
 
   it('counts each category separately', () => {
@@ -83,6 +92,98 @@ describe('summarizeObservations', () => {
       obs({ feedback_given_at: '2026-05-15T14:00:00.000Z' }),
     ]
     expect(summarizeObservations(rows).feedbackDelivered).toBe(2)
+  })
+
+  it('counts recognized safe behaviors', () => {
+    const rows: BbsObservationV2Row[] = [
+      obs({ category: 'safe_behavior', recognized: true }),
+      obs({ category: 'safe_behavior', recognized: true }),
+      obs({ category: 'safe_behavior', recognized: false }),
+    ]
+    expect(summarizeObservations(rows).recognizedCount).toBe(2)
+  })
+
+  it('counts only rapid reviews that are required and not yet completed', () => {
+    const rows: BbsObservationV2Row[] = [
+      obs({ rapid_review_required: true,  rapid_review_completed_at: null }),                       // due
+      obs({ rapid_review_required: true,  rapid_review_completed_at: '2026-05-15T13:00:00.000Z' }), // done
+      obs({ rapid_review_required: false, rapid_review_completed_at: null }),                       // not required
+    ]
+    expect(summarizeObservations(rows).rapidReviewsDue).toBe(1)
+  })
+})
+
+describe('tallyBehaviorTags', () => {
+  it('seeds every catalog key at zero on empty input', () => {
+    const t = tallyBehaviorTags([])
+    expect(t.ppe).toBe(0)
+    expect(t.line_of_fire).toBe(0)
+    expect(t.housekeeping).toBe(0)
+  })
+
+  it('accumulates counts across rows with multiple tags', () => {
+    const rows: BbsObservationV2Row[] = [
+      obs({ behavior_tags: ['ppe', 'housekeeping'] }),
+      obs({ behavior_tags: ['ppe'] }),
+      obs({ behavior_tags: null }),
+    ]
+    const t = tallyBehaviorTags(rows)
+    expect(t.ppe).toBe(2)
+    expect(t.housekeeping).toBe(1)
+    expect(t.ergonomics).toBe(0)
+  })
+
+  it('ignores tags that are not in the catalog', () => {
+    const rows: BbsObservationV2Row[] = [
+      obs({ behavior_tags: ['ppe', 'retired_tag_key'] }),
+    ]
+    const t = tallyBehaviorTags(rows)
+    expect(t.ppe).toBe(1)
+    expect(Object.keys(t)).not.toContain('retired_tag_key')
+  })
+})
+
+describe('countRapidReviews', () => {
+  const NOW = new Date('2026-05-16T12:00:00.000Z')
+
+  it('excludes reviews that are not required', () => {
+    const rows = [obs({ rapid_review_required: false })]
+    expect(countRapidReviews(rows, NOW)).toEqual({ due: 0, overdue: 0 })
+  })
+
+  it('excludes completed reviews', () => {
+    const rows = [obs({ rapid_review_required: true, rapid_review_completed_at: '2026-05-16T01:00:00.000Z' })]
+    expect(countRapidReviews(rows, NOW)).toEqual({ due: 0, overdue: 0 })
+  })
+
+  it('counts a fresh review as due but not overdue', () => {
+    // created 1h before NOW, well within the 24h SLA
+    const rows = [obs({ rapid_review_required: true, created_at: '2026-05-16T11:00:00.000Z' })]
+    expect(countRapidReviews(rows, NOW)).toEqual({ due: 1, overdue: 0 })
+  })
+
+  it('counts an aged review as due AND overdue', () => {
+    // created 25h before NOW, past the 24h SLA
+    const rows = [obs({ rapid_review_required: true, created_at: '2026-05-15T11:00:00.000Z' })]
+    expect(countRapidReviews(rows, NOW)).toEqual({ due: 1, overdue: 1 })
+  })
+
+  it('treats the exact 24h boundary as not yet overdue', () => {
+    // created exactly 24h before NOW — strictly greater than SLA is overdue
+    const rows = [obs({ rapid_review_required: true, created_at: '2026-05-15T12:00:00.000Z' })]
+    expect(countRapidReviews(rows, NOW)).toEqual({ due: 1, overdue: 0 })
+  })
+
+  it('fails safe on an unparseable created_at: due but never overdue', () => {
+    const rows = [obs({ rapid_review_required: true, created_at: 'not-a-date' })]
+    expect(countRapidReviews(rows, NOW)).toEqual({ due: 1, overdue: 0 })
+  })
+
+  it('respects a custom SLA window', () => {
+    // created 2h before NOW; overdue under a 1h SLA, fine under 24h
+    const rows = [obs({ rapid_review_required: true, created_at: '2026-05-16T10:00:00.000Z' })]
+    expect(countRapidReviews(rows, NOW, 1)).toEqual({ due: 1, overdue: 1 })
+    expect(countRapidReviews(rows, NOW, 24)).toEqual({ due: 1, overdue: 0 })
   })
 })
 

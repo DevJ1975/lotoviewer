@@ -117,7 +117,7 @@ describe('My Safety Readiness rules', () => {
       expect(readiness?.nextBestAction).toMatch(/Assign a current position/i)
       expect(readiness?.training).toEqual([])
       expect(readiness?.equipmentBadges).toEqual([])
-      expect(readiness?.adminLinks.map(l => l.id)).toEqual(['position', 'training', 'equipment'])
+      expect(readiness?.adminLinks.map(l => l.id)).toEqual(['position', 'training', 'matrix', 'equipment'])
       warn.mockRestore()
     })
 
@@ -207,7 +207,7 @@ describe('My Safety Readiness rules', () => {
 
   describe('admin edit path', () => {
     it('returns manage links for admins', () => {
-      expect(buildAdminLinks(true).map(l => l.id)).toEqual(['position', 'training', 'equipment'])
+      expect(buildAdminLinks(true).map(l => l.id)).toEqual(['position', 'training', 'matrix', 'equipment'])
     })
 
     it('hides manage links for non-admin workers', () => {

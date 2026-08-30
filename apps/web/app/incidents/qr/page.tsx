@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import QRCode from 'qrcode'
 import {
   ArrowLeft, AlertTriangle, Check, Copy, Download, Loader2, Pencil, Plus,
   Power, Printer, Search, Settings2, ShieldCheck, Trash2,
@@ -440,11 +439,21 @@ function TokenRow({
     [token.token],
   )
 
+  // qrcode (~30KB gz) is lazy-loaded so it stays out of this admin page's
+  // first-load JS; the row shows a skeleton until the SVG resolves.
   useEffect(() => {
     if (typeof window === 'undefined') return
-    QRCode.toString(reportUrl, { type: 'svg', width: 200, ...QR_OPTIONS })
-      .then(setQrSvg)
-      .catch(() => setQrSvg(null))
+    let cancelled = false
+    void (async () => {
+      try {
+        const QRCode = (await import('qrcode')).default
+        const svg = await QRCode.toString(reportUrl, { type: 'svg', width: 200, ...QR_OPTIONS })
+        if (!cancelled) setQrSvg(svg)
+      } catch {
+        if (!cancelled) setQrSvg(null)
+      }
+    })()
+    return () => { cancelled = true }
   }, [reportUrl])
 
   function printPoster() {
@@ -842,12 +851,14 @@ function DownloadMenu({ url, label }: { url: string; label: string }) {
 
   async function downloadPng() {
     setOpen(false)
+    const QRCode = (await import('qrcode')).default
     const dataUrl = await QRCode.toDataURL(url, { width: 1024, ...QR_OPTIONS })
     triggerDownload(dataUrl, `qr-${slug(label)}.png`)
   }
 
   async function downloadSvg() {
     setOpen(false)
+    const QRCode = (await import('qrcode')).default
     const svg = await QRCode.toString(url, { type: 'svg', width: 1024, ...QR_OPTIONS })
     const blob = new Blob([svg], { type: 'image/svg+xml' })
     const obj  = URL.createObjectURL(blob)
