@@ -241,6 +241,25 @@
       "sources":  ["apps/web/app/near-miss/**"]
     },
     {
+      "slug":     "incident-reporting",
+      "module":   "Incident Reporting",
+      "tagline":  "File incidents, triage by severity, notify the right people, and hand off to investigation — with anonymous QR reporting and OSHA recordability built in.",
+      "category": "safety",
+      "href":     "/incidents",
+      "wikiPage": "apps/web/app/wiki/incident-reporting/page.tsx",
+      "sources":  [
+        "apps/web/app/incidents/page.tsx",
+        "apps/web/app/incidents/new/**",
+        "apps/web/app/incidents/qr/**",
+        "apps/web/app/incidents/[id]/page.tsx",
+        "apps/web/app/incidents/[id]/classify/**",
+        "apps/web/app/incidents/[id]/care/**",
+        "apps/web/app/report/**",
+        "apps/web/app/api/incidents/route.ts",
+        "packages/core/src/incident.ts"
+      ]
+    },
+    {
       "slug":     "incident-investigation",
       "module":   "Incident Investigation & RCA",
       "tagline":  "Guided, AI-assisted 5 Whys root cause analysis — multiple roots, anti-blame guardrails, and one-click corrective actions.",
@@ -288,7 +307,11 @@
       "category": "reports",
       "href":     "/admin/insights/scorecard",
       "wikiPage": "apps/web/app/wiki/scorecard/page.tsx",
-      "sources":  ["apps/web/app/admin/insights/scorecard/**"]
+      "sources":  ["apps/web/app/admin/insights/scorecard/**",
+                   "apps/web/components/scorecard/**",
+                   "packages/core/src/incidentScorecardMetrics.ts",
+                   "packages/core/src/scorecardMetrics.ts",
+                   "packages/core/src/monthOverMonth.ts"]
     },
     {
       "slug":     "insights",
@@ -352,6 +375,19 @@
       "href":     "/admin/loto/training-records",
       "wikiPage": "apps/web/app/wiki/training-records/page.tsx",
       "sources":  ["apps/web/app/admin/loto/training-records/**"]
+    },
+    {
+      "slug":     "training-competency-matrix",
+      "module":   "Training & Competency Matrix",
+      "tagline":  "Org-wide required training by worker and course, with expiry status and per-position requirements.",
+      "category": "admin",
+      "href":     "/admin/people/training-competency-matrix",
+      "wikiPage": "apps/web/app/wiki/training-competency-matrix/page.tsx",
+      "sources":  [
+        "apps/web/app/admin/people/training-competency-matrix/**",
+        "apps/web/migrations/240_training_competency_matrix.sql",
+        "packages/core/src/trainingMatrix.ts"
+      ]
     },
     {
       "slug":     "configuration",

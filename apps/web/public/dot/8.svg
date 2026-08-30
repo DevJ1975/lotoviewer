@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="DOT 8 — Corrosive">
+  <title>DOT 8 — Corrosive</title>
+  <defs>
+    <clipPath id="diamond8"><path d="M50 2 L98 50 L50 98 L2 50 Z"/></clipPath>
+  </defs>
+  <!-- top half white, bottom half black, clipped to the diamond -->
+  <g clip-path="url(#diamond8)">
+    <rect x="0" y="0" width="100" height="50" fill="#FFFFFF"/>
+    <rect x="0" y="50" width="100" height="50" fill="#000000"/>
+  </g>
+  <path d="M50 7 L93 50 L50 93 L7 50 Z" fill="none" stroke="#000" stroke-width="1.5"/>
+  <!-- two test tubes dripping onto a hand (left) and a metal bar (right) -->
+  <g fill="#000" stroke="#000">
+    <!-- left tube, tipped, dripping -->
+    <path d="M28 17 L37 21 L33 30 L24 26 Z" stroke="none"/>
+    <path d="M30 31 L31 38" fill="none" stroke-width="2.2" stroke-linecap="round"/>
+    <!-- hand receiving the drips -->
+    <path d="M22 49 L22 41 C 22 39.3 24 39.3 24 41 L 24 38 C 24 36.3 26 36.3 26 38 L 26 39 C 26 37.3 28 37.3 28 39 L 28 41 C 28 39.3 30 39.3 30 41 L 30 42 L 32 40.5 C 33.5 39.5 34.6 41 33.5 42.5 L 30 47 L 30 49 Z" stroke="none"/>
+    <!-- right tube, tipped, dripping -->
+    <path d="M72 17 L63 21 L67 30 L76 26 Z" stroke="none"/>
+    <path d="M70 31 L69 38" fill="none" stroke-width="2.2" stroke-linecap="round"/>
+    <!-- metal bar being corroded -->
+    <path d="M58 44 L78 44 L78 48 L71 48 L69 51 L64 48 L58 48 Z" stroke="none"/>
+  </g>
+  <!-- class number (bottom corner), white for contrast on black lower half -->
+  <text x="50" y="86" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="bold" text-anchor="middle" fill="#fff">8</text>
+</svg>

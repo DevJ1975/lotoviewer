@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
-import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { loadCareAccess } from '@/lib/incidents/careAccess'
 import {
   validateCareVisit,
   CARE_VISIT_TYPES,
@@ -31,8 +31,11 @@ export async function POST(req: Request, ctx: RouteContext) {
   const { id: incidentId } = await ctx.params
   if (!UUID_RE.test(incidentId)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
 
-  const gate = await requireTenantMember(req)
-  if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
+  const access = await loadCareAccess(req, incidentId)
+  if (!access.ok) return NextResponse.json({ error: access.message }, { status: access.status })
+  if (!access.isPriv)
+    return NextResponse.json({ error: 'Admin or investigator or case manager only' }, { status: 403 })
+  const gate = access.gate
 
   let body: IncidentCareVisitInput
   try { body = (await req.json()) as IncidentCareVisitInput }
@@ -43,37 +46,15 @@ export async function POST(req: Request, ctx: RouteContext) {
   const validation = validateCareVisit(body)
   if (validation) return NextResponse.json({ error: validation }, { status: 400 })
 
+  if (!access.careCaseId)
+    return NextResponse.json({ error: 'No care case yet — create one first' }, { status: 404 })
+
   try {
     const admin = supabaseAdmin()
 
-    // Resolve the care case + auth in one round-trip.
-    const { data: incident } = await admin
-      .from('incidents')
-      .select('id, assigned_investigator')
-      .eq('id', incidentId)
-      .eq('tenant_id', gate.tenantId)
-      .maybeSingle()
-    if (!incident) return NextResponse.json({ error: 'Incident not found' }, { status: 404 })
-
-    const { data: caseRow } = await admin
-      .from('incident_care_cases')
-      .select('id, case_manager_user_id')
-      .eq('incident_id', incidentId)
-      .eq('tenant_id', gate.tenantId)
-      .maybeSingle()
-    if (!caseRow)
-      return NextResponse.json({ error: 'No care case yet — create one first' }, { status: 404 })
-
-    const isPriv =
-      gate.role === 'owner' || gate.role === 'admin' || gate.role === 'superadmin'
-      || incident.assigned_investigator === gate.userId
-      || (caseRow as { case_manager_user_id: string | null }).case_manager_user_id === gate.userId
-    if (!isPriv)
-      return NextResponse.json({ error: 'Admin or investigator or case manager only' }, { status: 403 })
-
     const insert = {
       tenant_id:    gate.tenantId,
-      care_case_id: (caseRow as { id: string }).id,
+      care_case_id: access.careCaseId,
       visit_at:     body.visit_at ?? new Date().toISOString(),
       visit_type:   (body.visit_type as CareVisitType | undefined) ?? 'clinic',
       notes:        body.notes?.trim() || null,

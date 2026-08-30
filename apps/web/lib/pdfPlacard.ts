@@ -612,8 +612,29 @@ export function drawPlacardPage(
   const rowCount = Math.max(steps.length, 1)
   const rowH     = Math.max(30, Math.min(80, dataH / rowCount))
 
+  // How many rows physically fit. rowH has a 30pt floor (below that the text
+  // stops being legible at arm's length, which is its own hazard on a posted
+  // placard), so a long procedure cannot simply be squeezed in.
+  //
+  // This used to be left implicit: the loop just stopped when it ran out of
+  // vertical space. On a letter-landscape sheet that is SEVEN steps — step 8
+  // and everything after it vanished with no notice, no marker, and no
+  // warning to whoever printed it. For a lockout placard that is the worst
+  // possible failure: a worker performs every step the sheet shows, reaches
+  // the end, and believes the machine is at zero energy while un-isolated
+  // sources are still live. Machines with electrical, pneumatic, hydraulic,
+  // steam, water and stored-gravity energy routinely exceed seven.
+  //
+  // The remainder still cannot be shown on a fixed-size placard, but it must
+  // never be shown SILENTLY: when the procedure overflows, the last row is
+  // given over to a warning instead of a step, so the sheet declares itself
+  // incomplete.
+  const rowCapacity  = Math.max(1, Math.floor((dataTop - (tableBottom - 2)) / rowH))
+  const overflows    = steps.length > rowCapacity
+  const visibleSteps = overflows ? rowCapacity - 1 : steps.length
+
   let rowY = dataTop
-  for (let i = 0; i < steps.length && rowY - rowH >= tableBottom - 2; i++) {
+  for (let i = 0; i < visibleSteps && rowY - rowH >= tableBottom - 2; i++) {
     const s = rowY - rowH
     if (i % 2 === 1) {
       page.drawRectangle({
@@ -676,6 +697,27 @@ export function drawPlacardPage(
     page.drawLine({ start: { x: MARGIN + colBadgeW + col1W, y: s }, end: { x: MARGIN + colBadgeW + col1W, y: rowY }, thickness: 0.3, color: COLOR_TABLE_BORDER })
 
     rowY = s
+  }
+
+  // Overflow banner, drawn in the row slot the loop deliberately left free.
+  // Red on white at the table's own width so it reads as a warning rather
+  // than another procedure row.
+  if (overflows) {
+    const hidden  = steps.length - visibleSteps
+    const bannerH = Math.min(rowH, Math.max(18, rowY - tableBottom))
+    const bannerY = rowY - bannerH
+    page.drawRectangle({
+      x: MARGIN, y: bannerY, width: PAGE_W - MARGIN * 2, height: bannerH,
+      color: COLOR_RED_BLOCK,
+    })
+    const msg = PLACARD_TEXT.stepsTruncated[language].replace('{n}', String(hidden))
+    const size = 8
+    const w = bold.widthOfTextAtSize(msg, size)
+    page.drawText(sanitizeForWinAnsi(msg), {
+      x: Math.max(MARGIN + 4, (PAGE_W - w) / 2),
+      y: bannerY + bannerH / 2 - size / 2 + 1,
+      size, font: bold, color: COLOR_WHITE,
+    })
   }
 
   if (steps.length === 0) {

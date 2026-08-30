@@ -11,6 +11,7 @@ import {
   type HazardousWasteAreaRow,
   type HazardousWasteAreaType,
 } from '@soteria/core/hazardousWaste'
+import PrintSignageButton from './PrintSignageButton'
 
 // /hazardous-waste/areas — tenant-admin surface to list, add, rename,
 // retune cadence, and archive accumulation areas. Read access is open
@@ -167,12 +168,15 @@ export default function HazardousWasteAreasPage() {
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 {!area.archived_at && (
-                  <Link
-                    href={`/hazardous-waste/inspections/new?area=${encodeURIComponent(area.id)}`}
-                    className="text-xs font-semibold text-brand-navy hover:underline"
-                  >
-                    Inspect
-                  </Link>
+                  <>
+                    <Link
+                      href={`/hazardous-waste/inspections/new?area=${encodeURIComponent(area.id)}`}
+                      className="text-xs font-semibold text-brand-navy hover:underline"
+                    >
+                      Inspect
+                    </Link>
+                    <PrintSignageButton areaId={area.id} onError={setError} />
+                  </>
                 )}
                 {canWrite && (
                   <>
