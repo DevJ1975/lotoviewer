@@ -164,7 +164,6 @@ export function AreaPhotos({ permitId, phase, readOnly }: Props) {
                 sizes="(max-width: 640px) 50vw, 33vw"
                 className="object-cover"
                 style={{ imageOrientation: 'from-image' }}
-                unoptimized
               />
             </div>
             <figcaption className="absolute top-1.5 left-1.5">

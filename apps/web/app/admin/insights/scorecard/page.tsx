@@ -49,6 +49,7 @@ import { useMetricDrill } from '@/components/scorecard/useMetricDrill'
 import { MetricDetailSheet } from '@/components/scorecard/MetricDetailSheet'
 import { RiskGauge } from '@/components/scorecard/RiskGauge'
 import { LeadingLaggingPanel } from '@/components/scorecard/LeadingLaggingPanel'
+import { MomentumPanel } from '@/components/scorecard/MomentumPanel'
 import LeadingSignalPanel from '@/components/scorecard/LeadingSignalPanel'
 import { rateInterval, wilsonInterval } from '@soteria/core/statistics'
 import { buildWeatherRow } from '@soteria/core/scorecardWeatherReport'
@@ -433,6 +434,8 @@ export default function ScorecardPage() {
           onSelect={d => drill.open(metricDetailFromDriver(d))}
         />
       )}
+
+      {incidentMetrics && <MomentumPanel mom={incidentMetrics.monthOverMonth} />}
 
       {tenantId && <LeadingSignalPanel tenantId={tenantId} />}
 

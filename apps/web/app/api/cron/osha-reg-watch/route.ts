@@ -14,6 +14,7 @@ import {
   type FederalRegisterDoc,
   type CalOshaPage,
   type RawOshaItem,
+  type NormalizedOshaUpdate,
 } from '@/lib/oshaRegWatch'
 import type { RegulationJurisdiction } from '@soteria/core/oshaRegWatch'
 
@@ -265,9 +266,15 @@ interface PassResult {
 const SKIPPED_PASS: PassResult = { reachable: false, scanned: 0, inserted: 0, skipped: 0, failed: 0 }
 
 /**
- * Insert one pass's normalized items. Idempotent: dedup_key is derived from
- * the source URL, so re-seeing a document no-ops via the unique constraint
- * (23505 = already have it, a skip rather than a failure).
+ * Insert one pass's normalized items in a single statement. Idempotent:
+ * dedup_key is derived from the source URL and uniquely constrained, so
+ * re-seeing a document is a no-op.
+ *
+ * The upsert is ON CONFLICT DO NOTHING ... RETURNING, which is what lets the
+ * batch keep the old per-row accounting: the response carries only the rows
+ * that were genuinely new, and every row missing from it is a re-sighting
+ * (skipped, not failed). DO NOTHING also absorbs two feed items that hash to
+ * the same key inside one batch, which a plain insert would reject outright.
  */
 async function insertUpdates(
   items: readonly RawOshaItem[],
@@ -275,34 +282,35 @@ async function insertUpdates(
 ): Promise<{ inserted: number; skipped: number; failed: number }> {
   const admin = supabaseAdmin()
   const fetchedAt = new Date().toISOString()
-  let inserted = 0
-  let skipped  = 0
-  let failed   = 0
 
-  for (const raw of items) {
-    const update = normalizeOshaUpdate(raw, jurisdiction)
-    if (!update) { skipped += 1; continue }
-    const dedupKey = computeDedupKey(update)
-    try {
-      const { error } = await admin.from('osha_regulation_updates').insert({
-        dedup_key:  dedupKey,
-        ...update,
-        ai_model:   AI_MODEL,
-        fetched_at: fetchedAt,
-      })
-      if (error) {
-        if (error.code === '23505') { skipped += 1; continue }
-        Sentry.captureException(error, { tags: { source: 'osha-reg-watch', stage: 'insert', jurisdiction } })
-        failed += 1
-        continue
-      }
-      inserted += 1
-    } catch (err) {
-      Sentry.captureException(err, { tags: { source: 'osha-reg-watch', stage: 'insert', jurisdiction } })
-      failed += 1
+  const normalized = items
+    .map(raw => normalizeOshaUpdate(raw, jurisdiction))
+    .filter((update): update is NormalizedOshaUpdate => update !== null)
+  const unusable = items.length - normalized.length
+  if (normalized.length === 0) return { inserted: 0, skipped: unusable, failed: 0 }
+
+  const rows = normalized.map(update => ({
+    dedup_key:  computeDedupKey(update),
+    ...update,
+    ai_model:   AI_MODEL,
+    fetched_at: fetchedAt,
+  }))
+
+  try {
+    const { data, error } = await admin
+      .from('osha_regulation_updates')
+      .upsert(rows, { onConflict: 'dedup_key', ignoreDuplicates: true })
+      .select('dedup_key')
+    if (error) {
+      Sentry.captureException(error, { tags: { source: 'osha-reg-watch', stage: 'insert', jurisdiction } })
+      return { inserted: 0, skipped: unusable, failed: rows.length }
     }
+    const inserted = data?.length ?? 0
+    return { inserted, skipped: unusable + (rows.length - inserted), failed: 0 }
+  } catch (err) {
+    Sentry.captureException(err, { tags: { source: 'osha-reg-watch', stage: 'insert', jurisdiction } })
+    return { inserted: 0, skipped: unusable, failed: rows.length }
   }
-  return { inserted, skipped, failed }
 }
 
 /** Shared tail of both passes: extract with the model, then insert. */

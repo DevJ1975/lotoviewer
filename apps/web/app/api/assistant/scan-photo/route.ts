@@ -88,7 +88,13 @@ export async function POST(req: Request) {
   }
 
   let client: Anthropic
-  try { client = await getAnthropic(gate.tenantId) }
+  // Same budget arithmetic as /api/assistant/hazards, and tighter here: the
+  // defaults are 30s × 3 attempts = 90s of Anthropic time against this
+  // route's maxDuration of 60, so a slow vision call could not finish inside
+  // the function no matter what — the platform killed it and the caller got a
+  // raw 504. One attempt at 40s leaves room for the upload handling and the
+  // image round-trip.
+  try { client = await getAnthropic(gate.tenantId, { timeoutMs: 40_000, maxRetries: 0 }) }
   catch (err) {
     const mapped = aiErrorToResponse(err, 'assistant-scan-photo')
     Sentry.captureException(err, { tags: { ...mapped.tags, route: '/api/assistant/scan-photo' } })

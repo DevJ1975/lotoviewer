@@ -1,39 +1,39 @@
 import type { ComponentType, SVGProps } from 'react'
+import { Box } from 'lucide-react'
 import {
-  AlertOctagon,
-  AlertTriangle,
-  BarChart3,
-  Bell,
-  BookOpen,
-  Box,
-  Brush,
-  CalendarClock,
-  ClipboardList,
-  Eye,
-  FileArchive,
-  GraduationCap,
-  LayoutGrid,
-  LifeBuoy,
-  Megaphone,
-  MessageSquare,
-  Mountain,
-  Recycle,
-  Settings,
-  ShieldAlert,
-  Siren,
-  Sparkles,
-  Tag,
-  Truck,
-  Users,
-  Webhook,
-} from 'lucide-react'
-import {
-  BiohazardIcon,
+  ArchiveBinderIcon,
+  BarsIcon,
+  BellIcon,
+  BuildingIcon,
+  CalendarClockIcon,
+  ClipboardCheckIcon,
+  ClipboardListIcon,
+  ConfinedSpaceIcon,
   FlameTriangleIcon,
+  FlaskIcon,
+  ForumIcon,
+  GradCapIcon,
   HardHatIcon,
-  HazardDiamondIcon,
-  ManholeIcon,
+  HexNutIcon,
+  KeyIcon,
+  LifeRingIcon,
+  LinkCableIcon,
+  LockTagIcon,
+  ManualBookIcon,
+  MegaphoneIcon,
+  NearMissOctagonIcon,
+  ObserveEyeIcon,
   PadlockIcon,
+  PeakIcon,
+  RiskTriangleIcon,
+  ScrubBrushIcon,
+  ShieldAlertIcon,
+  ShieldCheckIcon,
+  SirenIcon,
+  SparkInsightIcon,
+  TruckIcon,
+  WasteDrumIcon,
+  WebhookIcon,
 } from '@/components/icons/safety'
 import { FEATURES, getFeature, type FeatureDef, type ModuleColor } from '@soteria/core/features'
 
@@ -162,29 +162,49 @@ export const MODULE_COLOR_CLASSES: Record<ModuleColor, ColorClasses> = {
 
 const FALLBACK_COLOR: ModuleColor = 'slate'
 
-// Module icon registry. Six signature safety modules render with hand-
-// drawn duotone pictograms (`components/icons/safety`) so they read as
-// real industrial signage; everything else stays on Lucide for now and
-// inherits a chunkier visual via the `.module-icon-treatment` class
-// applied at the tile call sites.
+// Module icon registry. Every module renders with a hand-drawn line +
+// soft-duotone pictogram (`components/icons/safety`) so the catalog reads
+// as real industrial signage rather than generic line icons. Inside a
+// `.module-icon-tile` wrapper the shared stroke is pumped to 2.25 (see
+// globals.css) so the marks carry module-identity weight.
 //
-// Feature names below (the keys) match the string `icon:` values in
-// `packages/core/src/features.ts`. Add a new icon here once the
-// feature declares its name there.
+// The keys below match the string `icon:` values in
+// `packages/core/src/features.ts`. Add a new icon here once the feature
+// declares its name there; an unmapped key falls back to FALLBACK_ICON.
 const MODULE_ICONS: Record<string, ModuleIconComponent> = {
-  // ── Custom duotone safety pictograms ───────────────────────────────
-  Lock:          PadlockIcon,         // LOTO
-  Flame:         FlameTriangleIcon,   // Hot work
-  FlaskConical:  BiohazardIcon,       // Chemicals / hazmat
-  DoorClosed:    ManholeIcon,         // Confined spaces
-  ShieldCheck:   HazardDiamondIcon,   // Risk / equipment readiness
-  Users:         HardHatIcon,         // Workers / PPE
-
-  // ── Lucide fallbacks for non-signature modules ─────────────────────
-  AlertOctagon, AlertTriangle, BarChart3, Bell, BookOpen, Brush,
-  CalendarClock, ClipboardList, Eye, FileArchive, GraduationCap, LayoutGrid, LifeBuoy,
-  Megaphone, MessageSquare, Mountain, Settings, ShieldAlert, Siren,
-  Sparkles, Tag, Truck, Webhook, Recycle,
+  Lock:           PadlockIcon,           // LOTO
+  Flame:          FlameTriangleIcon,     // Hot work
+  FlaskConical:   FlaskIcon,             // Chemicals
+  DoorClosed:     ConfinedSpaceIcon,     // Confined spaces
+  AlertTriangle:  RiskTriangleIcon,      // Risk / warning
+  Siren:          SirenIcon,             // Incident
+  Eye:            ObserveEyeIcon,        // Observation
+  Recycle:        WasteDrumIcon,         // Hazardous waste
+  AlertOctagon:   NearMissOctagonIcon,   // Near-miss
+  ClipboardList:  ClipboardListIcon,     // JHA
+  ClipboardCheck: ClipboardCheckIcon,    // Inspection
+  Megaphone:      MegaphoneIcon,         // Toolbox talks
+  GraduationCap:  GradCapIcon,           // Training / STRIKE
+  BarChart3:      BarsIcon,              // Scorecard
+  Sparkles:       SparkInsightIcon,      // Risk intelligence
+  FileArchive:    ArchiveBinderIcon,     // Compliance bundle
+  CalendarClock:  CalendarClockIcon,     // Compliance calendar
+  Tag:            LockTagIcon,           // LOTO devices
+  Users:          HardHatIcon,           // Workers / PPE
+  Settings:       HexNutIcon,            // Configuration
+  Webhook:        WebhookIcon,           // Webhooks
+  Brush:          ScrubBrushIcon,        // Data hygiene
+  Bell:           BellIcon,              // Notifications
+  MessageSquare:  ForumIcon,             // Safety boards
+  BookOpen:       ManualBookIcon,        // User manuals
+  LifeBuoy:       LifeRingIcon,          // Support
+  KeyRound:       KeyIcon,               // SCIM
+  Cable:          LinkCableIcon,         // CMMS integrations
+  Building2:      BuildingIcon,          // Contractors
+  ShieldCheck:    ShieldCheckIcon,       // Shield check
+  ShieldAlert:    ShieldAlertIcon,       // Prop 65
+  Mountain:       PeakIcon,              // Working at heights
+  Truck:          TruckIcon,             // Fleet safety
 }
 
 const FALLBACK_ICON: ModuleIconComponent = Box

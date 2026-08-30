@@ -1,6 +1,6 @@
 {
   "name": "web",
-  "version": "1.17.1",
+  "version": "1.18.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,9 +9,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:security": "vitest run proxy.test.ts __tests__/lib/auth __tests__/lib/security __tests__/lib/safeRedirect __tests__/lib/scrubEvent __tests__/lib/rateLimit __tests__/lib/memoryRateLimit __tests__/lib/inviteTokens __tests__/api/invites __tests__/api/superadmin __tests__/api/admin __tests__/migrations/profilesPrivilegedColumns __tests__/anonReport",
+    "test:security": "vitest run proxy.test.ts __tests__/security __tests__/e2e/authLifecycle.e2e.test.ts __tests__/lib/auth __tests__/lib/security __tests__/lib/safeRedirect __tests__/lib/scrubEvent __tests__/lib/rateLimit __tests__/lib/memoryRateLimit __tests__/lib/inviteTokens __tests__/api/invites __tests__/api/superadmin __tests__/api/admin __tests__/api/strike __tests__/migrations/profilesPrivilegedColumns __tests__/migrations/strikeAnswerKeyGrants __tests__/anonReport",
     "test:watch": "vitest",
-    "db:types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > lib/database.types.ts && echo '✓ wrote lib/database.types.ts'"
+    "db:types": "{ printf '%s\\n' '// Generated from the live Postgres schema \u2014 do not edit by hand.' '//' '// Regenerate from apps/web:' '//   SUPABASE_PROJECT_ID=zwtnpyjifbdytlektxlc npm run db:types' '//' '// Re-run after every migration. This file is what narrows every `.from()` and' '// `.select()` in the app, so a stale copy silently re-opens the hole it exists' '// to close: a mistyped table or column compiling clean and failing at runtime.' '// The build is not gated on regeneration \u2014 that would block iterating on a' '// migration locally \u2014 so CI typecheck is the backstop.' ''; supabase gen types typescript --project-id $SUPABASE_PROJECT_ID; } > ../../packages/core/src/database.types.ts && echo '\u2713 wrote packages/core/src/database.types.ts'"
   },
   "dependencies": {
     "@adobe/spectrum-tokens": "^14.11.0",
@@ -31,14 +31,14 @@
     "date-fns": "^4.1.0",
     "exceljs": "^4.4.0",
     "lucide-react": "^1.8.0",
-    "next": "16.2.6",
+    "next": "16.3.3",
     "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4",
-    "react": "19.2.4",
+    "react": "19.2.8",
     "react-aria": "^3.48.0",
     "react-aria-components": "^1.17.0",
     "react-day-picker": "^9.12.0",
-    "react-dom": "19.2.4",
+    "react-dom": "19.2.8",
     "react-hook-form": "^7.65.0",
     "react-stately": "^3.46.0",
     "recharts": "^3.8.1",
@@ -53,7 +53,6 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@tailwindcss/oxide-linux-x64-gnu": "^4.2.4",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -63,7 +62,7 @@
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^9",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.3.3",
     "jsdom": "^29.0.2",
     "supabase": "^2.98.2",
     "tailwindcss": "^4",

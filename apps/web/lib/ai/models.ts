@@ -41,7 +41,21 @@ export const SONNET = 'claude-sonnet-5' as const
 export const HAIKU  = 'claude-haiku-4-5' as const
 export const OPUS   = 'claude-opus-5'    as const
 
-export type ModelId = typeof SONNET | typeof HAIKU | typeof OPUS
+// Newer generation, used ONLY by surfaces added after it shipped. Migrating the
+// forty-odd existing mappings above is a deliberate, separately testable change:
+// doing it as a drive-by inside a feature PR would put every shipped surface's
+// behaviour up for re-validation in a review about something else.
+//
+// Adding a constant here is not enough on its own — MODEL_PRICING in
+// lib/ai/usageAggregator.ts falls back to SONNET's rate for an unrecognized
+// model id, so a routed model with no pricing row silently under-bills and
+// checkTenantBudget stops enforcing. modelPricingCoverage.test.ts fails the
+// build if the two ever drift.
+export const SONNET_5 = 'claude-sonnet-5' as const
+
+export type ModelId =
+  | typeof SONNET | typeof HAIKU | typeof OPUS
+  | typeof SONNET_5
 
 /**
  * Surface → model selection. Single point of override if a surface
@@ -162,6 +176,36 @@ export const MODEL_BY_SURFACE = {
   'operator-admin':                   SONNET,
   'operator-home':                    SONNET,
   'operator-knowledge':               SONNET,
+  // ── Predictive Safety Intelligence ───────────────────────────────────────
+  // vision-hazard-sweep: reads hazards out of field photos already stored
+  //   against BBS observations, incidents, permits, and hazwaste inspections.
+  //   Haiku for the same reason loto-audit-fpe uses it — high-volume perception
+  //   behind a conservative deterministic gate (closed taxonomy, per-source
+  //   eligible codes, per-code confidence floors) plus mandatory human review.
+  //   It runs OFFLINE and batched, so it does not reintroduce the per-upload
+  //   latency that got the original photo gate removed.
+  'vision-hazard-sweep':              HAIKU,
+  // draft-regulatory-document: first drafts of risk assessments, method
+  //   statements, JSA checklists, and incident reports. A qualified safety
+  //   professional reads and signs every one, and the draft is grounded on
+  //   retrieved regulation chunks with unresolvable citations stripped — draft
+  //   quality is what the whole feature is for, so it gets the stronger model.
+  'draft-regulatory-document':        SONNET_5,
+  // safety-briefing-narrate: optional prose over the deterministic briefing.
+  //   The ranking, the scores, and the score-reduction arithmetic are all
+  //   computed in @soteria/core before the model is called; it narrates and
+  //   never reorders. Same advisory class as scorecard-focus.
+  'safety-briefing-narrate':          SONNET_5,
+  // ── Hazard Hunt (CSP write-up / DS analytics) ─────────────────────────────
+  // hazard-hunt-csp: a Certified Safety Professional authoring a citation-backed
+  //   write-up of a completed workplace inspection — safety-critical authoring a
+  //   human reviews before it is finalized to the wiki + KB. Opus 4.8, the same
+  //   class as the loto-audit-ehs gate.
+  'hazard-hunt-csp':                  OPUS,
+  // hazard-hunt-ds: a Data Scientist narrating deterministic hazard-finding
+  //   trends. Advisory, text-only, never computes the EHS score — same advisory
+  //   class as scorecard-focus. Sonnet (drop to Haiku if volume dominates).
+  'hazard-hunt-ds':                   SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

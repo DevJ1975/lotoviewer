@@ -71,17 +71,44 @@ describe('POST /api/superadmin/tenants/[number]/reset-demo', () => {
     expect(mockState.deletes.length).toBeGreaterThan(0)
   })
 
-  it('demo tenant other than 0002: wipes but skips reseed (no seed function)', async () => {
+  // This used to assert the opposite: that a demo tenant other than #0002 was
+  // wiped and NOT re-seeded. That was the defect (audit item A10), not the
+  // contract — the seed step was gated on `tenant_number === '0002'` while the
+  // seed functions themselves resolve their tenant by is_demo. Any second demo
+  // tenant was therefore emptied and never refilled.
+  it('re-seeds any demo tenant, not just #0002', async () => {
     mockState.queue('tenants', {
       data: { id: 'T5', tenant_number: '0005', name: 'Other Demo', is_demo: true },
       error: null,
     })
-    // Empty queues for delete tables → defaults to { data: null, error: null }
+    mockState.queue('rpc:seed_wls_demo', { data: 'Seeded WLS Demo', error: null })
+
     const r = await resetDemo(emptyRequest('POST'), ctxFor({ number: '0005' }))
     expect(r.status).toBe(200)
     const body = await r.json()
-    expect(body.seedSkipped).toBe(true)
-    expect(body.seed).toBeNull()
+    expect(body.seedSkipped).toBe(false)
+    expect(body.seed).toMatch(/Seeded WLS Demo/)
+  })
+
+  // A database missing one optional seed must still reset, and must say which
+  // one was absent rather than reporting a clean run it did not have.
+  it('reports a missing seed function instead of under-seeding silently', async () => {
+    mockState.queue('tenants', {
+      data: { id: 'T2', tenant_number: '0002', name: 'WLS Demo', is_demo: true },
+      error: null,
+    })
+    mockState.queue('rpc:seed_wls_demo', { data: 'Seeded WLS Demo', error: null })
+    mockState.queue('rpc:seed_wls_equipment_readiness_demo', {
+      data: null,
+      error: { message: 'function does not exist', code: '42883' },
+    })
+
+    const r = await resetDemo(emptyRequest('POST'), ctxFor({ number: '0002' }))
+    expect(r.status).toBe(200)
+    const body = await r.json()
+    expect(body.seedSkipped).toBe(false)
+    expect(body.seedsMissing).toContain('seed_wls_equipment_readiness_demo')
+    expect(body.note).toMatch(/not present in this database/)
   })
 
   it('skips a domain table with PG 42P01 (table does not exist) instead of failing', async () => {

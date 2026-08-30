@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import type { HotWorkCancelReason, HotWorkPermit } from '@soteria/core/types'
 import { HOT_WORK_CANCEL_REASON_LABELS } from '@soteria/core/types'
+import { hotWorkState, hotWorkCountdown } from '@soteria/core/hotWorkPermitStatus'
 
 // Cancel + close-out dialog. The same form covers all cancel reasons —
 // the wording adapts (close-out vs. cancel-for-cause) so the supervisor
@@ -26,6 +27,27 @@ export function CancelDialog({
 
   const requiresNotes = reason !== 'task_complete'
   const isCloseOut    = reason === 'task_complete'
+
+  // NFPA 51B §8.7: a permit may only be closed as "task complete" once the
+  // post-work fire watch has actually run. hotWorkPermitStatus already models
+  // this — 'post_watch_complete' is documented there as "ready to close" — but
+  // the close-out wrote canceled_at unconditionally, so a supervisor could
+  // close the instant work stopped, or before work was even marked complete.
+  // Hot work leaves smouldering ignition that develops after the torch stops;
+  // closing early is the failure mode the watch exists to prevent.
+  //
+  // Only this reason is gated. 'fire_observed' and the other for-cause reasons
+  // are what you reach for when something IS going wrong — blocking those
+  // behind a timer would be exactly backwards.
+  const state          = hotWorkState(permit)
+  const watchRemaining = hotWorkCountdown(permit).postWatchMinutesRemaining
+  const watchPending   = isCloseOut && state !== 'post_watch_complete'
+  const watchBlockedMsg = !watchPending ? null
+    : permit.work_completed_at
+      ? `The ${permit.post_watch_minutes}-minute post-work fire watch is still running${
+          watchRemaining != null ? ` — ${watchRemaining} min remaining` : ''
+        }. Close out once it ends, or cancel for cause if something is wrong.`
+      : 'Mark the work complete first — that starts the post-work fire watch. A permit cannot be closed as task complete before the watch has run.'
   const dialogTitle   = isCloseOut ? 'Close out permit' : 'Cancel permit'
   const submitLabel   = isCloseOut ? 'Close out' : 'Cancel permit'
   const submitTone    = isCloseOut
@@ -37,6 +59,7 @@ export function CancelDialog({
     if (requiresNotes && !notes.trim()) {
       setErr('Describe the situation when canceling for this reason.'); return
     }
+    if (watchBlockedMsg) { setErr(watchBlockedMsg); return }
     setBusy(true); setErr(null)
     const now = new Date().toISOString()
     const { data, error } = await supabase
@@ -94,13 +117,18 @@ export function CancelDialog({
             />
           </label>
         </div>
+        {watchBlockedMsg && !err && (
+          <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2">
+            {watchBlockedMsg}
+          </p>
+        )}
         {err && <p className="text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 rounded-md px-3 py-2">{err}</p>}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} disabled={busy} className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200">Back</button>
           <button
             type="button"
             onClick={submit}
-            disabled={busy}
+            disabled={busy || !!watchBlockedMsg}
             className={`px-5 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-40 transition-colors ${submitTone}`}
           >
             {busy ? 'Saving…' : submitLabel}

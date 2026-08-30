@@ -12,6 +12,121 @@ app at `/superadmin/release-notes`.
 
 _Nothing pending._
 
+## [1.18.0] — 2026-08-29
+
+### Security
+- **STRIKE quiz answers are no longer readable by learners.** The RLS policy on
+  the quiz tables grants row-level read to any signed-in member, and Postgres
+  RLS cannot filter columns — so while the learner page politely asked for only
+  the answer text, anything holding a session could ask for `is_correct` and get
+  the key for every published module. Column grants now withhold it (and the
+  explanation text, which often paraphrases it) from browser-facing roles;
+  grading has always been server-side and is unaffected. Explanations now come
+  back with the graded result, for the questions you actually missed, instead of
+  being rendered next to the question before you answered it.
+- **Narration and audio files are no longer world-readable inside the shared
+  library.** Media reads under the cross-tenant `global/` prefix only restricted
+  video extensions, so any other file type was readable by every signed-in user
+  of every tenant. Audio now follows the same rule as video.
+
+- **A reachable remote-code-execution hole in image handling is closed.** The
+  image optimizer decoded AVIF uploads through a vulnerable library, and the
+  path was reachable in this deployment: members upload images into public
+  buckets with the file type passed through unchecked, and two pages that serve
+  them — the review-token page and the QR placard view — need no sign-in. Next
+  is upgraded to 16.3.3, which also carries nine further advisories the prior
+  version predated. Worth recording that `npm audit` did not report this one.
+- **Inspector links can no longer read another customer's permits.** The signed
+  token carried no tenant, and the routes behind it query with a key that
+  bypasses row-level security — so a token minted for one customer's Cal/OSHA
+  inspection returned every customer's confined-space and hot-work permits. The
+  tenant is now part of what the signature covers, and all six reads filter on
+  it. Every previously issued inspector URL stops working, which is the correct
+  direction to fail.
+- **A revoked member, or a member of a disabled organisation, is now refused.**
+  The server-side gate checked membership but not whether the invite had been
+  cancelled or the organisation switched off, while the database rules it was
+  meant to mirror checked both. Most routes reach the database with a key that
+  bypasses those rules, so for them the gate was the only thing standing there.
+
+### Added
+- **Hazard-communication symbols.** GHS pictograms, DOT hazard classes, NFPA 704
+  diamonds and waste-stream symbols, with printable labels.
+- **Post-work fire watch is enforced, not just documented.** NFPA 51B §8.7 sets a
+  floor on how long a watch must run after hot work stops; the form asked for it
+  and nothing checked it. The database now enforces the minimum too, because the
+  form is not the only writer.
+- **Behaviour-Based Safety coaching**, and a training and competency matrix.
+- **Placard export to Excel**, per site and per department.
+
+### Changed
+- **Continuous integration now gates the whole test suite**, typecheck, lint and
+  a production build, in place of a hand-picked 28-file subset. The subset
+  existed because the full suite was believed to have 127 failures; re-measured,
+  it had two, both stale assertions. Widening it immediately surfaced three real
+  problems that had been invisible: two typecheck errors, twelve tests that fail
+  only on the Node version CI runs, and a lockfile missing Linux binaries.
+- **Sign-in decides on a complete session.** The app could act on a half-loaded
+  session for one render, which sent a first-time user to the page they had
+  asked for before pulling them back to set a password.
+
+### Fixed
+- **A module with no quiz questions no longer records itself as passed.** Such a
+  module scores 100% by definition, and the "I reviewed this" confirmation was
+  only enforced in the browser — so a submission that skipped it still wrote a
+  passing training record. The server now requires the acknowledgement.
+- **Turning STRIKE off for a tenant now also turns off its APIs.** The module
+  toggle was enforced on the pages but not the endpoints behind them, so a
+  tenant without STRIKE still had working submit, playback, and assignment
+  endpoints.
+- **STRIKE assignment errors no longer echo database internals** to the caller.
+  Every other STRIKE endpoint already returned a generic message.
+
+- **Reset Demo no longer empties Equipment Readiness.** The reset wiped 31
+  tables and re-seeded 17. Everything Equipment Readiness owns — inspections,
+  their responses, defects, repairs and photo evidence — was in the first list
+  and not the second, so every reset silently emptied the module and nothing
+  put it back. A new seed restores a five-unit mobile fleet with inspections,
+  three open defects and a repair returned to service. A wipe followed by a
+  re-seed now leaves the tenant identical.
+- **Reset Demo re-seeds any demo tenant, not just #0002.** The wipe ran against
+  any tenant flagged `is_demo`, but the re-seed was gated on the tenant number.
+  A second demo tenant was therefore emptied and never restored. The seeds
+  resolve their own tenant by `is_demo`, so the number check was both wrong and
+  redundant. (Audit item A10.)
+- **A missing seed function is reported instead of silently skipped.** The
+  response now carries `seedsMissing`, so a partially-migrated database is
+  visible rather than quietly under-seeding.
+- **The SSO setup page handed admins a callback URL that goes nowhere.** The SP
+  ACS URL — the address your identity provider posts a sign-in to — defaulted to
+  a path inside this application that does not exist. An admin who pasted it
+  into Okta or Azure AD would have configured a dead endpoint and only found out
+  when the first user tried to sign in. SAML is terminated by Supabase Auth, not
+  by this app, so the field now defaults to the real Supabase endpoint, and is
+  left blank rather than guessing when the deployment cannot determine it.
+- **Fleet no longer advertises journey management.** The module description
+  promised "monitored journey plans", which are not built — the module home
+  already said "(coming soon)", but the drawer and catalog tile did not.
+- **The Data Hygiene Log showed operator instructions to admins.** When the log
+  could not load, the page told the reader to "run the data-hygiene SQL script
+  first — the table is created in Section -1", which is a note to whoever runs
+  the SQL, not to the admin reading the page. It now distinguishes three states
+  properly: nothing logged yet, nothing matching the current filter, and a real
+  load failure.
+- **The printed placard silently dropped isolation steps past the seventh.**
+- **The legal pages are reachable when signed out.** The login footer links to
+  Privacy and Terms, and clicking either bounced you back to the login screen.
+- **Equipment Readiness survives Reset Demo**, and the reset re-seeds any demo
+  organisation rather than only one.
+
+### Internal
+- The repository and the production database are reconciled in both directions,
+  and a drift check now compares them so it cannot silently recur. Seven tables
+  existed in production with no migration file anywhere; a rebuild would have
+  lost them.
+- 33 pull requests resolved: 24 merged, 5 closed as superseded, duplicated or
+  contradicted by shipped work.
+
 ## [1.17.1] — 2026-07-31
 
 A navigation and search release. The version is a patch, but the most visible
@@ -168,6 +283,19 @@ deep pages carry a breadcrumb trail.
 > than grouping them honestly.
 
 ### Added
+- **Resend an invite, or share the invite link yourself.** Invite emails
+  regularly land in a recipient's junk folder, and until now the link was shown
+  once at invite time and then unrecoverable. Every pending invite on
+  **User Management** now carries two actions: **Resend invite email**, and
+  **Copy invite link** — which mints the link and hands it back *without*
+  emailing anything, alongside a ready-to-send message, so an admin can deliver
+  it through a channel the recipient actually reads. Both mint a fresh
+  single-use link that retires the previous one (the UI says so), both refuse
+  once the person has signed in (an invite link sets a password, so re-issuing
+  one to a live account would be a takeover, not a courtesy), and both
+  reactivate an invite the reminder cron had soft-cancelled so the fresh link
+  can't dead-end. Tenant admins previously had no resend at all — only
+  superadmins did.
 - **Drag-and-drop Events & Causal Factors, folded into Investigate & RCA.** The
   ECFA editor is now directly manipulable: drag to reorder events, and drag
   conditions between events and the above/below lanes, with the chart updating
@@ -230,6 +358,19 @@ deep pages carry a breadcrumb trail.
   `/incidents/[id]/rca` tab redirects there. Migration 234 adds 5-Whys
   branching, multi-root support, and AI provenance; new wiki page at
   `/wiki/incident-investigation`.
+- **BBS coaching upgrade (Workplace Learning System methodology)** — the BBS v2
+  observation surface (`/bbs/observe`) gains a structured safe-behavior checklist
+  (PPE, line of fire, tools, procedures, housekeeping, ergonomics), C.A.R.E.S.
+  coaching notes on the in-the-moment feedback conversation, and a one-tap
+  *recognize* toggle for safe behaviors. Critical unsafe observations are
+  auto-flagged for a non-punitive **24-hour "Hot Seat" rapid review** (due/overdue
+  tracking). New **Safety Action Teams** (tenant-scoped lookup, managed inline on
+  the dashboard) let follow-ups group by team. The admin dashboard
+  (`/admin/observations/bbs/dashboard`) adds rapid-review, safe-behavior-trend,
+  recognition-feed, and follow-ups-by-team sections; the BBS scorecard
+  (`/bbs/scorecard`) surfaces the v2 leading indicators. Additive migration
+  (`234_bbs_v2_coaching_teams.sql`) — existing rows and flows are unchanged.
+  Documented in a dedicated wiki page at `/wiki/bbs`.
 - **Public QR placard view** (`/qr/{qr_token}`) — scanning a printed placard QR
   opens a read-only, no-login view of that machine's isolation photo (with
   annotation markers), ordered energy-control steps, and verified badge. Reads

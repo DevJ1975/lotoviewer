@@ -1,16 +1,27 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Loader2 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
 import { fetchBBSMetrics, type BBSMetrics } from '@soteria/core/bbsMetrics'
+import {
+  bandRatio,
+  summarizeObservations,
+  countRapidReviews,
+  RATIO_BAND_LABEL,
+  type BbsObservationV2Row,
+} from '@soteria/core/bbsMetricsV2'
 import { Leaderboard } from '../_components/Leaderboard'
+
+const V2_WINDOW_DAYS = 30
 
 export default function BBSScorecardPage() {
   const { tenant } = useTenant()
   const [metrics, setMetrics] = useState<BBSMetrics | null>(null)
   const [loading, setLoading] = useState(true)
+  const [v2Rows, setV2Rows]   = useState<BbsObservationV2Row[]>([])
 
   useEffect(() => {
     if (!tenant?.id) return
@@ -20,6 +31,23 @@ export default function BBSScorecardPage() {
       setLoading(false)
     })
   }, [tenant?.id])
+
+  useEffect(() => {
+    const tenantId = tenant?.id
+    if (!tenantId) return
+    const cutoff = new Date(Date.now() - V2_WINDOW_DAYS * 86_400_000).toISOString()
+    void supabase
+      .from('bbs_observations_v2')
+      .select('id, category, severity, follow_up_required, follow_up_completed_at, feedback_given_at, recognized, rapid_review_required, rapid_review_completed_at, created_at')
+      .eq('tenant_id', tenantId)
+      .gte('created_at', cutoff)
+      .limit(1000)
+      .then(({ data }) => setV2Rows((data ?? []) as BbsObservationV2Row[]))
+  }, [tenant?.id])
+
+  const v2 = useMemo(() => summarizeObservations(v2Rows), [v2Rows])
+  const v2RapidReviews = useMemo(() => countRapidReviews(v2Rows, new Date()), [v2Rows])
+  const v2Band = bandRatio(v2.safeToUnsafeRatio)
 
   if (loading) {
     return (
@@ -94,6 +122,40 @@ export default function BBSScorecardPage() {
           <div className="text-xs text-slate-500">all-time</div>
         </div>
       </section>
+
+      {v2Rows.length > 0 && (
+        <section className="space-y-3">
+          <div>
+            <h2 className="font-semibold text-slate-900 dark:text-slate-100">Coaching &amp; recognition (30d)</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Leading indicators from shop-floor BBS observations. The safe-to-unsafe ratio
+              is healthiest at ≥4:1.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-lg border border-slate-200 dark:border-slate-800 p-4">
+              <div className="text-xs uppercase text-slate-500">Safe : Unsafe</div>
+              <div className="text-3xl font-bold mt-1 tabular-nums">{v2.safeToUnsafeRatio === null ? '—' : `${v2.safeToUnsafeRatio.toFixed(1)}:1`}</div>
+              <div className="text-xs text-slate-500">{RATIO_BAND_LABEL[v2Band]}</div>
+            </div>
+            <div className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-950/20 p-4">
+              <div className="text-xs uppercase text-emerald-700 dark:text-emerald-300">Recognized</div>
+              <div className="text-3xl font-bold mt-1 text-emerald-900 dark:text-emerald-100">{v2.recognizedCount}</div>
+              <div className="text-xs text-slate-500">safe behaviors</div>
+            </div>
+            <div className="rounded-lg border border-slate-200 dark:border-slate-800 p-4">
+              <div className="text-xs uppercase text-slate-500">Coaching feedback</div>
+              <div className="text-3xl font-bold mt-1 tabular-nums">{v2.feedbackDelivered}</div>
+              <div className="text-xs text-slate-500">conversations</div>
+            </div>
+            <div className="rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20 p-4">
+              <div className="text-xs uppercase text-amber-700 dark:text-amber-300">Rapid reviews due</div>
+              <div className="text-3xl font-bold mt-1 text-amber-900 dark:text-amber-100 tabular-nums">{v2RapidReviews.due}</div>
+              <div className="text-xs text-slate-500">{v2RapidReviews.overdue} overdue</div>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="rounded-lg border border-slate-200 dark:border-slate-800 p-4">
         <h2 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">Top contributors</h2>

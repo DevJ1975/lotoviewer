@@ -2,6 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
+      "path": "/api/cron/regenerate-loto-placards",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/invite-reminders",
       "schedule": "0 9 * * *"
     },
@@ -87,6 +91,14 @@
     },
     {
       "path": "/api/cron/loto-audit-resume",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/vision-hazard-sweep",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/vision-sweep-resume",
       "schedule": "*/5 * * * *"
     }
   ]

@@ -176,34 +176,60 @@ export async function POST(req: Request, ctx: RouteContext) {
       .maybeSingle()
     if (!incident) return NextResponse.json({ error: 'Incident not found' }, { status: 404 })
 
-    const jurisdiction = await resolveJurisdiction(admin, gate.tenantId, incidentId)
-
-    const row = {
-      tenant_id:        gate.tenantId,
-      incident_id:      incidentId,
-      trigger_type:     body.trigger_type,
-      basis_at:         new Date(basisMs).toISOString(),
+    // Fields a filing update may change. The deadline-defining fields
+    // (reporting_jurisdiction, reporting_window_hours, basis_at) and the
+    // original author (created_by) are deliberately absent: migration 252
+    // freezes the jurisdiction + window at write time so re-pointing a facility
+    // later never silently moves a deadline someone was already held to, and
+    // RegulatoryReportingPanel's countdown relies on that. A blanket upsert
+    // re-resolved and overwrote all of them on every "record filing" POST.
+    const mutable = {
       reported_at:      reportedAt,
       report_method:    body.report_method ?? null,
       osha_case_number: body.osha_case_number?.trim() || null,
       notes:            body.notes?.trim() || null,
       reported_by:      reportedAt ? gate.userId : null,
       updated_by:       gate.userId,
-      created_by:       gate.userId,
-      reporting_jurisdiction: jurisdiction,
-      reporting_window_hours: reportingWindowHours(body.trigger_type, jurisdiction),
     }
 
-    const { data, error } = await admin
+    // Add the trigger. Jurisdiction is resolved and frozen HERE, on the insert
+    // only. A 23505 means the row already exists (recording a filing / editing),
+    // so fall through to an update that leaves the frozen fields untouched.
+    const jurisdiction = await resolveJurisdiction(admin, gate.tenantId, incidentId)
+    const { data: inserted, error: insertErr } = await admin
       .from('incident_severe_injury_reports')
-      .upsert(row, { onConflict: 'incident_id,trigger_type', ignoreDuplicates: false })
+      .insert({
+        tenant_id:              gate.tenantId,
+        incident_id:            incidentId,
+        trigger_type:           body.trigger_type,
+        basis_at:               new Date(basisMs).toISOString(),
+        created_by:             gate.userId,
+        reporting_jurisdiction: jurisdiction,
+        reporting_window_hours: reportingWindowHours(body.trigger_type, jurisdiction),
+        ...mutable,
+      })
       .select(SELECT_COLS)
       .single()
-    if (error) {
-      Sentry.captureException(error, { tags: { route: 'severe-injury-report/POST', stage: 'upsert' } })
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (!insertErr) return NextResponse.json({ report: inserted }, { status: 201 })
+
+    if ((insertErr as { code?: string }).code === '23505') {
+      const { data: updated, error: updateErr } = await admin
+        .from('incident_severe_injury_reports')
+        .update(mutable)
+        .eq('tenant_id', gate.tenantId)
+        .eq('incident_id', incidentId)
+        .eq('trigger_type', body.trigger_type)
+        .select(SELECT_COLS)
+        .single()
+      if (updateErr) {
+        Sentry.captureException(updateErr, { tags: { route: 'severe-injury-report/POST', stage: 'update' } })
+        return NextResponse.json({ error: updateErr.message }, { status: 500 })
+      }
+      return NextResponse.json({ report: updated }, { status: 200 })
     }
-    return NextResponse.json({ report: data }, { status: 201 })
+
+    Sentry.captureException(insertErr, { tags: { route: 'severe-injury-report/POST', stage: 'insert' } })
+    return NextResponse.json({ error: insertErr.message }, { status: 500 })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     Sentry.captureException(e, { tags: { route: 'severe-injury-report/POST' } })

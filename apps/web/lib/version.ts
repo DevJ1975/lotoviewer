@@ -28,7 +28,7 @@
 // (v1.12.0 and v1.14.0 were never released — VERSION never held either value.
 // The sequence skips them; that is not a gap in the tags.)
 
-export const VERSION = '1.17.1'
+export const VERSION = '1.18.0'
 
 const COMMIT_RAW = process.env.NEXT_PUBLIC_COMMIT_SHA
                 ?? process.env.VERCEL_GIT_COMMIT_SHA

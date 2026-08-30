@@ -12,7 +12,7 @@
 // surfaces this caveat in the UI; do not treat dollar figures here
 // as billing-grade.
 
-import { SONNET, HAIKU, OPUS } from './models'
+import { SONNET, HAIKU, OPUS, SONNET_5 } from './models'
 
 // ─── Pricing ──────────────────────────────────────────────────────────
 // Rates expressed in USD per million tokens. Source: Anthropic public
@@ -28,6 +28,9 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   // 2026-08-31; the list rate is used here rather than a date-dependent one,
   // so Sonnet spend reads slightly high until then. Deliberate — this table
   // is an estimate surface, and a time-varying rate is not worth the branch.
+  // SONNET and SONNET_5 are the same id after the Claude 5 move, so this is
+  // the Sonnet 5 row. List price deliberately, not the introductory rate:
+  // over-estimating makes a tenant budget cap fire early rather than late.
   [SONNET]: { inputPerMTok: 3,  outputPerMTok: 15 },
   [HAIKU]:  { inputPerMTok: 1,  outputPerMTok: 5  },
   [OPUS]:   { inputPerMTok: 5,  outputPerMTok: 25 },

@@ -149,6 +149,30 @@ For each step, use a real phone with the network reachable.
       token flow or permit sign-on tokens — visit one of those
       routes signed-out and confirm the existing behavior
 
+## 11 · BBS v2 coaching upgrade (migration 288)
+
+Apply `288_bbs_v2_coaching_teams.sql` first (idempotent; re-runnable).
+
+- [ ] At `/admin/observations/bbs/dashboard`, "Safety Action Teams" →
+      add "Night Crew"; it appears in the list (toggle Disable/Enable works)
+- [ ] At `/bbs/observe`, pick **Safe behavior** → the behavior checklist
+      chips show (PPE, line of fire, …); pick 2; check "Recognize this
+      safe behavior"; check "I gave coaching feedback" → C.A.R.E.S. note
+      box appears; pick the "Night Crew" action team; submit
+- [ ] Dashboard "Recognized" tile +1; recognition feed shows the row;
+      safe-behavior trend increments the two chosen tags
+- [ ] At `/bbs/observe`, pick **Unsafe act** + severity **Critical** →
+      the amber 24-hour rapid-review banner appears; submit
+- [ ] Dashboard "Rapid reviews" shows 1 due; back-date a test row's
+      `created_at` > 24h → it shows the **Overdue** badge
+- [ ] Submit an unsafe obs with "Follow-up needed" + the team → it
+      appears under "Night Crew" in "Follow-ups due by team"; a no-team
+      follow-up lands under "Unassigned"
+- [ ] `/bbs/scorecard` shows the "Coaching & recognition (30d)" section
+      (ratio, recognized, coaching feedback, rapid reviews due)
+- [ ] Tenant isolation: as Tenant B, none of Tenant A's teams,
+      observations, or recognition rows are visible
+
 ## What this checklist does NOT cover
 
 - Photo uploads (deferred — see `docs/deferred-work.md` D3.2)
