@@ -1,4 +1,4 @@
--- Migration 237: DOT / UN transport hazard-class placard catalog.
+-- Migration 267: DOT / UN transport hazard-class placard catalog.
 --
 -- The U.S. DOT hazardous-materials placarding system (49 CFR 172
 -- Subpart F) and the UN model regulations classify dangerous goods

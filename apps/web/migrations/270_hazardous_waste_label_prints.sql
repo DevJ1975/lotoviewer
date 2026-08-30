@@ -1,4 +1,4 @@
--- Migration 240: hazardous-waste label / signage print audit log.
+-- Migration 270: hazardous-waste label / signage print audit log.
 --
 -- Mirrors chemical_label_prints (090) for the hazardous-waste module.
 -- Every container label (40 CFR 262.32 marking) or accumulation-area

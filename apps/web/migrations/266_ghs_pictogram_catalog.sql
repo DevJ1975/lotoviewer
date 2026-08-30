@@ -1,4 +1,4 @@
--- Migration 236: GHS hazard-pictogram reference catalog.
+-- Migration 266: GHS hazard-pictogram reference catalog.
 --
 -- The nine GHS (Globally Harmonized System of Classification and
 -- Labelling of Chemicals) hazard pictograms used by OSHA HazCom 2012
