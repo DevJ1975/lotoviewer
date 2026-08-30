@@ -42,6 +42,7 @@ export type AiSurface =
   | 'loto-audit-regulator'
   | 'scorecard-focus'
   | 'rca-assist'
+  | 'ecfa-assist'
   | 'operator-orchestrator'
   | 'operator-incidents'
   | 'operator-risk'
@@ -55,6 +56,9 @@ export type AiSurface =
   | 'operator-admin'
   | 'operator-home'
   | 'operator-knowledge'
+  | 'vision-hazard-sweep'
+  | 'draft-regulatory-document'
+  | 'safety-briefing-narrate'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
@@ -123,6 +127,10 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   // case and iterates. Conversational-class caps keep an active investigation
   // unblocked while bounding a retry loop.
   'rca-assist':                       { perHour: 40, perDay: 200 },
+  // ECFA assist — interactive during an investigation: an admin clicks "draft
+  // sequence" / "suggest causal factors" a handful of times per case and
+  // iterates. Conversational-class caps, same as rca-assist.
+  'ecfa-assist':                      { perHour: 40, perDay: 200 },
   // Operator Console. The orchestrator is the one surface rate-limited per user
   // turn (conversational — same caps as the home assistant). The domain
   // sub-agents are fanned out BY the orchestrator within a single turn (often
@@ -142,6 +150,17 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   'operator-admin':                   { perHour: 600, perDay: 4000 },
   'operator-home':                    { perHour: 600, perDay: 4000 },
   'operator-knowledge':               { perHour: 600, perDay: 4000 },
+  // ── Predictive Safety Intelligence ─────────────────────────────────────
+  // The sweep is a batch fan-out under one engine identity, so its ceiling
+  // is a runaway guard rather than a per-user quota — the real cost control
+  // is the per-run photo cap plus the upfront tenant budget check. Same
+  // posture as the loto-audit-* surfaces above.
+  'vision-hazard-sweep':              { perHour: 900, perDay: 6000 },
+  // Interactive and expensive: a retrieval pass plus a long structured
+  // generation, then a human reads every word. Capped like the other
+  // authoring surfaces.
+  'draft-regulatory-document':        { perHour: 20,  perDay: 100 },
+  'safety-briefing-narrate':          { perHour: 20,  perDay: 100 },
 }
 
 interface CheckArgs {

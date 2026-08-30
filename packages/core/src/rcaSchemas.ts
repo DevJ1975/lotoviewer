@@ -35,6 +35,21 @@ export const RCA_METHOD_HELP: Record<RcaMethod, string> = {
     'Pick a method to start the analysis.',
 }
 
+// 5 Whys is RETIRED (soft): it stays a valid stored value so existing
+// investigations still render, but it is no longer offered for new
+// investigations and its editor is read-only. The Events & Causal Factors
+// Analysis (ECFA) tool supersedes it for causal analysis.
+export const RETIRED_RCA_METHODS: readonly RcaMethod[] = ['5_whys']
+
+export function isRetiredRcaMethod(m: RcaMethod): boolean {
+  return RETIRED_RCA_METHODS.includes(m)
+}
+
+// The methods offered in the "Begin investigation" + method-switch pickers.
+export const ACTIVE_RCA_METHODS: readonly RcaMethod[] = RCA_METHODS.filter(
+  (m) => m !== 'none_yet' && !RETIRED_RCA_METHODS.includes(m),
+)
+
 // ──────────────────────────────────────────────────────────────────────────
 // Investigation row (shared lifecycle metadata)
 // ──────────────────────────────────────────────────────────────────────────

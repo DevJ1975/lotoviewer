@@ -11,11 +11,16 @@ vi.mock('@/components/TenantProvider', () => ({
   useTenant: () => mockUseTenant(),
 }))
 
-// Override only the fetcher; keep sortUpdatesForFeed + types real.
+// Override only the fetchers; keep sortUpdatesForFeed + types real.
 const mockFetch = vi.fn()
+const mockJurisdictions = vi.fn()
 vi.mock('@soteria/core/oshaRegWatch', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@soteria/core/oshaRegWatch')>()
-  return { ...actual, fetchOshaRegulationUpdates: (...args: unknown[]) => mockFetch(...args) }
+  return {
+    ...actual,
+    fetchOshaRegulationUpdates: (...args: unknown[]) => mockFetch(...args),
+    fetchTenantJurisdictions:   () => mockJurisdictions(),
+  }
 })
 
 function update(over: Partial<OshaRegulationUpdate> = {}): OshaRegulationUpdate {
@@ -23,6 +28,7 @@ function update(over: Partial<OshaRegulationUpdate> = {}): OshaRegulationUpdate 
     id:                 'u1',
     title:              'Walking-Working Surfaces Final Rule',
     category:           'final_rule',
+    jurisdiction:       'federal',
     is_upcoming:        false,
     source_url:         'https://www.federalregister.gov/documents/2026/05/01/2026-12345/walking-working-surfaces',
     published_date:     '2026-05-01',
@@ -39,6 +45,9 @@ describe('OshaRegWatchPanel', () => {
   beforeEach(() => {
     mockUseTenant.mockReset()
     mockFetch.mockReset()
+    mockJurisdictions.mockReset()
+    // Default: a tenant with no California site, so only federal rows load.
+    mockJurisdictions.mockResolvedValue(['federal'])
   })
 
   it('renders nothing when the tenant has the module turned off', () => {
@@ -52,14 +61,14 @@ describe('OshaRegWatchPanel', () => {
     mockUseTenant.mockReturnValue({ tenant: { id: 't', modules: {} }, loading: false })
     mockFetch.mockResolvedValue([])
     render(<OshaRegWatchPanel />)
-    expect(await screen.findByText(/No OSHA regulatory updates yet/i)).toBeInTheDocument()
+    expect(await screen.findByText(/No regulatory updates yet/i)).toBeInTheDocument()
   })
 
   it('shows the empty state when the fetch returns null (swallowed query error)', async () => {
     mockUseTenant.mockReturnValue({ tenant: { id: 't', modules: {} }, loading: false })
     mockFetch.mockResolvedValue(null)
     render(<OshaRegWatchPanel />)
-    expect(await screen.findByText(/No OSHA regulatory updates yet/i)).toBeInTheDocument()
+    expect(await screen.findByText(/No regulatory updates yet/i)).toBeInTheDocument()
   })
 
   it('renders an update as an external link with badge, summary, and date', async () => {

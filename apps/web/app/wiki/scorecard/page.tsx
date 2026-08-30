@@ -1,10 +1,26 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.13.1'
-const LAST_UPDATED    = '2026-06-17'
+const CURRENT_VERSION = '1.14.0'
+const LAST_UPDATED    = '2026-07-14'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.14.0',
+    date:    '2026-07-14',
+    changes: [
+      'Cross-module risk engine (model v2.0.0): the site-health score now also ' +
+      'reads failing inspections, open BBS follow-ups, overdue JHA reviews, ' +
+      'permits left open past expiry, competency-matrix training gaps, and ECFA ' +
+      'causal factors on weak controls — each surfaced as a leading driver.',
+      'New “Leading Indicator Signals” panel: shows which leading indicators ' +
+      'historically precede your recordables and by how many months — presented ' +
+      'as exploratory correlation, not proof of cause.',
+      'Statistical honesty: OSHA rates now show confidence intervals (Poisson ' +
+      'for rates, Wilson for RCA completion) so a rate built on a few events no ' +
+      'longer reads as precise.',
+    ],
+  },
   {
     version: '1.13.1',
     date:    '2026-06-17',

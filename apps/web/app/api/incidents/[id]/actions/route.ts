@@ -23,7 +23,8 @@ const SELECT_COLS = [
   'action_type', 'hierarchy_of_controls',
   'description', 'owner_user_id', 'due_at',
   'status', 'completed_at', 'verified_at', 'verified_by',
-  'verification_evidence', 'source_rca_node_id', 'cancel_reason',
+  'verification_evidence', 'source_rca_node_id', 'source_ecfa_node_id',
+  'ai_origin', 'ai_edited', 'cancel_reason',
   'created_at', 'updated_at', 'created_by', 'updated_by',
 ].join(', ')
 
@@ -77,6 +78,8 @@ export async function POST(req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: 'owner_user_id must be a uuid' }, { status: 400 })
   if (body.source_rca_node_id && !UUID_RE.test(body.source_rca_node_id))
     return NextResponse.json({ error: 'source_rca_node_id must be a uuid' }, { status: 400 })
+  if (body.source_ecfa_node_id && !UUID_RE.test(body.source_ecfa_node_id))
+    return NextResponse.json({ error: 'source_ecfa_node_id must be a uuid' }, { status: 400 })
 
   try {
     const admin = supabaseAdmin()
@@ -98,6 +101,11 @@ export async function POST(req: Request, ctx: RouteContext) {
       owner_user_id:         body.owner_user_id ?? null,
       due_at:                body.due_at ?? null,
       source_rca_node_id:    body.source_rca_node_id ?? null,
+      source_ecfa_node_id:   body.source_ecfa_node_id ?? null,
+      // AI provenance passthrough — a corrective action drafted by the
+      // co-pilot and accepted by a human is badged. Defaults false.
+      ai_origin:             body.ai_origin ?? false,
+      ai_edited:             body.ai_edited ?? false,
       created_by:            gate.userId,
       updated_by:            gate.userId,
     }

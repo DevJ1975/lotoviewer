@@ -49,6 +49,9 @@ import { useMetricDrill } from '@/components/scorecard/useMetricDrill'
 import { MetricDetailSheet } from '@/components/scorecard/MetricDetailSheet'
 import { RiskGauge } from '@/components/scorecard/RiskGauge'
 import { LeadingLaggingPanel } from '@/components/scorecard/LeadingLaggingPanel'
+import LeadingSignalPanel from '@/components/scorecard/LeadingSignalPanel'
+import { rateInterval, wilsonInterval } from '@soteria/core/statistics'
+import { buildWeatherRow } from '@soteria/core/scorecardWeatherReport'
 import { PredictiveSection } from '@/components/scorecard/PredictiveSection'
 import { FocusCard } from '@/components/scorecard/FocusCard'
 import {
@@ -430,6 +433,8 @@ export default function ScorecardPage() {
           onSelect={d => drill.open(metricDetailFromDriver(d))}
         />
       )}
+
+      {tenantId && <LeadingSignalPanel tenantId={tenantId} />}
 
       {incidentMetrics && (
         <IncidentScorecardSection
@@ -1021,15 +1026,15 @@ function IncidentScorecardSection({ metrics: m, annualHistory, targetRows, naics
           sub={streak < 0 ? 'none on file' : streak === 1 ? 'day' : 'days'}
           accent={streak < 0 || streak >= 30 ? 'safe' : 'neutral'} href="/incidents"
           detail={kpi.days_since} onDrill={onDrill} />
-        <IncidentStatCard icon={Activity} label="TRIR" value={fmtRate(m.trir)} sub="per 100 FTE" accent="neutral" href="/osha" detail={kpi.trir} onDrill={onDrill} />
-        <IncidentStatCard icon={Activity} label="DART" value={fmtRate(m.dart)} sub="per 100 FTE" accent="neutral" href="/osha" detail={kpi.dart} onDrill={onDrill} />
-        <IncidentStatCard icon={Activity} label="LTIR" value={fmtRate(m.ltir)} sub="per 100 FTE" accent="neutral" href="/osha" detail={kpi.ltir} onDrill={onDrill} />
+        <IncidentStatCard icon={Activity} label="TRIR" value={fmtRate(m.trir)} sub={ciSub(rateInterval(m.totalRecordable, m.hoursWorked), 'per 100 FTE')} accent="neutral" href="/osha" detail={kpi.trir} onDrill={onDrill} />
+        <IncidentStatCard icon={Activity} label="DART" value={fmtRate(m.dart)} sub={ciSub(rateInterval(m.totalDeaths + m.totalDaysAwayCases + m.totalRestrictedCases, m.hoursWorked), 'per 100 FTE')} accent="neutral" href="/osha" detail={kpi.dart} onDrill={onDrill} />
+        <IncidentStatCard icon={Activity} label="LTIR" value={fmtRate(m.ltir)} sub={ciSub(rateInterval(m.totalDeaths + m.totalDaysAwayCases, m.hoursWorked), 'per 100 FTE')} accent="neutral" href="/osha" detail={kpi.ltir} onDrill={onDrill} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <IncidentStatCard icon={Gauge} label="Severity rate" value={fmtRate(m.severityRate)} sub="days × 200K / hrs" accent="neutral" href="/osha" detail={kpi.severity} onDrill={onDrill} />
+        <IncidentStatCard icon={Gauge} label="Severity rate" value={fmtRate(m.severityRate)} sub={ciSub(rateInterval(m.totalDaysAwayCount, m.hoursWorked), 'days × 200K / hrs')} accent="neutral" href="/osha" detail={kpi.severity} onDrill={onDrill} />
         <IncidentStatCard icon={ClipboardCheck} label="CAPA on time" value={fmtPct(m.actionClosureOnTimePct)} sub="closed by due date" accent={pctTone(m.actionClosureOnTimePct)} href="/incidents" detail={kpi.capa} onDrill={onDrill} />
-        <IncidentStatCard icon={ShieldCheck} label="RCA completion" value={fmtPct(m.rcaCompletionPct)} sub={`${m.recordablesWithCompletedRca} of ${m.totalRecordable} recordable`} accent={pctTone(m.rcaCompletionPct)} href="/incidents" detail={kpi.rca} onDrill={onDrill} />
+        <IncidentStatCard icon={ShieldCheck} label="RCA completion" value={fmtPct(m.rcaCompletionPct)} sub={m.totalRecordable > 0 ? `95% CI ${pctCiText(wilsonInterval(m.recordablesWithCompletedRca, m.totalRecordable))} · ${m.recordablesWithCompletedRca}/${m.totalRecordable}` : `${m.recordablesWithCompletedRca} of ${m.totalRecordable} recordable`} accent={pctTone(m.rcaCompletionPct)} href="/incidents" detail={kpi.rca} onDrill={onDrill} />
         <IncidentStatCard icon={Timer} label="Time to close" value={m.meanTimeToCloseDays === null ? '—' : m.meanTimeToCloseDays.toFixed(1)} sub="avg days, reported→closed" accent="neutral" href="/incidents" detail={kpi.time_to_close} onDrill={onDrill} />
       </div>
 
@@ -1417,9 +1422,13 @@ function RecordkeepingStat({ label, value, critical = false }: { label: string; 
 function WowRow({ label, current, previous, higherIsBetter }: {
   label: string; current: number; previous: number; higherIsBetter: boolean
 }) {
+  // Reuse the shared weather-report logic so the live WoW strip and the weekly
+  // email agree — including the significance gate: a within-noise ±1 move keeps
+  // its arrow but stays neutral-grey rather than reading as good/bad.
+  const row = buildWeatherRow({ key: label, label, current, previous, higherIsBetter })
   const delta = current - previous
   const dir = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat'
-  const good = dir === 'flat' ? null : (dir === 'up' ? higherIsBetter : !higherIsBetter)
+  const good = row.tone === 'good' ? true : row.tone === 'bad' ? false : null
   const color = good === null ? 'text-slate-400'
     : good ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
   const arrow = dir === 'up' ? '↑' : dir === 'down' ? '↓' : '—'
@@ -1475,6 +1484,18 @@ function fmtRate(v: number | null): string {
 
 function fmtPct(v: number | null): string {
   return v === null ? '—' : `${Math.round(v)}%`
+}
+
+// A rate confidence interval as a card subtitle ("95% CI 0.2–3.9"), or the
+// given fallback when there are no hours to compute a rate. Surfaces that a
+// rate built on a few recordables is imprecise, not exact.
+function ciSub(ci: { lower: number; upper: number } | null, fallback: string): string {
+  return ci ? `95% CI ${ci.lower.toFixed(2)}–${ci.upper.toFixed(2)}` : fallback
+}
+
+// A proportion Wilson interval as "61–92%".
+function pctCiText(ci: { lower: number; upper: number }): string {
+  return `${Math.round(ci.lower * 100)}–${Math.round(ci.upper * 100)}%`
 }
 
 // Percentage indicators where higher is better (CAPA on-time, RCA

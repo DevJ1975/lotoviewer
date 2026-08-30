@@ -49,6 +49,9 @@ interface Props {
   onCreateAction: (draft: ActionDraft) => Promise<boolean>
   /** Ask the AI route for help. Returns the parsed suggestion or null. */
   onAssist: (mode: 'next_why' | 'draft_root_and_actions', parentNodeId?: string | null) => Promise<unknown>
+  /** Retired-method view: render the existing chain read-only (no add /
+   *  edit / delete / AI). Existing 5 Whys investigations stay viewable. */
+  readOnly?: boolean
 }
 
 interface NextWhySuggestion { question: string; answer: string; rationale: string }
@@ -58,7 +61,7 @@ interface DraftSuggestion {
 }
 
 export default function FiveWhysBoard({
-  rows, busy, isAdmin, onAdd, onDelete, onPatch, onCreateAction, onAssist,
+  rows, busy, isAdmin, onAdd, onDelete, onPatch, onCreateAction, onAssist, readOnly = false,
 }: Props) {
   // Which node currently has its inline "ask why" form open (null = none;
   // '' = the top-level "what happened" form when the chain is empty).
@@ -170,7 +173,7 @@ export default function FiveWhysBoard({
             usually more than one.
           </p>
         </div>
-        {isAdmin && rows.length > 0 && (
+        {isAdmin && rows.length > 0 && !readOnly && (
           <button
             type="button"
             onClick={() => void runDraftPanel()}
@@ -202,7 +205,7 @@ export default function FiveWhysBoard({
       )}
 
       {/* ── Empty state ────────────────────────────────────────────── */}
-      {rows.length === 0 && openParent !== '' && (
+      {rows.length === 0 && openParent !== '' && !readOnly && (
         <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 p-4 text-center">
           <p className="text-sm text-slate-500 dark:text-slate-400">
             Start with the problem: what happened?
@@ -245,6 +248,7 @@ export default function FiveWhysBoard({
                     </p>
                   )}
                   {/* per-node controls */}
+                  {!readOnly && (
                   <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px]">
                     <button
                       type="button"
@@ -281,9 +285,10 @@ export default function FiveWhysBoard({
                       </button>
                     )}
                   </div>
+                  )}
 
                   {/* inline add-child form */}
-                  {openParent === node.id && (
+                  {!readOnly && openParent === node.id && (
                     <AddForm
                       prompt={nextWhyPrompt(node.answer)}
                       value={draftAnswer}
@@ -302,7 +307,7 @@ export default function FiveWhysBoard({
                     />
                   )}
                 </div>
-                <DeleteButton onClick={() => onDelete(node.id)} disabled={busy} />
+                {!readOnly && <DeleteButton onClick={() => onDelete(node.id)} disabled={busy} />}
               </div>
             </li>
           )
@@ -310,7 +315,7 @@ export default function FiveWhysBoard({
       </ul>
 
       {/* top-level "what happened" form (empty chain) */}
-      {openParent === '' && (
+      {!readOnly && openParent === '' && (
         <AddForm
           prompt="What happened?"
           value={draftAnswer}

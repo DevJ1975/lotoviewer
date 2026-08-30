@@ -30,6 +30,7 @@ const FREQUENCY_LABEL: Record<JhaFrequency, string> = {
 
 export default function JhaListPage() {
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const { profile } = useAuth()
   const canCreate = !!profile?.is_admin || !!profile?.is_superadmin
 
@@ -38,11 +39,11 @@ export default function JhaListPage() {
   const [showSuperseded, setShowSuperseded] = useState(false)
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     setError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+      const headers: Record<string, string> = { 'x-active-tenant': tenantId }
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
 
       const params = new URLSearchParams()
@@ -56,7 +57,7 @@ export default function JhaListPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [tenant?.id, showSuperseded])
+  }, [tenantId, showSuperseded])
 
   useEffect(() => { void load() }, [load])
 

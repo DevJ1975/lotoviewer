@@ -3,18 +3,21 @@
 // fail-soft behaviour of sendInvite.ts: returns { sent, providerId } and
 // never throws, so one Resend failure can't sink the cron's batch.
 //
-// We deliberately do NOT include a password — the one-time password lives
-// only in the original invite email. The reminder points to /login and, as
-// a fallback, the password-reset flow.
+// Never includes a password. When the cron minted a fresh invite link the
+// reminder carries it (superseding older links); without one it falls
+// back to pointing at /login + the password-reset flow.
 
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
 import { logEmailSend } from '@/lib/email/instrument'
+import { inviteReplyTo } from '@/lib/email/sendInvite'
 
 export interface InviteReminderArgs {
   to:             string
   fullName:       string
   loginUrl:       string
+  /** Fresh single-use accept-invite link; the CTA when present. */
+  inviteUrl?:     string
   tenantName?:    string
   /** 1-based reminder number (1..maxReminders). */
   reminderNumber: number
@@ -55,7 +58,9 @@ export async function sendInviteReminder(
 
   try {
     const resend = new Resend(apiKey)
-    const { data, error } = await resend.emails.send({ from, to: args.to, subject, text, html })
+    const { data, error } = await resend.emails.send({
+      from, to: args.to, subject, text, html, replyTo: inviteReplyTo(),
+    })
     if (error) {
       Sentry.captureException(error, { tags: { module: 'sendInviteReminder', stage: 'resend' } })
       console.error('[invite-reminder] Resend rejected the send', error)
@@ -89,19 +94,22 @@ function renderText(a: RenderArgs): string {
   const closing = a.isFinal
     ? `This is the last reminder. If you don't sign in soon, this invitation
 will be cancelled and an administrator will need to invite you again.`
-    : `If you've misplaced the one-time password from your invitation, you can
-reset it here:
+    : `Already set a password? Sign in at ${a.loginUrl}/login — or reset it
+here if you've forgotten it:
   ${a.loginUrl}/forgot-password`
+
+  const action = a.inviteUrl
+    ? `Accept your invitation and choose your password here (this fresh link
+replaces any earlier one):
+  ${a.inviteUrl}`
+    : `Sign in to finish setting up your account:
+  ${a.loginUrl}/login`
 
   return `Hi ${displayName},
 
 You were invited to SoteriaField${tenantLine} but haven't signed in yet.
 
-Sign in to finish setting up your account:
-  ${a.loginUrl}/login
-
-Use the one-time password from your original invitation email — you'll be
-asked to set your own password on first login.
+${action}
 
 ${closing}
 
@@ -124,8 +132,13 @@ function renderHtml(a: RenderArgs): string {
         This is the last reminder. If you don't sign in soon, this invitation will be cancelled and an administrator will need to invite you again.
       </p>`
     : `<p style="margin:18px 0 0 0;font-size:12px;line-height:1.55;color:#5b6675;">
-        Misplaced the one-time password from your invitation? <a href="${safe(a.loginUrl)}/forgot-password" style="color:#214488;">Reset it here</a>.
+        Already set a password? <a href="${safe(a.loginUrl)}/login" style="color:#214488;">Sign in here</a>, or <a href="${safe(a.loginUrl)}/forgot-password" style="color:#214488;">reset it</a> if you've forgotten it.
       </p>`
+  const ctaHref = a.inviteUrl ? safe(a.inviteUrl) : `${safe(a.loginUrl)}/login`
+  const ctaLabel = a.inviteUrl ? 'Accept your invitation →' : 'Sign in to SoteriaField →'
+  const bodyLine = a.inviteUrl
+    ? 'Tap below to accept your invitation and choose your password — this fresh link replaces any earlier one.'
+    : 'Tap below to finish setting up your account.'
 
   return `<!doctype html>
 <html><body style="margin:0;padding:0;background:#f6f8fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a2230;">
@@ -138,9 +151,9 @@ function renderHtml(a: RenderArgs): string {
     </td></tr>
     <tr><td style="padding:28px;">
       <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;">Hi ${displayName},</p>
-      <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;">You were invited to SoteriaField${tenantLine} but haven't signed in yet. Tap below to finish setting up your account — use the one-time password from your original invitation email.</p>
+      <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;">You were invited to SoteriaField${tenantLine} but haven't signed in yet. ${bodyLine}</p>
       <p style="margin:0 0 8px 0;text-align:center;">
-        <a href="${safe(a.loginUrl)}/login" style="display:inline-block;background:#214488;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 24px;border-radius:10px;">Sign in to SoteriaField →</a>
+        <a href="${ctaHref}" style="display:inline-block;background:#214488;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 24px;border-radius:10px;">${ctaLabel}</a>
       </p>
       ${closing}
       <p style="margin:18px 0 0 0;font-size:12px;line-height:1.55;color:#5b6675;">Trouble signing in? Just reply to this email.</p>

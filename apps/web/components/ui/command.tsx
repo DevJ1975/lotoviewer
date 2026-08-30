@@ -36,12 +36,28 @@ function CommandDialog({
   description?: string
   children?: React.ReactNode
 }) {
+  // The description is wired by id rather than by value. `aria-description`
+  // is not a real ARIA attribute — react-aria's filterDOMProps allows
+  // aria-label / -labelledby / -describedby / -details and drops everything
+  // else — so passing the text directly reached the DOM as nothing at all,
+  // even after DialogContent was taught to forward it. The name worked; the
+  // description silently did not.
+  const descriptionId = React.useId()
+
   return (
     <Dialog {...props}>
-      <DialogContent className="overflow-hidden p-0" showCloseButton={false}>
-        {/* a11y — reads to screenreaders even though we hide visually */}
+      {/* aria-label names the dialog; aria-describedby points at the sr-only
+          description below. The spans alone are not enough: they are children,
+          not the dialog's accessible name, so Base-UI warns and screen readers
+          announce an unnamed dialog on open. */}
+      <DialogContent
+        className="overflow-hidden p-0"
+        showCloseButton={false}
+        aria-label={title}
+        aria-describedby={descriptionId}
+      >
         <span className="sr-only">{title}</span>
-        <span className="sr-only">{description}</span>
+        <span className="sr-only" id={descriptionId}>{description}</span>
         <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]_svg]:size-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:size-5">
           {children}
         </Command>
