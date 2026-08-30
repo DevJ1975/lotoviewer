@@ -169,7 +169,7 @@ A rebuild from `migrations/` loses all of this. Verified live objects with no ow
 | PHI storage bucket | `20260524202855 medical_records_bucket` | private `medical-records` bucket (referenced by `201`'s header, created nowhere) |
 | Placard QR backfill marker | `20260606155006 289_loto_placard_qr_backfill_marker` | `loto_equipment.placard_qr_backfilled` + index |
 | Perf index drop | `20260612205718 291_drop_duplicate_audit_results_index` | drop of `idx_loto_audit_results_run` (repo `218` recreates it on rebuild — mild perf regression only) |
-| Perf consolidation RPCs | `20260613012950 227_perf_consolidation_rpcs` | N+1-collapsing read RPCs |
+| Perf consolidation RPCs | `20260613012950 292_perf_consolidation_rpcs` | N+1-collapsing read RPCs |
 | Waitlist | `20260613032726 228_waitlist_signups` | table `waitlist_signups` (0 rows) |
 | Hazmat catalogs (seeded!) | `20260614232545/232621/232742/232802/232820/232837` | `ghs_pictogram_catalog` (9 rows), `dot_hazard_class_catalog` (20 rows), `nfpa704_legend` (18 rows), `hazardous_waste_label_prints`, stream-symbol/tier-two columns |
 | Safety weather | `20260616224419/224604/224644 232/233/234_safety_weather_*` | tables `safety_weather_settings`, `safety_weather_readings` (0 rows) + site-coordinate columns |
