@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNow } from '@/hooks/useNow'
 import Link from 'next/link'
 import { ArrowLeft, Award, Eye, ListChecks, Loader2, ShieldAlert, Users } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -91,6 +92,11 @@ export default function BbsDashboardPage() {
     if (!authLoading && profile?.is_admin) { void load(); void loadTeams() }
   }, [authLoading, profile, load, loadTeams])
 
+  // Sampled rather than read at render: Date.now() during render is impure,
+  // so the overdue badge froze at whenever the last unrelated render happened.
+  // One minute is finer than the 24-hour SLA it drives. Must sit with the
+  // other hooks — below are early returns for loading and non-admins.
+  const nowMs = useNow(60_000)
   const summary = useMemo(() => summarizeObservations(rows ?? []), [rows])
   const band = bandRatio(summary.safeToUnsafeRatio)
   const tagTally = useMemo(() => tallyBehaviorTags(rows ?? []), [rows])
@@ -132,7 +138,7 @@ export default function BbsDashboardPage() {
   const recognizedRows = all.filter(r => r.recognized).slice(0, 10)
   const followUpGroups = groupFollowUpsByTeam(all, teamNameById)
   const maxTag = Math.max(1, ...BEHAVIOR_TAG_CATALOG.map(t => tagTally[t.key]))
-  const slaCutoff = Date.now() - RAPID_REVIEW_SLA_HOURS * 3_600_000
+  const slaCutoff = nowMs - RAPID_REVIEW_SLA_HOURS * 3_600_000
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-5">
