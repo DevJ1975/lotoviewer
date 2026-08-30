@@ -10,6 +10,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 import { runAuthorAgent } from '@/lib/loto/audit/agents/author'
 import type { AuthorResult, EhsCitation } from '@/lib/loto/audit/schemas'
+import { SONNET } from '@/lib/ai/models'
 
 const MODEL_RESULT: AuthorResult = {
   steps: [
@@ -152,7 +153,11 @@ describe('runAuthorAgent — response parsing', () => {
       client, EQUIPMENT, [step('s1', 'isolate', 'x')], CITATIONS, RECOMMENDATIONS, '', ['verify_zero_energy'],
     )
 
-    expect(model).toBe('claude-sonnet-4-6')
+    // Assert the registry constant, not a literal: models.ts is the single
+    // place a model id is pinned, and __tests__/lib/ai/models.test.ts pins it
+    // there. Repeating the literal here just makes every model bump a
+    // multi-file edit that says nothing about this agent.
+    expect(model).toBe(SONNET)
     expect(result.steps).toHaveLength(4)
     // The draft addresses the cited gap: a verify_zero_energy step is present.
     expect(result.steps.some(s => s.step_type === 'verify_zero_energy')).toBe(true)

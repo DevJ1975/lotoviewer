@@ -35,7 +35,7 @@ export const maxDuration = 90
 // pgvector RAG retrieval.
 
 const MODEL = MODEL_BY_SURFACE['assistant-chat']
-const MAX_TOKENS = 2000
+const MAX_TOKENS = 4000
 const HISTORY_TURNS = 20
 const MAX_TOOL_LOOPS = 4   // hard cap on tool-use roundtrips per turn
 
@@ -216,6 +216,8 @@ export async function POST(req: Request) {
       response = await client.messages.create({
         model:      MODEL,
         max_tokens: MAX_TOKENS,
+        thinking:   { type: 'adaptive' },
+        output_config: { effort: 'low' },
         system: [{
           type: 'text',
           text: staticBlock,

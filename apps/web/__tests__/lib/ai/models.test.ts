@@ -7,7 +7,7 @@ import { SONNET, HAIKU, OPUS, MODEL_BY_SURFACE, type AiSurface } from '@/lib/ai/
 
 describe('ai/models constants', () => {
   it('SONNET is the alias-style id (no date suffix)', () => {
-    expect(SONNET).toBe('claude-sonnet-4-6')
+    expect(SONNET).toBe('claude-sonnet-5')
     expect(SONNET).not.toMatch(/\d{8}$/)
   })
 
@@ -17,7 +17,7 @@ describe('ai/models constants', () => {
   })
 
   it('OPUS is the alias-style id (no date suffix)', () => {
-    expect(OPUS).toBe('claude-opus-4-8')
+    expect(OPUS).toBe('claude-opus-5')
     expect(OPUS).not.toMatch(/\d{8}$/)
   })
 

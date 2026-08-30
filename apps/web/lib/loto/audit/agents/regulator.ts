@@ -23,6 +23,7 @@ import {
 } from '../schemas'
 import { REGULATOR_SYSTEM, REGULATOR_PROGRAM_SYSTEM, describeRegulatorInputs } from '../prompts'
 import type { AgentOutput } from './fpe'
+import { assertNotRefused } from '@/lib/ai/client'
 
 const MODEL = MODEL_BY_SURFACE['loto-audit-regulator']
 
@@ -45,6 +46,7 @@ export async function runRegulatorMachineReview(
   const response = await client.messages.create({
     model:      MODEL,
     max_tokens: 4000,
+    thinking:   { type: 'disabled' },
     // Cache the static system prompt — a post-audit pass reviews many machines
     // in one burst, all sharing this prompt.
     system:     [{ type: 'text', text: REGULATOR_SYSTEM, cache_control: { type: 'ephemeral' } }],
@@ -52,6 +54,7 @@ export async function runRegulatorMachineReview(
     output_config: { format: { type: 'json_schema', schema: REGULATOR_MACHINE_SCHEMA } },
   })
 
+  assertNotRefused(response, 'loto-audit-regulator')
   const textBlock = response.content.find(b => b.type === 'text')
   if (!textBlock || textBlock.type !== 'text') throw new Error('Regulator agent: no text block in response')
   const result = JSON.parse(textBlock.text) as RegulatorMachineResult
@@ -74,11 +77,13 @@ export async function runRegulatorProgramReview(
   const response = await client.messages.create({
     model:      MODEL,
     max_tokens: 4000,
+    thinking:   { type: 'disabled' },
     system:     [{ type: 'text', text: REGULATOR_PROGRAM_SYSTEM, cache_control: { type: 'ephemeral' } }],
     messages:   [{ role: 'user', content: userText }],
     output_config: { format: { type: 'json_schema', schema: REGULATOR_PROGRAM_SCHEMA } },
   })
 
+  assertNotRefused(response, 'loto-audit-regulator')
   const textBlock = response.content.find(b => b.type === 'text')
   if (!textBlock || textBlock.type !== 'text') throw new Error('Regulator program agent: no text block in response')
   const result = JSON.parse(textBlock.text) as RegulatorProgramResult

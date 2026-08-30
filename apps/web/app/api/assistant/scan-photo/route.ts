@@ -114,6 +114,7 @@ export async function POST(req: Request) {
     response = (await client.messages.create({
       model:      MODEL,
       max_tokens: 1500,
+      thinking:   { type: 'disabled' },
       system:     SYSTEM_PROMPT,
       messages: [{
         role: 'user',

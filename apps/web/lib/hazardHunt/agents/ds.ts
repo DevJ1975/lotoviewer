@@ -19,6 +19,11 @@ export async function runDsTrendsAgent(
   const response = await client.messages.create({
     model:      MODEL,
     max_tokens: 2000,
+    // Explicit, per the posture rule: these are structured-output calls and
+    // extended thinking pushes them past the shared token budget. Silence
+    // here used to mean "whatever the model defaults to", which changed
+    // under the Claude 5 move.
+    thinking:   { type: 'disabled' },
     system:     [{ type: 'text', text: DS_SYSTEM, cache_control: { type: 'ephemeral' } }],
     messages:   [{ role: 'user', content: userText }],
     output_config: { format: { type: 'json_schema', schema: DS_TRENDS_SCHEMA } },
