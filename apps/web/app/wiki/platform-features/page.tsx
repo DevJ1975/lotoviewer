@@ -1,10 +1,19 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.1.0'
+const CURRENT_VERSION = '1.2.0'
 const LAST_UPDATED    = '2026-08-29'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.2.0',
+    date:    '2026-06-17',
+    changes: [
+      'Behavior-Based Safety now has its own dedicated wiki page at ' +
+      '/wiki/bbs (covering both BBS surfaces and the coaching upgrade). ' +
+      'This page links there instead of documenting BBS inline.',
+    ],
+  },
   {
     version: '1.1.0',
     date:    '2026-08-29',
@@ -45,6 +54,20 @@ const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
+    version: '1.1.0',
+    date:    '2026-06-17',
+    changes: [
+      'BBS v2 coaching upgrade (Workplace Learning System methodology): ' +
+      'C.A.R.E.S. coaching notes + a structured safe-behavior checklist ' +
+      '(PPE, line of fire, tools, procedures, housekeeping, ergonomics); ' +
+      'recognition of safe behaviors with a dashboard recognition feed; ' +
+      'a "Hot Seat" 24-hour rapid review auto-flagged for critical unsafe ' +
+      'observations (due / overdue tracking); and Safety Action Teams — a ' +
+      'tenant-scoped lookup so follow-ups group by team. The scorecard now ' +
+      'surfaces these v2 leading indicators.',
+    ],
+  },
+  {
     version: '1.0.0',
     date:    '2026-05-15',
     changes: [
@@ -62,7 +85,7 @@ export default function WikiPlatformFeaturesPage() {
   return (
     <WikiPage
       title="Platform Features"
-      subtitle="SSO + SCIM, CMMS sync, BBS v2, vendor prequal, i18n."
+      subtitle="SSO + SCIM, CMMS sync, vendor prequal, i18n."
       modulePath="/admin/people/sso"
       audience="admin"
       category="Admin"
@@ -74,7 +97,7 @@ export default function WikiPlatformFeaturesPage() {
         { id: 'sso',       label: 'SSO config' },
         { id: 'scim',      label: 'SCIM 2.0 provisioning' },
         { id: 'cmms',      label: 'CMMS bidirectional sync' },
-        { id: 'bbs',       label: 'BBS v2 observations' },
+        { id: 'bbs',       label: 'Behavior-Based Safety' },
         { id: 'prequal',   label: 'Vendor prequalification' },
         { id: 'i18n',      label: 'Multi-language (i18n)' },
         { id: 'faq',       label: 'FAQ' },
@@ -177,7 +200,7 @@ export default function WikiPlatformFeaturesPage() {
         </p>
       </Section>
 
-      <Section id="bbs" title="BBS v2 observations">
+      <Section id="bbs" title="Behavior-Based Safety">
         <p>
           A second, leaner BBS surface alongside the existing one (same
           intentional-parallel pattern Module 2 used for CAPAs vs
@@ -201,6 +224,12 @@ export default function WikiPlatformFeaturesPage() {
           banded red (&lt;2:1) / yellow (2–4:1) / green (≥4:1). The
           band is intentionally loud — a sustained red is a culture
           finding, not a data finding.
+          Behavior-Based Safety now has its own page — see the{' '}
+          <Link href="/wiki/bbs">Behavior-Based Safety wiki</Link> for the full
+          treatment: both surfaces (v1 gamified QR + leaderboard, v2 ratio-driven
+          coaching), the safe-to-unsafe ratio, C.A.R.E.S. coaching and
+          recognition, the 24-hour &ldquo;Hot Seat&rdquo; rapid review, and
+          Safety Action Teams.
         </p>
       </Section>
 
