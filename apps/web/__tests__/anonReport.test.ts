@@ -5,7 +5,7 @@ import {
   isValidPinFormat,
   normalizePin,
 } from '@/lib/anonReport/receipt'
-import { haversineMeters, isOutsideRadius, parsePgPoint } from '@/lib/anonReport/geofence'
+import { haversineMeters, isOutsideRadius } from '@/lib/anonReport/geofence'
 import { pickLocale } from '@/lib/anonReport/i18n'
 
 describe('receipt PIN', () => {
@@ -60,12 +60,9 @@ describe('geofence', () => {
     expect(isOutsideRadius(site, far,   100)).toBe(true)
   })
 
-  it('parses Postgres point literals defensively', () => {
-    expect(parsePgPoint('(40.7,-74.0)')).toEqual({ lat: 40.7, lng: -74.0 })
-    expect(parsePgPoint(' ( 1.5 , 2.5 ) ')).toEqual({ lat: 1.5, lng: 2.5 })
-    expect(parsePgPoint(null)).toBeNull()
-    expect(parsePgPoint('not a point')).toBeNull()
-  })
+  // Point parsing moved to @soteria/core/incident (parseIncidentGeo)
+  // so the reader and the writer share one axis order — covered in
+  // __tests__/lib/incidentReporterEdgeCases.test.ts.
 })
 
 describe('locale resolution', () => {

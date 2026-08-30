@@ -62,6 +62,7 @@ interface Catalog {
   thankYouTeam:             string
   errorPickType:            string
   errorPickDescription:     string
+  errorPickWhen:            string
   errorRequired:            string
   errorTokenInvalid:        string
   errorRateLimit:           string
@@ -106,6 +107,7 @@ const en: Catalog = {
   thankYouTeam:             'The safety team will review it. You can close this page.',
   errorPickType:            'Please pick an incident type.',
   errorPickDescription:     'Please describe what happened.',
+  errorPickWhen:            'Please enter a valid date and time.',
   errorRequired:            'This field is required.',
   errorTokenInvalid:        'This QR code is no longer active. Please ask your supervisor for an updated sign.',
   errorRateLimit:           'Too many reports from this location in the last hour. Please try again later.',
@@ -150,6 +152,7 @@ const es: Catalog = {
   thankYouTeam:             'El equipo de seguridad lo revisará. Puede cerrar esta página.',
   errorPickType:            'Por favor seleccione un tipo de incidente.',
   errorPickDescription:     'Por favor describa qué sucedió.',
+  errorPickWhen:            'Por favor ingrese una fecha y hora válidas.',
   errorRequired:            'Este campo es obligatorio.',
   errorTokenInvalid:        'Este código QR ya no está activo. Pida a su supervisor un letrero actualizado.',
   errorRateLimit:           'Demasiados reportes desde esta ubicación en la última hora. Por favor intente más tarde.',

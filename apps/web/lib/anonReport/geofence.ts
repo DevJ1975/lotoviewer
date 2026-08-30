@@ -35,11 +35,7 @@ export function isOutsideRadius(
   return haversineMeters(site, point) > radius
 }
 
-// Postgres `point` column comes back as a string like "(40.7,-74.0)".
-// Defensive parse: returns null on anything that doesn't look right.
-export function parsePgPoint(s: string | null | undefined): GeoPoint | null {
-  if (!s) return null
-  const m = /^\s*\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)\s*$/.exec(s)
-  if (!m) return null
-  return { lat: Number(m[1]), lng: Number(m[2]) }
-}
+// Parsing incidents.location_geo lives in @soteria/core/incident
+// (parseIncidentGeo) — this module owns distance, not wire format.
+// The copy that used to live here read the literal as (lat,lng),
+// the opposite of the (lon,lat) every producer writes.

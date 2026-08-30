@@ -1,6 +1,6 @@
 // Incident Classification Matrix — pure 5×5 lookup keyed by
 // severity × probability. Used by the triage UI to surface a band
-// label ("S4×P4 — High") and an SLA target the assigned investigator
+// label ("S4xP3_high") and an SLA target the assigned investigator
 // should beat.
 //
 // Phase 1 ships the matrix only. The OSHA recordability decision tree
@@ -36,7 +36,7 @@ export type MatrixBand = 'low' | 'moderate' | 'high' | 'extreme'
 
 export interface MatrixCell {
   /** Stable label persisted to incidents.classification_matrix_cell.
-   *  Format: `S{severity}xP{probability}_{band}`, e.g. `S4xP4_high`. */
+   *  Format: `S{severity}xP{probability}_{band}`, e.g. `S4xP3_high`. */
   cell:     string
   band:     MatrixBand
   score:    number

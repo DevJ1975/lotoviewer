@@ -65,8 +65,8 @@ export interface IncidentRow {
   reported_by:                       string                        // auth user id
   is_anonymous:                      boolean
   location_text:                     string | null
-  // Postgres point type wire format: "(lon,lat)" — kept as opaque
-  // string here; convert in app code when needed.
+  // Postgres `point` wire format: "(lon,lat)". Never hand-parse it —
+  // parseIncidentGeo / formatIncidentGeo below are the only codec.
   location_geo:                      string | null
   shift:                             IncidentShift | null
   description:                       string
@@ -119,9 +119,8 @@ export interface IncidentCreateInput {
   related_confined_space_permit_id?: string | null
   related_jha_id?:                   string | null
 
-  // GPS captured at intake. Format: "(lon,lat)" Postgres point
-  // string; the wizard's helper formats this from the
-  // navigator.geolocation result.
+  // GPS captured at intake. Postgres `point` string built by
+  // formatIncidentGeo() from the navigator.geolocation result.
   location_geo?:           string | null
 }
 
@@ -213,6 +212,9 @@ export function ageInDays(
 ): number {
   const start = new Date(row.reported_at).getTime()
   const end   = row.closed_at ? new Date(row.closed_at).getTime() : now.getTime()
+  // A row with an unparseable timestamp would otherwise return NaN,
+  // which silently poisons every downstream sum and comparison.
+  if (Number.isNaN(start) || Number.isNaN(end)) return 0
   return Math.floor(Math.max(0, end - start) / 86_400_000)
 }
 
@@ -243,11 +245,87 @@ export const STATUS_LABEL: Record<IncidentStatus, string> = {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// GPS codec — incidents.location_geo
+// ──────────────────────────────────────────────────────────────────────────
+//
+// The column is a Postgres `point`, whose wire format is "(x,y)". We
+// store x = longitude, y = latitude (migration 059: "Stored as
+// point(lon, lat)"), which is the GIS axis order every producer here
+// already writes. Parsing lived in three places with two different
+// axis orders; this is now the only codec, so a reader can never
+// disagree with a writer about which number is which.
+
+export interface IncidentGeoPoint {
+  lat: number
+  lng: number
+}
+
+const MAX_LAT = 90
+const MAX_LNG = 180
+// Six decimals ≈ 0.11 m — well past the accuracy of a phone GPS fix,
+// and short enough to keep the stored literal readable.
+const GEO_PRECISION = 6
+
+const PG_POINT_RE = /^\s*\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)\s*$/
+
+export function formatIncidentGeo(point: IncidentGeoPoint): string {
+  const lng = point.lng.toFixed(GEO_PRECISION)
+  const lat = point.lat.toFixed(GEO_PRECISION)
+  return `(${lng},${lat})`
+}
+
+// Returns null for anything that is not a well-formed, in-range point
+// literal — callers treat null as "no GPS", never as "0,0".
+export function parseIncidentGeo(raw: unknown): IncidentGeoPoint | null {
+  if (typeof raw !== 'string') return null
+  const m = PG_POINT_RE.exec(raw)
+  if (!m) return null
+  const lng = Number(m[1])
+  const lat = Number(m[2])
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+  if (Math.abs(lat) > MAX_LAT || Math.abs(lng) > MAX_LNG) return null
+  return { lat, lng }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // Validation
 // ──────────────────────────────────────────────────────────────────────────
 //
 // DB CHECK constraints are the authority — these are early feedback
 // for the wizard. Returns null if valid, error string otherwise.
+
+// Narrow an untrusted JSON body to the create-input shape. Every
+// field that isn't the expected primitive becomes undefined/null so
+// validateCreateInput() can reject it with a 400 — without this,
+// `description: 42` reaches `.trim()` and throws a 500 the reporter
+// can't act on. Both intake routes (authenticated and anonymous QR)
+// share this so a payload accepted on one path behaves identically
+// on the other.
+export function coerceCreateInput(body: unknown): Partial<IncidentCreateInput> {
+  const b = (body ?? {}) as Record<string, unknown>
+  const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
+  const nullableStr = (v: unknown): string | null => (typeof v === 'string' ? v : null)
+
+  return {
+    incident_type:           str(b.incident_type) as IncidentType | undefined,
+    occurred_at:             str(b.occurred_at),
+    description:             str(b.description),
+    location_text:           nullableStr(b.location_text),
+    shift:                   nullableStr(b.shift) as IncidentShift | null,
+    immediate_action_taken:  nullableStr(b.immediate_action_taken),
+    severity_actual:         str(b.severity_actual) as IncidentSeverityActual | undefined,
+    severity_potential:      nullableStr(b.severity_potential) as IncidentSeverityPotential | null,
+    probability:             nullableStr(b.probability) as IncidentProbability | null,
+    spill_substance:         nullableStr(b.spill_substance),
+    spill_quantity:          typeof b.spill_quantity === 'number' ? b.spill_quantity : null,
+    spill_quantity_unit:     nullableStr(b.spill_quantity_unit) as IncidentSpillUnit | null,
+    location_geo:            nullableStr(b.location_geo),
+    related_loto_permit_id:           nullableStr(b.related_loto_permit_id),
+    related_hot_work_permit_id:       nullableStr(b.related_hot_work_permit_id),
+    related_confined_space_permit_id: nullableStr(b.related_confined_space_permit_id),
+    related_jha_id:                   nullableStr(b.related_jha_id),
+  }
+}
 
 export function validateCreateInput(input: Partial<IncidentCreateInput>): string | null {
   if (!input.incident_type) return 'Incident type is required'
@@ -288,6 +366,12 @@ export function validateCreateInput(input: Partial<IncidentCreateInput>): string
   if (input.spill_quantity != null && (typeof input.spill_quantity !== 'number'
       || !Number.isFinite(input.spill_quantity) || input.spill_quantity < 0))
     return 'spill_quantity must be a non-negative number'
+
+  // Reject a malformed point here rather than letting Postgres reject
+  // the INSERT — a `point` parse error surfaces as a 500 the reporter
+  // can do nothing about.
+  if (input.location_geo != null && parseIncidentGeo(input.location_geo) === null)
+    return 'location_geo must be a "(lon,lat)" point within valid GPS bounds'
 
   // For injuries/illnesses, a near-miss-style severity_potential is
   // allowed but not required; severity_actual carries the OSHA-relevant
