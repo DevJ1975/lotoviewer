@@ -7,6 +7,7 @@ import {
   validateHazardousWasteStreamInput,
   type HazardousWasteStreamInput,
 } from '@soteria/core/hazardousWaste'
+import { parseHazardSymbolFields } from '@/lib/hazardSymbolInput'
 
 // GET  /api/hazardous-waste/streams        List the tenant's waste streams.
 // POST /api/hazardous-waste/streams        Create a waste-stream master row.
@@ -92,6 +93,7 @@ export async function POST(req: Request) {
     owner_user_id:       typeof body.owner_user_id === 'string' && body.owner_user_id ? body.owner_user_id : null,
     review_due_date:     trimOrNull(body.review_due_date, 30),
     notes:               trimOrNull(body.notes, 4000),
+    ...parseHazardSymbolFields(body),
   }
 
   const errors = validateHazardousWasteStreamInput(input)

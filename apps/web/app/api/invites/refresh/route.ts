@@ -12,6 +12,7 @@ import {
 } from '@/lib/invites/tokens'
 import { checkMemoryRateLimit } from '@/lib/rateLimit/memory'
 import { clientIp } from '@/lib/rateLimit/clientIp'
+import { sanitizeError } from '@/lib/security/sanitizeError'
 
 // POST /api/invites/refresh  { token }
 //
@@ -51,18 +52,25 @@ export async function POST(req: Request) {
 
   if (row.used_at) return NextResponse.json({ status: 'already_active' })
 
-  const { data: authUser } = await admin.auth.admin.getUserById(row.user_id)
-  if (authUser?.user?.last_sign_in_at) {
+  // Fail closed on a lookup fault, as /accept and /validate do: an
+  // unreadable account state is not a dormant one, and this route mints and
+  // EMAILS a fresh live token off the back of these two checks.
+  const { data: authUser, error: authUserErr } = await admin.auth.admin.getUserById(row.user_id)
+  if (authUserErr || !authUser?.user) {
+    return sanitizeError(authUserErr ?? new Error('invite target not found'), 'invites/refresh user lookup')
+  }
+  if (authUser.user.last_sign_in_at) {
     return NextResponse.json({ status: 'already_active' })
   }
 
   if (row.tenant_id) {
-    const { data: membership } = await admin
+    const { data: membership, error: membershipErr } = await admin
       .from('tenant_memberships')
       .select('invite_cancelled_at')
       .eq('user_id', row.user_id)
       .eq('tenant_id', row.tenant_id)
       .maybeSingle()
+    if (membershipErr) return sanitizeError(membershipErr, 'invites/refresh membership lookup')
     if (membership?.invite_cancelled_at) {
       return NextResponse.json({ status: 'cancelled' })
     }
@@ -80,11 +88,6 @@ export async function POST(req: Request) {
     })
     return NextResponse.json({ error: 'internal' }, { status: 500 })
   }
-
-  // Burn the presented token so the same leaked link can't be replayed to
-  // re-send email or thrash the freshly-issued link. The next replay hits
-  // the row.used_at guard above.
-  await consumeInviteToken(admin, row.id)
 
   const { data: profile } = await admin
     .from('profiles')
@@ -111,6 +114,19 @@ export async function POST(req: Request) {
     tenantName,
     expiresInDays: inviteLinkTtlDays(),
   })
+
+  // Burn the presented token only once its replacement has actually reached
+  // the invitee, so a leaked link can't be replayed to thrash the new one.
+  //
+  // Burning it first — as this did — turned any Resend failure into a dead
+  // end: the replacement's raw token is never returned to the client (by
+  // design; it belongs in the invitee's inbox, not in an HTTP response), so
+  // a failed send left NOBODY holding a usable link, and the spent token
+  // then reported 'used', which the UI renders as "your account is already
+  // set up". Leaving it unburned costs nothing — issueInviteToken above has
+  // already superseded it, so it can no longer be accepted; it can only be
+  // re-presented here to try the send again.
+  if (emailSent) await consumeInviteToken(admin, row.id)
 
   return NextResponse.json({ ok: true, emailSent })
 }

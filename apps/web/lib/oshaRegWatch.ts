@@ -1,11 +1,20 @@
-// OSHA Regulatory Watch — pure transforms for the osha-reg-watch cron.
+// Regulatory Watch — pure transforms for the osha-reg-watch cron.
 //
-// Source of record is the Federal Register public JSON API (the official
-// publication channel for OSHA rulemaking), filtered to the OSHA agency.
-// osha.gov's own pages sit behind an Akamai WAF that 403s datacenter clients,
-// so a Vercel cron can't scrape them — but the Federal Register API is built
-// for programmatic access and carries the same final/proposed rules, notices,
-// comment periods, and effective dates as structured fields.
+// TWO sources, because the two regulators publish nothing alike:
+//
+//   Federal OSHA — the Federal Register public JSON API, filtered to the OSHA
+//     agency. osha.gov's own pages sit behind an Akamai WAF that 403s
+//     datacenter clients, so a Vercel cron can't scrape them; the FR API is
+//     built for programmatic access and carries the same final/proposed
+//     rules, notices, comment periods, and effective dates as typed fields.
+//
+//   Cal/OSHA — dir.ca.gov. California rulemaking is NOT in the Federal
+//     Register; the Standards Board publishes proposed regulations and
+//     rulemaking notices as hand-tagged HTML with no API and no schema. So
+//     that path strips tags to text and lets the model read prose, which is
+//     strictly weaker than the FR path and is treated as such: a stricter
+//     prompt, and a source whose layout can change without warning. Same
+//     best-effort posture as scripts/ingest-cal-osha-t8.mjs.
 //
 // These helpers are the deterministic, side-effect-free pieces of the
 // pipeline — kept here so they're unit-testable without a network round-trip
@@ -13,6 +22,8 @@
 //
 //   federalRegisterDocsToLlmText  serialize FR documents into a labeled text
 //                                 block for the model to read
+//   htmlToPlainText               strip a dir.ca.gov page down to readable prose
+//   calOshaPagesToLlmText         serialize those pages into one labeled block
 //   normalizeOshaUpdate           validate + coerce one model item into a DB row
 //   computeDedupKey               derive a stable idempotency key for the unique constraint
 //
@@ -27,6 +38,7 @@ import {
   OSHA_UPDATE_SEVERITIES,
   type OshaUpdateCategory,
   type OshaUpdateSeverity,
+  type RegulationJurisdiction,
 } from '@soteria/core/oshaRegWatch'
 
 // The subset of a Federal Register document (documents.json) the cron reads.
@@ -64,6 +76,7 @@ export interface RawOshaItem {
 export interface NormalizedOshaUpdate {
   title:              string
   category:           OshaUpdateCategory
+  jurisdiction:       RegulationJurisdiction
   is_upcoming:        boolean
   source_url:         string
   published_date:     string | null
@@ -71,6 +84,13 @@ export interface NormalizedOshaUpdate {
   comment_close_date: string | null
   impact_summary:     string
   severity:           OshaUpdateSeverity | null
+}
+
+// One fetched Cal/OSHA page, already reduced to text.
+export interface CalOshaPage {
+  url:   string
+  label: string
+  text:  string
 }
 
 const MAX_TEXT_CHARS = 40_000
@@ -96,6 +116,50 @@ export function federalRegisterDocsToLlmText(docs: FederalRegisterDoc[]): string
     ].filter(Boolean)
     return lines.join('\n')
   })
+  const text = blocks.join('\n\n---\n\n')
+  return text.length > MAX_TEXT_CHARS ? text.slice(0, MAX_TEXT_CHARS) : text
+}
+
+/**
+ * Reduce a dir.ca.gov HTML page to readable prose.
+ *
+ * Deliberately crude — a regex strip, not a parser. The model only needs the
+ * words; markup fidelity buys nothing and a real DOM parser would be a new
+ * dependency in a serverless function for no gain. Script and style bodies go
+ * first (their contents are text nodes that would otherwise survive), then
+ * tags, then HTML entities, then whitespace is collapsed.
+ */
+export function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<\/(p|div|li|tr|h[1-6])>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+/g, ' ')
+    // Trim per line: an unwrapped opening tag (<li>, <td>) collapses to a
+    // space, so without this every scraped line arrives indented by one.
+    .split('\n').map(line => line.trim()).join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/**
+ * Serialize fetched Cal/OSHA pages into one labeled block for the model.
+ * Mirrors federalRegisterDocsToLlmText, but each record is a whole page of
+ * prose rather than typed fields — so the URL line is the only thing the
+ * model can reliably echo back, and computeDedupKey leans on it.
+ */
+export function calOshaPagesToLlmText(pages: readonly CalOshaPage[]): string {
+  const blocks = pages
+    .filter(p => p.text.trim() !== '')
+    .map(p => [`Source: ${p.label}`, `URL: ${p.url}`, '', p.text.trim()].join('\n'))
   const text = blocks.join('\n\n---\n\n')
   return text.length > MAX_TEXT_CHARS ? text.slice(0, MAX_TEXT_CHARS) : text
 }
@@ -131,7 +195,10 @@ function coerceSeverity(v: string): OshaUpdateSeverity | null {
  * impact summary — so a hallucinated or empty entry never reaches the table.
  * Unknown categories degrade to 'other'; unparseable dates degrade to null.
  */
-export function normalizeOshaUpdate(raw: RawOshaItem): NormalizedOshaUpdate | null {
+export function normalizeOshaUpdate(
+  raw: RawOshaItem,
+  jurisdiction: RegulationJurisdiction = 'federal',
+): NormalizedOshaUpdate | null {
   const title = (raw.title ?? '').trim()
   const impact_summary = (raw.impact_summary ?? '').trim()
   if (title === '' || impact_summary === '') return null
@@ -139,6 +206,7 @@ export function normalizeOshaUpdate(raw: RawOshaItem): NormalizedOshaUpdate | nu
   return {
     title,
     category:           coerceCategory((raw.category ?? '').trim()),
+    jurisdiction,
     is_upcoming:        raw.is_upcoming === true,
     source_url:         (raw.source_url ?? '').trim(),
     published_date:     coerceDate(raw.published_date),
@@ -154,15 +222,24 @@ export function normalizeOshaUpdate(raw: RawOshaItem): NormalizedOshaUpdate | nu
  * Federal Register document's canonical, permanent html_url); fall back to
  * title + published date on the rare doc with no URL. Always returns a
  * non-empty hash, so a row can never collide on a NULL key.
+ *
+ * Non-federal jurisdictions prefix the basis so two regulators can never
+ * collide on the URL-less fallback path. Federal keys are left byte-identical
+ * to what they were before jurisdiction existed — changing them would give
+ * every already-stored row a new key, and the next run would insert a
+ * duplicate of the entire feed.
  */
 export function computeDedupKey(item: {
   source_url:     string
   title:          string
   published_date: string | null
+  jurisdiction?:  RegulationJurisdiction
 }): string {
   const url = item.source_url.trim().toLowerCase()
   const basis = url !== ''
     ? `url:${url}`
     : `title:${item.title.trim().toLowerCase()}|${item.published_date ?? ''}`
-  return createHash('sha1').update(basis).digest('hex')
+  const jurisdiction = item.jurisdiction ?? 'federal'
+  const scoped = jurisdiction === 'federal' ? basis : `${jurisdiction}|${basis}`
+  return createHash('sha1').update(scoped).digest('hex')
 }

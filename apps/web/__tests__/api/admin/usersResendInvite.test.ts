@@ -187,6 +187,13 @@ describe('POST /api/admin/users/[userId]/resend-invite', () => {
 
   it('rate-limits repeated resends for the same person', async () => {
     for (let attempt = 0; attempt < 7; attempt++) {
+      // One extra membership row per attempt: requireTenantAdmin reads
+      // tenant_memberships itself before the route's own two reads, so a
+      // loop that queues only the route's needs starves every other call.
+      mockState.queue('tenant_memberships', {
+        data: { role: 'admin', invite_cancelled_at: null, tenants: { disabled_at: null } },
+        error: null,
+      })
       queueMembership({ user_id: PENDING_USER, invite_cancelled_at: null })
       mockState.queue('tenants', { data: { id: 'T1', name: 'Snak King' }, error: null })
       mockState.queue('profiles', { data: { full_name: 'Pending Person' }, error: null })

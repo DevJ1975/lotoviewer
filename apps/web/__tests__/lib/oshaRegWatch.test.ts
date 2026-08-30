@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   federalRegisterDocsToLlmText,
+  calOshaPagesToLlmText,
+  htmlToPlainText,
   computeDedupKey,
   normalizeOshaUpdate,
   type FederalRegisterDoc,
@@ -143,5 +145,68 @@ describe('normalizeOshaUpdate', () => {
     const out = normalizeOshaUpdate(rawItem({ title: '  Spaced title  ', impact_summary: '  body  ' }))
     expect(out?.title).toBe('Spaced title')
     expect(out?.impact_summary).toBe('body')
+  })
+})
+
+describe('htmlToPlainText', () => {
+  it('drops script and style bodies rather than leaking their text', () => {
+    const html = '<style>.a{color:red}</style><p>Real text</p><script>var x=1</script>'
+    const out = htmlToPlainText(html)
+    expect(out).toContain('Real text')
+    expect(out).not.toContain('color:red')
+    expect(out).not.toContain('var x')
+  })
+
+  it('decodes entities and collapses whitespace', () => {
+    expect(htmlToPlainText('<p>Title&nbsp;&amp;   Scope</p>')).toBe('Title & Scope')
+  })
+
+  it('keeps block boundaries as newlines so list items do not run together', () => {
+    expect(htmlToPlainText('<li>First</li><li>Second</li>')).toBe('First\nSecond')
+  })
+})
+
+describe('calOshaPagesToLlmText', () => {
+  const page = (over: Partial<{ url: string; label: string; text: string }> = {}) => ({
+    url:   'https://www.dir.ca.gov/oshsb/proposedregulations.html',
+    label: 'Cal/OSHA Standards Board — proposed regulations',
+    text:  'Section 3396 indoor heat. Public hearing scheduled.',
+    ...over,
+  })
+
+  it('labels each block with its source and URL so the model can echo the URL back', () => {
+    const out = calOshaPagesToLlmText([page()])
+    expect(out).toContain('Source: Cal/OSHA Standards Board — proposed regulations')
+    expect(out).toContain('URL: https://www.dir.ca.gov/oshsb/proposedregulations.html')
+    expect(out).toContain('Section 3396 indoor heat.')
+  })
+
+  it('skips pages that stripped down to nothing', () => {
+    expect(calOshaPagesToLlmText([page({ text: '   ' })])).toBe('')
+  })
+})
+
+describe('computeDedupKey — jurisdiction scoping', () => {
+  // Federal keys predate the jurisdiction column. If they changed, the next
+  // cron run would re-insert the entire stored feed under new keys.
+  it('leaves federal keys byte-identical to the un-scoped key', () => {
+    const item = { source_url: 'https://example.gov/a', title: 'A', published_date: '2026-01-01' }
+    expect(computeDedupKey({ ...item, jurisdiction: 'federal' })).toBe(computeDedupKey(item))
+  })
+
+  it('separates California from federal on the URL-less fallback path', () => {
+    const item = { source_url: '', title: 'Heat', published_date: '2026-01-01' }
+    expect(computeDedupKey({ ...item, jurisdiction: 'CA' }))
+      .not.toBe(computeDedupKey({ ...item, jurisdiction: 'federal' }))
+  })
+})
+
+describe('normalizeOshaUpdate — jurisdiction', () => {
+  it('defaults to federal', () => {
+    expect(normalizeOshaUpdate(rawItem())?.jurisdiction).toBe('federal')
+  })
+
+  it('stamps the jurisdiction the pass was run for', () => {
+    expect(normalizeOshaUpdate(rawItem(), 'CA')?.jurisdiction).toBe('CA')
   })
 })

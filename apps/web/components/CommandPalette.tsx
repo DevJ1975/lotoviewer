@@ -1,8 +1,8 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
-import { KeyRound, LayoutDashboard, Shield, UserRoundCog } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { KeyRound, LayoutDashboard, Shield, UserRoundCog, Wrench } from 'lucide-react'
 
 import {
   CommandDialog,
@@ -17,21 +17,67 @@ import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { getNavigationCommandItems } from '@/lib/navigationCatalog'
 import { getModuleVisuals } from '@/lib/moduleVisuals'
+import { useDebounce } from '@/hooks/useDebounce'
+import { supabase } from '@/lib/supabase'
+import type { Equipment } from '@soteria/core/types'
+
+// The single search surface for the app. It answers two questions that used to
+// live in two different places: "where is that page?" (the feature registry)
+// and "where is that machine?" (loto_equipment). Splitting them meant the only
+// search box a user could actually see — the header one — searched equipment
+// only, so typing "confined space permit" into it returned nothing while the
+// page sat one keystroke away behind ⌘K.
+//
+// It also owns ⌘K outright. GlobalSearch used to bind ⌘K and bare "/" while
+// this component bound ⌘K too, and AppChrome mounted GlobalSearch twice
+// (desktop + mobile) — three live window listeners, all calling
+// preventDefault(), none aware of the others.
+
+type EquipmentHit = Pick<Equipment, 'equipment_id' | 'description' | 'department'>
+
+const EQUIPMENT_LIMIT = 6
+const MIN_QUERY_CHARS = 2
+
+/**
+ * The text cmdk filters an equipment row against.
+ *
+ * Must stay in step with the `.or()` in the lookup below: it lists the same
+ * three columns the server searched, so any row the server returned is one
+ * cmdk will also keep. Drop a column here and rows matched on it vanish the
+ * moment they arrive.
+ */
+function equipmentValue(item: EquipmentHit): string {
+  return [item.equipment_id, item.description, item.department].filter(Boolean).join(' ')
+}
 
 export default function CommandPalette() {
   const router = useRouter()
-  const { tenant } = useTenant()
+  const { tenant, tenantId } = useTenant()
   const { profile } = useAuth()
   const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const [equipment, setEquipment] = useState<EquipmentHit[]>([])
+  const debouncedSearch = useDebounce(search, 300)
+  const reqToken = useRef(0)
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key !== 'k') return
+      // Case-insensitive: Caps Lock or ⇧⌘K reports 'K', and a user who holds
+      // shift out of habit should still get the palette rather than nothing.
+      if (e.key.toLowerCase() !== 'k') return
       if (!(e.metaKey || e.ctrlKey)) return
+
       const target = e.target as HTMLElement | null
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+      // The guard below stops ⌘K hijacking a field the user is typing in. The
+      // palette's own input is not that case — it is the thing the chord just
+      // opened, and closing with the same chord is what makes it a toggle.
+      // Without this exemption the guard fires on every close attempt, because
+      // focus is always in that input while the palette is open.
+      const inPalette = target?.closest('[data-slot="command-input"]') != null
+      if (!inPalette && target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
         return
       }
+
       e.preventDefault()
       setOpen(prev => !prev)
     }
@@ -47,6 +93,42 @@ export default function CommandPalette() {
       window.removeEventListener('soteria:open-command-palette', onOpenRequest)
     }
   }, [])
+
+  // Clear the query when the dialog closes, so reopening never shows a stale
+  // result set from the previous session.
+  useEffect(() => {
+    if (!open) { setSearch(''); setEquipment([]) }
+  }, [open])
+
+  // Equipment lookup. Carried over verbatim from the old GlobalSearch,
+  // including two details worth keeping:
+  //   - the sanitizer strips characters that break PostgREST's .or() parsing
+  //     (, ( ) or act as ILIKE wildcards (% _ \), which is safer than escaping
+  //   - reqToken drops a slow response that lands after a newer query fired
+  useEffect(() => {
+    const sanitized = debouncedSearch.replace(/[%_\\,()]/g, ' ').trim()
+
+    if (!open || !tenantId || sanitized.length < MIN_QUERY_CHARS) {
+      setEquipment([])
+      return
+    }
+
+    const myReq = ++reqToken.current
+    void supabase
+      .from('loto_equipment')
+      .select('equipment_id, description, department')
+      .eq('tenant_id', tenantId)
+      .or(
+        `equipment_id.ilike.%${sanitized}%,` +
+        `description.ilike.%${sanitized}%,` +
+        `department.ilike.%${sanitized}%`
+      )
+      .limit(EQUIPMENT_LIMIT)
+      .then(({ data }) => {
+        if (myReq !== reqToken.current) return
+        setEquipment((data as EquipmentHit[]) ?? [])
+      })
+  }, [debouncedSearch, tenantId, open])
 
   const grouped = useMemo(() => {
     const rows = [
@@ -116,9 +198,50 @@ export default function CommandPalette() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Type a module, page, or action..." />
+      <CommandInput
+        placeholder="Search pages, modules, and equipment…"
+        value={search}
+        onValueChange={setSearch}
+      />
       <CommandList className="max-h-[min(480px,70vh)]">
         <CommandEmpty>No matches.</CommandEmpty>
+
+        {/* Equipment is filtered server-side, and the row's `value` carries
+            every field the server searched — equipment_id, description and
+            department, the three columns in the `.or()` above. That is what
+            keeps cmdk's client-side filter from second-guessing the query and
+            hiding a row matched on a field the user can't see, e.g. a
+            department match.
+
+            NOT forceMount. forceMount renders a row while leaving it out of
+            cmdk's filtered set, which breaks two things at once: <CommandEmpty>
+            counts the filtered set, so it printed "No matches." directly above
+            visible results; and cmdk only ever selects from that set, so Enter
+            on a highlighted equipment row activated an unrelated nav item
+            instead. Because a server match means the query is a substring of
+            one of those three fields, it is also a substring of `value`, so
+            ordinary filtering keeps the row — in the set, counted, selectable. */}
+        {equipment.length > 0 && (
+          <CommandGroup heading="Equipment">
+            {equipment.map(item => (
+              <CommandItem
+                key={item.equipment_id}
+                value={equipmentValue(item)}
+                onSelect={() => go(`/equipment/${encodeURIComponent(item.equipment_id)}`)}
+              >
+                <Wrench className="size-4" />
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="font-mono font-semibold">{item.equipment_id}</span>
+                  {item.description ? <span className="text-muted-foreground"> · {item.description}</span> : null}
+                </span>
+                <CommandShortcut className="max-w-36 truncate tracking-normal">
+                  {item.department ?? ''}
+                </CommandShortcut>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
         {Object.entries(grouped).map(([groupLabel, items]) => (
           <CommandGroup key={groupLabel} heading={groupLabel}>
             {items.map(item => {

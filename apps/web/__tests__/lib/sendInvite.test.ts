@@ -184,10 +184,21 @@ describe('computeLoginUrl', () => {
     expect(computeLoginUrl(reqWith())).toBe('https://branded.example.com')
   })
 
-  it('uses the request origin when env is unset', () => {
+  it('never takes the origin header, which the caller chooses', () => {
+    // The returned value becomes the base of an emailed invite LINK, and
+    // /api/invites/refresh is unauthenticated — so honouring Origin let a
+    // caller have us mail the invitee a real token pointed at their own
+    // domain. Host is the header the platform validates; Origin is not.
     delete process.env.NEXT_PUBLIC_APP_URL
-    expect(computeLoginUrl(reqWith({ origin: 'https://preview.vercel.app' })))
-      .toBe('https://preview.vercel.app')
+    expect(computeLoginUrl(reqWith({
+      origin: 'https://evil.example',
+      host:   'soteriafield.app',
+    }))).toBe('https://soteriafield.app')
+
+    // With no trustworthy host at all, the canonical placeholder — never the
+    // attacker's origin.
+    expect(computeLoginUrl(reqWith({ origin: 'https://evil.example' })))
+      .toBe('https://soteriafield.app')
   })
 
   it('falls back to https://<host> when only the host header is present', () => {

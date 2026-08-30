@@ -27,6 +27,9 @@ import { sendDailyReport } from '@/lib/email/sendDailyReport'
 // Schedule: 0 12 * * * (07:00 EST). vercel.json gets the entry.
 
 export const runtime = 'nodejs'
+// Six aggregation queries, then a Sonnet synthesis call, then an email. The
+// model call alone can run tens of seconds; the 10s default would never finish.
+export const maxDuration = 300
 
 const MODEL    = MODEL_BY_SURFACE['superadmin-daily-report']
 const SURFACE  = 'superadmin-daily-report' as const
@@ -185,7 +188,7 @@ async function runCron(): Promise<NextResponse> {
   const { costForInvocation } = await import('@/lib/ai/usageAggregator')
   type AiBucket = { invocations: number; spendUsd: number; cacheRead: number; uncachedInput: number; errors: number; bb: number }
   const aiByTenant = new Map<string, AiBucket>()
-  let aiTotal: AiBucket = { invocations: 0, spendUsd: 0, cacheRead: 0, uncachedInput: 0, errors: 0, bb: 0 }
+  const aiTotal: AiBucket = { invocations: 0, spendUsd: 0, cacheRead: 0, uncachedInput: 0, errors: 0, bb: 0 }
   for (const r of (aiRows ?? []) as Array<{
     tenant_id: string | null; model: string; status: string;
     input_tokens: number | null; output_tokens: number | null;
@@ -234,7 +237,7 @@ async function runCron(): Promise<NextResponse> {
   // ── Webhook rollup ─────────────────────────────────────────────────
   type WhBucket = { total: number; ok: number; fail: number; pending: number }
   const whByTenant = new Map<string, WhBucket>()
-  let whTotal: WhBucket = { total: 0, ok: 0, fail: 0, pending: 0 }
+  const whTotal: WhBucket = { total: 0, ok: 0, fail: 0, pending: 0 }
   for (const r of (webhookRows ?? []) as Array<{ tenant_id: string | null; response_status: number | null; completed_at: string | null }>) {
     whTotal.total += 1
     const ok = r.completed_at != null && r.response_status != null && r.response_status >= 200 && r.response_status < 300

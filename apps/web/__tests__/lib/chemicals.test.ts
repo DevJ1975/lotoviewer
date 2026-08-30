@@ -611,6 +611,13 @@ describe('tierTwoToCsv', () => {
     average_daily_quantity: 55,
     container_count:        2,
     earliest_expiration:    '2026-12-31',
+    nfpa_health:        1,
+    nfpa_flammability:  3,
+    nfpa_instability:   0,
+    nfpa_special:       null,
+    dot_un_number:      'UN1090',
+    dot_hazard_class:   '3',
+    dot_packing_group:  'II',
   }
 
   it('starts with a UTF-8 BOM and includes the header row', () => {
