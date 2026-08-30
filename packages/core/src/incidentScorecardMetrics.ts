@@ -17,6 +17,11 @@ import {
   type HierarchyOfControls,
 } from './incidentAction'
 import { OSHA_RATE_CONSTANT } from './oshaForms'
+import {
+  buildMonthOverMonthRow,
+  closedMonthSeries,
+  type MonthOverMonthRow,
+} from './monthOverMonth'
 import { type CareCaseStatus } from './incidentCare'
 import {
   type IncidentSeverityActual,
@@ -133,9 +138,68 @@ export interface IncidentScorecardMetrics {
     nearMiss:    { current: number; previous: number }
   }
 
+  /** Last CLOSED calendar month vs the one before, on both a lagging and a
+   *  leading series. See MONTH_OVER_MONTH_EXCLUSIONS for what is deliberately
+   *  absent — this set is narrow on purpose. */
+  monthOverMonth: {
+    /** Lagging. */
+    recordables:             MonthOverMonthRow
+    allIncidents:            MonthOverMonthRow
+    /** Leading (process discipline). */
+    actionsCompleted:        MonthOverMonthRow
+    investigationsCompleted: MonthOverMonthRow
+  }
+
   /** Echo of "now" for the chart axes. */
   nowMs: number
 }
+
+/**
+ * Metrics deliberately WITHHELD from the month-over-month strip, with the
+ * blocker for each. Kept as data rather than prose so the wiki renders the
+ * same list the code enforces, and so a test fails if one is quietly added
+ * without clearing its blocker.
+ *
+ * Each of these looks plausible and would be an artifact — which is exactly
+ * why they need to be written down rather than just left out.
+ */
+export const MONTH_OVER_MONTH_EXCLUSIONS: ReadonlyArray<{
+  metric: string
+  blocker: string
+}> = [
+  {
+    metric: 'Near-miss reports',
+    blocker:
+      'POST /api/near-miss writes to near_misses while this summarizer counts ' +
+      'incidents.incident_type = \'near_miss\'. Migration 059b was a one-time copy ' +
+      'and no sync trigger exists, so the undercount is channel-dependent: the web ' +
+      'form files into incidents, the API and mobile file into near_misses. A ' +
+      'month-over-month move would partly measure which intake screen people used.',
+  },
+  {
+    metric: 'TRIR / DART / LTIR / severity rate',
+    blocker:
+      'hoursWorked is a single annual, current-calendar-year, tenant-wide scalar. ' +
+      'A monthly rate would divide a one-month numerator by a twelve-month ' +
+      'denominator, and osha_establishments carries no facility_id so the ' +
+      'denominator cannot follow the facility filter the numerator already obeys.',
+  },
+  {
+    metric: 'CAPA on-time closure % / hierarchy-of-controls mix',
+    blocker:
+      'Both are computed over every action ever written, unwindowed. A delta on a ' +
+      'cumulative-to-date ratio is near zero by construction and reads as "stable" ' +
+      'when the month underneath may have collapsed. Windowing them changes a ' +
+      'published metric definition, which needs an owner before it needs code.',
+  },
+  {
+    metric: 'RCA completion %',
+    blocker:
+      'Rises monotonically for older months as investigations close, so a given ' +
+      'month\'s value depends on when it is asked for. The count of investigations ' +
+      'completed in a month is event-sourced and stable, and is shipped instead.',
+  },
+]
 
 // ──────────────────────────────────────────────────────────────────────────
 // Input row shapes — each is the minimal subset we read from the DB.
@@ -509,6 +573,31 @@ export function summarizeIncidentScorecard(input: SummariseInput): IncidentScore
     },
   }
 
+  // Month-over-month: last CLOSED calendar month vs the one before, judged
+  // against control limits from the preceding months. Deliberately a narrow
+  // set — see the MONTH_OVER_MONTH_EXCLUSIONS note above the type for what is
+  // withheld and why. All four series come from rows already fetched, so this
+  // adds no round trips.
+  const momMonths = 13
+  const monthOverMonth = {
+    recordables: buildMonthOverMonthRow({
+      key: 'recordables', label: 'Recordable cases', higherIsBetter: false,
+      series: closedMonthSeries(recordablesAll, r => r.occurred_at, nowMs, momMonths),
+    }),
+    allIncidents: buildMonthOverMonthRow({
+      key: 'all_incidents', label: 'All reported incidents', higherIsBetter: null,
+      series: closedMonthSeries(input.incidents, r => r.occurred_at, nowMs, momMonths),
+    }),
+    actionsCompleted: buildMonthOverMonthRow({
+      key: 'actions_completed', label: 'Corrective actions completed', higherIsBetter: true,
+      series: closedMonthSeries(input.actions, a => a.completed_at, nowMs, momMonths),
+    }),
+    investigationsCompleted: buildMonthOverMonthRow({
+      key: 'investigations_completed', label: 'Investigations completed', higherIsBetter: true,
+      series: closedMonthSeries(input.investigations, i => i.completed_at, nowMs, momMonths),
+    }),
+  }
+
   return {
     windowDays, nowMs, hoursWorked,
 
@@ -550,6 +639,7 @@ export function summarizeIncidentScorecard(input: SummariseInput): IncidentScore
     injuryNatureBreakdown:    injuryNatureBreakdown(input.injuredPeople),
     shiftDayHeatmap:          shiftDayHeatmap(incidentsInWindow),
     weekOverWeek,
+    monthOverMonth,
   }
 }
 

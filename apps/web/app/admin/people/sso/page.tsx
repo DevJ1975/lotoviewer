@@ -29,15 +29,25 @@ interface SsoConfig {
 }
 
 function defaultSpValues(tenantId: string | null): { entity: string; acs: string } {
-  // The SP values are derived from the public app URL + tenant id so
-  // the IdP can be configured before our backend even sees the row.
-  // The exact strings here are advisory — Supabase's SAML IdP uses
-  // its own ACS, surfaced to the superadmin once they enable SAML.
+  // Two different kinds of value, and only one of them has to be real.
+  //
+  // The entity ID is an opaque SAML identifier. It names the SP; nothing
+  // ever fetches it, so deriving it from the app URL + tenant id is fine
+  // and lets the IdP be configured before our backend sees the row.
+  //
+  // The ACS URL is the endpoint the IdP POSTs the assertion to, so it has
+  // to exist. Supabase Auth terminates SAML, not this app — the ACS lives
+  // under the Supabase project origin. This used to default to
+  // `${base}/api/auth/saml/callback`, a path in *this* app that does not
+  // exist and never will; an admin who pasted it into Okta got a dead
+  // endpoint. Prefer an empty field over a plausible wrong one: an admin
+  // fills a blank in, but has no reason to doubt a URL we supplied.
   const base = typeof window !== 'undefined' ? window.location.origin : ''
+  const supabaseOrigin = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, '') ?? ''
   const id = tenantId ?? ''
   return {
     entity: `${base}/sso/${id}`,
-    acs:    `${base}/api/auth/saml/callback`,
+    acs:    supabaseOrigin ? `${supabaseOrigin}/auth/v1/sso/saml/acs` : '',
   }
 }
 
@@ -84,6 +94,14 @@ export default function SsoPage() {
   }, [tenantId])
 
   useEffect(() => { if (!authLoading && profile?.is_admin) void load() }, [authLoading, profile, load])
+
+  // Auto-clear the "Saved" indicator after 5s. Deriving the visibility
+  // from Date.now() during render would never re-render to hide it.
+  useEffect(() => {
+    if (savedAt == null) return
+    const t = setTimeout(() => setSavedAt(null), 5000)
+    return () => clearTimeout(t)
+  }, [savedAt])
 
   const dirty = useMemo(() => {
     if (!config) {
@@ -278,7 +296,7 @@ export default function SsoPage() {
           )}
 
           <div className="flex items-center justify-end gap-3">
-            {savedAt && Date.now() - savedAt < 5000 && (
+            {savedAt != null && (
               <span className="text-[11px] text-emerald-700 dark:text-emerald-300">Saved.</span>
             )}
             <button

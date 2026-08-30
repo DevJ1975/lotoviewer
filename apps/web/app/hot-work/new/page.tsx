@@ -18,6 +18,7 @@ import {
   HOT_WORK_TYPE_LABELS,
 } from '@soteria/core/types'
 import { FIRE_EXTINGUISHER_TYPES } from '@soteria/core/hotWorkChecklist'
+import { useNow } from '@/hooks/useNow'
 
 // New Hot Work Permit form. Creates a row in pending_signature state —
 // the actual sign happens on the detail page once the PAI has reviewed
@@ -32,6 +33,14 @@ import { FIRE_EXTINGUISHER_TYPES } from '@soteria/core/hotWorkChecklist'
 
 const MAX_HOURS = 8
 const DEFAULT_HOURS = 4
+
+// NFPA 51B §8.7 post-work fire watch. The floor is not a preference: the watch
+// exists because hot work leaves smouldering ignition that develops after the
+// torch stops, so anything materially below an hour is the same as no watch.
+// Enforced in the database too (migration 286) — this form is not the only
+// writer, since the insert goes straight through PostgREST.
+const POST_WATCH_MIN_MINUTES = 60
+const POST_WATCH_MAX_MINUTES = 240
 
 const ALL_WORK_TYPES: HotWorkType[] = [
   'welding', 'cutting', 'grinding', 'soldering', 'brazing', 'torch_roof', 'other',
@@ -66,7 +75,7 @@ export default function NewHotWorkPermitPage() {
   const [workOrderRef, setWorkOrderRef]                 = useState('')
 
   // Post-watch duration override (NFPA 51B floor is 60)
-  const [postWatchMinutes, setPostWatchMinutes] = useState(60)
+  const [postWatchMinutes, setPostWatchMinutes] = useState(POST_WATCH_MIN_MINUTES)
 
   // Notes
   const [notes, setNotes] = useState('')
@@ -126,6 +135,11 @@ export default function NewHotWorkPermitPage() {
     return () => { cancelled = true }
   }, [tenantId])
 
+  // The expiry checks below compare against the clock, so the form has to
+  // re-render as time passes — otherwise an expiry that lapses while the
+  // form sits open still reads as valid.
+  const now = useNow(30_000)
+
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
@@ -147,15 +161,21 @@ export default function NewHotWorkPermitPage() {
   // sign gate enforces compliance — this gate just stops the user from
   // submitting an obviously-incomplete row.
   const expiresMs = new Date(expiresAt).getTime()
-  const validExpiry = !Number.isNaN(expiresMs) && expiresMs > Date.now()
-  const exceedsMax = validExpiry && (expiresMs - Date.now()) > MAX_HOURS * 3600_000
+  const validExpiry = !Number.isNaN(expiresMs) && expiresMs > now
+  const exceedsMax = validExpiry && (expiresMs - now) > MAX_HOURS * 3600_000
   const submitErrors: string[] = []
   if (!workLocation.trim())     submitErrors.push('Work location is required.')
   if (!workDescription.trim())  submitErrors.push('Work description is required.')
   if (workTypes.size === 0)     submitErrors.push('Pick at least one work type.')
   if (!validExpiry)             submitErrors.push('Expiry must be in the future.')
   if (exceedsMax)               submitErrors.push(`Permit duration cannot exceed ${MAX_HOURS} hours.`)
-  if (postWatchMinutes < 1 || postWatchMinutes > 240) submitErrors.push('Post-watch must be 1–240 minutes.')
+  // NFPA 51B §8.7 sets a 60-minute floor, which this file's own hint text and
+  // migration 019's column comment both cite — while the check accepted 1.
+  // The watch exists because hot work leaves smouldering ignition that
+  // develops after the torch stops, so a one-minute watch is the same as none.
+  if (postWatchMinutes < POST_WATCH_MIN_MINUTES || postWatchMinutes > POST_WATCH_MAX_MINUTES) {
+    submitErrors.push(`Post-watch must be ${POST_WATCH_MIN_MINUTES}–${POST_WATCH_MAX_MINUTES} minutes (NFPA 51B floor is ${POST_WATCH_MIN_MINUTES}).`)
+  }
 
   async function handleSubmit() {
     if (submitErrors.length > 0 || !profile?.id) return
@@ -255,8 +275,8 @@ export default function NewHotWorkPermitPage() {
           <Field label="Post-watch minutes" hint="NFPA 51B floor is 60; some sites bump to 120">
             <input
               type="number"
-              min={1}
-              max={240}
+              min={POST_WATCH_MIN_MINUTES}
+              max={POST_WATCH_MAX_MINUTES}
               value={postWatchMinutes}
               onChange={e => setPostWatchMinutes(Number(e.target.value))}
               className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"

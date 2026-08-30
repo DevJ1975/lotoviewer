@@ -63,7 +63,12 @@ export function resolveLandingPath(tenant: Tenant | null): string | null {
   return null
 }
 
-function isAllowedLandingOverride(
+// Whether a `default_landing_path` override is a safe redirect target: it must
+// start with a single "/" and resolve to a feature that is enabled, not
+// coming-soon, and visible for this tenant. Exported so the Operator Console's
+// home agent can validate a proposed path with the exact same rule the resolver
+// applies on every visit to `/`.
+export function isAllowedLandingOverride(
   path: string,
   modules: Record<string, boolean> | null,
 ): boolean {

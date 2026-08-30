@@ -93,6 +93,14 @@ export default function ObservePage() {
 
   useEffect(() => { void loadWorkers(); void loadActionTeams() }, [loadWorkers, loadActionTeams])
 
+  // Auto-clear the "Saved" indicator after 5s. Deriving the visibility
+  // from Date.now() during render would never re-render to hide it.
+  useEffect(() => {
+    if (successAt == null) return
+    const t = setTimeout(() => setSuccessAt(null), 5000)
+    return () => clearTimeout(t)
+  }, [successAt])
+
   function reset() {
     setCategory(null)
     setSeverity('minor')
@@ -172,7 +180,7 @@ export default function ObservePage() {
         </p>
       </div>
 
-      {successAt && Date.now() - successAt < 5000 && (
+      {successAt != null && (
         <div className="rounded-md border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-2 text-xs text-emerald-900 dark:text-emerald-100 flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4" /> Observation logged. Capture another or head back.
         </div>

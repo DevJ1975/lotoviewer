@@ -37,9 +37,31 @@ describe('resolveHref', () => {
     expect(resolveHref('/some-random-deep-path/123')).toBeNull()
   })
 
-  it('returns null for an exact-path mismatch (no fuzzy prefix matching)', () => {
-    // /loto/equipment/abc is a real route but not in the catalog; we
-    // don't fuzzy-match to /loto.
-    expect(resolveHref('/loto/equipment/abc')).toBeNull()
+  // This used to assert the opposite — that an uncatalogued path under a
+  // catalogued module resolved to null, "so we don't render a broken link."
+  // That rule is what emptied Recents: the catalogs name no `[id]` segment,
+  // and the app has 128 of them, so every incident, chemical and piece of
+  // equipment a user visited was dropped from the one surface meant to
+  // remember them.
+  //
+  // The old test also mis-stated its own premise. Its comment called
+  // /loto/equipment/abc "a real route"; there is no app/loto/equipment —
+  // equipment lives at /equipment/[id]. The case it defended was a path that
+  // does not exist.
+  //
+  // The trade-off is accepted deliberately: a path that 404s can now carry a
+  // label instead of being dropped. Recents only ever holds paths the user
+  // actually navigated to (AppChrome calls pushRecent with the live
+  // pathname), so the cost is one stale row they can see and ignore — against
+  // the benefit of every real detail page being remembered at all.
+  it('resolves an uncatalogued path against its nearest catalogued ancestor', () => {
+    const r = resolveHref('/loto/equipment/abc')
+    expect(r).not.toBeNull()
+    expect(r!.label).toContain('LOTO')
+    expect(r!.href).toBe('/loto/equipment/abc')
+  })
+
+  it('still returns null when no ancestor is catalogued at all', () => {
+    expect(resolveHref('/loto-not-a-module/abc')).toBeNull()
   })
 })

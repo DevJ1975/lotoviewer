@@ -36,6 +36,7 @@ import {
   History,
   IdCard,
   KeyRound,
+  LayoutGrid,
   LifeBuoy,
   Lock,
   Mountain,
@@ -116,6 +117,9 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       tile('people', 'contractors', 'contractors',
         Building2, 'Contractors',
         'Vendor prequalification, host-procedure acknowledgement, and renewals.'),
+      tile('people', 'training-competency-matrix', null,
+        LayoutGrid, 'Training & Competency Matrix',
+        'Required training by worker and course, with expiry status and per-position requirements.'),
     ],
   },
   {
@@ -199,23 +203,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     ],
   },
   {
-    id:          'environmental',
-    urlSegment:  'environmental',
-    title:       'Environmental Management',
-    description: 'ISO 14001:2015 environmental aspects, impacts, and significance.',
-    tiles: [
-      tile('environmental', 'aspects', null,
-        Mountain, 'Aspects & impacts register',
-        'ISO 14001 clause 6.1.2 — environmental aspects, impacts, and significance scoring.'),
-      tile('environmental', 'objectives', null,
-        BarChart3, 'Objectives & targets',
-        'ISO 14001 clauses 6.2 & 9.1.1 — measurable environmental objectives tracked by periodic readings.'),
-      tile('environmental', 'management-review', null,
-        ScrollText, 'Management review',
-        'ISO 14001 clause 9.3 — periodic EMS management reviews with the standard input/output agenda.'),
-    ],
-  },
-  {
     id:          'compliance',
     urlSegment:  'compliance',
     title:       'Compliance Operations',
@@ -233,9 +220,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       tile('compliance', 'calendar',          null,
         CalendarClock, 'Compliance calendar',
         'Recurring regulatory + tenant obligations — overdue, due soon, upcoming.'),
-      tile('compliance', 'nonconformities',   null,
-        ClipboardCheck, 'Nonconformities & CAPA',
-        'Findings from audits, reviews, compliance, or aspects — corrective actions with §10.2 verification.'),
     ],
   },
   {
@@ -345,11 +329,25 @@ export function getAdminTile(slug: string): AdminTile | undefined {
   return getAllAdminTiles().find(t => t.slug === slug)
 }
 
+// Routes that left /admin entirely for a top-level module. A tile's
+// `legacyHref` cannot describe this kind of move — the tile() helper
+// hard-codes hrefs under /admin — so the moves live in their own table,
+// kept in this file so the redirect set still has exactly one owner.
+//
+// Only the subtree root is listed. /admin/environmental carries its
+// children through the `:path*` capture, so /admin/environmental/aspects
+// lands on /environmental/aspects without an entry of its own. Add a row
+// here only when a route's whole subtree moves.
+export const MOVED_ADMIN_ROUTES: ReadonlyArray<{ from: string; to: string }> = [
+  { from: '/admin/environmental',              to: '/environmental' },
+  { from: '/admin/compliance/nonconformities', to: '/environmental/nonconformities' },
+]
+
 // Generates the 301 redirect table consumed by next.config.ts. One
-// `:path*` rule per tile (covers the bare URL plus any subroute), plus
-// one rule per section that redirects the bare section path
+// `:path*` rule per tile (covers the bare URL plus any subroute), one
+// rule per section that redirects the bare section path
 // (/admin/<segment>) back to the landing — the section path itself is
-// not a page.
+// not a page — and two rules per entry in MOVED_ADMIN_ROUTES.
 export function getAdminRedirects(): Array<{ source: string; destination: string; permanent: true }> {
   const tileRedirects = getAllAdminTiles()
     .filter(t => t.legacyHref)
@@ -373,7 +371,16 @@ export function getAdminRedirects(): Array<{ source: string; destination: string
     destination: '/admin',
     permanent:   true as const,
   }))
-  return [...tileRedirects, ...sectionLanders]
+  // Two rules per moved subtree. The `:path*` rule carries deep links
+  // through; the exact rule catches the bare path, because whether a
+  // trailing `/:path*` also matches zero segments is a path-to-regexp
+  // detail we would rather not bet a 404 on. Subtree first so a deep
+  // link keeps its segments.
+  const moved = MOVED_ADMIN_ROUTES.flatMap(m => [
+    { source: `${m.from}/:path*`, destination: `${m.to}/:path*`, permanent: true as const },
+    { source: m.from,             destination: m.to,             permanent: true as const },
+  ])
+  return [...tileRedirects, ...moved, ...sectionLanders]
 }
 
 // Surface a notification-tile for the catch-all settings/notifications

@@ -29,6 +29,9 @@ import { bandFor } from '@soteria/core/risk'
 // same business day).
 
 export const runtime = 'nodejs'
+// One digest email per (tenant, risk owner) pair with something overdue. Send
+// count tracks owner count across all tenants.
+export const maxDuration = 300
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false
@@ -170,7 +173,7 @@ async function run(req: Request): Promise<NextResponse> {
   // ─── Send one email per group via Promise.allSettled ───────────────────
   let sentCount = 0
   let skipCount = 0
-  await Promise.all([...groups.entries()].map(async ([key, risks]) => {
+  await Promise.allSettled([...groups.entries()].map(async ([key, risks]) => {
     const ctx = ownerCtx.get(key)!
     const email = emailById.get(ctx.ownerId)
     if (!email) {

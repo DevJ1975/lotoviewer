@@ -83,6 +83,7 @@ export default function IippExportPage() {
 
 function Inner() {
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const [data,    setData]    = useState<ExportEnvelope | null>(null)
   const [error,   setError]   = useState<string | null>(null)
 
@@ -91,7 +92,7 @@ function Inner() {
       const { data: { session } } = await supabase.auth.getSession()
       const headers: Record<string, string> = {}
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
-      if (tenant?.id)            headers['x-active-tenant'] = tenant.id
+      if (tenantId)              headers['x-active-tenant'] = tenantId
       const res = await fetch('/api/risk/export?format=json', { headers })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
@@ -99,7 +100,7 @@ function Inner() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [tenant?.id])
+  }, [tenantId])
 
   useEffect(() => { void load() }, [load])
 
@@ -116,7 +117,7 @@ function Inner() {
     <main className="iipp max-w-[850px] mx-auto p-8">
       <div className="iipp__toolbar print:hidden flex items-center justify-between mb-6">
         <p className="text-xs text-slate-500">
-          Use your browser's print dialog (Cmd/Ctrl + P) → Save as PDF for an audit-ready paper copy.
+          Use your browser&apos;s print dialog (Cmd/Ctrl + P) → Save as PDF for an audit-ready paper copy.
         </p>
         <button
           type="button"

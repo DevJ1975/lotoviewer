@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import type { MemberProfilePatch, MemberSearchResult, MemberSummary } from '@/lib/members/types'
+import type { AdminMemberRow, MemberProfilePatch, MemberSearchResult, MemberSummary } from '@/lib/members/types'
 
 async function authHeader(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession()
@@ -65,7 +65,7 @@ export async function updateMyMemberProfile(
 export async function listAdminMembers(
   tenantId: string,
   opts: { q?: string; includeArchived?: boolean; limit?: number } = {},
-): Promise<MemberSearchResult[]> {
+): Promise<AdminMemberRow[]> {
   const u = new URL('/api/admin/members', window.location.origin)
   if (opts.q) u.searchParams.set('q', opts.q)
   if (opts.includeArchived) u.searchParams.set('includeArchived', '1')
@@ -73,15 +73,19 @@ export async function listAdminMembers(
   const res = await fetch(u.pathname + u.search, {
     headers: { ...tenantHeader(tenantId), ...(await authHeader()) },
   })
-  const json = await readJson<{ members: MemberSearchResult[] }>(res)
+  const json = await readJson<{ members: AdminMemberRow[] }>(res)
   return json.members
 }
 
 export interface GrantLoginResult {
-  memberId:     string
-  profileId:    string
-  tempPassword: string | null
-  emailSent:    boolean
+  memberId:      string
+  profileId:     string
+  email:         string
+  tempPassword:  string | null
+  inviteUrl?:    string
+  emailSent:     boolean
+  expiresInDays: number
+  tenantName?:   string
 }
 
 export async function grantMemberLogin(
@@ -95,6 +99,32 @@ export async function grantMemberLogin(
     body: JSON.stringify(body),
   })
   return readJson<GrantLoginResult>(res)
+}
+
+export interface ResetAccessResult {
+  memberId:      string
+  email:         string
+  tempPassword:  string | null
+  inviteUrl?:    string
+  emailSent:     boolean
+  expiresInDays: number
+  tenantName?:   string
+}
+
+/**
+ * Rotates an existing login's password and mints a fresh invite link.
+ * Destructive — the member's current password stops working — so callers
+ * must confirm with the admin first.
+ */
+export async function resetMemberAccess(
+  tenantId: string,
+  memberId: string,
+): Promise<ResetAccessResult> {
+  const res = await fetch(`/api/admin/members/${memberId}/reset-access`, {
+    method: 'POST',
+    headers: await jsonHeaders(tenantId),
+  })
+  return readJson<ResetAccessResult>(res)
 }
 
 export async function mergeMembers(

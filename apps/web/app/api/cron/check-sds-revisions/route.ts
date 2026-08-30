@@ -15,6 +15,7 @@ import { runDriftCheck, type DriftCheckRow } from '@/lib/chemicalSdsDrift'
 // Auth + run-logging follow the same posture as the other crons.
 
 export const runtime = 'nodejs'
+export const maxDuration = 300
 // Most chems are checked once per quarter; revisions are rare and
 // the cap protects per-run cost. Tenants with hot products can hit
 // the manual button.

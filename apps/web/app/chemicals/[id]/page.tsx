@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Download, ExternalLink, FileText, Loader2, RefreshCw, Search, Sparkles } from 'lucide-react'
+import { ArrowLeft, Camera, Download, ExternalLink, FileText, Loader2, RefreshCw, Search, Sparkles } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import Dropzone from '@/components/ui/Dropzone'
 import { PictogramBadges, SignalWordBadge } from '../_components/PictogramBadges'
+import { Nfpa704Diamond } from '../_components/Nfpa704Diamond'
+import { PlacardBadges } from '../_components/PlacardBadges'
 import PrintLabelPanel from './_components/PrintLabelPanel'
 import ContainersPanel from './_components/ContainersPanel'
 import JhaUsagePanel from './_components/JhaUsagePanel'
@@ -32,6 +34,9 @@ interface Product {
   nfpa_flammability:  number | null
   nfpa_instability:   number | null
   nfpa_special:       string | null
+  dot_un_number:      string | null
+  dot_hazard_class:   string | null
+  dot_packing_group:  string | null
   ppe_required:       string[] | null
   flash_point_c:      number | null
   boiling_point_c:    number | null
@@ -285,9 +290,17 @@ export default function ChemicalDetailPage() {
             {product.product_code && <span>· {product.product_code}</span>}
             {product.physical_state && <span>· {product.physical_state}</span>}
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-3">
             <SignalWordBadge word={product.ghs_signal_word} />
             <PictogramBadges pictograms={product.ghs_pictograms ?? []} showLabel />
+            {product.dot_hazard_class && (
+              <PlacardBadges
+                hazardClass={product.dot_hazard_class}
+                unNumber={product.dot_un_number}
+                packingGroup={product.dot_packing_group}
+                showLabel
+              />
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -306,11 +319,24 @@ export default function ChemicalDetailPage() {
           <Field label="Synonyms" value={product.synonyms?.join(', ')} />
         </Card>
         <Card title="NFPA 704">
-          <div className="flex flex-wrap items-center gap-3 text-sm">
-            <NfpaTile label="Health" value={product.nfpa_health} bg="bg-sky-100 dark:bg-sky-950/40 text-sky-800 dark:text-sky-300" />
-            <NfpaTile label="Flammability" value={product.nfpa_flammability} bg="bg-red-100 dark:bg-red-950/40 text-red-800 dark:text-red-300" />
-            <NfpaTile label="Instability" value={product.nfpa_instability} bg="bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300" />
-            <NfpaTile label="Special" value={product.nfpa_special} bg="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200" />
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            <Nfpa704Diamond
+              health={product.nfpa_health}
+              flammability={product.nfpa_flammability}
+              instability={product.nfpa_instability}
+              special={product.nfpa_special}
+              size="md"
+            />
+            <dl className="grid grid-cols-[auto_2rem] gap-x-3 gap-y-0.5 text-xs">
+              <dt className="text-sky-700 dark:text-sky-300">Health</dt>
+              <dd className="font-mono">{product.nfpa_health ?? '–'}</dd>
+              <dt className="text-red-700 dark:text-red-300">Flammability</dt>
+              <dd className="font-mono">{product.nfpa_flammability ?? '–'}</dd>
+              <dt className="text-amber-700 dark:text-amber-300">Instability</dt>
+              <dd className="font-mono">{product.nfpa_instability ?? '–'}</dd>
+              <dt className="text-slate-600 dark:text-slate-300">Special</dt>
+              <dd className="font-mono">{product.nfpa_special?.trim() || '–'}</dd>
+            </dl>
           </div>
         </Card>
         <Card title="Storage & physical">
@@ -447,6 +473,13 @@ export default function ChemicalDetailPage() {
               helpText={uploading ? 'Uploading…' : 'PDF only, ≤25MB. Drop a new revision or click to browse.'}
               disabled={uploading}
             />
+            <Link
+              href={`/chemicals/${id}/capture`}
+              className="self-start inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+              title="Photograph a paper SDS with your camera"
+            >
+              <Camera className="w-4 h-4" /> Capture paper SDS
+            </Link>
           </div>
         </div>
 
@@ -543,15 +576,6 @@ function Field({ label, value }: { label: string; value: string | null | undefin
     <div className="text-sm flex gap-2">
       <span className="text-slate-500 min-w-[110px]">{label}</span>
       <span className="text-slate-800 dark:text-slate-200">{value && value.trim() ? value : <span className="italic text-slate-400">—</span>}</span>
-    </div>
-  )
-}
-
-function NfpaTile({ label, value, bg }: { label: string; value: number | string | null | undefined; bg: string }) {
-  return (
-    <div className={`flex flex-col items-center justify-center w-16 h-16 rounded font-bold text-2xl ${bg}`}>
-      <span>{value === null || value === undefined || value === '' ? '–' : value}</span>
-      <span className="text-[9px] uppercase font-medium opacity-70">{label}</span>
     </div>
   )
 }
