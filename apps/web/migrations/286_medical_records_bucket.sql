@@ -1,4 +1,4 @@
--- Migration 213: restricted `medical-records` storage bucket (PHI).
+-- Migration 286: restricted `medical-records` storage bucket (PHI).
 --
 -- Migration 201 added incident_medical_documents (file metadata) and noted the
 -- medical files themselves live in a RESTRICTED `medical-records` bucket,
