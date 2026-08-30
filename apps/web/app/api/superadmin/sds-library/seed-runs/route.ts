@@ -19,6 +19,9 @@ import { proposeChemicalList } from '@/lib/ai/seedChemicalList'
 //     Lists recent runs for the dashboard.
 
 export const runtime = 'nodejs'
+// POST runs a multi-round web_search generation (proposeChemicalList); give it
+// the same budget as the sibling seeding routes instead of the default ceiling.
+export const maxDuration = 300
 
 const SEED_MODEL = MODEL_BY_SURFACE['seed-sds-list']
 

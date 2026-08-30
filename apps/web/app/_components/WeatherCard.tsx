@@ -1,10 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import {
-  Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSnow,
-  MapPin, Sun, Wind,
-} from 'lucide-react'
+import { MapPin, Wind } from 'lucide-react'
+import { AnimatedWeatherIcon } from './AnimatedWeatherIcon'
 
 // Browser-side weather card. Two free, no-key APIs:
 //   - Open-Meteo for the actual reading (temperature / wind / weather code)
@@ -101,11 +99,11 @@ export function WeatherCard() {
     )
   }
 
-  const { Icon, label } = weatherIconForCode(weather.code)
+  const label = weatherLabelForCode(weather.code)
   return (
     <div className="bg-white/10 dark:bg-slate-900/10 backdrop-blur-sm rounded-xl p-4 min-w-[200px]">
       <div className="flex items-center gap-3">
-        <Icon className="h-10 w-10 text-brand-yellow shrink-0" />
+        <AnimatedWeatherIcon code={weather.code} className="h-10 w-10 text-brand-yellow shrink-0" />
         <div>
           <p className="text-3xl font-bold tabular-nums">{weather.temperatureF}°F</p>
           <p className="text-xs text-white/80">{label}</p>
@@ -119,15 +117,18 @@ export function WeatherCard() {
   )
 }
 
-function weatherIconForCode(code: number): { Icon: typeof Sun; label: string } {
-  if (code === 0)                       return { Icon: Sun,            label: 'Clear' }
-  if (code <= 3)                        return { Icon: Cloud,          label: 'Partly cloudy' }
-  if (code === 45 || code === 48)       return { Icon: CloudFog,       label: 'Fog' }
-  if (code >= 51 && code <= 57)         return { Icon: CloudDrizzle,   label: 'Drizzle' }
-  if (code >= 61 && code <= 67)         return { Icon: CloudRain,      label: 'Rain' }
-  if (code >= 71 && code <= 77)         return { Icon: CloudSnow,      label: 'Snow' }
-  if (code >= 80 && code <= 82)         return { Icon: CloudRain,      label: 'Showers' }
-  if (code >= 85 && code <= 86)         return { Icon: CloudSnow,      label: 'Snow showers' }
-  if (code >= 95)                       return { Icon: CloudLightning, label: 'Thunderstorm' }
-  return                                       { Icon: Cloud,          label: 'Cloudy' }
+// The human-readable condition. Finer-grained than the glyph on purpose:
+// "Drizzle", "Rain", and "Showers" all draw as falling drops, so the word is
+// what carries the distinction. Glyph selection lives in AnimatedWeatherIcon.
+export function weatherLabelForCode(code: number): string {
+  if (code === 0)                 return 'Clear'
+  if (code <= 3)                  return 'Partly cloudy'
+  if (code === 45 || code === 48) return 'Fog'
+  if (code >= 51 && code <= 57)   return 'Drizzle'
+  if (code >= 61 && code <= 67)   return 'Rain'
+  if (code >= 71 && code <= 77)   return 'Snow'
+  if (code >= 80 && code <= 82)   return 'Showers'
+  if (code >= 85 && code <= 86)   return 'Snow showers'
+  if (code >= 95)                 return 'Thunderstorm'
+  return 'Cloudy'
 }

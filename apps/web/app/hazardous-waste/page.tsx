@@ -60,6 +60,7 @@ const nextBiennialDue = nextBiennialDueDate(new Date()).toLocaleDateString('en-U
 
 export default function HazardousWastePage() {
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const { profile } = useAuth()
   const canManageAreas = !!profile?.is_admin || !!profile?.is_superadmin
 
@@ -69,11 +70,11 @@ export default function HazardousWastePage() {
   const [error,        setError]       = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     setError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+      const headers: Record<string, string> = { 'x-active-tenant': tenantId }
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
 
       const [areasRes, insRes, streamsRes] = await Promise.all([
@@ -93,7 +94,7 @@ export default function HazardousWastePage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [tenant?.id])
+  }, [tenantId])
 
   useEffect(() => { void load() }, [load])
 

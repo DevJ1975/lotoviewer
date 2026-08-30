@@ -1,10 +1,49 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-15'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-08-29'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.0',
+    date:    '2026-08-29',
+    changes: [
+      'SCIM provisioning tokens are now owner/admin only. The database rule ' +
+      'behind the token table accepted any member of the organisation, ' +
+      'including a read-only viewer — and because a SCIM token is checked on ' +
+      'its own and not against a session, anyone who could add a row could ' +
+      'mint themselves a working provisioning credential and use it to ' +
+      'create, rename or deactivate workforce records. Issuing and revoking ' +
+      'now happen only through the admin screen. NOTE: this ships as a ' +
+      'database migration and is not in effect until that migration is ' +
+      'applied.',
+      'A SCIM token stops working the moment its organisation is disabled. ' +
+      'Disabling is the offboarding lever, but the SCIM endpoints never ' +
+      'consulted it, so a suspended customer’s identity provider kept ' +
+      'reading and updating the full workforce roster.',
+      'SCIM user lookups reject filter values containing characters the ' +
+      'query grammar treats as syntax (commas, parentheses, quotes). Such a ' +
+      'value used to be spliced into the query and could match on fields the ' +
+      'endpoint does not return; it now returns an empty result. Ordinary ' +
+      'email addresses and employee IDs are unaffected.',
+      'Document the SP ACS URL correctly. The page used to default it to ' +
+      '/api/auth/saml/callback — a path in this application that does not ' +
+      'exist. Supabase Auth terminates SAML, so the ACS lives under the ' +
+      'Supabase project origin, and the field now defaults there.',
+    ],
+  },
+  {
+    version: '1.0.1',
+    date:    '2026-08-19',
+    changes: [
+      'BBS v2: the "BBS observations" tile on /admin now opens an index ' +
+      'at /admin/observations/bbs gathering the leading-indicator ' +
+      'dashboard, the QR / location manager, and the observation log. ' +
+      'The tile previously pointed at a URL that served no page, so it ' +
+      '404ed.',
+    ],
+  },
   {
     version: '1.0.0',
     date:    '2026-05-15',
@@ -68,6 +107,20 @@ export default function WikiPlatformFeaturesPage() {
           the admin of the next step. The reason: SAML enablement on
           Supabase has irreversible side effects (the tenant&apos;s auth
           flow flips); we want a human gate on that.
+        </p>
+        <p>
+          <strong>The two SP values are not the same kind of thing.</strong>{' '}
+          The <em>entity ID</em> is an opaque SAML identifier — it names us to
+          the IdP and nothing ever fetches it, so the default derived from the
+          app URL is fine to keep. The <em>ACS URL</em> is the endpoint your IdP
+          POSTs the assertion to, so it has to be live. Supabase Auth terminates
+          SAML, not this application, which means the ACS sits under the
+          Supabase project origin —{' '}
+          <code>&lt;supabase-url&gt;/auth/v1/sso/saml/acs</code> — and the page
+          defaults to exactly that. If the field comes up blank, the deployment
+          is missing <code>NEXT_PUBLIC_SUPABASE_URL</code>; ask your superadmin
+          for the ACS rather than guessing, because an IdP pointed at the wrong
+          endpoint fails at the moment a user first tries to sign in.
         </p>
       </Section>
 
@@ -135,8 +188,13 @@ export default function WikiPlatformFeaturesPage() {
         <p>
           <strong>Where to find it.</strong> Workers capture at{' '}
           <Link href="/bbs/observe">/bbs/observe</Link> (mobile-first
-          tap targets). Admins review at{' '}
-          <Link href="/admin/observations/bbs/dashboard">/admin/observations/bbs/dashboard</Link>.
+          tap targets). Admins start from the{' '}
+          <Link href="/admin/observations/bbs">BBS observations</Link> tile
+          on <Link href="/admin">/admin</Link>, which gathers the
+          leading-indicator dashboard at{' '}
+          <Link href="/admin/observations/bbs/dashboard">/admin/observations/bbs/dashboard</Link>,
+          the QR / location manager at <Link href="/bbs/qr">/bbs/qr</Link>,
+          and the observation log at <Link href="/bbs">/bbs</Link>.
         </p>
         <p>
           <strong>Headline metric.</strong> safe-to-unsafe ratio,

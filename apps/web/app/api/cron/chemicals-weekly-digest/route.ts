@@ -29,6 +29,10 @@ import {
 // x-internal-secret).
 
 export const runtime = 'nodejs'
+// Four global roll-up queries are cheap; the cost is one email per owner/admin
+// of every tenant with something actionable, each preceded by an auth lookup.
+// Recipient count, not query size, sets the runtime.
+export const maxDuration = 300
 
 const DRIFT_WINDOW_DAYS    = 7
 const EXPIRING_WINDOW_DAYS = 30

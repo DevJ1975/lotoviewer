@@ -9,8 +9,10 @@ import {
   type IncidentScorecardMetrics,
 } from '@soteria/core/incidentScorecardMetrics'
 import { HIERARCHY_LABEL, HIERARCHY_OF_CONTROLS } from '@soteria/core/incidentAction'
+import { rateInterval, wilsonInterval } from '@soteria/core/statistics'
 import { SEVERITY_ACTUAL_LABEL } from '@soteria/core/incident'
 import IncidentSeverityHeatmap from '@/app/_components/IncidentSeverityHeatmap'
+import CausalFactorTrendPanel from './_components/CausalFactorTrendPanel'
 
 // /incidents/scorecard — full EHS scorecard view.
 //
@@ -100,22 +102,22 @@ export default function ScorecardPage() {
         </div>
       )}
 
-      {metrics && <ScorecardBody m={metrics} monthMax={monthMax} />}
+      {metrics && <ScorecardBody m={metrics} monthMax={monthMax} windowDays={windowDays} tenantId={tenant?.id ?? ''} />}
     </div>
   )
 }
 
-function ScorecardBody({ m, monthMax }: { m: IncidentScorecardMetrics; monthMax: number }) {
+function ScorecardBody({ m, monthMax, windowDays, tenantId }: { m: IncidentScorecardMetrics; monthMax: number; windowDays: number; tenantId: string }) {
   return (
     <>
       <DaysSinceBanner days={m.daysSinceLastRecordable} />
 
       <Section title="Lagging indicators · OSHA rates">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Kpi label="TRIR"           value={fmt(m.trir)}          help="per 100 FTE" />
-          <Kpi label="DART"           value={fmt(m.dart)}          help="per 100 FTE" />
-          <Kpi label="LTIR"           value={fmt(m.ltir)}          help="lost-time only" />
-          <Kpi label="Severity rate"  value={fmt(m.severityRate)}  help="days × 200K / hrs" />
+          <Kpi label="TRIR"           value={fmt(m.trir)}          help={ciRange(rateInterval(m.totalRecordable, m.hoursWorked)) ?? 'per 100 FTE'} />
+          <Kpi label="DART"           value={fmt(m.dart)}          help={ciRange(rateInterval(m.totalDeaths + m.totalDaysAwayCases + m.totalRestrictedCases, m.hoursWorked)) ?? 'per 100 FTE'} />
+          <Kpi label="LTIR"           value={fmt(m.ltir)}          help={ciRange(rateInterval(m.totalDeaths + m.totalDaysAwayCases, m.hoursWorked)) ?? 'lost-time only'} />
+          <Kpi label="Severity rate"  value={fmt(m.severityRate)}  help={ciRange(rateInterval(m.totalDaysAwayCount, m.hoursWorked)) ?? 'days × 200K / hrs'} />
           <Kpi label="Recordables"    value={String(m.totalRecordable)} />
           <Kpi label="Days-away cases" value={String(m.totalDaysAwayCases)} />
           <Kpi label="Restricted"     value={String(m.totalRestrictedCases)} />
@@ -136,7 +138,9 @@ function ScorecardBody({ m, monthMax }: { m: IncidentScorecardMetrics; monthMax:
                help="closed on or before due" />
           <Kpi label="RCA completion"
                value={m.rcaCompletionPct == null ? '—' : `${m.rcaCompletionPct.toFixed(0)}%`}
-               help={`${m.recordablesWithCompletedRca} of ${m.totalRecordable}`} />
+               help={m.totalRecordable > 0
+                 ? `95% CI ${pctCi(wilsonInterval(m.recordablesWithCompletedRca, m.totalRecordable))} · ${m.recordablesWithCompletedRca}/${m.totalRecordable}`
+                 : `${m.recordablesWithCompletedRca} of ${m.totalRecordable}`} />
         </div>
       </Section>
 
@@ -168,6 +172,10 @@ function ScorecardBody({ m, monthMax }: { m: IncidentScorecardMetrics; monthMax:
 
       <Section title="CAPA hierarchy of controls (closed actions)">
         <HierarchyMix mix={m.hierarchyOfControlsMix} />
+      </Section>
+
+      <Section title="Causal-factor trends (ECFA)">
+        <CausalFactorTrendPanel windowDays={windowDays} tenantId={tenantId} />
       </Section>
 
       <Section title="Heatmaps">
@@ -228,6 +236,19 @@ function Kpi({ label, value, help }: { label: string; value: string; help?: stri
 function fmt(v: number | null): string {
   if (v == null) return '—'
   return v.toFixed(2)
+}
+
+// Render a rate confidence interval as "95% CI lo–hi" (or nothing when the
+// rate itself is undefined, e.g. no hours worked). Reminds the reader that a
+// rate built on a handful of recordables is imprecise, not exact.
+function ciRange(ci: { lower: number; upper: number } | null, digits = 2): string | undefined {
+  if (!ci) return undefined
+  return `95% CI ${ci.lower.toFixed(digits)}–${ci.upper.toFixed(digits)}`
+}
+
+// Format a proportion Wilson interval as "61–92%".
+function pctCi(ci: { lower: number; upper: number }): string {
+  return `${Math.round(ci.lower * 100)}–${Math.round(ci.upper * 100)}%`
 }
 
 // ──────────────────────────────────────────────────────────────────────────

@@ -22,14 +22,9 @@ import {
   INCIDENT_STATUSES,
 } from '@soteria/core/incident'
 
-// /incidents/[id] — Phase 1 overview shell. The full investigation /
-// RCA / CAPA / care / OSHA tabs ship in later phases — this page lands
-// the core info + a status transition button so the on-shift workflow
-// works end-to-end today.
-
-const STATUS_OPTIONS: ReadonlyArray<IncidentStatus> = [
-  'reported', 'triaged', 'investigating', 'pending_review', 'closed', 'reopened',
-]
+// /incidents/[id] — the overview tab: what happened, who was involved, the
+// regulatory clocks, and the status transition. The investigation, actions,
+// care and classification tabs live under this route and are linked below.
 
 interface PersonRow {
   id:           string
@@ -63,14 +58,24 @@ export default function IncidentDetailPage() {
 
   const load = useCallback(async () => {
     if (!tenant?.id || !id) return
+    setError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
 
-      const [incRes, peopleRes] = await Promise.all([
+      // The notifications log is RLS-scoped to tenant members, so it is read
+      // through the supabase client rather than a dedicated route. It does
+      // not depend on the other two, so it travels with them.
+      const [incRes, peopleRes, notifsRes] = await Promise.all([
         fetch(`/api/incidents/${id}`, { headers }),
         fetch(`/api/incidents/${id}/people`, { headers }),
+        supabase
+          .from('incident_notifications')
+          .select('id, rule_id, trigger_type, channel, recipient_email, status, error_text, sent_at')
+          .eq('incident_id', id)
+          .order('sent_at', { ascending: false })
+          .limit(50),
       ])
       const incBody    = await incRes.json()
       const peopleBody = await peopleRes.json()
@@ -79,17 +84,7 @@ export default function IncidentDetailPage() {
 
       setIncident(incBody.report as IncidentRow)
       setPeople(peopleBody.people as PersonRow[])
-
-      // Best-effort load of the per-incident notifications log. The
-      // table is RLS-scoped to tenant members so we hit it directly
-      // via the supabase client rather than a dedicated API route.
-      const { data: notifs } = await supabase
-        .from('incident_notifications')
-        .select('id, rule_id, trigger_type, channel, recipient_email, status, error_text, sent_at')
-        .eq('incident_id', id)
-        .order('sent_at', { ascending: false })
-        .limit(50)
-      setNotifications((notifs as NotificationRow[] | null) ?? [])
+      setNotifications((notifsRes.data as NotificationRow[] | null) ?? [])
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -122,7 +117,11 @@ export default function IncidentDetailPage() {
     }
   }
 
-  if (error) {
+  // Only take over the page when there is genuinely nothing to show. Once the
+  // incident has loaded, a later failure — a rejected status change, a blip
+  // mid-refresh — surfaces as a banner above the record instead of replacing
+  // it, so the reader keeps the context and a way to retry.
+  if (error && !incident) {
     return (
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
         <Link href="/incidents" className="inline-flex items-center gap-1 text-sm text-slate-500">
@@ -132,6 +131,13 @@ export default function IncidentDetailPage() {
           <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
           <span>{error}</span>
         </div>
+        <button
+          type="button"
+          onClick={() => void load()}
+          className="mt-3 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:border-slate-400"
+        >
+          Try again
+        </button>
       </div>
     )
   }
@@ -150,6 +156,20 @@ export default function IncidentDetailPage() {
         <ArrowLeft className="h-4 w-4" />
         Back to incidents
       </Link>
+
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:bg-rose-950/30 dark:text-rose-200">
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="text-xs font-semibold underline underline-offset-2"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* ── Tabs ─────────────────────────────────────────────────── */}
       <nav className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800 -mb-2">
@@ -240,11 +260,11 @@ export default function IncidentDetailPage() {
           Status
         </h2>
         <div className="flex flex-wrap gap-2">
-          {STATUS_OPTIONS.map(s => (
+          {INCIDENT_STATUSES.map(s => (
             <button
               key={s}
               type="button"
-              disabled={busy || s === incident.status || !INCIDENT_STATUSES.includes(s)}
+              disabled={busy || s === incident.status}
               onClick={() => patchStatus(s)}
               className={
                 'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ' +
@@ -337,9 +357,6 @@ export default function IncidentDetailPage() {
 
       <CapaPanel incidentId={incident.id} />
 
-      <p className="text-[11px] text-slate-400 dark:text-slate-500">
-        Investigation, RCA, action items, care management, and OSHA classification ship in later phases.
-      </p>
     </div>
   )
 }

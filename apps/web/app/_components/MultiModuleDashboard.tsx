@@ -27,6 +27,8 @@ import IncidentKpiPanel         from './IncidentKpiPanel'
 import BBSKpiPanel              from './BBSKpiPanel'
 import OpenActionsPanel         from './OpenActionsPanel'
 import OshaRegWatchPanel        from './OshaRegWatchPanel'
+import ComingUpPanel            from './ComingUpPanel'
+import TrainingMatrixNavCard    from './TrainingMatrixNavCard'
 
 // Multi-module dashboard — the legacy default home rendered by
 // app/page.tsx for tenants who use more than one safety module.
@@ -193,12 +195,20 @@ export default function MultiModuleDashboard({ embedded = false }: { embedded?: 
           gamification leaderboard. Self-gates via isModuleVisible. */}
       <BBSKpiPanel />
 
-      {/* OSHA Regulatory Watch — AI-summarized regulation updates + upcoming
-          changes. Self-gates via isModuleVisible('osha-reg-watch'); the feed
-          is global, so it shows the same rows to every tenant. */}
+      {/* Regulatory Watch — AI-summarized regulation updates, then what is
+          still ahead. Both self-gate via isModuleVisible('osha-reg-watch').
+          The feed rows are global, but each panel filters them to the
+          jurisdictions the tenant operates in, so Cal/OSHA items reach only
+          tenants with a California site. */}
+      <ComingUpPanel />
       <OshaRegWatchPanel />
 
       <OpenActionsPanel />
+
+      {/* Training & Competency Matrix — admin-only discoverability card.
+          Pure link (no data read), self-hides for non-admins and tenants
+          without the module visible. */}
+      <TrainingMatrixNavCard />
 
       <ComingSoonStrip />
       <ModulesGrid />

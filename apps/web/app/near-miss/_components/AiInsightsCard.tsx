@@ -28,12 +28,13 @@ const RISK_TONE = {
 
 export function AiInsightsCard({ nearMissId, canEdit }: Props) {
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const [data,    setData]    = useState<ClassifyResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
   const load = useCallback(async (force = false) => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     setLoading(true); setError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -42,7 +43,7 @@ export function AiInsightsCard({ nearMissId, canEdit }: Props) {
         method: 'POST',
         headers: {
           authorization:    `Bearer ${session.access_token}`,
-          'x-active-tenant': tenant.id,
+          'x-active-tenant': tenantId,
         },
         cache: 'no-store',
       })
@@ -58,7 +59,7 @@ export function AiInsightsCard({ nearMissId, canEdit }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [tenant?.id, nearMissId])
+  }, [tenantId, nearMissId])
 
   useEffect(() => { if (canEdit) void load() }, [load, canEdit])
 

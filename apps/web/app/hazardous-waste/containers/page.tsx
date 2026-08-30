@@ -53,6 +53,7 @@ const AGE_LABEL: Record<ContainerAgeStatus, string> = {
 
 export default function HazardousWasteContainersPage() {
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const search = useSearchParams()
   const streamId = search?.get('stream_id') ?? ''
 
@@ -69,10 +70,10 @@ export default function HazardousWasteContainersPage() {
   }, [])
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     setError(null)
     const { data: { session } } = await supabase.auth.getSession()
-    const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+    const headers: Record<string, string> = { 'x-active-tenant': tenantId }
     if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
 
     const params = new URLSearchParams()
@@ -83,7 +84,7 @@ export default function HazardousWasteContainersPage() {
     const json = await res.json()
     if (!res.ok) { setError(json.error ?? 'Failed to load'); setRows([]); return }
     setRows(json.containers ?? [])
-  }, [tenant?.id, filter, streamId])
+  }, [tenantId, filter, streamId])
 
   useEffect(() => { void load() }, [load])
 

@@ -19,11 +19,18 @@ import { discoverSds, type SdsCandidate } from '@/lib/ai/discoverSds'
 // Idempotency/resumability lives in sds_library_seed_items.status: an item is
 // claimed (-> 'researching', attempts++) before its discover call, then moved
 // to 'found' / 'not_found', or back to 'approved' to retry (or 'error' once
-// attempts are exhausted). A crashed run just leaves items re-claimable.
+// attempts are exhausted). If a run crashes or times out mid-item, the next
+// batch reclaims items stuck in 'researching' past RESEARCHING_LEASE_MS so the
+// run can finish instead of stalling forever on an orphaned claim.
 
 const DISCOVER_MODEL = MODEL_BY_SURFACE['discover-sds']
 const MAX_ATTEMPTS = 3
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+// A 'researching' claim older than this is from a run that crashed or timed out
+// (the function ceiling is 300s). 3× that ceiling leaves a still-running batch's
+// in-flight items alone while still recovering orphaned ones within a cycle.
+const RESEARCHING_LEASE_MS = 15 * 60 * 1000
+const STALE_LEASE_ERROR = 'Reclaimed after the researching lease expired (run crashed or timed out)'
 
 type Admin = SupabaseClient
 
@@ -77,6 +84,10 @@ export async function researchSeedBatch(params: {
   if (runErr) throw new Error(runErr.message)
   if (!run)   throw new Error('Seed run not found')
   const createdBy = (run as { created_by: string | null }).created_by
+
+  // Recover items orphaned in 'researching' by a prior crashed/timed-out batch
+  // before selecting work, so they rejoin this batch (or terminate the run).
+  await reclaimStaleResearching(admin, seedRunId)
 
   const { data: items, error: itemsErr } = await admin
     .from('sds_library_seed_items')
@@ -180,11 +191,13 @@ async function upsertLibraryChemical(
   candidates: SdsCandidate[],
 ): Promise<string> {
   const best = candidates[0]
+  // Resolve once so the collision lookup can match the exact identity we wrote.
+  const manufacturer = best.manufacturer || item.proposed_manufacturer || null
   const { data: inserted, error } = await admin
     .from('sds_library_chemicals')
     .insert({
       canonical_name:    item.proposed_name,
-      manufacturer:      best.manufacturer || item.proposed_manufacturer || null,
+      manufacturer,
       cas_primary:       item.proposed_cas,
       cas_numbers:       item.proposed_cas ? [item.proposed_cas] : [],
       source_url:        best.url,
@@ -201,7 +214,9 @@ async function upsertLibraryChemical(
     // uq_sds_library_identity collision — this chemical is already in the
     // library (e.g. a prior run). Reuse it and just attach the new sources.
     if (error.code === '23505') {
-      const existingId = await findExistingChemical(admin, item)
+      const existingId = await findExistingChemical(admin, {
+        name: item.proposed_name, manufacturer, cas: item.proposed_cas,
+      })
       if (!existingId) throw new Error(`identity collision but lookup failed: ${error.message}`)
       chemicalId = existingId
     } else {
@@ -228,19 +243,73 @@ async function upsertLibraryChemical(
   return chemicalId
 }
 
-async function findExistingChemical(admin: Admin, item: SeedItemRow): Promise<string | null> {
-  // Match the unique index's coalesce semantics: name (case-insensitive) +
-  // manufacturer + primary CAS. ilike with no wildcards is a case-insensitive
-  // exact match; chemical names don't contain % or _.
+interface ChemicalIdentity {
+  name:         string
+  manufacturer: string | null
+  cas:          string | null
+}
+
+/**
+ * Find the library row that collided on uq_sds_library_identity —
+ * (lower(canonical_name), coalesce(manufacturer,''), coalesce(cas_primary,'')).
+ * Narrow by name in the DB (ilike, wildcards escaped — see escapeLike), then
+ * match the coalesced manufacturer/CAS in JS against the exact values we tried
+ * to insert. manufacturer/CAS are compared case-sensitively to mirror the index
+ * (only canonical_name is lower()'d there). A 23505 guarantees such a row
+ * exists; returning null on no match lets the caller surface the inconsistency
+ * rather than silently attaching sources to the wrong chemical.
+ */
+async function findExistingChemical(admin: Admin, identity: ChemicalIdentity): Promise<string | null> {
   const { data } = await admin
     .from('sds_library_chemicals')
-    .select('id, manufacturer, cas_primary')
-    .ilike('canonical_name', item.proposed_name)
-  const rows = (data ?? []) as Array<{ id: string; manufacturer: string | null; cas_primary: string | null }>
-  const cas = item.proposed_cas ?? ''
-  const mfr = (item.proposed_manufacturer ?? '').toLowerCase()
-  const exact = rows.find(r => (r.cas_primary ?? '') === cas && (r.manufacturer ?? '').toLowerCase() === mfr)
-  return (exact ?? rows[0])?.id ?? null
+    .select('id, canonical_name, manufacturer, cas_primary')
+    .ilike('canonical_name', escapeLike(identity.name))
+  const rows = (data ?? []) as Array<{
+    id: string; canonical_name: string; manufacturer: string | null; cas_primary: string | null
+  }>
+  const name = identity.name.toLowerCase()
+  const mfr  = identity.manufacturer ?? ''
+  const cas  = identity.cas ?? ''
+  const match = rows.find(r =>
+    r.canonical_name.toLowerCase() === name &&
+    (r.manufacturer ?? '') === mfr &&
+    (r.cas_primary ?? '') === cas)
+  return match?.id ?? null
+}
+
+// PostgREST hands the ilike pattern straight to SQL ILIKE, where % and _ are
+// wildcards and \ escapes them. Chemical names can contain these (e.g.
+// "Hydrogen peroxide 30%"), so escape them to keep the lookup an exact match.
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, ch => `\\${ch}`)
+}
+
+/**
+ * Reclaim items orphaned in 'researching' by a run that crashed or timed out
+ * mid-item. finalizeRunCounts counts 'researching' as pending, so without this
+ * a dead run's leftovers would keep it from ever completing. Items still under
+ * the attempt cap go back to 'approved' to retry; exhausted ones go to 'error'
+ * so the run can finish. Only claims older than the lease are touched, leaving
+ * a concurrently-running batch's in-flight items alone.
+ */
+async function reclaimStaleResearching(admin: Admin, seedRunId: string): Promise<void> {
+  const staleBefore = new Date(Date.now() - RESEARCHING_LEASE_MS).toISOString()
+
+  // Exhausted the attempt cap → give up so the run can complete.
+  await admin.from('sds_library_seed_items')
+    .update({ status: 'error', last_error: STALE_LEASE_ERROR })
+    .eq('seed_run_id', seedRunId)
+    .eq('status', 'researching')
+    .lt('last_attempt_at', staleBefore)
+    .gte('attempts', MAX_ATTEMPTS)
+
+  // Retries remaining → back to the approved queue for the next batch.
+  await admin.from('sds_library_seed_items')
+    .update({ status: 'approved' })
+    .eq('seed_run_id', seedRunId)
+    .eq('status', 'researching')
+    .lt('last_attempt_at', staleBefore)
+    .lt('attempts', MAX_ATTEMPTS)
 }
 
 /**

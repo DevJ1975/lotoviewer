@@ -1,3 +1,5 @@
+import type { MemberAccessState } from '@soteria/core/memberAccessState'
+
 export type MemberStatus = 'active' | 'suspended' | 'terminated' | 'archived'
 export type MemberReadinessStatus = 'ready' | 'attention' | 'restricted' | 'setup_needed' | 'inactive'
 export type EmploymentType = 'employee' | 'contractor' | 'temp' | 'vendor' | 'visitor' | 'other'
@@ -43,6 +45,15 @@ export interface MemberSummary {
 export interface MemberSearchResult extends MemberSummary {
   mention_label: string
   mention_subtitle: string
+}
+
+/**
+ * A roster row plus the sign-in state only the admin views need. Kept off
+ * MemberSummary because the mention/search endpoints neither compute it nor
+ * are authorized to read the columns it derives from.
+ */
+export interface AdminMemberRow extends MemberSearchResult {
+  access_state: MemberAccessState
 }
 
 export interface MemberProfilePatch {

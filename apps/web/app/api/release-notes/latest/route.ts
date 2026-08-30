@@ -1,11 +1,23 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { releaseNoteCutoffIso, RELEASE_NOTE_BANNER_DAYS } from '@soteria/core/releaseNotes'
 
 // GET /api/release-notes/latest
 //
-// Returns the most recently published release note, or { note: null }
-// if no published notes exist. Consumed by the in-app banner on every
-// authenticated user's first page-load.
+// Returns the most recently published release note IF it is still inside the
+// banner window (RELEASE_NOTE_BANNER_DAYS from its published_at), else
+// { note: null }. Consumed by the in-app banner on every authenticated
+// user's page-load.
+//
+// The age cutoff is applied HERE, in SQL, rather than left to the client.
+// The banner's other exit — the user dismissing it — is a localStorage
+// stamp, which is per-device and clearable; the age rule is the one that has
+// to hold for everyone, so it belongs on the server. A client that ignores
+// or loses its stamp still cannot resurrect a month-old announcement.
+//
+// Note this endpoint is the BANNER's feed, not the changelog: /whats-new
+// reads /api/release-notes, which is unfiltered, so ageing a note out of the
+// banner never hides it from the history page.
 //
 // Auth: any signed-in user (not superadmin-only). The release_notes
 // RLS policy already gates: published_at IS NOT NULL is readable by
@@ -51,10 +63,16 @@ export async function GET(req: Request) {
     .from('release_notes')
     .select('id, version, title, body_md, published_at')
     .not('published_at', 'is', null)
+    .gte('published_at', releaseNoteCutoffIso(Date.now()))
     .order('published_at', { ascending: false })
     .limit(1)
     .maybeSingle()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ note: data as LatestReleaseNote | null })
+  // windowDays travels with the payload so the client can re-check the
+  // boundary on a long-lived tab without hardcoding the number twice.
+  return NextResponse.json({
+    note: data as LatestReleaseNote | null,
+    windowDays: RELEASE_NOTE_BANNER_DAYS,
+  })
 }

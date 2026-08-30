@@ -26,6 +26,7 @@ export default function NewHazardousWasteContainerPage() {
   const router = useRouter()
   const search = useSearchParams()
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const prefilledStream = search?.get('stream_id') ?? ''
 
   const [streams, setStreams]                       = useState<HazardousWasteStreamRow[] | null>(null)
@@ -42,9 +43,9 @@ export default function NewHazardousWasteContainerPage() {
   const [error, setError]                           = useState<string | null>(null)
 
   const loadStreams = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     const { data: { session } } = await supabase.auth.getSession()
-    const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+    const headers: Record<string, string> = { 'x-active-tenant': tenantId }
     if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
     const res = await fetch('/api/hazardous-waste/streams?status=active', { headers })
     const json = await res.json()
@@ -53,7 +54,7 @@ export default function NewHazardousWasteContainerPage() {
     if (!streamId && (json.streams?.length ?? 0) > 0) {
       setStreamId(json.streams[0].id)
     }
-  }, [tenant?.id, streamId])
+  }, [tenantId, streamId])
 
   useEffect(() => { void loadStreams() }, [loadStreams])
 

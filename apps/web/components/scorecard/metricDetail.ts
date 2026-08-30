@@ -57,6 +57,18 @@ const DRIVER_DEFINITION: Record<string, string> = {
     'Worker certifications that have lapsed. Untrained workers on hazardous tasks raise incident odds.',
   atmospheric_failures:
     'The share of confined-space atmospheric tests that failed in the recent window. A rising fail rate signals ventilation or monitor problems.',
+  inspection_failing:
+    'The share of inspections that failed in the recent window. A rising fail rate is an early sign of conditions drifting out of standard, before an incident.',
+  bbs_followup_overdue:
+    'Behavior-Based Safety observations whose required follow-up is still open. Each open follow-up is a recognised at-risk condition left unaddressed.',
+  jha_reviews_overdue:
+    'Approved Job Hazard Analyses past their scheduled review date. A stale JHA no longer matches how the work is actually done.',
+  permit_noncompliance:
+    'Confined-space and hot-work permits that ran past their expiry without being closed out — high-energy work continuing without live authorization.',
+  training_gaps:
+    'Required course assignments that are missing or overdue in the competency matrix — a richer signal than raw expired certs, weighted to the roles that need them.',
+  ecfa_weak_controls:
+    'The share of recent ECFA causal factors whose corrective control sits low on the hierarchy (PPE/administrative) or is uncoded — fixes that leave the hazard in place.',
 }
 
 function toneForPressure(pressure: number): MetricTone {
