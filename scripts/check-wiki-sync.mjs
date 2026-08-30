@@ -89,6 +89,15 @@ try {
     } catch {
       console.log(`[wiki-sync] could not resolve merge-base with ${base} (likely a shallow clone or first-commit branch); falling back to HEAD~1`)
       try { mergeBase = git('git rev-parse HEAD~1') } catch { mergeBase = null }
+      if (!mergeBase) {
+        // Fail closed. Falling through here left changedFiles empty, which the
+        // "no changed files — OK" branch below reports as a PASS — a git
+        // resolution failure silently became a green gate. wikiSyncRange.mjs
+        // already states the policy: "failing closed is right for a check
+        // whose whole purpose is to catch omissions."
+        console.error(`[wiki-sync] could not resolve a diff range against ${base} or HEAD~1 — refusing to report a pass. Deepen the clone (fetch-depth: 0) and re-run.`)
+        process.exit(2)
+      }
     }
     if (mergeBase) {
       const committed   = git(`git diff --name-only ${mergeBase}...HEAD`).split('\n').filter(Boolean)
