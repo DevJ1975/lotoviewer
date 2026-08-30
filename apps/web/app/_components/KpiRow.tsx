@@ -3,19 +3,19 @@
 import { Camera, HardHat, UsersRound, Workflow } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { HomeMetrics } from '@soteria/core/homeMetrics'
+import { useNow } from '@/hooks/useNow'
 import { InfographicMetricCard, type InfographicTone } from './InfographicMetricCard'
 
 // 4-tile KPI strip plus a freshness/refresh row underneath. The wrapper
 // owns the error-banner-with-retry path; each Kpi is a dumb display tile.
 
 export function KpiRow({
-  metrics, error, loadedAt, refreshing, now, onRefresh,
+  metrics, error, loadedAt, refreshing, onRefresh,
 }: {
   metrics:    HomeMetrics | null
   error:      string | null
   loadedAt:   number | null
   refreshing: boolean
-  now:        Date
   onRefresh:  () => void
 }) {
   if (error) {
@@ -44,7 +44,7 @@ export function KpiRow({
           ))}
         </div>
       )}
-      <FreshnessIndicator loadedAt={loadedAt} refreshing={refreshing} now={now} onRefresh={onRefresh} />
+      <FreshnessIndicator loadedAt={loadedAt} refreshing={refreshing} onRefresh={onRefresh} />
     </section>
   )
 }
@@ -117,17 +117,17 @@ function buildKpiCards(metrics: HomeMetrics | null): Array<{
 }
 
 // "Updated 23s ago · ↻" line so a supervisor knows the metrics aren't stuck.
-// The clock tick that drives the rest of the home page also drives this —
-// `now` is passed in so the relative label ticks live without a separate
-// interval. Tap to force a refresh.
+// Owns its own 1Hz tick so the relative label ticks live without dragging the
+// rest of the home page into a per-second re-render. Tap to force a refresh.
 function FreshnessIndicator({
-  loadedAt, refreshing, now, onRefresh,
+  loadedAt, refreshing, onRefresh,
 }: {
   loadedAt:   number | null
   refreshing: boolean
-  now:        Date
   onRefresh:  () => void
 }) {
+  // useNow returns epoch ms; this component works in Date terms.
+  const now = new Date(useNow(1000))
   const label = loadedAt == null
     ? (refreshing ? 'Loading…' : '—')
     : refreshing ? 'Updating…' : `Updated ${formatAgo(now.getTime() - loadedAt)}`

@@ -15,7 +15,12 @@
 // Skip:
 //   - WIKI_SYNC_SKIP=1 in the environment bypasses the check entirely.
 //   - A commit body line starting with `wiki-sync-skip:` (case-insensitive)
-//     also bypasses, with the reason recorded.
+//     also bypasses, with the reason recorded. The directive only counts when
+//     it appears on a commit *under review* — the range this run is checking,
+//     not an ancestor already on the base branch. A skip justifies one change;
+//     letting it carry into later PRs is how the gate silently switched itself
+//     off for weeks. In `--staged` mode no commit body applies at all, since
+//     the message does not exist yet; use WIKI_SYNC_SKIP=1 there.
 //
 // The check is intentionally conservative: it asks for a wiki touch, not
 // a specific edit. A bumped CURRENT_VERSION + CHANGELOG row counts. The
@@ -26,6 +31,8 @@ import { execSync } from 'node:child_process'
 import { readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve, relative } from 'node:path'
+
+import { skipScanRange } from './lib/wikiSyncRange.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repo = resolve(here, '..')
@@ -63,6 +70,9 @@ function git(cmd) {
 let changedFiles = []
 let modeLabel    = ''
 let bypassReason = null
+// The commits under review. Set alongside changedFiles so the skip scan and the
+// diff always describe the same change — see scripts/lib/wikiSyncRange.mjs.
+let mergeBase    = null
 
 try {
   if (stagedOnly) {
@@ -74,7 +84,6 @@ try {
   } else {
     const base = process.env.WIKI_SYNC_BASE || 'origin/main'
     modeLabel = `vs ${base}`
-    let mergeBase
     try {
       mergeBase = git(`git merge-base HEAD ${base}`)
     } catch {
@@ -96,18 +105,25 @@ try {
   process.exit(2)
 }
 
-// Look for `wiki-sync-skip: <reason>` at the start of a line in any
-// commit body on the branch. Anchored to ^ so quoting the directive in
-// prose (like this comment, or in a commit that explains how the bypass
-// works) does not accidentally trip it.
-try {
-  const log = git('git log -50 --pretty=%B')
-  const m = log.match(/^[ \t]*wiki-sync-skip:\s*(\S.*)$/im)
-  if (m) bypassReason = m[1].trim()
-} catch { /* ignore */ }
+// Look for `wiki-sync-skip: <reason>` at the start of a line in a commit body
+// belonging to THIS change. Anchored to ^ so quoting the directive in prose
+// (like this comment, or in a commit that explains how the bypass works) does
+// not accidentally trip it.
+//
+// Scoped to the range under review rather than a fixed window: a skip is a
+// statement about one change, and must not speak for anyone else's. See
+// scripts/lib/wikiSyncRange.mjs for what the old window cost.
+const scanRange = skipScanRange({ stagedOnly, explicitSince, mergeBase })
+if (scanRange) {
+  try {
+    const log = git(`git log ${scanRange} --pretty=%B`)
+    const m = log.match(/^[ \t]*wiki-sync-skip:\s*(\S.*)$/im)
+    if (m) bypassReason = m[1].trim()
+  } catch { /* ignore */ }
+}
 
 if (bypassReason) {
-  console.log(`[wiki-sync] skipped via commit body: "${bypassReason}"`)
+  console.log(`[wiki-sync] skipped via commit body (${scanRange}): "${bypassReason}"`)
   process.exit(0)
 }
 

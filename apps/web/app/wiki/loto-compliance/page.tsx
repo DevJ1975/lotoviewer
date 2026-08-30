@@ -66,7 +66,7 @@ export default function WikiLotoCompliancePage() {
           release stored energy, lockout, verify zero energy (the
           &quot;tryout&quot;). Every energy step on every equipment now
           carries a phase tag and an explicit sequence order. The placard
-          generator refuses to publish a placard that's missing a required
+          generator refuses to publish a placard that&apos;s missing a required
           phase — the most common citation in §147 is a procedure with no
           verify-zero-energy step.
         </p>

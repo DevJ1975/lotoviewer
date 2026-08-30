@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Plus, RefreshCcw, Loader2, Printer, QrCode, Power } from 'lucide-react'
-import QRCode from 'qrcode'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 
@@ -19,6 +18,7 @@ interface Location {
 
 export default function BBSQrAdminPage() {
   const { tenant } = useTenant()
+  const tenantId = tenant?.id
   const [rows, setRows] = useState<Location[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -27,16 +27,16 @@ export default function BBSQrAdminPage() {
   const [qrImages, setQrImages] = useState<Record<string, string>>({})
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenantId) return
     setError(null)
     const { data: { session } } = await supabase.auth.getSession()
-    const headers: Record<string, string> = { 'x-active-tenant': tenant.id }
+    const headers: Record<string, string> = { 'x-active-tenant': tenantId }
     if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
     const res = await fetch('/api/bbs/locations', { headers })
     const body = await res.json()
     if (!res.ok) { setError(body.error ?? `HTTP ${res.status}`); return }
     setRows(body.locations ?? [])
-  }, [tenant?.id])
+  }, [tenantId])
 
   useEffect(() => { void load() }, [load])
 
@@ -44,13 +44,17 @@ export default function BBSQrAdminPage() {
   useEffect(() => {
     if (!rows) return
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
-    void Promise.all(rows.map(async loc => {
-      const url = `${origin}/r/bbs/${loc.token}`
-      const dataUrl = await QRCode.toDataURL(url, { errorCorrectionLevel: 'M', margin: 1, scale: 6 })
-      return [loc.id, dataUrl] as const
-    })).then(pairs => {
+    // Lazy-load qrcode (~30KB gz) off the page's first-load JS; it's only
+    // needed once locations arrive.
+    void (async () => {
+      const QRCode = (await import('qrcode')).default
+      const pairs = await Promise.all(rows.map(async loc => {
+        const url = `${origin}/r/bbs/${loc.token}`
+        const dataUrl = await QRCode.toDataURL(url, { errorCorrectionLevel: 'M', margin: 1, scale: 6 })
+        return [loc.id, dataUrl] as const
+      }))
       setQrImages(Object.fromEntries(pairs))
-    })
+    })()
   }, [rows])
 
   async function api(path: string, init: RequestInit) {

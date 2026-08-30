@@ -74,11 +74,13 @@ describe('POST /api/admin/users', () => {
       status: 'active',
       readiness_status: 'setup_needed',
     })
-    expect(sendInviteEmailMock).toHaveBeenCalledWith(expect.objectContaining({
-      to: 'new@example.com',
-      tenantName: 'Snak King',
-      tempPassword: 'TempPass123!',
-    }))
+    // The email carries the accept-invite link — never the password.
+    const emailArgs = sendInviteEmailMock.mock.calls[0]![0] as Record<string, unknown>
+    expect(emailArgs.to).toBe('new@example.com')
+    expect(emailArgs.tenantName).toBe('Snak King')
+    expect(emailArgs.inviteUrl).toContain('/accept-invite?token=')
+    expect(emailArgs).not.toHaveProperty('tempPassword')
+    expect(body.inviteUrl).toContain('/accept-invite?token=')
   })
 
   it('rolls back a brand-new auth user when membership insert races into a duplicate', async () => {

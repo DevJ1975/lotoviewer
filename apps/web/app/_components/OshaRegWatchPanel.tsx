@@ -1,28 +1,34 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ExternalLink, Loader2, ShieldAlert } from 'lucide-react'
+import { ShieldAlert } from 'lucide-react'
 import {
   fetchOshaRegulationUpdates,
+  fetchTenantJurisdictions,
   sortUpdatesForFeed,
   type OshaRegulationUpdate,
   type OshaUpdateCategory,
-  type OshaUpdateSeverity,
+  type RegulationJurisdiction,
 } from '@soteria/core/oshaRegWatch'
+import { DashboardPanel } from '@/components/DashboardPanel'
+import OpsSpinner from '@/components/OpsSpinner'
 import { useTenant } from '@/components/TenantProvider'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
+import { JurisdictionBadge, SeverityPill, TitleLink } from './RegulationUpdateParts'
 
-// OSHA Regulatory Watch panel for the Control Center home dashboard.
+// Regulatory Watch panel for the Control Center home dashboard — the
+// backward-looking half. ComingUpPanel is its forward-looking sibling.
 //
 // Same self-gating pattern as RiskKpiPanel / NearMissKpiPanel: mounts only
 // when the active tenant has the module visible, returns null otherwise.
 // Unlike the KPI panels (number tiles), this one is summary-text-first —
-// each row is the AI's workplace-impact blurb for one OSHA update, because
+// each row is the AI's workplace-impact blurb for one update, because
 // reading the summary IS the point of the feature.
 //
-// The feed is GLOBAL (one shared set of rows for every tenant) and the cron
-// refreshes it monthly, so the poll interval is slow — just enough that a
-// long-lived tab eventually picks up a new month's run.
+// The feed is GLOBAL (one shared set of rows) and the cron refreshes it
+// monthly, so the poll interval is slow — just enough that a long-lived tab
+// eventually picks up a new month's run. Cal/OSHA rows are filtered to
+// tenants that actually operate in California; see fetchTenantJurisdictions.
 
 const REFRESH_MS = 6 * 60 * 60 * 1000   // 6h — the feed only changes monthly
 const FEED_LIMIT = 5
@@ -44,14 +50,16 @@ export default function OshaRegWatchPanel() {
   )
 
   const [updates, setUpdates] = useState<OshaRegulationUpdate[] | null>(null)
+  const [jurisdictions, setJurisdictions] = useState<RegulationJurisdiction[]>(['federal'])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const rows = await fetchOshaRegulationUpdates(FEED_LIMIT)
-      setUpdates(rows)
+      const scope = await fetchTenantJurisdictions()
+      setJurisdictions(scope)
+      setUpdates(await fetchOshaRegulationUpdates(FEED_LIMIT, scope))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -73,41 +81,43 @@ export default function OshaRegWatchPanel() {
   if (error && !updates) return null
 
   const ordered = updates ? sortUpdatesForFeed(updates) : null
+  const showJurisdiction = jurisdictions.length > 1
 
   return (
-    <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5 space-y-4">
-      <header className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-            OSHA · Regulatory Watch
-          </div>
-          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
-            Regulatory updates
-          </h2>
-        </div>
+    <DashboardPanel
+      eyebrow="Regulatory Watch"
+      title="Regulatory updates"
+      action={
         <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
           <ShieldAlert className="h-3.5 w-3.5" /> AI summary
         </span>
-      </header>
-
+      }
+    >
       {loading && ordered === null ? (
         <div className="flex items-center justify-center py-6">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+          <OpsSpinner size="sm" label={null} />
         </div>
       ) : ordered === null || ordered.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-4 text-center">
-          <p className="text-xs italic text-slate-400">No OSHA regulatory updates yet.</p>
+          <p className="text-xs italic text-slate-400">No regulatory updates yet.</p>
         </div>
       ) : (
         <ul className="space-y-3">
-          {ordered.map(u => <UpdateRow key={u.id} update={u} />)}
+          {ordered.map(u => (
+            <UpdateRow key={u.id} update={u} showJurisdiction={showJurisdiction} />
+          ))}
         </ul>
       )}
-    </section>
+    </DashboardPanel>
   )
 }
 
-function UpdateRow({ update }: { update: OshaRegulationUpdate }) {
+function UpdateRow({
+  update, showJurisdiction,
+}: {
+  update: OshaRegulationUpdate
+  showJurisdiction: boolean
+}) {
   const dateLabel = formatUpdateDate(update)
   return (
     <li className="rounded-xl border border-slate-100 dark:border-slate-800 p-3">
@@ -116,6 +126,7 @@ function UpdateRow({ update }: { update: OshaRegulationUpdate }) {
         <SeverityPill severity={update.severity} />
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+        {showJurisdiction && <JurisdictionBadge jurisdiction={update.jurisdiction} />}
         <CategoryBadge update={update} />
         {dateLabel && <span>{dateLabel}</span>}
       </div>
@@ -123,23 +134,6 @@ function UpdateRow({ update }: { update: OshaRegulationUpdate }) {
         {update.impact_summary}
       </p>
     </li>
-  )
-}
-
-function TitleLink({ update }: { update: OshaRegulationUpdate }) {
-  if (update.source_url === '') {
-    return <span className="font-semibold text-slate-900 dark:text-slate-100">{update.title}</span>
-  }
-  return (
-    <a
-      href={update.source_url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group inline-flex items-start gap-1 font-semibold text-brand-navy dark:text-brand-yellow hover:underline"
-    >
-      <span>{update.title}</span>
-      <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-70 group-hover:opacity-100" />
-    </a>
   )
 }
 
@@ -154,19 +148,6 @@ function CategoryBadge({ update }: { update: OshaRegulationUpdate }) {
   return (
     <span className="rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
       {CATEGORY_LABEL[update.category]}
-    </span>
-  )
-}
-
-function SeverityPill({ severity }: { severity: OshaUpdateSeverity | null }) {
-  if (!severity) return null
-  const cls =
-    severity === 'high'   ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
-    : severity === 'medium' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
-    :                         'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-  return (
-    <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${cls}`}>
-      {severity}
     </span>
   )
 }
