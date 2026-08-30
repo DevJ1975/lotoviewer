@@ -26,7 +26,10 @@ import {
   nextBiennialDueDate,
   type HazardousWasteAreaRow,
   type HazardousWasteInspectionRow,
+  type HazardousWasteStreamRow,
 } from '@soteria/core/hazardousWaste'
+import { GHS_PICTOGRAM_LABEL, type GhsPictogram } from '@soteria/core/chemicals'
+import { PictogramBadges } from '@/app/chemicals/_components/PictogramBadges'
 
 // /hazardous-waste — module hub. Phase 1 (this PR) gives the hub real
 // data: areas the tenant has registered, the next due walk-throughs,
@@ -63,6 +66,7 @@ export default function HazardousWastePage() {
 
   const [areas,        setAreas]       = useState<AreaWithLastInspection[] | null>(null)
   const [inspections,  setInspections] = useState<HazardousWasteInspectionRow[] | null>(null)
+  const [streams,      setStreams]     = useState<HazardousWasteStreamRow[] | null>(null)
   const [error,        setError]       = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -73,22 +77,42 @@ export default function HazardousWastePage() {
       const headers: Record<string, string> = { 'x-active-tenant': tenantId }
       if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
 
-      const [areasRes, insRes] = await Promise.all([
+      const [areasRes, insRes, streamsRes] = await Promise.all([
         fetch('/api/hazardous-waste/areas', { headers }),
         fetch('/api/hazardous-waste/inspections?limit=10', { headers }),
+        fetch('/api/hazardous-waste/streams', { headers }),
       ])
-      const areasBody = await areasRes.json()
-      const insBody   = await insRes.json()
-      if (!areasRes.ok) throw new Error(areasBody.error ?? `HTTP ${areasRes.status}`)
-      if (!insRes.ok)   throw new Error(insBody.error   ?? `HTTP ${insRes.status}`)
+      const areasBody   = await areasRes.json()
+      const insBody     = await insRes.json()
+      const streamsBody = await streamsRes.json()
+      if (!areasRes.ok)   throw new Error(areasBody.error   ?? `HTTP ${areasRes.status}`)
+      if (!insRes.ok)     throw new Error(insBody.error     ?? `HTTP ${insRes.status}`)
+      if (!streamsRes.ok) throw new Error(streamsBody.error ?? `HTTP ${streamsRes.status}`)
       setAreas(areasBody.areas ?? [])
       setInspections(insBody.inspections ?? [])
+      setStreams(streamsBody.streams ?? [])
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
   }, [tenantId])
 
   useEffect(() => { void load() }, [load])
+
+  // Client-side rollup: how many streams carry each GHS pictogram, top 5.
+  const pictogramRollup = useMemo(() => {
+    if (!streams) return null
+    const counts = new Map<GhsPictogram, number>()
+    for (const stream of streams) {
+      for (const code of stream.ghs_pictograms) {
+        if (code in GHS_PICTOGRAM_LABEL) {
+          counts.set(code, (counts.get(code) ?? 0) + 1)
+        }
+      }
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+  }, [streams])
 
   const summary = useMemo(() => {
     const now = new Date()
@@ -101,7 +125,7 @@ export default function HazardousWastePage() {
     return { activeAreas: active.length, overdueAreas: overdue.length, recentCritical }
   }, [areas, inspections])
 
-  const loading = areas === null || inspections === null
+  const loading = areas === null || inspections === null || streams === null
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -202,6 +226,8 @@ export default function HazardousWastePage() {
           </p>
         </Link>
       </section>
+
+      <HazardSymbolRollup loading={loading} rollup={pictogramRollup} streamCount={streams?.length ?? 0} />
 
       <section className="rounded-lg border border-slate-200 dark:border-slate-800 p-5">
         <div className="flex items-start gap-3">
@@ -305,6 +331,42 @@ export default function HazardousWastePage() {
         </div>
       </section>
     </main>
+  )
+}
+
+function HazardSymbolRollup({
+  loading, rollup, streamCount,
+}: {
+  loading: boolean
+  rollup:  [GhsPictogram, number][] | null
+  streamCount: number
+}) {
+  return (
+    <section className="rounded-lg border border-slate-200 dark:border-slate-800 p-5">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3">
+        Waste streams by GHS hazard
+      </h2>
+      {loading ? (
+        <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
+      ) : !rollup || rollup.length === 0 ? (
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          No GHS pictograms recorded yet across {streamCount} stream{streamCount === 1 ? '' : 's'}.
+          Add hazard symbols when authoring a stream so they print on container labels and area signage.
+        </p>
+      ) : (
+        <ul className="flex flex-wrap gap-4">
+          {rollup.map(([code, count]) => (
+            <li key={code} className="flex items-center gap-2">
+              <PictogramBadges pictograms={[code]} size="sm" />
+              <span className="text-sm text-slate-700 dark:text-slate-200">
+                <span className="font-semibold tabular-nums">{count}</span>{' '}
+                <span className="text-slate-500 dark:text-slate-400">{GHS_PICTOGRAM_LABEL[code]}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
 
