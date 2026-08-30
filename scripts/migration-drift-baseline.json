@@ -132,7 +132,7 @@
     "20260518233129": "loto_publish_gate_disable_2026_05_18",
     "20260520103243": "loto_review_link_equipment_field_flag",
     "20260524202855": "medical_records_bucket",
-    "20260606155006": "217_loto_placard_qr_backfill_marker",
+    "20260606155006": "289_loto_placard_qr_backfill_marker",
     "20260612205718": "226_drop_duplicate_audit_results_index",
     "20260613012950": "227_perf_consolidation_rpcs",
     "20260613032726": "228_waitlist_signups",
