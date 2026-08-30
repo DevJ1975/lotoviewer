@@ -27,6 +27,9 @@ jobs:
       - name: Run repository guards
         run: npm run check:repo
 
+      - name: Typecheck mobile
+        run: npm run typecheck --workspace mobile
+
       - name: Run wiki sync
         if: github.event_name == 'pull_request'
         env:

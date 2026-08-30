@@ -27,7 +27,5 @@
     "doctor:git": "bash scripts/repo-doctor.sh",
     "wiki:touch": "node scripts/wiki-touch.mjs"
   },
-  "dependencies": {
-    "expo-router": "~6.0.23"
-  }
+  "dependencies": {}
 }
