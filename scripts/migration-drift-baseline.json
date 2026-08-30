@@ -10,9 +10,9 @@
     "osha_ita_submission_local_069": "075_osha_ita_submission.sql",
     "osha_ita_auto_submit_local_070": "076_osha_ita_auto_submit.sql",
     "data_hygiene_snak_king_2026_05_06": "data_hygiene_snak_king_2026-05-06.sql",
-    "tenants_industry_profile": "263_recover_tenants_industry_profile.sql",
-    "construction_projects": "264_recover_construction_projects.sql",
-    "fix_project_calendar_ordinal_assignment": "265_recover_fix_project_calendar_ordinal_assignment.sql"
+    "tenants_industry_profile": "283_recover_tenants_industry_profile.sql",
+    "construction_projects": "284_recover_construction_projects.sql",
+    "fix_project_calendar_ordinal_assignment": "285_recover_fix_project_calendar_ordinal_assignment.sql"
   },
   "repo_applied_without_ledger": [
     "001_loto_reviews.sql",

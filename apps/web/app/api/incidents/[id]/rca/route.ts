@@ -41,6 +41,20 @@ const TABLE_BY_METHOD: Record<RcaMethod, string | null> = {
   none_yet:   null,
 }
 
+// Fields a POST may set, per method table. The server owns identity (id),
+// scope (tenant_id, investigation_id) and timestamps — without this allowlist
+// a caller could supply its own id or backdate created_at, forging the
+// identity and timeline of an investigation record. Only 5 Whys carries the
+// ai_origin/ai_edited provenance flags (migration 236); they stay
+// caller-supplied because the AI-accept flow runs client-side.
+const INSERT_FIELDS_BY_METHOD: Record<RcaMethod, readonly string[]> = {
+  '5_whys':  ['ordinal', 'question', 'answer', 'is_root', 'parent_id', 'ai_origin', 'ai_edited'],
+  fishbone:  ['category', 'cause', 'ordinal', 'is_root'],
+  taproot:   ['parent_id', 'factor_type', 'description', 'taproot_category', 'ordinal', 'is_root'],
+  icam:      ['layer', 'factor', 'evidence', 'ordinal', 'is_root'],
+  none_yet:  [],
+}
+
 interface RouteContext {
   params: Promise<{ id: string }>
 }
@@ -144,15 +158,17 @@ export async function POST(req: Request, ctx: RouteContext) {
     if (!isPriv)
       return NextResponse.json({ error: 'Only the investigation team can add RCA nodes' }, { status: 403 })
 
-    // Build the insert with method-specific shape. Spread + tenant
-    // scope last so callers can't override. For 5 Whys this also carries
-    // the optional parent_id (branching) and ai_origin/ai_edited
-    // provenance flags (migration 234).
-    const insert = {
-      ...body.node,
+    // Copy only the caller-settable fields for this method, then scope
+    // tenant + investigation. A spread here would let a caller set
+    // id/created_at, or write a column belonging to a different method.
+    const insert: Record<string, unknown> = {
       tenant_id:        gate.tenantId,
       investigation_id: inv.id,
-    } as Record<string, unknown>
+    }
+    const node = (body.node ?? {}) as Record<string, unknown>
+    for (const field of INSERT_FIELDS_BY_METHOD[body.method]) {
+      if (field in node) insert[field] = node[field]
+    }
 
     // Multiple identified roots are allowed (migration 234): real
     // incidents have several contributing root causes, and forcing a

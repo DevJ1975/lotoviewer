@@ -72,6 +72,7 @@ export {
 } from './bbsMetrics'
 export * from './bbsMetricsV2'
 export * from './chemicals'
+export * from './hazardSymbols'
 export * from './sdsDiff'
 export * from './sdsFacsimile'
 // Incident module reuses some helper names from nearMiss

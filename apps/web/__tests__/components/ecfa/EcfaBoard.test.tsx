@@ -38,7 +38,12 @@ describe('EcfaBoard', () => {
     )
     await waitFor(() => expect(getByText('Operator opened the door')).toBeInTheDocument())
     expect(getByText(/Add event/i)).toBeInTheDocument()
-    expect(queryAllByLabelText(/Reorder event/i).length).toBeGreaterThan(0)
+    // The reorder handles paint on a later tick than the event text, so
+    // asserting them synchronously raced the render: this was the suite's one
+    // intermittent failure, and it failed with "expected 0 to be greater than
+    // 0" rather than a timeout — the events were there, the handles were not
+    // there YET. Wait for the thing being asserted.
+    await waitFor(() => expect(queryAllByLabelText(/Reorder event/i).length).toBeGreaterThan(0))
   })
 
   it('hides drag + add affordances when read-only', async () => {
