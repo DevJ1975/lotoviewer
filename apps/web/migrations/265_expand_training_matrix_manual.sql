@@ -1,4 +1,4 @@
--- Migration 244: expand + publish the Training & Competency Matrix user manual.
+-- Migration 265: expand + publish the Training & Competency Matrix user manual.
 --
 -- The matrix shipped (migration 240, v1.13.0) with only a stub manual in
 -- seed_module_manuals.sql, and the row was never present in this database's
