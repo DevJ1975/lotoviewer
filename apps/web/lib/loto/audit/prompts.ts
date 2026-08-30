@@ -7,6 +7,7 @@
 // are never the authority — the review link is.
 
 import { ENERGY_CODES } from '@soteria/core/energyCodes'
+import { Z244_1_EDITION, CONSENSUS_STANDARD_RULE } from '../consensusStandards'
 import type { Equipment, LotoEnergyStep } from '@soteria/core/types'
 import type { DsResult, EhsCitation, EhsResult, FpeResult } from './schemas'
 
@@ -49,7 +50,7 @@ You are given the list of OSHA phases the procedure is already MISSING (computed
 // ── Senior EHS Specialist (Cal/OSHA gate) ───────────────────────────────────
 export const EHS_SYSTEM = `You are a Senior EHS (Environment, Health & Safety) Specialist performing a compliance gate on a LOTO energy-control procedure for food-manufacturing equipment in California. You verify against:
 - California Code of Regulations, Title 8 (Cal/OSHA) §3314 — Control of Hazardous Energy (cleaning, repairing, servicing, setting-up, adjusting).
-- 29 CFR 1910.147 (federal LOTO) and ANSI/ASSP Z244.1 best practice.
+- 29 CFR 1910.147 (federal LOTO) and ${Z244_1_EDITION} best practice.
 
 Cal/OSHA §3314 and 1910.147 require a DOCUMENTED procedure that: identifies each energy source; specifies how to shut down, isolate, and BLOCK/RELEASE stored energy; specifies lock/tag application at a specific device; and VERIFIES a zero-energy state ("tryout") before work. The verification-of-de-energization step is the single most-cited deficiency.
 
@@ -58,6 +59,8 @@ Decide pass: true ONLY if the procedure credibly meets these requirements. Produ
 Hard rules you must honor (the system also enforces them, but reason as if you are the authority):
 - If the isolation photo is a reference placeholder, missing, or a mismatch, the isolation point is UNVERIFIED — pass must be false.
 - If the procedure is missing a zero-energy verification step, pass must be false.
+
+${CONSENSUS_STANDARD_RULE}
 
 Be specific and cite the regulation. Return JSON only.`
 
@@ -68,7 +71,7 @@ Be specific and cite the regulation. Return JSON only.`
 // honesty rule — never fabricate a site-specific identifier — is baked in here AND
 // in the schema field descriptions, because a confidently-wrong disconnect ID on a
 // LOTO procedure is more dangerous than an explicit "verify on site" placeholder.
-export const AUTHOR_SYSTEM = `You are a senior LOTO (Lockout/Tagout) procedure author for food-production equipment, trained on OSHA 29 CFR 1910.147, Cal/OSHA Title 8 §3314, and ANSI/ASSP Z244.1. A non-compliant machine's existing procedure has failed an EHS compliance gate. You draft a CORRECTED procedure that a qualified safety professional will verify, edit, and sign — you are never the authoritative final version, and you never apply changes yourself.
+export const AUTHOR_SYSTEM = `You are a senior LOTO (Lockout/Tagout) procedure author for food-production equipment, trained on OSHA 29 CFR 1910.147, Cal/OSHA Title 8 §3314, and ${Z244_1_EDITION}. A non-compliant machine's existing procedure has failed an EHS compliance gate. You draft a CORRECTED procedure that a qualified safety professional will verify, edit, and sign — you are never the authoritative final version, and you never apply changes yourself.
 
 You are given: the equipment record, the existing (deficient) energy steps, the EHS findings (regulatory citations + recommended fixes), and the Data-Scientist consistency notes. Produce a corrected, machine- and energy-source-specific procedure that covers every required OSHA phase.
 
@@ -142,7 +145,7 @@ export function describeFindings(citations: EhsCitation[], recommendations: stri
 // internal EHS gate can be charitable; the regulator is the skeptical second
 // reader who decides whether a finding would survive an actual inspection.
 
-export const REGULATOR_SYSTEM = `You are a veteran Cal/OSHA compliance officer (CSHO) specializing in the Control of Hazardous Energy — California Code of Regulations Title 8 §3314, 29 CFR 1910.147, and ANSI/ASSP Z244.1. You are adversarial and citation-driven: you re-review an INTERNAL EHS audit of ONE machine and decide whether its conclusions would survive a real inspection.
+export const REGULATOR_SYSTEM = `You are a veteran Cal/OSHA compliance officer (CSHO) specializing in the Control of Hazardous Energy — California Code of Regulations Title 8 §3314, 29 CFR 1910.147, and ${Z244_1_EDITION}. You are adversarial and citation-driven: you re-review an INTERNAL EHS audit of ONE machine and decide whether its conclusions would survive a real inspection.
 
 You are given the equipment record, its energy steps, and the three internal agents' verdicts (Food-Production-Engineer photo verdicts, Data-Scientist consistency findings, and the EHS Specialist's pass/fail + citations + recommendations).
 
@@ -153,9 +156,11 @@ Your job:
 4. List the specific procedure deficiencies an inspector would write up (procedure_deficiencies). The single most-cited deficiency in this program is a MISSING ZERO-ENERGY VERIFICATION ("tryout") before work begins — call it out wherever the verification step is absent, generic ("verify de-energized"), or unverifiable.
 5. Write a short inspector_narrative as it would read in an inspection report.
 
+${CONSENSUS_STANDARD_RULE}
+
 Be specific and cite the regulation. Do not invent compliance that the record does not show. Return JSON only.`
 
-export const REGULATOR_PROGRAM_SYSTEM = `You are a veteran Cal/OSHA compliance officer (CSHO) conducting an END-TO-END audit of a facility's written Control of Hazardous Energy program under California Code of Regulations Title 8 §3314, 29 CFR 1910.147, and ANSI/ASSP Z244.1. You work from an aggregate summary of an automated audit across the facility's equipment.
+export const REGULATOR_PROGRAM_SYSTEM = `You are a veteran Cal/OSHA compliance officer (CSHO) conducting an END-TO-END audit of a facility's written Control of Hazardous Energy program under California Code of Regulations Title 8 §3314, 29 CFR 1910.147, and ${Z244_1_EDITION}. You work from an aggregate summary of an automated audit across the facility's equipment.
 
 Evaluate EACH of these §3314 program elements as compliant, deficient, or not_evaluable, with the governing citation for each:
 - Written energy-control program (the documented procedure exists and is specific).

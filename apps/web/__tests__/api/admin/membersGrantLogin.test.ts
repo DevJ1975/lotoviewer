@@ -134,4 +134,68 @@ describe('POST /api/admin/members/[memberId]/grant-login', () => {
     expect(res.status).toBe(400)
     expect((await res.json()).error).toBe('EMAIL_REQUIRED')
   })
+
+  it('links the roster row BEFORE inserting the membership, so the sync trigger no-ops instead of colliding', async () => {
+    // Regression: the tenant_memberships insert fires trg_sync_membership_to_members
+    // (migration 180), which inserts members(tenant, profile) ON CONFLICT DO
+    // NOTHING. If we link the roster row AFTER that insert, the trigger has
+    // already created a second (tenant, profile) row and our UPDATE collides on
+    // the 183 partial unique index — a 23505 that broke grant-login's primary
+    // path. Linking first makes the trigger's insert a no-op.
+    mockState.queue('members', {
+      data: {
+        id: MEMBER, tenant_id: TENANT, profile_id: null, email: 'roster@example.com',
+        legal_name: 'Roster Worker', display_name: 'Roster Worker', source: 'loto_worker',
+      },
+      error: null,
+    })
+    mockState.queue('tenants', { data: { id: TENANT, name: 'Snak King' }, error: null })
+    mockState.queue('profiles', { data: null, error: null })      // profile-by-email: none
+    authAdminMock.createUser.mockResolvedValue({
+      data: { user: { id: 'NEW-USER', email: 'roster@example.com' } }, error: null,
+    })
+    mockState.queue('profiles', { data: null, error: null })              // profile patch
+    mockState.queue('members', { data: null, error: null })              // link update
+    mockState.queue('tenant_memberships', { data: null, error: null })   // membership insert
+    mockState.queue('member_status_events', { data: null, error: null }) // audit event
+
+    const res = await grantLogin(jsonRequest('POST', {}), ctxFor(MEMBER))
+    expect(res.status).toBe(200)
+
+    const linkIdx       = mockState.calls.findIndex(c => c.op === 'update' && c.table === 'members')
+    const membershipIdx = mockState.calls.findIndex(c => c.op === 'insert' && c.table === 'tenant_memberships')
+    expect(linkIdx).toBeGreaterThanOrEqual(0)
+    expect(membershipIdx).toBeGreaterThanOrEqual(0)
+    expect(linkIdx).toBeLessThan(membershipIdx)
+  })
+
+  it('rolls back the profile link when the membership insert fails, so a retry is not blocked', async () => {
+    mockState.queue('members', {
+      data: {
+        id: MEMBER, tenant_id: TENANT, profile_id: null, email: 'roster@example.com',
+        legal_name: 'Roster Worker', display_name: 'Roster Worker', source: 'loto_worker',
+      },
+      error: null,
+    })
+    mockState.queue('tenants', { data: { id: TENANT, name: 'Snak King' }, error: null })
+    mockState.queue('profiles', { data: null, error: null })
+    authAdminMock.createUser.mockResolvedValue({
+      data: { user: { id: 'NEW-USER', email: 'roster@example.com' } }, error: null,
+    })
+    mockState.queue('profiles', { data: null, error: null })                               // profile patch
+    mockState.queue('members', { data: null, error: null })                                // link update ok
+    mockState.queue('tenant_memberships', { data: null, error: { message: 'db down' } })   // membership insert fails
+    mockState.queue('members', { data: null, error: null })                                // rollback update ok
+
+    const res = await grantLogin(jsonRequest('POST', {}), ctxFor(MEMBER))
+    expect(res.status).toBe(500)
+
+    // Two members updates: the link, then the rollback that restores the row to
+    // roster-only (profile_id null, original source) so ALREADY_HAS_LOGIN won't
+    // block the admin's retry.
+    const memberUpdates = mockState.updates.filter(u => u.table === 'members')
+    expect(memberUpdates).toHaveLength(2)
+    expect(memberUpdates[0].payload).toMatchObject({ profile_id: 'NEW-USER' })
+    expect(memberUpdates[1].payload).toMatchObject({ profile_id: null, source: 'loto_worker' })
+  })
 })

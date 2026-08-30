@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import type { TrainingGateRecord } from '../trainingRecords'
 import type {
   AtmosphericTest,
   ConfinedSpace,
@@ -7,8 +8,13 @@ import type {
   GasMeter,
   HotWorkPermit,
   OrgConfig,
-  TrainingRecord,
 } from '../types'
+
+// The §1910.146(g) gate reads only these columns from each training
+// record. Fetching the projection instead of `select('*')` keeps the
+// row count identical (so the gate result is unchanged) while dropping
+// the unused free-text columns (notes, cert_authority, …) from the wire.
+const TRAINING_GATE_COLUMNS = 'worker_name, role, completed_at, expires_at'
 
 // One-shot loader for the confined-space permit detail page. Replaces
 // the inline 8-parallel Promise.all that lived directly in the page
@@ -41,7 +47,7 @@ export interface PermitPageData {
   // bump warning shown).
   meters:          Map<string, GasMeter>
   orgConfig:       OrgConfig | null
-  trainingRecords: TrainingRecord[]
+  trainingRecords: TrainingGateRecord[]
   linkedHotWork:   HotWorkPermit[]
 }
 
@@ -73,7 +79,7 @@ export async function loadPermitPage(args: {
     supabase.from('loto_confined_space_entries').select('*').eq('permit_id', permitId).order('entered_at', { ascending: false }),
     supabase.from('loto_gas_meters').select('*').eq('decommissioned', false),
     supabase.from('loto_org_config').select('*').eq('id', 1).maybeSingle(),
-    supabase.from('loto_training_records').select('*'),
+    supabase.from('loto_training_records').select(TRAINING_GATE_COLUMNS),
     supabase.from('loto_hot_work_permits').select('*').eq('associated_cs_permit_id', permitId).order('started_at', { ascending: false }),
   ])
 
@@ -101,7 +107,7 @@ export async function loadPermitPage(args: {
       entries:         (entriesRes.data  ?? []) as ConfinedSpaceEntry[],
       meters,
       orgConfig:       (configRes.data ?? null) as OrgConfig | null,
-      trainingRecords: (trainingRes.data ?? []) as TrainingRecord[],
+      trainingRecords: (trainingRes.data ?? []) as TrainingGateRecord[],
       linkedHotWork:   (hotWorkRes.data  ?? []) as HotWorkPermit[],
     },
   }

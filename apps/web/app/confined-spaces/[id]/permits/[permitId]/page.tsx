@@ -15,7 +15,6 @@ import type {
   GasMeter,
   HotWorkPermit,
   OrgConfig,
-  TrainingRecord,
 } from '@soteria/core/types'
 import { formatWorkOrderUrl } from '@soteria/core/orgConfig'
 import {
@@ -24,7 +23,7 @@ import {
   permitState,
   type ReadingStatus,
 } from '@soteria/core/confinedSpaceThresholds'
-import { validateTraining, type TrainingIssue } from '@/lib/trainingRecords'
+import { validateTraining, type TrainingGateRecord, type TrainingIssue } from '@/lib/trainingRecords'
 import { StatusBanner }          from './_components/StatusBanner'
 import { LinkedHotWorkBanner }   from './_components/LinkedHotWorkBanner'
 import { RescueDisplay }         from './_components/RescueDisplay'
@@ -66,7 +65,7 @@ export default function PermitDetailPage() {
   const [orgConfig, setOrgConfig] = useState<OrgConfig | null>(null)
   // Training records for §1910.146(g) sign-gate. Loaded once; the gate
   // re-evaluates whenever the roster changes via the Edit Roster modal.
-  const [trainingRecords, setTrainingRecords] = useState<TrainingRecord[]>([])
+  const [trainingRecords, setTrainingRecords] = useState<TrainingGateRecord[]>([])
   // Supervisor's explicit override when training records aren't on file
   // for everyone. Tracked locally so leaving and returning to the page
   // re-prompts (matches the pre-entry-test warning pattern).

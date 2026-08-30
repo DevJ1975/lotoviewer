@@ -740,6 +740,143 @@
   }
 }
 
+/* ── Weather glyph motion (WeatherCard) ─────────────────────────────────────
+   Each condition animates the part of the glyph that actually moves in the
+   world: the sun's rays turn, clouds drift, precipitation falls, lightning
+   flashes. Every animation is infinite and slow — this sits in the dashboard
+   hero permanently, so anything fast or attention-grabbing would be a
+   distraction rather than an ambient detail.
+
+   Precipitation uses staggered delays (set inline per drop) against a shared
+   keyframe, so one rule drives every drop without a keyframe per element. */
+
+@keyframes wx-sun-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes wx-sun-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 0.92;
+  }
+}
+
+@keyframes wx-drift {
+  0%,
+  100% {
+    transform: translateX(-1px);
+  }
+  50% {
+    transform: translateX(1px);
+  }
+}
+
+/* Fog bands slide further than clouds and fade at the extremes. */
+@keyframes wx-fog-band {
+  0%,
+  100% {
+    transform: translateX(-2px);
+    opacity: 0.55;
+  }
+  50% {
+    transform: translateX(2px);
+    opacity: 1;
+  }
+}
+
+/* A drop enters just under the cloud, falls, and fades before the baseline
+   so it never appears to land on the card's edge. */
+@keyframes wx-fall {
+  0% {
+    transform: translateY(-2px);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(7px);
+    opacity: 0;
+  }
+}
+
+/* Snow falls slower than rain and slips sideways on the way down. */
+@keyframes wx-snow-fall {
+  0% {
+    transform: translate(0, -2px);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(1.5px, 7px);
+    opacity: 0;
+  }
+}
+
+/* Mostly dark, with a brief double-strike — a steady blink reads as a
+   status LED rather than lightning. */
+@keyframes wx-flash {
+  0%,
+  62%,
+  100% {
+    opacity: 0.35;
+  }
+  66%,
+  72% {
+    opacity: 1;
+  }
+  69% {
+    opacity: 0.5;
+  }
+}
+
+@layer utilities {
+  .animate-wx-sun-spin {
+    transform-origin: center;
+    animation: wx-sun-spin 24s linear infinite;
+  }
+
+  .animate-wx-sun-pulse {
+    transform-origin: center;
+    animation: wx-sun-pulse 4s ease-in-out infinite;
+  }
+
+  .animate-wx-drift {
+    animation: wx-drift 6s ease-in-out infinite;
+  }
+
+  .animate-wx-fog-band {
+    animation: wx-fog-band 5s ease-in-out infinite;
+  }
+
+  .animate-wx-fall {
+    animation: wx-fall 1.4s linear infinite;
+  }
+
+  .animate-wx-snow-fall {
+    animation: wx-snow-fall 2.6s linear infinite;
+  }
+
+  .animate-wx-flash {
+    animation: wx-flash 3.2s ease-in-out infinite;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ops-surface-interactive,
   .motion-reactive,
@@ -754,7 +891,14 @@
 
   .animate-panel-in,
   .animate-meter-fill,
-  .animate-gauge-sweep {
+  .animate-gauge-sweep,
+  .animate-wx-sun-spin,
+  .animate-wx-sun-pulse,
+  .animate-wx-drift,
+  .animate-wx-fog-band,
+  .animate-wx-fall,
+  .animate-wx-snow-fall,
+  .animate-wx-flash {
     animation: none;
   }
 }

@@ -174,10 +174,10 @@ export default function EcfaBoard({ incidentId, tenantId, isAdmin, readOnly }: P
   // ── Drag-and-drop reorder / move ─────────────────────────────────────────
   // Apply the computed patches optimistically (chart + lists re-derive from
   // `nodes`, so the picture updates instantly), then persist in ONE batch
-  // PATCH, reconciling with the returned rows or rolling back on error.
+  // PATCH, reconciling with the returned rows — and re-reading authoritative
+  // state if the (non-transactional) batch fails.
   async function commitPatches(changes: Array<{ id: string; patch: Record<string, unknown> }>) {
     if (changes.length === 0) return
-    const prev = nodes
     setNodes(applyEcfaPatches(nodes, changes as Array<{ id: string; patch: Partial<EcfaNodeRow> }>))
     setBusy(true); setError(null)
     try {
@@ -192,8 +192,12 @@ export default function EcfaBoard({ incidentId, tenantId, isAdmin, readOnly }: P
         setNodes(cur => cur.map(n => byId.get(n.id) ?? n))
       }
     } catch (e) {
-      setNodes(prev) // rollback the optimistic move
       setError(e instanceof Error ? e.message : String(e))
+      // The batch PATCH is not transactional (supabase-js has no multi-row
+      // transaction), so a failed batch may have partially applied. Re-read
+      // authoritative state rather than rolling back to a pre-move snapshot
+      // that could now disagree with the server.
+      await load()
     } finally { setBusy(false) }
   }
 
@@ -288,12 +292,19 @@ export default function EcfaBoard({ incidentId, tenantId, isAdmin, readOnly }: P
   }
 
   async function downloadPdf() {
-    // Dynamic import keeps pdf-lib out of the page's initial bundle.
-    const { downloadEcfaChartPdf } = await import('@/lib/pdfEcfaChart')
-    await downloadEcfaChartPdf(nodes, {
-      title: 'Events & Causal Factors Analysis',
-      subtitle: `Incident ${incidentId}`,
-    })
+    setError(null)
+    try {
+      // Dynamic import keeps pdf-lib out of the page's initial bundle.
+      const { downloadEcfaChartPdf } = await import('@/lib/pdfEcfaChart')
+      await downloadEcfaChartPdf(nodes, {
+        title: 'Events & Causal Factors Analysis',
+        subtitle: `Incident ${incidentId}`,
+      })
+    } catch (e) {
+      // A dynamic-import chunk-load failure or a pdf-lib error must surface —
+      // otherwise the button click silently does nothing.
+      setError(e instanceof Error ? e.message : String(e))
+    }
   }
 
   if (loading) {

@@ -65,14 +65,28 @@ function DialogClose({ className, children, ...props }: React.ComponentProps<typ
   )
 }
 
+// The aria props are named explicitly rather than swept up by a `...props`
+// spread. This component used to accept only the three below and silently
+// discard anything else, so a caller passing `aria-label` got no error, no
+// warning and no accessible name — the dialog stayed anonymous while the
+// calling code read as though it had been labelled. Naming them puts the
+// contract in the signature where the type-checker can enforce it.
+//
+// `aria-describedby`, not `aria-description`: the latter is not a real ARIA
+// attribute, so react-aria's filterDOMProps drops it and the description never
+// reaches the DOM. Describing by id is the supported route.
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  'aria-label': ariaLabel,
+  'aria-describedby': ariaDescribedBy,
 }: {
   className?: string
   children?: React.ReactNode
   showCloseButton?: boolean
+  'aria-label'?: string
+  'aria-describedby'?: string
 }) {
   const { open, onOpenChange } = React.useContext(DialogContext)
   return (
@@ -89,6 +103,8 @@ function DialogContent({
       <Modal className="entering:animate-in entering:zoom-in-95 exiting:animate-out exiting:zoom-out-95">
         <AriaDialog
           data-slot="dialog-content"
+          aria-label={ariaLabel}
+          aria-describedby={ariaDescribedBy}
           className={cn(
             "relative grid w-full max-w-lg gap-4 rounded-xl border bg-background p-6 shadow-lg outline-none",
             className,

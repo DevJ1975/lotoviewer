@@ -18,6 +18,9 @@ import { withCronLogging } from '@/lib/cronInstrumentation'
 // Auth: same Bearer/internal-secret pattern as the other crons.
 
 export const runtime = 'nodejs'
+// A single RPC that patches at most BATCH rows. If it has not returned inside a
+// minute the database is the problem, and the next tick retries in five.
+export const maxDuration = 60
 
 const BATCH = 500
 
