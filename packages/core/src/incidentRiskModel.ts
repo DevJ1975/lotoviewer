@@ -69,6 +69,14 @@ export interface IncidentRiskFeatures {
   ecfaCausalFactors?:   number
   /** …of which are coded to weak controls (administrative/PPE) or uncoded. */
   ecfaWeakControls?:    number
+  /** Hazard Hunt inspections due in the recent window. */
+  hazardHuntsDue:      number
+  /** Hazard Hunt inspections actually submitted in the recent window. */
+  hazardHuntsDone:     number
+  /** Hazard Hunt findings opened in the recent window. */
+  hhFindingsOpened:    number
+  /** Hazard Hunt findings closed or escalated in the recent window. */
+  hhFindingsResolved:  number
 }
 
 export interface IncidentRiskDriver {
@@ -96,7 +104,11 @@ export interface IncidentRiskResult {
   modelVersion: string
 }
 
-export const INCIDENT_RISK_MODEL_VERSION = '2.0.0'
+// 2.1.0: main reached 2.0.0 while this branch sat at 1.1.0, and adding the
+// hazard-hunt indicator raises TOTAL_WEIGHT from 100 to 110, re-normalizing
+// every existing indicator. Scores computed before this are not comparable
+// with scores after it, which is the whole reason this constant exists.
+export const INCIDENT_RISK_MODEL_VERSION = '2.1.0'
 
 const clamp = (n: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n))
 const round1 = (n: number) => Math.round(n * 10) / 10
@@ -282,6 +294,35 @@ const INDICATORS: IndicatorSpec[] = [
     // No causal factors → 0 (no signal).
     pressure: f => { const t = f.ecfaCausalFactors ?? 0; return t === 0 ? 0 : clamp(((f.ecfaWeakControls ?? 0) / t) * 100) },
     describe: f => ({ value: `${f.ecfaWeakControls ?? 0}/${f.ecfaCausalFactors ?? 0} weak-control`, target: 'controls above PPE/admin' }),
+  },
+  {
+    key: 'hazard_hunt_proactive',
+    label: 'Proactive hazard hunting (cadence + findings closure)',
+    kind: 'leading',
+    href: '/hazard-hunt',
+    // Adding this 10-weight indicator raises TOTAL_WEIGHT from 100 to 110, which
+    // proportionally re-normalizes every existing indicator (each scales by
+    // 100/110). That is intended: proactive hunting now shares the budget.
+    weight: 10,
+    suggestedAction: 'Keep daily/weekly/monthly hazard hunts on cadence and close out findings — proactive hunting is the cheapest leading indicator.',
+    // Leading, inverted: strong proactive behavior → low pressure. Two equally
+    // weighted sub-terms:
+    //   adherence = hunts missed vs. due (no hunts scheduled → 50, a blind spot,
+    //               mirroring bbs_ratio); all hunts done → 0.
+    //   closure   = findings left unresolved vs. opened (no findings → 0).
+    pressure: f => {
+      const adherence = f.hazardHuntsDue === 0
+        ? (f.hazardHuntsDone > 0 ? 0 : 50)
+        : clamp((1 - f.hazardHuntsDone / f.hazardHuntsDue) * 100)
+      const closure = f.hhFindingsOpened === 0
+        ? 0
+        : clamp((1 - f.hhFindingsResolved / f.hhFindingsOpened) * 100)
+      return clamp((adherence + closure) / 2)
+    },
+    describe: f => ({
+      value: `${f.hazardHuntsDone}/${f.hazardHuntsDue} hunts on cadence, ${f.hhFindingsResolved}/${f.hhFindingsOpened} findings resolved`,
+      target: 'all hunts on cadence; findings resolved',
+    }),
   },
 ]
 

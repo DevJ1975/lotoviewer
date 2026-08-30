@@ -1,3 +1,4 @@
+import { after } from 'next/server'
 import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
 import { sanitizeError } from '@/lib/security/sanitizeError'
 import {
@@ -8,6 +9,8 @@ import {
   type ScoreItem,
   type ScoreResponse,
 } from '@soteria/core/inspectionScoring'
+import { isHazardCategory, isSeverityHint } from '@soteria/core/hazardHunt'
+import { runHazardHuntWriteUp } from '@/lib/hazardHunt/runWriteUp'
 
 // Submit an inspection: persist responses, score it, and close it out.
 // Failed items flagged fail_creates_action are returned as actionItemIds so
@@ -42,9 +45,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (!inspection) return Response.json({ error: 'not_found' }, { status: 404 })
     if (inspection.status === 'submitted') return Response.json({ error: 'already_submitted' }, { status: 409 })
 
+    // Hazard Hunt is the inspection engine with a category. Detecting it here lets
+    // a submit create findings + draft a CSP write-up without forking the engine.
+    const { data: template, error: tErr } = await g.authedClient
+      .from('inspection_templates').select('category').eq('id', inspection.template_id as string).maybeSingle()
+    if (tErr) return sanitizeError(tErr, 'POST /api/inspections/[id]/submit')
+    const isHazardHunt = (template?.category as string | undefined) === 'hazard_hunt'
+
     const { data: items, error: iErr } = await g.authedClient
       .from('inspection_template_items')
-      .select('id, item_type, weight, fail_creates_action, config')
+      .select('id, item_type, weight, fail_creates_action, config, prompt, section')
       .eq('template_id', inspection.template_id as string)
     if (iErr) return sanitizeError(iErr, 'POST /api/inspections/[id]/submit')
     const itemById = new Map((items ?? []).map(it => [it.id as string, it]))
@@ -71,11 +81,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         }
       })
 
+    const responseIdByItem = new Map<string, string>()
     if (responseRows.length > 0) {
-      const { error: upErr } = await g.authedClient
+      const { data: upserted, error: upErr } = await g.authedClient
         .from('inspection_responses')
         .upsert(responseRows, { onConflict: 'inspection_id,item_id' })
+        .select('id, item_id')
       if (upErr) return sanitizeError(upErr, 'POST /api/inspections/[id]/submit')
+      for (const r of (upserted ?? []) as { id: string; item_id: string }[]) responseIdByItem.set(r.item_id, r.id)
     }
 
     const scoreItems: ScoreItem[] = (items ?? []).map(it => ({
@@ -102,6 +115,37 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       .select('*')
       .single()
     if (uErr) return sanitizeError(uErr, 'POST /api/inspections/[id]/submit')
+
+    // Hazard Hunt: each failed item becomes a durable finding (carrying the
+    // item's hazard_category + severity_hint from config), then the CSP write-up
+    // is drafted post-response — never blocking this submit.
+    if (isHazardHunt) {
+      const findingsToInsert = scored.failedItemIds.flatMap(itemId => {
+        const item = itemById.get(itemId)
+        if (!item) return []
+        const cfg = (item.config ?? {}) as { hazard_category?: unknown; severity_hint?: unknown }
+        const prompt = typeof item.prompt === 'string' ? item.prompt : 'Hazard finding'
+        return [{
+          tenant_id:       g.tenantId,
+          inspection_id:   id,
+          response_id:     responseIdByItem.get(itemId) ?? null,
+          item_id:         itemId,
+          hazard_category: isHazardCategory(cfg.hazard_category) ? cfg.hazard_category : 'physical',
+          title:           prompt.slice(0, 120),
+          description:     prompt,
+          severity_hint:   isSeverityHint(cfg.severity_hint) ? cfg.severity_hint : null,
+          status:          'open',
+          created_by:      g.userId,
+        }]
+      })
+
+      if (findingsToInsert.length > 0) {
+        const { error: fErr } = await g.authedClient.from('hazard_hunt_findings').insert(findingsToInsert)
+        if (fErr) return sanitizeError(fErr, 'POST /api/inspections/[id]/submit')
+      }
+
+      after(() => runHazardHuntWriteUp({ tenantId: g.tenantId, inspectionId: id, userId: g.userId }))
+    }
 
     return Response.json({
       inspection:    updated,

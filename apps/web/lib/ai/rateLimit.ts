@@ -59,6 +59,8 @@ export type AiSurface =
   | 'vision-hazard-sweep'
   | 'draft-regulatory-document'
   | 'safety-briefing-narrate'
+  | 'hazard-hunt-csp'
+  | 'hazard-hunt-ds'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
@@ -161,6 +163,11 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   // authoring surfaces.
   'draft-regulatory-document':        { perHour: 20,  perDay: 100 },
   'safety-briefing-narrate':          { perHour: 20,  perDay: 100 },
+  // Hazard Hunt agents fire once each per submitted inspection (post-submit,
+  // via after()). A busy site submits a handful of hunts a day; caps sit well
+  // above honest volume while bounding a retry loop.
+  'hazard-hunt-csp':                  { perHour: 30, perDay: 150 },
+  'hazard-hunt-ds':                   { perHour: 30, perDay: 150 },
 }
 
 interface CheckArgs {

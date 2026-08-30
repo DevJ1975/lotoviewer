@@ -185,6 +185,16 @@ export const MODEL_BY_SURFACE = {
   //   computed in @soteria/core before the model is called; it narrates and
   //   never reorders. Same advisory class as scorecard-focus.
   'safety-briefing-narrate':          SONNET_5,
+  // ── Hazard Hunt (CSP write-up / DS analytics) ─────────────────────────────
+  // hazard-hunt-csp: a Certified Safety Professional authoring a citation-backed
+  //   write-up of a completed workplace inspection — safety-critical authoring a
+  //   human reviews before it is finalized to the wiki + KB. Opus 4.8, the same
+  //   class as the loto-audit-ehs gate.
+  'hazard-hunt-csp':                  OPUS,
+  // hazard-hunt-ds: a Data Scientist narrating deterministic hazard-finding
+  //   trends. Advisory, text-only, never computes the EHS score — same advisory
+  //   class as scorecard-focus. Sonnet (drop to Haiku if volume dominates).
+  'hazard-hunt-ds':                   SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

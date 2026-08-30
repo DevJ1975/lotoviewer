@@ -124,7 +124,7 @@ export type IntegralMetricId =
   | 'risk_reviews_overdue' | 'open_high_risks' | 'training_expired'
   | 'atmospheric_failures' | 'inspection_failing' | 'bbs_followup_overdue'
   | 'jha_reviews_overdue' | 'permit_noncompliance' | 'training_gaps'
-  | 'ecfa_weak_controls'
+  | 'ecfa_weak_controls' | 'hazard_hunt_proactive'
   | 'rca_completion' | 'time_to_close'
 
 export interface IndicatorClass {
@@ -167,6 +167,7 @@ export const INTEGRAL_CLASS: Record<IntegralMetricId, IndicatorClass> = {
   jha_reviews_overdue:  { quadrant: 'systems',    maturity: 'transitional', kind: 'leading', scope: 'process', label: 'Overdue JHA reviews' },
   permit_noncompliance: { quadrant: 'systems',    maturity: 'transitional', kind: 'leading', scope: 'process', label: 'Permits expired without close-out' },
   ecfa_weak_controls:   { quadrant: 'systems',    maturity: 'predictive',   kind: 'leading', scope: 'process', label: 'Causal factors on weak controls' },
+  hazard_hunt_proactive: { quadrant: 'behavioral', maturity: 'predictive',   kind: 'leading', scope: 'process', label: 'Proactive hazard hunting (cadence + findings closure)' },
   rca_completion:       { quadrant: 'systems',    maturity: 'transitional', kind: 'leading', scope: 'process', label: 'RCA completion' },
   time_to_close:        { quadrant: 'systems',    maturity: 'transitional', kind: 'leading', scope: 'process', label: 'Mean time to close' },
 }

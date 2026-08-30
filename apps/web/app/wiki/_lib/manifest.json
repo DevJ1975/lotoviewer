@@ -35,6 +35,27 @@
       ]
     },
     {
+      "slug":     "hazard-hunt",
+      "module":   "Hazard Hunt",
+      "tagline":  "Daily/weekly/monthly OSHA + Cal/OSHA workplace inspections that feed the EHS score and escalate to the risk register.",
+      "category": "safety",
+      "href":     "/hazard-hunt",
+      "wikiPage": "apps/web/app/wiki/hazard-hunt/page.tsx",
+      "sources":  [
+        "apps/web/app/hazard-hunt/**",
+        "apps/web/app/api/hazard-hunt/**",
+        "apps/web/app/api/cron/hazard-hunt-generate/**",
+        "apps/web/lib/hazardHunt/**",
+        "packages/core/src/hazardHunt.ts",
+        "packages/core/src/hazardHuntTemplates.ts",
+        "packages/core/src/hazardHuntMetrics.ts",
+        "apps/web/migrations/275_hazard_hunt_schedules.sql",
+        "apps/web/migrations/276_hazard_hunt_findings.sql",
+        "apps/web/migrations/277_hazard_hunt_write_ups.sql",
+        "apps/web/migrations/278_risks_source_hazard_hunt.sql"
+      ]
+    },
+    {
       "slug":     "compliance-calendar",
       "module":   "Compliance Calendar",
       "tagline":  "Recurring regulatory + tenant obligations — overdue, due soon, upcoming.",
