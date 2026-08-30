@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
-import { requireTenantMember } from '@/lib/auth/tenantGate'
+import { requireStrikeMember } from '@/lib/strike/gate'
 import { checkMemoryRateLimit } from '@/lib/rateLimit/memory'
 import { loadPublishedStrikeVersion } from '@/lib/strike/moduleAccess'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -27,7 +27,7 @@ interface RouteContext {
 }
 
 export async function POST(req: Request, ctx: RouteContext) {
-  const gate = await requireTenantMember(req)
+  const gate = await requireStrikeMember(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
 
   const { moduleId } = await ctx.params

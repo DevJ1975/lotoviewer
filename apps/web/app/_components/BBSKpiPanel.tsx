@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
-import { ArrowRight, CheckCircle2, ClipboardList, Eye, Loader2, Medal, Trophy } from 'lucide-react'
+import { CheckCircle2, ClipboardList, Eye, Medal, Trophy } from 'lucide-react'
 import { fetchBBSMetrics, type BBSMetrics } from '@soteria/core/bbsMetrics'
+import { DashboardPanel, PanelEyebrow, PanelLink } from '@/components/DashboardPanel'
+import OpsSpinner from '@/components/OpsSpinner'
 import { useTenant } from '@/components/TenantProvider'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { Avatar } from '@/components/ui/Avatar'
@@ -49,27 +51,15 @@ export default function BBSKpiPanel() {
   if (tenantLoading || !visible) return null
 
   return (
-    <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5 space-y-4">
-      <header className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 inline-flex items-center gap-1">
-            <Eye className="w-3 h-3" /> Behavior-Based Safety
-          </div>
-          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
-            Observation program
-          </h2>
-        </div>
-        <Link
-          href="/bbs"
-          className="text-xs font-semibold text-brand-navy hover:underline inline-flex items-center gap-1"
-        >
-          View all <ArrowRight className="h-3 w-3" />
-        </Link>
-      </header>
-
+    <DashboardPanel
+      icon={Eye}
+      eyebrow="Behavior-Based Safety"
+      title="Observation program"
+      action={<PanelLink href="/bbs">View all</PanelLink>}
+    >
       {loading && metrics === null ? (
         <div className="flex items-center justify-center py-6">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+          <OpsSpinner size="sm" label={null} />
         </div>
       ) : metrics === null || metrics.totalAll === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-4 text-center">
@@ -81,7 +71,7 @@ export default function BBSKpiPanel() {
       ) : (
         <Inner metrics={metrics} />
       )}
-    </section>
+    </DashboardPanel>
   )
 }
 
@@ -98,9 +88,9 @@ function Inner({ metrics }: { metrics: BBSMetrics }) {
 
       {metrics.leaderboard.length > 0 && (
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2 inline-flex items-center gap-1">
+          <PanelEyebrow className="mb-2 inline-flex items-center gap-1">
             <Trophy className="w-3 h-3" /> Top contributors
-          </div>
+          </PanelEyebrow>
           <ul className="space-y-1.5">
             {metrics.leaderboard.slice(0, 3).map((row, idx) => (
               <li key={row.user_id} className="flex items-center gap-2.5 text-sm">

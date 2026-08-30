@@ -4,6 +4,24 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { withCronLogging } from '@/lib/cronInstrumentation'
 
 export const runtime = 'nodejs'
+// One unbounded loto_equipment query per active rule across every tenant, so
+// the read count grows with tenants × rules. The notification writes are
+// batched; the reads are not, which is what needs the full ceiling.
+export const maxDuration = 300
+
+// PostgREST carries the whole batch in one request body; 500 rows keeps that
+// body a sane size while still collapsing a many-tenant sweep into a handful of
+// round-trips. The same cap bounds the id list in the rule-stamp filter, which
+// travels in the query string.
+const WRITE_CHUNK = 500
+
+interface AdminNotification {
+  tenant_id: string
+  user_id:   string
+  title:     string
+  body:      string
+  href:      string
+}
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false
@@ -41,6 +59,10 @@ async function runCron(): Promise<NextResponse> {
   let alerts = 0
   let overdueEquipment = 0
   let overdueAuthorizations = 0
+  // The sweep is tenants x rules x admins. Writing inside it meant one insert
+  // per admin per rule; accumulate instead and write once the sweep is done.
+  const notifications: AdminNotification[] = []
+  const remindedRuleIds: string[] = []
 
   try {
     const { data: rules, error: ruleErr } = await admin
@@ -78,19 +100,45 @@ async function runCron(): Promise<NextResponse> {
         if (missed.length === 0) continue
 
         for (const userId of adminIds) {
-          const { error: notificationErr } = await admin.from('notifications').insert({
+          notifications.push({
             tenant_id: tenantId,
             user_id: userId,
             title: 'Equipment inspections overdue',
             body: `${missed.length} ${rule.shift_label ?? 'daily'} equipment pre-use checks appear overdue.`,
             href: '/equipment-readiness',
           })
-          if (!notificationErr) alerts += 1
         }
-        await admin
-          .from('equipment_missed_inspection_rules')
-          .update({ last_reminded_at: now.toISOString(), updated_at: now.toISOString() })
-          .eq('id', rule.id)
+        remindedRuleIds.push(rule.id as string)
+      }
+    }
+
+    for (let i = 0; i < notifications.length; i += WRITE_CHUNK) {
+      const chunk = notifications.slice(i, i + WRITE_CHUNK)
+      const { error: notificationErr } = await admin.from('notifications').insert(chunk)
+      if (notificationErr) {
+        // A failed chunk is not fatal — the remaining chunks and the
+        // authorization scan below still have value — but it silently costs
+        // admins their reminders, so it has to reach Sentry.
+        Sentry.captureException(notificationErr, {
+          tags: { route: 'cron/equipment-readiness-reminders', stage: 'notifications' },
+        })
+        continue
+      }
+      alerts += chunk.length
+    }
+
+    // Every rule touched this run gets the same timestamps, so the per-rule
+    // update collapses into one statement per chunk.
+    const stampedAt = now.toISOString()
+    for (let i = 0; i < remindedRuleIds.length; i += WRITE_CHUNK) {
+      const { error: stampErr } = await admin
+        .from('equipment_missed_inspection_rules')
+        .update({ last_reminded_at: stampedAt, updated_at: stampedAt })
+        .in('id', remindedRuleIds.slice(i, i + WRITE_CHUNK))
+      if (stampErr) {
+        Sentry.captureException(stampErr, {
+          tags: { route: 'cron/equipment-readiness-reminders', stage: 'rule-stamp' },
+        })
       }
     }
 

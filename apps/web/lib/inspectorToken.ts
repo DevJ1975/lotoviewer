@@ -23,6 +23,21 @@ import { createHmac, timingSafeEqual } from 'crypto'
 // end up as query-string params. exp is a unix timestamp in seconds
 // (chosen for compactness and easy human readability vs. ms).
 export interface InspectorTokenPayload {
+  /**
+   * The tenant this token may read, and the ONLY one.
+   *
+   * The inspector feature predates multi-tenancy: the payload carried a date
+   * range and nothing else, and /api/inspector/{lookup,bundle} query the
+   * permit tables through the service-role client, which bypasses RLS. With
+   * no tenant in the token there was nothing to filter on, so a token minted
+   * for one customer's Cal/OSHA inspection returned every customer's confined
+   * -space and hot-work permits.
+   *
+   * Part of the signed canonical string, so it cannot be swapped in the URL.
+   * Adding it invalidates previously-issued tokens, which is the correct
+   * direction to fail: they are capped at 90 days and an admin can re-mint.
+   */
+  tenantId: string
   start: string   // YYYY-MM-DD inclusive
   end:   string   // YYYY-MM-DD inclusive
   exp:   number   // unix seconds
@@ -32,6 +47,8 @@ export interface InspectorTokenPayload {
   label: string
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 const HMAC_LEN = 32   // bytes (SHA-256)
 
 // Build the canonical signing string. Field order is fixed so the
@@ -40,6 +57,7 @@ const HMAC_LEN = 32   // bytes (SHA-256)
 // pipes (free-text labels) don't collide with the delimiter.
 function canonicalize(p: InspectorTokenPayload): string {
   return [
+    `tenantId:${p.tenantId}`,
     `start:${p.start}`,
     `end:${p.end}`,
     `exp:${p.exp}`,
@@ -84,6 +102,13 @@ export function verifyInspectorToken(args: {
 
   // Validate payload shape so a malformed query string is rejected
   // before we spend time computing HMACs.
+  //
+  // tenantId is checked first and strictly: a token with no tenant is a
+  // pre-multi-tenancy token, and honouring one would read across every
+  // customer. Rejecting it is the whole point of the field.
+  if (typeof payload.tenantId !== 'string' || !UUID_RE.test(payload.tenantId)) {
+    return { ok: false, reason: 'Invalid or missing tenant' }
+  }
   if (typeof payload.start !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(payload.start)) return { ok: false, reason: 'Invalid start date' }
   if (typeof payload.end   !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(payload.end))   return { ok: false, reason: 'Invalid end date' }
   if (payload.start > payload.end) return { ok: false, reason: 'Start date is after end date' }
@@ -113,10 +138,14 @@ export function buildInspectorUrl(args: {
 }): string {
   const sig = signInspectorPayload(args.payload, args.secret)
   const params = new URLSearchParams({
-    start: args.payload.start,
-    end:   args.payload.end,
-    exp:   String(args.payload.exp),
-    label: args.payload.label,
+    // Carried in the URL because the verifier recomputes the HMAC over the
+    // whole payload — omitting it here would make every minted link fail
+    // verification rather than silently widen it.
+    tenant: args.payload.tenantId,
+    start:  args.payload.start,
+    end:    args.payload.end,
+    exp:    String(args.payload.exp),
+    label:  args.payload.label,
     sig,
   })
   // Strip a trailing slash on the origin so we don't double up.

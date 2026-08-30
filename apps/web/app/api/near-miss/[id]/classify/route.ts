@@ -34,8 +34,10 @@ const SCHEMA = {
       type: 'array',
       description: '2-5 short keyword themes describing the incident (e.g. "PPE-gap", "electrical-arc", "near-fall"). lowercase-with-hyphens.',
       items: { type: 'string' },
+      // Anthropic's structured-output endpoint rejects `maxItems` ("For
+      // 'array' type, property 'maxItems' is not supported") and allows
+      // `minItems` only with 0 or 1 — the 2-5 bound lives in the description.
       minItems: 1,
-      maxItems: 8,
     },
     escalation_risk: {
       type: 'string',

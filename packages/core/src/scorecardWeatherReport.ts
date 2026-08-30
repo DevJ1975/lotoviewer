@@ -28,6 +28,8 @@ export interface WeatherMetricRow {
   deltaPct:  number | null
   direction: WeatherDirection
   tone:      WeatherTone
+  /** Whether the week-to-week move is beyond normal noise (drives tone). */
+  significant: boolean
   unit:      string
 }
 
@@ -35,12 +37,20 @@ export function buildWeatherRow(input: WeatherMetricInput): WeatherMetricRow {
   const delta = round1(input.current - input.previous)
   const direction: WeatherDirection = input.current > input.previous ? 'up'
     : input.current < input.previous ? 'down' : 'flat'
-  const deltaPct = input.previous === 0
+  // Guard the percentage against a tiny (sub-unit) baseline, not just an exact
+  // zero — otherwise 0.2 → 0.6 reads as "+200%".
+  const deltaPct = Math.abs(input.previous) < 1
     ? null
     : round1(((input.current - input.previous) / Math.abs(input.previous)) * 100)
 
+  // Significance gate: week-to-week counts are small and noisy, so a ±1 move is
+  // almost always noise. Treat a change as real only when it exceeds ~1 Poisson
+  // standard deviation of the combined counts; below that we don't color it
+  // good/bad. Keeps the weekly email from crying wolf on normal variation.
+  const significant = Math.abs(input.current - input.previous) >= Math.sqrt(input.previous + input.current)
+
   let tone: WeatherTone = 'neutral'
-  if (input.higherIsBetter !== null && direction !== 'flat') {
+  if (input.higherIsBetter !== null && direction !== 'flat' && significant) {
     const improved = direction === 'up' ? input.higherIsBetter : !input.higherIsBetter
     tone = improved ? 'good' : 'bad'
   }
@@ -54,6 +64,7 @@ export function buildWeatherRow(input: WeatherMetricInput): WeatherMetricRow {
     deltaPct,
     direction,
     tone,
+    significant,
     unit: input.unit ?? '',
   }
 }

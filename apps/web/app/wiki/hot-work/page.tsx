@@ -1,10 +1,20 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.1.0'
-const LAST_UPDATED    = '2026-05-24'
+const CURRENT_VERSION = '1.2.0'
+const LAST_UPDATED    = '2026-08-28'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.2.0',
+    date: '2026-08-28',
+    changes: [
+      'The post-work fire watch is now enforced, not just displayed. NFPA 51B \u00a78.7 sets a 60-minute minimum and the permit form previously accepted as little as 1 minute; the minimum is now 60 (raise it per site if your insurer or AHJ requires longer \u2014 120 is common).',
+      'A permit can no longer be closed out as "task complete" until the post-work fire watch has actually run. Mark the work complete to start the watch, then close out once it ends. The close-out button explains how long is left. Hot work leaves smouldering ignition that develops after the torch stops, which is the whole reason the watch exists.',
+      'Cancelling for cause is deliberately NOT gated. "Fire observed", "unsafe condition", "expired" and "other" stay available at any moment \u2014 those are what you reach for when something is going wrong, and waiting on a timer to record one would be backwards.',
+      'ACTION REQUIRED: permits issued before this change may carry a watch shorter than 60 minutes. Those records are left as they are, because they describe what actually happened and an inspector may read them \u2014 they are worth reviewing.',
+    ],
+  },
   { version: '1.1.0', date: '2026-05-24', changes: ['Area-condition photos: attach pre-work and post-work fire-watch photos directly to a permit (OSHA 1910.252 / NFPA 51B evidence).'] },
   { version: '1.0.0', date: '2026-05-05', changes: ['Initial hot-work wiki page.'] },
 ]
