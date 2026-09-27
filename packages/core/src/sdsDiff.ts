@@ -85,21 +85,28 @@ function diffCodeSets(
 function diffScalar(
   field:  string,
   label:  string,
-  prev:   string | number | null,
-  next:   string | number | null,
+  prev:   string | number | null | undefined,
+  next:   string | number | null | undefined,
   render: (v: string | number) => string,
 ): SdsFieldDiff | null {
-  const prevAbsent = prev === null
-  const nextAbsent = next === null
+  // Treat both null and undefined as "absent". parsed_payload is jsonb the
+  // /diff route casts to ParsedSdsPayload without proof, and an older parse
+  // schema (or a hand-edited row) can OMIT a key entirely — reading back as
+  // undefined. Without this, a missing→present NFPA/exposure value rendered as
+  // "changed: undefined→3" (String(undefined)) instead of a clean "added",
+  // and a missing→null value produced a phantom "removed". Same trust-boundary
+  // reasoning as codeSet's non-array guard above.
+  const prevAbsent = prev == null
+  const nextAbsent = next == null
   if (prevAbsent && nextAbsent) return null
   if (prev === next) return null
   if (prevAbsent) {
     return { field, label, kind: 'added', before: null, after: render(next as string | number) }
   }
   if (nextAbsent) {
-    return { field, label, kind: 'removed', before: render(prev), after: null }
+    return { field, label, kind: 'removed', before: render(prev as string | number), after: null }
   }
-  return { field, label, kind: 'changed', before: render(prev), after: render(next as string | number) }
+  return { field, label, kind: 'changed', before: render(prev as string | number), after: render(next as string | number) }
 }
 
 const renderRaw = (v: string | number): string => String(v)
