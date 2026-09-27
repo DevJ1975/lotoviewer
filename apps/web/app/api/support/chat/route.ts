@@ -17,6 +17,7 @@ import { getAnthropic, aiErrorToResponse } from '@/lib/ai/client'
 import { toSendableHistory } from '@/lib/ai/conversationWindow'
 import { checkTenantBudget, logAiInvocation } from '@/lib/ai/rateLimit'
 import { executeTool, isDataFetchTool, visibleDataFetchTools } from '@/lib/support/tools'
+import { requireTenantMember } from '@/lib/auth/tenantGate'
 
 // An AI route's worst case is `timeout x (retries + 1)`, and it must fit
 // inside maxDuration or the platform kills the function mid-flight and the
@@ -105,7 +106,9 @@ interface Reporter {
   tenantId: string | null
 }
 
-async function authedReporter(req: Request): Promise<Reporter | null> {
+// Exported for unit testing the tenant-verification guard below. Not part of
+// the route's public HTTP surface.
+export async function authedReporter(req: Request): Promise<Reporter | null> {
   const authHeader = req.headers.get('authorization')
   if (!authHeader?.startsWith('Bearer ')) return null
   const token = authHeader.slice('Bearer '.length)
@@ -121,10 +124,21 @@ async function authedReporter(req: Request): Promise<Reporter | null> {
     .select('full_name')
     .eq('id', user.id)
     .maybeSingle()
-  // x-active-tenant matches the header the supabase client sends with every
-  // domain query — we honour the same scoping when persisting the conversation.
-  const rawTenant = req.headers.get('x-active-tenant')
-  const tenantId = rawTenant && /^[0-9a-f-]{36}$/i.test(rawTenant) ? rawTenant : null
+  // The active tenant scopes RLS-bypassing service-role reads (the support
+  // data tools), the tenant's stored Anthropic key, and every row this route
+  // writes. x-active-tenant is attacker-controlled, so a format check is not
+  // enough: it MUST be verified against tenant_memberships before it is
+  // trusted — exactly as every other AI route does via requireTenantMember
+  // (see lib/auth/tenantGate.ts: for service-role routes the gate "is the only
+  // access control in the path"). A present-but-unverified tenant — never a
+  // member, revoked invite, or disabled tenant — degrades to the tenantless
+  // experience (general KB, env AI key, no data tools) instead of reading
+  // another tenant's data or spending its API key.
+  let tenantId: string | null = null
+  if (req.headers.get('x-active-tenant')?.trim()) {
+    const gate = await requireTenantMember(req)
+    if (gate.ok) tenantId = gate.tenantId
+  }
   return {
     id:       user.id,
     email:    user.email ?? null,
