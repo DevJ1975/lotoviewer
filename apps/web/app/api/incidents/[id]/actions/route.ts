@@ -92,6 +92,27 @@ export async function POST(req: Request, ctx: RouteContext) {
       .maybeSingle()
     if (!incident) return NextResponse.json({ error: 'Incident not found' }, { status: 404 })
 
+    // owner_user_id arrives in the request body validated only as a UUID. Verify
+    // it belongs to THIS tenant before storing it and (below) emailing that
+    // person the incident's report number + action description. Without this a
+    // member could address a CAPA to another tenant's user id and leak incident
+    // details across the tenant boundary — the profile lookup that feeds the
+    // email is not itself tenant-scoped.
+    if (body.owner_user_id) {
+      const { data: ownerMembership } = await admin
+        .from('tenant_memberships')
+        .select('user_id')
+        .eq('tenant_id', gate.tenantId)
+        .eq('user_id', body.owner_user_id)
+        .maybeSingle()
+      if (!ownerMembership) {
+        return NextResponse.json(
+          { error: 'owner_user_id must be an active member of this tenant' },
+          { status: 400 },
+        )
+      }
+    }
+
     const insert = {
       tenant_id:             gate.tenantId,
       incident_id:           incidentId,
