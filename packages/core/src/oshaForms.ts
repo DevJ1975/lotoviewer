@@ -564,12 +564,18 @@ export type ItaCoverage = 'summary_only' | 'summary_and_cases' | 'not_required'
 
 export function classifyItaCoverage(opts: {
   annual_avg_employees: number
-  appendix:             'a' | 'b' | null
+  // 'ab' means the NAICS is listed in BOTH appendices. It must stay distinct
+  // from 'b': a dual-listed establishment at 20–99 employees is below the
+  // Appendix B 100-employee tier but still owes its 300A under the Appendix A
+  // 20–249 tier. Collapsing 'ab' to 'b' silently dropped that filing.
+  appendix:             'a' | 'b' | 'ab' | null
 }): ItaCoverage {
   const n = opts.annual_avg_employees
-  if (opts.appendix === 'b' && n >= 100) return 'summary_and_cases'
-  if (n >= 250)                          return 'summary_only'
-  if (opts.appendix === 'a' && n >= 20 && n <= 249) return 'summary_only'
+  const inAppendixA = opts.appendix === 'a' || opts.appendix === 'ab'
+  const inAppendixB = opts.appendix === 'b' || opts.appendix === 'ab'
+  if (inAppendixB && n >= 100)               return 'summary_and_cases'
+  if (n >= 250)                              return 'summary_only'
+  if (inAppendixA && n >= 20 && n <= 249)    return 'summary_only'
   return 'not_required'
 }
 
@@ -641,17 +647,24 @@ export const APPENDIX_B_NAICS_PREFIXES: readonly string[] = [
   '6231', '6232', '6233', '6239',  // Nursing and Residential Care Facilities
 ] as const
 
-/** Returns 'a' / 'b' / null for a NAICS code based on the seeded
- *  prefix tables. Falls back to null for unknown codes — the size-
- *  only classification path then applies. */
-export function appendixForNaics(naicsCode: string | null | undefined): 'a' | 'b' | null {
+/** Returns 'a' / 'b' / 'ab' / null for a NAICS code based on the seeded
+ *  prefix tables. 'ab' marks a code listed in BOTH appendices (e.g. hospitals
+ *  6221, nursing/residential care 6231–6239, dairy 3115, meat 3116, foundries
+ *  3315, logging 1133). Falls back to null for unknown codes — the size-only
+ *  classification path then applies.
+ *
+ *  A dual-listed code MUST report 'ab', not 'b': the two appendices bind at
+ *  different sizes (A at 20–249, B at 100+), so collapsing to 'b' made
+ *  classifyItaCoverage skip the mandatory 300A for a 20–99-employee A-industry. */
+export function appendixForNaics(naicsCode: string | null | undefined): 'a' | 'b' | 'ab' | null {
   if (!naicsCode) return null
   const code = naicsCode.replace(/\D/g, '')
   if (code.length < 4) return null
   const p4 = code.slice(0, 4)
-  // Appendix B wins when both apply, because it's the stricter rule
-  // (forces 300/301 case-row submission on top of 300A).
-  if (APPENDIX_B_NAICS_PREFIXES.includes(p4)) return 'b'
-  if (APPENDIX_A_NAICS_PREFIXES.includes(p4)) return 'a'
+  const inA = APPENDIX_A_NAICS_PREFIXES.includes(p4)
+  const inB = APPENDIX_B_NAICS_PREFIXES.includes(p4)
+  if (inA && inB) return 'ab'
+  if (inB) return 'b'
+  if (inA) return 'a'
   return null
 }
