@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { sanitizeError } from '@/lib/security/sanitizeError'
 import { clientIp, hashIp, isOverIpLimit, recordAttempt } from '@/lib/anonReport/ipThrottle'
 
 // PUBLIC POST /api/anonymous-report/attach
@@ -147,14 +148,14 @@ export async function POST(req: Request) {
 
     const { error: insErr } = await admin.from('incident_attachments').insert(rows)
     if (insErr) {
-      Sentry.captureException(insErr, { tags: { route: 'anonymous-report/attach', stage: 'insert' } })
-      return NextResponse.json({ error: insErr.message }, { status: 500 })
+      // Public endpoint — don't leak the raw DB message; sanitizeError logs
+      // full detail to Sentry and returns a generic body.
+      return sanitizeError(insErr, 'anonymous-report/attach:insert')
     }
 
     void recordAttempt(ipHash, 'submit_ok')
     return NextResponse.json({ ok: true, attached: rows.length })
   } catch (e) {
-    Sentry.captureException(e, { tags: { route: 'anonymous-report/attach' } })
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
+    return sanitizeError(e, 'anonymous-report/attach')
   }
 }
