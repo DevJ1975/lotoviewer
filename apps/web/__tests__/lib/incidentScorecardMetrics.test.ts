@@ -191,6 +191,23 @@ describe('meanTimeToCloseDays', () => {
       row('2026-04-30T00:00:00Z', null),                     // ignored
     ])).toBe(7)
   })
+
+  it('divides by the rows that contributed, not every closed row (back-dated skipped)', () => {
+    // A back-dated row (closed_at before reported_at) is excluded from the sum;
+    // it must also be excluded from the denominator, else the mean is understated.
+    expect(meanTimeToCloseDays([
+      row('2026-04-01T00:00:00Z', '2026-04-05T00:00:00Z'),  // 4 days (valid)
+      row('2026-04-10T00:00:00Z', '2026-04-20T00:00:00Z'),  // 10 days (valid)
+      row('2026-05-10T00:00:00Z', '2026-05-01T00:00:00Z'),  // closed before reported → skipped
+    ])).toBe(7)  // (4+10)/2, NOT (4+10)/3
+  })
+
+  it('returns null when every closed row is invalid', () => {
+    expect(meanTimeToCloseDays([
+      row('2026-05-10T00:00:00Z', '2026-05-01T00:00:00Z'),  // back-dated
+      row('not-a-date', '2026-05-01T00:00:00Z'),            // unparseable
+    ])).toBeNull()
+  })
 })
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -210,6 +227,17 @@ describe('meanDaysToRtw', () => {
         return_to_work_at: '2026-04-15T00:00:00Z', created_at: '2026-04-01T00:00:00Z' },
     ]
     expect(meanDaysToRtw(cs)).toBe((7 + 14) / 2)
+  })
+
+  it('divides by contributing rows only (RTW before created_at skipped)', () => {
+    const cs: CareRowForMetrics[] = [
+      { incident_id: '1', case_status: 'closed', days_away_from_work: 0, days_restricted: 0,
+        return_to_work_at: '2026-04-08T00:00:00Z', created_at: '2026-04-01T00:00:00Z' }, // 7 days
+      // RTW before created_at → skipped from the sum AND the denominator.
+      { incident_id: '2', case_status: 'closed', days_away_from_work: 0, days_restricted: 0,
+        return_to_work_at: '2026-03-20T00:00:00Z', created_at: '2026-04-01T00:00:00Z' },
+    ]
+    expect(meanDaysToRtw(cs)).toBe(7)  // 7/1, NOT 7/2
   })
 })
 

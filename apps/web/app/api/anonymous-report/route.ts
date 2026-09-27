@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { sanitizeError } from '@/lib/security/sanitizeError'
 import { dispatchIntakeNotifications } from '@/lib/incident/notifyOnIntake'
 import {
   coerceCreateInput,
@@ -209,9 +210,11 @@ export async function POST(req: Request) {
       .select('*')
       .single()
     if (error) {
-      Sentry.captureException(error, { tags: { route: 'anonymous-report', stage: 'insert' } })
+      // Public, unauthenticated endpoint: never return the raw Postgres message
+      // (it leaks constraint/column/schema detail as a recon channel).
+      // sanitizeError captures the full error to Sentry and returns a generic body.
       void recordAttempt(ipHash, 'submit_error', t.id)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return sanitizeError(error, 'anonymous-report/POST:insert')
     }
 
     const incident = data as unknown as IncidentRow
@@ -271,10 +274,9 @@ export async function POST(req: Request) {
       uploads,
     }, { status: 201 })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    Sentry.captureException(e, { tags: { route: 'anonymous-report' } })
+    // Public endpoint — return a generic error; full detail goes to Sentry.
     void recordAttempt(ipHash, 'submit_error')
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return sanitizeError(e, 'anonymous-report/POST')
   }
 }
 

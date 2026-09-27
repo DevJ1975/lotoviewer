@@ -357,13 +357,20 @@ export function meanTimeToCloseDays(
   const closed = rows.filter(r => r.closed_at)
   if (closed.length === 0) return null
   let totalMs = 0
+  // Divide by the rows that actually contributed to the sum, not every
+  // closed row: a back-dated (closed_at < reported_at) or unparseable row is
+  // skipped below, and counting it in the denominator would understate the
+  // mean. Same valid-count discipline as avgPermitDurationMinutes.
+  let valid = 0
   for (const r of closed) {
     const start = new Date(r.reported_at).getTime()
     const end   = new Date(r.closed_at!).getTime()
     if (Number.isNaN(start) || Number.isNaN(end) || end < start) continue
     totalMs += (end - start)
+    valid += 1
   }
-  return totalMs / closed.length / DAY_MS
+  if (valid === 0) return null
+  return totalMs / valid / DAY_MS
 }
 
 // ── Care metrics ──────────────────────────────────────────────────────────
@@ -372,13 +379,19 @@ export function meanDaysToRtw(rows: ReadonlyArray<CareRowForMetrics>): number | 
   const closed = rows.filter(r => r.return_to_work_at)
   if (closed.length === 0) return null
   let totalDays = 0
+  // Divide by the rows that contributed, not every RTW row — a row skipped
+  // below (return_to_work_at before created_at, or unparseable) must not
+  // inflate the denominator and understate the mean. Mirrors meanTimeToCloseDays.
+  let valid = 0
   for (const r of closed) {
     const start = new Date(r.created_at).getTime()
     const end   = new Date(r.return_to_work_at!).getTime()
     if (Number.isNaN(start) || Number.isNaN(end) || end < start) continue
     totalDays += (end - start) / DAY_MS
+    valid += 1
   }
-  return totalDays / closed.length
+  if (valid === 0) return null
+  return totalDays / valid
 }
 
 // ── Trend buckets ────────────────────────────────────────────────────────

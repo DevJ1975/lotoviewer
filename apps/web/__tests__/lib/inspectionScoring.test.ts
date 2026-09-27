@@ -79,6 +79,21 @@ describe('scoreInspection', () => {
     expect(s.failedItemIds).toEqual([])
     expect(s.result).toBe('pass')
   })
+
+  it('a fail on a non-scorable (text/photo/signature) item does not fail the inspection', () => {
+    // Item 'd' is a text item — informational, never scorable. A stray 'fail'
+    // response against it must not flip the overall result or spawn a CAPA.
+    const s = scoreInspection(items, [
+      { itemId: 'a', result: 'pass' },
+      { itemId: 'b', result: 'pass' },
+      { itemId: 'c', result: 'pass' },
+      { itemId: 'd', result: 'fail' }, // non-scorable — ignored
+    ])
+    expect(s.failedItemIds).toEqual([])
+    expect(s.actionItemIds).toEqual([])
+    expect(s.result).toBe('pass')
+    expect(s.pct).toBe(100)
+  })
 })
 
 describe('evaluateNumeric', () => {

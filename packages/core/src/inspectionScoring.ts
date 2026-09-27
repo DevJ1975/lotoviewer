@@ -64,7 +64,11 @@ export function scoreInspection(
   for (const r of responses) {
     if (r.result !== 'fail') continue
     const item = byId.get(r.itemId)
-    if (!item) continue
+    // Only scorable items count toward the overall result — mirror the scoring
+    // loop's isScorableType guard. A 'fail' recorded against an informational
+    // text/photo/signature item must not flip the inspection to 'fail' or spawn
+    // a corrective action (the module contract: "only pass/fail/na items score").
+    if (!item || !isScorableType(item.type)) continue
     failedItemIds.push(item.id)
     if (item.failCreatesAction) actionItemIds.push(item.id)
   }

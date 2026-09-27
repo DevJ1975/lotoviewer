@@ -241,6 +241,23 @@ describe('diffSdsPayloads', () => {
     const coded = new Set(['ghs_pictograms', 'hazard_statements', 'precautionary_statements'])
     expect(diffSdsPayloads(malformed, malformed).filter(d => coded.has(d.field))).toEqual([])
   })
+
+  it('treats a MISSING (undefined) prev scalar as absent → clean "added", not "undefined→x"', () => {
+    // NFPA/exposure keys are optional on ParsedSdsPayload; an older parse
+    // schema can omit them, reading back as undefined from jsonb. That must
+    // diff as an addition, not a change to/from the string "undefined".
+    const prev = basePayload({ nfpa_health: undefined })
+    const next = basePayload({ nfpa_health: 3 })
+    expect(rowFor(diffSdsPayloads(prev, next), 'nfpa_health')).toEqual({
+      field: 'nfpa_health', label: 'NFPA Health', kind: 'added', before: null, after: '3',
+    })
+  })
+
+  it('does not emit a phantom "removed" when prev scalar is undefined and next is null', () => {
+    const prev = basePayload({ pel_twa_ppm: undefined })
+    const next = basePayload({ pel_twa_ppm: null })
+    expect(rowFor(diffSdsPayloads(prev, next), 'pel_twa_ppm')).toBeUndefined()
+  })
 })
 
 describe('summarizeDiff', () => {

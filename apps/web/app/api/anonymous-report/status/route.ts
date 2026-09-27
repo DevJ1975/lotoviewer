@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { sanitizeError } from '@/lib/security/sanitizeError'
 import { clientIp, hashIp, isOverIpLimit, recordAttempt } from '@/lib/anonReport/ipThrottle'
 import { hashReceipt, isValidPinFormat } from '@/lib/anonReport/receipt'
 
@@ -89,7 +90,7 @@ export async function POST(req: Request) {
       public_note:   r.anon_public_status_note,
     })
   } catch (e) {
-    Sentry.captureException(e, { tags: { route: 'anonymous-report/status' } })
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
+    // Public endpoint — generic error only; full detail goes to Sentry.
+    return sanitizeError(e, 'anonymous-report/status')
   }
 }

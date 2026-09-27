@@ -112,6 +112,22 @@ describe('classifyItaCoverage', () => {
     expect(classifyItaCoverage({ annual_avg_employees: 99, appendix: 'b' })).toBe('not_required')
     expect(classifyItaCoverage({ annual_avg_employees: 100, appendix: null })).toBe('not_required')
   })
+
+  // Regression: a NAICS listed in BOTH appendices ('ab') binds under Appendix A
+  // at 20–249 AND Appendix B at 100+. Collapsing it to 'b' made a 20–99-employee
+  // dual-listed establishment (hospitals, nursing homes, dairy, meat, foundries…)
+  // read as 'not_required' and skip its mandatory 300A filing.
+  it('dual-listed industry owes its 300A at 20–99 employees (Appendix A tier)', () => {
+    expect(classifyItaCoverage({ annual_avg_employees: 60, appendix: 'ab' })).toBe('summary_only')
+    expect(classifyItaCoverage({ annual_avg_employees: 20, appendix: 'ab' })).toBe('summary_only')
+  })
+  it('dual-listed industry escalates to case rows at 100+ (Appendix B tier)', () => {
+    expect(classifyItaCoverage({ annual_avg_employees: 100, appendix: 'ab' })).toBe('summary_and_cases')
+    expect(classifyItaCoverage({ annual_avg_employees: 500, appendix: 'ab' })).toBe('summary_and_cases')
+  })
+  it('dual-listed industry below 20 is still not required', () => {
+    expect(classifyItaCoverage({ annual_avg_employees: 19, appendix: 'ab' })).toBe('not_required')
+  })
 })
 
 describe('appendixForNaics', () => {
@@ -123,14 +139,19 @@ describe('appendixForNaics', () => {
   })
 
   it('matches a 6-digit code by 4-digit prefix', () => {
-    // Logging — appears on both Appendix A and B; B wins (stricter rule).
-    expect(appendixForNaics('113310')).toBe('b')
-    // 311615 (poultry processing) → 3116 → Appendix B (animal slaughter)
-    expect(appendixForNaics('311615')).toBe('b')
-    // 236118 (residential remodelers) → 2361 → Appendix A
+    // Logging — appears on both Appendix A and B → 'ab' (must keep BOTH
+    // memberships; the two appendices bind at different employee counts).
+    expect(appendixForNaics('113310')).toBe('ab')
+    // 311615 (poultry processing) → 3116 → both A (food mfg) and B (animal slaughter)
+    expect(appendixForNaics('311615')).toBe('ab')
+    // 236118 (residential remodelers) → 2361 → Appendix A only
     expect(appendixForNaics('236118')).toBe('a')
-    // 622110 (general medical & surgical hospitals) → 6221 → on both, B wins
-    expect(appendixForNaics('622110')).toBe('b')
+    // 622110 (general medical & surgical hospitals) → 6221 → on both → 'ab'
+    expect(appendixForNaics('622110')).toBe('ab')
+    // 212210 (iron ore mining) → 2122 → Appendix B only
+    expect(appendixForNaics('212210')).toBe('b')
+    // 623110 (nursing care facilities) → 6231 → on both → 'ab'
+    expect(appendixForNaics('623110')).toBe('ab')
   })
 
   it('strips non-digits and tolerates whitespace', () => {
