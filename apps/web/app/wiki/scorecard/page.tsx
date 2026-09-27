@@ -1,10 +1,21 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.15.0'
-const LAST_UPDATED    = '2026-07-29'
+const CURRENT_VERSION = '1.15.1'
+const LAST_UPDATED    = '2026-09-27'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.15.1',
+    date:    '2026-09-27',
+    changes: [
+      'Fixed: “mean time to close” and “mean days to return-to-work” now divide ' +
+      'by the number of cases that actually contributed, not by every closed ' +
+      'case. Rows with an unparseable or back-dated timestamp were already left ' +
+      'out of the total but were still counted in the denominator, which ' +
+      'understated both averages whenever a record had dirty dates.',
+    ],
+  },
   {
     version: '1.15.0',
     date:    '2026-07-29',
