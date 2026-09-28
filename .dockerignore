@@ -1,0 +1,15 @@
+# Keep the Docker build context small and hermetic: never ship host installs
+# or build output — the image rebuilds them from the lockfile + sources.
+**/node_modules
+**/.next
+**/.expo
+**/dist
+**/coverage
+.git
+.github
+**/*.log
+**/.DS_Store
+**/.env*
+!**/.env.example
+services/sds-parser/.venv
+**/__pycache__
