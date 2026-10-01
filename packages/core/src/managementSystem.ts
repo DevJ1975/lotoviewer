@@ -46,3 +46,123 @@ export function registerHealth(rows: readonly RegisterRow[], today: string): Reg
   if (active.length === 0) return 'red'
   return active.some(row => row.nextReviewDue < today) ? 'amber' : 'green'
 }
+
+// ── Review dates ──────────────────────────────────────────────────────────
+
+/** How often a register row must be re-reviewed when nothing more specific applies. */
+export const DEFAULT_REVIEW_CADENCE_DAYS = 365
+
+/**
+ * The ISO calendar date `days` after `date`, in UTC calendar days so the
+ * answer never depends on the server's timezone.
+ * @param date ISO calendar date (YYYY-MM-DD).
+ */
+export function addCalendarDays(date: string, days: number): string {
+  const [year, month, day] = date.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
+}
+
+/**
+ * When a row reviewed on `reviewedOn` is next due for review.
+ * @param reviewedOn ISO calendar date (YYYY-MM-DD) of the review.
+ * @param cadenceDays Days between reviews; a whole number of at least 1.
+ */
+export function nextReviewDue(reviewedOn: string, cadenceDays: number): string {
+  return addCalendarDays(reviewedOn, cadenceDays)
+}
+
+// ── Policy (clause 5.2) ──────────────────────────────────────────────────
+
+export interface PolicyCommitment {
+  /** Key in the policy's `commitments` map, prefixed by standard. */
+  key: string
+  label: string
+}
+
+/**
+ * The commitments each standard requires its policy to state. Keys are
+ * prefixed by standard so one `commitments` map can hold both; an
+ * integrated policy must state both lists.
+ */
+export const REQUIRED_POLICY_COMMITMENTS: Readonly<Record<'ems' | 'ohs', readonly PolicyCommitment[]>> = {
+  // ISO 14001:2015 clause 5.2 c), d), e)
+  ems: [
+    { key: 'ems.protect_environment',     label: 'Protect the environment, including preventing pollution' },
+    { key: 'ems.fulfil_obligations',      label: 'Fulfil our compliance obligations' },
+    { key: 'ems.continual_improvement',   label: 'Continually improve the environmental management system' },
+  ],
+  // ISO 45001:2018 clause 5.2 a), c), d), e), f)
+  ohs: [
+    { key: 'ohs.safe_healthy_conditions',          label: 'Provide safe and healthy working conditions' },
+    { key: 'ohs.eliminate_hazards_reduce_risks',   label: 'Eliminate hazards and reduce OH&S risks' },
+    { key: 'ohs.consultation_participation',       label: 'Consult workers and enable their participation' },
+    { key: 'ohs.fulfil_obligations',               label: 'Fulfil our legal and other requirements' },
+    { key: 'ohs.continual_improvement',            label: 'Continually improve the OH&S management system' },
+  ],
+}
+
+/** The commitments a policy for `discipline` must state. */
+export function requiredCommitments(discipline: Discipline): readonly PolicyCommitment[] {
+  if (discipline === 'integrated') return [...REQUIRED_POLICY_COMMITMENTS.ems, ...REQUIRED_POLICY_COMMITMENTS.ohs]
+  return REQUIRED_POLICY_COMMITMENTS[discipline]
+}
+
+export interface PolicyCompletenessInput {
+  commitments:   Readonly<Record<string, boolean>>
+  signatoryName: string | null
+  signedAt:      string | null
+}
+
+/**
+ * A policy is complete when it states every commitment its standard
+ * requires and someone has signed and dated it. An auditor treats a missing
+ * commitment or an unsigned policy as a nonconformity, so the policy form
+ * refuses to save an incomplete one.
+ */
+export function policyIsComplete(policy: PolicyCompletenessInput, discipline: Discipline): boolean {
+  const statesEveryCommitment = requiredCommitments(discipline).every(c => policy.commitments[c.key] === true)
+  const signed = (policy.signatoryName ?? '').trim().length > 0 && (policy.signedAt ?? '').length > 0
+  return statesEveryCommitment && signed
+}
+
+export interface ScopeVersion {
+  version:       number
+  legalEntity:   string
+  effectiveFrom: string
+}
+
+/**
+ * True when the legal entity in the scope changed after the policy was
+ * signed: the policy still carries a previous owner's signature (Lesson L3).
+ * A first scope version is not a change.
+ * @param policy The policy in force; signedAt is an ISO calendar date.
+ * @param scopes Every scope version for the same discipline, in any order.
+ */
+export function policySignatoryStale(policy: { signedAt: string }, scopes: readonly ScopeVersion[]): boolean {
+  const ordered = [...scopes].sort((a, b) => a.version - b.version)
+  let lastEntityChange: string | null = null
+  for (let i = 1; i < ordered.length; i++) {
+    const entityChanged = ordered[i].legalEntity.trim().toLowerCase() !== ordered[i - 1].legalEntity.trim().toLowerCase()
+    if (entityChanged) lastEntityChange = ordered[i].effectiveFrom
+  }
+  return lastEntityChange !== null && lastEntityChange > policy.signedAt
+}
+
+// ── Context (clauses 4.1, 4.2) ───────────────────────────────────────────
+
+export type ContextIssueKind = 'internal' | 'external' | 'climate'
+
+/**
+ * Health of the context-issues register. Like registerHealth, then amber
+ * when no active issue records the organization's climate-change
+ * determination: ISO 14001 Amd 1:2024 requires the organization to decide
+ * whether climate change is a relevant issue, so its absence is a gap.
+ */
+export function contextRegisterHealth(
+  rows: readonly (RegisterRow & { kind: ContextIssueKind })[],
+  today: string,
+): RegisterHealth {
+  const health = registerHealth(rows, today)
+  if (health !== 'green') return health
+  return rows.some(row => row.active && row.kind === 'climate') ? 'green' : 'amber'
+}
