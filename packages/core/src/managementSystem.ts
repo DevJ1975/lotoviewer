@@ -5,6 +5,8 @@
 // register will reuse unchanged. See docs/ems/EMS_IMPLEMENTATION_PLAN.md,
 // "ISO 45001 extension".
 
+import type { FieldError } from './hazardousWaste'
+
 /** Every standard a shared management-system record can belong to. */
 export const DISCIPLINES = ['ems', 'ohs', 'integrated'] as const
 
@@ -15,6 +17,14 @@ export const DISCIPLINES = ['ems', 'ohs', 'integrated'] as const
  * register serves both standards.
  */
 export type Discipline = typeof DISCIPLINES[number]
+
+/**
+ * The disciplines one standard's registers show: its own records plus the
+ * integrated ones, which belong to both standards.
+ */
+export function registerDisciplines(standard: Exclude<Discipline, 'integrated'>): readonly Discipline[] {
+  return [standard, 'integrated']
+}
 
 /** Traffic-light state of a register, as shown on the dashboard. */
 export type RegisterHealth = 'green' | 'amber' | 'red'
@@ -150,7 +160,12 @@ export function policySignatoryStale(policy: { signedAt: string }, scopes: reado
 
 // ── Context (clauses 4.1, 4.2) ───────────────────────────────────────────
 
-export type ContextIssueKind = 'internal' | 'external' | 'climate'
+export const CONTEXT_ISSUE_KINDS = ['internal', 'external', 'climate'] as const
+export type ContextIssueKind = typeof CONTEXT_ISSUE_KINDS[number]
+
+/** Clause 6.1.1: whether an issue is a risk, an opportunity, or both. */
+export const CONTEXT_ISSUE_EFFECTS = ['risk', 'opportunity', 'both'] as const
+export type ContextIssueEffect = typeof CONTEXT_ISSUE_EFFECTS[number]
 
 /**
  * Health of the context-issues register. Like registerHealth, then amber
@@ -165,4 +180,129 @@ export function contextRegisterHealth(
   const health = registerHealth(rows, today)
   if (health !== 'green') return health
   return rows.some(row => row.active && row.kind === 'climate') ? 'green' : 'amber'
+}
+
+// ── Register inputs ──────────────────────────────────────────────────────
+// What a person may type into the context, interested-party, scope and
+// policy registers. Each validator returns every problem at once, keyed by
+// input field; an empty list means the input is acceptable.
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/** True for a real calendar date written YYYY-MM-DD: '2026-02-30' is not one. */
+export function isCalendarDate(value: string): boolean {
+  return ISO_DATE_RE.test(value) && addCalendarDays(value, 0) === value
+}
+
+function requireText(errors: FieldError[], field: string, value: string, max: number): void {
+  if (value.trim().length === 0) errors.push({ field, message: 'is required' })
+  else if (value.length > max) errors.push({ field, message: `must be at most ${max} characters` })
+}
+
+function limitText(errors: FieldError[], field: string, value: string | null, max: number): void {
+  if (value !== null && value.length > max) errors.push({ field, message: `must be at most ${max} characters` })
+}
+
+function requireDiscipline(errors: FieldError[], discipline: Discipline): void {
+  if (!DISCIPLINES.includes(discipline)) errors.push({ field: 'discipline', message: 'must be ems, ohs, or integrated' })
+}
+
+/** Why a register row is being retired. Retired rows keep their history, so the reason is required. */
+export function validateRetirementReason(reason: string, field = 'retiredReason'): FieldError[] {
+  const errors: FieldError[] = []
+  requireText(errors, field, reason, 2000)
+  return errors
+}
+
+export interface ContextIssueInput {
+  discipline:  Discipline
+  kind:        ContextIssueKind
+  description: string
+  relevance:   string | null
+  effect:      ContextIssueEffect | null
+}
+
+export function validateContextIssueInput(input: ContextIssueInput): FieldError[] {
+  const errors: FieldError[] = []
+  requireDiscipline(errors, input.discipline)
+  if (!CONTEXT_ISSUE_KINDS.includes(input.kind)) {
+    errors.push({ field: 'kind', message: 'must be internal, external, or climate' })
+  }
+  requireText(errors, 'description', input.description, 2000)
+  limitText(errors, 'relevance', input.relevance, 2000)
+  if (input.effect !== null && !CONTEXT_ISSUE_EFFECTS.includes(input.effect)) {
+    errors.push({ field: 'effect', message: 'must be risk, opportunity, or both' })
+  }
+  return errors
+}
+
+export interface InterestedPartyInput {
+  discipline:        Discipline
+  name:              string
+  needsExpectations: string
+  /** Clause 4.2 c): the organization adopts this party's need as a compliance obligation. */
+  becomesObligation: boolean
+  obligationId:      string | null
+}
+
+export function validateInterestedPartyInput(input: InterestedPartyInput): FieldError[] {
+  const errors: FieldError[] = []
+  requireDiscipline(errors, input.discipline)
+  requireText(errors, 'name', input.name, 200)
+  requireText(errors, 'needsExpectations', input.needsExpectations, 4000)
+  if (input.obligationId !== null && !input.becomesObligation) {
+    errors.push({ field: 'obligationId', message: 'can only be set when the need becomes a compliance obligation' })
+  }
+  return errors
+}
+
+export interface ScopeStatementInput {
+  discipline:       Discipline
+  legalEntity:      string
+  physicalBoundary: string
+  activities:       string
+  productsServices: string
+  /** ISO calendar date from which this version is the scope. */
+  effectiveFrom:    string
+}
+
+export function validateScopeStatementInput(input: ScopeStatementInput): FieldError[] {
+  const errors: FieldError[] = []
+  requireDiscipline(errors, input.discipline)
+  requireText(errors, 'legalEntity', input.legalEntity, 300)
+  requireText(errors, 'physicalBoundary', input.physicalBoundary, 4000)
+  requireText(errors, 'activities', input.activities, 4000)
+  requireText(errors, 'productsServices', input.productsServices, 4000)
+  if (!isCalendarDate(input.effectiveFrom)) errors.push({ field: 'effectiveFrom', message: 'must be a date (YYYY-MM-DD)' })
+  return errors
+}
+
+export interface PolicyInput {
+  discipline:     Discipline
+  body:           string
+  commitments:    Readonly<Record<string, boolean>>
+  signatoryName:  string
+  signatoryTitle: string | null
+  /** ISO calendar date the policy was signed. */
+  signedAt:       string
+}
+
+const KNOWN_COMMITMENT_KEYS = new Set(requiredCommitments('integrated').map(c => c.key))
+
+/**
+ * Shape problems only. Whether the policy states every commitment its
+ * standard requires is policyIsComplete(), a separate question with its own answer.
+ */
+export function validatePolicyInput(input: PolicyInput): FieldError[] {
+  const errors: FieldError[] = []
+  requireDiscipline(errors, input.discipline)
+  requireText(errors, 'body', input.body, 20000)
+  for (const [key, stated] of Object.entries(input.commitments)) {
+    if (!KNOWN_COMMITMENT_KEYS.has(key)) errors.push({ field: 'commitments', message: `has an unknown commitment '${key}'` })
+    else if (typeof stated !== 'boolean') errors.push({ field: 'commitments', message: `'${key}' must be true or false` })
+  }
+  requireText(errors, 'signatoryName', input.signatoryName, 200)
+  limitText(errors, 'signatoryTitle', input.signatoryTitle, 200)
+  if (!isCalendarDate(input.signedAt)) errors.push({ field: 'signedAt', message: 'must be a date (YYYY-MM-DD)' })
+  return errors
 }

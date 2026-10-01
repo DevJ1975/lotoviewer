@@ -8,9 +8,20 @@ import {
   nextReviewDue,
   policyIsComplete,
   policySignatoryStale,
+  isCalendarDate,
+  registerDisciplines,
   registerHealth,
   requiredCommitments,
+  validateContextIssueInput,
+  validateInterestedPartyInput,
+  validatePolicyInput,
+  validateRetirementReason,
+  validateScopeStatementInput,
+  type ContextIssueInput,
+  type InterestedPartyInput,
+  type PolicyInput,
   type RegisterRow,
+  type ScopeStatementInput,
 } from '../managementSystem'
 
 const TODAY = '2026-10-01'
@@ -164,5 +175,140 @@ describe('contextRegisterHealth', () => {
 
   it('stays red when there are no active issues at all', () => {
     expect(contextRegisterHealth([], '2026-10-01')).toBe('red')
+  })
+})
+
+describe('registerDisciplines', () => {
+  it('shows a standard its own records plus the integrated ones', () => {
+    expect(registerDisciplines('ems')).toEqual(['ems', 'integrated'])
+    expect(registerDisciplines('ohs')).toEqual(['ohs', 'integrated'])
+  })
+})
+
+describe('isCalendarDate', () => {
+  it.each(['2026-10-01', '2028-02-29', '2026-12-31'])('accepts %s', date => {
+    expect(isCalendarDate(date)).toBe(true)
+  })
+
+  it.each(['2026-02-29', '2026-02-30', '2026-13-01', '2026-1-01', '2026-10-01T00:00:00Z', ''])('rejects %j', date => {
+    expect(isCalendarDate(date)).toBe(false)
+  })
+})
+
+const fieldsOf = (errors: { field: string }[]) => errors.map(e => e.field)
+
+describe('validateRetirementReason', () => {
+  it('requires a reason, because retired rows keep their history', () => {
+    expect(fieldsOf(validateRetirementReason('   '))).toEqual(['retiredReason'])
+    expect(validateRetirementReason('Process moved to the new plant')).toEqual([])
+  })
+
+  it('names the field it was asked to', () => {
+    expect(fieldsOf(validateRetirementReason('', 'obsoleteReason'))).toEqual(['obsoleteReason'])
+  })
+
+  it('caps the reason at 2000 characters', () => {
+    expect(validateRetirementReason('x'.repeat(2000))).toEqual([])
+    expect(fieldsOf(validateRetirementReason('x'.repeat(2001)))).toEqual(['retiredReason'])
+  })
+})
+
+describe('validateContextIssueInput', () => {
+  const valid: ContextIssueInput = {
+    discipline: 'ems', kind: 'climate', description: 'Hotter summers raise cooling-water demand',
+    relevance: null, effect: 'risk',
+  }
+
+  it('accepts a complete issue, with or without an effect', () => {
+    expect(validateContextIssueInput(valid)).toEqual([])
+    expect(validateContextIssueInput({ ...valid, effect: null })).toEqual([])
+  })
+
+  it('reports every problem at once', () => {
+    const errors = validateContextIssueInput({
+      discipline: 'quality' as never, kind: 'political' as never, description: ' ',
+      relevance: 'x'.repeat(2001), effect: 'threat' as never,
+    })
+    expect(fieldsOf(errors)).toEqual(['discipline', 'kind', 'description', 'relevance', 'effect'])
+  })
+
+  it('caps the description at 2000 characters', () => {
+    expect(validateContextIssueInput({ ...valid, description: 'x'.repeat(2000) })).toEqual([])
+    expect(fieldsOf(validateContextIssueInput({ ...valid, description: 'x'.repeat(2001) }))).toEqual(['description'])
+  })
+})
+
+describe('validateInterestedPartyInput', () => {
+  const valid: InterestedPartyInput = {
+    discipline: 'ems', name: 'County water district', needsExpectations: 'Discharge within permit limits',
+    becomesObligation: true, obligationId: '22222222-2222-4222-8222-222222222222',
+  }
+
+  it('accepts a party whose need becomes a linked obligation', () => {
+    expect(validateInterestedPartyInput(valid)).toEqual([])
+  })
+
+  it('accepts a need adopted as an obligation before the obligation is linked', () => {
+    expect(validateInterestedPartyInput({ ...valid, obligationId: null })).toEqual([])
+  })
+
+  it('refuses an obligation link on a need that is not adopted, as the database does', () => {
+    expect(fieldsOf(validateInterestedPartyInput({ ...valid, becomesObligation: false }))).toEqual(['obligationId'])
+  })
+
+  it('requires a name and the needs', () => {
+    expect(fieldsOf(validateInterestedPartyInput({ ...valid, name: '', needsExpectations: '' })))
+      .toEqual(['name', 'needsExpectations'])
+  })
+})
+
+describe('validateScopeStatementInput', () => {
+  const valid: ScopeStatementInput = {
+    discipline: 'ems', legalEntity: 'Northfield Forge & Finish LLC', physicalBoundary: 'The Northfield, TX site',
+    activities: 'Forging, machining, powder coating', productsServices: 'Forged steel brackets',
+    effectiveFrom: '2026-10-01',
+  }
+
+  it('accepts a complete scope', () => {
+    expect(validateScopeStatementInput(valid)).toEqual([])
+  })
+
+  it('requires all four statements and a real effective date', () => {
+    const errors = validateScopeStatementInput({
+      ...valid, legalEntity: '', physicalBoundary: '', activities: '', productsServices: '', effectiveFrom: '2026-02-30',
+    })
+    expect(fieldsOf(errors)).toEqual(['legalEntity', 'physicalBoundary', 'activities', 'productsServices', 'effectiveFrom'])
+  })
+})
+
+describe('validatePolicyInput', () => {
+  const valid: PolicyInput = {
+    discipline: 'ems', body: 'We protect the environment and prevent pollution.',
+    commitments: { 'ems.protect_environment': true, 'ems.fulfil_obligations': true, 'ems.continual_improvement': false },
+    signatoryName: 'Plant Manager', signatoryTitle: null, signedAt: '2026-10-01',
+  }
+
+  it('accepts a well-formed policy, even one missing a commitment: completeness is a separate check', () => {
+    expect(validatePolicyInput(valid)).toEqual([])
+  })
+
+  it('accepts OH&S commitment keys, so an integrated policy fits', () => {
+    expect(validatePolicyInput({ ...valid, discipline: 'integrated', commitments: { 'ohs.continual_improvement': true } }))
+      .toEqual([])
+  })
+
+  it('refuses an unknown commitment key and a non-boolean answer', () => {
+    const errors = validatePolicyInput({
+      ...valid, commitments: { 'ems.be_nice': true, 'ems.protect_environment': 'yes' as never },
+    })
+    expect(errors).toEqual([
+      { field: 'commitments', message: "has an unknown commitment 'ems.be_nice'" },
+      { field: 'commitments', message: "'ems.protect_environment' must be true or false" },
+    ])
+  })
+
+  it('requires a body, a signatory and a real signing date', () => {
+    const errors = validatePolicyInput({ ...valid, body: ' ', signatoryName: '', signedAt: '01/10/2026' })
+    expect(fieldsOf(errors)).toEqual(['body', 'signatoryName', 'signedAt'])
   })
 })
