@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { isModuleVisible } from '@soteria/core/moduleVisibility'
+import { isModuleVisible, isVisibleByDefault } from '@soteria/core/moduleVisibility'
+import { FEATURES, getFeature, type FeatureDef } from '@soteria/core/features'
 
 // Pure-logic tests for the per-tenant module resolver. These cover the
 // matrix of (tenant override × static enabled × parent inheritance) so
@@ -125,4 +126,70 @@ describe('isModuleVisible', () => {
       expect(isModuleVisible('hot-work-status', wlsDemoModules)).toBe(true)
     })
   })
+
+  describe('opt-in module (defaultEnabled: false)', () => {
+    // 'environmental' is the first opt-in module (docs/ems/adr/0001, Q2):
+    // a tenant sees it only after a superadmin switches it on.
+
+    it('is hidden from a tenant with no override key', () => {
+      expect(isModuleVisible('environmental', {})).toBe(false)
+    })
+
+    it('is hidden when the tenant has no modules map at all', () => {
+      expect(isModuleVisible('environmental', null)).toBe(false)
+      expect(isModuleVisible('environmental', undefined)).toBe(false)
+    })
+
+    it('is visible once the tenant opts in', () => {
+      expect(isModuleVisible('environmental', { environmental: true })).toBe(true)
+    })
+
+    it('stays hidden when the tenant explicitly opts out', () => {
+      expect(isModuleVisible('environmental', { environmental: false })).toBe(false)
+    })
+
+    it('children inherit the opt-in: hidden by default, visible once opted in', () => {
+      expect(isModuleVisible('environmental-aspects', {})).toBe(false)
+      expect(isModuleVisible('environmental-aspects', { environmental: true })).toBe(true)
+    })
+
+    it('a stray child key cannot switch the module on without the parent', () => {
+      expect(isModuleVisible('environmental-aspects', { 'environmental-aspects': true })).toBe(false)
+    })
+
+    it('does not change default-on modules: LOTO stays visible with no override', () => {
+      expect(isModuleVisible('loto', {})).toBe(true)
+      expect(isModuleVisible('loto', null)).toBe(true)
+    })
+  })
 })
+
+describe('isVisibleByDefault', () => {
+  function feature(id: string): FeatureDef {
+    const def = getFeature(id)
+    if (!def) throw new Error(`fixture: ${id} missing from FEATURES`)
+    return def
+  }
+
+  it('is true for a default-on module', () => {
+    expect(isVisibleByDefault(feature('loto'))).toBe(true)
+  })
+
+  it('is false for an opt-in module', () => {
+    expect(isVisibleByDefault(feature('environmental'))).toBe(false)
+  })
+
+  it('is false for a hard-disabled module, whatever its default', () => {
+    expect(isVisibleByDefault({ ...feature('loto'), enabled: false })).toBe(false)
+    expect(isVisibleByDefault({ ...feature('loto'), enabled: false, defaultEnabled: true })).toBe(false)
+  })
+
+  it('agrees with isModuleVisible for every top-level module when the tenant has no overrides', () => {
+    // The superadmin form seeds its checkboxes from isVisibleByDefault; if
+    // the two ever disagree, saving the form silently flips a module.
+    for (const def of FEATURES.filter(f => !f.parent)) {
+      expect(isVisibleByDefault(def), def.id).toBe(isModuleVisible(def.id, {}))
+    }
+  })
+})
+

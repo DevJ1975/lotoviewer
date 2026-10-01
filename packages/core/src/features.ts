@@ -61,6 +61,12 @@ export interface FeatureDef {
   // Allows href:null without tripping the "live features must be
   // routable" registry invariant.
   internal?:   boolean
+  // Visibility for a tenant whose `modules` jsonb has no key for this
+  // module. Omitted means visible, which is how every module behaved
+  // before opt-in existed. Set false for an opt-in module: tenants see
+  // it only after a superadmin sets `modules[id] = true`. Top-level
+  // modules only — children always inherit their parent.
+  defaultEnabled?: boolean
   // Lucide icon name (e.g. 'Lock', 'Flame'). Stored as a string so
   // packages/core stays free of lucide-react (web vs. native split).
   // Resolved to a component via apps/web/lib/moduleVisuals.ts. Set on
@@ -1001,6 +1007,10 @@ export const FEATURES: FeatureDef[] = [
   // no module of their own; this entry gives them a home, a tenant
   // toggle, and a drawer row. The report card is the module's reason
   // to exist — it reads the registers and says what an auditor would.
+  //
+  // Opt-in (docs/ems/adr/0001): the EMS grows phase by phase, so a tenant
+  // sees it only once enabled. Migration 294 kept it on for tenants that
+  // already had environmental records.
   {
     id:          'environmental',
     name:        'Environmental (ISO 14001)',
@@ -1008,6 +1018,7 @@ export const FEATURES: FeatureDef[] = [
     href:        '/environmental',
     category:    'safety',
     enabled:     true,
+    defaultEnabled: false,
     comingSoon:  false,
     icon:        'Mountain',
     color:       'emerald',
