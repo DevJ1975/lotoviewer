@@ -1,6 +1,6 @@
 # ADR 0001: Build the EMS on the existing `environmental` module
 
-- **Status:** Proposed. Awaiting the product owner's decision on Q1–Q7 below.
+- **Status:** Accepted, 2026-10-01. The product owner replied "go", accepting every recommendation in the table below.
 - **Date:** 2026-10-01
 - **Phase:** 0 (discovery)
 
@@ -51,8 +51,7 @@ Several of the plan's assumptions don't hold here:
 
 ## Decision
 
-Option 3, pending answers to the questions below. Each has a recommended default;
-replying "go" accepts all of them.
+Option 3. Every recommendation below was accepted.
 
 | # | Question | Recommendation |
 | --- | --- | --- |
@@ -77,6 +76,16 @@ These adaptations need no decision; the plan delegates them ("adapt to repo layo
   under `apps/web/app/api/cron/` for the plan's nightly jobs.
 - **Demo seed:** an unnumbered `apps/web/migrations/seed_ems_northfield_demo.sql`
   (the repo's `seed_*.sql` convention) instead of `scripts/seed-ems-demo.ts`.
+
+Adaptations made while building Phase 0:
+
+- **Error name:** the OH&S placeholder error is `NotImplementedError`, not the plan's
+  `NotImplemented`. Every error class in this repo ends in `Error`.
+- **Deferred to Phase 8:** the `ohsms_module` flag and the OH&S placeholder page.
+  A switch for a module with no screens would only add a dead menu entry.
+  `docs/ohs/README.md` reserves the names.
+- **Deferred to Phase 1:** the mobile navigation entry. Mobile has no EMS screen
+  until Phase 1's read-only aspect lookup, and its tabs are not flag-driven yet.
 
 ## Consequences
 

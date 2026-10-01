@@ -225,15 +225,18 @@ export async function enqueueUpload(entry: Omit<QueuedUpload, 'id' | 'createdAt'
   - The `tenant_features` table the header comment mentions was never built.
   - `resolveFeatureFlags` is a stub.
 - **Resolver:** `isModuleVisible` in `packages/core/src/moduleVisibility.ts`.
-  - **A module with no override is visible.** There is no default-off option.
+  - A module with no override uses its default: visible, unless `FeatureDef.defaultEnabled`
+    is `false` (opt-in; added in Phase 0, ADR 0001 Q2).
+  - `isVisibleByDefault(def)` is that default. The superadmin form seeds its checkboxes with it.
   - Children inherit their parent's resolution.
 - **Guards:**
   - Pages: `apps/web/components/ModuleGuard.tsx` (client-side "not enabled" screen) in each module `layout.tsx`.
   - APIs: `requireTenantModuleMember`.
   - Nav: `apps/web/lib/navigationCatalog.ts` → `AppDrawer.tsx`, `CommandPalette.tsx`.
 - **Mobile ignores flags.** Its tabs are hard-coded.
-- **The EMS flag already exists:** module id `environmental` (`features.ts:1005`,
-  "Environmental (ISO 14001)"). It is on by default for every tenant.
+- **The EMS flag:** module id `environmental` ("Environmental (ISO 14001)"). It is opt-in
+  since Phase 0. Migration `294_environmental_module_opt_in.sql` kept it on for tenants
+  that already had environmental records. `GET /api/environmental/health` reports it.
 
 ```ts
 // packages/core/src/moduleVisibility.ts:17-33
@@ -249,9 +252,8 @@ export function isModuleVisible(featureId: string, tenantModules: Record<string,
 }
 ```
 
-**Plan impact:** the plan's `ems_module` default-off flag needs either a new
-"default off" option in `isModuleVisible` or the existing `environmental` id
-(ADR 0001, question Q2).
+**Plan impact:** resolved in Phase 0. `environmental` is the plan's `ems_module`, and it is
+off by default.
 
 ## 8. Tests, CI, lint, format
 
