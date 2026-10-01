@@ -219,9 +219,11 @@ export async function enqueueUpload(entry: Omit<QueuedUpload, 'id' | 'createdAt'
 ## 7. Feature flags
 
 - **Catalog:** `FEATURES` in `packages/core/src/features.ts`, with fields
-  `id, href, parent, enabled, comingSoon, internal`.
-- **Per-tenant override:** `tenants.modules jsonb` (027). Superadmins write it through
-  `PATCH /api/superadmin/tenants/[number]` and `POST /api/superadmin/tenants/bulk-modules`.
+  `id, href, parent, enabled, defaultEnabled, comingSoon, internal`.
+- **Per-tenant override:** `tenants.modules jsonb` (027). Three paths write it:
+  - superadmins, through `PATCH /api/superadmin/tenants/[number]` and `POST /api/superadmin/tenants/bulk-modules`;
+  - tenant admins, through the Operator Console tool `set_module_visibility` (`apps/web/lib/ai/operator/homeTools.ts`);
+  - tenant owners, through RLS policy `tenants_owner_update` (031).
   - The `tenant_features` table the header comment mentions was never built.
   - `resolveFeatureFlags` is a stub.
 - **Resolver:** `isModuleVisible` in `packages/core/src/moduleVisibility.ts`.
@@ -239,7 +241,11 @@ export async function enqueueUpload(entry: Omit<QueuedUpload, 'id' | 'createdAt'
   that already had environmental records. `GET /api/environmental/health` reports it.
 
 ```ts
-// packages/core/src/moduleVisibility.ts:17-33
+// packages/core/src/moduleVisibility.ts
+export function isVisibleByDefault(def: FeatureDef): boolean {
+  return def.enabled && def.defaultEnabled !== false
+}
+
 export function isModuleVisible(featureId: string, tenantModules: Record<string, boolean> | null | undefined): boolean {
   const def = getFeature(featureId)
   if (!def) return false
@@ -248,7 +254,7 @@ export function isModuleVisible(featureId: string, tenantModules: Record<string,
   if (tenantModules && featureId in tenantModules) {
     return tenantModules[featureId] === true
   }
-  return true
+  return isVisibleByDefault(def)
 }
 ```
 

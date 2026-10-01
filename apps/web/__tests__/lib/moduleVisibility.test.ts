@@ -129,7 +129,7 @@ describe('isModuleVisible', () => {
 
   describe('opt-in module (defaultEnabled: false)', () => {
     // 'environmental' is the first opt-in module (docs/ems/adr/0001, Q2):
-    // a tenant sees it only after a superadmin switches it on.
+    // a tenant sees it only once its modules map says true.
 
     it('is hidden from a tenant with no override key', () => {
       expect(isModuleVisible('environmental', {})).toBe(false)
@@ -185,8 +185,10 @@ describe('isVisibleByDefault', () => {
   })
 
   it('agrees with isModuleVisible for every top-level module when the tenant has no overrides', () => {
-    // The superadmin form seeds its checkboxes from isVisibleByDefault; if
-    // the two ever disagree, saving the form silently flips a module.
+    // isVisibleByDefault is the resolver's no-override answer, and the
+    // superadmin form seeds its checkboxes from it. If the two disagreed, the
+    // form would show a module as on while it is hidden (or the reverse).
+    // EditTenantForm.test.tsx covers the form itself.
     for (const def of FEATURES.filter(f => !f.parent)) {
       expect(isVisibleByDefault(def), def.id).toBe(isModuleVisible(def.id, {}))
     }

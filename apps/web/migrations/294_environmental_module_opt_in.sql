@@ -14,8 +14,12 @@
 --   * "Has environmental records" means at least one row in a table the
 --     module owns (migrations 204-207).
 --
--- Ordering: apply BEFORE deploying the code change. Applied after, the
--- targeted tenants lose the module until this runs.
+-- Ordering: apply BEFORE deploying the code change, then run it ONCE
+-- MORE right after the deploy is live. Who is targeted depends on the rows
+-- present when it runs, and until the deploy every keyless tenant can still
+-- open the module. The second run catches a tenant that created its first
+-- environmental record in between. Skip the first run and the targeted
+-- tenants lose the module until it runs.
 --
 -- Idempotent: a re-run finds every target already carrying the key.
 -- The tenants audit trigger records each row this changes.

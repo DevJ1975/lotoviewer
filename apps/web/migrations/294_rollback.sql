@@ -8,10 +8,9 @@
 -- touches loses the module.
 --
 -- It removes `environmental: true` from the tenants migration 294 targeted:
--- those with environmental records. A tenant a superadmin explicitly
--- switched on after 294 also matches. Under the reverted code that is
--- harmless, because the module is visible to it either way. An explicit
--- `false` is never touched.
+-- those with environmental records. A tenant switched on explicitly after
+-- 294 also matches. Under the reverted code that is harmless, because the
+-- module is visible to it either way. An explicit `false` is never touched.
 --
 -- Apply: paste into the SQL Editor, or run with psql.
 -- ────────────────────────────────────────────────────────────────────────────

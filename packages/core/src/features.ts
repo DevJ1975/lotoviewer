@@ -64,8 +64,10 @@ export interface FeatureDef {
   // Visibility for a tenant whose `modules` jsonb has no key for this
   // module. Omitted means visible, which is how every module behaved
   // before opt-in existed. Set false for an opt-in module: tenants see
-  // it only after a superadmin sets `modules[id] = true`. Top-level
-  // modules only — children always inherit their parent.
+  // it only once their `modules[id]` is explicitly true. Any writer of
+  // tenants.modules can set that: a superadmin, a tenant admin through
+  // the Operator Console, or a tenant owner. Top-level modules only —
+  // children always inherit their parent.
   defaultEnabled?: boolean
   // Lucide icon name (e.g. 'Lock', 'Flame'). Stored as a string so
   // packages/core stays free of lucide-react (web vs. native split).

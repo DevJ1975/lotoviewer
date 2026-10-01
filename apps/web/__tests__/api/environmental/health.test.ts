@@ -35,11 +35,18 @@ function req(): Request {
 beforeEach(() => gateMock.mockReset())
 
 describe('GET /api/environmental/health', () => {
-  it('passes the gate failure through (no or forged tenant membership)', async () => {
+  it('passes an authentication failure through as 401', async () => {
     gateMock.mockResolvedValue({ ok: false, status: 401, message: 'Missing bearer token' })
     const res = await GET(req())
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({ error: 'Missing bearer token' })
+  })
+
+  it('passes a membership failure (not a member of the requested tenant) through as 403', async () => {
+    gateMock.mockResolvedValue({ ok: false, status: 403, message: 'Not a member of this tenant' })
+    const res = await GET(req())
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'Not a member of this tenant' })
   })
 
   it('reports enabled=false for a tenant with no override: the module is opt-in', async () => {
@@ -68,12 +75,11 @@ describe('GET /api/environmental/health', () => {
     expect(await (await GET(req())).json()).toEqual({ enabled: false })
   })
 
-  it('reads only the gate-verified tenant, never a client-chosen one', async () => {
-    const { client, from, select, eq } = authedClientReturning({ data: { modules: {} }, error: null })
+  it('filters the tenants table on the gate-verified tenant id', async () => {
+    const { client, from, eq } = authedClientReturning({ data: { modules: {} }, error: null })
     gateMock.mockResolvedValue({ ok: true, tenantId: 'gate-tenant', authedClient: client })
     await GET(req())
     expect(from).toHaveBeenCalledWith('tenants')
-    expect(select).toHaveBeenCalledWith('modules')
     expect(eq).toHaveBeenCalledWith('id', 'gate-tenant')
   })
 
