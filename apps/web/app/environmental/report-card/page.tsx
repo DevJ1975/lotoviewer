@@ -51,8 +51,8 @@ const VERDICT_META: Record<ClauseVerdict, {
     chip:  'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
     rail:  'bg-rose-500',
   },
-  not_applicable: {
-    label: 'Not applicable',
+  not_assessed: {
+    label: 'Not assessed',
     Icon:  MinusCircle,
     chip:  'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
     rail:  'bg-slate-300 dark:bg-slate-700',
@@ -87,13 +87,13 @@ export default function Iso14001ReportCardPage() {
     if (!tenantId) return
     setLoadError(null)
     try {
-      const signals = await fetchIso14001Signals(tenantId, tenant?.modules ?? null)
+      const signals = await fetchIso14001Signals(tenantId)
       setCard(assessIso14001(signals))
       setStamp(new Date().toISOString())
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Could not build the report card.')
     }
-  }, [tenantId, tenant])
+  }, [tenantId])
 
   useEffect(() => { void load() }, [load])
 
@@ -131,8 +131,6 @@ export default function Iso14001ReportCardPage() {
       </div>
     )
   }
-
-  const applicable = card ? card.clauses.length - card.counts.not_applicable : 0
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
@@ -179,7 +177,7 @@ export default function Iso14001ReportCardPage() {
               </p>
               <p className="placard-label mt-1 text-slate-500 dark:text-slate-400">Evidence coverage</p>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {card.counts.conforming} of {applicable} applicable clauses
+                {card.counts.conforming} of {card.clauses.length} clauses
               </p>
             </div>
 
@@ -194,7 +192,8 @@ export default function Iso14001ReportCardPage() {
               <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                 Evidence coverage measures whether records exist and are current <em>in this platform</em>.
                 It is not a statement of conformity — only an accredited certification body determines that.
-                Blocking findings fail an audit regardless of coverage.
+                Blocking findings fail an audit regardless of coverage. A clause marked not assessed has no
+                environmental record in the platform to judge it by yet, so check it against your own records.
               </p>
             </div>
           </div>
@@ -240,7 +239,7 @@ export default function Iso14001ReportCardPage() {
                       {meta.label}
                     </span>
                     <span className="w-20 shrink-0 text-right">
-                      {c.fixHref && c.verdict !== 'conforming' && c.verdict !== 'not_applicable' && (
+                      {c.fixHref && c.verdict !== 'conforming' && (
                         <Link
                           href={c.fixHref}
                           className="inline-flex items-center gap-0.5 text-xs font-semibold text-brand-navy hover:underline dark:text-brand-yellow"

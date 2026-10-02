@@ -33,7 +33,6 @@ vi.mock('@/components/Breadcrumbs', () => ({ Breadcrumbs: () => null }))
 
 function healthy(): ReadinessSignals {
   return {
-    disabledModules: [],
     contextIssuesActive: 8, contextIssuesReviewOverdue: 0, climateIssueRecorded: true,
     interestedPartiesActive: 5, interestedPartiesReviewOverdue: 0,
     scopeOnFile: true, scopeReviewOverdue: false, policySignatoryStale: false,
@@ -46,10 +45,7 @@ function healthy(): ReadinessSignals {
     complianceEvalAgeDays: 50, evaluationsOverdue: 0, obligationsUnscheduled: 0, evaluationsUndetermined: 0,
     significantUnaddressed: 0,
     objectivesActive: 6, objectivesLinked: 6, objectivesWithTargets: 6, objectivesAchieved: 2,
-    trainingRecords: 40, trainingExpired: 0, trainingExpiringSoon: 0,
-    awarenessAgeDays: 45, communicationAgeDays: 45,
-    operationalInspections: 22, operationalOverdue: 0,
-    emergencyDrillAgeDays: 120, objectivesStaleReadings: 0,
+    objectivesStaleReadings: 0,
     auditProgrammeLive: true, lastAuditAgeDays: 90, auditClausesUncovered: 0,
     lastReviewAgeDays: 120, lastReviewHasOutputs: true,
     nonconformityRegisterLive: true, openMajorNonconformities: 0, overdueActions: 0,
@@ -63,9 +59,21 @@ describe('ISO 14001 report card page', () => {
   it('leads with the readiness band, not the percentage', async () => {
     render(<Iso14001ReportCardPage />)
     await waitFor(() => {
-      expect(screen.getByText('Ready for a certification audit')).toBeInTheDocument()
+      expect(screen.getByText('Ready with gaps')).toBeInTheDocument()
     })
-    expect(screen.getByText('100%')).toBeInTheDocument()
+    expect(screen.getByText('76%')).toBeInTheDocument()
+    expect(screen.getByText('16 of 21 clauses')).toBeInTheDocument()
+  })
+
+  it('never shows Ready while clauses are not assessed, and names them instead', async () => {
+    // Every clause the platform can see is green. Clauses 7.2 to 8.2 have no
+    // environmental source yet, so the card must not call the system ready.
+    render(<Iso14001ReportCardPage />)
+    await waitFor(() => expect(screen.getByText('Ready with gaps')).toBeInTheDocument())
+    expect(screen.queryByText('Ready for a certification audit')).toBeNull()
+    expect(screen.getByText(/Check 7\.2, 7\.3, 7\.4, 8\.1, 8\.2 against your own records/)).toBeInTheDocument()
+    expect(screen.getAllByText('Not assessed')).toHaveLength(5)
+    expect(screen.queryAllByRole('link', { name: /Fix/ })).toEqual([])
   })
 
   it('says Not ready when a major is open, however high coverage is', async () => {

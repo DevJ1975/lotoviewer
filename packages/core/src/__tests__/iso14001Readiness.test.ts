@@ -13,8 +13,6 @@ import { ISO14001_CLAUSE_MAP } from '../iso14001'
 // here and breaks exactly one thing, so a failure names its own cause.
 function healthy(): ReadinessSignals {
   return {
-    disabledModules: [],
-
     contextIssuesActive:        8,
     contextIssuesReviewOverdue: 0,
     climateIssueRecorded:       true,
@@ -47,14 +45,6 @@ function healthy(): ReadinessSignals {
     objectivesLinked:      6,
     objectivesWithTargets: 6,
     objectivesAchieved:    2,
-    trainingRecords:       40,
-    trainingExpired:       0,
-    trainingExpiringSoon:  0,
-    awarenessAgeDays:      45,
-    communicationAgeDays:  45,
-    operationalInspections: 22,
-    operationalOverdue:     0,
-    emergencyDrillAgeDays: 120,
     objectivesStaleReadings: 0,
     auditProgrammeLive:    true,
     lastAuditAgeDays:      90,
@@ -91,14 +81,49 @@ describe('assessIso14001 — contract with the clause map', () => {
   })
 })
 
+// The clauses with no environmental source in the platform yet.
+const NOT_ASSESSED = ['7.2', '7.3', '7.4', '8.1', '8.2']
+
 describe('assessIso14001 — a fully evidenced EMS', () => {
-  it('reports every clause conforming at 100% coverage', () => {
+  it('reports every clause it can assess as conforming, and the rest as not assessed', () => {
     const card = assessIso14001(healthy())
     const notConforming = card.clauses.filter(c => c.verdict !== 'conforming')
-    expect(notConforming.map(c => `${c.code}: ${c.reason}`)).toEqual([])
-    expect(card.coverage).toBe(100)
-    expect(card.band).toBe('ready')
+    expect(notConforming.map(c => `${c.code}: ${c.verdict}`))
+      .toEqual(NOT_ASSESSED.map(code => `${code}: not_assessed`))
     expect(card.blockers).toEqual([])
+  })
+
+  it('stops short of Ready while any clause is not assessed, and names them', () => {
+    const card = assessIso14001(healthy())
+    expect(card.band).toBe('ready_with_gaps')
+    expect(card.headline).toBe(
+      'Every clause the platform can assess has current evidence. '
+      + 'Check 7.2, 7.3, 7.4, 8.1, 8.2 against your own records before an audit.',
+    )
+  })
+
+  it('keeps not-assessed clauses in the coverage denominator', () => {
+    const card = assessIso14001(healthy())
+    const assessable = ISO14001_CLAUSE_MAP.length - NOT_ASSESSED.length
+    expect(card.coverage).toBe(Math.round((assessable / ISO14001_CLAUSE_MAP.length) * 100))
+  })
+})
+
+describe('assessIso14001 — clauses with no environmental source', () => {
+  // MJ-1 of the Phase 1 audit: these clauses used to read LOTO training,
+  // toolbox talks, Prop 65 notices and any inspection. Safety records are
+  // not environmental evidence, so the card must not grade from them.
+  it.each(NOT_ASSESSED)('grades %s not assessed, never blocking, with no fix link', code => {
+    const clause = assessIso14001(healthy()).clauses.find(c => c.code === code)!
+    expect(clause.verdict).toBe('not_assessed')
+    expect(clause.blocking).toBe(false)
+    expect(clause.fixHref).toBeNull()
+    expect(clause.reason).toMatch(/^Not assessed: the platform/)
+  })
+
+  it('says why safety training does not count for competence', () => {
+    const competence = assessIso14001(healthy()).clauses.find(c => c.code === '7.2')!
+    expect(competence.reason).toContain('safety training is not evidence')
   })
 })
 
@@ -127,14 +152,8 @@ describe('assessIso14001 — per-clause verdicts', () => {
     ['6.1.4', 'attention', { significantUnaddressed: 1 },                 'unaddressed significant aspect'],
     ['6.2.1', 'gap',       { objectivesActive: 0 },                       'no objectives'],
     ['6.2.1', 'attention', { objectivesWithTargets: 4 },                  'objectives without targets'],
-    ['7.2',   'gap',       { trainingRecords: 0 },                        'no training records'],
-    ['7.2',   'attention', { trainingExpired: 2 },                        'expired training'],
-    ['7.3',   'gap',       { awarenessAgeDays: null },                    'awareness never communicated'],
-    ['7.4',   'attention', { communicationAgeDays: 400 },                 'stale communication'],
     ['7.5',   'gap',       { requiredDocsMissing: 1 },                    'required document absent'],
     ['7.5',   'attention', { docsReviewOverdue: 2 },                      'documents past review'],
-    ['8.1',   'gap',       { operationalInspections: 0 },                 'no operational checks'],
-    ['8.2',   'attention', { emergencyDrillAgeDays: 400 },                'stale emergency drill'],
     ['9.1.1', 'attention', { objectivesStaleReadings: 1 },                'stale objective reading'],
     ['9.1.2', 'gap',       { complianceEvalAgeDays: null },               'never evaluated compliance'],
     ['9.1.2', 'attention', { evaluationsOverdue: 2 },                     'evaluations past due'],
@@ -160,23 +179,6 @@ describe('assessIso14001 — per-clause verdicts', () => {
   })
 })
 
-describe('assessIso14001 — not_applicable', () => {
-  it('excludes a clause whose contributing module is off', () => {
-    const card = assessIso14001({ ...healthy(), disabledModules: ['loto'], trainingRecords: 0 })
-    const competence = card.clauses.find(c => c.code === '7.2')!
-    expect(competence.verdict).toBe('not_applicable')
-    // The whole point: a module the tenant never bought must not drag
-    // the score down, so it leaves the denominator entirely.
-    expect(card.coverage).toBe(100)
-    expect(card.counts.not_applicable).toBe(1)
-  })
-
-  it('does not count a disabled module as conforming either', () => {
-    const card = assessIso14001({ ...healthy(), disabledModules: ['loto'] })
-    expect(card.counts.conforming).toBe(ISO14001_CLAUSE_MAP.length - 1)
-  })
-})
-
 describe('assessIso14001 — blocking findings', () => {
   it('marks a gap on a core clause as blocking', () => {
     const card = assessIso14001({ ...healthy(), aspectsTotal: 0, aspectsSignificant: 0 })
@@ -186,9 +188,10 @@ describe('assessIso14001 — blocking findings', () => {
   })
 
   it('does not mark a gap on a non-core clause as blocking', () => {
-    const card = assessIso14001({ ...healthy(), awarenessAgeDays: null })
-    expect(card.clauses.find(c => c.code === '7.3')!.blocking).toBe(false)
+    const card = assessIso14001({ ...healthy(), objectivesActive: 0 })
+    expect(card.clauses.find(c => c.code === '6.2.1')!.blocking).toBe(false)
     expect(card.band).toBe('ready_with_gaps')
+    expect(card.headline).toBe('Evidence is in place, with clauses needing attention before an audit.')
   })
 
   it('every CORE_CLAUSES code exists in the clause map', () => {
@@ -196,11 +199,11 @@ describe('assessIso14001 — blocking findings', () => {
     expect(CORE_CLAUSES.filter(c => !mapped.has(c))).toEqual([])
   })
 
-  it('an open major forces not_ready even at high coverage', () => {
-    // This is the auditor's objection made executable: everything else
-    // is green, coverage is high, and the verdict is still Not ready.
+  it('an open major forces not_ready even when everything else is green', () => {
+    // This is the auditor's objection made executable: every other clause
+    // the platform can assess conforms, and the verdict is still Not ready.
     const card = assessIso14001({ ...healthy(), openMajorNonconformities: 1 })
-    expect(card.coverage).toBeGreaterThanOrEqual(90)
+    expect(card.counts.conforming).toBe(assessIso14001(healthy()).counts.conforming - 1)
     expect(card.band).toBe('not_ready')
     expect(card.headline).toContain('open major')
   })
@@ -214,17 +217,15 @@ describe('assessIso14001 — blocking findings', () => {
 })
 
 describe('assessIso14001 — coverage arithmetic', () => {
-  it('rounds coverage to a whole percent of applicable clauses', () => {
-    const card = assessIso14001({ ...healthy(), awarenessAgeDays: null, communicationAgeDays: null })
-    const applicable = card.clauses.length - card.counts.not_applicable
-    expect(card.coverage).toBe(Math.round((card.counts.conforming / applicable) * 100))
-    expect(card.coverage).toBeLessThan(100)
+  it('rounds coverage to a whole percent of every clause', () => {
+    const card = assessIso14001({ ...healthy(), objectivesActive: 0 })
+    expect(card.coverage).toBe(Math.round((card.counts.conforming / card.clauses.length) * 100))
   })
 
   it('counts sum to the number of clauses assessed', () => {
-    const card = assessIso14001({ ...healthy(), disabledModules: ['loto'] })
+    const card = assessIso14001({ ...healthy(), contextIssuesActive: 0, obligationsOverdue: 1 })
     const total = card.counts.conforming + card.counts.attention
-      + card.counts.gap + card.counts.not_applicable
+      + card.counts.gap + card.counts.not_assessed
     expect(total).toBe(card.clauses.length)
   })
 })
@@ -258,7 +259,7 @@ describe('assessIso14001 — phase-3/4 tables absent', () => {
   it('still gives every other clause a working fix link', () => {
     const card = assessIso14001(preRelease)
     const broken = card.clauses
-      .filter(c => c.verdict !== 'conforming' && c.verdict !== 'not_applicable')
+      .filter(c => c.verdict !== 'conforming' && c.verdict !== 'not_assessed')
       .filter(c => !['7.5', '9.2'].includes(c.code))
       .filter(c => c.fixHref === null)
     expect(broken.map(c => c.code)).toEqual([])
@@ -308,11 +309,6 @@ describe('assessIso14001 — the WLS demo seed story', () => {
     // Management review four months ago, with recorded outputs.
     lastReviewAgeDays:    120,
     lastReviewHasOutputs: true,
-    // Nothing in the platform stores an emergency drill or test, so the
-    // fetcher reports null and 8.2 reads as a gap. Mirrored here rather
-    // than inherited from healthy(), which would let the test claim a
-    // record the demo cannot actually produce.
-    emergencyDrillAgeDays: null,
   }
 
   const verdicts = () => {
@@ -337,17 +333,18 @@ describe('assessIso14001 — the WLS demo seed story', () => {
       '9.1.2': 'gap',          // no compliance evaluation on record
       '7.5':   'gap',          // no documents register yet (phase 3)
       '9.2':   'gap',          // no audit programme yet (phase 4)
+      '7.2':   'not_assessed', // no environmental source yet, whatever
+      '7.3':   'not_assessed', // the tenant's safety modules hold
+      '7.4':   'not_assessed',
+      '8.1':   'not_assessed',
+      '8.2':   'not_assessed',
     })
   })
 
-  it('lands on Not ready, driven by the open major rather than coverage', () => {
+  it('lands on Not ready, with the open major named first', () => {
     const card = assessIso14001(demo)
     expect(card.band).toBe('not_ready')
     expect(card.headline).toContain('1 open major nonconformity')
-    // Coverage is respectable — which is exactly why it must not be the
-    // headline. A demo that showed "68%" and nothing else would teach
-    // the buyer the wrong thing about how audits work.
-    expect(card.coverage).toBeGreaterThan(30)
   })
 
   it('shows every verdict type, so the demo exercises the whole UI', () => {
@@ -355,6 +352,7 @@ describe('assessIso14001 — the WLS demo seed story', () => {
     expect(card.counts.conforming).toBeGreaterThan(0)
     expect(card.counts.attention).toBeGreaterThan(0)
     expect(card.counts.gap).toBeGreaterThan(0)
+    expect(card.counts.not_assessed).toBeGreaterThan(0)
   })
 
   it('produces the headline migration 256 documents', () => {

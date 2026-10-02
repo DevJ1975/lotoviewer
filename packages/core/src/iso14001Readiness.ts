@@ -26,8 +26,10 @@ export type ClauseVerdict =
   | 'attention'
   /** No evidence at all — an auditor would raise a finding. */
   | 'gap'
-  /** No module that feeds this clause is enabled for the tenant. */
-  | 'not_applicable'
+  /** The platform holds no environmental record this clause can be judged
+   *  from yet. Neither conforming nor a gap: the evidence may well exist
+   *  outside the platform, and the card must not guess either way. */
+  | 'not_assessed'
 
 export interface ClauseAssessment {
   code:     string
@@ -46,7 +48,9 @@ export type ReadinessBand = 'ready' | 'ready_with_gaps' | 'not_ready'
 
 export interface Iso14001ReportCard {
   clauses:  readonly ClauseAssessment[]
-  /** Share of applicable clauses that are conforming, 0-100 integer.
+  /** Share of clauses that are conforming, 0-100 integer. A clause the
+   *  platform cannot assess stays in the denominator: coverage is what the
+   *  platform can evidence, so it never rises by leaving a clause out.
    *  Labelled "evidence coverage" in every surface — never "compliant". */
   coverage: number
   counts:   Record<ClauseVerdict, number>
@@ -68,8 +72,6 @@ export const READINESS_WINDOWS = {
   annualReviewDays:    365,
   /** §9.1.1 — a monitored objective needs a reasonably recent reading. */
   objectiveReadingDays: 90,
-  /** §7.2 — competence expiring inside this window is a warning. */
-  trainingExpiryWarnDays: 30,
 } as const
 
 // A gap on one of these is enough to fail an audit on its own: they are
@@ -95,9 +97,6 @@ export interface Recency {
 }
 
 export interface ReadinessSignals {
-  /** Module ids the tenant has switched off. Drives `not_applicable`. */
-  disabledModules: readonly string[]
-
   // 4.1 Context (the context register)
   contextIssuesActive:        number
   contextIssuesReviewOverdue: number
@@ -150,18 +149,6 @@ export interface ReadinessSignals {
   objectivesLinked:      number
   objectivesWithTargets: number
   objectivesAchieved:    number
-  // 7.2 / 7.3 Competence & awareness
-  trainingRecords:       number
-  trainingExpired:       number
-  trainingExpiringSoon:  number
-  awarenessAgeDays:      number | null
-  // 7.4 Communication
-  communicationAgeDays:  number | null
-  // 8.1 Operational control
-  operationalInspections: number
-  operationalOverdue:     number
-  // 8.2 Emergency preparedness
-  emergencyDrillAgeDays: number | null
   // 9.1.1 Monitoring
   objectivesStaleReadings: number
   // 9.2 Internal audit (phase 4 tables)
@@ -226,7 +213,6 @@ function firstMatch(
 // ─── The assessment ────────────────────────────────────────────────────────
 
 export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
-  const off = (moduleId: string) => s.disabledModules.includes(moduleId)
   const out: ClauseAssessment[] = []
 
   const push = (
@@ -316,28 +302,20 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
       `${count(s.objectivesActive - s.objectivesLinked, 'objective is', 'objectives are')} not linked to a significant aspect.`],
   ], ['conforming', `${s.objectivesActive} measurable objectives, each tied to a significant aspect.`])
 
-  // 7.2 — Competence.
-  push('7.2', '/admin/people/training-competency-matrix', [
-    [off('loto'), 'not_applicable', 'No module contributing competence records is enabled.'],
-    [s.trainingRecords === 0, 'gap', 'No training records on file.'],
-    [s.trainingExpired > 0, 'attention', `${count(s.trainingExpired, 'required training record has', 'required training records have')} expired.`],
-    [s.trainingExpiringSoon > 0, 'attention',
-      `${count(s.trainingExpiringSoon, 'training record expires', 'training records expire')} within ${READINESS_WINDOWS.trainingExpiryWarnDays} days.`],
-  ], ['conforming', 'Required competence records are current.'])
-
-  // 7.3 — Awareness.
-  push('7.3', '/toolbox-talks', [
-    [s.awarenessAgeDays === null, 'gap', 'No record of EMS awareness being communicated to workers.'],
-    [older(s.awarenessAgeDays, READINESS_WINDOWS.annualReviewDays), 'attention',
-      'EMS awareness has not been communicated in over a year.'],
-  ], ['conforming', 'EMS awareness communicated within the last year.'])
-
-  // 7.4 — Communication.
-  push('7.4', '/safety-boards', [
-    [s.communicationAgeDays === null, 'gap', 'No internal or external environmental communication recorded.'],
-    [older(s.communicationAgeDays, READINESS_WINDOWS.annualReviewDays), 'attention',
-      'No environmental communication recorded in over a year.'],
-  ], ['conforming', 'Environmental communication recorded within the last year.'])
+  // 7.2 to 7.4 — no environmental source yet. LOTO training, toolbox
+  // talks and Prop 65 notices are safety and right-to-know records: grading
+  // these clauses from them showed conformity an auditor would reject, and
+  // their absence showed gaps that may not exist. Phase 6 brings the
+  // environmental training matrix and communications log.
+  out.push(assess('7.2', 'not_assessed',
+    'Not assessed: the platform holds no environmental competence records yet, and safety training is not evidence for this clause.',
+    null))
+  out.push(assess('7.3', 'not_assessed',
+    'Not assessed: the platform does not yet record whether workers know the policy and the significant aspects of their work.',
+    null))
+  out.push(assess('7.4', 'not_assessed',
+    'Not assessed: the platform does not yet keep a log of internal and external environmental communication.',
+    null))
 
   // 7.5 — Documented information. Register arrives in phase 3.
   push('7.5', s.documentsRegisterLive ? '/documents' : null, [
@@ -349,18 +327,15 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
       `${count(s.docsReviewOverdue, 'controlled document is past its', 'controlled documents are past their')} review date.`],
   ], ['conforming', 'Every required document is approved and within its review cycle.'])
 
-  // 8.1 — Operational planning and control.
-  push('8.1', '/inspections', [
-    [s.operationalInspections === 0, 'gap', 'No operational control checks have been carried out.'],
-    [s.operationalOverdue > 0, 'attention', `${count(s.operationalOverdue, 'operational check is', 'operational checks are')} overdue.`],
-  ], ['conforming', `${s.operationalInspections} operational control checks completed on cadence.`])
-
-  // 8.2 — Emergency preparedness and response.
-  push('8.2', '/incidents', [
-    [s.emergencyDrillAgeDays === null, 'gap', 'No emergency preparedness drill or test on record.'],
-    [older(s.emergencyDrillAgeDays, READINESS_WINDOWS.annualReviewDays), 'attention',
-      'No emergency preparedness drill or test in over a year.'],
-  ], ['conforming', 'Emergency preparedness tested within the last year.'])
+  // 8.1 and 8.2 — likewise. An inspection says nothing about which aspect
+  // or obligation it controls until Phases 2 and 4 tie them together, and
+  // nothing in the platform records an environmental drill yet.
+  out.push(assess('8.1', 'not_assessed',
+    'Not assessed: the platform does not yet tie operational checks to significant aspects or compliance obligations.',
+    null))
+  out.push(assess('8.2', 'not_assessed',
+    'Not assessed: the platform does not yet record environmental emergency drills or tests.',
+    null))
 
   // 9.1.1 — Monitoring, measurement, analysis and evaluation.
   push('9.1.1', '/environmental/objectives', [
@@ -426,14 +401,13 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
 
 function rollUp(clauses: ClauseAssessment[], s: ReadinessSignals): Iso14001ReportCard {
   const counts: Record<ClauseVerdict, number> = {
-    conforming: 0, attention: 0, gap: 0, not_applicable: 0,
+    conforming: 0, attention: 0, gap: 0, not_assessed: 0,
   }
   for (const c of clauses) counts[c.verdict]++
 
-  const applicable = clauses.length - counts.not_applicable
-  const coverage = applicable === 0
+  const coverage = clauses.length === 0
     ? 0
-    : Math.round((counts.conforming / applicable) * 100)
+    : Math.round((counts.conforming / clauses.length) * 100)
 
   // An open major is a blocker in its own right even though 10.2 reads
   // "attention" — the register is working, the finding is not closed.
@@ -441,21 +415,31 @@ function rollUp(clauses: ClauseAssessment[], s: ReadinessSignals): Iso14001Repor
   const blockers = clauses.filter(c => c.blocking)
   const openMajor = s.openMajorNonconformities > 0
 
+  // "Ready" is a claim about every clause, so one the platform cannot see
+  // holds the band at ready-with-gaps however green the rest is.
   const band: ReadinessBand =
     openMajor || blockers.length > 0 ? 'not_ready'
-      : counts.attention > 0 || counts.gap > 0 ? 'ready_with_gaps'
+      : counts.attention > 0 || counts.gap > 0 || counts.not_assessed > 0 ? 'ready_with_gaps'
         : 'ready'
 
-  return { clauses, coverage, counts, blockers, band, headline: headlineFor(band, blockers, s) }
+  return { clauses, coverage, counts, blockers, band, headline: headlineFor(band, clauses, blockers, s) }
 }
 
 function headlineFor(
   band: ReadinessBand,
+  clauses: readonly ClauseAssessment[],
   blockers: readonly ClauseAssessment[],
   s: ReadinessSignals,
 ): string {
-  if (band === 'ready') return 'Every applicable clause has current evidence.'
-  if (band === 'ready_with_gaps') return 'Evidence is in place, with clauses needing attention before an audit.'
+  if (band === 'ready') return 'Every clause has current evidence.'
+  if (band === 'ready_with_gaps') {
+    const unassessed = clauses.filter(c => c.verdict === 'not_assessed').map(c => c.code)
+    const needsWork = clauses.some(c => c.verdict === 'attention' || c.verdict === 'gap')
+    if (!needsWork) {
+      return `Every clause the platform can assess has current evidence. Check ${unassessed.join(', ')} against your own records before an audit.`
+    }
+    return 'Evidence is in place, with clauses needing attention before an audit.'
+  }
 
   const parts: string[] = []
   if (s.openMajorNonconformities > 0) {

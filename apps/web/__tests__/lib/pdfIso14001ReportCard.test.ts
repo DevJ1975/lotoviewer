@@ -10,7 +10,6 @@ import { assessIso14001, type ReadinessSignals } from '@soteria/core/iso14001Rea
 
 function signals(overrides: Partial<ReadinessSignals> = {}): ReadinessSignals {
   return {
-    disabledModules: [],
     contextIssuesActive: 0, contextIssuesReviewOverdue: 0, climateIssueRecorded: false,
     interestedPartiesActive: 0, interestedPartiesReviewOverdue: 0,
     scopeOnFile: false, scopeReviewOverdue: false, policySignatoryStale: false,
@@ -23,10 +22,7 @@ function signals(overrides: Partial<ReadinessSignals> = {}): ReadinessSignals {
     complianceEvalAgeDays: 50, evaluationsOverdue: 0, obligationsUnscheduled: 0, evaluationsUndetermined: 0,
     significantUnaddressed: 1,
     objectivesActive: 6, objectivesLinked: 6, objectivesWithTargets: 6, objectivesAchieved: 1,
-    trainingRecords: 40, trainingExpired: 0, trainingExpiringSoon: 0,
-    awarenessAgeDays: 45, communicationAgeDays: 45,
-    operationalInspections: 22, operationalOverdue: 0,
-    emergencyDrillAgeDays: null, objectivesStaleReadings: 1,
+    objectivesStaleReadings: 1,
     auditProgrammeLive: false, lastAuditAgeDays: null, auditClausesUncovered: 0,
     lastReviewAgeDays: 120, lastReviewHasOutputs: true,
     nonconformityRegisterLive: true, openMajorNonconformities: 1, overdueActions: 2,
@@ -58,9 +54,7 @@ describe('generateIso14001ReportCard', () => {
     // one Letter page; reserveSpace() should add pages.
     const doc = await PDFDocument.load(await render({
       aspectsTotal: 0, aspectsSignificant: 0, obligationsTotal: 0,
-      objectivesActive: 0, trainingRecords: 0, awarenessAgeDays: null,
-      communicationAgeDays: null, operationalInspections: 0,
-      complianceEvalAgeDays: null, risks: { count: 0, ageDays: null },
+      objectivesActive: 0, complianceEvalAgeDays: null, risks: { count: 0, ageDays: null },
       nonconformityRegisterLive: false, improvementsThisPeriod: 0,
       objectivesAchieved: 0,
     }))
@@ -90,12 +84,14 @@ describe('generateIso14001ReportCard', () => {
     const card = assessIso14001(signals({
       documentsRegisterLive: true, policyApproved: true, requiredDocsMissing: 0,
       auditProgrammeLive: true, lastAuditAgeDays: 90, auditClausesUncovered: 0,
-      emergencyDrillAgeDays: 120, openMajorNonconformities: 0, overdueActions: 0,
+      openMajorNonconformities: 0, overdueActions: 0,
       significantUncontrolled: 0, significantUnaddressed: 0,
       obligationsOverdue: 0, objectivesStaleReadings: 0,
       contextIssuesActive: 8, climateIssueRecorded: true, interestedPartiesActive: 5, scopeOnFile: true,
     }))
-    expect(card.band).toBe('ready')
+    // Ready with gaps, not Ready: clauses 7.2 to 8.2 are not assessed.
+    expect(card.band).toBe('ready_with_gaps')
+    expect(card.counts.not_assessed).toBe(5)
     expect(card.blockers).toEqual([])
     const doc = await PDFDocument.load(await generateIso14001ReportCard({
       card, tenantName: 'Acme', generatedAt: GENERATED_AT,

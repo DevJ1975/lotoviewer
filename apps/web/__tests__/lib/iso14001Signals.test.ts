@@ -10,6 +10,7 @@ import { TENANT_A, TENANT_B, resetStore, seed } from '../api/environmental/_emsH
 vi.mock('@/lib/supabase', async () => ({ supabase: (await import('../api/environmental/_emsHarness')).emsClient }))
 
 import { fetchIso14001Signals } from '@/lib/iso14001Signals'
+import { assessIso14001 } from '@soteria/core/iso14001Readiness'
 
 const TODAY = '2026-10-02'
 const PAST = '2026-01-01'
@@ -23,7 +24,7 @@ beforeEach(() => {
 })
 afterEach(() => vi.useRealTimers())
 
-const signals = () => fetchIso14001Signals(TENANT_A, { environmental: true })
+const signals = () => fetchIso14001Signals(TENANT_A)
 
 describe('fetchIso14001Signals — the Phase 1 registers', () => {
   it('reads an empty tenant as nothing recorded', async () => {
@@ -100,6 +101,22 @@ describe('fetchIso14001Signals — the Phase 1 registers', () => {
     expect(await signals()).toMatchObject({
       obligationsTotal: 2, obligationsOverdue: 1, obligationsReviewOverdue: 1,
       complianceEvalAgeDays: 10, evaluationsOverdue: 1, obligationsUnscheduled: 1, evaluationsUndetermined: 1,
+    })
+  })
+})
+
+describe('fetchIso14001Signals — safety records are not environmental evidence', () => {
+  it('leaves 7.2 to 8.2 not assessed however many safety records the tenant keeps', async () => {
+    // MJ-1 of the Phase 1 audit: these clauses once graded from exactly these tables.
+    seed('loto_training_records', [{ tenant_id: TENANT_A, expires_at: FUTURE }])
+    seed('toolbox_talks', [{ tenant_id: TENANT_A, talk_date: '2026-09-30' }])
+    seed('prop65_notifications', [{ tenant_id: TENANT_A, notified_at: '2026-09-30T00:00:00Z' }])
+    seed('inspections', [{ id: 'i1', tenant_id: TENANT_A, status: 'submitted', submitted_at: '2026-09-30T00:00:00Z' }])
+
+    const card = assessIso14001(await signals())
+    const verdicts = Object.fromEntries(card.clauses.map(c => [c.code, c.verdict]))
+    expect(verdicts).toMatchObject({
+      '7.2': 'not_assessed', '7.3': 'not_assessed', '7.4': 'not_assessed', '8.1': 'not_assessed', '8.2': 'not_assessed',
     })
   })
 })

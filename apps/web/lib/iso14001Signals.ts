@@ -1,5 +1,4 @@
 import { supabase } from '@/lib/supabase'
-import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { reviewHasOutputs } from '@soteria/core/managementReview'
 import { policyIsComplete, policySignatoryStale, registerDisciplines } from '@soteria/core/managementSystem'
 import {
@@ -23,13 +22,12 @@ import {
 //
 // The context, scope and policy, aspect and obligation clauses read the
 // Phase 1 registers (migrations 295-299); environmental registers count
-// environmental and integrated rows, never OH&S-only ones.
+// environmental and integrated rows, never OH&S-only ones. Clauses 7.2 to
+// 8.2 read nothing: the readiness module grades them not assessed until an
+// environmental source exists, rather than from safety records.
 
 const DOCUMENTS_REGISTER_LIVE = false  // flip when controlled_documents ships
 const AUDIT_PROGRAMME_LIVE    = false  // flip when internal_audits ships
-
-/** Modules whose absence makes a clause not-applicable rather than a gap. */
-const CLAUSE_MODULE_DEPENDENCIES = ['loto'] as const
 
 function daysSince(iso: string | null | undefined): number | null {
   if (!iso) return null
@@ -53,10 +51,7 @@ function countRows(res: { count: number | null }): number {
   return res.count ?? 0
 }
 
-export async function fetchIso14001Signals(
-  tenantId: string,
-  tenantModules: Record<string, boolean> | null | undefined,
-): Promise<ReadinessSignals> {
+export async function fetchIso14001Signals(tenantId: string): Promise<ReadinessSignals> {
   const t = (table: string) => supabase.from(table).select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId)
   const ems = registerDisciplines('ems')
   const activeIssues = () => t('ms_context_issues').in('discipline', ems).is('retired_at', null)
@@ -74,11 +69,8 @@ export async function fetchIso14001Signals(
     aspects, objectives, objectiveReadings,
     obligations, obligationsOverdue, obligationsReviewOverdue,
     lastEvaluation, evaluationsOverdue, obligationsUnscheduled, evaluationsUndetermined,
-    training,
     reviews,
     nonconformities, ncActions,
-    inspections,
-    toolboxTalks, prop65Notifications,
   ] = await Promise.all([
     activeIssues(),
     activeIssues().lt('next_review_due', today),
@@ -112,7 +104,6 @@ export async function fetchIso14001Signals(
     t('ms_compliance_evaluations').in('discipline', ems).is('completed_at', null).lt('scheduled_for', today),
     registerObligations().is('evaluation_cadence_days', null),
     t('ms_obligation_register').in('discipline', ems).neq('status', 'dismissed').eq('last_result', 'undetermined'),
-    supabase.from('loto_training_records').select('expires_at').eq('tenant_id', tenantId).limit(10_000),
     supabase.from('management_reviews')
       .select('review_date, conclusions, decisions, status')
       .eq('tenant_id', tenantId).eq('status', 'completed')
@@ -122,14 +113,6 @@ export async function fetchIso14001Signals(
     supabase.from('nonconformity_actions')
       .select('id, nonconformity_id, status, due_at, verified_effective_at')
       .eq('tenant_id', tenantId).limit(10_000),
-    supabase.from('inspections')
-      .select('id, status, due_at, submitted_at').eq('tenant_id', tenantId).limit(5000),
-    supabase.from('toolbox_talks')
-      .select('talk_date').eq('tenant_id', tenantId)
-      .order('talk_date', { ascending: false }).limit(1),
-    supabase.from('prop65_notifications')
-      .select('notified_at').eq('tenant_id', tenantId)
-      .order('notified_at', { ascending: false }).limit(1),
   ])
 
   const aspectRows    = aspects.data ?? []
@@ -137,7 +120,6 @@ export async function fetchIso14001Signals(
   const readingRows   = objectiveReadings.data ?? []
   const ncRows        = nonconformities.data ?? []
   const actionRows    = ncActions.data ?? []
-  const inspectionRows = inspections.data ?? []
   const riskRows      = risks.data ?? []
 
   const significant = aspectRows.filter(a => a.significant)
@@ -169,17 +151,8 @@ export async function fetchIso14001Signals(
   )
 
   const lastReview = (reviews.data ?? [])[0] ?? null
-  const trainingRows = training.data ?? []
-  const warnCutoffMs = Date.now() + READINESS_WINDOWS.trainingExpiryWarnDays * 86_400_000
-
-  // A clause is not-applicable when nothing feeds it — the tenant never
-  // bought the module, so scoring them down would be dishonest.
-  const disabledModules = CLAUSE_MODULE_DEPENDENCIES
-    .filter(id => !isModuleVisible(id, tenantModules))
 
   return {
-    disabledModules,
-
     contextIssuesActive:            countRows(contextIssues),
     contextIssuesReviewOverdue:     countRows(contextIssuesOverdue),
     climateIssueRecorded:           countRows(climateIssues) > 0,
@@ -229,29 +202,6 @@ export async function fetchIso14001Signals(
     objectivesLinked:      objectivesActive.filter(o => o.related_aspect_id).length,
     objectivesWithTargets: objectivesActive.filter(o => o.target_value !== null && o.target_date).length,
     objectivesAchieved:    objectiveRows.filter(o => o.status === 'achieved').length,
-
-    trainingRecords:      trainingRows.length,
-    trainingExpired:      trainingRows.filter(r => r.expires_at && Date.parse(r.expires_at) < Date.now()).length,
-    trainingExpiringSoon: trainingRows.filter(r =>
-      r.expires_at
-      && Date.parse(r.expires_at) >= Date.now()
-      && Date.parse(r.expires_at) < warnCutoffMs,
-    ).length,
-
-    // No EMS-specific awareness or communication record exists yet, so
-    // these read the nearest true artifacts: a delivered toolbox talk is
-    // awareness, a worker notification is communication. Both overstate
-    // slightly — neither is guaranteed to be *environmental* — which is
-    // what clause pinning (phase 5) is for: an auditor confirms the tie.
-    awarenessAgeDays:     newestAgeDays(toolboxTalks.data ?? [], 'talk_date'),
-    communicationAgeDays: newestAgeDays(prop65Notifications.data ?? [], 'notified_at'),
-
-    operationalInspections: inspectionRows.filter(i => i.submitted_at).length,
-    operationalOverdue:     inspectionRows.filter(i =>
-      !i.submitted_at && i.due_at && i.due_at < today,
-    ).length,
-
-    emergencyDrillAgeDays: null,
 
     objectivesStaleReadings: objectivesActive.filter(o =>
       o.status === 'in_progress' && !objectiveIdsWithReading.has(o.id),
