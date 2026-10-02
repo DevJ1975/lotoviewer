@@ -53,8 +53,26 @@ export interface RegisterRow {
  */
 export function registerHealth(rows: readonly RegisterRow[], today: string): RegisterHealth {
   const active = rows.filter(row => row.active)
-  if (active.length === 0) return 'red'
-  return active.some(row => row.nextReviewDue < today) ? 'amber' : 'green'
+  return registerHealthFromCounts({
+    active:        active.length,
+    reviewOverdue: active.filter(row => row.nextReviewDue < today).length,
+  })
+}
+
+/** The facts register health needs, counted by the database rather than read row by row. */
+export interface RegisterCounts {
+  /** Rows not retired. */
+  active:        number
+  /** Active rows past their review date. */
+  reviewOverdue: number
+  /** Other register-specific gaps that make it amber: an unscored aspect, an overdue evaluation, no climate issue. */
+  gaps?:         number
+}
+
+/** registerHealth's rule over counts: red when empty, amber when anything is overdue or missing, else green. */
+export function registerHealthFromCounts(counts: RegisterCounts): RegisterHealth {
+  if (counts.active === 0) return 'red'
+  return counts.reviewOverdue > 0 || (counts.gaps ?? 0) > 0 ? 'amber' : 'green'
 }
 
 // ── Review dates ──────────────────────────────────────────────────────────
@@ -177,9 +195,34 @@ export function contextRegisterHealth(
   rows: readonly (RegisterRow & { kind: ContextIssueKind })[],
   today: string,
 ): RegisterHealth {
-  const health = registerHealth(rows, today)
-  if (health !== 'green') return health
-  return rows.some(row => row.active && row.kind === 'climate') ? 'green' : 'amber'
+  const active = rows.filter(row => row.active)
+  return registerHealthFromCounts({
+    active:        active.length,
+    reviewOverdue: active.filter(row => row.nextReviewDue < today).length,
+    gaps:          active.some(row => row.kind === 'climate') ? 0 : 1,
+  })
+}
+
+export interface ScopeAndPolicyState {
+  /** The current scope's next review date, or null when there is no scope. */
+  scopeNextReviewDue:  string | null
+  /** The current policy's next review date, or null when there is no policy. */
+  policyNextReviewDue: string | null
+  /** policyIsComplete() for the current policy. */
+  policyComplete:      boolean
+  /** policySignatoryStale() for the current policy. */
+  signatoryStale:      boolean
+}
+
+/**
+ * Health of clauses 4.3 and 5.2 together: red until both a scope and a
+ * policy exist; amber while the policy leaves out a required commitment,
+ * carries a prior owner's signature, or either document is past review.
+ */
+export function scopeAndPolicyHealth(state: ScopeAndPolicyState, today: string): RegisterHealth {
+  if (state.scopeNextReviewDue === null || state.policyNextReviewDue === null) return 'red'
+  const reviewOverdue = state.scopeNextReviewDue < today || state.policyNextReviewDue < today
+  return reviewOverdue || !state.policyComplete || state.signatoryStale ? 'amber' : 'green'
 }
 
 // ── Register inputs ──────────────────────────────────────────────────────

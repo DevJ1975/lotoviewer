@@ -11,7 +11,9 @@ import {
   isCalendarDate,
   registerDisciplines,
   registerHealth,
+  registerHealthFromCounts,
   requiredCommitments,
+  scopeAndPolicyHealth,
   validateContextIssueInput,
   validateInterestedPartyInput,
   validatePolicyInput,
@@ -310,5 +312,53 @@ describe('validatePolicyInput', () => {
   it('requires a body, a signatory and a real signing date', () => {
     const errors = validatePolicyInput({ ...valid, body: ' ', signatoryName: '', signedAt: '01/10/2026' })
     expect(fieldsOf(errors)).toEqual(['body', 'signatoryName', 'signedAt'])
+  })
+})
+
+describe('registerHealthFromCounts', () => {
+  it('is red with no active rows, whatever else is counted', () => {
+    expect(registerHealthFromCounts({ active: 0, reviewOverdue: 0 })).toBe('red')
+    expect(registerHealthFromCounts({ active: 0, reviewOverdue: 3, gaps: 2 })).toBe('red')
+  })
+
+  it('is amber when a review is overdue or a register-specific gap is open', () => {
+    expect(registerHealthFromCounts({ active: 4, reviewOverdue: 1 })).toBe('amber')
+    expect(registerHealthFromCounts({ active: 4, reviewOverdue: 0, gaps: 1 })).toBe('amber')
+  })
+
+  it('is green otherwise', () => {
+    expect(registerHealthFromCounts({ active: 4, reviewOverdue: 0 })).toBe('green')
+    expect(registerHealthFromCounts({ active: 4, reviewOverdue: 0, gaps: 0 })).toBe('green')
+  })
+
+  it('agrees with registerHealth on the same rows', () => {
+    const rows = [row('2026-09-30'), row('2026-10-01'), row('2020-01-01', false)]
+    expect(registerHealth(rows, TODAY)).toBe(registerHealthFromCounts({ active: 2, reviewOverdue: 1 }))
+  })
+})
+
+describe('scopeAndPolicyHealth', () => {
+  const healthy = {
+    scopeNextReviewDue: '2027-01-01', policyNextReviewDue: '2027-01-01', policyComplete: true, signatoryStale: false,
+  }
+
+  it('is green with a current scope and a complete, current, validly signed policy', () => {
+    expect(scopeAndPolicyHealth(healthy, TODAY)).toBe('green')
+  })
+
+  it('is red until both documents exist', () => {
+    expect(scopeAndPolicyHealth({ ...healthy, scopeNextReviewDue: null }, TODAY)).toBe('red')
+    expect(scopeAndPolicyHealth({ ...healthy, policyNextReviewDue: null }, TODAY)).toBe('red')
+  })
+
+  it('is amber for an incomplete policy, a prior owner\'s signature, or an overdue review', () => {
+    expect(scopeAndPolicyHealth({ ...healthy, policyComplete: false }, TODAY)).toBe('amber')
+    expect(scopeAndPolicyHealth({ ...healthy, signatoryStale: true }, TODAY)).toBe('amber')
+    expect(scopeAndPolicyHealth({ ...healthy, scopeNextReviewDue: '2026-09-30' }, TODAY)).toBe('amber')
+    expect(scopeAndPolicyHealth({ ...healthy, policyNextReviewDue: '2026-09-30' }, TODAY)).toBe('amber')
+  })
+
+  it('treats a review due today as not yet overdue', () => {
+    expect(scopeAndPolicyHealth({ ...healthy, scopeNextReviewDue: TODAY, policyNextReviewDue: TODAY }, TODAY)).toBe('green')
   })
 })

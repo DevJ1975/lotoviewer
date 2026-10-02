@@ -176,6 +176,9 @@ interface QueryState {
   orders:   { column: string; ascending: boolean }[]
   limit:    number | null
   offset:   number
+  /** select(…, { count: 'exact', head }) */
+  count:    boolean
+  head:     boolean
   columns:  string[] | null
 }
 
@@ -273,7 +276,7 @@ const VIEWS: Partial<Record<string, () => Row[]>> = {
   ms_obligation_register:              obligationRegister,
 }
 
-function run(state: QueryState): { data: unknown; error: DbError | null } {
+function run(state: QueryState): { data: unknown; error: DbError | null; count?: number | null } {
   const hook = hooks.findIndex(h => h.table === state.table && h.mode === state.mode)
   if (hook >= 0) hooks.splice(hook, 1)[0].action()
   const failure = failures.findIndex(f => f.table === state.table && (f.mode === 'any' || f.mode === state.mode))
@@ -321,13 +324,19 @@ function run(state: QueryState): { data: unknown; error: DbError | null } {
   for (const { column, ascending } of [...state.orders].reverse()) {
     result = [...result].sort((a, b) => (ascending ? 1 : -1) * compare(a[column], b[column]))
   }
+  const matched = result.length
   result = result.slice(state.offset, state.limit === null ? undefined : state.offset + state.limit)
-  return { data: result.map(r => project(r, state.columns)), error: null }
+  return {
+    data:  state.head ? null : result.map(r => project(r, state.columns)),
+    error: null,
+    ...(state.count ? { count: matched } : {}),
+  }
 }
 
 function builder(table: string) {
   const state: QueryState = {
     table, mode: 'select', payload: null, filters: [], orders: [], limit: null, offset: 0, columns: null,
+    count: false, head: false,
   }
   const settle = () => run(state)
   const one = (allowNone: boolean) => {
@@ -339,7 +348,12 @@ function builder(table: string) {
     return Promise.resolve({ data: null, error: { code: 'PGRST116', message: `expected one row, got ${rows.length}` } })
   }
   const chain = {
-    select(columns?: string) { state.columns = parseColumns(columns ?? '*'); return chain },
+    select(columns?: string, options: { count?: 'exact'; head?: boolean } = {}) {
+      state.columns = parseColumns(columns ?? '*')
+      state.count = options.count === 'exact'
+      state.head = options.head === true
+      return chain
+    },
     insert(payload: Row | Row[]) { state.mode = 'insert'; state.payload = payload; return chain },
     update(payload: Row) { state.mode = 'update'; state.payload = payload; return chain },
     delete() { state.mode = 'delete'; return chain },
@@ -364,7 +378,7 @@ function builder(table: string) {
     range(from: number, to: number) { state.offset = from; state.limit = to - from + 1; return chain },
     single: () => one(false),
     maybeSingle: () => one(true),
-    then<T>(onFulfilled: (value: { data: unknown; error: DbError | null }) => T, onRejected?: (reason: unknown) => T) {
+    then<T>(onFulfilled: (value: { data: unknown; error: DbError | null; count?: number | null }) => T, onRejected?: (reason: unknown) => T) {
       return Promise.resolve(settle()).then(onFulfilled, onRejected)
     },
   }
