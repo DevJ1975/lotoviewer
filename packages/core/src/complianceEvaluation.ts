@@ -138,7 +138,8 @@ export interface ObligationRegisterInput {
   title:                  string
   sourceKind:             ObligationSourceKind
   citation:               string | null
-  jurisdiction:           string
+  /** Null when no jurisdiction applies: a contract, a voluntary commitment, an internal requirement. */
+  jurisdiction:           string | null
   applicabilityRationale: string | null
   evaluationCadenceDays:  number | null
 }
@@ -156,7 +157,11 @@ export function validateObligationRegisterInput(input: ObligationRegisterInput):
   if (input.citation !== null && input.citation.length > 300) {
     errors.push({ field: 'citation', message: 'must be at most 300 characters' })
   }
-  if (parseJurisdiction(input.jurisdiction) === null) {
+  if (input.jurisdiction === null) {
+    if (input.sourceKind === 'law' || input.sourceKind === 'permit') {
+      errors.push({ field: 'jurisdiction', message: 'is required for a law or a permit' })
+    }
+  } else if (parseJurisdiction(input.jurisdiction) === null) {
     errors.push({ field: 'jurisdiction', message: "must be 'federal', 'state:XX', or 'local:<name>'" })
   }
   if (input.applicabilityRationale !== null && input.applicabilityRationale.length > 4000) {

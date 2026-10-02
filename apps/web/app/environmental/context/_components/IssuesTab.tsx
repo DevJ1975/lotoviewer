@@ -12,7 +12,7 @@ import {
   type ContextIssueRow,
   type FieldError,
 } from '@/lib/environmental/client'
-import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_ERROR, INPUT, LABEL, LABEL_TEXT, errorFor } from '../../_components/formStyles'
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_ERROR, INPUT, LABEL, LABEL_TEXT, errorFor, generalError } from '../../_components/formStyles'
 import { ReasonPrompt } from '../../_components/ReasonPrompt'
 
 // Clause 4.1: the internal and external issues that shape the EMS, and,
@@ -72,11 +72,11 @@ export function IssuesTab({ tenantId, canEdit, onChanged }: { tenantId: string; 
         {canEdit && <button type="button" className={BUTTON_PRIMARY} onClick={() => setEditing('new')}>Record an issue</button>}
       </div>
       {editing && (
-        <IssueForm tenantId={tenantId} initial={editing === 'new' ? null : editing}
+        <IssueForm key={editing === 'new' ? 'new' : editing.id} tenantId={tenantId} initial={editing === 'new' ? null : editing}
           onSaved={() => void changed()} onCancel={() => setEditing(null)} />
       )}
       {retiring && (
-        <ReasonPrompt explanation="A retired issue leaves the active register but stays in its history. Say why it no longer applies."
+        <ReasonPrompt key={retiring.id} explanation="A retired issue leaves the active register but stays in its history. Say why it no longer applies."
           label="Why the issue is retired" placeholder="e.g. Permit requirement withdrawn by the state" confirmLabel="Retire issue"
           onSubmit={async reason => { await updateContextIssue(tenantId, retiring.id, { retired_reason: reason }); await changed() }}
           onCancel={() => setRetiring(null)} />
@@ -190,7 +190,7 @@ function IssueForm({ tenantId, initial, onSaved, onCancel }: {
           <textarea className={INPUT} rows={2} value={relevance} onChange={e => setRelevance(e.target.value)} />
         </label>
       </div>
-      {error && fieldErrors.length === 0 && <p className={FIELD_ERROR} role="alert">{error}</p>}
+      {generalError(error, fieldErrors, ['description']) && <p className={FIELD_ERROR} role="alert">{generalError(error, fieldErrors, ['description'])}</p>}
       <div className="flex justify-end gap-2">
         <button type="button" className={BUTTON_SECONDARY} onClick={onCancel} disabled={saving}>Cancel</button>
         <button type="submit" className={BUTTON_PRIMARY} disabled={saving}>{saving ? 'Saving…' : initial ? 'Save changes' : 'Record issue'}</button>

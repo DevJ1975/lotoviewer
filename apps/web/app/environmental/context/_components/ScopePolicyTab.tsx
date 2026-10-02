@@ -13,7 +13,7 @@ import {
   type PolicyRow,
   type ScopeRow,
 } from '@/lib/environmental/client'
-import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_ERROR, INPUT, LABEL, LABEL_TEXT, errorFor } from '../../_components/formStyles'
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_ERROR, INPUT, LABEL, LABEL_TEXT, errorFor, generalError } from '../../_components/formStyles'
 
 // Clauses 4.3 and 5.2: the EMS scope and the environmental policy. Both are
 // numbered versions that are never edited: a change is a new version, so
@@ -185,7 +185,7 @@ function ScopeForm({ tenantId, current, onSaved, onCancel }: {
         {field('activities', 'Activities')}
         {field('products_services', 'Products and services')}
       </div>
-      {error && fieldErrors.length === 0 && <p className={FIELD_ERROR} role="alert">{error}</p>}
+      {generalError(error, fieldErrors, ['legal_entity', 'physical_boundary', 'activities', 'products_services', 'effective_from']) && <p className={FIELD_ERROR} role="alert">{generalError(error, fieldErrors, ['legal_entity', 'physical_boundary', 'activities', 'products_services', 'effective_from'])}</p>}
       <div className="flex justify-end gap-2">
         <button type="button" className={BUTTON_SECONDARY} onClick={onCancel} disabled={saving}>Cancel</button>
         <button type="submit" className={BUTTON_PRIMARY} disabled={saving}>{saving ? 'Saving…' : 'Save version'}</button>
@@ -251,7 +251,7 @@ function PolicyForm({ tenantId, current, required, onSaved, onCancel }: {
           {errorFor(fieldErrors, 'signed_at') && <p className={FIELD_ERROR}>{errorFor(fieldErrors, 'signed_at')}</p>}
         </label>
       </div>
-      {error && fieldErrors.length === 0 && <p className={FIELD_ERROR} role="alert">{error}</p>}
+      {generalError(error, fieldErrors, ['body', 'signatory_name', 'signed_at']) && <p className={FIELD_ERROR} role="alert">{generalError(error, fieldErrors, ['body', 'signatory_name', 'signed_at'])}</p>}
       <div className="flex justify-end gap-2">
         <button type="button" className={BUTTON_SECONDARY} onClick={onCancel} disabled={saving}>Cancel</button>
         <button type="submit" className={BUTTON_PRIMARY} disabled={saving || !allStated}>{saving ? 'Saving…' : 'Save version'}</button>

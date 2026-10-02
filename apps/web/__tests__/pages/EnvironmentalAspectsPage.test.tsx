@@ -60,8 +60,8 @@ describe('/environmental/aspects', () => {
   it('shows each aspect with its condition coverage and the register\'s health', async () => {
     render(<EnvironmentalAspectsPage />)
     expect(await screen.findByText('Parts degreasing')).toBeInTheDocument()
-    expect(screen.getByLabelText('Normal: score 12, significant')).toBeInTheDocument()
-    expect(screen.getAllByLabelText('Emergency: not scored')).toHaveLength(2)
+    expect(screen.getByText('Normal: score 12, significant')).toBeInTheDocument()
+    expect(screen.getAllByText('Emergency: not scored')).toHaveLength(2)
     expect(screen.getByText('Needs attention')).toBeInTheDocument()
     expect(screen.getByText('not scored').textContent).toBe('1 not scored')
   })

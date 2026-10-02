@@ -77,7 +77,7 @@ function ContextRegisters() {
 
       <div role="tablist" aria-label="Context registers" className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
         {TABS.map(t => (
-          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id}
+          <button key={t.id} type="button" role="tab" id={`context-tab-${t.id}`} aria-selected={tab === t.id} aria-controls="context-tabpanel"
             onClick={() => router.replace(t.id === 'issues' ? '/environmental/context' : `/environmental/context?tab=${t.id}`)}
             className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${tab === t.id
               ? 'border-brand-navy text-brand-navy dark:border-brand-yellow dark:text-brand-yellow'
@@ -88,7 +88,7 @@ function ContextRegisters() {
       </div>
 
       {tenantId && (
-        <div role="tabpanel">
+        <div role="tabpanel" id="context-tabpanel" aria-labelledby={`context-tab-${tab}`}>
           {tab === 'issues' && <IssuesTab tenantId={tenantId} canEdit={canEdit} onChanged={() => void loadHealth()} />}
           {tab === 'parties' && <PartiesTab tenantId={tenantId} canEdit={canEdit} onChanged={() => void loadHealth()} />}
           {tab === 'scope' && <ScopePolicyTab tenantId={tenantId} canEdit={canEdit} onChanged={() => void loadHealth()} />}

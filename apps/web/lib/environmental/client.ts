@@ -160,7 +160,7 @@ export const getObligation = (tenantId: string, id: string) =>
 
 export interface ObligationBody {
   discipline?: 'ems' | 'integrated'; title?: string; description?: string | null; source_kind?: string
-  regulatory_ref?: string | null; jurisdiction?: string; applicability_rationale?: string | null
+  regulatory_ref?: string | null; jurisdiction?: string | null; applicability_rationale?: string | null
   evaluation_cadence_days?: number | null; next_due_at?: string; cadence?: string; cadence_days?: number | null
 }
 

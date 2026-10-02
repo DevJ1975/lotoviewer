@@ -131,6 +131,14 @@ describe('validateObligationRegisterInput', () => {
     expect(fields({ ...valid, jurisdiction: 'Texas' })).toEqual(['jurisdiction'])
   })
 
+  it('requires a jurisdiction for a law or a permit, and lets other sources have none', () => {
+    expect(fields({ ...valid, sourceKind: 'law', jurisdiction: null })).toEqual(['jurisdiction'])
+    expect(fields({ ...valid, sourceKind: 'permit', jurisdiction: null })).toEqual(['jurisdiction'])
+    for (const sourceKind of ['contract', 'voluntary', 'internal'] as const) {
+      expect(fields({ ...valid, sourceKind, jurisdiction: null })).toEqual([])
+    }
+  })
+
   it('bounds the evaluation cadence, and allows none', () => {
     expect(fields({ ...valid, evaluationCadenceDays: null })).toEqual([])
     expect(fields({ ...valid, evaluationCadenceDays: 0 })).toEqual(['evaluationCadenceDays'])

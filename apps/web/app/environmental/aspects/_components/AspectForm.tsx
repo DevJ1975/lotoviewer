@@ -16,7 +16,7 @@ import {
   type AspectRow,
   type FieldError,
 } from '@/lib/environmental/client'
-import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_ERROR, INPUT, LABEL, LABEL_TEXT, errorFor } from '../../_components/formStyles'
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_ERROR, INPUT, LABEL, LABEL_TEXT, errorFor, generalError } from '../../_components/formStyles'
 import { TermTooltip } from '../../_components/TermTooltip'
 
 // Records a new aspect, or edits an existing one's description. Scores are
@@ -151,7 +151,7 @@ export function AspectForm({ tenantId, initial, processAreas, onSaved, onCancel 
           {fieldError('notes')}
         </label>
       </div>
-      {error && fieldErrors.length === 0 && <p className={FIELD_ERROR} role="alert">{error}</p>}
+      {generalError(error, fieldErrors, ['activity', 'process_area', 'aspect', 'impact', 'controls', 'source_reference', 'notes']) && <p className={FIELD_ERROR} role="alert">{generalError(error, fieldErrors, ['activity', 'process_area', 'aspect', 'impact', 'controls', 'source_reference', 'notes'])}</p>}
       <div className="flex justify-end gap-2">
         <button type="button" className={BUTTON_SECONDARY} onClick={onCancel} disabled={saving}>Cancel</button>
         <button type="submit" className={BUTTON_PRIMARY} disabled={saving}>

@@ -20,7 +20,7 @@ describe('parseAspectCsv', () => {
     expect(parseAspectCsv('activity,aspect,impact\nWelding,Fume,Air\n').headerError).toBe('Missing required column: process_area')
   })
 
-  it('tolerates header case and punctuation, and defaults the optional fields', () => {
+  it('tolerates header case and spacing, and defaults the optional fields', () => {
     const { rows } = parseAspectCsv('Activity,Aspect,Impact,Process Area\nBoiler firing,Combustion gases,Air quality,Utilities\n')
     expect(rows[0]).toMatchObject({
       status: 'valid', score: null,
@@ -36,7 +36,7 @@ describe('parseAspectCsv', () => {
     expect(rows[0].status).toBe('invalid')
     expect(rows[0].errors).toEqual(expect.arrayContaining([
       'activity is required', 'flow must be input, output, or empty',
-      'operatingCondition must be normal, abnormal, or emergency', 'severity must be a whole number from 1 to 5',
+      'operating_condition must be normal, abnormal, or emergency', 'severity must be a whole number from 1 to 5',
       'rationale is required: say why this score',
     ]))
     expect(rows[1].status).toBe('valid')
@@ -46,6 +46,18 @@ describe('parseAspectCsv', () => {
     const csv = 'activity,aspect,impact,process_area,operating_condition,severity,likelihood,rationale\n'
       + 'Washing,Wash water,Water,Yard,normal,2.5,3,Weekly\n'
     expect(parseAspectCsv(csv).rows[0].errors).toContain('severity must be a whole number from 1 to 5')
+  })
+
+  it('names a header it does not recognise instead of silently dropping its cells', () => {
+    const csv = 'activity,aspect,impact,process_area,Life-cycle stage\nWelding,Fume,Air,Fabrication,transport\n'
+    const { rows, ignoredColumns } = parseAspectCsv(csv)
+    expect(ignoredColumns).toEqual(['Life-cycle stage'])
+    expect(rows[0].aspect.lifeCycleStage).toBe('operation')
+  })
+
+  it('names a missing value by its column, as the CSV user knows it', () => {
+    expect(parseAspectCsv('activity,aspect,impact,process_area\nWelding,Fume,Air,\n').rows[0].errors)
+      .toContain('process_area is required')
   })
 
   it('reports an empty file', () => {

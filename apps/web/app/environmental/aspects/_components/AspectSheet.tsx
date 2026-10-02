@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import {
   ASPECT_OPERATING_CONDITIONS,
@@ -22,7 +22,7 @@ import {
   type ObligationRow,
   type ScoreHistoryRow,
 } from '@/lib/environmental/client'
-import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_ERROR, INPUT, LABEL, LABEL_TEXT, errorFor } from '../../_components/formStyles'
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_ERROR, INPUT, LABEL, LABEL_TEXT, errorFor, generalError } from '../../_components/formStyles'
 import { ReasonPrompt } from '../../_components/ReasonPrompt'
 import { TermTooltip } from '../../_components/TermTooltip'
 import { AspectForm } from './AspectForm'
@@ -51,20 +51,26 @@ export function AspectSheet({ tenantId, aspectId, canEdit, processAreas, onChang
   const [loadError, setLoadError] = useState<string | null>(null)
   const [mode, setMode] = useState<'view' | 'edit' | 'links' | 'obsolete'>('view')
 
+  // A slow answer for an aspect the user has since moved away from must not
+  // replace the one now open: only the newest request's answer is shown.
+  const latestRequest = useRef(0)
+
   const load = useCallback(async () => {
     if (!aspectId) return
+    const request = ++latestRequest.current
     setLoadError(null)
     try {
       const [detail, register] = await Promise.all([
         getAspect(tenantId, aspectId),
         listObligations(tenantId, { status: 'all' }),
       ])
+      if (request !== latestRequest.current) return
       setAspect(detail.aspect)
       setHistory(detail.history)
       setLinkedIds(detail.obligationIds)
       setObligations(register.obligations)
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Could not load the aspect.')
+      if (request === latestRequest.current) setLoadError(err instanceof Error ? err.message : 'Could not load the aspect.')
     }
   }, [tenantId, aspectId])
 
@@ -155,7 +161,7 @@ export function AspectSheet({ tenantId, aspectId, canEdit, processAreas, onChang
           </section>
 
           {mode === 'obsolete' && (
-            <ReasonPrompt
+            <ReasonPrompt key={aspect.id}
               explanation="An obsolete aspect leaves the active register but keeps its scores and history. Say why it no longer applies."
               label="Why the aspect is obsolete" placeholder="e.g. Degreasing line removed in March" confirmLabel="Mark obsolete"
               onSubmit={async reason => { await obsoleteAspect(tenantId, aspect.id, reason); await changed() }}
@@ -258,7 +264,7 @@ function ScoreForm({ tenantId, aspectId, onScored }: { tenantId: string; aspectI
           placeholder="What you saw, and what would happen" />
         {errorFor(fieldErrors, 'rationale') && <p className={FIELD_ERROR}>{errorFor(fieldErrors, 'rationale')}</p>}
       </label>
-      {error && fieldErrors.length === 0 && <p className={FIELD_ERROR} role="alert">{error}</p>}
+      {generalError(error, fieldErrors, ['rationale']) && <p className={FIELD_ERROR} role="alert">{generalError(error, fieldErrors, ['rationale'])}</p>}
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-slate-500">
           Score {preview.score}{preview.significant ? ', significant' : ''} under the default rule (5 × 5, significant at 12)

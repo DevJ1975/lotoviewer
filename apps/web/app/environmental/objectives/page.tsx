@@ -49,6 +49,7 @@ interface AspectOption {
   aspect:      string
   /** Significant under any operating condition (environmental_aspect_register). */
   significant: boolean
+  obsolete_at: string | null
 }
 
 const STATUS_BADGE: Record<ObjectiveStatus, string> = {
@@ -113,9 +114,9 @@ export default function EnvironmentalObjectivesPage() {
           .limit(5000),
         supabase
           .from('environmental_aspect_register')
-          .select('id, activity, aspect, significant')
+          // Obsolete aspects too, so an objective linked to one keeps its label.
+          .select('id, activity, aspect, significant, obsolete_at')
           .eq('tenant_id', tenantId)
-          .is('obsolete_at', null)
           .order('max_score', { ascending: false, nullsFirst: false })
           .limit(1000),
       ])
@@ -143,7 +144,7 @@ export default function EnvironmentalObjectivesPage() {
 
   const aspectLabel = useMemo(() => {
     const m = new Map<string, string>()
-    for (const a of aspects) m.set(a.id, `${a.activity} — ${a.aspect}`)
+    for (const a of aspects) m.set(a.id, `${a.activity} — ${a.aspect}${a.obsolete_at ? ' (obsolete)' : ''}`)
     return m
   }, [aspects])
 
@@ -294,7 +295,7 @@ export default function EnvironmentalObjectivesPage() {
               <select value={relatedAspectId} onChange={e => setRelatedAspectId(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm">
                 <option value="">—</option>
-                {aspects.map(a => (
+                {aspects.filter(a => a.obsolete_at === null).map(a => (
                   <option key={a.id} value={a.id}>
                     {a.significant ? '★ ' : ''}{a.activity} — {a.aspect}
                   </option>

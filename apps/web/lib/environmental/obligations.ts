@@ -46,7 +46,7 @@ export function obligationRegisterInputFrom(raw: JsonObject): Parsed<ObligationR
     title:                  text(raw.title),
     sourceKind:             text(raw.source_kind) as ObligationSourceKind,
     citation:               optionalText(raw.regulatory_ref),
-    jurisdiction:           text(raw.jurisdiction),
+    jurisdiction:           optionalText(raw.jurisdiction),
     applicabilityRationale: optionalText(raw.applicability_rationale),
     evaluationCadenceDays:  optionalCadence(raw.evaluation_cadence_days),
   }

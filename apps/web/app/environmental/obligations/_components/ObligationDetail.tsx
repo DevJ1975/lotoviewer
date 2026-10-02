@@ -75,7 +75,7 @@ export function ObligationDetail({ tenantId, obligationId, canEdit, onChanged }:
   const open = evaluations.find(e => e.completed_at === null) ?? null
   const completed = evaluations.filter(e => e.completed_at !== null)
   const evidenceFor = (evaluationId: string) => evidence.filter(e => e.subject_id === evaluationId)
-  const mayEvaluate = open !== null && (canEdit || open.assigned_to === userId)
+  const mayEvaluate = open !== null && (canEdit || (userId !== null && open.assigned_to === userId))
 
   return (
     <div className="space-y-6 text-sm">

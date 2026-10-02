@@ -4,7 +4,8 @@
 // first score to /api/environmental/aspects/[id]/scores, so every row goes
 // through the same validation, RLS and audit trigger as one typed by hand.
 //
-// Required columns (headers are case- and punctuation-insensitive):
+// Required columns (headers ignore case, and spaces and underscores are
+// interchangeable; any other header is reported as ignored, never guessed):
 //   activity, aspect, impact, process_area
 // Optional:
 //   life_cycle_stage, flow, status, controls, notes, source_reference
@@ -34,7 +35,7 @@ const SCORE_COLUMNS = ['operating_condition', 'severity', 'likelihood', 'rationa
 type Column = typeof ASPECT_CSV_REQUIRED[number] | typeof OPTIONAL[number]
 
 export interface ParsedAspectRow {
-  /** 1-indexed line in the file, header included, for error display. */
+  /** 1-indexed record number, the header counted as 1 and blank lines skipped, as a spreadsheet numbers rows. */
   rowNumber: number
   aspect:    AspectInput
   /** The row's first score, when its four score columns are filled. */
@@ -44,8 +45,10 @@ export interface ParsedAspectRow {
 }
 
 export interface AspectCsvParseResult {
-  rows:        ParsedAspectRow[]
-  headerError: string | null
+  rows:           ParsedAspectRow[]
+  headerError:    string | null
+  /** Headers that match no column, so their cells are not imported. */
+  ignoredColumns: string[]
 }
 
 /** A template to download: every column, and one invented example row. */
@@ -55,7 +58,11 @@ export const ASPECT_CSV_TEMPLATE = [
     + 'Lidded tank; fume extraction,,SDS-114,normal,3,4,Daily use; lid left open during breaks',
 ].join('\n') + '\n'
 
-function headerIndex(header: string[]): { ok: true; at: Partial<Record<Column, number>> } | { ok: false; error: string } {
+type HeaderIndex =
+  | { ok: true; at: Partial<Record<Column, number>>; ignored: string[] }
+  | { ok: false; error: string }
+
+function headerIndex(header: string[]): HeaderIndex {
   const seen = new Map<string, number>()
   header.forEach((h, i) => seen.set(normalizeHeader(h), i))
   const at: Partial<Record<Column, number>> = {}
@@ -64,16 +71,26 @@ function headerIndex(header: string[]): { ok: true; at: Partial<Record<Column, n
     if (i !== undefined) at[column] = i
   }
   const missing = ASPECT_CSV_REQUIRED.filter(column => at[column] === undefined)
-  return missing.length > 0 ? { ok: false, error: `Missing required column: ${missing.join(', ')}` } : { ok: true, at }
+  if (missing.length > 0) return { ok: false, error: `Missing required column: ${missing.join(', ')}` }
+  const used = new Set(Object.values(at))
+  const ignored = header.filter((h, i) => !used.has(i) && h.trim().length > 0)
+  return { ok: true, at, ignored }
 }
+
+/** Core validators name fields as code does; a CSV user knows them by their column names. */
+const COLUMN_FOR_FIELD: Record<string, string> = {
+  processArea: 'process_area', lifeCycleStage: 'life_cycle_stage', sourceReference: 'source_reference',
+  operatingCondition: 'operating_condition',
+}
+const asColumnError = (e: { field: string; message: string }) => `${COLUMN_FOR_FIELD[e.field] ?? e.field} ${e.message}`
 
 const optional = (value: string): string | null => (value.length > 0 ? value : null)
 
 export function parseAspectCsv(text: string): AspectCsvParseResult {
   const grid = parseCsv(text).filter(row => row.some(c => c.trim() !== ''))
-  if (grid.length === 0) return { rows: [], headerError: 'The file is empty.' }
+  if (grid.length === 0) return { rows: [], headerError: 'The file is empty.', ignoredColumns: [] }
   const header = headerIndex(grid[0])
-  if (!header.ok) return { rows: [], headerError: header.error }
+  if (!header.ok) return { rows: [], headerError: header.error, ignoredColumns: [] }
   const at = header.at
   const get = (row: string[], column: Column) => cell(row, at[column])
 
@@ -90,7 +107,7 @@ export function parseAspectCsv(text: string): AspectCsvParseResult {
       notes:           optional(get(row, 'notes')),
       sourceReference: optional(get(row, 'source_reference')),
     }
-    const errors = validateAspectInput(aspect).map(e => `${e.field} ${e.message}`)
+    const errors = validateAspectInput(aspect).map(asColumnError)
 
     const scoreCells = SCORE_COLUMNS.map(column => get(row, column))
     let score: AspectScoreInput | null = null
@@ -102,12 +119,12 @@ export function parseAspectCsv(text: string): AspectCsvParseResult {
         rationale:          scoreCells[3],
       }
       // Phase 1 has no method editor, so every tenant scores under the default rule.
-      errors.push(...validateAspectScoreInput(score, DEFAULT_SCORING_METHOD).map(e => `${e.field} ${e.message}`))
+      errors.push(...validateAspectScoreInput(score, DEFAULT_SCORING_METHOD).map(asColumnError))
     }
 
     return { rowNumber: i + 2, aspect, score, status: errors.length === 0 ? 'valid' : 'invalid', errors }
   })
-  return { rows, headerError: null }
+  return { rows, headerError: null, ignoredColumns: header.ignored }
 }
 
 /** The POST body for one parsed row, in the API's column names. */

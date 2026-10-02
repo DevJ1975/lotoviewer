@@ -11,22 +11,26 @@ import {
   type ObligationBody,
   type ObligationRow,
 } from '@/lib/environmental/client'
-import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_ERROR, INPUT, LABEL, LABEL_TEXT, errorFor } from '../../_components/formStyles'
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_ERROR, INPUT, LABEL, LABEL_TEXT, errorFor, generalError } from '../../_components/formStyles'
 import { TermTooltip } from '../../_components/TermTooltip'
 
 // Adds an obligation to the register, or edits its register fields. A new
 // obligation also needs the calendar's deadline; an existing one's deadline
 // stays with the Compliance Calendar, so the edit form leaves it alone.
 
-type Level = 'federal' | 'state' | 'local'
+// 'none' is for contracts, voluntary commitments and internal requirements,
+// which no jurisdiction imposes; the API still requires one for a law or permit.
+type Level = 'federal' | 'state' | 'local' | 'none'
 
 function splitJurisdiction(value: string | null): { level: Level; detail: string } {
-  if (value?.startsWith('state:')) return { level: 'state', detail: value.slice('state:'.length) }
-  if (value?.startsWith('local:')) return { level: 'local', detail: value.slice('local:'.length) }
+  if (value === null) return { level: 'none', detail: '' }
+  if (value.startsWith('state:')) return { level: 'state', detail: value.slice('state:'.length) }
+  if (value.startsWith('local:')) return { level: 'local', detail: value.slice('local:'.length) }
   return { level: 'federal', detail: '' }
 }
 
-function joinJurisdiction(level: Level, detail: string): string {
+function joinJurisdiction(level: Level, detail: string): string | null {
+  if (level === 'none') return null
   if (level === 'federal') return 'federal'
   return level === 'state' ? `state:${detail.trim().toUpperCase()}` : `local:${detail.trim()}`
 }
@@ -38,7 +42,9 @@ const SOURCE_LABEL: Record<string, string> = {
 export function ObligationForm({ tenantId, initial, onSaved, onCancel }: {
   tenantId: string; initial: ObligationRow | null; onSaved: (obligation: ObligationRow) => void; onCancel: () => void
 }) {
-  const jurisdiction = splitJurisdiction(initial?.jurisdiction ?? null)
+  // A new obligation starts federal with a yearly evaluation; an existing one
+  // keeps exactly what it has, including "none" and "not scheduled".
+  const jurisdiction = initial ? splitJurisdiction(initial.jurisdiction) : { level: 'federal' as Level, detail: '' }
   const [form, setForm] = useState({
     title:                   initial?.title ?? '',
     source_kind:             initial?.source_kind ?? 'law',
@@ -46,7 +52,7 @@ export function ObligationForm({ tenantId, initial, onSaved, onCancel }: {
     level:                   jurisdiction.level,
     jurisdiction_detail:     jurisdiction.detail,
     applicability_rationale: initial?.applicability_rationale ?? '',
-    evaluation_cadence_days: initial?.evaluation_cadence_days?.toString() ?? '365',
+    evaluation_cadence_days: initial ? (initial.evaluation_cadence_days?.toString() ?? '') : '365',
     next_due_at:             '',
     cadence:                 'annual',
     description:             '',
@@ -127,8 +133,9 @@ export function ObligationForm({ tenantId, initial, onSaved, onCancel }: {
               <option value="federal">Federal</option>
               <option value="state">State</option>
               <option value="local">Local</option>
+              <option value="none">None (contract, voluntary or internal)</option>
             </select>
-            {form.level !== 'federal' && (
+            {(form.level === 'state' || form.level === 'local') && (
               <input className={INPUT} aria-label={form.level === 'state' ? 'State code' : 'Local authority'}
                 value={form.jurisdiction_detail} onChange={e => set('jurisdiction_detail', e.target.value)}
                 placeholder={form.level === 'state' ? 'TX' : 'e.g. City of Northfield'}
@@ -166,7 +173,7 @@ export function ObligationForm({ tenantId, initial, onSaved, onCancel }: {
           </>
         )}
       </div>
-      {error && fieldErrors.length === 0 && <p className={FIELD_ERROR} role="alert">{error}</p>}
+      {generalError(error, fieldErrors, ['title', 'source_kind', 'regulatory_ref', 'jurisdiction', 'evaluation_cadence_days', 'applicability_rationale', 'next_due_at']) && <p className={FIELD_ERROR} role="alert">{generalError(error, fieldErrors, ['title', 'source_kind', 'regulatory_ref', 'jurisdiction', 'evaluation_cadence_days', 'applicability_rationale', 'next_due_at'])}</p>}
       <div className="flex justify-end gap-2">
         <button type="button" className={BUTTON_SECONDARY} onClick={onCancel} disabled={saving}>Cancel</button>
         <button type="submit" className={BUTTON_PRIMARY} disabled={saving}>

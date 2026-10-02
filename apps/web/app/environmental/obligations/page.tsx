@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { AlertTriangle, ArrowLeft, Loader2, Scale } from 'lucide-react'
 import type { EvaluationResult } from '@soteria/core/complianceEvaluation'
@@ -40,6 +40,7 @@ export default function ComplianceObligationsPage() {
   const [nextOffset, setNextOffset] = useState<number | null>(null)
   const [health, setHealth] = useState<RegistersHealth['obligations'] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [selected, setSelected] = useState<ObligationRow | null>(null)
   const [adding, setAdding] = useState(false)
 
@@ -47,33 +48,50 @@ export default function ComplianceObligationsPage() {
     status, last_result: lastResult || undefined, review_due: overdueOnly ? 'overdue' : undefined, offset,
   }), [status, lastResult, overdueOnly])
 
+  // Every reload starts a new generation; a response (or a "Load more" page)
+  // from an older generation arrives too late to count and is dropped, so a
+  // quick filter change can never show the other filter's rows.
+  const generation = useRef(0)
+
   const load = useCallback(async () => {
     if (!tenantId) return
+    const current = ++generation.current
     setLoadError(null)
+    setNextOffset(null)   // the previous filters' paging no longer applies
+    void getRegistersHealth(tenantId)
+      .then(registers => { if (current === generation.current) setHealth(registers.obligations) })
+      .catch(() => { if (current === generation.current) setHealth(null) })   // the list reports its own errors; the strip stays empty
     try {
-      const [page, registers] = await Promise.all([listObligations(tenantId, filters()), getRegistersHealth(tenantId)])
+      const page = await listObligations(tenantId, filters())
+      if (current !== generation.current) return
       setRows(page.obligations)
       setNextOffset(page.nextOffset)
-      setHealth(registers.obligations)
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Could not load the obligations register.')
+      if (current === generation.current) setLoadError(err instanceof Error ? err.message : 'Could not load the obligations register.')
     }
   }, [tenantId, filters])
 
   useEffect(() => { void load() }, [load])
 
   async function loadMore() {
-    if (!tenantId || nextOffset === null) return
+    if (!tenantId || nextOffset === null || loadingMore) return
+    const current = generation.current
+    setLoadingMore(true)
     try {
       const page = await listObligations(tenantId, filters(nextOffset))
+      if (current !== generation.current) return
       setRows(previous => [...(previous ?? []), ...page.obligations])
       setNextOffset(page.nextOffset)
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Could not load more obligations.')
+      if (current === generation.current) setLoadError(err instanceof Error ? err.message : 'Could not load more obligations.')
+    } finally {
+      setLoadingMore(false)
     }
   }
 
   const today = new Date().toISOString().slice(0, 10)
+  // The sheet's heading follows the reloaded row, so an edit made inside it shows at once.
+  const shown = selected && (rows?.find(row => row.id === selected.id) ?? selected)
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6">
@@ -136,7 +154,7 @@ export default function ComplianceObligationsPage() {
 
       <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
         {rows === null ? (
-          <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
+          !loadError && <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
         ) : rows.length === 0 ? (
           <p className="px-4 py-10 text-center text-sm italic text-slate-500 dark:text-slate-400">No obligations match.</p>
         ) : (
@@ -179,7 +197,9 @@ export default function ComplianceObligationsPage() {
       </div>
       {nextOffset !== null && (
         <div className="flex justify-center">
-          <button type="button" className={BUTTON_SECONDARY} onClick={() => void loadMore()}>Load more</button>
+          <button type="button" className={BUTTON_SECONDARY} disabled={loadingMore} onClick={() => void loadMore()}>
+            {loadingMore ? 'Loading…' : 'Load more'}
+          </button>
         </div>
       )}
 
@@ -193,8 +213,8 @@ export default function ComplianceObligationsPage() {
         </Sheet>
       )}
       {tenantId && (
-        <Sheet open={selected !== null} onClose={() => setSelected(null)} title={selected?.title ?? 'Obligation'}
-          subtitle={selected?.regulatory_ref ?? undefined}>
+        <Sheet open={selected !== null} onClose={() => setSelected(null)} title={shown?.title ?? 'Obligation'}
+          subtitle={shown?.regulatory_ref ?? undefined}>
           {selected && (
             <>
               <Link href={`/environmental/obligations/${selected.id}`} className="mb-3 inline-block text-xs text-brand-navy hover:underline dark:text-brand-yellow">

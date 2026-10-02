@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { AlertTriangle, ArrowLeft, Loader2, Mountain } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
@@ -63,32 +63,44 @@ export default function EnvironmentalAspectsPage() {
     return [...areas].sort((a, b) => a.localeCompare(b))
   })
 
+  // Every reload starts a new generation; a response (or a "Load more" page)
+  // from an older generation arrives too late to count and is dropped, so a
+  // quick filter change can never show the other filter's rows.
+  const generation = useRef(0)
+
   const load = useCallback(async () => {
     if (!tenantId) return
+    const current = ++generation.current
     setLoadError(null)
+    setNextOffset(null)   // the previous filters' paging no longer applies
+    void getRegistersHealth(tenantId)
+      .then(registers => { if (current === generation.current) setHealth(registers.aspects) })
+      .catch(() => { if (current === generation.current) setHealth(null) })   // the list reports its own errors; the strip stays empty
     try {
-      const [page, registers] = await Promise.all([listAspects(tenantId, filters()), getRegistersHealth(tenantId)])
+      const page = await listAspects(tenantId, filters())
+      if (current !== generation.current) return
       setRows(page.aspects)
       setNextOffset(page.nextOffset)
-      setHealth(registers.aspects)
       remember(page.aspects)
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Could not load the aspects register.')
+      if (current === generation.current) setLoadError(err instanceof Error ? err.message : 'Could not load the aspects register.')
     }
   }, [tenantId, filters])
 
   useEffect(() => { void load() }, [load])
 
   async function loadMore() {
-    if (!tenantId || nextOffset === null) return
+    if (!tenantId || nextOffset === null || loadingMore) return
+    const current = generation.current
     setLoadingMore(true)
     try {
       const page = await listAspects(tenantId, filters(nextOffset))
+      if (current !== generation.current) return
       setRows(previous => [...(previous ?? []), ...page.aspects])
       setNextOffset(page.nextOffset)
       remember(page.aspects)
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Could not load more aspects.')
+      if (current === generation.current) setLoadError(err instanceof Error ? err.message : 'Could not load more aspects.')
     } finally {
       setLoadingMore(false)
     }
@@ -181,7 +193,7 @@ export default function EnvironmentalAspectsPage() {
 
       <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
         {rows === null ? (
-          <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
+          !loadError && <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
         ) : rows.length === 0 ? (
           <p className="px-4 py-10 text-center text-sm italic text-slate-500 dark:text-slate-400">
             No aspects match. {canEdit ? 'Record the first one, or import a CSV.' : ''}

@@ -13,7 +13,7 @@ import {
   type InterestedPartyRow,
   type ObligationRow,
 } from '@/lib/environmental/client'
-import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_ERROR, INPUT, LABEL, LABEL_TEXT, errorFor } from '../../_components/formStyles'
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_ERROR, INPUT, LABEL, LABEL_TEXT, errorFor, generalError } from '../../_components/formStyles'
 import { ReasonPrompt } from '../../_components/ReasonPrompt'
 import { TermTooltip } from '../../_components/TermTooltip'
 
@@ -70,11 +70,11 @@ export function PartiesTab({ tenantId, canEdit, onChanged }: { tenantId: string;
         {canEdit && <button type="button" className={BUTTON_PRIMARY} onClick={() => setEditing('new')}>Record a party</button>}
       </div>
       {editing && (
-        <PartyForm tenantId={tenantId} initial={editing === 'new' ? null : editing} obligations={obligations}
+        <PartyForm key={editing === 'new' ? 'new' : editing.id} tenantId={tenantId} initial={editing === 'new' ? null : editing} obligations={obligations}
           onSaved={() => void changed()} onCancel={() => setEditing(null)} />
       )}
       {retiring && (
-        <ReasonPrompt explanation="A retired party leaves the active register but stays in its history. Say why it no longer applies."
+        <ReasonPrompt key={retiring.id} explanation="A retired party leaves the active register but stays in its history. Say why it no longer applies."
           label="Why the party is retired" placeholder="e.g. Neighbouring site sold and demolished" confirmLabel="Retire party"
           onSubmit={async reason => { await updateInterestedParty(tenantId, retiring.id, { retired_reason: reason }); await changed() }}
           onCancel={() => setRetiring(null)} />
@@ -179,7 +179,7 @@ function PartyForm({ tenantId, initial, obligations, onSaved, onCancel }: {
           {errorFor(fieldErrors, 'obligation_id') && <p className={FIELD_ERROR}>{errorFor(fieldErrors, 'obligation_id')}</p>}
         </label>
       )}
-      {error && fieldErrors.length === 0 && <p className={FIELD_ERROR} role="alert">{error}</p>}
+      {generalError(error, fieldErrors, ['name', 'needs_expectations', 'obligation_id']) && <p className={FIELD_ERROR} role="alert">{generalError(error, fieldErrors, ['name', 'needs_expectations', 'obligation_id'])}</p>}
       <div className="flex justify-end gap-2">
         <button type="button" className={BUTTON_SECONDARY} onClick={onCancel} disabled={saving}>Cancel</button>
         <button type="submit" className={BUTTON_PRIMARY} disabled={saving}>{saving ? 'Saving…' : initial ? 'Save changes' : 'Record party'}</button>

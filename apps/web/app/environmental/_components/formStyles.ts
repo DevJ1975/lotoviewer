@@ -13,3 +13,15 @@ export const FIELD_ERROR = 'mt-1 text-[11px] text-rose-700 dark:text-rose-300'
 export function errorFor(errors: readonly FieldError[], field: string): string | null {
   return errors.find(e => e.field === field)?.message ?? null
 }
+
+/**
+ * What a form shows in its general error slot. A field error the form has an
+ * input for is shown beside that input, so the slot stays quiet; one it has
+ * no input for is spelled out here, so a refusal is never silent.
+ * @param shownFields the fields this form renders an error beside
+ */
+export function generalError(error: string | null, errors: readonly FieldError[], shownFields: readonly string[]): string | null {
+  const unshown = errors.filter(e => !shownFields.includes(e.field))
+  if (unshown.length > 0) return unshown.map(e => `${e.field.replace(/[._]/g, ' ')} ${e.message}`).join('. ')
+  return errors.length === 0 ? error : null
+}

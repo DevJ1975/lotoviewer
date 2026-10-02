@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, RefreshControl, SectionList, StyleSheet } from 'react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, Pressable, RefreshControl, SectionList, StyleSheet } from 'react-native'
 
 import { Text, View } from '@/components/Themed'
 import { useTenant } from '@/components/TenantProvider'
@@ -37,22 +37,29 @@ type WalkdownRow = RegisterRow & { processArea: string | null; maxScore: number 
 
 const LETTER: Record<AspectOperatingCondition, string> = { normal: 'N', abnormal: 'A', emergency: 'E' }
 
+/** Enough for any one site's register; the screen says so if a tenant ever exceeds it. */
+const ROW_LIMIT = 2000
+
 export default function EnvironmentalAspectsScreen() {
-  const { tenant } = useTenant()
+  const { tenant, loading: tenantLoading } = useTenant()
   const moduleOn = isModuleVisible('environmental', tenant?.modules)
   const [rows, setRows] = useState<WalkdownRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  // A tenant switch mid-request must not show the previous tenant's register.
+  const latestRequest = useRef(0)
 
   const load = useCallback(async () => {
     if (!tenant?.id || !moduleOn) return
+    const request = ++latestRequest.current
     setError(null)
     const { data, error: readError } = await supabase
       .from('environmental_aspect_register')
       .select('id, activity, aspect, impact, process_area, controls, significant, max_score, current_scores')
       .eq('tenant_id', tenant.id)
       .is('obsolete_at', null)
-      .limit(2000)
+      .limit(ROW_LIMIT)
+    if (request !== latestRequest.current) return
     if (readError) { setError(readError.message); return }
     setRows(((data ?? []) as RegisterRow[]).map(row => ({ ...row, processArea: row.process_area, maxScore: row.max_score })))
   }, [tenant?.id, moduleOn])
@@ -65,10 +72,22 @@ export default function EnvironmentalAspectsScreen() {
     setRefreshing(false)
   }
 
+  if (!tenant && !tenantLoading) {
+    return <View style={styles.center}><Text style={styles.empty}>Choose an organization to see its aspects.</Text></View>
+  }
   if (tenant && !moduleOn) {
     return <View style={styles.center}><Text style={styles.empty}>The Environmental module is not enabled for this organization.</Text></View>
   }
-  if (error) return <View style={styles.center}><Text style={styles.error}>{error}</Text></View>
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.error}>{error}</Text>
+        <Pressable accessibilityRole="button" onPress={() => void load()} style={styles.retry}>
+          <Text style={styles.retryText}>Try again</Text>
+        </Pressable>
+      </View>
+    )
+  }
   if (rows === null) return <View style={styles.center}><ActivityIndicator /></View>
 
   const sections = walkdownGroups(rows).map(group => ({ title: group.processArea, data: group.aspects }))
@@ -80,6 +99,9 @@ export default function EnvironmentalAspectsScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />}
       contentContainerStyle={styles.list}
       ListEmptyComponent={<Text style={styles.empty}>No aspects recorded for this site yet.</Text>}
+      ListFooterComponent={rows.length === ROW_LIMIT
+        ? <Text style={styles.empty}>Showing the first {ROW_LIMIT} aspects. Use the web register to see them all.</Text>
+        : null}
       renderSectionHeader={({ section }) => <Text style={styles.section}>{section.title}</Text>}
       renderItem={({ item }) => <AspectCard row={item} />}
     />
@@ -115,6 +137,8 @@ function AspectCard({ row }: { row: WalkdownRow }) {
 const styles = StyleSheet.create({
   center:          { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   error:           { color: '#b91c1c', textAlign: 'center' },
+  retry:           { marginTop: 12, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#94a3b8' },
+  retryText:       { fontSize: 14, fontWeight: '600' },
   list:            { padding: 16, gap: 10 },
   empty:           { textAlign: 'center', opacity: 0.6, marginTop: 40 },
   section:         { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6, marginTop: 12, marginBottom: 4 },

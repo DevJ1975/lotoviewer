@@ -11,7 +11,7 @@ const NAME: Record<AspectOperatingCondition, string> = { normal: 'Normal', abnor
 export function ConditionChips({ scores }: { scores: readonly CurrentScore[] }) {
   const byCondition = new Map(scores.map(s => [s.operating_condition, s]))
   return (
-    <span className="inline-flex gap-1" aria-label="Operating-condition coverage">
+    <span className="inline-flex gap-1" role="group" aria-label="Operating-condition coverage">
       {OPERATING_CONDITION_ORDER.map(condition => {
         const score = byCondition.get(condition)
         const description = score
@@ -23,9 +23,11 @@ export function ConditionChips({ scores }: { scores: readonly CurrentScore[] }) 
             ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-200'
             : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200'
         return (
-          <span key={condition} title={description} aria-label={description}
+          <span key={condition} title={description}
             className={`inline-flex h-6 min-w-[2.25rem] items-center justify-center rounded px-1 text-[10px] font-bold ${look}`}>
-            {LETTER[condition]}{score ? ` ${score.score}` : ''}
+            {/* aria-label is ignored on a plain span, so screen readers get the description as text. */}
+            <span aria-hidden="true">{LETTER[condition]}{score ? ` ${score.score}` : ''}</span>
+            <span className="sr-only">{description}</span>
           </span>
         )
       })}

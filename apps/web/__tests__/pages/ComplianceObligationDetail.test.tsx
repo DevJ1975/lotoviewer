@@ -105,6 +105,16 @@ describe('ObligationForm', () => {
     expect(api.updateObligation).not.toHaveBeenCalled()
   })
 
+  it('keeps an unscheduled obligation unscheduled, and a contract without a jurisdiction, when editing something else', async () => {
+    const contract = { ...obligation, source_kind: 'contract', jurisdiction: null, evaluation_cadence_days: null } satisfies ObligationRow
+    api.updateObligation.mockResolvedValue({ obligation: contract })
+    render(<ObligationForm tenantId="t1" initial={contract} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    expect(screen.getByLabelText('Evaluate compliance every (days)')).toHaveValue('')
+    fireEvent.click(screen.getByText('Save changes'))
+    await waitFor(() => expect(api.updateObligation).toHaveBeenCalledWith('t1', 'ob-1',
+      expect.objectContaining({ evaluation_cadence_days: null, jurisdiction: null })))
+  })
+
   it('sends a blank cadence as "never scheduled", and composes the jurisdiction', async () => {
     api.updateObligation.mockResolvedValue({ obligation })
     render(<ObligationForm tenantId="t1" initial={obligation} onSaved={vi.fn()} onCancel={vi.fn()} />)
