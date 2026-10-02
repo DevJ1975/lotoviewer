@@ -11,14 +11,14 @@ recording an evaluation result, which the assigned evaluator may also do.
 
 ## The hub: `/environmental`
 
-The **Context, scope & policy**, **Processes & responsibilities**, **Aspects & impacts** and
-**Compliance obligations** cards on the hub each carry a traffic light. The Context card
+The **Context, scope & policy**, **Processes & responsibilities**, **Aspects & impacts**,
+**Compliance obligations** and **Permits** cards on the hub each carry a traffic light. The Context card
 shows the worse of its two registers: context, and scope and policy.
 
 | Light | Meaning |
 | --- | --- |
-| Red | The register is empty, a required record (scope or policy) is missing, or no one holds one of the two roles clause 5.3 names. |
-| Amber | Something needs attention: a review is overdue, an aspect is unscored, a compliance deadline has passed with the obligation still open, an evaluation is overdue, an obligation has no evaluation frequency, the policy is incomplete or has not been communicated within the organization, the scope does not say what the organization controls and influences, no climate-change determination is recorded, or an EMS process has no owner. |
+| Red | The register is empty, a required record (scope or policy) is missing, or no one holds one of the two roles clause 5.3 names. For Permits: a renewal deadline has passed with no renewal submitted, or a permit is held by someone other than the legal entity in the scope. |
+| Amber | Something needs attention: a review is overdue, an aspect is unscored, a compliance deadline has passed with the obligation still open, an evaluation is overdue, an obligation has no evaluation frequency, the policy is incomplete or has not been communicated within the organization, the scope does not say what the organization controls and influences, no climate-change determination is recorded, or an EMS process has no owner. For Permits: nothing is recorded yet, a renewal is due within 90 days or was submitted and is pending, a permit condition is overdue, or a permit review is overdue. |
 | Green | Every record is in date and complete. |
 
 A light changes as soon as the underlying record does, and each card opens the
@@ -219,10 +219,11 @@ reminder. An admin can also **Start an evaluation now**.
 
 On the obligation's page, under **Evaluation of compliance**:
 
-1. **Attach evidence**: a PDF, JPEG, PNG or WebP file of up to 4 MB, filed as a
+1. **Attach evidence**: a PDF, JPEG, PNG or WebP file of up to 25 MB, filed as a
    *Document*, *Photo*, *Sample result* or *Signature*. The server checks the file's
    real type from its contents, names it for that type, and records a SHA-256
-   fingerprint of it. Compress a larger scan or photo before attaching it.
+   fingerprint of it. A file over 4 MB goes straight to storage and is checked and
+   filed from there, so a large scan needs no compressing.
 2. **Record result**:
    - *Compliant* or *Noncompliant* needs at least one current evidence file.
    - *Noncompliant* also opens a nonconformity. Name the **Nonconformity to open** and
@@ -250,6 +251,109 @@ The old file stays on record, marked as superseded.
   stands.
 - **Mark reviewed** confirms the obligation still applies as recorded, and moves its
   next review a year out.
+
+---
+
+## Permits: `/environmental/permits`
+
+Clause 6.1.3. The permits, registrations and plans each site holds, when each must be
+renewed, and whether each is held by the organization that runs the site. (This is not
+the permit-to-work screens; those are for hot work and confined spaces.)
+
+### Recording a permit
+
+An admin chooses a facility in the header and selects **Add permit**. A permit belongs
+to one site.
+
+- **Program** (air, waste, wastewater, stormwater, spill prevention, community
+  right-to-know or other) and **Kind of paper** (*Permit*, *Registration* or *Plan*).
+- **Issuing agency**, **Number** and **Jurisdiction**.
+- **Holder of record**: the name printed on the permit itself, not who you wish it
+  said. It starts as the legal entity in the scope.
+- **Issued on**, **Expires on** (leave blank for a permit with no fixed term, such as
+  a permit by rule) and **Renewal application due**. Enter that last date from the
+  permit's own terms. The platform never works out a regulatory lead time.
+- **Business-critical** marks a permit operations cannot run without.
+
+### The renewal countdown
+
+The countdown runs to the renewal application date when the permit gives one, and to
+its expiry otherwise. The card says which: *Renewal application due* or *Expires*. It
+escalates at 180, 90 and 30 days, then once the date has passed. Those intervals are
+this product's own; the permit says what it actually requires.
+
+- **Record renewal application submitted** stops the countdown and its notices.
+- **Record the renewed term** takes the new dates from the agency's renewal and starts
+  the countdown again.
+- An expired permit with a renewal pending shows *confirm its status with the agency*.
+  Whether it stays in force while the agency reviews depends on the program and the
+  agency, so the screen does not say.
+
+Each night the owner is emailed at each stage. With no owner, or an owner who has left,
+the email goes to the owners and admins. A business-critical permit also reaches the
+holder of the Compliance obligations process, and reaches every owner and admin at 30
+days and once the date has passed.
+
+### Holder of record
+
+When the holder differs from the legal entity in the scope, the permit shows a red
+**Holder mismatch** badge. The two names are compared without regard to capital
+letters, full stops, commas or extra spaces. Anything else counts as a difference,
+*Inc* and *LLC* and *&* versus *and* included, so write the holder as the permit does.
+The Permits light turns red too. Fix it by recording a change of owner or legal name,
+below, so each permit is transferred and confirmed. The badge is absent when the scope
+is not recorded yet, because there is nothing to compare with.
+
+### Conditions and documents
+
+- **Add a condition** gives the permit a duty with a deadline and a repeat, such as a
+  quarterly monitoring report. A condition is an obligation linked to its permit, so it
+  also appears in the compliance obligations register and the Compliance Calendar. To
+  link an obligation that already exists, edit it and choose its **Linked permit**; only
+  an obligation whose source is a permit can be linked.
+- **Mark done** records that the condition was done for the deadline shown, with an
+  optional note, and moves the deadline on by its repeat. The condition's owner or an
+  admin can do it. Attach the evidence to that occurrence straight afterwards, so the
+  file proves that instance.
+- **Documents** holds the permit itself and anything issued under it. Tick
+  **Export-controlled** for a file that is subject to ITAR or EAR: only owners and admins
+  can then download it. A file is replaced, not deleted.
+- **Retire** takes a permit out of every countdown and notice, with a reason. It is kept
+  as history, with its documents.
+- **Mark reviewed** confirms the record is still right and moves its next review out.
+
+The hazardous-waste EPA ID is also held in the site's hazardous-waste profile. Until a
+later phase links the two, enter the number in both places.
+
+---
+
+## Management of change: `/environmental/changes`
+
+Clauses 6.1.4 and 8.1. When something changes, the records it touches are listed so
+none is forgotten, and the change closes only when each has been dealt with.
+
+- **New change** (admins) takes a kind: *New or changed equipment*, *New or changed
+  chemical*, *Process change*, *Change of owner or legal name*, *Personnel change* or
+  *Other change*. **Preview impacts** says how many impacts opening it will create
+  before anything is created.
+- An equipment or process change lists the active aspects in the process area it names.
+  A chemical change lists the open air and waste obligations. A personnel or other
+  change lists nothing automatically, so its checklist starts empty. The list is worked
+  out when the change opens; a record added later is not on it.
+- A **change of owner or legal name** covers every site, so open it with *All
+  facilities* chosen in the header. It lists three steps for each active permit, *Notify
+  the agency*, *Submit the transfer or update* and *Confirm the holder of record is
+  updated*, then the scope and the policy.
+
+Each impact is **Resolved**, and the screen says what is holding one back. Each of a
+permit's three transfer steps needs a file that shows it was done, and **Confirm the
+holder** is also refused until the permit's holder of record has been edited to match
+the new legal entity. The scope is resolved once a new scope version names the new
+entity, and the policy once it has been signed again after that. Any other impact
+needs a note saying what was done. If the database still refuses, the screen shows its
+reason. **Close change** is available once every impact is resolved. **Cancel change**
+needs a reason and keeps the impacts as history. Once a change has ended, its impacts
+and their evidence no longer change.
 
 ---
 

@@ -341,11 +341,11 @@ equivalent exists.
 | `ems_manifest` | None (`packages/core/src/ldrNotice.ts:8`) | New |
 | `ms_chemical` (Tier II / TRI) | `chemical_products`, `chemical_inventory_items` (089/091), `v_chemical_tier_two` (093/271) | Extend: no EHS/TPQ flag, threshold check, TRI category or pounds conversion |
 | `ms_training_*` | `loto_training_records` (017), `training_courses` (240), `v_training_matrix` | Extend: no environmental roles, no citation, no evidence link |
-| `ms_evidence` | `ms_evidence` (299), private `ms-evidence` bucket | **Done in Phase 1** for compliance evaluations; later phases add subject types |
+| `ms_evidence` | `ms_evidence` (299), private `ms-evidence` bucket | **Done in Phase 1** for compliance evaluations; Phase 2 (306) adds permits, change impacts, condition occurrences and an export-control flag |
 | `ms_audit_log` | `audit_log` (003) | Reuse |
 | `ms_context_issue`, `ms_interested_party`, `ms_scope`, `ms_policy` | `ms_context_issues`, `ms_interested_parties`, `ms_scope_statements`, `ms_policies` (295) | **Done in Phase 1**; readiness now reads them |
-| `ms_moc`, `ms_moc_impact` | None (only `'moc'` enum values on `risks` / `risk_reviews`) | New |
-| `ems_permit`, `ems_permit_condition` | None. "Permit" already means permit-to-work here (`loto_hot_work_permits`, `loto_confined_space_permits`, `loto_group_permits`, `wah_permits`) | New: name it to avoid the collision |
+| `ms_moc`, `ms_moc_impact` | `ms_changes`, `ms_change_impacts` (305) | **Done in Phase 2** (the 305 migration awaits approval) |
+| `ems_permit`, `ems_permit_condition` | `environmental_permits` (304); a condition is a `compliance_calendar_obligations` row with `permit_id`. "Permit" already means permit-to-work here (`loto_hot_work_permits`, `loto_confined_space_permits`, `loto_group_permits`, `wah_permits`), hence the name | **Done in Phase 2** (the 304 migration awaits approval) |
 | `ms_internal_audit`, `_finding` | None (`AUDIT_PROGRAMME_LIVE = false`); NCs carry `source_type='internal_audit'` | New |
 | `ms_drill` | None (`wah_rescue_plans` drill dates only) | New |
 | `discipline` column | None anywhere | New, per the plan's 45001 seams |
@@ -433,3 +433,19 @@ its own PR.
 Live-database state can differ from the repo because of known migration drift
 (`docs/audits/migration-reconciliation-2026-08-28.md`). Items 1 and 3 were checked
 against the repo only.
+
+## 13. Phase 2 (permit vault and management of change): where things live
+
+Added 2026-10-02 on `feat/ems-phase2-permits`. The plan is
+[phase-2-plan.md](./phase-2-plan.md); the screens are described in
+[USER_GUIDE.md](./USER_GUIDE.md).
+
+| Concern | Where |
+| --- | --- |
+| Schema | `apps/web/migrations/304_environmental_permits.sql` (permits, the `permit_id` link on obligations, `ms_record_obligation_occurrence()`, `ms_advance_due_date()`, `ms_notification_log`), `305_ms_changes.sql` (changes, impacts, their guards, `ms_open_change()`) and `306_ms_evidence_subjects.sql` (four new evidence subjects, `export_controlled`). Each has a `_rollback.sql`. Apply all three before deploying the code that reads them; revert that code before the rollbacks, in the order 306, 305, 304 |
+| Rules | `packages/core/src/environmentalPermit.ts` (renewal countdown, standing, holder-of-record check, health, notice planning), `managementOfChange.ts` (fan-out, transfer steps, resolution and close gaps), `managementSystem.ts` (`normalizeLegalEntity`, which mirrors `ms_normalize_legal_entity`) |
+| Readiness | `iso14001Readiness.ts`: 6.1.3 puts permit findings first (a missed renewal or a holder mismatch is a gap); the signals are read by `apps/web/lib/iso14001Signals.ts` |
+| API | `apps/web/app/api/environmental/permits`, `changes`, `evidence` (five subjects, `uploads` and `uploads/finalize` for files over 4 MB) and `obligations/[id]/occurrences`; the request shapes are in `apps/web/lib/environmental/permits.ts`, `changes.ts` and `evidenceSubjects.ts` |
+| Nightly job | `apps/web/app/api/cron/environmental-permits/route.ts` (14:15 UTC): renewal notices and condition reminders, claimed in `ms_notification_log` so a rerun never repeats one, and a sweep of uploads never finalized. The digest is `lib/email/sendPermitsDue.ts`; who is told is `lib/environmental/permitNotices.ts` |
+| Screens | `apps/web/app/environmental/permits`, `changes`, the shared `_components/EvidenceUpload.tsx`, and the browser client `lib/environmental/client.ts` |
+| Tests | `emsPhase2.db.test.ts` (304-306 for real, in PGlite), `permits.test.ts`, `occurrences.test.ts`, `changes.test.ts`, `evidenceSubjects.test.ts`, `environmental-permits.test.ts` (the cron), `sendPermitsDue.test.ts`, `permitNotices.test.ts`, and the page tests `EnvironmentalPermitsPage`, `EnvironmentalPermitDetailPage`, `EnvironmentalChangesPages`, `EvidenceUpload` |

@@ -15,6 +15,13 @@ import {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.4.0',
+    date: '2026-10-02',
+    changes: [
+      'Updated "How Soteria supports an EMS" for permits and management of change. Added a permit vault under 6.1.3: renewal countdowns that escalate at 180, 90 and 30 days (the platform\'s own intervals, not a regulatory lead time), a holder-of-record check against the EMS scope, conditions that are linked obligations marked done with evidence, and export-controlled documents. Added management of change under 6.1.4 and 8.1, including the three-step permit transfer that a change of owner or legal name opens for every active permit.',
+    ],
+  },
+  {
     version: '1.3.0',
     date: '2026-10-02',
     changes: [
