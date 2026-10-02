@@ -14,7 +14,8 @@ import {
   type ObligationRow,
 } from '@/lib/environmental/client'
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_ERROR } from '../../_components/formStyles'
-import { EvaluationPanel, EvidenceList } from './EvaluationPanel'
+import { EvidenceList } from '../../_components/EvidenceUpload'
+import { EvaluationPanel } from './EvaluationPanel'
 import { ObligationForm } from './ObligationForm'
 import { ResultBadge } from './ResultBadge'
 
@@ -87,6 +88,13 @@ export function ObligationDetail({ tenantId, obligationId, canEdit, onChanged }:
         <Fact label="Evaluated every" value={obligation.evaluation_cadence_days ? `${obligation.evaluation_cadence_days} days` : 'Not scheduled'} />
         <Fact label="Next register review" value={obligation.next_review_due} />
         <Fact label="Why it applies" value={obligation.applicability_rationale ?? 'Not recorded'} wide />
+        {obligation.permit_id && (
+          <p className="col-span-2">
+            <Link href={`/environmental/permits/${obligation.permit_id}`} className="text-brand-navy hover:underline dark:text-brand-yellow">
+              A condition of a permit: open the permit
+            </Link>
+          </p>
+        )}
       </section>
 
       <section className="space-y-1">

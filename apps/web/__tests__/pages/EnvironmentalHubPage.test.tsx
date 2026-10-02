@@ -19,7 +19,14 @@ vi.mock('@/lib/environmental/client', async importOriginal => ({
 
 import EnvironmentalHomePage from '@/app/environmental/page'
 
-const health = (responsibilities: RegistersHealth['responsibilities']): RegistersHealth => ({
+const QUIET_PERMITS: RegistersHealth['permits'] = {
+  health: 'green', active: 5, deadlineMissed: 0, holderMismatch: 0, renewalSoon: 0, conditionsOverdue: 0, reviewOverdue: 0,
+}
+
+const health = (
+  responsibilities: RegistersHealth['responsibilities'],
+  permits: RegistersHealth['permits'] = QUIET_PERMITS,
+): RegistersHealth => ({
   asOf: '2026-10-02',
   context: { health: 'green', active: 5, reviewOverdue: 0, climateRecorded: true },
   scopeAndPolicy: {
@@ -29,8 +36,11 @@ const health = (responsibilities: RegistersHealth['responsibilities']): Register
   aspects: { health: 'green', active: 25, reviewOverdue: 0, unscored: 0 },
   obligations: { health: 'amber', active: 15, reviewOverdue: 1, evaluationsOverdue: 1, unscheduled: 0, deadlinesMissed: 0 },
   responsibilities,
+  permits,
 })
 
+const ALL_HELD = { health: 'green', rolesUnassigned: 0, processesUnassigned: 0 } as const
+const cardFor = async (title: string) => within((await screen.findByText(title)).closest('a') as HTMLElement)
 const processesCard = async () => within((await screen.findByText('Processes & responsibilities')).closest('a') as HTMLElement)
 
 beforeEach(() => api.getRegistersHealth.mockReset())
@@ -51,5 +61,33 @@ describe('/environmental hub', () => {
     const card = await processesCard()
     expect(card.getByText('Current')).toBeInTheDocument()
     expect(card.getByText('roles assigned · 0 processes without an owner')).toBeInTheDocument()
+  })
+
+  it('shows the permits card with its light and what is wrong, worst first', async () => {
+    api.getRegistersHealth.mockResolvedValue(health(ALL_HELD, {
+      ...QUIET_PERMITS, health: 'red', active: 6, deadlineMissed: 1, holderMismatch: 2, renewalSoon: 1,
+    }))
+    render(<EnvironmentalHomePage />)
+    const card = await cardFor('Permits')
+    expect(card.getByText('Missing')).toBeInTheDocument()
+    expect(card.getByText('6 in force · 1 renewal deadlines missed · 2 holder mismatch · 1 renewals due within 90 days')).toBeInTheDocument()
+    expect(card.getByText('Clause 6.1.3')).toBeInTheDocument()
+  })
+
+  it('shows a quiet permits card as just the count, and links to the vault', async () => {
+    api.getRegistersHealth.mockResolvedValue(health(ALL_HELD))
+    render(<EnvironmentalHomePage />)
+    const card = await cardFor('Permits')
+    expect(card.getByText('Current')).toBeInTheDocument()
+    expect(card.getByText('5 in force')).toBeInTheDocument()
+    expect((await screen.findByText('Permits')).closest('a')).toHaveAttribute('href', '/environmental/permits')
+  })
+
+  it('shows the open changes on the management of change card', async () => {
+    api.getRegistersHealth.mockResolvedValue(health(ALL_HELD))
+    render(<EnvironmentalHomePage />)
+    const card = await cardFor('Management of change')
+    expect(card.getByText('3 open')).toBeInTheDocument()
+    expect(card.getByText('Clauses 6.1.4 & 8.1')).toBeInTheDocument()
   })
 })

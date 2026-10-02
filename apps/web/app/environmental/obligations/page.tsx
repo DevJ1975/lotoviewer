@@ -178,6 +178,12 @@ export default function ComplianceObligationsPage() {
                     <button type="button" onClick={() => setSelected(row)}
                       className="text-left font-medium text-slate-900 hover:underline dark:text-slate-100">{row.title}</button>
                     {row.regulatory_ref && <p className="text-xs text-slate-500">{row.regulatory_ref}</p>}
+                    {row.permit_id && (
+                      <Link href={`/environmental/permits/${row.permit_id}`}
+                        className="mt-1 inline-block rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-800 hover:underline dark:bg-sky-950/40 dark:text-sky-200">
+                        Permit condition
+                      </Link>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-xs text-slate-600 dark:text-slate-300">{row.source_kind ?? '—'}</td>
                   <td className="px-4 py-2 text-xs text-slate-600 dark:text-slate-300">{row.jurisdiction ?? '—'}</td>

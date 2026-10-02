@@ -1,15 +1,17 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { OBLIGATION_CADENCES } from '@soteria/core/complianceCalendar'
 import { OBLIGATION_SOURCE_KINDS } from '@soteria/core/complianceEvaluation'
 import {
   EmsApiError,
   createObligation,
+  listPermits,
   updateObligation,
   type FieldError,
   type ObligationBody,
   type ObligationRow,
+  type PermitRow,
 } from '@/lib/environmental/client'
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_ERROR, INPUT, LABEL, LABEL_TEXT, errorFor, generalError } from '../../_components/formStyles'
 import { TermTooltip } from '../../_components/TermTooltip'
@@ -56,7 +58,19 @@ export function ObligationForm({ tenantId, initial, onSaved, onCancel }: {
     next_due_at:             '',
     cadence:                 'annual',
     description:             '',
+    permit_id:               initial?.permit_id ?? '',
   })
+  // Only an existing obligation is linked to a permit here; a new condition is added from the permit itself.
+  const [permits, setPermits] = useState<PermitRow[]>([])
+  const isExisting = initial !== null
+  useEffect(() => {
+    if (!isExisting) return
+    let current = true
+    void listPermits(tenantId, { status: 'active' })
+      .then(page => { if (current) setPermits(page.permits) })
+      .catch(() => { if (current) setPermits([]) })   // the link is optional; the rest of the form works without the list
+    return () => { current = false }
+  }, [tenantId, isExisting])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldError[]>([])
@@ -85,7 +99,11 @@ export function ObligationForm({ tenantId, initial, onSaved, onCancel }: {
     }
     try {
       const { obligation } = initial
-        ? await updateObligation(tenantId, initial.id, register)
+        ? await updateObligation(tenantId, initial.id, {
+          ...register,
+          // Sent only when changed: linking re-checks that the obligation's source is a permit.
+          ...(form.permit_id !== (initial.permit_id ?? '') ? { permit_id: form.permit_id || null } : {}),
+        })
         : await createObligation(tenantId, {
           ...register, next_due_at: form.next_due_at, cadence: form.cadence, description: form.description || null,
         })
@@ -102,6 +120,9 @@ export function ObligationForm({ tenantId, initial, onSaved, onCancel }: {
     const message = errorFor(fieldErrors, field)
     return message ? <p className={FIELD_ERROR}>{message}</p> : null
   }
+
+  const general = generalError(error, fieldErrors,
+    ['title', 'source_kind', 'regulatory_ref', 'jurisdiction', 'evaluation_cadence_days', 'applicability_rationale', 'next_due_at', 'permitId'])
 
   return (
     <form onSubmit={submit} className="space-y-3" noValidate>
@@ -157,6 +178,21 @@ export function ObligationForm({ tenantId, initial, onSaved, onCancel }: {
             placeholder="e.g. Industrial activity in SIC 3462 discharges stormwater to a municipal system" />
           {fieldError('applicability_rationale')}
         </label>
+        {initial && (
+          <label className={`${LABEL} sm:col-span-2`}>
+            <span className={LABEL_TEXT}>Linked permit (optional)</span>
+            <select className={INPUT} value={form.permit_id} onChange={e => set('permit_id', e.target.value)}>
+              <option value="">Not a permit condition</option>
+              {permits.map(permit => <option key={permit.id} value={permit.id}>{permit.title}</option>)}
+              {/* A retired or out-of-site permit this obligation is already linked to stays selectable, so saving never silently unlinks it. */}
+              {form.permit_id !== '' && !permits.some(permit => permit.id === form.permit_id) && (
+                <option value={form.permit_id}>The permit it is linked to</option>
+              )}
+            </select>
+            <p className="mt-1 text-[11px] text-slate-500">Only an obligation whose source is a permit can be linked to one.</p>
+            {fieldError('permitId')}
+          </label>
+        )}
         {!initial && (
           <>
             <label className={LABEL}>
@@ -173,7 +209,7 @@ export function ObligationForm({ tenantId, initial, onSaved, onCancel }: {
           </>
         )}
       </div>
-      {generalError(error, fieldErrors, ['title', 'source_kind', 'regulatory_ref', 'jurisdiction', 'evaluation_cadence_days', 'applicability_rationale', 'next_due_at']) && <p className={FIELD_ERROR} role="alert">{generalError(error, fieldErrors, ['title', 'source_kind', 'regulatory_ref', 'jurisdiction', 'evaluation_cadence_days', 'applicability_rationale', 'next_due_at'])}</p>}
+      {general && <p className={FIELD_ERROR} role="alert">{general}</p>}
       <div className="flex justify-end gap-2">
         <button type="button" className={BUTTON_SECONDARY} onClick={onCancel} disabled={saving}>Cancel</button>
         <button type="submit" className={BUTTON_PRIMARY} disabled={saving}>

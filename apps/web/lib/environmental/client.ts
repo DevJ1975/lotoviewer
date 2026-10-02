@@ -3,6 +3,8 @@ import type { RegisterHealth } from '@soteria/core/managementSystem'
 import type { AspectOperatingCondition } from '@soteria/core/environmentalAspect'
 import type { EvaluationResult } from '@soteria/core/complianceEvaluation'
 import type { ResponsibilityCoverage, ResponsibilityKey } from '@soteria/core/emsProcesses'
+import type { Escalation, PermitInstrument, PermitProgram, PermitStanding } from '@soteria/core/environmentalPermit'
+import type { ChangeKind, ImpactTargetType } from '@soteria/core/managementOfChange'
 
 // Browser client for /api/environmental/*. Same shape as lib/fleet/client.ts
 // (bearer token, x-active-tenant, a readJson that surfaces the API's message),
@@ -68,6 +70,10 @@ export interface RegistersHealth {
     health: RegisterHealth; active: number; reviewOverdue: number; evaluationsOverdue: number; unscheduled: number; deadlinesMissed: number
   }
   responsibilities: { health: RegisterHealth } & ResponsibilityCoverage
+  permits: {
+    health: RegisterHealth; active: number; deadlineMissed: number; holderMismatch: number
+    renewalSoon: number; conditionsOverdue: number; reviewOverdue: number
+  }
 }
 
 export const getRegistersHealth = (tenantId: string) =>
@@ -139,6 +145,8 @@ export interface ObligationRow {
   last_evaluation_id: string | null; last_evaluated_at: string | null; last_result: EvaluationResult | null
   last_nonconformity_id: string | null
   open_evaluation_id: string | null; open_evaluation_due: string | null; open_evaluation_assignee: string | null
+  /** Set when this obligation is a condition of a permit. */
+  permit_id: string | null
 }
 
 export interface EvaluationRow {
@@ -151,6 +159,7 @@ export interface EvidenceRow {
   id: string; subject_id: string; kind: string; file_name: string; mime_type: string; file_size_bytes: number
   sha256: string; uploaded_by: string; uploaded_at: string
   superseded_by: string | null; superseded_at: string | null; superseded_reason: string | null
+  export_controlled: boolean
 }
 
 export interface ObligationFilters {
@@ -168,6 +177,8 @@ export const getObligation = (tenantId: string, id: string) =>
 
 export interface ObligationBody {
   discipline?: 'ems' | 'integrated'; title?: string; description?: string | null; source_kind?: string
+  /** A permit this obligation is a condition of; null unlinks it. */
+  permit_id?: string | null
   regulatory_ref?: string | null; jurisdiction?: string | null; applicability_rationale?: string | null
   evaluation_cadence_days?: number | null; next_due_at?: string; cadence?: string; cadence_days?: number | null
 }
@@ -192,20 +203,60 @@ export const completeEvaluation = (tenantId: string, evaluationId: string, body:
 }) => call<{ evaluation: EvaluationRow; nonconformity: { id: string } | null }>(
   tenantId, `/api/environmental/evaluations/${evaluationId}/complete`, { method: 'POST', body })
 
-export function uploadEvidence(tenantId: string, input: {
-  evaluationId: string; kind: 'photo' | 'document' | 'sample_result' | 'signature'; file: File
+export type EvidenceKindOption = 'photo' | 'document' | 'sample_result' | 'signature'
+export type EvidenceSubjectType =
+  | 'compliance_evaluation' | 'environmental_permit' | 'ms_change_impact' | 'compliance_calendar_event' | 'compliance_obligation'
+
+/** What a file of evidence is attached to, and what kind of file it is. */
+export interface EvidenceUploadInput {
+  subjectType: EvidenceSubjectType
+  subjectId: string
+  kind: EvidenceKindOption
+  file: File
+  /** An export-controlled file is downloaded by owners and admins only. */
+  exportControlled?: boolean
   supersedes?: { id: string; reason: string }
-}) {
+}
+
+/** Files up to this size go in the request body; larger ones go straight to storage. */
+export const MAX_BODY_EVIDENCE_BYTES = 4 * 1024 * 1024
+export const MAX_DIRECT_EVIDENCE_BYTES = 25 * 1024 * 1024
+
+const evidenceFields = (input: EvidenceUploadInput) => ({
+  subject_type: input.subjectType,
+  subject_id: input.subjectId,
+  kind: input.kind,
+  ...(input.exportControlled ? { export_controlled: true } : {}),
+  ...(input.supersedes ? { supersedes_id: input.supersedes.id, superseded_reason: input.supersedes.reason } : {}),
+})
+
+/** A small file, sent in the request. */
+function uploadEvidenceInBody(tenantId: string, input: EvidenceUploadInput) {
   const form = new FormData()
-  form.set('subject_type', 'compliance_evaluation')
-  form.set('subject_id', input.evaluationId)
-  form.set('kind', input.kind)
+  for (const [name, value] of Object.entries(evidenceFields(input))) form.set(name, String(value))
   form.set('file', input.file)
-  if (input.supersedes) {
-    form.set('supersedes_id', input.supersedes.id)
-    form.set('superseded_reason', input.supersedes.reason)
-  }
   return call<{ evidence: EvidenceRow }>(tenantId, '/api/environmental/evidence', { method: 'POST', body: form })
+}
+
+/**
+ * A larger file: the API signs a one-time upload into a pending folder, the
+ * browser sends the bytes straight to storage, and the API then re-reads,
+ * hashes and files them. A request body would be refused at about 4.5 MB.
+ */
+async function uploadEvidenceDirect(tenantId: string, input: EvidenceUploadInput) {
+  const fields = evidenceFields(input)
+  const started = await call<{ path: string; token: string }>(tenantId, '/api/environmental/evidence/uploads', {
+    method: 'POST', body: { ...fields, file_size: input.file.size },
+  })
+  const { error } = await supabase.storage.from('ms-evidence').uploadToSignedUrl(started.path, started.token, input.file)
+  if (error) throw new EmsApiError(`The file could not be uploaded: ${error.message}`, 502)
+  return call<{ evidence: EvidenceRow }>(tenantId, '/api/environmental/evidence/uploads/finalize', {
+    method: 'POST', body: { ...fields, path: started.path, file_name: input.file.name },
+  })
+}
+
+export function uploadEvidence(tenantId: string, input: EvidenceUploadInput) {
+  return input.file.size > MAX_BODY_EVIDENCE_BYTES ? uploadEvidenceDirect(tenantId, input) : uploadEvidenceInBody(tenantId, input)
 }
 
 /**
@@ -316,3 +367,150 @@ export const assignResponsibility = (tenantId: string, key: ResponsibilityKey, o
   call<{ responsibility: ResponsibilityRow }>(tenantId, `/api/environmental/responsibilities/${key}`, {
     method: 'PUT', body: { owner_user_id: ownerUserId },
   })
+
+// ── Permits and their conditions (clause 6.1.3) ─────────────────────────
+export interface PermitRow {
+  id: string; facility_id: string; program: PermitProgram; instrument: PermitInstrument
+  title: string; agency: string; permit_number: string | null; jurisdiction: string; holder_of_record: string
+  issued_on: string | null; expires_on: string | null; renewal_application_due_on: string | null; renewal_submitted_on: string | null
+  business_critical: boolean; owner_user_id: string | null; notes: string | null
+  retired_at: string | null; retired_reason: string | null
+  last_reviewed_at: string | null; next_review_due: string
+  standing: PermitStanding
+  renewal_deadline: string | null
+  escalation: Escalation | null
+  /** Null when no scope is in force yet, so there is nothing to compare the holder with. */
+  holder_mismatch: boolean | null
+  conditions_open: number; conditions_overdue: number
+}
+
+export interface PermitCondition {
+  id: string; title: string; description: string | null; cadence: string; next_due_at: string
+  owner_user_id: string | null; status: string; permit_id: string
+  last_evaluated_at: string | null; last_result: EvaluationResult | null
+}
+
+export interface PermitChangeRef { id: string; kind: ChangeKind; title: string; status: string; opened_at: string; ended_at: string | null }
+
+export interface PermitFilters {
+  status?: 'active' | 'retired' | 'all'; program?: PermitProgram; business_critical?: boolean
+  holder_mismatch?: boolean; standing?: PermitStanding
+}
+
+export const listPermits = (tenantId: string, filters: PermitFilters = {}) =>
+  call<{ permits: PermitRow[]; legalEntityInForce: string | null; asOf: string }>(
+    tenantId, `/api/environmental/permits${query({ ...filters })}`)
+
+export const getPermit = (tenantId: string, id: string) =>
+  call<{
+    permit: PermitRow; legalEntityInForce: string | null; conditions: PermitCondition[]
+    documents: EvidenceRow[]; changes: PermitChangeRef[]
+  }>(tenantId, `/api/environmental/permits/${id}`)
+
+export interface PermitBody {
+  program?: PermitProgram; instrument?: PermitInstrument; title?: string; agency?: string
+  permit_number?: string | null; jurisdiction?: string; holder_of_record?: string
+  issued_on?: string | null; expires_on?: string | null; renewal_application_due_on?: string | null
+  business_critical?: boolean; notes?: string | null
+  /** A member's user id; null clears the owner. Changed from the all-facilities view only. */
+  owner_user_id?: string | null
+}
+
+export const createPermit = (tenantId: string, body: PermitBody) =>
+  call<{ permit: PermitRow }>(tenantId, '/api/environmental/permits', { method: 'POST', body })
+
+export const updatePermit = (tenantId: string, id: string, body: PermitBody) =>
+  call<{ permit: PermitRow }>(tenantId, `/api/environmental/permits/${id}`, { method: 'PATCH', body })
+
+export const recordRenewalSubmitted = (tenantId: string, id: string, submittedOn: string) =>
+  call<{ permit: PermitRow }>(tenantId, `/api/environmental/permits/${id}/renewal`, {
+    method: 'POST', body: { action: 'submitted', submitted_on: submittedOn },
+  })
+
+export const recordRenewedTerm = (tenantId: string, id: string, term: {
+  issued_on: string; expires_on: string | null; renewal_application_due_on: string | null; permit_number: string | null
+}) => call<{ permit: PermitRow }>(tenantId, `/api/environmental/permits/${id}/renewal`, {
+  method: 'POST', body: { action: 'renewed', ...term },
+})
+
+export const retirePermit = (tenantId: string, id: string, reason: string) =>
+  call<{ permit: PermitRow }>(tenantId, `/api/environmental/permits/${id}/retire`, { method: 'POST', body: { retired_reason: reason } })
+
+export const reviewPermit = (tenantId: string, id: string) =>
+  call<{ row: PermitRow }>(tenantId, `/api/environmental/permits/${id}/review`, { method: 'POST', body: {} })
+
+export interface ConditionBody {
+  title: string; description?: string | null; citation?: string | null; applicability_rationale?: string | null
+  next_due_at: string; cadence: string; cadence_days?: number | null
+  evaluation_cadence_days?: number | null; owner_user_id?: string | null
+}
+
+export const addPermitCondition = (tenantId: string, permitId: string, body: ConditionBody) =>
+  call<{ condition: PermitCondition }>(tenantId, `/api/environmental/permits/${permitId}/conditions`, { method: 'POST', body })
+
+export interface OccurrenceRow {
+  id: string; obligation_id: string; occurrence_at: string; completed_at: string; completed_by: string | null; note: string | null
+}
+
+export const listOccurrences = (tenantId: string, obligationId: string) =>
+  call<{ occurrences: OccurrenceRow[]; evidence: EvidenceRow[] }>(tenantId, `/api/environmental/obligations/${obligationId}/occurrences`)
+
+/** Record that a condition was done for the deadline `dueOn`; the next deadline follows from its cadence. */
+export const recordOccurrence = (tenantId: string, obligationId: string, dueOn: string, note: string | null) =>
+  call<{ occurrence: { id: string; obligation_id: string; occurrence_at: string } }>(
+    tenantId, `/api/environmental/obligations/${obligationId}/occurrences`, { method: 'POST', body: { due_on: dueOn, note } })
+
+// ── Management of change (clauses 6.1.4, 8.1) ───────────────────────────
+export interface ChangeRow {
+  id: string; facility_id: string | null; discipline: string; kind: ChangeKind; title: string; description: string
+  process_area: string | null; new_legal_entity: string | null; effective_on: string | null
+  status: 'open' | 'closed' | 'cancelled'; requested_by: string | null
+  opened_at: string; ended_at: string | null; ended_by: string | null; cancelled_reason: string | null
+}
+
+export interface ChangeSummary extends ChangeRow { impacts_total: number; impacts_resolved: number }
+
+export interface ImpactRow {
+  id: string; change_id: string; target_type: ImpactTargetType; target_id: string
+  /** The named step of a permit transfer; null for any other impact. */
+  step: string | null; step_order: number; action_required: string
+  resolved_at: string | null; resolved_by: string | null; resolution_note: string | null
+  target_label: string; target_href: string | null
+  /** The impact needs a note to resolve; the note is typed as it is resolved. */
+  needs_note: boolean
+  /** Plain-words reasons the database would refuse to resolve it now. */
+  blockers: string[]
+}
+
+export interface ChangeBody {
+  discipline?: 'ems'; kind: ChangeKind; title: string; description: string
+  process_area?: string | null; new_legal_entity?: string | null; effective_on?: string | null
+}
+
+export const listChanges = (tenantId: string, status: 'open' | 'closed' | 'cancelled' | 'all' = 'open') =>
+  call<{ changes: ChangeSummary[] }>(tenantId, `/api/environmental/changes${query({ status })}`)
+
+export const getChange = (tenantId: string, id: string) =>
+  call<{ change: ChangeRow; impacts: ImpactRow[]; evidence: EvidenceRow[]; closeBlockers: string[] }>(
+    tenantId, `/api/environmental/changes/${id}`)
+
+export const openChange = (tenantId: string, body: ChangeBody) =>
+  call<{ change: ChangeRow; impacts: number }>(tenantId, '/api/environmental/changes', { method: 'POST', body })
+
+export const closeChange = (tenantId: string, id: string) =>
+  call<{ change: ChangeRow }>(tenantId, `/api/environmental/changes/${id}`, { method: 'PATCH', body: { status: 'closed' } })
+
+export const cancelChange = (tenantId: string, id: string, reason: string) =>
+  call<{ change: ChangeRow }>(tenantId, `/api/environmental/changes/${id}`, {
+    method: 'PATCH', body: { status: 'cancelled', cancelled_reason: reason },
+  })
+
+export const resolveImpact = (tenantId: string, changeId: string, impactId: string, note: string | null) =>
+  call<{ impact: ImpactRow }>(tenantId, `/api/environmental/changes/${changeId}/impacts/${impactId}/resolve`, {
+    method: 'POST', body: { resolution_note: note },
+  })
+
+/** What opening this change would create, without opening it. */
+export const previewChange = (tenantId: string, body: ChangeBody) =>
+  call<{ preview: { impacts: number; byTarget: Partial<Record<ImpactTargetType, number>> } }>(
+    tenantId, '/api/environmental/changes?preview=true', { method: 'POST', body })

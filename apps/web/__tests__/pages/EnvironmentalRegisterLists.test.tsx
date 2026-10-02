@@ -31,6 +31,7 @@ const health: RegistersHealth = {
   aspects: { health: 'green', active: 1, reviewOverdue: 0, unscored: 0 },
   obligations: { health: 'green', active: 1, reviewOverdue: 0, evaluationsOverdue: 0, unscheduled: 0, deadlinesMissed: 0 },
   responsibilities: { health: 'green', rolesUnassigned: 0, processesUnassigned: 0 },
+  permits: { health: 'green', active: 0, deadlineMissed: 0, holderMismatch: 0, renewalSoon: 0, conditionsOverdue: 0, reviewOverdue: 0 },
 }
 
 function aspect(id: string): AspectRow {
@@ -48,7 +49,7 @@ function obligation(id: string): ObligationRow {
     cadence: 'annual', next_due_at: '2027-01-01', status: 'open', source: 'tenant', source_kind: 'law',
     jurisdiction: 'federal', applicability_rationale: null, evaluation_cadence_days: 365, last_reviewed_at: null,
     next_review_due: '2099-01-01', last_evaluation_id: null, last_evaluated_at: null, last_result: null,
-    last_nonconformity_id: null, open_evaluation_id: null, open_evaluation_due: null, open_evaluation_assignee: null,
+    last_nonconformity_id: null, open_evaluation_id: null, open_evaluation_due: null, open_evaluation_assignee: null, permit_id: null,
   }
 }
 

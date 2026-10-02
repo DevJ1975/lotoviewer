@@ -109,6 +109,21 @@ describe('POST /changes', () => {
     expect(p_impacts[2]).toMatchObject({ step_order: 3, action_required: expect.stringContaining(NEW_ENTITY) })
   })
 
+  it('previews the impacts a change would create without opening it', async () => {
+    rollUp()
+    const res = await changes.POST(jsonRequest('/x?preview=true', 'POST', ownershipChange))
+    expect(res.status).toBe(200)
+    expect((await res.json()).preview).toEqual({ impacts: 11, byTarget: { permit: 9, scope: 1, policy: 1 } })
+    expect(rpcCalls).toEqual([])
+    expect(writes).toEqual([])
+  })
+
+  it('still validates, and still refuses a change of owner from one site, when previewing', async () => {
+    expect((await changes.POST(jsonRequest('/x?preview=true', 'POST', ownershipChange))).status).toBe(400)
+    rollUp()
+    expect((await changes.POST(jsonRequest('/x?preview=true', 'POST', { ...ownershipChange, title: '' }))).status).toBe(400)
+  })
+
   it('refuses a change of owner from one site, which would miss the other sites\' permits', async () => {
     const res = await changes.POST(jsonRequest('/x', 'POST', ownershipChange))   // admin A, at FACILITY_A
     expect(res.status).toBe(400)

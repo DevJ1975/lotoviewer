@@ -132,6 +132,13 @@ export async function POST(req: Request) {
     processArea: change.processArea, newLegalEntity: change.newLegalEntity,
   }, context)
 
+  // The form's "this will create N impacts" line: the same fan-out, without opening the change.
+  if (new URL(req.url).searchParams.get('preview') === 'true') {
+    const byTarget: Record<string, number> = {}
+    for (const impact of impacts) byTarget[impact.targetType] = (byTarget[impact.targetType] ?? 0) + 1
+    return NextResponse.json({ preview: { impacts: impacts.length, byTarget } })
+  }
+
   const { data: changeId, error } = await db.rpc('ms_open_change', {
     p_change: {
       tenant_id:        gate.tenantId,

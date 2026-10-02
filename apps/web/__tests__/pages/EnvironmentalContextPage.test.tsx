@@ -51,6 +51,7 @@ const health: RegistersHealth = {
   aspects: { health: 'red', active: 0, reviewOverdue: 0, unscored: 0 },
   obligations: { health: 'red', active: 0, reviewOverdue: 0, evaluationsOverdue: 0, unscheduled: 0, deadlinesMissed: 0 },
   responsibilities: { health: 'red', rolesUnassigned: 2, processesUnassigned: 14 },
+  permits: { health: 'green', active: 0, deadlineMissed: 0, holderMismatch: 0, renewalSoon: 0, conditionsOverdue: 0, reviewOverdue: 0 },
 }
 
 beforeEach(() => {

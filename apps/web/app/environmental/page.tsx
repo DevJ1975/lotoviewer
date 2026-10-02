@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
-  AlertTriangle, BarChart3, ClipboardCheck, Compass, Gauge, Mountain, Scale, ScrollText, Workflow,
+  AlertTriangle, BarChart3, ClipboardCheck, Compass, FileBadge, Gauge, GitPullRequestArrow, Mountain, Scale, ScrollText, Workflow,
 } from 'lucide-react'
 import type { RegisterHealth } from '@soteria/core/managementSystem'
 import { EMS_RESPONSIBILITIES } from '@soteria/core/emsProcesses'
@@ -30,6 +30,7 @@ interface RegisterCounts {
   reviews:        number
   nonconformities: number
   openFindings:   number
+  openChanges:    number
 }
 
 const CARDS = [
@@ -67,6 +68,20 @@ const CARDS = [
     title: 'Compliance obligations',
     desc:  'The legal register, and evidence-backed evaluations of compliance with it.',
     clause: 'Clauses 6.1.3 & 9.1.2',
+  },
+  {
+    href:  '/environmental/permits',
+    Icon:  FileBadge,
+    title: 'Permits',
+    desc:  'Each permit, registration and plan: when it renews, who holds it of record, its conditions and documents.',
+    clause: 'Clause 6.1.3',
+  },
+  {
+    href:  '/environmental/changes',
+    Icon:  GitPullRequestArrow,
+    title: 'Management of change',
+    desc:  'A change to equipment, a chemical, a process or the owner, and the records it touches.',
+    clause: 'Clauses 6.1.4 & 8.1',
   },
   {
     href:  '/environmental/objectives',
@@ -113,7 +128,7 @@ export default function EnvironmentalHomePage() {
       const head = (table: string) =>
         supabase.from(table).select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId)
 
-      const [registers, aspects, significant, objectives, reviews, ncs, openNcs] = await Promise.all([
+      const [registers, aspects, significant, objectives, reviews, ncs, openNcs, openChanges] = await Promise.all([
         getRegistersHealth(tenantId),
         head('environmental_aspect_register').is('obsolete_at', null),
         head('environmental_aspect_register').is('obsolete_at', null).eq('significant', true),
@@ -121,9 +136,10 @@ export default function EnvironmentalHomePage() {
         head('management_reviews'),
         head('nonconformities'),
         head('nonconformities').in('status', ['open', 'in_progress']),
+        head('ms_changes').eq('status', 'open').in('discipline', ['ems', 'integrated']),
       ])
 
-      const firstError = [aspects, significant, objectives, reviews, ncs, openNcs]
+      const firstError = [aspects, significant, objectives, reviews, ncs, openNcs, openChanges]
         .find(r => r.error)?.error
       if (firstError) throw new Error(formatSupabaseError(firstError, 'load EMS registers'))
 
@@ -135,6 +151,7 @@ export default function EnvironmentalHomePage() {
         reviews:         reviews.count ?? 0,
         nonconformities: ncs.count ?? 0,
         openFindings:    openNcs.count ?? 0,
+        openChanges:     openChanges.count ?? 0,
       })
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Could not load the EMS registers.')
@@ -151,6 +168,7 @@ export default function EnvironmentalHomePage() {
       case '/environmental/aspects':     return health.aspects.health
       case '/environmental/obligations': return health.obligations.health
       case '/environmental/processes':   return health.responsibilities.health
+      case '/environmental/permits':     return health.permits.health
       default:                           return null
     }
   }
@@ -173,6 +191,15 @@ export default function EnvironmentalHomePage() {
           health.responsibilities.rolesUnassigned > 0 ? `${health.responsibilities.rolesUnassigned} of ${ROLE_COUNT} roles unassigned` : 'roles assigned',
           `${health.responsibilities.processesUnassigned} processes without an owner`,
         ].join(' · ')
+      case '/environmental/permits':
+        return [
+          `${health.permits.active} in force`,
+          health.permits.deadlineMissed > 0 && `${health.permits.deadlineMissed} renewal deadlines missed`,
+          health.permits.holderMismatch > 0 && `${health.permits.holderMismatch} holder mismatch`,
+          health.permits.renewalSoon > 0 && `${health.permits.renewalSoon} renewals due within 90 days`,
+        ].filter(Boolean).join(' · ')
+      case '/environmental/changes':
+        return `${counts.openChanges} open`
       case '/environmental/objectives':
         return `${counts.objectives} objectives`
       case '/environmental/management-review':

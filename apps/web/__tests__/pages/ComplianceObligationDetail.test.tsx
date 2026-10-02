@@ -35,7 +35,7 @@ const obligation = {
   source_kind: 'permit', jurisdiction: 'state:TX', applicability_rationale: 'Industrial stormwater discharge',
   evaluation_cadence_days: 365, last_reviewed_at: null, next_review_due: '2027-06-01',
   last_evaluation_id: null, last_evaluated_at: null, last_result: null, last_nonconformity_id: null,
-  open_evaluation_id: 'ev-1', open_evaluation_due: '2026-10-01', open_evaluation_assignee: 'user-member',
+  open_evaluation_id: 'ev-1', open_evaluation_due: '2026-10-01', open_evaluation_assignee: 'user-member', permit_id: null,
 } satisfies ObligationRow
 
 const openEvaluation: EvaluationRow = {
