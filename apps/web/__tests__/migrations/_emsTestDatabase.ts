@@ -141,9 +141,21 @@ export const PHASE1_MIGRATIONS = [
 ] as const
 /** Phase 1.1: the gaps the ISO 14001 audit of Phase 1 found. */
 export const PHASE1_1_MIGRATIONS = ['302_ems_phase1_audit_fixes.sql'] as const
+/** Phase 2: the permit vault and management of change, all applied before the deploy. */
+export const PHASE2_MIGRATIONS = [
+  '304_environmental_permits.sql',
+  '305_ms_changes.sql',
+  '306_ms_evidence_subjects.sql',
+] as const
 
-/** A fresh database with the platform, two tenants, and every migration through Phase 1.1 applied. */
-export async function createEmsDatabase(options: { throughPhase1?: boolean } = {}): Promise<PGlite> {
+/**
+ * A fresh database with the platform, two tenants, and every EMS migration
+ * applied. `throughPhase1: false` stops before Phase 1; `throughPhase2: false`
+ * stops after Phase 1.1.
+ */
+export async function createEmsDatabase(
+  options: { throughPhase1?: boolean; throughPhase2?: boolean } = {},
+): Promise<PGlite> {
   const db = new PGlite({ extensions: { pgcrypto } })
   await db.exec(PLATFORM_SQL)
   for (const file of BASE_MIGRATIONS) await db.exec(migrationSql(file))
@@ -151,6 +163,9 @@ export async function createEmsDatabase(options: { throughPhase1?: boolean } = {
   for (const file of [...FACILITY_MIGRATIONS, ...PRE_PHASE1_MIGRATIONS]) await db.exec(migrationSql(file))
   if (options.throughPhase1 !== false) {
     for (const file of [...PHASE1_MIGRATIONS, ...PHASE1_1_MIGRATIONS]) await db.exec(migrationSql(file))
+    if (options.throughPhase2 !== false) {
+      for (const file of PHASE2_MIGRATIONS) await db.exec(migrationSql(file))
+    }
   }
   return db
 }

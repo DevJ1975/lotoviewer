@@ -4,8 +4,10 @@ import {
   DISCIPLINES,
   REQUIRED_POLICY_COMMITMENTS,
   addCalendarDays,
+  calendarDaysBetween,
   contextRegisterHealth,
   nextReviewDue,
+  normalizeLegalEntity,
   policyIsComplete,
   policySignatoryStale,
   isCalendarDate,
@@ -13,6 +15,7 @@ import {
   registerHealth,
   registerHealthFromCounts,
   requiredCommitments,
+  sameLegalEntity,
   scopeAndPolicyHealth,
   validateContextIssueInput,
   validateInterestedPartyInput,
@@ -158,6 +161,47 @@ describe('policySignatoryStale', () => {
     expect(policySignatoryStale({ signedAt: '2020-01-01' }, [v(1, 'Co', '2026-01-01')])).toBe(false)
     const scopes = [v(2, 'New Owner Inc', '2026-06-01'), v(1, 'Old Owner LLC', '2024-01-01')]
     expect(policySignatoryStale({ signedAt: '2025-03-01' }, scopes)).toBe(true)
+  })
+
+  it('does not count punctuation or spacing as a change of entity', () => {
+    const scopes = [v(1, 'Northfield Forge & Finish LLC', '2024-01-01'), v(2, 'Northfield Forge & Finish, L.L.C.', '2026-06-01')]
+    expect(policySignatoryStale({ signedAt: '2025-01-01' }, scopes)).toBe(false)
+  })
+})
+
+describe('normalizeLegalEntity and sameLegalEntity', () => {
+  it.each([
+    ['Northfield Forge & Finish LLC', 'northfield forge & finish llc'],
+    ['Northfield Forge & Finish, L.L.C.', 'northfield forge & finish llc'],
+    ['  Acme \t Holdings\r\nInc.  ', 'acme holdings inc'],
+    ['ACME', 'acme'],
+  ])('normalizes %j to %j', (name, expected) => {
+    expect(normalizeLegalEntity(name)).toBe(expected)
+  })
+
+  it('keeps what distinguishes one entity from another', () => {
+    expect(sameLegalEntity('Forge & Finish LLC', 'Forge and Finish LLC')).toBe(false)
+    expect(sameLegalEntity('Forge & Finish LLC', 'Forge & Finish Inc')).toBe(false)
+    expect(sameLegalEntity('Forge-Finish LLC', 'Forge Finish LLC')).toBe(false)
+  })
+
+  it('folds ASCII only, so it agrees with the database whatever its locale', () => {
+    // An accented capital stays as typed; the comparison is strict rather than locale-dependent.
+    expect(normalizeLegalEntity('SOCIÉTÉ Générale')).toBe('sociÉtÉ générale')
+    expect(sameLegalEntity('Société', 'SOCIÉTÉ')).toBe(false)
+  })
+})
+
+describe('calendarDaysBetween', () => {
+  it.each([
+    ['2026-10-02', '2026-10-02', 0],
+    ['2026-10-02', '2026-10-03', 1],
+    ['2026-10-03', '2026-10-02', -1],
+    ['2027-12-31', '2028-01-01', 1],
+    ['2028-02-28', '2028-03-01', 2],
+    ['2026-03-07', '2026-03-09', 2],
+  ])('from %s to %s is %i days', (from, to, days) => {
+    expect(calendarDaysBetween(from, to)).toBe(days)
   })
 })
 

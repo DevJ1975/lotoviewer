@@ -91,6 +91,20 @@ export function addCalendarDays(date: string, days: number): string {
 }
 
 /**
+ * Whole calendar days from `from` to `to` (negative when `to` is earlier),
+ * in UTC calendar days like addCalendarDays.
+ * @param from ISO calendar date (YYYY-MM-DD).
+ * @param to   ISO calendar date (YYYY-MM-DD).
+ */
+export function calendarDaysBetween(from: string, to: string): number {
+  const utc = (date: string) => {
+    const [year, month, day] = date.split('-').map(Number)
+    return Date.UTC(year, month - 1, day)
+  }
+  return Math.round((utc(to) - utc(from)) / 86_400_000)
+}
+
+/**
  * When a row reviewed on `reviewedOn` is next due for review.
  * @param reviewedOn ISO calendar date (YYYY-MM-DD) of the review.
  * @param cadenceDays Days between reviews; a whole number of at least 1.
@@ -153,6 +167,32 @@ export function policyIsComplete(policy: PolicyCompletenessInput, discipline: Di
   return statesEveryCommitment && signed
 }
 
+// ── Legal entity (clause 4.3; Lessons L3 and L8) ─────────────────────────
+
+/**
+ * A legal entity's name reduced to what tells two names apart: ASCII
+ * letters lower-cased, full stops and commas dropped, runs of spaces, tabs
+ * and line breaks collapsed to one space, ends trimmed. "Forge & Finish,
+ * L.L.C." and "forge & finish LLC" normalize alike; "&" and "and" do not.
+ *
+ * Only ASCII is folded, so the result matches
+ * public.ms_normalize_legal_entity() (migration 305) whatever the database's
+ * locale: PostgreSQL's lower() depends on it and JavaScript's does not. A
+ * PGlite test pins the two together.
+ */
+export function normalizeLegalEntity(name: string): string {
+  return name
+    .replace(/[A-Z]/g, letter => letter.toLowerCase())
+    .replace(/[.,]/g, '')
+    .replace(/[ \t\r\n]+/g, ' ')
+    .replace(/^ | $/g, '')
+}
+
+/** True when two legal-entity names are the same entity by normalizeLegalEntity's rule. */
+export function sameLegalEntity(a: string, b: string): boolean {
+  return normalizeLegalEntity(a) === normalizeLegalEntity(b)
+}
+
 export interface ScopeVersion {
   version:       number
   legalEntity:   string
@@ -170,8 +210,7 @@ export function policySignatoryStale(policy: { signedAt: string }, scopes: reado
   const ordered = [...scopes].sort((a, b) => a.version - b.version)
   let lastEntityChange: string | null = null
   for (let i = 1; i < ordered.length; i++) {
-    const entityChanged = ordered[i].legalEntity.trim().toLowerCase() !== ordered[i - 1].legalEntity.trim().toLowerCase()
-    if (entityChanged) lastEntityChange = ordered[i].effectiveFrom
+    if (!sameLegalEntity(ordered[i].legalEntity, ordered[i - 1].legalEntity)) lastEntityChange = ordered[i].effectiveFrom
   }
   return lastEntityChange !== null && lastEntityChange > policy.signedAt
 }

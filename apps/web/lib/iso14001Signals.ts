@@ -3,6 +3,7 @@ import { formatSupabaseError } from '@/lib/supabaseError'
 import { reviewHasOutputs } from '@soteria/core/managementReview'
 import { policyIsComplete, policySignatoryStale, registerDisciplines } from '@soteria/core/managementSystem'
 import { responsibilityCoverage } from '@soteria/core/emsProcesses'
+import { holderOfRecordMismatch, renewalDeadlineMissed } from '@soteria/core/environmentalPermit'
 import {
   READINESS_WINDOWS,
   type ReadinessSignals,
@@ -72,6 +73,7 @@ export async function fetchIso14001Signals(tenantId: string): Promise<ReadinessS
     aspects, objectives, objectiveReadings,
     obligations, obligationsOverdue, obligationsReviewOverdue,
     lastEvaluation, evaluationsOverdue, obligationsUnscheduled, evaluationsUndetermined,
+    permits,
     reviews,
     nonconformities, ncActions,
   ] = await Promise.all([
@@ -109,6 +111,9 @@ export async function fetchIso14001Signals(tenantId: string): Promise<ReadinessS
     t('ms_compliance_evaluations').in('discipline', ems).is('completed_at', null).lt('scheduled_for', today),
     registerObligations().is('evaluation_cadence_days', null),
     t('ms_obligation_register').in('discipline', ems).neq('status', 'dismissed').eq('last_result', 'undetermined'),
+    supabase.from('environmental_permits')
+      .select('holder_of_record, expires_on, renewal_application_due_on, renewal_submitted_on')
+      .eq('tenant_id', tenantId).is('retired_at', null).limit(5000),
     supabase.from('management_reviews')
       .select('review_date, conclusions, decisions, status')
       .eq('tenant_id', tenantId).eq('status', 'completed')
@@ -127,7 +132,7 @@ export async function fetchIso14001Signals(tenantId: string): Promise<ReadinessS
     contextIssues, contextIssuesOverdue, climateIssues, parties, partiesOverdue,
     scopes, policies, heldResponsibilities, aspects,
     obligations, obligationsOverdue, obligationsReviewOverdue,
-    lastEvaluation, evaluationsOverdue, obligationsUnscheduled, evaluationsUndetermined,
+    lastEvaluation, evaluationsOverdue, obligationsUnscheduled, evaluationsUndetermined, permits,
   ].find(r => r.error)?.error
   if (failedRead) throw new Error(formatSupabaseError(failedRead, 'Could not read the EMS registers.'))
 
@@ -178,6 +183,15 @@ export async function fetchIso14001Signals(tenantId: string): Promise<ReadinessS
 
   const lastReview = (reviews.data ?? [])[0] ?? null
 
+  const legalEntityInForce = scopeRows[0]?.legal_entity ?? null
+  const permitRows = (permits.data ?? []).map(p => ({
+    holderOfRecord:          p.holder_of_record as string,
+    retiredAt:               null,
+    expiresOn:               p.expires_on as string | null,
+    renewalApplicationDueOn: p.renewal_application_due_on as string | null,
+    renewalSubmittedOn:      p.renewal_submitted_on as string | null,
+  }))
+
   return {
     contextIssuesActive:            countRows(contextIssues),
     contextIssuesReviewOverdue:     countRows(contextIssuesOverdue),
@@ -225,6 +239,8 @@ export async function fetchIso14001Signals(tenantId: string): Promise<ReadinessS
     evaluationsOverdue:      countRows(evaluationsOverdue),
     obligationsUnscheduled:  countRows(obligationsUnscheduled),
     evaluationsUndetermined: countRows(evaluationsUndetermined),
+    permitsDeadlineMissed:   permitRows.filter(p => renewalDeadlineMissed(p, today)).length,
+    permitsHolderMismatch:   permitRows.filter(p => holderOfRecordMismatch(p.holderOfRecord, legalEntityInForce) === true).length,
 
     significantUnaddressed: significant.filter(a =>
       !aspectIdsWithObjective.has(a.id) && !a.controls?.trim() && !a.related_risk_id,

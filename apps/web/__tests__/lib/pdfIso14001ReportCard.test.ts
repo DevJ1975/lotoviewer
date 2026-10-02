@@ -21,6 +21,7 @@ function signals(overrides: Partial<ReadinessSignals> = {}): ReadinessSignals {
     aspectsUnscored: 0, aspectsControlUndetermined: 0, aspectsReviewOverdue: 0,
     obligationsTotal: 6, obligationsOverdue: 1, obligationsReviewOverdue: 0,
     complianceEvalAgeDays: 50, evaluationsOverdue: 0, obligationsUnscheduled: 0, evaluationsUndetermined: 0,
+    permitsDeadlineMissed: 0, permitsHolderMismatch: 0,
     significantUnaddressed: 1,
     objectivesActive: 6, objectivesLinked: 6, objectivesWithTargets: 6, objectivesAchieved: 1,
     objectivesStaleReadings: 1,

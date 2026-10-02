@@ -153,6 +153,11 @@ export interface ReadinessSignals {
   obligationsUnscheduled: number
   /** Obligations whose latest result is undetermined: their compliance status is unknown. */
   evaluationsUndetermined: number
+  // 6.1.3 The permit vault (Phase 2)
+  /** Active permits whose renewal deadline passed with no renewal submitted. */
+  permitsDeadlineMissed: number
+  /** Active permits naming a holder other than the legal entity in the scope in force. */
+  permitsHolderMismatch: number
   // 6.1.4
   significantUnaddressed: number
   // 6.2.1 Objectives
@@ -303,9 +308,16 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
   ], ['conforming',
     `${s.aspectsTotal} aspects recorded, ${s.aspectsSignificant} significant, all scored, controlled and within review.`])
 
-  // 6.1.3 — Compliance obligations.
-  push('6.1.3', '/environmental/obligations', [
+  // 6.1.3 — Compliance obligations. A permit that lapsed or names a previous
+  // owner outranks a late deadline, so its finding comes first and its fix
+  // link opens the permits register.
+  const permitFinding = s.permitsDeadlineMissed > 0 || s.permitsHolderMismatch > 0
+  push('6.1.3', s.obligationsTotal > 0 && permitFinding ? '/environmental/permits' : '/environmental/obligations', [
     [s.obligationsTotal === 0, 'gap', 'The compliance obligations register is empty.'],
+    [s.permitsDeadlineMissed > 0, 'attention',
+      `${count(s.permitsDeadlineMissed, 'permit has passed its', 'permits have passed their')} renewal deadline with no renewal submitted.`],
+    [s.permitsHolderMismatch > 0, 'attention',
+      `${count(s.permitsHolderMismatch, 'permit names', 'permits name')} a holder other than the legal entity in the scope.`],
     [s.obligationsOverdue > 0, 'attention',
       `${count(s.obligationsOverdue, 'compliance obligation is past its', 'compliance obligations are past their')} due date.`],
     [s.obligationsReviewOverdue > 0, 'attention',

@@ -68,12 +68,12 @@ export const ISO14001_CLAUSE_MAP: readonly Iso14001ClauseEntry[] = [
   {
     code:    '6.1.3',
     title:   'Compliance obligations',
-    sources: ['compliance_calendar_obligations', 'prop65_annual_reviews'],
+    sources: ['compliance_calendar_obligations', 'environmental_permits', 'prop65_annual_reviews'],
   },
   {
     code:    '6.1.4',
     title:   'Planning action',
-    sources: ['risk_controls', 'incident_capas', 'environmental_aspects'],
+    sources: ['risk_controls', 'incident_capas', 'environmental_aspects', 'ms_changes'],
   },
   {
     code:    '6.2.1',
@@ -103,7 +103,7 @@ export const ISO14001_CLAUSE_MAP: readonly Iso14001ClauseEntry[] = [
   {
     code:    '8.1',
     title:   'Operational planning and control',
-    sources: ['chemical_inventory_items', 'hazardous_waste_containers', 'hazardous_waste_streams', 'inspections'],
+    sources: ['chemical_inventory_items', 'hazardous_waste_containers', 'hazardous_waste_streams', 'inspections', 'ms_changes'],
   },
   {
     code:    '8.2',

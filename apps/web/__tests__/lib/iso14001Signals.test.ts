@@ -105,6 +105,35 @@ describe('fetchIso14001Signals — the Phase 1 registers', () => {
   })
 })
 
+describe('fetchIso14001Signals — the permit vault', () => {
+  const permit = (holder: string, expiresOn: string | null, extra: Record<string, unknown> = {}) => ({
+    tenant_id: TENANT_A, holder_of_record: holder, expires_on: expiresOn, renewal_application_due_on: null,
+    renewal_submitted_on: null, retired_at: null, ...extra,
+  })
+
+  it('counts active permits past their renewal deadline, and those naming a holder other than the scope in force', async () => {
+    seed('ms_scope_statements', [
+      { tenant_id: TENANT_A, discipline: 'ems', version: 1, legal_entity: 'Northfield Metal Products Inc.', effective_from: '2020-01-01', next_review_due: FUTURE, control_and_influence: null },
+      { tenant_id: TENANT_A, discipline: 'ems', version: 2, legal_entity: 'Northfield Forge & Finish LLC', effective_from: '2025-01-01', next_review_due: FUTURE, control_and_influence: null },
+    ])
+    seed('environmental_permits', [
+      permit('Northfield Forge & Finish, LLC', FUTURE),
+      permit('Northfield Forge & Finish LLC', PAST),
+      permit('Northfield Forge & Finish LLC', PAST, { renewal_submitted_on: '2025-11-01' }),
+      permit('Northfield Forge & Finish LLC', FUTURE, { renewal_application_due_on: PAST }),
+      permit('Northfield Metal Products Inc.', FUTURE),
+      permit('Northfield Metal Products Inc.', PAST, { retired_at: '2026-02-01T00:00:00Z' }),
+      { ...permit('Northfield Metal Products Inc.', PAST), tenant_id: TENANT_B },
+    ])
+    expect(await signals()).toMatchObject({ permitsDeadlineMissed: 2, permitsHolderMismatch: 1 })
+  })
+
+  it('flags no holder when no scope is recorded to compare against', async () => {
+    seed('environmental_permits', [permit('Anyone at all', FUTURE)])
+    expect(await signals()).toMatchObject({ permitsDeadlineMissed: 0, permitsHolderMismatch: 0 })
+  })
+})
+
 describe('fetchIso14001Signals — safety records are not environmental evidence', () => {
   it('leaves 7.2 to 8.2 not assessed however many safety records the tenant keeps', async () => {
     // These clauses once graded from exactly these tables, which an auditor would not accept as environmental evidence.

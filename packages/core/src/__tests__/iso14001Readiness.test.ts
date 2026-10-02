@@ -45,6 +45,8 @@ function healthy(): ReadinessSignals {
     evaluationsOverdue:    0,
     obligationsUnscheduled:  0,
     evaluationsUndetermined: 0,
+    permitsDeadlineMissed: 0,
+    permitsHolderMismatch: 0,
     significantUnaddressed: 0,
     objectivesActive:      6,
     objectivesLinked:      6,
@@ -159,6 +161,8 @@ describe('assessIso14001 — per-clause verdicts', () => {
     ['6.1.3', 'gap',       { obligationsTotal: 0 },                       'no obligations'],
     ['6.1.3', 'attention', { obligationsOverdue: 1 },                     'overdue obligation'],
     ['6.1.3', 'attention', { obligationsReviewOverdue: 1 },               'obligation past register review'],
+    ['6.1.3', 'attention', { permitsDeadlineMissed: 1 },                  'a permit past its renewal deadline'],
+    ['6.1.3', 'attention', { permitsHolderMismatch: 1 },                  'a permit naming another holder'],
     ['6.1.4', 'attention', { significantUnaddressed: 1 },                 'unaddressed significant aspect'],
     ['6.2.1', 'gap',       { objectivesActive: 0 },                       'no objectives'],
     ['6.2.1', 'attention', { objectivesWithTargets: 4 },                  'objectives without targets'],
@@ -192,6 +196,18 @@ describe('assessIso14001 — per-clause verdicts', () => {
       .toBe('3 aspects do not record whether the organization controls them or can only influence them.')
     expect(reason('5.3', { processesUnassigned: 1 })).toBe('1 EMS process has no owner.')
     expect(reason('4.3', { scopeStatesControlAndInfluence: false })).toContain('(4.3 e)')
+  })
+
+  it('puts a permit finding first and sends its fix link to the permits register', () => {
+    const clause = (patch: Partial<ReadinessSignals>) =>
+      assessIso14001({ ...healthy(), ...patch }).clauses.find(c => c.code === '6.1.3')!
+    const lapsed = clause({ permitsDeadlineMissed: 2, obligationsOverdue: 1 })
+    expect(lapsed.reason).toBe('2 permits have passed their renewal deadline with no renewal submitted.')
+    expect(lapsed.fixHref).toBe('/environmental/permits')
+    expect(clause({ permitsHolderMismatch: 1 }).reason).toBe('1 permit names a holder other than the legal entity in the scope.')
+    expect(clause({ obligationsOverdue: 1 }).fixHref).toBe('/environmental/obligations')
+    // An empty register is the gap to fix first, whatever the permits show.
+    expect(clause({ obligationsTotal: 0, permitsHolderMismatch: 1 }).fixHref).toBe('/environmental/obligations')
   })
 
   it('treats a reading exactly at the window boundary as still current', () => {

@@ -1,6 +1,6 @@
 # Phase 2 plan: permit vault and ownership-change workflow
 
-- **Status:** Proposed. Awaiting the product owner's "go" before any application code or migration file is written.
+- **Status:** Accepted. The product owner replied "go" on 2026-10-02, taking every decision and every lean in §2. Migrations 304–306 await approval before they are applied.
 - **Branch:** `feat/ems-phase2-permits`, stacked on `chore/release-1.20.0` (#316), so its migrations start at 304.
 - **Contract:** [EMS_IMPLEMENTATION_PLAN.md](./EMS_IMPLEMENTATION_PLAN.md), "Phase 2" and Lessons L8–L9, as adapted by [ADR 0001](./adr/0001-build-on-the-existing-environmental-module.md).
 - **Ground truth:** [00-repo-map.md](./00-repo-map.md), and the two read-only discovery passes summarized in "What exists today".

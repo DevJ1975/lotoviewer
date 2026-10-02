@@ -44,6 +44,7 @@ function healthy(): ReadinessSignals {
     aspectsUnscored: 0, aspectsControlUndetermined: 0, aspectsReviewOverdue: 0,
     obligationsTotal: 6, obligationsOverdue: 0, obligationsReviewOverdue: 0,
     complianceEvalAgeDays: 50, evaluationsOverdue: 0, obligationsUnscheduled: 0, evaluationsUndetermined: 0,
+    permitsDeadlineMissed: 0, permitsHolderMismatch: 0,
     significantUnaddressed: 0,
     objectivesActive: 6, objectivesLinked: 6, objectivesWithTargets: 6, objectivesAchieved: 2,
     objectivesStaleReadings: 0,
