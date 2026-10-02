@@ -31,6 +31,7 @@ describe('fetchIso14001Signals — the Phase 1 registers', () => {
       contextIssuesActive: 0, climateIssueRecorded: false, interestedPartiesActive: 0,
       scopeOnFile: false, policyApproved: false, policySignatoryStale: false,
       aspectsTotal: 0, aspectsUnscored: 0, obligationsTotal: 0, complianceEvalAgeDays: null, evaluationsOverdue: 0,
+      obligationsUnscheduled: 0, evaluationsUndetermined: 0,
     })
   })
 
@@ -84,19 +85,21 @@ describe('fetchIso14001Signals — the Phase 1 registers', () => {
 
   it('reads obligations from the environmental register and evaluations from their record', async () => {
     seed('compliance_calendar_obligations', [
-      { tenant_id: TENANT_A, discipline: 'ems', status: 'open', next_due_at: PAST, next_review_due: FUTURE },
-      { tenant_id: TENANT_A, discipline: 'integrated', status: 'open', next_due_at: FUTURE, next_review_due: PAST },
-      { tenant_id: TENANT_A, discipline: 'ohs', status: 'open', next_due_at: PAST, next_review_due: PAST },
-      { tenant_id: TENANT_A, discipline: 'ems', status: 'dismissed', next_due_at: PAST, next_review_due: PAST },
+      { id: 'o1', tenant_id: TENANT_A, discipline: 'ems', status: 'open', next_due_at: PAST, next_review_due: FUTURE, evaluation_cadence_days: 365 },
+      { id: 'o2', tenant_id: TENANT_A, discipline: 'integrated', status: 'open', next_due_at: FUTURE, next_review_due: PAST, evaluation_cadence_days: null },
+      { id: 'o3', tenant_id: TENANT_A, discipline: 'ohs', status: 'open', next_due_at: PAST, next_review_due: PAST },
+      { id: 'o4', tenant_id: TENANT_A, discipline: 'ems', status: 'dismissed', next_due_at: PAST, next_review_due: PAST },
     ])
     seed('ms_compliance_evaluations', [
-      { tenant_id: TENANT_A, discipline: 'ems', completed_at: '2026-09-22T09:00:00Z', scheduled_for: '2026-09-20' },
-      { tenant_id: TENANT_A, discipline: 'ems', completed_at: null, scheduled_for: '2026-09-25' },
-      { tenant_id: TENANT_A, discipline: 'ohs', completed_at: null, scheduled_for: '2026-09-25' },
+      { tenant_id: TENANT_A, discipline: 'ems', obligation_id: 'o1', completed_at: '2026-09-22T09:00:00Z', scheduled_for: '2026-09-20', result: 'compliant' },
+      // Newer, but it established nothing: it neither dates the last evaluation nor settles the status.
+      { tenant_id: TENANT_A, discipline: 'ems', obligation_id: 'o1', completed_at: '2026-09-30T09:00:00Z', scheduled_for: '2026-09-29', result: 'undetermined' },
+      { tenant_id: TENANT_A, discipline: 'ems', obligation_id: 'o2', completed_at: null, scheduled_for: '2026-09-25' },
+      { tenant_id: TENANT_A, discipline: 'ohs', obligation_id: 'o3', completed_at: null, scheduled_for: '2026-09-25' },
     ])
     expect(await signals()).toMatchObject({
       obligationsTotal: 2, obligationsOverdue: 1, obligationsReviewOverdue: 1,
-      complianceEvalAgeDays: 10, evaluationsOverdue: 1,
+      complianceEvalAgeDays: 10, evaluationsOverdue: 1, obligationsUnscheduled: 1, evaluationsUndetermined: 1,
     })
   })
 })

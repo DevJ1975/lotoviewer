@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
-import { evaluationsToSchedule, type EvaluationRecord } from '@soteria/core/complianceEvaluation'
+import { evaluationsToSchedule, type EvaluationRecord, type EvaluationResult } from '@soteria/core/complianceEvaluation'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { withCronLogging } from '@/lib/cronInstrumentation'
@@ -76,6 +76,7 @@ interface RegisterRow {
   evaluation_cadence_days: number
   owner_user_id:           string | null
   last_evaluated_at:       string | null
+  last_result:             EvaluationResult | null
   open_evaluation_id:      string | null
 }
 
@@ -127,7 +128,7 @@ async function run(req: Request): Promise<NextResponse> {
     for (let from = 0; ; from += PAGE_SIZE) {
       const { data, error } = await admin
         .from('ms_obligation_register')
-        .select('id, tenant_id, facility_id, discipline, status, title, evaluation_cadence_days, owner_user_id, last_evaluated_at, open_evaluation_id')
+        .select('id, tenant_id, facility_id, discipline, status, title, evaluation_cadence_days, owner_user_id, last_evaluated_at, last_result, open_evaluation_id')
         .in('tenant_id', tenantIds)
         .in('discipline', EMS_DISCIPLINES)
         .not('evaluation_cadence_days', 'is', null)
@@ -142,7 +143,7 @@ async function run(req: Request): Promise<NextResponse> {
   // ── 3. What falls due ────────────────────────────────────────────────
   const evaluations: EvaluationRecord[] = register.flatMap(row => [
     ...(row.open_evaluation_id ? [{ obligationId: row.id, completedAt: null }] : []),
-    ...(row.last_evaluated_at ? [{ obligationId: row.id, completedAt: row.last_evaluated_at }] : []),
+    ...(row.last_evaluated_at ? [{ obligationId: row.id, completedAt: row.last_evaluated_at, result: row.last_result }] : []),
   ])
   const due = evaluationsToSchedule(
     register.map(row => ({ id: row.id, evaluationCadenceDays: row.evaluation_cadence_days, active: row.status === 'open' })),

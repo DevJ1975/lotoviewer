@@ -43,7 +43,7 @@ function healthy(): ReadinessSignals {
     aspectsTotal: 14, aspectsSignificant: 5, significantUncontrolled: 0,
     aspectsUnscored: 0, aspectsReviewOverdue: 0,
     obligationsTotal: 6, obligationsOverdue: 0, obligationsReviewOverdue: 0,
-    complianceEvalAgeDays: 50, evaluationsOverdue: 0,
+    complianceEvalAgeDays: 50, evaluationsOverdue: 0, obligationsUnscheduled: 0, evaluationsUndetermined: 0,
     significantUnaddressed: 0,
     objectivesActive: 6, objectivesLinked: 6, objectivesWithTargets: 6, objectivesAchieved: 2,
     trainingRecords: 40, trainingExpired: 0, trainingExpiringSoon: 0,

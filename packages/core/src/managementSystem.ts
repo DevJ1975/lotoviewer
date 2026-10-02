@@ -115,9 +115,9 @@ export interface PolicyCommitment {
 export const REQUIRED_POLICY_COMMITMENTS: Readonly<Record<'ems' | 'ohs', readonly PolicyCommitment[]>> = {
   // ISO 14001:2015 clause 5.2 c), d), e)
   ems: [
-    { key: 'ems.protect_environment',     label: 'Protect the environment, including preventing pollution' },
+    { key: 'ems.protect_environment',     label: 'Protect the environment, including preventing pollution and other commitments relevant to our context' },
     { key: 'ems.fulfil_obligations',      label: 'Fulfil our compliance obligations' },
-    { key: 'ems.continual_improvement',   label: 'Continually improve the environmental management system' },
+    { key: 'ems.continual_improvement',   label: 'Continually improve the environmental management system to enhance environmental performance' },
   ],
   // ISO 45001:2018 clause 5.2 a), c), d), e), f)
   ohs: [

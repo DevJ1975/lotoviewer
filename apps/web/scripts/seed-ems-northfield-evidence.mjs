@@ -10,10 +10,10 @@
  * evaluation also names the person who evaluated it. So this script uploads
  * small generated PDFs, records their hashes, and completes:
  *
- *   stormwater general permit      compliant       with a monitoring record
- *   hazardous waste generator      compliant       with a monthly tally
+ *   stormwater visual monitoring   compliant       with the quarter's monitoring record
+ *   hazardous waste generator      compliant       with a monthly tally and inspection log
  *   surface coating permit by rule noncompliant    with a usage log, opening a nonconformity
- *   hazardous waste biennial report not applicable with notes saying why
+ *   hazardous waste biennial report not applicable with the monthly tallies that show why
  *
  * The files say on their face that they are invented demo records.
  *
@@ -71,20 +71,20 @@ function northfieldId(register, ordinal) {
 export const COMPLETIONS = [
   {
     ordinal: 1, obligation: 9, scheduledDaysAgo: 95, completedDaysAgo: 92, result: 'compliant',
-    notes: 'Quarterly visual assessment done at the north outfall; no sheen, odor or floating solids.',
+    notes: 'Quarterly visual monitoring record for the north outfall reviewed: complete, and no sheen, odor, foam or solids observed.',
     evidence: {
       fileName: 'stormwater-visual-monitoring.pdf',
       lines: ['Quarterly stormwater visual monitoring record', 'Outfall: north outfall',
-        'Observations: clear, no sheen, no odor, no floating solids'],
+        'Observations: clear, no sheen, odor, foam or floating solids'],
     },
   },
   {
     ordinal: 2, obligation: 3, scheduledDaysAgo: 40, completedDaysAgo: 38, result: 'compliant',
-    notes: 'Monthly generation tally kept; accumulation containers closed, labeled and dated.',
+    notes: 'Monthly generation tally kept; weekly accumulation-area inspection log complete for the month; containers closed, labeled and dated.',
     evidence: {
       fileName: 'generator-monthly-tally.pdf',
-      lines: ['Hazardous waste generator monthly tally', 'Streams: spent paint filters, spent coolant, spent solvent',
-        'Containers inspected: closed, labeled, dated'],
+      lines: ['Hazardous waste generator monthly tally', 'Streams: spent paint filters, spent coolant concentrate, spent solvent',
+        'Weekly central accumulation area inspections: all recorded', 'Containers: closed, labeled, dated'],
     },
   },
   {
@@ -98,13 +98,19 @@ export const COMPLETIONS = [
     nonconformity: {
       ordinal: 1,
       title: 'Coating usage records missing for three production days',
-      description: 'The permit by rule relies on daily coating usage records; three production days in the quarter have none.',
+      description: 'The paint booth\'s permit by rule depends on coating usage records to demonstrate compliance (30 TAC §106.8), and the plant procedure requires a daily entry; three production days in the quarter have none.',
       classification: 'minor',
     },
   },
   {
     ordinal: 4, obligation: 4, scheduledDaysAgo: 60, completedDaysAgo: 58, result: 'not_applicable',
-    notes: 'The site generated as a small quantity generator in every month of the reporting year, so the biennial report does not apply.',
+    notes: 'The site was not a large quantity generator in any month of the odd-numbered reporting year (monthly generation tallies attached), so 40 CFR 262.41(a) required no report.',
+    // A not-applicable result that rests on facts carries the records that show them.
+    evidence: {
+      fileName: 'reporting-year-generation-tallies.pdf',
+      lines: ['Monthly hazardous waste generation tallies, odd-numbered reporting year',
+        'Generator category each month: small quantity generator', 'No month at large quantity generator levels'],
+    },
   },
 ]
 

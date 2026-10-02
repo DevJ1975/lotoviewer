@@ -147,7 +147,7 @@ export function ObligationForm({ tenantId, initial, onSaved, onCancel }: {
         <label className={LABEL}>
           <span className={LABEL_TEXT}>Evaluate compliance every (days)</span>
           <input className={INPUT} inputMode="numeric" value={form.evaluation_cadence_days}
-            onChange={e => set('evaluation_cadence_days', e.target.value)} placeholder="Blank: never scheduled" />
+            onChange={e => set('evaluation_cadence_days', e.target.value)} placeholder="e.g. 365 (clause 9.1.2 a asks for one)" />
           {fieldError('evaluation_cadence_days')}
         </label>
         <label className={`${LABEL} sm:col-span-2`}>

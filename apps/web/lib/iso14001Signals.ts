@@ -73,7 +73,7 @@ export async function fetchIso14001Signals(
     risks, riskReviews, riskControls,
     aspects, objectives, objectiveReadings,
     obligations, obligationsOverdue, obligationsReviewOverdue,
-    lastEvaluation, evaluationsOverdue,
+    lastEvaluation, evaluationsOverdue, obligationsUnscheduled, evaluationsUndetermined,
     training,
     reviews,
     nonconformities, ncActions,
@@ -105,10 +105,13 @@ export async function fetchIso14001Signals(
     registerObligations(),
     registerObligations().eq('status', 'open').lt('next_due_at', today),
     registerObligations().lt('next_review_due', today),
+    // An undetermined result leaves the status unknown, so it is not an evaluation of compliance here.
     supabase.from('ms_compliance_evaluations').select('completed_at')
-      .eq('tenant_id', tenantId).in('discipline', ems).not('completed_at', 'is', null)
+      .eq('tenant_id', tenantId).in('discipline', ems).not('completed_at', 'is', null).neq('result', 'undetermined')
       .order('completed_at', { ascending: false }).limit(1),
     t('ms_compliance_evaluations').in('discipline', ems).is('completed_at', null).lt('scheduled_for', today),
+    registerObligations().is('evaluation_cadence_days', null),
+    t('ms_obligation_register').in('discipline', ems).neq('status', 'dismissed').eq('last_result', 'undetermined'),
     supabase.from('loto_training_records').select('expires_at').eq('tenant_id', tenantId).limit(10_000),
     supabase.from('management_reviews')
       .select('review_date, conclusions, decisions, status')
@@ -210,10 +213,13 @@ export async function fetchIso14001Signals(
     obligationsTotal:         countRows(obligations),
     obligationsOverdue:       countRows(obligationsOverdue),
     obligationsReviewOverdue: countRows(obligationsReviewOverdue),
-    // 9.1.2 reads the evaluation record itself: a completed evaluation is
-    // a result backed by evidence (migration 299 enforces it).
-    complianceEvalAgeDays: newestAgeDays(lastEvaluation.data ?? [], 'completed_at'),
-    evaluationsOverdue:    countRows(evaluationsOverdue),
+    // 9.1.2 reads the evaluation record itself: compliant and noncompliant
+    // results are backed by evidence (migration 299 enforces it), and a
+    // not-applicable one by notes; an undetermined one establishes nothing.
+    complianceEvalAgeDays:   newestAgeDays(lastEvaluation.data ?? [], 'completed_at'),
+    evaluationsOverdue:      countRows(evaluationsOverdue),
+    obligationsUnscheduled:  countRows(obligationsUnscheduled),
+    evaluationsUndetermined: countRows(evaluationsUndetermined),
 
     significantUnaddressed: significant.filter(a =>
       !aspectIdsWithObjective.has(a.id) && !a.controls?.trim() && !a.related_risk_id,

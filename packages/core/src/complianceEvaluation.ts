@@ -63,6 +63,8 @@ export interface EvaluationRecord {
   obligationId: string
   /** ISO timestamp, or null while the evaluation is still open. */
   completedAt: string | null
+  /** The recorded result; null or absent while open. */
+  result?:     EvaluationResult | null
 }
 
 export interface ScheduledEvaluation {
@@ -75,8 +77,10 @@ export interface ScheduledEvaluation {
  * The evaluations the nightly job must create today. An active obligation
  * with an evaluation cadence needs one when it has no open evaluation and
  * its next evaluation falls due within EVALUATION_LEAD_DAYS. Next due is
- * the last completed evaluation plus the cadence; an obligation never
- * evaluated is due today. At most one result per obligation.
+ * the last evaluation that established compliance status plus the
+ * cadence; an obligation never so evaluated is due today. An undetermined
+ * result establishes nothing (clause 9.1.2 c: know the compliance status),
+ * so it starts no new cycle. At most one result per obligation.
  *
  * @param today ISO calendar date (YYYY-MM-DD).
  */
@@ -89,6 +93,7 @@ export function evaluationsToSchedule(
   const lastCompleted = new Map<string, string>()
   for (const e of evaluations) {
     if (e.completedAt === null) { hasOpen.add(e.obligationId); continue }
+    if (e.result === 'undetermined') continue
     const completedOn = e.completedAt.slice(0, 10)
     const previous = lastCompleted.get(e.obligationId)
     if (!previous || completedOn > previous) lastCompleted.set(e.obligationId, completedOn)

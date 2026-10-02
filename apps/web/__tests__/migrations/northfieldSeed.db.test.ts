@@ -107,10 +107,13 @@ describe('seed_ems_northfield_demo.sql', () => {
     const evaluationsOverdue = await count(`
       select count(*) from public.ms_compliance_evaluations
        where tenant_id = $1 and completed_at is null and scheduled_for < current_date`)
-    const obligations = registerHealthFromCounts({ active: 15, reviewOverdue, gaps: evaluationsOverdue })
+    const unscheduled = await count(`
+      select count(*) from public.compliance_calendar_obligations where tenant_id = $1 and evaluation_cadence_days is null`)
+    const obligations = registerHealthFromCounts({ active: 15, reviewOverdue, gaps: evaluationsOverdue + unscheduled })
 
     expect({ context, aspects, obligations }).toEqual({ context: 'green', aspects: 'green', obligations: 'amber' })
-    expect({ reviewOverdue, evaluationsOverdue }).toEqual({ reviewOverdue: 1, evaluationsOverdue: 1 })
+    // Amber for exactly the two deliberate gaps; every obligation has an evaluation frequency (clause 9.1.2 a).
+    expect({ reviewOverdue, evaluationsOverdue, unscheduled }).toEqual({ reviewOverdue: 1, evaluationsOverdue: 1, unscheduled: 0 })
   })
 
   it('has a scope and a complete policy signed after it', async () => {

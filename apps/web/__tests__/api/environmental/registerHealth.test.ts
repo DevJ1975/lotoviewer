@@ -22,7 +22,7 @@ const aspect = (over: Record<string, unknown>) => ({
   tenant_id: TENANT_A, obsolete_at: null, next_review_due: FUTURE, ...over,
 })
 const obligation = (over: Record<string, unknown>) => ({
-  tenant_id: TENANT_A, discipline: 'ems', status: 'open', next_review_due: FUTURE, ...over,
+  tenant_id: TENANT_A, discipline: 'ems', status: 'open', next_review_due: FUTURE, evaluation_cadence_days: 365, ...over,
 })
 const COMPLETE_COMMITMENTS = { 'ems.protect_environment': true, 'ems.fulfil_obligations': true, 'ems.continual_improvement': true }
 
@@ -74,7 +74,12 @@ describe('GET /api/environmental/registers/health', () => {
     seed('compliance_calendar_obligations', [obligation({ id: 'o1' }), obligation({ id: 'o2', status: 'dismissed', next_review_due: PAST })])
     expect((await health()).body.obligations.health).toBe('green')
     seed('ms_compliance_evaluations', [{ id: 'e1', tenant_id: TENANT_A, discipline: 'ems', completed_at: null, scheduled_for: PAST }])
-    expect((await health()).body.obligations).toEqual({ health: 'amber', active: 1, reviewOverdue: 0, evaluationsOverdue: 1 })
+    expect((await health()).body.obligations).toEqual({ health: 'amber', active: 1, reviewOverdue: 0, evaluationsOverdue: 1, unscheduled: 0 })
+  })
+
+  it('turns obligations amber for one with no evaluation frequency, as clause 9.1.2 a) requires one for each', async () => {
+    seed('compliance_calendar_obligations', [obligation({ id: 'o1' }), obligation({ id: 'o2', evaluation_cadence_days: null })])
+    expect((await health()).body.obligations).toEqual({ health: 'amber', active: 2, reviewOverdue: 0, evaluationsOverdue: 0, unscheduled: 1 })
   })
 
   it('grades scope and policy together', async () => {

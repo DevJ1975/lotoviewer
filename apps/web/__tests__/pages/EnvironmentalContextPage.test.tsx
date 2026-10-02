@@ -45,7 +45,7 @@ const health: RegistersHealth = {
   context: { health: 'amber', active: 1, reviewOverdue: 0, climateRecorded: false },
   scopeAndPolicy: { health: 'red', scopeVersion: null, policyVersion: null, policyComplete: false, signatoryStale: false },
   aspects: { health: 'red', active: 0, reviewOverdue: 0, unscored: 0 },
-  obligations: { health: 'red', active: 0, reviewOverdue: 0, evaluationsOverdue: 0 },
+  obligations: { health: 'red', active: 0, reviewOverdue: 0, evaluationsOverdue: 0, unscheduled: 0 },
 }
 
 beforeEach(() => {

@@ -135,10 +135,14 @@ export interface ReadinessSignals {
   /** Obligations past their calendar deadline. */
   obligationsOverdue:    number
   obligationsReviewOverdue: number
-  /** Age of the newest completed compliance evaluation. */
+  /** Age of the newest evaluation that established compliance status (any result but undetermined). */
   complianceEvalAgeDays: number | null
   /** Open compliance evaluations past their scheduled date. */
   evaluationsOverdue:    number
+  /** Obligations with no evaluation frequency: clause 9.1.2 a) asks for one for each. */
+  obligationsUnscheduled: number
+  /** Obligations whose latest result is undetermined: their compliance status is unknown. */
+  evaluationsUndetermined: number
   // 6.1.4
   significantUnaddressed: number
   // 6.2.1 Objectives
@@ -243,7 +247,7 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
     [s.contextIssuesReviewOverdue > 0, 'attention',
       `${count(s.contextIssuesReviewOverdue, 'context issue is past its', 'context issues are past their')} review date.`],
   ], ['conforming',
-    `${count(s.contextIssuesActive, 'context issue', 'context issues')} recorded, climate change included, all within review.`])
+    `${count(s.contextIssuesActive, 'context issue', 'context issues')} recorded, the climate-change determination among them, all within review.`])
 
   // 4.2 — Needs and expectations of interested parties.
   push('4.2', '/environmental/context?tab=parties', [
@@ -370,6 +374,10 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
     [s.complianceEvalAgeDays === null, 'gap', 'Compliance status has never been formally evaluated.'],
     [s.evaluationsOverdue > 0, 'attention',
       `${count(s.evaluationsOverdue, 'compliance evaluation is', 'compliance evaluations are')} past due.`],
+    [s.evaluationsUndetermined > 0, 'attention',
+      `${count(s.evaluationsUndetermined, 'obligation has', 'obligations have')} an undetermined compliance status.`],
+    [s.obligationsUnscheduled > 0, 'attention',
+      `${count(s.obligationsUnscheduled, 'obligation has', 'obligations have')} no evaluation frequency (clause 9.1.2 a).`],
     [older(s.complianceEvalAgeDays, READINESS_WINDOWS.annualReviewDays), 'attention',
       'Compliance has not been evaluated in over a year.'],
   ], ['conforming', 'Compliance evaluated against evidence within the last year, with nothing past due.'])

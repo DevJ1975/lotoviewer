@@ -62,6 +62,13 @@ describe('evaluationsToSchedule', () => {
       .toEqual([{ obligationId: 'o1', scheduledFor: '2026-01-15' }])
   })
 
+  it('starts no new cycle from an undetermined result: the status is still unknown, so it is due now', () => {
+    const recent = { obligationId: 'o1', completedAt: '2026-09-30T09:00:00Z', result: 'undetermined' as const }
+    expect(evaluationsToSchedule([obligation('o1')], [recent], TODAY)).toEqual([{ obligationId: 'o1', scheduledFor: TODAY }])
+    const established = { obligationId: 'o1', completedAt: '2026-09-01T09:00:00Z', result: 'compliant' as const }
+    expect(evaluationsToSchedule([obligation('o1')], [established, recent], TODAY)).toEqual([])
+  })
+
   it('never double-books: an open evaluation blocks a new one', () => {
     expect(evaluationsToSchedule([obligation('o1')], [{ obligationId: 'o1', completedAt: null }], TODAY)).toEqual([])
   })

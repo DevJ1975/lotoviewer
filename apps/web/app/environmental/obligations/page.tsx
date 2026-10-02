@@ -112,6 +112,7 @@ export default function ComplianceObligationsPage() {
       <RegisterHealthStrip title="Obligations" health={health?.health ?? null} facts={health ? [
         { label: 'in the register', value: health.active },
         { label: 'evaluations overdue', value: health.evaluationsOverdue, warn: health.evaluationsOverdue > 0 },
+        { label: 'no evaluation frequency', value: health.unscheduled, warn: health.unscheduled > 0 },
         { label: 'review overdue', value: health.reviewOverdue, warn: health.reviewOverdue > 0 },
       ] : []} />
 

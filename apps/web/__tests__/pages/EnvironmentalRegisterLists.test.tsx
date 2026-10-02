@@ -29,7 +29,7 @@ const health: RegistersHealth = {
   context: { health: 'green', active: 1, reviewOverdue: 0, climateRecorded: true },
   scopeAndPolicy: { health: 'green', scopeVersion: 1, policyVersion: 1, policyComplete: true, signatoryStale: false },
   aspects: { health: 'green', active: 1, reviewOverdue: 0, unscored: 0 },
-  obligations: { health: 'green', active: 1, reviewOverdue: 0, evaluationsOverdue: 0 },
+  obligations: { health: 'green', active: 1, reviewOverdue: 0, evaluationsOverdue: 0, unscheduled: 0 },
 }
 
 function aspect(id: string): AspectRow {

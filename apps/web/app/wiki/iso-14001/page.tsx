@@ -18,7 +18,7 @@ const CHANGELOG: ChangelogEntry[] = [
     version: '1.2.0',
     date: '2026-10-02',
     changes: [
-      'Updated "How Soteria supports an EMS" for the new registers: context, interested parties, scope and policy (4.1-4.3, 5.2); aspects scored per operating condition with a rationale and a stored method (6.1.2); and the compliance obligations register with scheduled, evidence-backed evaluations (6.1.3 / 9.1.2). Added the red/amber/green register health and how evidence integrity is kept.',
+      'Updated "How Soteria supports an EMS" for the new registers: context, interested parties, scope and policy (4.1-4.3, 5.2); aspects scored per operating condition with a rationale and a stored method (6.1.2); and the compliance obligations register with scheduled, evidence-backed evaluations (6.1.3 / 9.1.2), where a missing evaluation frequency is flagged and an undetermined result does not count. Added the red/amber/green register health and how evidence integrity is kept. Corrected the note on the 2015 revision: it adopted Annex SL\'s high-level structure.',
     ],
   },
   {

@@ -103,6 +103,17 @@ describe('/api/cron/compliance-evaluations', () => {
     ])
   })
 
+  it('schedules again at once after an undetermined result, which settled nothing', async () => {
+    seed('compliance_calendar_obligations', [obligation('unknown')])
+    seed('ms_compliance_evaluations', [
+      { id: 'e1', tenant_id: TENANT_A, obligation_id: 'unknown', completed_at: '2026-09-30T09:00:00Z', result: 'undetermined' },
+    ])
+    await cron()
+    expect(scheduled().filter(e => e.completed_at == null)).toEqual([
+      expect.objectContaining({ obligation_id: 'unknown', scheduled_for: TODAY }),
+    ])
+  })
+
   it('leaves alone what is not its to schedule', async () => {
     seed('compliance_calendar_obligations', [
       obligation('open-already'),

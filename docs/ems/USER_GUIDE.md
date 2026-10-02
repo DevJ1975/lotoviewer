@@ -18,7 +18,7 @@ and scope and policy.
 | Light | Meaning |
 | --- | --- |
 | Red | The register is empty, or a required record (scope or policy) is missing. |
-| Amber | Something needs attention: a review is overdue, an aspect is unscored, an evaluation is overdue, the policy is incomplete, or no climate-change decision is recorded. |
+| Amber | Something needs attention: a review is overdue, an aspect is unscored, an evaluation is overdue, an obligation has no evaluation frequency, the policy is incomplete, or no climate-change determination is recorded. |
 | Green | Every record is in date and complete. |
 
 A light changes as soon as the underlying record does, and each card opens the
@@ -39,9 +39,10 @@ The internal and external issues that affect what your EMS can achieve.
 - **Record an issue.** Choose a **Kind of issue**: *Internal*, *External* or
   *Climate change*. Describe it in **The issue**, and optionally say **Why it matters
   to the EMS** and whether it is a **Risk**, an **Opportunity** or both (clause 6.1.1).
-- **Climate change.** Amendment 1:2024 asks every organization to decide whether
-  climate change is a relevant issue. Until at least one *Climate change* issue is
-  recorded, the strip at the top shows the climate decision as *missing*, and the
+- **Climate change.** Amendment 1:2024 requires every organization to determine
+  whether climate change is a relevant issue (clause 4.1). Record that determination
+  as a *Climate change* issue whether the answer is yes or no, and say why. Until one
+  is recorded, the strip at the top shows the climate decision as *missing*, and the
   Context light stays amber.
 - **Mark reviewed** confirms that an issue still holds. Its next review moves a year
   out.
@@ -66,9 +67,10 @@ Who has a stake in your EMS, and what they need from you.
 - **Record the policy**: the **Policy text**, who it is **Signed by**, and the date
   **Signed on**. You cannot save it until you tick all three commitments that clause
   5.2 requires:
-  - protect the environment, including preventing pollution;
+  - protect the environment, including preventing pollution and any other
+    commitments relevant to your context;
   - fulfil your compliance obligations;
-  - continually improve the EMS.
+  - continually improve the EMS to enhance environmental performance.
 - If the scope's legal entity changes after the policy was signed, the page warns
   that the policy *carries a prior owner's signature*. The light stays amber until top
   management signs a new version.
@@ -142,8 +144,10 @@ choose to meet, and the periodic evaluation of whether you meet them.
   - Say **Why it applies** to your site.
 - **Next deadline** and **Deadline repeats** put the obligation's due dates in the
   compliance calendar.
-- **Evaluate compliance every (days)** sets how often compliance must be evaluated.
-  Leave it blank if the obligation is not evaluated on a schedule.
+- **Evaluate compliance every (days)** records how often you have decided to evaluate
+  compliance with this obligation (clause 9.1.2 a). Every obligation needs one,
+  including the contract, voluntary and internal requirements you have adopted; one
+  left blank keeps the Obligations light amber until it is set.
 - An obligation that has been evaluated cannot be deleted from the compliance
   calendar, because its evaluations are part of the record. Dismiss it instead.
 
@@ -167,7 +171,9 @@ On the obligation's page, under **Evaluation of compliance**:
      choose its **Classification** (*Observation*, *Minor* or *Major*). The
      evaluation links to the nonconformity.
    - *Not applicable* needs notes saying why.
-   - *Undetermined* records that compliance could not be established.
+   - *Undetermined* records that compliance could not be established. It does not
+     count as an evaluation: the obligation falls due again straight away, until a
+     compliant, noncompliant or not-applicable result is recorded.
 
 Once recorded, an evaluation is sealed and cannot be changed. The next evaluation is
 scheduled from it. An evaluation still open after its due date keeps the Obligations
