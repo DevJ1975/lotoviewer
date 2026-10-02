@@ -101,7 +101,7 @@ Adaptations made while building Phase 0:
   Each phase moves the writes it touches behind `/api/environmental/*`.
 - **The 45001 seams still apply** to every new `ms_` table.
 - **Pre-existing defects found in discovery are fixed in separate PRs.** The most
-  relevant is `log_audit()` never writing `tenant_id` (repo map section 11). Until it is
+  relevant is `log_audit()` never writing `tenant_id` (repo map section 12). Until it is
   fixed, tenant admins cannot read the EMS audit trail the plan requires.
 
 ### Phase 0 scaffold, if accepted

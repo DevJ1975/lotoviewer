@@ -5,7 +5,7 @@ This file answers the nine Phase 0 discovery questions in
 excerpt each, then inventories the ISO 14001 features the repo already ships.
 Keep it current: every phase updates it when it learns something new.
 
-**As of:** 2026-10-01, `main` at `7c26827` (v1.19.0).
+**As of:** 2026-10-01, `main` at `7c26827` (v1.19.0). Section 11 was added for Phase 1 on 2026-10-02.
 
 **The one finding that changes the plan:** the plan assumes a greenfield EMS, but the
 repo already has an `environmental` (ISO 14001) module plus hazardous waste,
@@ -327,13 +327,13 @@ equivalent exists.
 
 | Plan entity | Existing (migration) | Verdict and main gap |
 | --- | --- | --- |
-| `ems_aspect`, `ems_aspect_score` | `environmental_aspects` (204) | Extend. There is one `operating_condition` column per aspect, and the 5×5 scale and ≥12 threshold are hard-coded in generated columns. Missing: per-condition score history, review dates, obsolete state, `facility_id` |
-| `ms_scoring_method` | None | New |
+| `ems_aspect`, `ems_aspect_score` | `environmental_aspects` (204) | **Done in Phase 1:** extended by 297, with append-only `environmental_aspect_scores` per operating condition and the `environmental_aspect_register` view; 301 drops the single-condition columns |
+| `ms_scoring_method` | `ms_scoring_methods` (296) | **Done in Phase 1** |
 | `ms_objective`, `_progress` | `environmental_objectives`, `environmental_objective_readings` (205) | Extend: single aspect link, no evidence on readings, no edit UI |
 | `ms_capa` | `nonconformities` + `nonconformity_actions` (206). Two incident-only CAPA systems also exist (`incident_capas` 152, `incident_actions` 063) | Extend: add root cause, effectiveness check, typed source link (ADR Q4) |
 | `ms_mgmt_review` | `management_reviews` (207) | Extend: inputs are free text, with no snapshot |
 | Readiness dashboard | `packages/core/src/iso14001Readiness.ts`, `/environmental/report-card` | Extend: already scores 19 clauses with signal flags |
-| `ms_obligation`, `ms_compliance_eval` | `compliance_calendar_obligations` and `_events` (192). Production also holds an out-of-band `legal_register` / `compliance_obligations` with no repo migration | Extend the calendar, or formalize the legacy legal register (ADR Q3) |
+| `ms_obligation`, `ms_compliance_eval` | `compliance_calendar_obligations` and `_events` (192). Production also holds an out-of-band `legal_register` / `compliance_obligations` with no repo migration | **Done in Phase 1:** the calendar was extended (298) with `ms_compliance_evaluations` and the `ms_obligation_register` view. The legacy legal register is untouched |
 | `ms_inspection_template`, `ms_inspection` | Generic engine (193); hazard-hunt scheduler (275) | Extend: add cadence (quarterly), asset subject, photo upload, fail → CAPA |
 | `ems_asset_env_profile` | `loto_equipment` (via Equipment Readiness precedent); `hazardous_waste_areas` (142) for SAA/CAA | New profile table on `loto_equipment` |
 | `ems_waste_stream`, `ems_waste_container` | `hazardous_waste_streams`, `hazardous_waste_containers` (140, 269, 272) with accumulation clocks in `packages/core/src/hazardousWaste.ts` | Extend: no generation log, no `labeled`, no asset link |
@@ -341,9 +341,9 @@ equivalent exists.
 | `ems_manifest` | None (`packages/core/src/ldrNotice.ts:8`) | New |
 | `ms_chemical` (Tier II / TRI) | `chemical_products`, `chemical_inventory_items` (089/091), `v_chemical_tier_two` (093/271) | Extend: no EHS/TPQ flag, threshold check, TRI category or pounds conversion |
 | `ms_training_*` | `loto_training_records` (017), `training_courses` (240), `v_training_matrix` | Extend: no environmental roles, no citation, no evidence link |
-| `ms_evidence` | Fragments only (see Q4) | New |
+| `ms_evidence` | `ms_evidence` (299), private `ms-evidence` bucket | **Done in Phase 1** for compliance evaluations; later phases add subject types |
 | `ms_audit_log` | `audit_log` (003) | Reuse |
-| `ms_context_issue`, `ms_interested_party`, `ms_scope`, `ms_policy` | None (`risks` is a 4.1 proxy; readiness hard-codes `policyApproved: false`) | New |
+| `ms_context_issue`, `ms_interested_party`, `ms_scope`, `ms_policy` | `ms_context_issues`, `ms_interested_parties`, `ms_scope_statements`, `ms_policies` (295) | **Done in Phase 1**; readiness now reads them |
 | `ms_moc`, `ms_moc_impact` | None (only `'moc'` enum values on `risks` / `risk_reviews`) | New |
 | `ems_permit`, `ems_permit_condition` | None. "Permit" already means permit-to-work here (`loto_hot_work_permits`, `loto_confined_space_permits`, `loto_group_permits`, `wah_permits`) | New: name it to avoid the collision |
 | `ms_internal_audit`, `_finding` | None (`AUDIT_PROGRAMME_LIVE = false`); NCs carry `source_type='internal_audit'` | New |
@@ -354,7 +354,49 @@ The plan's `ohs_*` placeholders also have partial equivalents already: `risks`, 
 `risk_controls`/`controls_library`, `loto_contractor_companies`, `vendor_prequalifications`
 and `iso45001_clause_evidence` (154). Phase 8 should start from those.
 
-## 11. Pre-existing defects noticed during discovery (not fixed here)
+## 11. Phase 1 (registers): where things live
+
+Added 2026-10-02 on `feat/ems-phase1-registers`. The plan is
+[phase-1-plan.md](./phase-1-plan.md); the screens are described in
+[USER_GUIDE.md](./USER_GUIDE.md).
+
+| Concern | Where |
+| --- | --- |
+| Schema | `apps/web/migrations/295`–`301`, each with an `NNN_rollback.sql`. 295–300 apply before the deploy and 301 after it (expand, then contract) |
+| Domain rules (pure, tested) | `packages/core/src/managementSystem.ts` (register health, context, scope and policy), `environmentalAspect.ts` (scoring, coverage, walk-down grouping), `scoringMethod.ts`, `complianceEvaluation.ts` (scheduling, completion gaps) |
+| Admin gate | `requireTenantModuleAdmin` in `apps/web/lib/auth/tenantGate.ts`, beside `requireTenantModuleMember` |
+| Route helpers | `apps/web/lib/environmental/`: `registerApi.ts` (shared responses and the review route), one input mapper per register, `evidence.ts` (type sniffing, hashing, storage path), and `client.ts` for the browser |
+| API | `apps/web/app/api/environmental/`: `context-issues`, `interested-parties`, `scope`, `policy`, `aspects`, `obligations`, `evaluations/[id]/complete`, `evidence`, `registers/health` |
+| Nightly job | `apps/web/app/api/cron/compliance-evaluations/route.ts` (in `vercel.json`), emailing through `lib/email/sendComplianceEvaluationDue.ts` |
+| Web pages | `apps/web/app/environmental/{context,aspects,obligations}/`, with the shared pieces in `app/environmental/_components/` |
+| Mobile | `apps/mobile/app/environmental/aspects.tsx` (read-only walk-down) and a Home-tab card gated by `isModuleVisible` |
+| Demo data | `apps/web/migrations/seed_ems_northfield_demo.sql`, plus `apps/web/scripts/seed-ems-northfield-evidence.mjs` for completed evaluations, which need real evidence files and a real evaluator |
+
+How Phase 1 is tested, and the harnesses later phases can reuse:
+
+- **Real Postgres:** `apps/web/__tests__/migrations/_emsTestDatabase.ts` applies the
+  real migrations to PGlite over stand-ins for Supabase's `auth`, `storage` and
+  platform tables. `asCaller()` runs SQL as an authenticated user, so RLS and grants
+  apply. See `emsPhase1.db.test.ts` and `northfieldSeed.db.test.ts`.
+- **Routes:** `apps/web/__tests__/api/environmental/_emsHarness.ts` is an in-memory
+  Supabase stand-in. It really applies filters, enforces the unique keys, foreign keys
+  and column defaults the routes rely on, and derives the register views with the core
+  scoring. A route that forgets its tenant filter leaks in these tests, as it would in
+  production.
+- **End to end:** `apps/web/__tests__/e2e/emsRegisters.e2e.test.ts` runs the routes and
+  the nightly job from empty registers to green.
+
+Things learned along the way:
+
+- `active_tenant_id()` and `active_facility_id()` raised on an empty `request.headers`
+  setting, which is what a cron or SQL-editor session has. Migration 300 makes both
+  return null instead.
+- The mobile app has no test runner. Logic it needs, such as the walk-down grouping,
+  lives in `packages/core` so it can be tested there.
+- In Postgres, `least(null, 5)` is 5, not null. Rollbacks that rebuild a required column
+  from optional data must use `coalesce`.
+
+## 12. Pre-existing defects noticed during discovery (not fixed here)
 
 These sit outside EMS scope. They are recorded so they don't get lost; each deserves
 its own PR.
