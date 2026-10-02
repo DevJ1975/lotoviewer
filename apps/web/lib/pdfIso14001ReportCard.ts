@@ -21,14 +21,14 @@ const VERDICT_LABEL: Record<ClauseVerdict, string> = {
   conforming:     'Evidenced',
   attention:      'Needs attention',
   gap:            'No evidence',
-  not_applicable: 'Not applicable',
+  not_assessed:   'Not assessed',
 }
 
 const VERDICT_COLOR: Record<ClauseVerdict, RGB> = {
   conforming:     EMERALD,
   attention:      AMBER,
   gap:            RED,
-  not_applicable: MUTED,
+  not_assessed:   MUTED,
 }
 
 const BAND_HEADING: Record<Iso14001ReportCard['band'], string> = {
@@ -92,16 +92,15 @@ export async function generateIso14001ReportCard(args: ReportCardPdfArgs): Promi
 
   // ── Coverage + counts ────────────────────────────────────────────
   drawSectionBar(ctx, 'Evidence coverage')
-  const applicable = card.clauses.length - card.counts.not_applicable
   ctx.page.drawText(`${card.coverage}%`, {
     x: MARGIN, y: ctx.y - 22, size: 26, font: bold, color: NAVY,
   })
   ctx.page.drawText(
-    sanitizeForWinAnsi(`of ${applicable} applicable clauses carry current evidence`),
+    sanitizeForWinAnsi(`of ${card.clauses.length} clauses carry current evidence`),
     { x: MARGIN + 74, y: ctx.y - 14, size: 9, font, color: SLATE },
   )
   const tally = `${card.counts.conforming} evidenced  ·  ${card.counts.attention} need attention  ·  `
-    + `${card.counts.gap} no evidence  ·  ${card.counts.not_applicable} n/a`
+    + `${card.counts.gap} no evidence  ·  ${card.counts.not_assessed} not assessed`
   ctx.page.drawText(sanitizeForWinAnsi(tally), {
     x: MARGIN + 74, y: ctx.y - 26, size: 8, font, color: MUTED,
   })
@@ -109,15 +108,18 @@ export async function generateIso14001ReportCard(args: ReportCardPdfArgs): Promi
 
   // Coverage is not a conformity claim, and this document will be read
   // far from the UI that says so. State it on the artifact itself.
-  for (const [i, line] of wrap(
+  const disclaimer = wrap(
     'Evidence coverage measures whether records exist and are current in this platform. '
     + 'It is not a statement of conformity — only an accredited certification body can determine that. '
-    + 'Blocking findings below fail an audit regardless of coverage.',
+    + 'Blocking findings below fail an audit regardless of coverage. '
+    + 'A clause marked not assessed has no environmental record in the platform to judge it by yet; '
+    + 'its evidence must be checked against the organization’s own records.',
     font, 7.5, PAGE_W - 2 * MARGIN,
-  ).entries()) {
+  )
+  for (const [i, line] of disclaimer.entries()) {
     ctx.page.drawText(line, { x: MARGIN, y: ctx.y - i * 9, size: 7.5, font, color: MUTED })
   }
-  ctx.y -= 34
+  ctx.y -= disclaimer.length * 9 + 7
 
   // ── Blocking findings ────────────────────────────────────────────
   if (card.blockers.length > 0) {
