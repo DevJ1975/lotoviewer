@@ -20,7 +20,8 @@ import {
 //     context          red: no issues;   amber: a review is overdue, or no climate issue (Amd 1:2024)
 //     scopeAndPolicy   red: either missing; amber: incomplete policy, prior owner's signature, or overdue review
 //     aspects          red: no aspects;  amber: a review is overdue, or an active aspect has no score
-//     obligations      red: none;        amber: a review is overdue, an evaluation is past due, or an
+//     obligations      red: none;        amber: a review is overdue, a deadline has passed with the
+//                                         obligation still open, an evaluation is past due, or an
 //                                         obligation has no evaluation frequency (clause 9.1.2 a)
 //
 // Counts come from the database (count=exact, no rows), so the answer is right however
@@ -53,6 +54,8 @@ export async function GET(req: Request) {
     activeObligations(),
     activeObligations().lt('next_review_due', today),
     activeObligations().is('evaluation_cadence_days', null),
+    // A missed deadline is a compliance failure the site lead must see, not just the report card.
+    activeObligations().eq('status', 'open').lt('next_due_at', today),
     count('ms_compliance_evaluations').in('discipline', EMS_DISCIPLINES).is('completed_at', null).lt('scheduled_for', today),
     db.from('ms_scope_statements').select('version, legal_entity, effective_from, next_review_due')
       .eq('tenant_id', gate.tenantId).eq('discipline', discipline).order('version', { ascending: false }),
@@ -63,7 +66,7 @@ export async function GET(req: Request) {
   if (failed) return sanitizeError(failed, 'environmental/registers/health/GET')
 
   const [issues, issuesOverdue, climate, aspects, aspectsOverdue, unscored, obligations, obligationsOverdue,
-    unscheduled, evaluationsOverdue, scopeVersions, policyResult] = results
+    unscheduled, deadlinesMissed, evaluationsOverdue, scopeVersions, policyResult] = results
   const n = (r: { count?: number | null }) => r.count ?? 0
 
   const scopes = (scopeVersions.data ?? []) as ScopeRow[]
@@ -105,12 +108,14 @@ export async function GET(req: Request) {
     },
     obligations: {
       health:             registerHealthFromCounts({
-        active: n(obligations), reviewOverdue: n(obligationsOverdue), gaps: n(evaluationsOverdue) + n(unscheduled),
+        active: n(obligations), reviewOverdue: n(obligationsOverdue),
+        gaps: n(deadlinesMissed) + n(evaluationsOverdue) + n(unscheduled),
       }),
       active:             n(obligations),
       reviewOverdue:      n(obligationsOverdue),
       evaluationsOverdue: n(evaluationsOverdue),
       unscheduled:        n(unscheduled),
+      deadlinesMissed:    n(deadlinesMissed),
     },
   })
 }

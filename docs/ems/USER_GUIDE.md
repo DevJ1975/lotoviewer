@@ -18,7 +18,7 @@ and scope and policy.
 | Light | Meaning |
 | --- | --- |
 | Red | The register is empty, or a required record (scope or policy) is missing. |
-| Amber | Something needs attention: a review is overdue, an aspect is unscored, an evaluation is overdue, an obligation has no evaluation frequency, the policy is incomplete, or no climate-change determination is recorded. |
+| Amber | Something needs attention: a review is overdue, an aspect is unscored, a compliance deadline has passed with the obligation still open, an evaluation is overdue, an obligation has no evaluation frequency, the policy is incomplete, or no climate-change determination is recorded. |
 | Green | Every record is in date and complete. |
 
 A light changes as soon as the underlying record does, and each card opens the
@@ -143,7 +143,8 @@ choose to meet, and the periodic evaluation of whether you meet them.
     authority.
   - Say **Why it applies** to your site.
 - **Next deadline** and **Deadline repeats** put the obligation's due dates in the
-  compliance calendar.
+  compliance calendar. A deadline that passes with the obligation still open turns the
+  Obligations light amber until it is met in the calendar.
 - **Evaluate compliance every (days)** records how often you have decided to evaluate
   compliance with this obligation (clause 9.1.2 a). Every obligation needs one,
   including the contract, voluntary and internal requirements you have adopted; one

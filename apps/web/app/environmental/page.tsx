@@ -152,7 +152,11 @@ export default function EnvironmentalHomePage() {
       case '/environmental/aspects':
         return `${counts.aspects} active · ${counts.significant} significant`
       case '/environmental/obligations':
-        return `${health.obligations.active} obligations · ${health.obligations.evaluationsOverdue} evaluations overdue`
+        return [
+          `${health.obligations.active} obligations`,
+          health.obligations.deadlinesMissed > 0 && `${health.obligations.deadlinesMissed} deadlines missed`,
+          `${health.obligations.evaluationsOverdue} evaluations overdue`,
+        ].filter(Boolean).join(' · ')
       case '/environmental/objectives':
         return `${counts.objectives} objectives`
       case '/environmental/management-review':

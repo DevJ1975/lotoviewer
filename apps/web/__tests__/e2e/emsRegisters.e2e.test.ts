@@ -120,7 +120,8 @@ describe('EMS registers, end to end', () => {
     const recorded = await call(obligations.POST(jsonRequest('/x', 'POST', {
       title: 'Industrial stormwater general permit', source_kind: 'permit', regulatory_ref: 'State MSGP',
       jurisdiction: 'state:TX', applicability_rationale: 'Outdoor storage drains to the north outfall',
-      evaluation_cadence_days: 365, cadence: 'quarterly', next_due_at: '2026-12-31',
+      // Its next deadline falls after the story ends, so only the reviews below drive the light.
+      evaluation_cadence_days: 365, cadence: 'quarterly', next_due_at: '2028-06-30',
     })))
     expect(recorded.status).toBe(201)
     const obligationId: string = recorded.body.obligation.id

@@ -60,7 +60,9 @@ export interface RegistersHealth {
   context:        { health: RegisterHealth; active: number; reviewOverdue: number; climateRecorded: boolean }
   scopeAndPolicy: { health: RegisterHealth; scopeVersion: number | null; policyVersion: number | null; policyComplete: boolean; signatoryStale: boolean }
   aspects:        { health: RegisterHealth; active: number; reviewOverdue: number; unscored: number }
-  obligations:    { health: RegisterHealth; active: number; reviewOverdue: number; evaluationsOverdue: number; unscheduled: number }
+  obligations:    {
+    health: RegisterHealth; active: number; reviewOverdue: number; evaluationsOverdue: number; unscheduled: number; deadlinesMissed: number
+  }
 }
 
 export const getRegistersHealth = (tenantId: string) =>

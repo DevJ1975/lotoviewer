@@ -74,12 +74,26 @@ describe('GET /api/environmental/registers/health', () => {
     seed('compliance_calendar_obligations', [obligation({ id: 'o1' }), obligation({ id: 'o2', status: 'dismissed', next_review_due: PAST })])
     expect((await health()).body.obligations.health).toBe('green')
     seed('ms_compliance_evaluations', [{ id: 'e1', tenant_id: TENANT_A, discipline: 'ems', completed_at: null, scheduled_for: PAST }])
-    expect((await health()).body.obligations).toEqual({ health: 'amber', active: 1, reviewOverdue: 0, evaluationsOverdue: 1, unscheduled: 0 })
+    expect((await health()).body.obligations).toEqual({
+      health: 'amber', active: 1, reviewOverdue: 0, evaluationsOverdue: 1, unscheduled: 0, deadlinesMissed: 0,
+    })
+  })
+
+  it('turns obligations amber for a deadline that passed with the obligation still open', async () => {
+    seed('compliance_calendar_obligations', [
+      obligation({ id: 'o1', next_due_at: FUTURE }),
+      obligation({ id: 'o2', next_due_at: PAST, status: 'completed' }),   // met: the calendar closed it
+    ])
+    expect((await health()).body.obligations.health).toBe('green')
+    seed('compliance_calendar_obligations', [obligation({ id: 'o3', next_due_at: PAST })])
+    expect((await health()).body.obligations).toMatchObject({ health: 'amber', deadlinesMissed: 1 })
   })
 
   it('turns obligations amber for one with no evaluation frequency, as clause 9.1.2 a) requires one for each', async () => {
     seed('compliance_calendar_obligations', [obligation({ id: 'o1' }), obligation({ id: 'o2', evaluation_cadence_days: null })])
-    expect((await health()).body.obligations).toEqual({ health: 'amber', active: 2, reviewOverdue: 0, evaluationsOverdue: 0, unscheduled: 1 })
+    expect((await health()).body.obligations).toEqual({
+      health: 'amber', active: 2, reviewOverdue: 0, evaluationsOverdue: 0, unscheduled: 1, deadlinesMissed: 0,
+    })
   })
 
   it('grades scope and policy together', async () => {
