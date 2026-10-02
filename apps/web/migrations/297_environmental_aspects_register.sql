@@ -175,6 +175,39 @@ select distinct on (h.aspect_id, h.operating_condition) h.*
   from public.environmental_aspect_score_history h
  order by h.aspect_id, h.operating_condition, h.scored_at desc, h.id desc;   -- id breaks timestamp ties
 
+-- One row per aspect with its current scores folded in, so the register can
+-- filter on significance and page on the server in one query. A lateral
+-- join, not a GROUP BY, so filters on the aspect (tenant, facility, process
+-- area) reach the aspects index before any scores are read. Columns are
+-- listed rather than a.*: a view pins every column it names, and 301 must
+-- be able to drop the legacy ones.
+create or replace view public.environmental_aspect_register
+with (security_invoker = true) as
+select a.id, a.tenant_id, a.facility_id, a.activity, a.aspect, a.impact, a.process_area,
+       a.life_cycle_stage, a.flow, a.controls, a.related_risk_id, a.source_reference, a.status,
+       a.owner_user_id, a.notes, a.obsolete_at, a.obsolete_reason, a.last_reviewed_at, a.reviewed_by,
+       a.next_review_due, a.created_by, a.updated_by, a.created_at, a.updated_at,
+       coalesce(s.significant, false)       as significant,
+       s.max_score,
+       coalesce(s.current_scores, '[]'::jsonb) as current_scores
+  from public.environmental_aspects a
+  left join lateral (
+    select bool_or(c.significant) as significant,
+           max(c.score)           as max_score,
+           jsonb_agg(jsonb_build_object(
+               'operating_condition', c.operating_condition,
+               'severity',            c.severity,
+               'likelihood',          c.likelihood,
+               'score',               c.score,
+               'significant',         c.significant,
+               'method_id',           c.method_id,
+               'scored_at',           c.scored_at)
+             order by array_position(array['normal','abnormal','emergency'], c.operating_condition)
+           ) as current_scores
+      from public.environmental_aspect_current_scores c
+     where c.tenant_id = a.tenant_id and c.aspect_id = a.id   -- idx_environmental_aspect_scores_latest
+  ) s on true;
+
 -- ── Backfill: the legacy single score becomes the first history row ──────
 do $$
 begin

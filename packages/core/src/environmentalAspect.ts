@@ -138,9 +138,13 @@ export interface AspectInput {
   status:           AspectStatus
   controls:         string | null
   notes:            string | null
+  /** Where the aspect came from: a chemical, a waste stream, an incident. Free text, no cross-module key. */
+  sourceReference:  string | null
 }
 
-const ASPECT_TEXT_LIMITS = { activity: 500, aspect: 500, impact: 2000, processArea: 120, controls: 4000, notes: 4000 } as const
+const ASPECT_TEXT_LIMITS = {
+  activity: 500, aspect: 500, impact: 2000, processArea: 120, controls: 4000, notes: 4000, sourceReference: 300,
+} as const
 
 function requireText(errors: FieldError[], field: keyof typeof ASPECT_TEXT_LIMITS, value: string) {
   if (value.trim().length === 0) errors.push({ field, message: 'is required' })
@@ -162,6 +166,7 @@ export function validateAspectInput(input: AspectInput): FieldError[] {
   requireText(errors, 'processArea', input.processArea)
   limitText(errors, 'controls', input.controls)
   limitText(errors, 'notes', input.notes)
+  limitText(errors, 'sourceReference', input.sourceReference)
   if (!ASPECT_LIFE_CYCLE_STAGES.some(s => s.value === input.lifeCycleStage)) {
     errors.push({ field: 'lifeCycleStage', message: 'is not a recognised life-cycle stage' })
   }

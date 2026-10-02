@@ -121,7 +121,7 @@ describe('validateAspectInput', () => {
   const valid: AspectInput = {
     activity: 'Parts degreasing', aspect: 'Solvent vapour release', impact: 'Air pollution (VOC)',
     processArea: 'Finishing', lifeCycleStage: 'operation', flow: 'output', status: 'identified',
-    controls: null, notes: null,
+    controls: null, notes: null, sourceReference: null,
   }
   const fields = (input: AspectInput) => validateAspectInput(input).map(e => e.field)
 
@@ -138,6 +138,8 @@ describe('validateAspectInput', () => {
     expect(fields({ ...valid, processArea: 'x'.repeat(120) })).toEqual([])
     expect(fields({ ...valid, processArea: 'x'.repeat(121) })).toEqual(['processArea'])
     expect(fields({ ...valid, controls: 'x'.repeat(4001) })).toEqual(['controls'])
+    expect(fields({ ...valid, sourceReference: 'x'.repeat(300) })).toEqual([])
+    expect(fields({ ...valid, sourceReference: 'x'.repeat(301) })).toEqual(['sourceReference'])
   })
 
   it('rejects unknown enum values', () => {

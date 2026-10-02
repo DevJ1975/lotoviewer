@@ -99,6 +99,22 @@ describe('EMS Phase 1 migrations on a real Postgres', () => {
         [facility])).toBe(0)
     })
 
+    it('folds each aspect\'s current scores into the register view', async () => {
+      const register = await db.query<{ significant: boolean; max_score: number | null; current_scores: unknown[] }>(
+        `select significant, max_score, current_scores from public.environmental_aspect_register where tenant_id = $1`,
+        [IDS.tenantA])
+      expect(register.rows).toHaveLength(14)
+      expect(register.rows.filter(r => r.significant)).toHaveLength(5)
+      expect(register.rows.every(r => r.current_scores.length === 1)).toBe(true)
+    })
+
+    it('shows an unscored aspect as not significant, with no scores', async () => {
+      const aspect = await insertAspect(db, IDS.tenantA)
+      const row = await db.query(
+        `select significant, max_score, current_scores from public.environmental_aspect_register where id = $1`, [aspect])
+      expect(row.rows).toEqual([{ significant: false, max_score: null, current_scores: [] }])
+    })
+
     it('drops the legacy single-score columns', async () => {
       const legacy = await db.query(
         `select column_name from information_schema.columns
@@ -408,7 +424,7 @@ describe('EMS Phase 1 migrations on a real Postgres', () => {
     it('shows another tenant\'s admin none of the registers', async () => {
       await asCaller(db, adminB, async () => {
         for (const table of ['ms_context_issues', 'environmental_aspects', 'environmental_aspect_scores',
-          'ms_compliance_evaluations', 'ms_scoring_methods', 'ms_policies']) {
+          'ms_compliance_evaluations', 'ms_scoring_methods', 'ms_policies', 'environmental_aspect_register']) {
           expect(await count(db, `select count(*) from public.${table} where tenant_id = $1`, [IDS.tenantA])).toBe(0)
         }
         await expect(db.query(contextInsert, [IDS.tenantA, null])).rejects.toMatchObject({ code: '42501' })
@@ -523,7 +539,7 @@ describe('EMS Phase 1 rollbacks', () => {
     await rollBackPhase1()
     for (const relation of ['ms_context_issues', 'ms_interested_parties', 'ms_scope_statements', 'ms_policies',
       'ms_scoring_methods', 'environmental_aspect_scores', 'environmental_aspect_obligations',
-      'environmental_aspect_current_scores', 'ms_compliance_evaluations', 'ms_evidence']) {
+      'environmental_aspect_current_scores', 'environmental_aspect_register', 'ms_compliance_evaluations', 'ms_evidence']) {
       expect(await scalar(db, 'select to_regclass($1)::text', [`public.${relation}`])).toBeNull()
     }
     const policies = await db.query<{ policyname: string }>(

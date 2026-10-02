@@ -35,6 +35,7 @@ alter table public.environmental_aspects
   alter column likelihood set default 1,
   alter column likelihood set not null;
 
+drop view  if exists public.environmental_aspect_register;
 drop view  if exists public.environmental_aspect_current_scores;
 drop view  if exists public.environmental_aspect_score_history;
 drop table if exists public.environmental_aspect_obligations;

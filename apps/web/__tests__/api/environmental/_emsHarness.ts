@@ -11,6 +11,7 @@
 // and the PGlite suite proves the policies themselves.
 
 import { vi } from 'vitest'
+import { currentScoresByCondition, scoreAspect, type AspectOperatingCondition } from '@soteria/core/environmentalAspect'
 
 // ── tenant gate ───────────────────────────────────────────────────────
 export const TENANT_A = '11111111-1111-4111-8111-111111111111'
@@ -41,7 +42,10 @@ export function gateRejects(status: number, message: string): void {
   caller = { ok: false, status, message }
 }
 
-function memberGate() {
+type GateFailure = { ok: false; status: number; message: string }
+type GatePass = { ok: true; userId: string; tenantId: string; facilityId: string | null; role: Caller['role'] } & Record<string, unknown>
+
+function memberGate(): GateFailure | GatePass {
   if ('ok' in caller) return caller
   if (caller.moduleOn === false) return { ok: false, status: 403, message: 'Module is not enabled for this tenant' }
   return {
@@ -81,16 +85,27 @@ interface DbError { message: string; code: string }
 
 const store = new Map<string, Row[]>()
 
-/** Unique keys a route depends on, per table. */
-export const UNIQUE_KEYS: Record<string, string[][]> = {
-  ms_scope_statements: [['tenant_id', 'discipline', 'version']],
-  ms_policies:         [['tenant_id', 'discipline', 'version']],
+/** Unique keys a route depends on, per table; `where` makes one partial, like a partial unique index. */
+export const UNIQUE_KEYS: Record<string, { columns: string[]; where?: (row: Row) => boolean }[]> = {
+  ms_scope_statements: [{ columns: ['tenant_id', 'discipline', 'version'] }],
+  ms_policies:         [{ columns: ['tenant_id', 'discipline', 'version'] }],
+  // uq_ms_scoring_methods_default (migration 296)
+  ms_scoring_methods:  [{ columns: ['tenant_id', 'discipline'], where: row => row.is_default === true && row.retired_at == null }],
+  environmental_aspect_obligations: [{ columns: ['aspect_id', 'obligation_id'] }],
 }
 
 /** Same-tenant composite foreign keys, per table: (columns) → table(references). */
 export const FOREIGN_KEYS: Record<string, { columns: string[]; table: string; references: string[] }[]> = {
   ms_interested_parties: [
     { columns: ['tenant_id', 'obligation_id'], table: 'compliance_calendar_obligations', references: ['tenant_id', 'id'] },
+  ],
+  environmental_aspect_obligations: [
+    { columns: ['tenant_id', 'aspect_id'], table: 'environmental_aspects', references: ['tenant_id', 'id'] },
+    { columns: ['tenant_id', 'obligation_id'], table: 'compliance_calendar_obligations', references: ['tenant_id', 'id'] },
+  ],
+  environmental_aspect_scores: [
+    { columns: ['tenant_id', 'aspect_id'], table: 'environmental_aspects', references: ['tenant_id', 'id'] },
+    { columns: ['tenant_id', 'method_id'], table: 'ms_scoring_methods', references: ['tenant_id', 'id'] },
   ],
 }
 
@@ -103,7 +118,7 @@ export function seed(table: string, rows: Row[]): void {
 }
 
 /** Every write attempted since the last reset, in order, including refused ones. */
-export const writes: { table: string; mode: 'insert' | 'update'; payload: unknown }[] = []
+export const writes: { table: string; mode: 'insert' | 'update' | 'delete'; payload: unknown }[] = []
 
 let failures: { table: string; mode: QueryState['mode'] | 'any'; error: DbError }[] = []
 /** The next query against `table` (optionally only the next insert, update or select) fails with `error`. */
@@ -111,11 +126,18 @@ export function failNext(table: string, error: DbError, mode: QueryState['mode']
   failures.push({ table, mode, error })
 }
 
+let hooks: { table: string; mode: QueryState['mode']; action: () => void }[] = []
+/** Run `action` just before the next `mode` query against `table`: how a test stages a race. */
+export function beforeNext(table: string, mode: QueryState['mode'], action: () => void): void {
+  hooks.push({ table, mode, action })
+}
+
 let idCounter = 0
 export function resetStore(): void {
   store.clear()
   writes.length = 0
   failures = []
+  hooks = []
   idCounter = 0
   captureExceptionMock.mockReset()
   asAdminA()
@@ -127,9 +149,10 @@ function nextId(): string {
 }
 
 function violation(table: string, candidate: Row, others: Row[]): DbError | null {
-  for (const key of UNIQUE_KEYS[table] ?? []) {
-    if (others.some(r => key.every(col => r[col] === candidate[col]))) {
-      return { code: '23505', message: `duplicate key value violates unique constraint on ${table} (${key.join(', ')})` }
+  for (const { columns, where = () => true } of UNIQUE_KEYS[table] ?? []) {
+    if (!where(candidate)) continue
+    if (others.some(r => where(r) && columns.every(col => r[col] === candidate[col]))) {
+      return { code: '23505', message: `duplicate key value violates unique constraint on ${table} (${columns.join(', ')})` }
     }
   }
   for (const fk of FOREIGN_KEYS[table] ?? []) {
@@ -143,11 +166,12 @@ function violation(table: string, candidate: Row, others: Row[]): DbError | null
 
 interface QueryState {
   table:    string
-  mode:     'select' | 'insert' | 'update'
+  mode:     'select' | 'insert' | 'update' | 'delete'
   payload:  Row | Row[] | null
   filters:  Filter[]
   orders:   { column: string; ascending: boolean }[]
   limit:    number | null
+  offset:   number
   columns:  string[] | null
 }
 
@@ -168,13 +192,72 @@ function compare(a: unknown, b: unknown): number {
   return String(a) < String(b) ? -1 : 1
 }
 
+// ── views ─────────────────────────────────────────────────────────────
+// Computed from stored rows the way migration 297's views compute them,
+// using core's scoreAspect(), which the PGlite suite pins to the database.
+
+function scoreHistory(): Row[] {
+  return rowsIn('environmental_aspect_scores').map(score => {
+    const method = rowsIn('ms_scoring_methods').find(m => m.id === score.method_id)
+    if (!method) throw new Error(`harness: score ${String(score.id)} names no stored method`)
+    const { score: value, significant } = scoreAspect(Number(score.severity), Number(score.likelihood), {
+      severityLevels:        Number(method.severity_levels),
+      likelihoodLevels:      Number(method.likelihood_levels),
+      matrix:                (method.matrix ?? null) as number[][] | null,
+      significanceThreshold: Number(method.significance_threshold),
+    })
+    return {
+      ...score, score: value, significant,
+      method_name: method.name, method_version: method.version, significance_threshold: method.significance_threshold,
+    }
+  })
+}
+
+function currentScores(): Row[] {
+  const byAspect = new Map<unknown, Row[]>()
+  for (const row of scoreHistory()) byAspect.set(row.aspect_id, [...(byAspect.get(row.aspect_id) ?? []), row])
+  return [...byAspect.values()].flatMap(rows => Object.values(currentScoresByCondition(rows.map(r => ({
+    ...r, id: String(r.id), operatingCondition: r.operating_condition as AspectOperatingCondition, scoredAt: String(r.scored_at),
+  })))))
+}
+
+const CONDITION_ORDER = ['normal', 'abnormal', 'emergency']
+
+function aspectRegister(): Row[] {
+  const current = currentScores()
+  return rowsIn('environmental_aspects').map(aspect => {
+    const mine = current
+      .filter(c => c.aspect_id === aspect.id)
+      .sort((a, b) => CONDITION_ORDER.indexOf(String(a.operating_condition)) - CONDITION_ORDER.indexOf(String(b.operating_condition)))
+    return {
+      ...aspect,
+      significant:    mine.some(c => c.significant === true),
+      max_score:      mine.length > 0 ? Math.max(...mine.map(c => Number(c.score))) : null,
+      current_scores: mine.map(c => ({
+        operating_condition: c.operating_condition, severity: c.severity, likelihood: c.likelihood,
+        score: c.score, significant: c.significant, method_id: c.method_id, scored_at: c.scored_at,
+      })),
+    }
+  })
+}
+
+const VIEWS: Partial<Record<string, () => Row[]>> = {
+  environmental_aspect_score_history:  scoreHistory,
+  environmental_aspect_current_scores: currentScores,
+  environmental_aspect_register:       aspectRegister,
+}
+
 function run(state: QueryState): { data: unknown; error: DbError | null } {
+  const hook = hooks.findIndex(h => h.table === state.table && h.mode === state.mode)
+  if (hook >= 0) hooks.splice(hook, 1)[0].action()
   const failure = failures.findIndex(f => f.table === state.table && (f.mode === 'any' || f.mode === state.mode))
   if (failure >= 0) {
     const [{ error }] = failures.splice(failure, 1)
     return { data: null, error }
   }
-  const rows = store.get(state.table) ?? (store.set(state.table, []), store.get(state.table)!)
+  const view = VIEWS[state.table]
+  if (view && state.mode !== 'select') throw new Error(`harness: ${state.table} is a view`)
+  const rows = view ? view() : store.get(state.table) ?? (store.set(state.table, []), store.get(state.table)!)
   const matches = () => rows.filter(row => state.filters.every(f => f(row)))
 
   if (state.mode === 'insert') {
@@ -201,17 +284,24 @@ function run(state: QueryState): { data: unknown; error: DbError | null } {
     return { data: targets.map(r => project(r, state.columns)), error: null }
   }
 
+  if (state.mode === 'delete') {
+    writes.push({ table: state.table, mode: 'delete', payload: null })
+    const doomed = new Set(matches())
+    store.set(state.table, rows.filter(r => !doomed.has(r)))
+    return { data: [...doomed].map(r => project(r, state.columns)), error: null }
+  }
+
   let result = matches()
   for (const { column, ascending } of [...state.orders].reverse()) {
     result = [...result].sort((a, b) => (ascending ? 1 : -1) * compare(a[column], b[column]))
   }
-  if (state.limit !== null) result = result.slice(0, state.limit)
+  result = result.slice(state.offset, state.limit === null ? undefined : state.offset + state.limit)
   return { data: result.map(r => project(r, state.columns)), error: null }
 }
 
 function builder(table: string) {
   const state: QueryState = {
-    table, mode: 'select', payload: null, filters: [], orders: [], limit: null, columns: null,
+    table, mode: 'select', payload: null, filters: [], orders: [], limit: null, offset: 0, columns: null,
   }
   const settle = () => run(state)
   const one = (allowNone: boolean) => {
@@ -226,6 +316,7 @@ function builder(table: string) {
     select(columns?: string) { state.columns = parseColumns(columns ?? '*'); return chain },
     insert(payload: Row | Row[]) { state.mode = 'insert'; state.payload = payload; return chain },
     update(payload: Row) { state.mode = 'update'; state.payload = payload; return chain },
+    delete() { state.mode = 'delete'; return chain },
     eq(column: string, value: unknown) { state.filters.push(r => r[column] === value); return chain },
     neq(column: string, value: unknown) { state.filters.push(r => r[column] !== value); return chain },
     in(column: string, values: readonly unknown[]) { state.filters.push(r => values.includes(r[column])); return chain },
@@ -244,6 +335,7 @@ function builder(table: string) {
       return chain
     },
     limit(n: number) { state.limit = n; return chain },
+    range(from: number, to: number) { state.offset = from; state.limit = to - from + 1; return chain },
     single: () => one(false),
     maybeSingle: () => one(true),
     then<T>(onFulfilled: (value: { data: unknown; error: DbError | null }) => T, onRejected?: (reason: unknown) => T) {
