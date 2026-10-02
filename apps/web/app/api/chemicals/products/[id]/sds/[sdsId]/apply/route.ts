@@ -108,6 +108,27 @@ export async function POST(req: Request, ctx: Ctx) {
       precautionary_statements: update.precautionary_statements as ParsedSdsPrecautionaryStatement[] | undefined,
     })
 
+    // Approval is the activation point for a discovered or library-adopted
+    // SDS. The upload path activates immediately (sds/route.ts) because a
+    // human hand-picked that file; a fetched PDF deliberately waits — see the
+    // rationale at sds/fetch/route.ts — until someone has parsed and approved
+    // it. That moment is here. Without this the flag was never set at all:
+    // the product kept rendering the amber "No SDS" badge, the missing-SDS
+    // KPI counted it, and chemicalSdsDrift had no baseline hash, so every
+    // scheduled check fell through to a paid AI revision-date extraction.
+    const { data: prior, error: priorErr } = await admin
+      .from('chemical_products')
+      .select('active_sds_id')
+      .eq('id',        productId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle()
+    if (priorErr) return NextResponse.json({ error: priorErr.message }, { status: 500 })
+    if (!prior)   return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+
+    const priorActiveSdsId = prior.active_sds_id as string | null
+    const activated = priorActiveSdsId !== sdsId
+    if (activated) update.active_sds_id = sdsId
+
     const { data: product, error: pErr } = await admin
       .from('chemical_products')
       .update(update)
@@ -118,6 +139,20 @@ export async function POST(req: Request, ctx: Ctx) {
     if (pErr)    return NextResponse.json({ error: pErr.message }, { status: 500 })
     if (!product) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
 
+    // Stamp the outgoing revision so the supersession chain stays intact.
+    // 1910.1020 retention means a prior SDS is never deleted, only marked.
+    if (activated && priorActiveSdsId) {
+      await admin
+        .from('chemical_sds_documents')
+        .update({
+          superseded_by:     sdsId,
+          superseded_at:     new Date().toISOString(),
+          superseded_reason: 'Replaced by newer revision',
+        })
+        .eq('id',        priorActiveSdsId)
+        .eq('tenant_id', tenantId)
+    }
+
     await admin
       .from('chemical_sds_documents')
       .update({ parse_review_status: 'approved' })
@@ -126,7 +161,8 @@ export async function POST(req: Request, ctx: Ctx) {
 
     return NextResponse.json({
       product,
-      applied:       Object.keys(update).filter(k => k !== 'updated_by'),
+      applied:       Object.keys(update).filter(k => k !== 'updated_by' && k !== 'active_sds_id'),
+      activated,
       applied_count: appliedCount,
       warnings,
     })

@@ -171,12 +171,18 @@ export async function normalizeCandidates(
     : []
 
   const candidates: SdsCandidate[] = []
+  const seenUrls = new Set<string>()
   for (const r of rows) {
     if (!r || typeof r !== 'object') continue
     const row = r as Record<string, unknown>
     // Boundary validation: drop anything without a real https URL — the model
     // is told not to invent links, but we never trust that on its own.
     if (!isHttpsUrl(row.url)) continue
+    // The model can list the same PDF twice. Keep the first occurrence — rows
+    // arrive best-match first — so the picker doesn't render duplicate rows
+    // under a colliding React key (SdsCandidatePicker keys on url).
+    if (seenUrls.has(row.url)) continue
+    seenUrls.add(row.url)
     const confidence = row.confidence === 'high' || row.confidence === 'medium' || row.confidence === 'low'
       ? row.confidence : 'low'
     candidates.push({
