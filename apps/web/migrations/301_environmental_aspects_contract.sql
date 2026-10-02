@@ -43,7 +43,8 @@ begin
         from public.environmental_aspects a
         join public.ms_scoring_methods m
           on m.tenant_id = a.tenant_id and m.discipline = 'ems' and m.is_default and m.retired_at is null
-       where not exists (select 1 from public.environmental_aspect_scores s where s.aspect_id = a.id)
+       where a.severity is not null   -- null: created by the Phase 1 API, never scored the old way
+         and not exists (select 1 from public.environmental_aspect_scores s where s.aspect_id = a.id)
     $b$;
   end if;
 end $$;

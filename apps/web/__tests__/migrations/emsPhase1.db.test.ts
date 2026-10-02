@@ -540,3 +540,41 @@ describe('EMS Phase 1 rollbacks', () => {
     await expect(db.query('select public.active_facility_id()')).rejects.toMatchObject({ code: '22P02' })
   })
 })
+
+describe('the deploy window between 300 and 301', () => {
+  let db: PGlite
+  const UNSCORED = 'dddddddd-0000-4000-8000-000000000001'
+
+  beforeAll(async () => {
+    db = await createEmsDatabase({ throughPhase1: false })
+    for (const file of PHASE1_MIGRATIONS.slice(0, -1)) await db.exec(migrationSql(file))
+    // What the Phase 1 API does: an aspect with no legacy score columns.
+    await db.query(
+      `insert into public.environmental_aspects (id, tenant_id, activity, aspect, impact, process_area)
+       values ($1, $2, 'Pallet washing', 'Wash water', 'Water quality', 'Shipping')`, [UNSCORED, IDS.tenantA])
+  }, DB_SETUP_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await db?.close()
+  })
+
+  it('leaves an aspect the new API created unscored, rather than inventing a 1 × 1 assessment', async () => {
+    expect(await scalar(db, 'select severity from public.environmental_aspects where id = $1', [UNSCORED])).toBeNull()
+    await db.exec(migrationSql('301_environmental_aspects_contract.sql'))
+    expect(await count(db, 'select count(*) from public.environmental_aspect_scores where aspect_id = $1', [UNSCORED])).toBe(0)
+    expect(await count(db, 'select count(*) from public.environmental_aspect_scores')).toBe(14)
+  }, DB_SETUP_TIMEOUT_MS)
+
+  it('keeps it unscored through 301\'s rollback, and gives it 204\'s defaults only when the old model returns', async () => {
+    await db.exec(migrationSql('301_rollback.sql'))
+    expect(await scalar(db, 'select severity from public.environmental_aspects where id = $1', [UNSCORED])).toBeNull()
+
+    for (const file of ['300_rollback.sql', '299_rollback.sql', '298_rollback.sql', '297_rollback.sql']) {
+      await db.exec(migrationSql(file))
+    }
+    const legacy = await db.query(
+      'select operating_condition, severity, likelihood from public.environmental_aspects where id = $1', [UNSCORED])
+    expect(legacy.rows).toEqual([{ operating_condition: 'normal', severity: 1, likelihood: 1 }])
+    expect(await count(db, 'select count(*) from public.environmental_aspects where severity is null')).toBe(0)
+  }, DB_SETUP_TIMEOUT_MS)
+})

@@ -11,11 +11,12 @@
 
 begin;
 
+-- 297's shape: optional, no default. An aspect with no score stays null.
 alter table public.environmental_aspects
-  add column if not exists operating_condition text not null default 'normal'
+  add column if not exists operating_condition text
     check (operating_condition in ('normal','abnormal','emergency')),
-  add column if not exists severity   int not null default 1 check (severity between 1 and 5),
-  add column if not exists likelihood int not null default 1 check (likelihood between 1 and 5);
+  add column if not exists severity   int check (severity between 1 and 5),
+  add column if not exists likelihood int check (likelihood between 1 and 5);
 
 update public.environmental_aspects a
    set operating_condition = top.operating_condition,

@@ -18,7 +18,10 @@
 --
 -- Each existing aspect's single score becomes its first history row. The
 -- legacy columns stay until migration 301, because the pages deployed
--- before this change still read and write them.
+-- before this change still read and write them. They lose their defaults
+-- and become optional: the Phase 1 API creates aspects without them, and a
+-- 1 x 1 default would read as an assessment nobody made. Null there means
+-- "never scored under the old model", and 301 carries over only the rest.
 --
 -- Ordering: apply before deploying the Phase 1 code; apply 301 after it.
 -- Idempotent. Rollback: 297_rollback.sql.
@@ -180,6 +183,13 @@ begin
     select 1 from information_schema.columns
      where table_schema = 'public' and table_name = 'environmental_aspects' and column_name = 'severity'
   ) then
+    alter table public.environmental_aspects
+      alter column operating_condition drop default,
+      alter column operating_condition drop not null,
+      alter column severity drop default,
+      alter column severity drop not null,
+      alter column likelihood drop default,
+      alter column likelihood drop not null;
     execute $b$
       insert into public.environmental_aspect_scores
         (tenant_id, aspect_id, operating_condition, severity, likelihood, method_id, rationale, scored_by, scored_at)
@@ -189,7 +199,8 @@ begin
         from public.environmental_aspects a
         join public.ms_scoring_methods m
           on m.tenant_id = a.tenant_id and m.discipline = 'ems' and m.is_default and m.retired_at is null
-       where not exists (select 1 from public.environmental_aspect_scores s where s.aspect_id = a.id)
+       where a.severity is not null
+         and not exists (select 1 from public.environmental_aspect_scores s where s.aspect_id = a.id)
     $b$;
   end if;
 end $$;
