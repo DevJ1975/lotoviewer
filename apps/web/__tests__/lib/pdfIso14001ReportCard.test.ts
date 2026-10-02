@@ -11,12 +11,16 @@ import { assessIso14001, type ReadinessSignals } from '@soteria/core/iso14001Rea
 function signals(overrides: Partial<ReadinessSignals> = {}): ReadinessSignals {
   return {
     disabledModules: [],
+    contextIssuesActive: 0, contextIssuesReviewOverdue: 0, climateIssueRecorded: false,
+    interestedPartiesActive: 0, interestedPartiesReviewOverdue: 0,
+    scopeOnFile: false, scopeReviewOverdue: false, policySignatoryStale: false,
     risks: { count: 12, ageDays: 30 },
     documentsRegisterLive: false, policyApproved: false, policyReviewOverdue: false,
     requiredDocsMissing: 0, docsReviewOverdue: 0, risksWithoutControls: 0,
     aspectsTotal: 14, aspectsSignificant: 5, significantUncontrolled: 1,
-    aspectsRegisterAgeDays: 20,
-    obligationsTotal: 6, obligationsOverdue: 1, complianceEvalAgeDays: 50,
+    aspectsUnscored: 0, aspectsReviewOverdue: 0,
+    obligationsTotal: 6, obligationsOverdue: 1, obligationsReviewOverdue: 0,
+    complianceEvalAgeDays: 50, evaluationsOverdue: 0,
     significantUnaddressed: 1,
     objectivesActive: 6, objectivesLinked: 6, objectivesWithTargets: 6, objectivesAchieved: 1,
     trainingRecords: 40, trainingExpired: 0, trainingExpiringSoon: 0,
@@ -89,6 +93,7 @@ describe('generateIso14001ReportCard', () => {
       emergencyDrillAgeDays: 120, openMajorNonconformities: 0, overdueActions: 0,
       significantUncontrolled: 0, significantUnaddressed: 0,
       obligationsOverdue: 0, objectivesStaleReadings: 0,
+      contextIssuesActive: 8, climateIssueRecorded: true, interestedPartiesActive: 5, scopeOnFile: true,
     }))
     expect(card.band).toBe('ready')
     expect(card.blockers).toEqual([])

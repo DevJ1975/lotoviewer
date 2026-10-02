@@ -44,10 +44,11 @@ interface ReadingRow {
 }
 
 interface AspectOption {
-  id:             string
-  activity:       string
-  aspect:         string
-  is_significant: boolean
+  id:          string
+  activity:    string
+  aspect:      string
+  /** Significant under any operating condition (environmental_aspect_register). */
+  significant: boolean
 }
 
 const STATUS_BADGE: Record<ObjectiveStatus, string> = {
@@ -111,10 +112,11 @@ export default function EnvironmentalObjectivesPage() {
           .order('reading_date', { ascending: false })
           .limit(5000),
         supabase
-          .from('environmental_aspects')
-          .select('id, activity, aspect, is_significant')
+          .from('environmental_aspect_register')
+          .select('id, activity, aspect, significant')
           .eq('tenant_id', tenantId)
-          .order('significance_score', { ascending: false })
+          .is('obsolete_at', null)
+          .order('max_score', { ascending: false, nullsFirst: false })
           .limit(1000),
       ])
       if (obj.error) throw new Error(formatSupabaseError(obj.error, 'load objectives'))
@@ -294,7 +296,7 @@ export default function EnvironmentalObjectivesPage() {
                 <option value="">—</option>
                 {aspects.map(a => (
                   <option key={a.id} value={a.id}>
-                    {a.is_significant ? '★ ' : ''}{a.activity} — {a.aspect}
+                    {a.significant ? '★ ' : ''}{a.activity} — {a.aspect}
                   </option>
                 ))}
               </select>

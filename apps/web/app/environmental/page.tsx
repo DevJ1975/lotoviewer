@@ -3,13 +3,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
-  AlertTriangle, BarChart3, ClipboardCheck, Gauge, Mountain, ScrollText,
+  AlertTriangle, BarChart3, ClipboardCheck, Compass, Gauge, Mountain, Scale, ScrollText,
 } from 'lucide-react'
+import type { RegisterHealth } from '@soteria/core/managementSystem'
 import { useTenant } from '@/components/TenantProvider'
 import { PageHeader } from '@/components/PageHeader'
 import OpsSpinner from '@/components/OpsSpinner'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
+import { getRegistersHealth, type RegistersHealth } from '@/lib/environmental/client'
+import { RegisterHealthBadge } from './_components/RegisterHealthBadge'
 
 // /environmental — EMS module home.
 //
@@ -37,11 +40,25 @@ const CARDS = [
     clause: 'Report card',
   },
   {
+    href:  '/environmental/context',
+    Icon:  Compass,
+    title: 'Context, scope & policy',
+    desc:  'Issues (climate included), interested parties, the EMS scope, and the signed policy.',
+    clause: 'Clauses 4.1-4.3 & 5.2',
+  },
+  {
     href:  '/environmental/aspects',
     Icon:  Mountain,
     title: 'Aspects & impacts',
-    desc:  'Activities, their environmental aspects, and significance scoring.',
+    desc:  'Activities and their aspects, scored under normal, abnormal and emergency conditions.',
     clause: 'Clause 6.1.2',
+  },
+  {
+    href:  '/environmental/obligations',
+    Icon:  Scale,
+    title: 'Compliance obligations',
+    desc:  'The legal register, and evidence-backed evaluations of compliance with it.',
+    clause: 'Clauses 6.1.3 & 9.1.2',
   },
   {
     href:  '/environmental/objectives',
@@ -66,9 +83,17 @@ const CARDS = [
   },
 ] as const
 
+const HEALTH_RANK: Record<RegisterHealth, number> = { red: 0, amber: 1, green: 2 }
+
+/** The context card covers two registers; it shows the worse of the two. */
+function worst(a: RegisterHealth, b: RegisterHealth): RegisterHealth {
+  return HEALTH_RANK[a] <= HEALTH_RANK[b] ? a : b
+}
+
 export default function EnvironmentalHomePage() {
   const { tenantId } = useTenant()
   const [counts, setCounts]       = useState<RegisterCounts | null>(null)
+  const [health, setHealth]       = useState<RegistersHealth | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -78,9 +103,10 @@ export default function EnvironmentalHomePage() {
       const head = (table: string) =>
         supabase.from(table).select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId)
 
-      const [aspects, significant, objectives, reviews, ncs, openNcs] = await Promise.all([
-        head('environmental_aspects'),
-        head('environmental_aspects').eq('is_significant', true),
+      const [registers, aspects, significant, objectives, reviews, ncs, openNcs] = await Promise.all([
+        getRegistersHealth(tenantId),
+        head('environmental_aspect_register').is('obsolete_at', null),
+        head('environmental_aspect_register').is('obsolete_at', null).eq('significant', true),
         head('environmental_objectives'),
         head('management_reviews'),
         head('nonconformities'),
@@ -91,6 +117,7 @@ export default function EnvironmentalHomePage() {
         .find(r => r.error)?.error
       if (firstError) throw new Error(formatSupabaseError(firstError, 'load EMS registers'))
 
+      setHealth(registers)
       setCounts({
         aspects:         aspects.count ?? 0,
         significant:     significant.count ?? 0,
@@ -106,11 +133,26 @@ export default function EnvironmentalHomePage() {
 
   useEffect(() => { void load() }, [load])
 
-  const countFor = (href: string): string | null => {
-    if (!counts) return null
+  const healthFor = (href: string): RegisterHealth | null => {
+    if (!health) return null
     switch (href) {
+      case '/environmental/context':
+        return worst(health.context.health, health.scopeAndPolicy.health)
+      case '/environmental/aspects':     return health.aspects.health
+      case '/environmental/obligations': return health.obligations.health
+      default:                           return null
+    }
+  }
+
+  const countFor = (href: string): string | null => {
+    if (!counts || !health) return null
+    switch (href) {
+      case '/environmental/context':
+        return `${health.context.active} issues · ${health.scopeAndPolicy.policyVersion ? `policy v${health.scopeAndPolicy.policyVersion}` : 'no policy yet'}`
       case '/environmental/aspects':
-        return `${counts.aspects} recorded · ${counts.significant} significant`
+        return `${counts.aspects} active · ${counts.significant} significant`
+      case '/environmental/obligations':
+        return `${health.obligations.active} obligations · ${health.obligations.evaluationsOverdue} evaluations overdue`
       case '/environmental/objectives':
         return `${counts.objectives} objectives`
       case '/environmental/management-review':
@@ -152,6 +194,9 @@ export default function EnvironmentalHomePage() {
                   <Icon className="h-4 w-4" />
                 </span>
                 <span className="placard-label text-slate-500 dark:text-slate-400">{clause}</span>
+                {healthFor(href) && (
+                  <span className="ml-auto"><RegisterHealthBadge health={healthFor(href)!} /></span>
+                )}
               </span>
               <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</span>
               <span className="text-xs text-slate-500 dark:text-slate-400">{desc}</span>

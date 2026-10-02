@@ -34,12 +34,16 @@ vi.mock('@/components/Breadcrumbs', () => ({ Breadcrumbs: () => null }))
 function healthy(): ReadinessSignals {
   return {
     disabledModules: [],
+    contextIssuesActive: 8, contextIssuesReviewOverdue: 0, climateIssueRecorded: true,
+    interestedPartiesActive: 5, interestedPartiesReviewOverdue: 0,
+    scopeOnFile: true, scopeReviewOverdue: false, policySignatoryStale: false,
     risks: { count: 12, ageDays: 30 },
     documentsRegisterLive: true, policyApproved: true, policyReviewOverdue: false,
     requiredDocsMissing: 0, docsReviewOverdue: 0, risksWithoutControls: 0,
     aspectsTotal: 14, aspectsSignificant: 5, significantUncontrolled: 0,
-    aspectsRegisterAgeDays: 20,
-    obligationsTotal: 6, obligationsOverdue: 0, complianceEvalAgeDays: 50,
+    aspectsUnscored: 0, aspectsReviewOverdue: 0,
+    obligationsTotal: 6, obligationsOverdue: 0, obligationsReviewOverdue: 0,
+    complianceEvalAgeDays: 50, evaluationsOverdue: 0,
     significantUnaddressed: 0,
     objectivesActive: 6, objectivesLinked: 6, objectivesWithTargets: 6, objectivesAchieved: 2,
     trainingRecords: 40, trainingExpired: 0, trainingExpiringSoon: 0,

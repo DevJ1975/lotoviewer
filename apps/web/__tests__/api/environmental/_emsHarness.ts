@@ -386,6 +386,8 @@ function builder(table: string) {
 }
 
 const client = { from: (table: string) => builder(table) }
+/** The same store as a plain client, for code that takes the browser `supabase` export. */
+export const emsClient = client
 
 // ── storage (the private ms-evidence bucket) ──────────────────────────
 /** Stored objects by `${bucket}/${path}`. */

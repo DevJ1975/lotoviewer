@@ -98,25 +98,47 @@ export interface ReadinessSignals {
   /** Module ids the tenant has switched off. Drives `not_applicable`. */
   disabledModules: readonly string[]
 
-  // 4.1 Context
-  risks:                 Recency
-  // 5.2 Policy · 7.5 Documented information (phase 3 tables)
-  documentsRegisterLive: boolean
+  // 4.1 Context (the context register)
+  contextIssuesActive:        number
+  contextIssuesReviewOverdue: number
+  /** An active climate-kind issue records the climate-change determination (Amd 1:2024). */
+  climateIssueRecorded:       boolean
+  // 4.2 Interested parties
+  interestedPartiesActive:        number
+  interestedPartiesReviewOverdue: number
+  // 4.3 Scope
+  scopeOnFile:           boolean
+  scopeReviewOverdue:    boolean
+  // 5.2 Policy (the versioned policy record)
+  /** The policy in force is signed and states every commitment its standard requires. */
   policyApproved:        boolean
   policyReviewOverdue:   boolean
+  /** The legal entity changed after the policy was signed (Lesson L3). */
+  policySignatoryStale:  boolean
+  // 6.1.1 and 6.1.4 (the risk register)
+  risks:                 Recency
+  // 7.5 Documented information (phase 3 tables)
+  documentsRegisterLive: boolean
   requiredDocsMissing:   number
   docsReviewOverdue:     number
   // 6.1.1
   risksWithoutControls:  number
-  // 6.1.2 Aspects
+  // 6.1.2 Aspects (active ones)
   aspectsTotal:          number
   aspectsSignificant:    number
   significantUncontrolled: number
-  aspectsRegisterAgeDays: number | null
-  // 6.1.3 / 9.1.2 Compliance obligations
+  /** Active aspects with no score under any operating condition. */
+  aspectsUnscored:       number
+  aspectsReviewOverdue:  number
+  // 6.1.3 / 9.1.2 Compliance obligations (the environmental register)
   obligationsTotal:      number
+  /** Obligations past their calendar deadline. */
   obligationsOverdue:    number
+  obligationsReviewOverdue: number
+  /** Age of the newest completed compliance evaluation. */
   complianceEvalAgeDays: number | null
+  /** Open compliance evaluations past their scheduled date. */
+  evaluationsOverdue:    number
   // 6.1.4
   significantUnaddressed: number
   // 6.2.1 Objectives
@@ -214,19 +236,37 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
   }
 
   // 4.1 — Context of the organization.
-  push('4.1', '/risk', [
-    [s.risks.count === 0, 'gap', 'No risk register entries define the organization’s context.'],
-    [older(s.risks.ageDays, READINESS_WINDOWS.annualReviewDays), 'attention',
-      'The risk register has not been reviewed in over a year.'],
-  ], ['conforming', `${s.risks.count} risk register entries, reviewed within the last year.`])
+  push('4.1', '/environmental/context', [
+    [s.contextIssuesActive === 0, 'gap', 'No internal or external issues are recorded in the context register.'],
+    [!s.climateIssueRecorded, 'attention',
+      'The context register does not yet record whether climate change is a relevant issue (Amendment 1:2024).'],
+    [s.contextIssuesReviewOverdue > 0, 'attention',
+      `${count(s.contextIssuesReviewOverdue, 'context issue is past its', 'context issues are past their')} review date.`],
+  ], ['conforming',
+    `${count(s.contextIssuesActive, 'context issue', 'context issues')} recorded, climate change included, all within review.`])
 
-  // 5.2 — Environmental policy. Lives in the documents register (phase 3).
-  push('5.2', s.documentsRegisterLive ? '/documents' : null, [
-    [!s.documentsRegisterLive, 'gap',
-      'No controlled-document register yet, so the environmental policy cannot be version-controlled here.'],
-    [!s.policyApproved, 'gap', 'No approved environmental policy document.'],
+  // 4.2 — Needs and expectations of interested parties.
+  push('4.2', '/environmental/context?tab=parties', [
+    [s.interestedPartiesActive === 0, 'gap', 'No interested parties or their needs and expectations are recorded.'],
+    [s.interestedPartiesReviewOverdue > 0, 'attention',
+      `${count(s.interestedPartiesReviewOverdue, 'interested party is past its', 'interested parties are past their')} review date.`],
+  ], ['conforming',
+    `${count(s.interestedPartiesActive, 'interested party', 'interested parties')} recorded with their needs, all within review.`])
+
+  // 4.3 — Scope of the EMS.
+  push('4.3', '/environmental/context?tab=scope', [
+    [!s.scopeOnFile, 'gap', 'The scope of the environmental management system is not documented.'],
+    [s.scopeReviewOverdue, 'attention', 'The EMS scope is past its review date.'],
+  ], ['conforming', 'The EMS scope is documented and within its review date.'])
+
+  // 5.2 — Environmental policy.
+  push('5.2', '/environmental/context?tab=policy', [
+    [!s.policyApproved, 'gap',
+      'No signed environmental policy stating every commitment the standard requires.'],
+    [s.policySignatoryStale, 'attention',
+      'The policy was signed before the organization’s legal entity changed, so it carries a prior owner’s signature.'],
     [s.policyReviewOverdue, 'attention', 'The environmental policy is past its scheduled review date.'],
-  ], ['conforming', 'An approved environmental policy is on file and within its review cycle.'])
+  ], ['conforming', 'A signed environmental policy states every required commitment and is within its review cycle.'])
 
   // 6.1.1 — Actions to address risks and opportunities.
   push('6.1.1', '/risk', [
@@ -238,19 +278,23 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
   // 6.1.2 — Environmental aspects. The defining 14001 register.
   push('6.1.2', '/environmental/aspects', [
     [s.aspectsTotal === 0, 'gap', 'The environmental aspects register is empty.'],
+    [s.aspectsUnscored > 0, 'attention',
+      `${count(s.aspectsUnscored, 'aspect has', 'aspects have')} not been scored under any operating condition.`],
     [s.significantUncontrolled > 0, 'attention',
       `${count(s.significantUncontrolled, 'significant aspect has', 'significant aspects have')} no operational control or linked risk.`],
-    [older(s.aspectsRegisterAgeDays, READINESS_WINDOWS.annualReviewDays), 'attention',
-      'The aspects register has not been updated in over a year.'],
+    [s.aspectsReviewOverdue > 0, 'attention',
+      `${count(s.aspectsReviewOverdue, 'aspect is past its', 'aspects are past their')} review date.`],
   ], ['conforming',
-    `${s.aspectsTotal} aspects recorded, ${s.aspectsSignificant} significant, all controlled.`])
+    `${s.aspectsTotal} aspects recorded, ${s.aspectsSignificant} significant, all scored, controlled and within review.`])
 
   // 6.1.3 — Compliance obligations.
-  push('6.1.3', '/admin/compliance/calendar', [
-    [s.obligationsTotal === 0, 'gap', 'No compliance obligations are on the calendar.'],
+  push('6.1.3', '/environmental/obligations', [
+    [s.obligationsTotal === 0, 'gap', 'The compliance obligations register is empty.'],
     [s.obligationsOverdue > 0, 'attention',
       `${count(s.obligationsOverdue, 'compliance obligation is past its', 'compliance obligations are past their')} due date.`],
-  ], ['conforming', `${s.obligationsTotal} obligations tracked, none overdue.`])
+    [s.obligationsReviewOverdue > 0, 'attention',
+      `${count(s.obligationsReviewOverdue, 'obligation is past its', 'obligations are past their')} register review date.`],
+  ], ['conforming', `${s.obligationsTotal} obligations in the register, none overdue.`])
 
   // 6.1.4 — Planning action on significant aspects.
   push('6.1.4', '/environmental/objectives', [
@@ -322,11 +366,13 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
   ], ['conforming', 'Every active objective has a current reading.'])
 
   // 9.1.2 — Evaluation of compliance.
-  push('9.1.2', '/admin/compliance/calendar', [
+  push('9.1.2', '/environmental/obligations', [
     [s.complianceEvalAgeDays === null, 'gap', 'Compliance status has never been formally evaluated.'],
+    [s.evaluationsOverdue > 0, 'attention',
+      `${count(s.evaluationsOverdue, 'compliance evaluation is', 'compliance evaluations are')} past due.`],
     [older(s.complianceEvalAgeDays, READINESS_WINDOWS.annualReviewDays), 'attention',
       'Compliance has not been evaluated in over a year.'],
-  ], ['conforming', 'Compliance evaluated within the last year.'])
+  ], ['conforming', 'Compliance evaluated against evidence within the last year, with nothing past due.'])
 
   // 9.2 — Internal audit. Programme arrives in phase 4.
   push('9.2', s.auditProgrammeLive ? '/environmental/audits' : null, [
