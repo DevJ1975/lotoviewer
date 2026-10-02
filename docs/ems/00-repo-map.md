@@ -405,11 +405,11 @@ exclusions, policy communication, and owners with a process map.
 
 | Concern | Where |
 | --- | --- |
-| Schema | `apps/web/migrations/302_ems_phase1_audit_fixes.sql` and `302_rollback.sql`: `environmental_aspects.control_level`, the scope's `control_and_influence` and `exclusions`, `ms_policy_communications`, `ms_responsibilities`. Re-running 297 after 302 fails cleanly, because 297's view lacks `control_level` |
+| Schema | `apps/web/migrations/302_ems_phase1_audit_fixes.sql` and `302_rollback.sql`: `environmental_aspects.control_level`, the scope's `control_and_influence` and `exclusions`, `ms_policy_communications`, `ms_responsibilities` (its owner is held to a `tenant_memberships` row, so removing a member clears their assignments). Apply 302 before deploying the code that reads it. Re-running 297 after 302 fails cleanly, because 297's view lacks `control_level` |
 | Report card | `packages/core/src/iso14001Readiness.ts`: a `not_assessed` verdict for clauses with no environmental source yet (7.2, 7.3, 7.4, 8.1, 8.2), replacing `not_applicable`; clause 5.3 added to `iso14001.ts` |
 | Process map | `packages/core/src/emsProcesses.ts` (the static map, its keys and coverage), `/api/environmental/responsibilities`, and `app/environmental/processes/page.tsx` |
 | Policy | `POST /api/environmental/policy/communications`; `lib/pdfEmsPolicyScope.ts` builds the PDF for interested parties in the browser |
-| Members | `useTenantMembers()` and `memberName()` in `app/risk/_components/wizard/MemberPicker.tsx`, shared by the risk wizard and the process map |
+| Members | `useTenantMembers()` and `memberName()` in `app/risk/_components/wizard/MemberPicker.tsx`, shared by the risk wizard and the process map; every picker on a page shares one member request |
 | Tests | `emsPhase1_1.db.test.ts` (302 for real), `responsibilities.test.ts`, `pdfEmsPolicyScope.test.ts` (reads the printed text back), `EnvironmentalProcessesPage.test.tsx`, `EnvironmentalHubPage.test.tsx` |
 
 ## 12. Pre-existing defects noticed during discovery (not fixed here)

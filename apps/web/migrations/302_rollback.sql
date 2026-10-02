@@ -4,6 +4,8 @@
 -- each aspect's control or influence, and each scope version's control and
 -- influence statement and exclusions. Export them first if they matter.
 --
+-- Revert the code that reads these columns and tables before running this.
+--
 -- Apply: paste into the SQL Editor, or run with psql.
 -- ────────────────────────────────────────────────────────────────────────────
 

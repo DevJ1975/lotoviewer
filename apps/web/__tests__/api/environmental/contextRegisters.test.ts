@@ -3,7 +3,7 @@
 // failures through, refuse writes from non-admins, validate the whole
 // record with field errors, and never read or write across tenants.
 
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
   ADMIN_A, TENANT_A, TENANT_B,
   asAdminB, asMemberA, callAs, failNext, gateRejects, idContext, jsonRequest, resetStore, rowsIn, seed, writes,
@@ -464,6 +464,28 @@ describe('policy communications', () => {
     const future = await policyCommunications.POST(jsonRequest('/x', 'POST', { ...validCommunication, communicated_on: '2999-01-01' }))
     expect(future.status).toBe(400)
     expect((await future.json()).fieldErrors).toEqual([{ field: 'communicated_on', message: 'cannot be in the future' }])
+  })
+
+  it('refuses a communication dated before the policy version was signed', async () => {
+    const res = await policyCommunications.POST(jsonRequest('/x', 'POST', { ...validCommunication, communicated_on: '2026-09-14' }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).fieldErrors).toEqual([
+      { field: 'communicated_on', message: 'cannot be before the policy was signed (2026-09-15)' },
+    ])
+    expect(writes).toEqual([])
+  })
+
+  it('accepts a site\'s own today when it is already tomorrow in UTC terms, but not the day after', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-02T12:00:00Z'))   // already 2026-10-03 east of UTC+12
+    try {
+      const ahead = await policyCommunications.POST(jsonRequest('/x', 'POST', { ...validCommunication, communicated_on: '2026-10-03' }))
+      expect(ahead.status).toBe(201)
+      const future = await policyCommunications.POST(jsonRequest('/x', 'POST', { ...validCommunication, communicated_on: '2026-10-04' }))
+      expect(future.status).toBe(400)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('reports every field problem at once, with the column names', async () => {

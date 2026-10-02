@@ -115,6 +115,9 @@ export const FOREIGN_KEYS: Record<string, { columns: string[]; table: string; re
   ms_policy_communications: [
     { columns: ['tenant_id', 'policy_id', 'discipline'], table: 'ms_policies', references: ['tenant_id', 'id', 'discipline'] },
   ],
+  ms_responsibilities: [
+    { columns: ['owner_user_id', 'tenant_id'], table: 'tenant_memberships', references: ['user_id', 'tenant_id'] },
+  ],
 }
 
 export function rowsIn(table: string): Row[] {

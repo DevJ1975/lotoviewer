@@ -96,6 +96,16 @@ export function todayUtc(now: Date = new Date()): string {
   return now.toISOString().slice(0, 10)
 }
 
+/**
+ * The latest calendar date it is anywhere on Earth right now (UTC+14). A
+ * record of something that happened "today" in the user's own time zone is
+ * never later than this, so a "not in the future" check against it never
+ * refuses a site ahead of UTC.
+ */
+export function latestCalendarDate(now: Date = new Date()): string {
+  return todayUtc(new Date(now.getTime() + 14 * 3_600_000))
+}
+
 /** The columns that record a review of a register row, and when the next one falls due. */
 export function reviewStamp(userId: string, now: Date = new Date()) {
   return {

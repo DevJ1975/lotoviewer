@@ -27,6 +27,8 @@ import {
 //                                         obligation still open, an evaluation is past due, or an
 //                                         obligation has no evaluation frequency (clause 9.1.2 a)
 //     responsibilities red: a clause 5.3 role has no one; amber: an EMS process has no owner
+//                      (an owner is always a current member: migration 302's foreign key clears
+//                      the assignment when the membership is removed)
 //
 // Counts come from the database (count=exact, no rows), so the answer is right however
 // large the register, with no row cap to truncate it.
@@ -91,7 +93,7 @@ export async function GET(req: Request) {
   )
   const scopeStatesControlAndInfluence = scope?.control_and_influence != null
 
-  // The policy in force reached the workforce: one internal communication of this version.
+  // A communication of the policy in force within the organization is recorded.
   let policyCommunicatedInternally = false
   if (policy) {
     const internal = await count('ms_policy_communications').eq('policy_id', policy.id).eq('audience', 'internal')

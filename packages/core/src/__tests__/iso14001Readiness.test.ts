@@ -123,12 +123,12 @@ describe('assessIso14001 — clauses with no environmental source', () => {
     expect(clause.verdict).toBe('not_assessed')
     expect(clause.blocking).toBe(false)
     expect(clause.fixHref).toBeNull()
-    expect(clause.reason).toMatch(/^Not assessed: the platform/)
+    expect(clause.reason).toMatch(/^Not assessed: .*the platform/)
   })
 
-  it('says why safety training does not count for competence', () => {
+  it('says why it does not grade competence from the training records it holds', () => {
     const competence = assessIso14001(healthy()).clauses.find(c => c.code === '7.2')!
-    expect(competence.reason).toContain('safety training is not evidence')
+    expect(competence.reason).toContain('cannot yet tell which training records cover work that affects environmental performance')
   })
 })
 
@@ -212,7 +212,9 @@ describe('assessIso14001 — blocking findings', () => {
     const card = assessIso14001({ ...healthy(), objectivesActive: 0 })
     expect(card.clauses.find(c => c.code === '6.2.1')!.blocking).toBe(false)
     expect(card.band).toBe('ready_with_gaps')
-    expect(card.headline).toBe('Evidence is in place, with clauses needing attention before an audit.')
+    // The clauses checked off-platform are still named when something else needs attention.
+    expect(card.headline).toBe('Evidence is in place, with clauses needing attention before an audit. '
+      + 'Check 7.2, 7.3, 7.4, 8.1, 8.2 against your own records too.')
   })
 
   it('every CORE_CLAUSES code exists in the clause map', () => {

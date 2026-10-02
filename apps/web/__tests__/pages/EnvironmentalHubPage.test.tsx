@@ -37,11 +37,11 @@ beforeEach(() => api.getRegistersHealth.mockReset())
 
 describe('/environmental hub', () => {
   it('shows the process map red, and why, until the clause 5.3 roles are assigned', async () => {
-    api.getRegistersHealth.mockResolvedValue(health({ health: 'red', rolesUnassigned: 2, processesUnassigned: 14 }))
+    api.getRegistersHealth.mockResolvedValue(health({ health: 'red', rolesUnassigned: 2, processesUnassigned: 15 }))
     render(<EnvironmentalHomePage />)
     const card = await processesCard()
     expect(card.getByText('Missing')).toBeInTheDocument()
-    expect(card.getByText('2 of 2 roles unassigned · 14 processes without an owner')).toBeInTheDocument()
+    expect(card.getByText('2 of 2 roles unassigned · 15 processes without an owner')).toBeInTheDocument()
     expect(card.getByText('Clauses 4.4 & 5.3')).toBeInTheDocument()
   })
 

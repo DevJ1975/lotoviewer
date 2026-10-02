@@ -172,11 +172,12 @@ describe('/environmental/context', () => {
     })))
   })
 
-  it('flags a scope version that does not say what the organization controls and influences (4.3 e)', async () => {
+  it('flags a scope version that does not record how control and influence were considered (4.3 e)', async () => {
     nav.tab = 'scope'
     api.getScope.mockResolvedValue({ current: { ...SCOPE, control_and_influence: null }, versions: [] })
     render(<EnvironmentalContextPage />)
-    expect(await screen.findByText(/does not say what the organization can control and what it can only influence/)).toBeInTheDocument()
+    expect(await screen.findByText(/does not record how the organization's authority and ability to exercise control and influence were considered/))
+      .toBeInTheDocument()
   })
 
   it('records how the policy was communicated, and says so until it reaches the organization', async () => {
@@ -231,5 +232,30 @@ describe('/environmental/context', () => {
       scope: SCOPE, policy: POLICY, commitments: REQUIRED,
     })))
     expect(URL.createObjectURL).toHaveBeenCalled()
+  })
+
+  it('will not hand interested parties a policy that carries a prior owner\'s signature', async () => {
+    nav.tab = 'scope'
+    api.getScope.mockResolvedValue({ current: SCOPE, versions: [SCOPE] })
+    api.getPolicy.mockResolvedValue(policyState({ signatoryStale: true }))
+    render(<EnvironmentalContextPage />)
+    expect(await screen.findByRole('button', { name: /Download for interested parties/ })).toBeDisabled()
+    expect(screen.getByText(/Not available while the policy carries a prior owner’s signature/)).toBeInTheDocument()
+  })
+
+  it('warns, beside the exclusions field, against a scope drawn around significant aspects or obligations', async () => {
+    nav.tab = 'scope'
+    render(<EnvironmentalContextPage />)
+    fireEvent.click(await screen.findByText('Document the scope'))
+    expect(screen.getByLabelText('Exclusions, and why (optional)'))
+      .toHaveAccessibleDescription(/should not leave out activities with significant aspects/)
+  })
+
+  it('dates a new communication with the user\'s own calendar day', async () => {
+    nav.tab = 'scope'
+    api.getPolicy.mockResolvedValue(policyState())
+    render(<EnvironmentalContextPage />)
+    fireEvent.click(await screen.findByText('Record a communication'))
+    expect(screen.getByLabelText('On')).toHaveValue(new Date().toLocaleDateString('en-CA'))
   })
 })

@@ -214,7 +214,7 @@ export interface ScopeAndPolicyState {
   signatoryStale:      boolean
   /** The current scope says what the organization can control and influence (4.3 e). */
   scopeStatesControlAndInfluence: boolean
-  /** The current policy has been communicated within the organization (5.2). */
+  /** A communication of the current policy within the organization is recorded (5.2). */
   policyCommunicatedInternally:   boolean
 }
 
@@ -376,16 +376,22 @@ export interface PolicyCommunicationInput {
   communicatedOn: string
 }
 
-/**
- * A record that the policy reached people. Dated no later than `today`:
- * it records a communication that happened, not a plan.
- * @param today Today's ISO calendar date (YYYY-MM-DD).
- */
-export function validatePolicyCommunicationInput(input: PolicyCommunicationInput, today: string): FieldError[] {
+export interface CommunicationDateBounds {
+  /** The policy version's signing date: it cannot have been communicated before it existed. */
+  signedAt:   string
+  /** The latest calendar date it can be anywhere now: a record of something that happened, not a plan. */
+  latestDate: string
+}
+
+/** A record that the policy was communicated, dated within the policy's life so far. */
+export function validatePolicyCommunicationInput(input: PolicyCommunicationInput, bounds: CommunicationDateBounds): FieldError[] {
   const errors: FieldError[] = []
   if (!POLICY_AUDIENCES.includes(input.audience)) errors.push({ field: 'audience', message: 'must be internal or external' })
   requireText(errors, 'method', input.method, 2000)
   if (!isCalendarDate(input.communicatedOn)) errors.push({ field: 'communicatedOn', message: 'must be a date (YYYY-MM-DD)' })
-  else if (input.communicatedOn > today) errors.push({ field: 'communicatedOn', message: 'cannot be in the future' })
+  else if (input.communicatedOn > bounds.latestDate) errors.push({ field: 'communicatedOn', message: 'cannot be in the future' })
+  else if (input.communicatedOn < bounds.signedAt) {
+    errors.push({ field: 'communicatedOn', message: `cannot be before the policy was signed (${bounds.signedAt})` })
+  }
   return errors
 }

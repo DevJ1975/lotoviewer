@@ -116,7 +116,7 @@ export interface ReadinessSignals {
   policyReviewOverdue:   boolean
   /** The legal entity changed after the policy was signed (Lesson L3). */
   policySignatoryStale:  boolean
-  /** The policy in force has a recorded communication within the organization. */
+  /** A communication of the policy in force within the organization is recorded. */
   policyCommunicatedInternally: boolean
   // 5.3 Roles (the responsibilities on the EMS process map)
   /** Clause 5.3 a) and b) roles with no one assigned. */
@@ -258,9 +258,9 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
   push('4.3', '/environmental/context?tab=scope', [
     [!s.scopeOnFile, 'gap', 'The scope of the environmental management system is not documented.'],
     [!s.scopeStatesControlAndInfluence, 'attention',
-      'The EMS scope does not say what the organization can control and what it can only influence (4.3 e).'],
+      'The EMS scope does not record how the organization’s authority and ability to exercise control and influence were considered (4.3 e).'],
     [s.scopeReviewOverdue, 'attention', 'The EMS scope is past its review date.'],
-  ], ['conforming', 'The EMS scope is documented, says what the organization controls and influences, and is within its review date.'])
+  ], ['conforming', 'The EMS scope is documented, records how control and influence were considered, and is within its review date.'])
 
   // 5.2 — Environmental policy.
   push('5.2', '/environmental/context?tab=policy', [
@@ -269,10 +269,10 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
     [s.policySignatoryStale, 'attention',
       'The policy was signed before the organization’s legal entity changed, so it carries a prior owner’s signature.'],
     [!s.policyCommunicatedInternally, 'attention',
-      'The policy in force has no record of being communicated within the organization.'],
+      'No communication of the policy in force within the organization is recorded.'],
     [s.policyReviewOverdue, 'attention', 'The environmental policy is past its scheduled review date.'],
   ], ['conforming',
-    'A signed environmental policy states every required commitment, has been communicated within the organization, and is within its review cycle.'])
+    'A signed environmental policy states every required commitment, its communication within the organization is recorded, and it is within its review cycle.'])
 
   // 5.3 — Roles, responsibilities and authorities.
   push('5.3', '/environmental/processes', [
@@ -328,19 +328,20 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
       `${count(s.objectivesActive - s.objectivesLinked, 'objective is', 'objectives are')} not linked to a significant aspect.`],
   ], ['conforming', `${s.objectivesActive} measurable objectives, each tied to a significant aspect.`])
 
-  // 7.2 to 7.4 — no environmental source yet. LOTO training, toolbox
-  // talks and Prop 65 notices are safety and right-to-know records: grading
-  // these clauses from them showed conformity an auditor would reject, and
-  // their absence showed gaps that may not exist. Phase 6 brings the
-  // environmental training matrix and communications log.
+  // 7.2 to 7.4 — no environmental source yet. The platform cannot tell which
+  // LOTO training records, toolbox talks or Prop 65 notices address
+  // environmental aspects (a hazardous-waste course would; a lockout course
+  // would not), so grading from all of them showed conformity an auditor
+  // would reject, and their absence showed gaps that may not exist. Phase 6
+  // brings the environmental training matrix and communications log.
   out.push(assess('7.2', 'not_assessed',
-    'Not assessed: the platform holds no environmental competence records yet, and safety training is not evidence for this clause.',
+    'Not assessed: the platform cannot yet tell which training records cover work that affects environmental performance, so it does not grade competence from them.',
     null))
   out.push(assess('7.3', 'not_assessed',
     'Not assessed: the platform does not yet record whether workers know the policy and the significant aspects of their work.',
     null))
   out.push(assess('7.4', 'not_assessed',
-    'Not assessed: the platform does not yet keep a log of internal and external environmental communication.',
+    'Not assessed: apart from the policy, the platform does not yet record internal and external environmental communication.',
     null))
 
   // 7.5 — Documented information. Register arrives in phase 3.
@@ -464,7 +465,8 @@ function headlineFor(
     if (!needsWork) {
       return `Every clause the platform can assess has current evidence. Check ${unassessed.join(', ')} against your own records before an audit.`
     }
-    return 'Evidence is in place, with clauses needing attention before an audit.'
+    const offPlatform = unassessed.length > 0 ? ` Check ${unassessed.join(', ')} against your own records too.` : ''
+    return `Evidence is in place, with clauses needing attention before an audit.${offPlatform}`
   }
 
   const parts: string[] = []

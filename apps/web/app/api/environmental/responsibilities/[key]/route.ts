@@ -16,6 +16,8 @@ import {
 // PUT /api/environmental/responsibilities/[key]   Assign a process or clause 5.3 role to a
 //   member: { owner_user_id: <user id> | null, discipline? }. null leaves it unassigned.
 //   Admins only. The row is reassigned in place; log_audit() keeps who held it before.
+//   The database holds the owner to a membership of this tenant (migration 302), and
+//   clears the assignment when that membership is removed.
 
 interface KeyContext { params: Promise<{ key: string }> }
 
@@ -28,13 +30,15 @@ export async function PUT(req: Request, ctx: KeyContext) {
 
   const body = await readJsonObject(req)
   if (!body) return invalidJson()
-  const discipline = emsDisciplineParam(typeof body.discipline === 'string' ? body.discipline : null)
+  const rawDiscipline = body.discipline ?? null
+  const discipline = typeof rawDiscipline === 'string' || rawDiscipline === null ? emsDisciplineParam(rawDiscipline) : null
   if (!discipline) return invalidInput([{ field: 'discipline', message: 'must be ems or integrated' }])
   const owner = body.owner_user_id
   if (owner !== null && (typeof owner !== 'string' || !UUID_RE.test(owner))) {
     return invalidInput([{ field: 'ownerUserId', message: 'must be a user id, or null to unassign' }])
   }
 
+  const notAMember = () => invalidInput([{ field: 'ownerUserId', message: 'is not a member of this organization' }])
   if (owner !== null) {
     const { data: membership, error } = await supabaseAdmin()
       .from('tenant_memberships')
@@ -44,9 +48,10 @@ export async function PUT(req: Request, ctx: KeyContext) {
       .is('invite_cancelled_at', null)
       .maybeSingle()
     if (error) return sanitizeError(error, 'environmental/responsibilities/[key]/PUT owner')
-    if (!membership) return invalidInput([{ field: 'ownerUserId', message: 'is not a member of this organization' }])
+    if (!membership) return notAMember()
   }
 
+  // The membership can go between the check above and the write; the foreign key then refuses it.
   const assignment = { owner_user_id: owner, assigned_by: gate.userId }
   const updated = await gate.authedClient
     .from('ms_responsibilities')
@@ -56,6 +61,7 @@ export async function PUT(req: Request, ctx: KeyContext) {
     .eq('responsibility_key', key)
     .select('*')
     .maybeSingle()
+  if ((updated.error as { code?: string } | null)?.code === '23503') return notAMember()
   if (updated.error) return sanitizeError(updated.error, 'environmental/responsibilities/[key]/PUT update')
   if (updated.data) return NextResponse.json({ responsibility: updated.data })
 
@@ -64,6 +70,7 @@ export async function PUT(req: Request, ctx: KeyContext) {
     .insert({ tenant_id: gate.tenantId, discipline, responsibility_key: key, ...assignment })
     .select('*')
     .single()
+  if ((inserted.error as { code?: string } | null)?.code === '23503') return notAMember()
   if ((inserted.error as { code?: string } | null)?.code === '23505') {
     return NextResponse.json(
       { error: 'Someone assigned this at the same time. Reload and try again.' },

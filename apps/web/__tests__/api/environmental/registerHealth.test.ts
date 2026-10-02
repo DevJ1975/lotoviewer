@@ -39,7 +39,7 @@ describe('GET /api/environmental/registers/health', () => {
       scopeAndPolicy: { health: 'red', scopeVersion: null, policyVersion: null },
       aspects: { health: 'red', active: 0 },
       obligations: { health: 'red', active: 0 },
-      responsibilities: { health: 'red', rolesUnassigned: 2, processesUnassigned: 14 },
+      responsibilities: { health: 'red', rolesUnassigned: 2, processesUnassigned: 15 },
     })
   })
 
@@ -155,11 +155,11 @@ describe('GET /api/environmental/registers/health', () => {
     const held = (key: string, owner: string | null = ADMIN_A) =>
       ({ tenant_id: TENANT_A, discipline: 'ems', responsibility_key: key, owner_user_id: owner })
     seed('ms_responsibilities', [held('system_conformity'), held('performance_reporting', null)])
-    expect((await health()).body.responsibilities).toEqual({ health: 'red', rolesUnassigned: 1, processesUnassigned: 14 })
+    expect((await health()).body.responsibilities).toEqual({ health: 'red', rolesUnassigned: 1, processesUnassigned: 15 })
 
     resetStore()
     seed('ms_responsibilities', [held('system_conformity'), held('performance_reporting'), { ...held('aspects'), tenant_id: TENANT_B }])
-    expect((await health()).body.responsibilities).toEqual({ health: 'amber', rolesUnassigned: 0, processesUnassigned: 14 })
+    expect((await health()).body.responsibilities).toEqual({ health: 'amber', rolesUnassigned: 0, processesUnassigned: 15 })
 
     resetStore()
     seed('ms_responsibilities', RESPONSIBILITY_KEYS.map(key => held(key)))

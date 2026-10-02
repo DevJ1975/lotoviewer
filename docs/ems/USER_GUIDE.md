@@ -29,7 +29,8 @@ The report card grades clause 5.3 from the Processes page. It marks five clauses
 **Not assessed**: 7.2 competence, 7.3 awareness, 7.4 communication, 8.1 operational
 control and 8.2 emergency preparedness. The platform holds no environmental record for
 them yet. Safety training, toolbox talks and safety inspections are not evidence of
-these clauses, so the card does not grade them from those records. Check these clauses
+these clauses unless they cover environmental work, and the platform cannot yet tell
+which ones do, so the card does not grade them from those records. Check these clauses
 against your own records before an audit. While any clause is not assessed, the card
 says *Ready with gaps* at best.
 
@@ -71,8 +72,10 @@ Who has a stake in your EMS, and what they need from you.
 
 - **Document the scope**: the **Legal entity**, the **Physical boundary**, the
   **Activities**, the **Products and services**, and **What we control, and what we can
-  only influence** (clause 4.3 e). If the scope leaves anything out, say what and why
-  under **Exclusions, and why**. Each save creates a new version, and earlier versions
+  only influence**, which records how clause 4.3 e) was considered. If the scope leaves
+  any site or activity out, say what and why under **Exclusions, and why**. The
+  standard warns that a scope should not leave out activities with significant aspects,
+  or be drawn to avoid compliance obligations. Each save creates a new version, and earlier versions
   stay listed. A version saved before this field existed is flagged until a new version
   states it.
 - **Record the policy**: the **Policy text**, who it is **Signed by**, and the date
@@ -88,11 +91,13 @@ Who has a stake in your EMS, and what they need from you.
 - **Record a communication** each time the policy reaches people: choose *Within the
   organization* or *To interested parties outside it*, say **How, and to whom**, and give
   the date. Clause 5.2 requires the policy to be communicated within the organization,
-  so the light stays amber until the version in force has one internal communication.
+  so the light stays amber until a communication of the version in force within the
+  organization is recorded. A record can't be dated before the version was signed.
   Communications are never edited or deleted. To correct one, record the right one.
 - **Download for interested parties** saves the policy and the scope as one PDF, ready
   to send to a customer, a regulator or a neighbour. It contains only what the two
-  documents state: no review dates and no names other than the policy's signatory.
+  documents state: no review dates and no names other than the policy's signatory. It
+  is not available while the policy carries a prior owner's signature.
 
 ---
 
@@ -104,14 +109,17 @@ outputs feed the others, with an owner for each.
 - The two roles clause 5.3 names come first: **Ensuring the EMS conforms to ISO 14001**
   and **Reporting EMS performance to top management**. Until both have an owner, the
   light is red.
-- Every process is listed, including those the platform does not keep records for yet
+- Every process is listed, risks and opportunities (6.1.1, 6.1.4) among them, including
+  those the platform does not keep records for yet
   (competence, communication, documented information, operational control, emergency
   preparedness and internal audit). The organization runs them on its own records, but
   each still needs an owner. Until each has one, the light is amber.
 - An admin picks the owner from the organization's members, and the clear button
-  removes it. Everyone in the organization can see who owns what, because clause 5.3
-  asks for responsibilities to be communicated.
-- If an owner leaves the organization, the page says so: reassign the process.
+  removes it. Every member with access to the module can see who owns what. That is a
+  record, not the communication clause 5.3 asks for: tell the workforce who holds each
+  responsibility, and keep evidence that you did.
+- An owner must be a member. When someone leaves the organization, their processes and
+  roles go back to having no owner, and the light shows it.
 
 ---
 

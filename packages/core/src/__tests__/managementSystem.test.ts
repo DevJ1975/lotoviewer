@@ -298,20 +298,26 @@ describe('validatePolicyCommunicationInput', () => {
   const valid: PolicyCommunicationInput = {
     audience: 'internal', method: 'Posted at both entrances; read out at the all-hands', communicatedOn: TODAY,
   }
+  const bounds = { signedAt: '2026-01-10', latestDate: TODAY }
 
-  it('accepts a communication made today or earlier, to either audience', () => {
-    expect(validatePolicyCommunicationInput(valid, TODAY)).toEqual([])
-    expect(validatePolicyCommunicationInput({ ...valid, audience: 'external', communicatedOn: '2026-01-15' }, TODAY)).toEqual([])
+  it('accepts a communication made between the signing and today, to either audience', () => {
+    expect(validatePolicyCommunicationInput(valid, bounds)).toEqual([])
+    expect(validatePolicyCommunicationInput({ ...valid, audience: 'external', communicatedOn: '2026-01-10' }, bounds)).toEqual([])
   })
 
   it('refuses a planned communication: it records one that happened', () => {
-    expect(validatePolicyCommunicationInput({ ...valid, communicatedOn: '2026-10-02' }, TODAY))
+    expect(validatePolicyCommunicationInput({ ...valid, communicatedOn: '2026-10-02' }, bounds))
       .toEqual([{ field: 'communicatedOn', message: 'cannot be in the future' }])
+  })
+
+  it('refuses a communication dated before the policy version existed', () => {
+    expect(validatePolicyCommunicationInput({ ...valid, communicatedOn: '2026-01-09' }, bounds))
+      .toEqual([{ field: 'communicatedOn', message: 'cannot be before the policy was signed (2026-01-10)' }])
   })
 
   it('requires an audience it knows, a method, and a real date', () => {
     const errors = validatePolicyCommunicationInput(
-      { audience: 'everyone' as PolicyCommunicationInput['audience'], method: ' ', communicatedOn: '2026-02-30' }, TODAY)
+      { audience: 'everyone' as PolicyCommunicationInput['audience'], method: ' ', communicatedOn: '2026-02-30' }, bounds)
     expect(fieldsOf(errors)).toEqual(['audience', 'method', 'communicatedOn'])
   })
 })

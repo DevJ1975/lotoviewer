@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { formatSupabaseError } from '@/lib/supabaseError'
 import { reviewHasOutputs } from '@soteria/core/managementReview'
 import { policyIsComplete, policySignatoryStale, registerDisciplines } from '@soteria/core/managementSystem'
 import { responsibilityCoverage } from '@soteria/core/emsProcesses'
@@ -65,7 +66,7 @@ export async function fetchIso14001Signals(tenantId: string): Promise<ReadinessS
   const [
     contextIssues, contextIssuesOverdue, climateIssues,
     parties, partiesOverdue,
-    scopes, policies, internalCommunications, heldResponsibilities,
+    scopes, policies, heldResponsibilities,
     risks, riskReviews, riskControls,
     aspects, objectives, objectiveReadings,
     obligations, obligationsOverdue, obligationsReviewOverdue,
@@ -82,8 +83,6 @@ export async function fetchIso14001Signals(tenantId: string): Promise<ReadinessS
       .eq('tenant_id', tenantId).eq('discipline', 'ems').order('version', { ascending: false }),
     supabase.from('ms_policies').select('id, commitments, signatory_name, signed_at, next_review_due')
       .eq('tenant_id', tenantId).eq('discipline', 'ems').order('version', { ascending: false }).limit(1),
-    supabase.from('ms_policy_communications').select('policy_id')
-      .eq('tenant_id', tenantId).eq('discipline', 'ems').eq('audience', 'internal').limit(10_000),
     supabase.from('ms_responsibilities').select('responsibility_key')
       .eq('tenant_id', tenantId).eq('discipline', 'ems').not('owner_user_id', 'is', null),
     supabase.from('risks').select('id, updated_at').eq('tenant_id', tenantId).limit(5000),
@@ -120,6 +119,17 @@ export async function fetchIso14001Signals(tenantId: string): Promise<ReadinessS
       .eq('tenant_id', tenantId).limit(10_000),
   ])
 
+  // The EMS registers are this card's own source, so a failed read must say
+  // so rather than grade as "nothing recorded". (The nonconformity read is
+  // left out on purpose: its error is how the card tells the register is missing.)
+  const failedRead = [
+    contextIssues, contextIssuesOverdue, climateIssues, parties, partiesOverdue,
+    scopes, policies, heldResponsibilities, aspects,
+    obligations, obligationsOverdue, obligationsReviewOverdue,
+    lastEvaluation, evaluationsOverdue, obligationsUnscheduled, evaluationsUndetermined,
+  ].find(r => r.error)?.error
+  if (failedRead) throw new Error(formatSupabaseError(failedRead, 'Could not read the EMS registers.'))
+
   const aspectRows    = aspects.data ?? []
   const objectiveRows = objectives.data ?? []
   const readingRows   = objectiveReadings.data ?? []
@@ -141,8 +151,13 @@ export async function fetchIso14001Signals(tenantId: string): Promise<ReadinessS
     { signedAt: policy.signed_at },
     scopeRows.map(sv => ({ version: sv.version, legalEntity: sv.legal_entity, effectiveFrom: sv.effective_from })),
   )
-  const policyCommunicatedInternally = policy !== null
-    && (internalCommunications.data ?? []).some(c => c.policy_id === policy.id)
+  // Counted, not listed: a list would be cut short at the API's row cap.
+  let policyCommunicatedInternally = false
+  if (policy) {
+    const internal = await t('ms_policy_communications').eq('policy_id', policy.id).eq('audience', 'internal')
+    if (internal.error) throw new Error(formatSupabaseError(internal.error, 'Could not read the policy communications.'))
+    policyCommunicatedInternally = countRows(internal) > 0
+  }
   const responsibilities = responsibilityCoverage(
     new Set((heldResponsibilities.data ?? []).map(r => r.responsibility_key)),
   )

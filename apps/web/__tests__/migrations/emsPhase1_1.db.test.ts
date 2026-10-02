@@ -162,6 +162,25 @@ describe('migration 302 on a real Postgres', () => {
       await expect(assign(IDS.tenantA, 'coffee_rota', IDS.ownerA)).rejects.toMatchObject({ code: '23514' })
     })
 
+    it('refuses an owner who is not a member of the tenant', async () => {
+      await expect(assign(IDS.tenantA, 'objectives', IDS.adminB)).rejects.toMatchObject({ code: '23503' })
+    })
+
+    it('clears the owner, and only the owner, when their membership is removed, and logs it', async () => {
+      await assign(IDS.tenantA, 'nonconformity', IDS.memberA)
+      await db.query('delete from public.tenant_memberships where user_id = $1 and tenant_id = $2', [IDS.memberA, IDS.tenantA])
+
+      const row = (await db.query<{ owner_user_id: string | null; tenant_id: string }>(
+        `select owner_user_id, tenant_id from public.ms_responsibilities where tenant_id = $1 and responsibility_key = 'nonconformity'`,
+        [IDS.tenantA])).rows[0]
+      expect(row).toEqual({ owner_user_id: null, tenant_id: IDS.tenantA })
+      expect(await count(db,
+        `select count(*) from public.audit_log where table_name = 'ms_responsibilities' and operation = 'UPDATE'
+            and old_row ->> 'owner_user_id' = $1 and new_row ->> 'owner_user_id' is null`, [IDS.memberA])).toBeGreaterThan(0)
+
+      await db.query(`insert into public.tenant_memberships (user_id, tenant_id, role) values ($1, $2, 'member')`, [IDS.memberA, IDS.tenantA])
+    })
+
     it('keeps who held a responsibility before, in the audit log', async () => {
       await asCaller(db, ownerA, async () => {
         await assign(IDS.tenantA, 'policy', IDS.ownerA)
@@ -208,7 +227,16 @@ describe('migration 302 on a real Postgres', () => {
       for (const relation of ['ms_policy_communications', 'ms_responsibilities']) {
         expect(await scalar(db, 'select to_regclass($1)::text', [`public.${relation}`])).toBeNull()
       }
+      expect(await count(db,
+        `select count(*) from pg_constraint where conname = 'ms_policies_tenant_id_id_discipline_key'`)).toBe(0)
       expect(await registerColumns()).toEqual(withControlLevel.filter(c => c !== 'control_level'))
+      // The restored view must still run as the caller, or it would show every tenant's aspects.
+      expect(await scalar<string[]>(db,
+        `select reloptions from pg_class where oid = 'public.environmental_aspect_register'::regclass`))
+        .toEqual(['security_invoker=true'])
+      await asCaller(db, adminB, async () => {
+        expect(await count(db, 'select count(*) from public.environmental_aspect_register where tenant_id = $1', [IDS.tenantA])).toBe(0)
+      })
       expect(await count(db,
         `select count(*) from information_schema.columns
           where table_schema = 'public' and column_name in ('control_level', 'control_and_influence', 'exclusions')`)).toBe(0)

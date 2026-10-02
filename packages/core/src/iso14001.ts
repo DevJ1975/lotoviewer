@@ -8,12 +8,13 @@
 // Tenant-specific pinning of evidence to clauses lives in
 // iso14001_clause_evidence; this module is the canonical default.
 //
-// Conservative scope: every clause listed here is one we can genuinely
-// produce environmental evidence for from existing modules (incidents,
-// chemicals, hazardous waste, Prop 65, compliance calendar, inspections,
-// risk register, plus the environmental_aspects register added alongside
-// this map). Clauses with no real evidence home yet (e.g. 9.3 management
-// review) are deliberately omitted rather than mapped to a slogan.
+// Conservative scope: every clause listed here has somewhere in the platform
+// that can hold environmental evidence for it (incidents, chemicals,
+// hazardous waste, Prop 65, compliance calendar, inspections, risk register,
+// and the EMS registers). A source table is where to look, not proof: a
+// training record evidences 7.2 only if it covers environmental work, which
+// is why the report card does not grade 7.2 to 8.2 from these sources and a
+// person pins the records that count.
 
 export interface Iso14001ClauseEntry {
   /** Canonical clause code, e.g. "6.1.2". */

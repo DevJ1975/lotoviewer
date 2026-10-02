@@ -16,7 +16,9 @@ import {
   type PolicyInput,
   type ScopeStatementInput,
 } from '@soteria/core/managementSystem'
-import { emsDisciplineErrors, invalidInput, UUID_RE, optionalText, text, todayUtc, type JsonObject } from './registerApi'
+import {
+  emsDisciplineErrors, invalidInput, latestCalendarDate, UUID_RE, optionalText, text, todayUtc, type JsonObject,
+} from './registerApi'
 
 // Request bodies for the context, interested-party, scope and policy
 // registers (clauses 4.1, 4.2, 4.3, 5.2), turned into validated core inputs.
@@ -87,13 +89,14 @@ export function policyInputFrom(raw: JsonObject): Parsed<PolicyInput> {
   return parsed(input, errors)
 }
 
-export function policyCommunicationInputFrom(raw: JsonObject, now: Date = new Date()): Parsed<PolicyCommunicationInput> {
+/** @param signedAt The communicated policy version's signing date (YYYY-MM-DD). */
+export function policyCommunicationInputFrom(raw: JsonObject, signedAt: string, now: Date = new Date()): Parsed<PolicyCommunicationInput> {
   const input: PolicyCommunicationInput = {
     audience:       text(raw.audience) as PolicyAudience,
     method:         text(raw.method),
     communicatedOn: optionalText(raw.communicated_on) ?? todayUtc(now),
   }
-  return parsed(input, validatePolicyCommunicationInput(input, todayUtc(now)))
+  return parsed(input, validatePolicyCommunicationInput(input, { signedAt, latestDate: latestCalendarDate(now) }))
 }
 
 export interface RetirementColumns {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, X, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
@@ -27,11 +27,34 @@ interface Props {
   placeholder?: string
 }
 
-// Simple in-memory cache so re-mounting MemberPicker (e.g. when
-// stepping through wizard steps) doesn't re-fetch. Keyed by tenant
-// id; stale-after-tenant-switch is fine because we tear down on
-// switch via the `tenant?.id` dep.
-const cache = new Map<string, Member[]>()
+// In-memory cache, keyed by tenant id, so re-mounting MemberPicker (e.g.
+// when stepping through wizard steps) doesn't re-fetch. It holds the
+// request itself, not just its result, so pickers that mount together
+// share one fetch instead of each starting their own. A failed request is
+// dropped so the next mount retries. Stale-after-tenant-switch is fine
+// because we tear down on switch via the `tenant?.id` dep.
+const cache = new Map<string, Promise<Member[]>>()
+
+async function fetchMembers(tenantId: string): Promise<Member[]> {
+  const { data: { session } } = await supabase.auth.getSession()
+  const headers: Record<string, string> = {}
+  if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
+  headers['x-active-tenant'] = tenantId
+  const res = await fetch('/api/risk/members', { headers })
+  const body = await res.json()
+  if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
+  return (body.members ?? []) as Member[]
+}
+
+function membersOf(tenantId: string): Promise<Member[]> {
+  let request = cache.get(tenantId)
+  if (!request) {
+    request = fetchMembers(tenantId)
+    cache.set(tenantId, request)
+    request.catch(() => cache.delete(tenantId))
+  }
+  return request
+}
 
 /** The active tenant's members, for pickers and for showing who holds a role read-only. */
 export function useTenantMembers(): { members: Member[] | null; error: string | null } {
@@ -40,31 +63,12 @@ export function useTenantMembers(): { members: Member[] | null; error: string | 
   const [error, setError]     = useState<string | null>(null)
 
   useEffect(() => {
+    if (!tenant?.id) return
     let cancelled = false
-    async function load() {
-      if (!tenant?.id) return
-      if (cache.has(tenant.id)) {
-        setMembers(cache.get(tenant.id)!)
-        return
-      }
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-        const headers: Record<string, string> = {}
-        if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
-        headers['x-active-tenant'] = tenant.id
-        const res = await fetch('/api/risk/members', { headers })
-        const body = await res.json()
-        if (cancelled) return
-        if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
-        const list = (body.members ?? []) as Member[]
-        cache.set(tenant.id, list)
-        setMembers(list)
-      } catch (e) {
-        if (cancelled) return
-        setError(e instanceof Error ? e.message : String(e))
-      }
-    }
-    void load()
+    membersOf(tenant.id).then(
+      list => { if (!cancelled) setMembers(list) },
+      (e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)) },
+    )
     return () => { cancelled = true }
   }, [tenant?.id])
 
@@ -79,14 +83,33 @@ export function memberName(member: Member): string {
 export default function MemberPicker({ value, onChange, placeholder = 'Unassigned' }: Props) {
   const { members, error } = useTenantMembers()
   const [open, setOpen]    = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+
+  // Close on Escape or a press outside, not only on mouse-leave: keyboard
+  // and touch users never leave with a mouse, and an open list covers the
+  // pickers below it.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    const onPress = (e: PointerEvent) => {
+      if (root.current && !root.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('pointerdown', onPress)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('pointerdown', onPress)
+    }
+  }, [open])
 
   const selected = members?.find(m => m.user_id === value) ?? null
 
   return (
-    <div className="relative">
+    <div ref={root} className="relative">
       <div className="flex items-stretch gap-2">
         <button
           type="button"
+          aria-expanded={open}
           onClick={() => setOpen(o => !o)}
           className="flex-1 text-left rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm flex items-center justify-between gap-2"
         >

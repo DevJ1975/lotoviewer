@@ -5,7 +5,7 @@
 // only, the policy judged by the same rules the policy route applies.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { TENANT_A, TENANT_B, resetStore, seed } from '../api/environmental/_emsHarness'
+import { TENANT_A, TENANT_B, failNext, resetStore, seed } from '../api/environmental/_emsHarness'
 
 vi.mock('@/lib/supabase', async () => ({ supabase: (await import('../api/environmental/_emsHarness')).emsClient }))
 
@@ -118,5 +118,44 @@ describe('fetchIso14001Signals — safety records are not environmental evidence
     expect(verdicts).toMatchObject({
       '7.2': 'not_assessed', '7.3': 'not_assessed', '7.4': 'not_assessed', '8.1': 'not_assessed', '8.2': 'not_assessed',
     })
+  })
+})
+
+describe('fetchIso14001Signals — Phase 1.1 facts', () => {
+  const policy = (id: string, version: number, signedAt: string) => ({
+    id, tenant_id: TENANT_A, discipline: 'ems', version, commitments: COMPLETE, signatory_name: 'Plant Manager',
+    signed_at: signedAt, next_review_due: FUTURE,
+  })
+
+  it('counts only an internal communication of the policy in force', async () => {
+    seed('ms_policies', [policy('p1', 1, '2025-01-01'), policy('p2', 2, '2026-03-01')])
+    seed('ms_policy_communications', [
+      { tenant_id: TENANT_A, discipline: 'ems', policy_id: 'p1', audience: 'internal' },
+      { tenant_id: TENANT_A, discipline: 'ems', policy_id: 'p2', audience: 'external' },
+    ])
+    expect((await signals()).policyCommunicatedInternally).toBe(false)
+    seed('ms_policy_communications', [{ tenant_id: TENANT_A, discipline: 'ems', policy_id: 'p2', audience: 'internal' }])
+    expect((await signals()).policyCommunicatedInternally).toBe(true)
+  })
+
+  it('reads the scope\'s control-and-influence statement, the undecided aspects and the responsibilities held', async () => {
+    seed('ms_scope_statements', [{ tenant_id: TENANT_A, discipline: 'ems', version: 1, legal_entity: 'A', effective_from: '2026-01-01', next_review_due: FUTURE, control_and_influence: null }])
+    seed('environmental_aspects', [
+      { id: 'a1', tenant_id: TENANT_A, obsolete_at: null, next_review_due: FUTURE, control_level: 'influence' },
+      { id: 'a2', tenant_id: TENANT_A, obsolete_at: null, next_review_due: FUTURE, control_level: null },
+    ])
+    seed('ms_responsibilities', [
+      { tenant_id: TENANT_A, discipline: 'ems', responsibility_key: 'system_conformity', owner_user_id: 'u1' },
+      { tenant_id: TENANT_A, discipline: 'ems', responsibility_key: 'aspects', owner_user_id: null },
+      { tenant_id: TENANT_B, discipline: 'ems', responsibility_key: 'performance_reporting', owner_user_id: 'u2' },
+    ])
+    expect(await signals()).toMatchObject({
+      scopeStatesControlAndInfluence: false, aspectsControlUndetermined: 1, rolesUnassigned: 1, processesUnassigned: 15,
+    })
+  })
+
+  it('surfaces a failed register read instead of grading it as nothing recorded', async () => {
+    failNext('ms_scope_statements', { code: '42703', message: 'column ms_scope_statements.control_and_influence does not exist' })
+    await expect(signals()).rejects.toThrow(/control_and_influence does not exist/)
   })
 })

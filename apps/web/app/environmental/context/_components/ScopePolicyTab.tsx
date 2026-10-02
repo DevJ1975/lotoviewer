@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 import { FileDown, Loader2 } from 'lucide-react'
 import {
   EmsApiError,
@@ -15,6 +15,7 @@ import {
   type PolicyRow,
   type ScopeRow,
 } from '@/lib/environmental/client'
+import { downloadPdf } from '@/lib/pdfUtils'
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_ERROR, INPUT, LABEL, LABEL_TEXT, errorFor, generalError } from '../../_components/formStyles'
 
 // Clauses 4.3 and 5.2: the EMS scope and the environmental policy. Both are
@@ -68,12 +69,7 @@ export function ScopePolicyTab({ tenantId, canEdit, onChanged }: { tenantId: str
       const { generatePolicyScopeStatement } = await import('@/lib/pdfEmsPolicyScope')
       const issuedOn = new Date().toISOString().slice(0, 10)
       const bytes = await generatePolicyScopeStatement({ ...current, commitments, issuedOn })
-      const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }))
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `environmental-policy-and-scope-${issuedOn}.pdf`
-      link.click()
-      URL.revokeObjectURL(url)
+      downloadPdf(bytes, `environmental-policy-and-scope-${issuedOn}.pdf`)
     } catch (err) {
       setExportError(err instanceof Error ? err.message : 'Could not create the PDF.')
     } finally {
@@ -84,7 +80,10 @@ export function ScopePolicyTab({ tenantId, canEdit, onChanged }: { tenantId: str
   if (error) return <p className={FIELD_ERROR} role="alert">{error}</p>
   if (!scope || !policy) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
 
-  const shareable = scope.current && policy.current ? { scope: scope.current, policy: policy.current } : null
+  // A policy signed by a prior owner would go out under the new legal entity's name, so it is not shared until re-signed.
+  const shareable = scope.current && policy.current && !policy.signatoryStale
+    ? { scope: scope.current, policy: policy.current }
+    : null
 
   return (
     <div className="space-y-8">
@@ -97,7 +96,13 @@ export function ScopePolicyTab({ tenantId, canEdit, onChanged }: { tenantId: str
           {exporting ? <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" /> : <FileDown className="mr-1 inline h-3.5 w-3.5" />}
           Download for interested parties
         </button>
-        {!shareable && <p className="w-full text-[11px] text-slate-500">Available once both a scope and a policy are on record.</p>}
+        {!shareable && (
+          <p className="w-full text-[11px] text-slate-500">
+            {policy.signatoryStale
+              ? 'Not available while the policy carries a prior owner’s signature: have top management sign a new version first.'
+              : 'Available once both a scope and a policy are on record.'}
+          </p>
+        )}
         {exportError && <p className={`w-full ${FIELD_ERROR}`} role="alert">{exportError}</p>}
       </div>
 
@@ -116,7 +121,7 @@ export function ScopePolicyTab({ tenantId, canEdit, onChanged }: { tenantId: str
           <>
             {scope.current.control_and_influence === null && (
               <p className={NOTICE}>
-                This version does not say what the organization can control and what it can only influence (clause 4.3 e). Save a new version that does.
+                This version does not record how the organization&apos;s authority and ability to exercise control and influence were considered (clause 4.3 e). Save a new version that does.
               </p>
             )}
             <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
@@ -257,12 +262,13 @@ function ScopeForm({ tenantId, current, onSaved, onCancel }: {
     effective_from:    new Date().toISOString().slice(0, 10),
   })
   const { saving, error, fieldErrors, run } = useSaving()
+  const exclusionsHintId = useId()
   const set = (key: keyof typeof form, value: string) => setForm(f => ({ ...f, [key]: value }))
-  const field = (key: keyof typeof form, label: string, rows = 2) => (
+  const field = (key: keyof typeof form, label: string, rows = 2, hintId?: string) => (
     <label className={LABEL}>
       <span className={LABEL_TEXT}>{label}</span>
       {rows > 1
-        ? <textarea className={INPUT} rows={rows} value={form[key]} onChange={e => set(key, e.target.value)} />
+        ? <textarea className={INPUT} rows={rows} value={form[key]} onChange={e => set(key, e.target.value)} aria-describedby={hintId} />
         : <input className={INPUT} type={key === 'effective_from' ? 'date' : 'text'} value={form[key]} onChange={e => set(key, e.target.value)} />}
       {errorFor(fieldErrors, key) && <p className={FIELD_ERROR}>{errorFor(fieldErrors, key)}</p>}
     </label>
@@ -280,7 +286,13 @@ function ScopeForm({ tenantId, current, onSaved, onCancel }: {
         {field('activities', 'Activities')}
         {field('products_services', 'Products and services')}
         {field('control_and_influence', 'What we control, and what we can only influence')}
-        {field('exclusions', 'Exclusions, and why (optional)')}
+        <div className="space-y-1">
+          {field('exclusions', 'Exclusions, and why (optional)', 2, exclusionsHintId)}
+          <p id={exclusionsHintId} className="text-[11px] text-slate-500">
+            Any site, activity or part of the organization the EMS leaves out. ISO 14001 (Annex A.4.3) warns that the scope should
+            not leave out activities with significant aspects, or be drawn to avoid compliance obligations.
+          </p>
+        </div>
       </div>
       {generalError(error, fieldErrors, SCOPE_FIELDS) && <p className={FIELD_ERROR} role="alert">{generalError(error, fieldErrors, SCOPE_FIELDS)}</p>}
       <div className="flex justify-end gap-2">
@@ -300,7 +312,8 @@ function CommunicationForm({ tenantId, policyId, onSaved, onCancel }: {
 }) {
   const [audience, setAudience] = useState<PolicyCommunicationRow['audience']>('internal')
   const [method, setMethod] = useState('')
-  const [communicatedOn, setCommunicatedOn] = useState(new Date().toISOString().slice(0, 10))
+  // The user's own calendar date: en-CA formats it as YYYY-MM-DD.
+  const [communicatedOn, setCommunicatedOn] = useState(() => new Date().toLocaleDateString('en-CA'))
   const { saving, error, fieldErrors, run } = useSaving()
   const shown = ['audience', 'method', 'communicated_on']
 

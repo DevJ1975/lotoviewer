@@ -17,7 +17,10 @@
 -- control_and_influence on every new scope version.
 --
 -- Communications are append-only, like the policy they record; responsibilities
--- are reassigned in place, and log_audit() keeps who held each one.
+-- are reassigned in place, and log_audit() keeps who held each one. An owner
+-- must be a member of the tenant: the foreign key to tenant_memberships clears
+-- the assignment when the member is removed, so a departed owner never counts
+-- as holding a process.
 --
 -- environmental_aspect_register gains control_level as its last column. After
 -- this migration, re-running 297 fails, because 297's view definition lacks the
@@ -25,6 +28,10 @@
 -- so that failure changes nothing.
 --
 -- Access: members read; tenant admins write (docs/ems/phase-1-plan.md D8).
+--
+-- Order: apply 302 before deploying the code that reads it, and revert that code
+-- before running 302_rollback.sql. The routes select these columns and tables.
+--
 -- Idempotent. Rollback: 302_rollback.sql.
 
 begin;
@@ -126,16 +133,19 @@ create table if not exists public.ms_responsibilities (
   discipline          text not null default 'ems' check (discipline in ('ems','ohs','integrated')),
   responsibility_key  text not null check (responsibility_key in (
     'system_conformity', 'performance_reporting',
-    'context', 'policy', 'aspects', 'obligations', 'objectives',
+    'context', 'policy', 'risks_opportunities', 'aspects', 'obligations', 'objectives',
     'competence_awareness', 'communication', 'documented_information',
     'operational_control', 'emergency_preparedness',
     'compliance_evaluation', 'internal_audit', 'management_review', 'nonconformity'
   )),
-  owner_user_id       uuid references public.profiles(id) on delete set null,
+  owner_user_id       uuid,
   assigned_by         uuid references public.profiles(id) on delete set null,
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now(),
-  unique (tenant_id, discipline, responsibility_key)
+  unique (tenant_id, discipline, responsibility_key),
+  -- The owner is a member of this tenant; removing the membership clears only the owner.
+  constraint ms_responsibilities_owner_member_fk foreign key (owner_user_id, tenant_id)
+    references public.tenant_memberships (user_id, tenant_id) on delete set null (owner_user_id)
 );
 
 -- ── RLS: member read, admin write ────────────────────────────────────────

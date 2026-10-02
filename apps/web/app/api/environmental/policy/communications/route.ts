@@ -27,25 +27,26 @@ export async function POST(req: Request) {
   const policyId = typeof body.policy_id === 'string' ? body.policy_id : ''
   if (!UUID_RE.test(policyId)) return invalidInput([{ field: 'policyId', message: 'must be a policy id' }])
 
-  const parsed = policyCommunicationInputFrom(body)
-  if (!parsed.ok) return invalidInput(parsed.errors)
-  const communication = parsed.input
-
-  const { data: policy, error: policyError } = await gate.authedClient
+  const { data, error: policyError } = await gate.authedClient
     .from('ms_policies')
-    .select('id, discipline')
+    .select('id, discipline, signed_at')
     .eq('id', policyId)
     .eq('tenant_id', gate.tenantId)
     .in('discipline', EMS_DISCIPLINES)
     .maybeSingle()
   if (policyError) return sanitizeError(policyError, 'environmental/policy/communications/POST policy')
-  if (!policy) return notFound()
+  if (!data) return notFound()
+  const policy = data as { discipline: string; signed_at: string }
 
-  const { data, error } = await gate.authedClient
+  const parsed = policyCommunicationInputFrom(body, policy.signed_at)
+  if (!parsed.ok) return invalidInput(parsed.errors)
+  const communication = parsed.input
+
+  const { data: saved, error } = await gate.authedClient
     .from('ms_policy_communications')
     .insert({
       tenant_id:       gate.tenantId,
-      discipline:      (policy as { discipline: string }).discipline,
+      discipline:      policy.discipline,
       policy_id:       policyId,
       audience:        communication.audience,
       method:          communication.method,
@@ -55,5 +56,5 @@ export async function POST(req: Request) {
     .select('*')
     .single()
   if (error) return sanitizeError(error, 'environmental/policy/communications/POST')
-  return NextResponse.json({ communication: data }, { status: 201 })
+  return NextResponse.json({ communication: saved }, { status: 201 })
 }

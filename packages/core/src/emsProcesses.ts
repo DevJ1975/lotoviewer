@@ -13,7 +13,7 @@ import type { RegisterHealth } from './managementSystem'
 
 export const RESPONSIBILITY_KEYS = [
   'system_conformity', 'performance_reporting',
-  'context', 'policy', 'aspects', 'obligations', 'objectives',
+  'context', 'policy', 'risks_opportunities', 'aspects', 'obligations', 'objectives',
   'competence_awareness', 'communication', 'documented_information',
   'operational_control', 'emergency_preparedness',
   'compliance_evaluation', 'internal_audit', 'management_review', 'nonconformity',
@@ -41,13 +41,20 @@ export const EMS_RESPONSIBILITIES: readonly EmsResponsibility[] = [
     clauses: ['5.3 b)'], href: null, feeds: [] },
 
   { key: 'context', kind: 'process', name: 'Context, interested parties and scope',
-    clauses: ['4.1', '4.2', '4.3'], href: '/environmental/context', feeds: ['policy', 'aspects', 'obligations'] },
+    clauses: ['4.1', '4.2', '4.3'], href: '/environmental/context',
+    feeds: ['policy', 'risks_opportunities', 'aspects', 'obligations', 'management_review'] },
   { key: 'policy', kind: 'process', name: 'Environmental policy',
     clauses: ['5.2'], href: '/environmental/context?tab=policy', feeds: ['objectives', 'communication'] },
+  // Recorded today as the risk or opportunity on each context issue; planned actions arrive in Phases 3 and 6.
+  { key: 'risks_opportunities', kind: 'process', name: 'Risks and opportunities',
+    clauses: ['6.1.1', '6.1.4'], href: '/environmental/context',
+    feeds: ['objectives', 'operational_control', 'management_review'] },
   { key: 'aspects', kind: 'process', name: 'Environmental aspects',
-    clauses: ['6.1.2'], href: '/environmental/aspects', feeds: ['objectives', 'operational_control', 'emergency_preparedness'] },
+    clauses: ['6.1.2'], href: '/environmental/aspects',
+    feeds: ['risks_opportunities', 'objectives', 'competence_awareness', 'operational_control', 'emergency_preparedness', 'management_review'] },
   { key: 'obligations', kind: 'process', name: 'Compliance obligations',
-    clauses: ['6.1.3'], href: '/environmental/obligations', feeds: ['operational_control', 'compliance_evaluation'] },
+    clauses: ['6.1.3'], href: '/environmental/obligations',
+    feeds: ['risks_opportunities', 'operational_control', 'compliance_evaluation', 'management_review'] },
   { key: 'objectives', kind: 'process', name: 'Objectives, monitoring and measurement',
     clauses: ['6.2', '9.1.1'], href: '/environmental/objectives', feeds: ['management_review'] },
 

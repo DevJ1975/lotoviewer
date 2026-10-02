@@ -99,6 +99,22 @@ describe('PUT /responsibilities/[key]', () => {
     expect(res.status).toBe(400)
   })
 
+  it('refuses a discipline that is not text, rather than defaulting it', async () => {
+    const res = await assign('aspects', { owner_user_id: MEMBER_A, discipline: 7 })
+    expect(res.status).toBe(400)
+    expect(writes).toEqual([])
+  })
+
+  it('answers 400, not 500, when the membership goes between the check and the write', async () => {
+    beforeNext('ms_responsibilities', 'update', () => {
+      const memberships = rowsIn('tenant_memberships')
+      memberships.splice(memberships.findIndex(m => m.user_id === MEMBER_A && m.tenant_id === TENANT_A), 1)
+    })
+    const res = await assign('aspects', { owner_user_id: MEMBER_A })
+    expect(res.status).toBe(400)
+    expect((await res.json()).fieldErrors).toEqual([{ field: 'owner_user_id', message: 'is not a member of this organization' }])
+  })
+
   it('answers 409 when another admin made the first assignment at the same moment', async () => {
     beforeNext('ms_responsibilities', 'insert', () => seed('ms_responsibilities', [
       { tenant_id: TENANT_A, discipline: 'ems', responsibility_key: 'aspects', owner_user_id: ADMIN_A },
@@ -116,13 +132,13 @@ describe('GET /responsibilities', () => {
     await assign('policy', { owner_user_id: null })
     const body = await (await list()).json()
     expect(body.responsibilities).toHaveLength(4)
-    expect(body.coverage).toEqual({ rolesUnassigned: 0, processesUnassigned: 13 })
+    expect(body.coverage).toEqual({ rolesUnassigned: 0, processesUnassigned: 14 })
     expect(body.health).toBe('amber')
   })
 
   it('is red for a tenant that has assigned no one', async () => {
     const body = await (await list()).json()
-    expect(body).toMatchObject({ responsibilities: [], coverage: { rolesUnassigned: 2, processesUnassigned: 14 }, health: 'red' })
+    expect(body).toMatchObject({ responsibilities: [], coverage: { rolesUnassigned: 2, processesUnassigned: 15 }, health: 'red' })
   })
 
   it('shows another tenant nothing, and lets it assign nothing here', async () => {

@@ -28,6 +28,16 @@ describe('EMS_RESPONSIBILITIES — the clause 4.4 map', () => {
     }
   })
 
+  it('maps the risks-and-opportunities process 6.1.1 asks for, fed by context, aspects and obligations', () => {
+    const feeders = EMS_RESPONSIBILITIES.filter(r => r.feeds.includes('risks_opportunities')).map(r => r.key)
+    expect(feeders).toEqual(['context', 'aspects', 'obligations'])
+  })
+
+  it('feeds management review from the 9.3 inputs: context, risks, aspects, obligations and evaluation', () => {
+    const inputs = EMS_RESPONSIBILITIES.filter(r => r.feeds.includes('management_review')).map(r => r.key)
+    expect(inputs).toEqual(expect.arrayContaining(['context', 'risks_opportunities', 'aspects', 'obligations', 'compliance_evaluation']))
+  })
+
   it('links in-platform processes to an app route and leaves the rest without one', () => {
     for (const r of EMS_RESPONSIBILITIES) {
       if (r.href !== null) expect(r.href).toMatch(/^\/environmental\//)
@@ -69,10 +79,10 @@ describe('responsibilityCoverage and responsibilitiesHealth', () => {
   })
 
   it('counts every responsibility as open for a tenant that has assigned none', () => {
-    expect(responsibilityCoverage(new Set())).toEqual({ rolesUnassigned: 2, processesUnassigned: 14 })
+    expect(responsibilityCoverage(new Set())).toEqual({ rolesUnassigned: 2, processesUnassigned: 15 })
   })
 
   it('ignores keys that are not on the map', () => {
-    expect(responsibilityCoverage(new Set(['coffee_rota']))).toEqual({ rolesUnassigned: 2, processesUnassigned: 14 })
+    expect(responsibilityCoverage(new Set(['coffee_rota']))).toEqual({ rolesUnassigned: 2, processesUnassigned: 15 })
   })
 })

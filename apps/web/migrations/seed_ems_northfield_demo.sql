@@ -112,8 +112,8 @@ select nf.tenant_id, 'ems', 1,
        'The Northfield Plant in Northfield, TX: forge shop, heat treatment, machining and finishing buildings, and the yard inside the fence line.',
        'Closed-die forging, heat treatment, CNC machining, painting and powder coating of steel parts.',
        'Forged and finished steel components for industrial equipment makers.',
-       'The plant controls every activity inside the fence line. It can only influence the mills that make its steel, '
-       || 'the carrier that ships its parts, and how customers use and finally dispose of them.',
+       'The plant controls every activity inside the fence line. It can only influence the mills that make its steel '
+       || 'and the carrier that ships its parts.',
        current_date - 200, current_date + 165
   from northfield nf
 on conflict (tenant_id, discipline, version) do nothing;

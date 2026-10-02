@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowRight, Loader2, Workflow } from 'lucide-react'
 import {
@@ -19,9 +19,10 @@ import { FIELD_ERROR } from '../_components/formStyles'
 // /environmental/processes — clauses 4.4 and 5.3. The EMS as a map of
 // processes and how each one's outputs feed the others, with an owner for
 // each, plus the two roles clause 5.3 says top management must assign.
-// Members see who holds what (5.3 asks for responsibilities to be
-// communicated); admins assign them. Processes the platform keeps no
-// record of yet are still listed: the organization must run and own them.
+// Members can read who holds what; admins assign them. Showing it here is a
+// record, not 5.3's communication to the workforce, which needs its own
+// evidence. Processes the platform keeps no record of yet are still listed:
+// the organization must run and own them.
 
 type ResponsibilitiesState = Awaited<ReturnType<typeof getResponsibilities>>
 
@@ -35,24 +36,37 @@ export default function EmsProcessesPage() {
   const { members, error: membersError } = useTenantMembers()
   const [state, setState] = useState<ResponsibilitiesState | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [saving, setSaving] = useState<ResponsibilityKey | null>(null)
+  const [saving, setSaving] = useState<ReadonlySet<ResponsibilityKey>>(new Set())
   const [saveError, setSaveError] = useState<{ key: ResponsibilityKey; message: string } | null>(null)
+  // Each assignment reloads the map; only the newest reload may land, or an
+  // earlier one finishing last would show a newer assignment as undone.
+  const latestLoad = useRef(0)
 
   const load = useCallback(async () => {
     if (!tenantId) return
+    const request = ++latestLoad.current
     setLoadError(null)
     try {
-      setState(await getResponsibilities(tenantId))
+      const next = await getResponsibilities(tenantId)
+      if (request === latestLoad.current) setState(next)
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Could not load the process map.')
+      if (request === latestLoad.current) setLoadError(err instanceof Error ? err.message : 'Could not load the process map.')
     }
   }, [tenantId])
 
   useEffect(() => { void load() }, [load])
 
+  const markSaving = (key: ResponsibilityKey, on: boolean) => setSaving(previous => {
+    const next = new Set(previous)
+    if (on) next.add(key)
+    else next.delete(key)
+    return next
+  })
+
   async function assign(key: ResponsibilityKey, userId: string) {
-    if (!tenantId) return
-    setSaving(key)
+    // A second pick while the first is saving would race it into a 409 of the user's own making.
+    if (!tenantId || saving.has(key)) return
+    markSaving(key, true)
     setSaveError(null)
     try {
       await assignResponsibility(tenantId, key, userId || null)
@@ -60,7 +74,7 @@ export default function EmsProcessesPage() {
     } catch (err) {
       setSaveError({ key, message: err instanceof Error ? err.message : 'Could not save the owner.' })
     } finally {
-      setSaving(null)
+      markSaving(key, false)
     }
   }
 
@@ -69,7 +83,7 @@ export default function EmsProcessesPage() {
 
   const row = (item: EmsResponsibility) => (
     <ResponsibilityItem key={item.key} item={item} ownerId={ownerOf(item.key)} members={members}
-      canEdit={canEdit} saving={saving === item.key}
+      membersFailed={membersError !== null} canEdit={canEdit} saving={saving.has(item.key)}
       error={saveError?.key === item.key ? saveError.message : null}
       onAssign={userId => void assign(item.key, userId)} />
   )
@@ -115,18 +129,27 @@ export default function EmsProcessesPage() {
   )
 }
 
-function ResponsibilityItem({ item, ownerId, members, canEdit, saving, error, onAssign }: {
-  item:     EmsResponsibility
-  ownerId:  string | null
-  members:  Member[] | null
-  canEdit:  boolean
-  saving:   boolean
-  error:    string | null
-  onAssign: (userId: string) => void
+function ResponsibilityItem({ item, ownerId, members, membersFailed, canEdit, saving, error, onAssign }: {
+  item:          EmsResponsibility
+  ownerId:       string | null
+  members:       Member[] | null
+  membersFailed: boolean
+  canEdit:       boolean
+  saving:        boolean
+  error:         string | null
+  onAssign:      (userId: string) => void
 }) {
   const owner = ownerId && members ? members.find(m => m.user_id === ownerId) ?? null : null
-  // The owner left the organization: say so rather than show "Unassigned" or a stale name.
+  // The database clears an owner whose membership is removed, so this is the
+  // rare owner whose invitation was cancelled, or a member list from before
+  // they left. Say so rather than show "No owner" or a stale name.
   const formerMember = ownerId !== null && members !== null && owner === null
+  const ownerLabel =
+    ownerId === null ? 'No owner'
+      : owner ? memberName(owner)
+        : formerMember ? 'Former member'
+          : membersFailed ? 'Assigned (names unavailable)'
+            : 'Loading…'
 
   return (
     <li className="grid gap-3 px-4 py-3 sm:grid-cols-[1fr_16rem] sm:items-start">
@@ -150,13 +173,15 @@ function ResponsibilityItem({ item, ownerId, members, canEdit, saving, error, on
       </div>
       <div role="group" aria-label={`Owner of ${item.name}`} className="space-y-1">
         {canEdit ? (
-          <MemberPicker value={ownerId ?? ''} onChange={onAssign} placeholder="No owner" />
+          <MemberPicker value={ownerId ?? ''} onChange={onAssign} placeholder={ownerLabel} />
         ) : (
-          <p className="text-sm text-slate-800 dark:text-slate-100">
-            {ownerId === null ? 'No owner' : owner ? memberName(owner) : members === null ? '…' : ''}
+          <p className="text-sm text-slate-800 dark:text-slate-100">{ownerLabel}</p>
+        )}
+        {formerMember && (
+          <p className="text-[11px] text-amber-700 dark:text-amber-300">
+            The owner is no longer a member.{canEdit ? ' Reassign it.' : ''}
           </p>
         )}
-        {formerMember && <p className="text-[11px] text-amber-700 dark:text-amber-300">The owner is no longer a member. Reassign it.</p>}
         {saving && <p className="text-[11px] text-slate-500">Saving…</p>}
         {error && <p className={FIELD_ERROR} role="alert">{error}</p>}
       </div>
