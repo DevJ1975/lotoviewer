@@ -32,6 +32,13 @@ begin
   if not exists (select 1 from pg_constraint where conname = 'compliance_calendar_obligations_tenant_id_id_key') then
     alter table public.compliance_calendar_obligations add constraint compliance_calendar_obligations_tenant_id_id_key unique (tenant_id, id);
   end if;
+  -- Target for same-tenant facility references (295-300). Migration 284 already
+  -- creates it in production; this only covers a database without 284. The
+  -- rollback leaves it, because 284 owns it there.
+  if not exists (select 1 from pg_constraint
+                  where conrelid = 'public.facilities'::regclass and conname = 'uq_facilities_tenant_id_pair') then
+    alter table public.facilities add constraint uq_facilities_tenant_id_pair unique (tenant_id, id);
+  end if;
 end $$;
 
 -- ── ms_context_issues ────────────────────────────────────────────────────
@@ -39,7 +46,7 @@ create table if not exists public.ms_context_issues (
   id               uuid primary key default gen_random_uuid(),
   tenant_id        uuid not null references public.tenants(id) on delete cascade,
   -- null = applies to the whole organization
-  facility_id      uuid references public.facilities(id) on delete set null,
+  facility_id      uuid,
   discipline       text not null default 'ems' check (discipline in ('ems','ohs','integrated')),
   kind             text not null check (kind in ('internal','external','climate')),
   description      text not null check (length(btrim(description)) > 0),
@@ -55,7 +62,10 @@ create table if not exists public.ms_context_issues (
   updated_by       uuid references public.profiles(id) on delete set null,
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now(),
-  constraint ms_context_issues_retired_pair check ((retired_at is null) = (retired_reason is null))
+  constraint ms_context_issues_retired_pair check ((retired_at is null) = (retired_reason is null)),
+  -- Same-tenant facility; deleting the facility makes the issue organization-wide.
+  constraint ms_context_issues_facility_fk foreign key (tenant_id, facility_id)
+    references public.facilities (tenant_id, id) on delete set null (facility_id)
 );
 
 create index if not exists idx_ms_context_issues_active
@@ -65,7 +75,7 @@ create index if not exists idx_ms_context_issues_active
 create table if not exists public.ms_interested_parties (
   id                  uuid primary key default gen_random_uuid(),
   tenant_id           uuid not null references public.tenants(id) on delete cascade,
-  facility_id         uuid references public.facilities(id) on delete set null,
+  facility_id         uuid,
   discipline          text not null default 'ems' check (discipline in ('ems','ohs','integrated')),
   name                text not null check (length(btrim(name)) > 0),
   needs_expectations  text not null check (length(btrim(needs_expectations)) > 0),
@@ -85,7 +95,9 @@ create table if not exists public.ms_interested_parties (
   constraint ms_interested_parties_obligation_link check (becomes_obligation or obligation_id is null),
   -- Same-tenant link; deleting the obligation clears only obligation_id.
   constraint ms_interested_parties_obligation_fk foreign key (tenant_id, obligation_id)
-    references public.compliance_calendar_obligations (tenant_id, id) on delete set null (obligation_id)
+    references public.compliance_calendar_obligations (tenant_id, id) on delete set null (obligation_id),
+  constraint ms_interested_parties_facility_fk foreign key (tenant_id, facility_id)
+    references public.facilities (tenant_id, id) on delete set null (facility_id)
 );
 
 create index if not exists idx_ms_interested_parties_active

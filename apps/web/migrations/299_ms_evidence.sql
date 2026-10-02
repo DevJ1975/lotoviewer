@@ -24,7 +24,7 @@ create table if not exists public.ms_evidence (
   id                 uuid primary key default gen_random_uuid(),
   tenant_id          uuid not null references public.tenants(id) on delete cascade,
   -- Append-only, so no on-delete action: the reference blocks deleting the facility.
-  facility_id        uuid references public.facilities(id),
+  facility_id        uuid,
   -- What the evidence proves. The list grows one phase at a time.
   subject_type       text not null check (subject_type in ('compliance_evaluation')),
   subject_id         uuid not null,
@@ -37,7 +37,7 @@ create table if not exists public.ms_evidence (
   sha256             text not null check (sha256 ~ '^[0-9a-f]{64}$'),
   uploaded_by        uuid not null references public.profiles(id),
   uploaded_at        timestamptz not null default now(),
-  superseded_by      uuid references public.ms_evidence(id),
+  superseded_by      uuid,
   superseded_at      timestamptz,
   superseded_reason  text,
   constraint ms_evidence_superseded_triple check (
@@ -45,11 +45,17 @@ create table if not exists public.ms_evidence (
     and (superseded_at is null) = (superseded_reason is null)
   ),
   -- The same file attached twice to the same subject is one piece of evidence.
-  unique (tenant_id, subject_type, subject_id, sha256)
+  unique (tenant_id, subject_type, subject_id, sha256),
+  unique (tenant_id, id),   -- target for the same-tenant supersession link below
+  -- A file is replaced by another file of the same tenant, never by itself.
+  constraint ms_evidence_superseded_by_fk foreign key (tenant_id, superseded_by)
+    references public.ms_evidence (tenant_id, id),
+  constraint ms_evidence_not_self_superseded check (superseded_by is distinct from id),
+  constraint ms_evidence_facility_fk foreign key (tenant_id, facility_id)
+    references public.facilities (tenant_id, id)
 );
 
-create index if not exists idx_ms_evidence_subject
-  on public.ms_evidence (tenant_id, subject_type, subject_id);
+-- The unique (tenant_id, subject_type, subject_id, sha256) index already serves lookups by subject.
 
 -- Append-only: the one permitted update marks a row superseded, once.
 create or replace function public.ms_evidence_append_only()
@@ -79,6 +85,35 @@ drop trigger if exists trg_ms_evidence_append_only on public.ms_evidence;
 create trigger trg_ms_evidence_append_only
   before update on public.ms_evidence
   for each row execute function public.ms_evidence_append_only();
+
+-- Evidence belongs to an evaluation still being worked: once its result is
+-- recorded and sealed, the files behind it are fixed too. FOR SHARE makes a
+-- concurrent completion wait for this write, or this write wait for it, so
+-- a sealed record never rests on a file its evaluator did not see. A
+-- subject not written yet passes: a seed may file evidence first.
+create or replace function public.ms_evidence_subject_open()
+returns trigger
+language plpgsql
+set search_path = pg_catalog, public
+as $$
+declare
+  v_completed_at timestamptz;
+begin
+  select completed_at into v_completed_at
+    from public.ms_compliance_evaluations
+   where id = new.subject_id and tenant_id = new.tenant_id
+     for share;
+  if v_completed_at is not null then
+    raise exception 'evaluation % is complete and sealed; its evidence cannot change', new.subject_id
+      using errcode = 'integrity_constraint_violation';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_ms_evidence_subject_open on public.ms_evidence;
+create trigger trg_ms_evidence_subject_open
+  before insert or update on public.ms_evidence
+  for each row execute function public.ms_evidence_subject_open();
 
 drop trigger if exists trg_audit_ms_evidence on public.ms_evidence;
 create trigger trg_audit_ms_evidence

@@ -2,11 +2,16 @@
 --
 -- Roll back 301 first if it has run: 301 drops the legacy score columns
 -- this rollback relies on. With 301 not applied, the legacy columns still
--- hold each aspect's original single score, so nothing is lost except
--- scores added after 297 (extra conditions, re-scores) and aspect links.
--- An aspect the Phase 1 API created has no legacy score: it takes its
--- highest current score, or migration 204's defaults (normal, 1 x 1) if
--- it was never scored, because the old model cannot say "not scored".
+-- hold each aspect's original single score. An aspect the Phase 1 API
+-- created has no legacy score: it takes its highest current score, or
+-- migration 204's defaults (normal, 1 x 1) if it was never scored, because
+-- the old model cannot say "not scored".
+--
+-- Lost: score history beyond that one score (other conditions, re-scores,
+-- rationales), aspect-obligation links, process areas, review dates and
+-- reviewers, facilities, and obsolescence reasons. An obsolete aspect is
+-- kept as status 'closed', the old model's nearest state, so it does not
+-- come back as a live one.
 --
 -- Apply: paste into the SQL Editor, or run with psql.
 -- ────────────────────────────────────────────────────────────────────────────
@@ -27,6 +32,8 @@ update public.environmental_aspects a
   ) top on top.aspect_id = self.id
  where self.id = a.id and a.severity is null;
 
+update public.environmental_aspects set status = 'closed' where obsolete_at is not null and status <> 'closed';
+
 alter table public.environmental_aspects
   alter column operating_condition set default 'normal',
   alter column operating_condition set not null,
@@ -41,6 +48,7 @@ drop view  if exists public.environmental_aspect_score_history;
 drop table if exists public.environmental_aspect_obligations;
 drop table if exists public.environmental_aspect_scores;
 drop function if exists public.environmental_aspect_scores_in_scale();
+drop function if exists public.environmental_aspect_scores_stamp();
 
 -- Restore migration 204's policy.
 drop policy if exists environmental_aspects_tenant_scope on public.environmental_aspects;

@@ -14,6 +14,7 @@ drop trigger if exists trg_ms_compliance_evaluations_require_evidence on public.
 drop function if exists public.ms_compliance_evaluations_require_evidence();
 drop table if exists public.ms_evidence;
 drop function if exists public.ms_evidence_append_only();
+drop function if exists public.ms_evidence_subject_open();
 
 notify pgrst, 'reload schema';
 

@@ -21,6 +21,35 @@
 
 begin;
 
+-- A matrix must be one row per severity level, one whole-number cell (at
+-- least 1) per likelihood level, as validateScoringMethod() in packages/core
+-- says. Checked here, not just at the API, because a malformed cell would
+-- make ms_method_score() raise and break the tenant's whole register. It
+-- never raises itself: each test runs only once the previous one passed.
+create or replace function public.ms_scoring_matrix_is_valid(p_matrix jsonb, p_severity_levels int, p_likelihood_levels int)
+returns boolean
+language plpgsql
+immutable
+set search_path = pg_catalog, public
+as $$
+declare
+  v_row  jsonb;
+  v_cell jsonb;
+begin
+  if p_matrix is null then return true; end if;
+  if jsonb_typeof(p_matrix) <> 'array' then return false; end if;
+  if jsonb_array_length(p_matrix) <> p_severity_levels then return false; end if;
+  for v_row in select value from jsonb_array_elements(p_matrix) loop
+    if jsonb_typeof(v_row) <> 'array' then return false; end if;
+    if jsonb_array_length(v_row) <> p_likelihood_levels then return false; end if;
+    for v_cell in select value from jsonb_array_elements(v_row) loop
+      -- Digits only, so ms_method_score()'s ::int cast always succeeds: 2.0 and 1e3 are refused.
+      if v_cell::text !~ '^[1-9][0-9]{0,8}$' then return false; end if;
+    end loop;
+  end loop;
+  return true;
+end $$;
+
 create table if not exists public.ms_scoring_methods (
   id                     uuid primary key default gen_random_uuid(),
   tenant_id              uuid not null references public.tenants(id) on delete cascade,
@@ -29,9 +58,9 @@ create table if not exists public.ms_scoring_methods (
   version                int  not null default 1 check (version >= 1),
   severity_levels        int  not null default 5 check (severity_levels between 2 and 10),
   likelihood_levels      int  not null default 5 check (likelihood_levels between 2 and 10),
-  -- null = severity × likelihood; otherwise matrix[severity-1][likelihood-1].
-  -- Its shape is checked by validateScoringMethod() at the API boundary.
-  matrix                 jsonb check (matrix is null or jsonb_typeof(matrix) = 'array'),
+  -- null = severity × likelihood; otherwise matrix[severity-1][likelihood-1],
+  -- shaped as ms_scoring_methods_matrix_shape requires.
+  matrix                 jsonb,
   significance_threshold int  not null check (significance_threshold > 0),
   is_default             boolean not null default false,
   retired_at             timestamptz,
@@ -40,6 +69,11 @@ create table if not exists public.ms_scoring_methods (
   unique (tenant_id, discipline, name, version),
   unique (tenant_id, id)   -- target for same-tenant foreign keys from scores
 );
+
+alter table public.ms_scoring_methods drop constraint if exists ms_scoring_methods_matrix_shape;
+alter table public.ms_scoring_methods
+  add constraint ms_scoring_methods_matrix_shape
+    check (public.ms_scoring_matrix_is_valid(matrix, severity_levels, likelihood_levels));
 
 -- One active default method per tenant and discipline.
 create unique index if not exists uq_ms_scoring_methods_default

@@ -33,16 +33,46 @@ alter table public.compliance_calendar_obligations
   add column if not exists reviewed_by             uuid references public.profiles(id) on delete set null,
   add column if not exists next_review_due         date;
 
--- Existing rows: OSHA system obligations are OH&S, the EPCRA one is
--- environmental, and tenant-created rows count for both registers.
+-- A system obligation's register follows from its key (open question Q3):
+-- the OSHA postings are OH&S, EPCRA Tier II is environmental. Null for any
+-- other key.
+create or replace function public.ccal_system_obligation_discipline(p_system_key text)
+returns text
+language sql
+immutable
+set search_path = pg_catalog, public
+as $$
+  select case p_system_key
+           when 'osha-300a-post'  then 'ohs'
+           when 'osha-ita-submit' then 'ohs'
+           when 'epcra-tier-ii'   then 'ems'
+         end
+$$;
+
+-- Existing rows: system obligations by key; tenant-created rows count for both registers.
 update public.compliance_calendar_obligations
-   set discipline = case system_key
-                      when 'osha-300a-post'  then 'ohs'
-                      when 'osha-ita-submit' then 'ohs'
-                      when 'epcra-tier-ii'   then 'ems'
-                      else 'integrated'
-                    end
+   set discipline = coalesce(public.ccal_system_obligation_discipline(system_key), 'integrated')
  where discipline is null;
+
+-- Rows the calendar seeds later get the same answer, whichever code version
+-- writes them: the seeding code sends no discipline, and the column default
+-- ('integrated') would put OSHA postings in the ISO 14001 register.
+create or replace function public.ccal_obligations_system_discipline()
+returns trigger
+language plpgsql
+set search_path = pg_catalog, public
+as $$
+begin
+  if new.source = 'system' then
+    new.discipline := coalesce(public.ccal_system_obligation_discipline(new.system_key), new.discipline);
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_ccal_obligations_system_discipline on public.compliance_calendar_obligations;
+create trigger trg_ccal_obligations_system_discipline
+  before insert or update of source, system_key, discipline on public.compliance_calendar_obligations
+  for each row execute function public.ccal_obligations_system_discipline();
 
 -- Never reviewed as a register row yet: first review due a year after creation.
 update public.compliance_calendar_obligations
@@ -147,7 +177,7 @@ create table if not exists public.ms_compliance_evaluations (
   -- A sealed row cannot be rewritten, so none of these references nulls
   -- itself on delete: each blocks deleting the facility or person instead
   -- (migration 210's facility_id, and the 019 / 045 precedent for people).
-  facility_id      uuid references public.facilities(id),
+  facility_id      uuid,
   discipline       text not null default 'ems' check (discipline in ('ems','ohs','integrated')),
   obligation_id    uuid not null,
   scheduled_for    date not null,
@@ -175,7 +205,10 @@ create table if not exists public.ms_compliance_evaluations (
   constraint ms_compliance_evaluations_obligation_fk foreign key (tenant_id, obligation_id)
     references public.compliance_calendar_obligations (tenant_id, id),
   constraint ms_compliance_evaluations_nonconformity_fk foreign key (tenant_id, nonconformity_id)
-    references public.nonconformities (tenant_id, id)
+    references public.nonconformities (tenant_id, id),
+  -- Same-tenant facility.
+  constraint ms_compliance_evaluations_facility_fk foreign key (tenant_id, facility_id)
+    references public.facilities (tenant_id, id)
 );
 
 -- At most one open evaluation per obligation, so the nightly job and a person cannot double-book one.
@@ -185,6 +218,64 @@ create index if not exists idx_ms_compliance_evaluations_latest
   on public.ms_compliance_evaluations (tenant_id, obligation_id, completed_at desc);
 create index if not exists idx_ms_compliance_evaluations_assignee
   on public.ms_compliance_evaluations (assigned_to) where completed_at is null;
+-- A nonconformity backs one evaluation's result; also serves the foreign key on nonconformity delete.
+create unique index if not exists uq_ms_compliance_evaluations_nonconformity
+  on public.ms_compliance_evaluations (tenant_id, nonconformity_id) where nonconformity_id is not null;
+
+-- What a person may write, whichever way they reach the table. The API
+-- enforces the same, but RLS is the boundary and the anon key is public, so
+-- a PostgREST call must not be able to forge the record. Jobs, seeds and
+-- scripts run without auth.uid() and are trusted.
+create or replace function public.ms_compliance_evaluations_guard()
+returns trigger
+language plpgsql
+set search_path = pg_catalog, public
+as $$
+begin
+  if auth.uid() is null then
+    return new;
+  end if;
+
+  if tg_op = 'INSERT' then
+    -- An evaluation is opened, then completed; nobody files one already sealed.
+    if new.completed_at is not null then
+      raise exception 'an evaluation is opened and then completed, not inserted complete'
+        using errcode = 'check_violation';
+    end if;
+    return new;
+  end if;
+
+  -- Only an admin reschedules, reassigns or moves an evaluation; the assignee may only complete it.
+  if (new.obligation_id, new.scheduled_for, new.assigned_to, new.facility_id, new.discipline, new.created_by)
+       is distinct from
+     (old.obligation_id, old.scheduled_for, old.assigned_to, old.facility_id, old.discipline, old.created_by)
+     and not (public.is_superadmin() or new.tenant_id in (select public.current_user_admin_tenant_ids())) then
+    raise exception 'only an admin may reschedule, reassign or move evaluation %', old.id
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  if old.completed_at is null and new.completed_at is not null then
+    -- The record says when, and by whom, from the server's side.
+    new.completed_at := now();
+    new.evaluator_id := auth.uid();
+    -- The nonconformity is the finding this result raised against this obligation (plan D6),
+    -- not an older one borrowed to satisfy the noncompliant check.
+    if new.nonconformity_id is not null and not exists (
+      select 1 from public.nonconformities n
+       where n.id = new.nonconformity_id and n.tenant_id = new.tenant_id
+         and n.source_type = 'compliance' and n.source_reference = new.obligation_id::text
+    ) then
+      raise exception 'nonconformity % was not raised against obligation %', new.nonconformity_id, new.obligation_id
+        using errcode = 'check_violation';
+    end if;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_ms_compliance_evaluations_guard on public.ms_compliance_evaluations;
+create trigger trg_ms_compliance_evaluations_guard
+  before insert or update on public.ms_compliance_evaluations
+  for each row execute function public.ms_compliance_evaluations_guard();
 
 -- A completed evaluation is a record, not a draft. Deletion is closed by RLS,
 -- not by this trigger, so a tenant's cascade delete still works.

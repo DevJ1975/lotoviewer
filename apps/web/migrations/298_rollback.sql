@@ -12,6 +12,7 @@ begin;
 drop view  if exists public.ms_obligation_register;
 drop table if exists public.ms_compliance_evaluations;
 drop function if exists public.ms_compliance_evaluations_sealed();
+drop function if exists public.ms_compliance_evaluations_guard();
 alter table public.nonconformities drop constraint if exists nonconformities_tenant_id_id_key;
 
 drop policy if exists ccal_obligations_member_read on public.compliance_calendar_obligations;
@@ -42,6 +43,9 @@ create policy ccal_events_tenant_scope on public.compliance_calendar_events
 
 drop trigger if exists trg_audit_ccal_events        on public.compliance_calendar_events;
 drop trigger if exists trg_ccal_obligations_touch   on public.compliance_calendar_obligations;
+drop trigger if exists trg_ccal_obligations_system_discipline on public.compliance_calendar_obligations;
+drop function if exists public.ccal_obligations_system_discipline();
+drop function if exists public.ccal_system_obligation_discipline(text);
 drop index if exists public.idx_ccal_obligations_register;
 
 alter table public.compliance_calendar_obligations

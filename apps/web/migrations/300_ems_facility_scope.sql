@@ -60,34 +60,51 @@ as $$
 $$;
 
 -- ── Facility records ─────────────────────────────────────────────────────
-alter table public.environmental_objectives
-  add column if not exists facility_id uuid references public.facilities(id);
-alter table public.environmental_objectives alter column facility_id set default public.active_facility_id();
-update public.environmental_objectives o
-   set facility_id = f.id
-  from public.facilities f
- where f.tenant_id = o.tenant_id and f.is_primary and o.facility_id is null;
-create index if not exists idx_environmental_objectives_facility on public.environmental_objectives (facility_id);
-
-alter table public.nonconformities
-  add column if not exists facility_id uuid references public.facilities(id);
-alter table public.nonconformities alter column facility_id set default public.active_facility_id();
-update public.nonconformities n
-   set facility_id = f.id
-  from public.facilities f
- where f.tenant_id = n.tenant_id and f.is_primary and n.facility_id is null;
-create index if not exists idx_nonconformities_facility on public.nonconformities (facility_id);
+-- Existing rows go to the tenant's primary facility only when the column is
+-- first added, so a re-run never moves a row since made organization-wide
+-- (a nonconformity from an organization-wide obligation, say). The touch
+-- trigger is off meanwhile: a backfill is bookkeeping, and updated_at keeps
+-- the date someone last changed the record.
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['environmental_objectives', 'nonconformities'] loop
+    if not exists (select 1 from information_schema.columns
+                    where table_schema = 'public' and table_name = t and column_name = 'facility_id') then
+      execute format('alter table public.%I add column facility_id uuid', t);
+      execute format('alter table public.%I disable trigger %I', t, 'trg_' || t || '_touch');
+      execute format(
+        'update public.%I r set facility_id = f.id from public.facilities f where f.tenant_id = r.tenant_id and f.is_primary', t);
+      execute format('alter table public.%I enable trigger %I', t, 'trg_' || t || '_touch');
+    end if;
+    execute format('alter table public.%I alter column facility_id set default public.active_facility_id()', t);
+    execute format('create index if not exists %I on public.%I (facility_id)', 'idx_' || t || '_facility', t);
+  end loop;
+end $$;
 
 -- ── Organization-wide records ────────────────────────────────────────────
-alter table public.management_reviews
-  add column if not exists facility_id uuid references public.facilities(id);
+alter table public.management_reviews add column if not exists facility_id uuid;
 create index if not exists idx_management_reviews_facility
   on public.management_reviews (facility_id) where facility_id is not null;
 
-alter table public.iso14001_clause_evidence
-  add column if not exists facility_id uuid references public.facilities(id);
+alter table public.iso14001_clause_evidence add column if not exists facility_id uuid;
 create index if not exists idx_iso14001_clause_evidence_facility
   on public.iso14001_clause_evidence (facility_id) where facility_id is not null;
+
+-- Same-tenant facility on all four (uq_facilities_tenant_id_pair), so a stale
+-- or foreign facility header cannot stamp another tenant's facility.
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['environmental_objectives', 'nonconformities', 'management_reviews', 'iso14001_clause_evidence'] loop
+    execute format('alter table public.%I drop constraint if exists %I', t, t || '_facility_fk');
+    execute format(
+      'alter table public.%I add constraint %I foreign key (tenant_id, facility_id) references public.facilities (tenant_id, id)',
+      t, t || '_facility_fk');
+  end loop;
+end $$;
 
 -- ── Policies: migration 211's three-clause form ──────────────────────────
 do $$

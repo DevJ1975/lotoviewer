@@ -11,6 +11,7 @@ begin;
 drop table if exists public.ms_scoring_methods;
 drop function if exists public.ms_scoring_methods_frozen();
 drop function if exists public.ms_method_score(jsonb, int, int);
+drop function if exists public.ms_scoring_matrix_is_valid(jsonb, int, int);
 
 notify pgrst, 'reload schema';
 

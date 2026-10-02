@@ -35,8 +35,7 @@ alter table public.environmental_aspects
   add column if not exists obsolete_reason  text,
   add column if not exists last_reviewed_at timestamptz,
   add column if not exists reviewed_by      uuid references auth.users(id) on delete set null,
-  add column if not exists next_review_due  date,
-  add column if not exists facility_id      uuid references public.facilities(id);
+  add column if not exists next_review_due  date;
 
 alter table public.environmental_aspects drop constraint if exists environmental_aspects_obsolete_pair;
 alter table public.environmental_aspects
@@ -51,6 +50,10 @@ begin
   end if;
 end $$;
 
+-- The backfills below are bookkeeping, not edits: with the touch trigger off
+-- each aspect keeps its real updated_at, which dates its carried-over score.
+alter table public.environmental_aspects disable trigger trg_environmental_aspects_touch;
+
 -- Never reviewed yet: the first review falls due a year after the aspect
 -- was recorded. last_reviewed_at stays null; inventing a review would hide
 -- exactly what the register exists to show.
@@ -62,12 +65,29 @@ alter table public.environmental_aspects
   alter column next_review_due set default (current_date + 365);
 
 -- An aspect is a fact about a site: facility-scoped, defaulting to the
--- caller's active facility; existing rows go to the tenant's primary facility.
+-- caller's active facility. Existing rows go to the tenant's primary
+-- facility only when the column is first added, so a re-run never moves a
+-- row someone has since made organization-wide.
+do $$
+begin
+  if not exists (select 1 from information_schema.columns
+                  where table_schema = 'public' and table_name = 'environmental_aspects' and column_name = 'facility_id') then
+    alter table public.environmental_aspects add column facility_id uuid;
+    update public.environmental_aspects a
+       set facility_id = f.id
+      from public.facilities f
+     where f.tenant_id = a.tenant_id and f.is_primary;
+  end if;
+end $$;
 alter table public.environmental_aspects alter column facility_id set default public.active_facility_id();
-update public.environmental_aspects a
-   set facility_id = f.id
-  from public.facilities f
- where f.tenant_id = a.tenant_id and f.is_primary and a.facility_id is null;
+-- Same-tenant facility, so a stale or foreign facility header cannot stamp
+-- another tenant's facility. No action: an aspect keeps its site's history.
+alter table public.environmental_aspects drop constraint if exists environmental_aspects_facility_fk;
+alter table public.environmental_aspects
+  add constraint environmental_aspects_facility_fk foreign key (tenant_id, facility_id)
+    references public.facilities (tenant_id, id);
+
+alter table public.environmental_aspects enable trigger trg_environmental_aspects_touch;
 
 create index if not exists idx_environmental_aspects_facility on public.environmental_aspects (facility_id);
 create index if not exists idx_environmental_aspects_active
@@ -75,20 +95,30 @@ create index if not exists idx_environmental_aspects_active
 
 -- The old pages still write aspects directly until the Phase 1 deploy, so
 -- members keep write access here; 301 narrows it to admins. Only the
--- facility predicate (migration 211's form, which skipped this table) is added now.
-drop policy if exists environmental_aspects_tenant_scope on public.environmental_aspects;
-create policy environmental_aspects_tenant_scope on public.environmental_aspects
-  for all to authenticated
-  using (
-    (public.active_tenant_id() is null or tenant_id = public.active_tenant_id())
-    and (tenant_id in (select public.current_user_tenant_ids()) or public.is_superadmin())
-    and (public.active_facility_id() is null or facility_id is null or facility_id = public.active_facility_id())
-  )
-  with check (
-    (public.active_tenant_id() is null or tenant_id = public.active_tenant_id())
-    and (tenant_id in (select public.current_user_tenant_ids()) or public.is_superadmin())
-    and (public.active_facility_id() is null or facility_id is null or facility_id = public.active_facility_id())
-  );
+-- facility predicate (migration 211's form, which skipped this table) is
+-- added now, and only before 301: re-running this after 301 must not hand
+-- members write access again.
+do $$
+begin
+  if exists (select 1 from pg_policies
+              where schemaname = 'public' and tablename = 'environmental_aspects'
+                and policyname = 'environmental_aspects_admin_write') then
+    return;
+  end if;
+  drop policy if exists environmental_aspects_tenant_scope on public.environmental_aspects;
+  create policy environmental_aspects_tenant_scope on public.environmental_aspects
+    for all to authenticated
+    using (
+      (public.active_tenant_id() is null or tenant_id = public.active_tenant_id())
+      and (tenant_id in (select public.current_user_tenant_ids()) or public.is_superadmin())
+      and (public.active_facility_id() is null or facility_id is null or facility_id = public.active_facility_id())
+    )
+    with check (
+      (public.active_tenant_id() is null or tenant_id = public.active_tenant_id())
+      and (tenant_id in (select public.current_user_tenant_ids()) or public.is_superadmin())
+      and (public.active_facility_id() is null or facility_id is null or facility_id = public.active_facility_id())
+    );
+end $$;
 
 -- ── environmental_aspect_scores (append-only history) ────────────────────
 create table if not exists public.environmental_aspect_scores (
@@ -112,7 +142,7 @@ create table if not exists public.environmental_aspect_scores (
 );
 
 create index if not exists idx_environmental_aspect_scores_latest
-  on public.environmental_aspect_scores (tenant_id, aspect_id, operating_condition, scored_at desc);
+  on public.environmental_aspect_scores (tenant_id, aspect_id, operating_condition, scored_at desc, id desc);
 
 -- A score must sit on its method's scale. A check constraint cannot read
 -- another table, so a trigger does.
@@ -142,6 +172,27 @@ create trigger trg_environmental_aspect_scores_in_scale
   before insert on public.environmental_aspect_scores
   for each row execute function public.environmental_aspect_scores_in_scale();
 
+-- A person's score is dated and attributed by the server: the table is
+-- append-only, so a score dated in the future would stay "current" for good.
+-- Migrations, seeds and jobs (no auth.uid()) keep the dates they carry.
+create or replace function public.environmental_aspect_scores_stamp()
+returns trigger
+language plpgsql
+set search_path = pg_catalog, public
+as $$
+begin
+  if auth.uid() is not null then
+    new.scored_at := now();
+    new.scored_by := auth.uid();
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_environmental_aspect_scores_stamp on public.environmental_aspect_scores;
+create trigger trg_environmental_aspect_scores_stamp
+  before insert on public.environmental_aspect_scores
+  for each row execute function public.environmental_aspect_scores_stamp();
+
 drop trigger if exists trg_audit_environmental_aspect_scores on public.environmental_aspect_scores;
 create trigger trg_audit_environmental_aspect_scores
   after insert or update or delete on public.environmental_aspect_scores
@@ -169,11 +220,15 @@ select s.id,
   from public.environmental_aspect_scores s
   join public.ms_scoring_methods m on m.id = s.method_id;
 
+-- tenant_id leads the DISTINCT ON key, matching idx_environmental_aspect_scores_latest:
+-- Postgres pushes a filter into a DISTINCT ON subquery only on its key columns, so
+-- without it the register's per-aspect lookup could not use the index's leading
+-- column and would scan every tenant's scores for each aspect.
 create or replace view public.environmental_aspect_current_scores
 with (security_invoker = true) as
-select distinct on (h.aspect_id, h.operating_condition) h.*
+select distinct on (h.tenant_id, h.aspect_id, h.operating_condition) h.*
   from public.environmental_aspect_score_history h
- order by h.aspect_id, h.operating_condition, h.scored_at desc, h.id desc;   -- id breaks timestamp ties
+ order by h.tenant_id, h.aspect_id, h.operating_condition, h.scored_at desc, h.id desc;   -- id breaks timestamp ties
 
 -- One row per aspect with its current scores folded in, so the register can
 -- filter on significance and page on the server in one query. A lateral
