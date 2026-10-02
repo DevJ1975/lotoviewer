@@ -96,6 +96,7 @@ export const UNIQUE_KEYS: Record<string, { columns: string[]; where?: (row: Row)
   // uq_ms_compliance_evaluations_open (migration 298)
   ms_compliance_evaluations: [{ columns: ['obligation_id'], where: row => row.completed_at == null }],
   ms_evidence: [{ columns: ['tenant_id', 'subject_type', 'subject_id', 'sha256'] }],
+  ms_responsibilities: [{ columns: ['tenant_id', 'discipline', 'responsibility_key'] }],
 }
 
 /** Same-tenant composite foreign keys, per table: (columns) → table(references). */
@@ -110,6 +111,9 @@ export const FOREIGN_KEYS: Record<string, { columns: string[]; table: string; re
   environmental_aspect_scores: [
     { columns: ['tenant_id', 'aspect_id'], table: 'environmental_aspects', references: ['tenant_id', 'id'] },
     { columns: ['tenant_id', 'method_id'], table: 'ms_scoring_methods', references: ['tenant_id', 'id'] },
+  ],
+  ms_policy_communications: [
+    { columns: ['tenant_id', 'policy_id', 'discipline'], table: 'ms_policies', references: ['tenant_id', 'id', 'discipline'] },
   ],
 }
 

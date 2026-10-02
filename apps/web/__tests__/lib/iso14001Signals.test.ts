@@ -107,7 +107,7 @@ describe('fetchIso14001Signals — the Phase 1 registers', () => {
 
 describe('fetchIso14001Signals — safety records are not environmental evidence', () => {
   it('leaves 7.2 to 8.2 not assessed however many safety records the tenant keeps', async () => {
-    // MJ-1 of the Phase 1 audit: these clauses once graded from exactly these tables.
+    // These clauses once graded from exactly these tables, which an auditor would not accept as environmental evidence.
     seed('loto_training_records', [{ tenant_id: TENANT_A, expires_at: FUTURE }])
     seed('toolbox_talks', [{ tenant_id: TENANT_A, talk_date: '2026-09-30' }])
     seed('prop65_notifications', [{ tenant_id: TENANT_A, notified_at: '2026-09-30T00:00:00Z' }])

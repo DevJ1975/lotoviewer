@@ -2,6 +2,7 @@ import type { FieldError } from '@soteria/core/hazardousWaste'
 import {
   validateContextIssueInput,
   validateInterestedPartyInput,
+  validatePolicyCommunicationInput,
   validatePolicyInput,
   validateRetirementReason,
   validateScopeStatementInput,
@@ -10,6 +11,8 @@ import {
   type ContextIssueKind,
   type Discipline,
   type InterestedPartyInput,
+  type PolicyAudience,
+  type PolicyCommunicationInput,
   type PolicyInput,
   type ScopeStatementInput,
 } from '@soteria/core/managementSystem'
@@ -61,6 +64,8 @@ export function scopeStatementInputFrom(raw: JsonObject, now: Date = new Date())
     physicalBoundary: text(raw.physical_boundary),
     activities:       text(raw.activities),
     productsServices: text(raw.products_services),
+    controlAndInfluence: text(raw.control_and_influence),
+    exclusions:       optionalText(raw.exclusions),
     effectiveFrom:    optionalText(raw.effective_from) ?? todayUtc(now),
   }
   return parsed(input, [...validateScopeStatementInput(input), ...emsDisciplineErrors(input.discipline)])
@@ -80,6 +85,15 @@ export function policyInputFrom(raw: JsonObject): Parsed<PolicyInput> {
   const errors = [...validatePolicyInput(input), ...emsDisciplineErrors(input.discipline)]
   if (!isObject) errors.push({ field: 'commitments', message: 'must be an object of commitment keys to true or false' })
   return parsed(input, errors)
+}
+
+export function policyCommunicationInputFrom(raw: JsonObject, now: Date = new Date()): Parsed<PolicyCommunicationInput> {
+  const input: PolicyCommunicationInput = {
+    audience:       text(raw.audience) as PolicyAudience,
+    method:         text(raw.method),
+    communicatedOn: optionalText(raw.communicated_on) ?? todayUtc(now),
+  }
+  return parsed(input, validatePolicyCommunicationInput(input, todayUtc(now)))
 }
 
 export interface RetirementColumns {

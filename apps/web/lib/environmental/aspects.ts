@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   validateAspectInput,
   validateAspectScoreInput,
+  type AspectControlLevel,
   type AspectFlow,
   type AspectInput,
   type AspectLifeCycleStage,
@@ -28,6 +29,7 @@ export const ASPECT_EDITABLE = {
   process_area:     'processArea',
   life_cycle_stage: 'lifeCycleStage',
   flow:             'flow',
+  control_level:    'controlLevel',
   status:           'status',
   controls:         'controls',
   notes:            'notes',
@@ -42,6 +44,7 @@ export function aspectInputFrom(raw: JsonObject): Parsed<AspectInput> {
     processArea:     text(raw.process_area),
     lifeCycleStage:  (optionalText(raw.life_cycle_stage) ?? 'operation') as AspectLifeCycleStage,
     flow:            optionalText(raw.flow) as AspectFlow | null,
+    controlLevel:    optionalText(raw.control_level) as AspectControlLevel | null,
     status:          (optionalText(raw.status) ?? 'identified') as AspectStatus,
     controls:        optionalText(raw.controls),
     notes:           optionalText(raw.notes),

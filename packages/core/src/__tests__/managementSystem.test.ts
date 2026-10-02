@@ -16,11 +16,13 @@ import {
   scopeAndPolicyHealth,
   validateContextIssueInput,
   validateInterestedPartyInput,
+  validatePolicyCommunicationInput,
   validatePolicyInput,
   validateRetirementReason,
   validateScopeStatementInput,
   type ContextIssueInput,
   type InterestedPartyInput,
+  type PolicyCommunicationInput,
   type PolicyInput,
   type RegisterRow,
   type ScopeStatementInput,
@@ -268,18 +270,49 @@ describe('validateScopeStatementInput', () => {
   const valid: ScopeStatementInput = {
     discipline: 'ems', legalEntity: 'Northfield Forge & Finish LLC', physicalBoundary: 'The Northfield, TX site',
     activities: 'Forging, machining, powder coating', productsServices: 'Forged steel brackets',
-    effectiveFrom: '2026-10-01',
+    controlAndInfluence: 'We control every on-site operation; we influence our steel suppliers and freight carriers.',
+    exclusions: null, effectiveFrom: '2026-10-01',
   }
 
-  it('accepts a complete scope', () => {
+  it('accepts a complete scope, with or without exclusions', () => {
     expect(validateScopeStatementInput(valid)).toEqual([])
+    expect(validateScopeStatementInput({ ...valid, exclusions: 'The leased warehouse, run by its landlord.' })).toEqual([])
   })
 
-  it('requires all four statements and a real effective date', () => {
+  it('requires all five statements, control and influence among them, and a real effective date', () => {
     const errors = validateScopeStatementInput({
-      ...valid, legalEntity: '', physicalBoundary: '', activities: '', productsServices: '', effectiveFrom: '2026-02-30',
+      ...valid, legalEntity: '', physicalBoundary: '', activities: '', productsServices: '', controlAndInfluence: ' ',
+      effectiveFrom: '2026-02-30',
     })
-    expect(fieldsOf(errors)).toEqual(['legalEntity', 'physicalBoundary', 'activities', 'productsServices', 'effectiveFrom'])
+    expect(fieldsOf(errors))
+      .toEqual(['legalEntity', 'physicalBoundary', 'activities', 'productsServices', 'controlAndInfluence', 'effectiveFrom'])
+  })
+
+  it('caps exclusions at 4,000 characters', () => {
+    expect(fieldsOf(validateScopeStatementInput({ ...valid, exclusions: 'x'.repeat(4000) }))).toEqual([])
+    expect(fieldsOf(validateScopeStatementInput({ ...valid, exclusions: 'x'.repeat(4001) }))).toEqual(['exclusions'])
+  })
+})
+
+describe('validatePolicyCommunicationInput', () => {
+  const valid: PolicyCommunicationInput = {
+    audience: 'internal', method: 'Posted at both entrances; read out at the all-hands', communicatedOn: TODAY,
+  }
+
+  it('accepts a communication made today or earlier, to either audience', () => {
+    expect(validatePolicyCommunicationInput(valid, TODAY)).toEqual([])
+    expect(validatePolicyCommunicationInput({ ...valid, audience: 'external', communicatedOn: '2026-01-15' }, TODAY)).toEqual([])
+  })
+
+  it('refuses a planned communication: it records one that happened', () => {
+    expect(validatePolicyCommunicationInput({ ...valid, communicatedOn: '2026-10-02' }, TODAY))
+      .toEqual([{ field: 'communicatedOn', message: 'cannot be in the future' }])
+  })
+
+  it('requires an audience it knows, a method, and a real date', () => {
+    const errors = validatePolicyCommunicationInput(
+      { audience: 'everyone' as PolicyCommunicationInput['audience'], method: ' ', communicatedOn: '2026-02-30' }, TODAY)
+    expect(fieldsOf(errors)).toEqual(['audience', 'method', 'communicatedOn'])
   })
 })
 
@@ -340,6 +373,7 @@ describe('registerHealthFromCounts', () => {
 describe('scopeAndPolicyHealth', () => {
   const healthy = {
     scopeNextReviewDue: '2027-01-01', policyNextReviewDue: '2027-01-01', policyComplete: true, signatoryStale: false,
+    scopeStatesControlAndInfluence: true, policyCommunicatedInternally: true,
   }
 
   it('is green with a current scope and a complete, current, validly signed policy', () => {
@@ -356,6 +390,11 @@ describe('scopeAndPolicyHealth', () => {
     expect(scopeAndPolicyHealth({ ...healthy, signatoryStale: true }, TODAY)).toBe('amber')
     expect(scopeAndPolicyHealth({ ...healthy, scopeNextReviewDue: '2026-09-30' }, TODAY)).toBe('amber')
     expect(scopeAndPolicyHealth({ ...healthy, policyNextReviewDue: '2026-09-30' }, TODAY)).toBe('amber')
+  })
+
+  it('is amber while the scope omits control and influence, or the policy has not reached the workforce', () => {
+    expect(scopeAndPolicyHealth({ ...healthy, scopeStatesControlAndInfluence: false }, TODAY)).toBe('amber')
+    expect(scopeAndPolicyHealth({ ...healthy, policyCommunicatedInternally: false }, TODAY)).toBe('amber')
   })
 
   it('treats a review due today as not yet overdue', () => {

@@ -19,12 +19,14 @@ import {
 import { policyInputFrom } from '@/lib/environmental/contextRegisters'
 
 // GET  /api/environmental/policy?discipline=ems   The policy in force, its earlier versions,
-//                                                 the commitments it must state, and whether a
-//                                                 change of legal entity left it signed by a prior owner.
+//                                                 the commitments it must state, whether a change
+//                                                 of legal entity left it signed by a prior owner,
+//                                                 and how the policy in force has been communicated.
 // POST /api/environmental/policy                  Save a new version. Admins only. 422 unless it
 //                                                 states every commitment its standard requires (clause 5.2).
 
 interface PolicyRow {
+  id:             string
   commitments:    Record<string, boolean>
   signatory_name: string
   signed_at:      string
@@ -61,6 +63,19 @@ export async function GET(req: Request) {
 
   const versions = policies.data ?? []
   const current = (versions[0] ?? null) as PolicyRow | null
+
+  let communications: { audience: string }[] = []
+  if (current) {
+    const { data, error } = await gate.authedClient
+      .from('ms_policy_communications')
+      .select('*')
+      .eq('tenant_id', gate.tenantId)
+      .eq('policy_id', current.id)
+      .order('communicated_on', { ascending: false })
+    if (error) return sanitizeError(error, 'environmental/policy/GET communications')
+    communications = data ?? []
+  }
+
   return NextResponse.json({
     current,
     versions,
@@ -76,6 +91,8 @@ export async function GET(req: Request) {
         version: s.version, legalEntity: s.legal_entity, effectiveFrom: s.effective_from,
       })),
     ),
+    communications,
+    communicatedInternally: communications.some(c => c.audience === 'internal'),
   })
 }
 

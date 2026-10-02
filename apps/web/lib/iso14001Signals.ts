@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { reviewHasOutputs } from '@soteria/core/managementReview'
 import { policyIsComplete, policySignatoryStale, registerDisciplines } from '@soteria/core/managementSystem'
+import { responsibilityCoverage } from '@soteria/core/emsProcesses'
 import {
   READINESS_WINDOWS,
   type ReadinessSignals,
@@ -64,7 +65,7 @@ export async function fetchIso14001Signals(tenantId: string): Promise<ReadinessS
   const [
     contextIssues, contextIssuesOverdue, climateIssues,
     parties, partiesOverdue,
-    scopes, policies,
+    scopes, policies, internalCommunications, heldResponsibilities,
     risks, riskReviews, riskControls,
     aspects, objectives, objectiveReadings,
     obligations, obligationsOverdue, obligationsReviewOverdue,
@@ -77,16 +78,20 @@ export async function fetchIso14001Signals(tenantId: string): Promise<ReadinessS
     activeIssues().eq('kind', 'climate'),
     activeParties(),
     activeParties().lt('next_review_due', today),
-    supabase.from('ms_scope_statements').select('version, legal_entity, effective_from, next_review_due')
+    supabase.from('ms_scope_statements').select('version, legal_entity, effective_from, next_review_due, control_and_influence')
       .eq('tenant_id', tenantId).eq('discipline', 'ems').order('version', { ascending: false }),
-    supabase.from('ms_policies').select('commitments, signatory_name, signed_at, next_review_due')
+    supabase.from('ms_policies').select('id, commitments, signatory_name, signed_at, next_review_due')
       .eq('tenant_id', tenantId).eq('discipline', 'ems').order('version', { ascending: false }).limit(1),
+    supabase.from('ms_policy_communications').select('policy_id')
+      .eq('tenant_id', tenantId).eq('discipline', 'ems').eq('audience', 'internal').limit(10_000),
+    supabase.from('ms_responsibilities').select('responsibility_key')
+      .eq('tenant_id', tenantId).eq('discipline', 'ems').not('owner_user_id', 'is', null),
     supabase.from('risks').select('id, updated_at').eq('tenant_id', tenantId).limit(5000),
     supabase.from('risk_reviews').select('created_at').eq('tenant_id', tenantId)
       .order('created_at', { ascending: false }).limit(1),
     supabase.from('risk_controls').select('risk_id').eq('tenant_id', tenantId).limit(10_000),
     supabase.from('environmental_aspect_register')
-      .select('id, significant, max_score, controls, related_risk_id, next_review_due')
+      .select('id, significant, max_score, controls, related_risk_id, next_review_due, control_level')
       .eq('tenant_id', tenantId).is('obsolete_at', null).limit(5000),
     supabase.from('environmental_objectives')
       .select('id, status, target_value, target_date, related_aspect_id')
@@ -136,6 +141,11 @@ export async function fetchIso14001Signals(tenantId: string): Promise<ReadinessS
     { signedAt: policy.signed_at },
     scopeRows.map(sv => ({ version: sv.version, legalEntity: sv.legal_entity, effectiveFrom: sv.effective_from })),
   )
+  const policyCommunicatedInternally = policy !== null
+    && (internalCommunications.data ?? []).some(c => c.policy_id === policy.id)
+  const responsibilities = responsibilityCoverage(
+    new Set((heldResponsibilities.data ?? []).map(r => r.responsibility_key)),
+  )
   const controlledRiskIds = new Set((riskControls.data ?? []).map(c => c.risk_id))
   const objectivesActive = objectiveRows.filter(o => o.status !== 'cancelled')
   const objectiveIdsWithReading = new Set(readingRows.map(r => r.objective_id))
@@ -160,10 +170,15 @@ export async function fetchIso14001Signals(tenantId: string): Promise<ReadinessS
     interestedPartiesReviewOverdue: countRows(partiesOverdue),
     scopeOnFile:        scopeRows.length > 0,
     scopeReviewOverdue: scopeRows.length > 0 && scopeRows[0].next_review_due < today,
+    scopeStatesControlAndInfluence: scopeRows.length > 0 && scopeRows[0].control_and_influence !== null,
 
     policyApproved,
     policyReviewOverdue: policy !== null && policy.next_review_due < today,
     policySignatoryStale: signatoryStale,
+    policyCommunicatedInternally,
+
+    rolesUnassigned:     responsibilities.rolesUnassigned,
+    processesUnassigned: responsibilities.processesUnassigned,
 
     risks: {
       count:   riskRows.length,
@@ -181,6 +196,7 @@ export async function fetchIso14001Signals(tenantId: string): Promise<ReadinessS
     aspectsSignificant:      significant.length,
     significantUncontrolled: significant.filter(a => !a.controls?.trim() && !a.related_risk_id).length,
     aspectsUnscored:         aspectRows.filter(a => a.max_score === null).length,
+    aspectsControlUndetermined: aspectRows.filter(a => a.control_level === null).length,
     aspectsReviewOverdue:    aspectRows.filter(a => a.next_review_due < today).length,
 
     obligationsTotal:         countRows(obligations),

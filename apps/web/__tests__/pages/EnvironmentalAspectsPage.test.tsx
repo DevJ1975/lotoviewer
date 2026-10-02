@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
   getAspect:          vi.fn(),
   listObligations:    vi.fn(),
   scoreAspect:        vi.fn(),
+  createAspect:       vi.fn(),
 }))
 
 vi.mock('@/components/TenantProvider', () => ({ useTenant: () => ({ tenantId: 'tenant-1', role: access.role }) }))
@@ -30,7 +31,7 @@ import { EmsApiError } from '@/lib/environmental/client'
 function aspect(over: Partial<AspectRow> = {}): AspectRow {
   return {
     id: 'a1', facility_id: 'fac-1', activity: 'Parts degreasing', aspect: 'Solvent vapour release',
-    impact: 'Air pollution (VOC)', process_area: 'Finishing', life_cycle_stage: 'operation', flow: 'output',
+    impact: 'Air pollution (VOC)', process_area: 'Finishing', life_cycle_stage: 'operation', flow: 'output', control_level: 'control',
     status: 'identified', controls: null, notes: null, source_reference: null, obsolete_at: null, obsolete_reason: null,
     last_reviewed_at: null, next_review_due: '2099-01-01', significant: true, max_score: 12,
     current_scores: [{ operating_condition: 'normal', severity: 4, likelihood: 3, score: 12, significant: true, method_id: 'm1', scored_at: '2026-09-01' }],
@@ -41,9 +42,10 @@ function aspect(over: Partial<AspectRow> = {}): AspectRow {
 const health: RegistersHealth = {
   asOf: '2026-10-02',
   context: { health: 'red', active: 0, reviewOverdue: 0, climateRecorded: false },
-  scopeAndPolicy: { health: 'red', scopeVersion: null, policyVersion: null, policyComplete: false, signatoryStale: false },
+  scopeAndPolicy: { health: 'red', scopeVersion: null, policyVersion: null, policyComplete: false, signatoryStale: false, scopeStatesControlAndInfluence: true, policyCommunicatedInternally: true },
   aspects: { health: 'amber', active: 2, reviewOverdue: 0, unscored: 1 },
   obligations: { health: 'red', active: 0, reviewOverdue: 0, evaluationsOverdue: 0, unscheduled: 0, deadlinesMissed: 0 },
+  responsibilities: { health: 'red', rolesUnassigned: 2, processesUnassigned: 14 },
 }
 
 beforeEach(() => {
@@ -105,6 +107,38 @@ describe('/environmental/aspects', () => {
     await waitFor(() => expect(api.scoreAspect).toHaveBeenCalledWith('tenant-1', 'a1', {
       operating_condition: 'emergency', severity: 4, likelihood: 3, rationale: 'Bund failure reaches the drain',
     }))
+  })
+
+  it('asks whether a new aspect is one the organization controls or can only influence (6.1.2)', async () => {
+    api.createAspect.mockResolvedValue({ aspect: aspect({ id: 'a3' }) })
+    render(<EnvironmentalAspectsPage />)
+    fireEvent.click(await screen.findByText('Record aspect'))
+    const form = within(screen.getByLabelText('Activity, product or service').closest('form') as HTMLElement)
+    fireEvent.change(form.getByLabelText('Activity, product or service'), { target: { value: 'Steel bar purchasing' } })
+    fireEvent.change(form.getByLabelText('Control or influence'), { target: { value: 'influence' } })
+    expect(form.getByLabelText('Control or influence')).toHaveAccessibleDescription(/only influence/)
+    fireEvent.click(form.getByRole('button', { name: 'Record aspect' }))
+    await waitFor(() => expect(api.createAspect).toHaveBeenCalledWith('tenant-1', expect.objectContaining({
+      activity: 'Steel bar purchasing', control_level: 'influence',
+    })))
+  })
+
+  it('sends an undecided aspect as null, never as a guess', async () => {
+    api.createAspect.mockResolvedValue({ aspect: aspect({ id: 'a3' }) })
+    render(<EnvironmentalAspectsPage />)
+    fireEvent.click(await screen.findByText('Record aspect'))
+    const form = within(screen.getByLabelText('Activity, product or service').closest('form') as HTMLElement)
+    expect(form.getByLabelText('Control or influence')).toHaveValue('')
+    fireEvent.click(form.getByRole('button', { name: 'Record aspect' }))
+    await waitFor(() => expect(api.createAspect).toHaveBeenCalledWith('tenant-1', expect.objectContaining({ control_level: null })))
+  })
+
+  it('marks influence-only aspects in the register, and names the decision on the sheet', async () => {
+    api.listAspects.mockResolvedValue({ aspects: [aspect({ control_level: 'influence' }), aspect({ id: 'a2', activity: 'Boiler firing' })], nextOffset: null })
+    render(<EnvironmentalAspectsPage />)
+    expect(await screen.findAllByText('Influence only')).toHaveLength(1)
+    fireEvent.click(screen.getByText('Boiler firing'))
+    expect(await screen.findByText('We control it')).toBeInTheDocument()
   })
 
   it('puts the API\'s field error under the field it names', async () => {

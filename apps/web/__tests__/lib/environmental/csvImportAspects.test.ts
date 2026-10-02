@@ -11,7 +11,10 @@ describe('parseAspectCsv', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({
       rowNumber: 2, status: 'valid', errors: [],
-      aspect: { activity: 'Parts degreasing', processArea: 'Finishing', lifeCycleStage: 'operation', flow: 'output', status: 'controlled', sourceReference: 'SDS-114', notes: null },
+      aspect: {
+        activity: 'Parts degreasing', processArea: 'Finishing', lifeCycleStage: 'operation', flow: 'output', controlLevel: 'control',
+        status: 'controlled', sourceReference: 'SDS-114', notes: null,
+      },
       score: { operatingCondition: 'normal', severity: 3, likelihood: 4 },
     })
   })
@@ -24,7 +27,7 @@ describe('parseAspectCsv', () => {
     const { rows } = parseAspectCsv('Activity,Aspect,Impact,Process Area\nBoiler firing,Combustion gases,Air quality,Utilities\n')
     expect(rows[0]).toMatchObject({
       status: 'valid', score: null,
-      aspect: { processArea: 'Utilities', lifeCycleStage: 'operation', status: 'identified', flow: null },
+      aspect: { processArea: 'Utilities', lifeCycleStage: 'operation', status: 'identified', flow: null, controlLevel: null },
     })
   })
 
@@ -40,6 +43,15 @@ describe('parseAspectCsv', () => {
       'rationale is required: say why this score',
     ]))
     expect(rows[1].status).toBe('valid')
+  })
+
+  it('reads control or influence, and names a value it does not know by its column', () => {
+    const csv = 'activity,aspect,impact,process_area,control_level\n'
+      + 'Steel bar purchasing,Upstream mining,Land use,Purchasing,Influence\n'
+      + 'Welding,Fume,Air,Fabrication,some\n'
+    const { rows } = parseAspectCsv(csv)
+    expect(rows[0].aspect.controlLevel).toBe('influence')
+    expect(rows[1].errors).toEqual(['control_level must be control, influence, or empty'])
   })
 
   it('refuses a non-integer score rather than rounding it', () => {
@@ -68,6 +80,7 @@ describe('parseAspectCsv', () => {
 describe('aspectBody', () => {
   it('uses the API\'s column names', () => {
     const { rows } = parseAspectCsv(ASPECT_CSV_TEMPLATE)
-    expect(aspectBody(rows[0].aspect)).toMatchObject({ process_area: 'Finishing', life_cycle_stage: 'operation', source_reference: 'SDS-114' })
+    expect(aspectBody(rows[0].aspect))
+      .toMatchObject({ process_area: 'Finishing', life_cycle_stage: 'operation', control_level: 'control', source_reference: 'SDS-114' })
   })
 })

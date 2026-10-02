@@ -72,6 +72,14 @@ function ContextRegisters() {
         <RegisterHealthStrip title="Scope & policy" health={health?.scopeAndPolicy.health ?? null} facts={health ? [
           { label: 'scope', value: health.scopeAndPolicy.scopeVersion ? `v${health.scopeAndPolicy.scopeVersion}` : 'none', warn: !health.scopeAndPolicy.scopeVersion },
           { label: 'policy', value: health.scopeAndPolicy.policyVersion ? `v${health.scopeAndPolicy.policyVersion}` : 'none', warn: !health.scopeAndPolicy.policyVersion },
+          ...(health.scopeAndPolicy.scopeVersion ? [{
+            label: 'control & influence', value: health.scopeAndPolicy.scopeStatesControlAndInfluence ? 'stated' : 'missing',
+            warn: !health.scopeAndPolicy.scopeStatesControlAndInfluence,
+          }] : []),
+          ...(health.scopeAndPolicy.policyVersion ? [{
+            label: 'policy communicated', value: health.scopeAndPolicy.policyCommunicatedInternally ? 'yes' : 'no',
+            warn: !health.scopeAndPolicy.policyCommunicatedInternally,
+          }] : []),
         ] : []} />
       </div>
 

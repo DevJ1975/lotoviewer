@@ -89,6 +89,7 @@ export async function POST(req: Request) {
       process_area:     aspect.processArea,
       life_cycle_stage: aspect.lifeCycleStage,
       flow:             aspect.flow,
+      control_level:    aspect.controlLevel,
       status:           aspect.status,
       controls:         aspect.controls,
       notes:            aspect.notes,

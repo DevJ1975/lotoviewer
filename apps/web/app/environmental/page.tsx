@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
-  AlertTriangle, BarChart3, ClipboardCheck, Compass, Gauge, Mountain, Scale, ScrollText,
+  AlertTriangle, BarChart3, ClipboardCheck, Compass, Gauge, Mountain, Scale, ScrollText, Workflow,
 } from 'lucide-react'
 import type { RegisterHealth } from '@soteria/core/managementSystem'
+import { EMS_RESPONSIBILITIES } from '@soteria/core/emsProcesses'
 import { useTenant } from '@/components/TenantProvider'
 import { PageHeader } from '@/components/PageHeader'
 import OpsSpinner from '@/components/OpsSpinner'
@@ -47,6 +48,13 @@ const CARDS = [
     clause: 'Clauses 4.1-4.3 & 5.2',
   },
   {
+    href:  '/environmental/processes',
+    Icon:  Workflow,
+    title: 'Processes & responsibilities',
+    desc:  'The EMS processes and how they feed each other, an owner for each, and the roles clause 5.3 assigns.',
+    clause: 'Clauses 4.4 & 5.3',
+  },
+  {
     href:  '/environmental/aspects',
     Icon:  Mountain,
     title: 'Aspects & impacts',
@@ -84,6 +92,8 @@ const CARDS = [
 ] as const
 
 const HEALTH_RANK: Record<RegisterHealth, number> = { red: 0, amber: 1, green: 2 }
+
+const ROLE_COUNT = EMS_RESPONSIBILITIES.filter(r => r.kind === 'role').length
 
 /** The context card covers two registers; it shows the worse of the two. */
 function worst(a: RegisterHealth, b: RegisterHealth): RegisterHealth {
@@ -140,6 +150,7 @@ export default function EnvironmentalHomePage() {
         return worst(health.context.health, health.scopeAndPolicy.health)
       case '/environmental/aspects':     return health.aspects.health
       case '/environmental/obligations': return health.obligations.health
+      case '/environmental/processes':   return health.responsibilities.health
       default:                           return null
     }
   }
@@ -157,6 +168,11 @@ export default function EnvironmentalHomePage() {
           health.obligations.deadlinesMissed > 0 && `${health.obligations.deadlinesMissed} deadlines missed`,
           `${health.obligations.evaluationsOverdue} evaluations overdue`,
         ].filter(Boolean).join(' · ')
+      case '/environmental/processes':
+        return [
+          health.responsibilities.rolesUnassigned > 0 ? `${health.responsibilities.rolesUnassigned} of ${ROLE_COUNT} roles unassigned` : 'roles assigned',
+          `${health.responsibilities.processesUnassigned} processes without an owner`,
+        ].join(' · ')
       case '/environmental/objectives':
         return `${counts.objectives} objectives`
       case '/environmental/management-review':

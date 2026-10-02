@@ -15,6 +15,13 @@ import {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.3.0',
+    date: '2026-10-02',
+    changes: [
+      'The report card now marks 7.2 competence, 7.3 awareness, 7.4 communication, 8.1 operational control and 8.2 emergency preparedness as "not assessed" instead of grading them from safety records, and will not call the system ready while any clause is unassessed. Added clause 5.3 to the card. Updated "How Soteria supports an EMS" for: the process map with an owner for each process and the two clause 5.3 roles (4.4, 5.3); the scope\'s control-and-influence statement and exclusions (4.3); recorded policy communications, and the policy and scope as one PDF for interested parties (5.2); and whether each aspect is one the organization controls or can only influence (6.1.2).',
+    ],
+  },
+  {
     version: '1.2.0',
     date: '2026-10-02',
     changes: [

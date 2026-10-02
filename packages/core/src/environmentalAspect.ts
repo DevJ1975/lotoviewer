@@ -19,6 +19,8 @@ export type AspectLifeCycleStage =
 export type AspectOperatingCondition = 'normal' | 'abnormal' | 'emergency'
 export type AspectFlow = 'input' | 'output'
 export type AspectStatus = 'identified' | 'controlled' | 'monitored' | 'closed'
+/** Clause 6.1.2: an aspect the organization can control, or one it can only influence (a supplier's, a carrier's, a customer's use). */
+export type AspectControlLevel = 'control' | 'influence'
 // Option lists for the register form's selects (label + value).
 export const ASPECT_LIFE_CYCLE_STAGES: readonly { value: AspectLifeCycleStage; label: string }[] = [
   { value: 'raw_material',  label: 'Raw material' },
@@ -33,6 +35,11 @@ export const ASPECT_OPERATING_CONDITIONS: readonly { value: AspectOperatingCondi
   { value: 'normal',    label: 'Normal' },
   { value: 'abnormal',  label: 'Abnormal' },
   { value: 'emergency', label: 'Emergency' },
+]
+
+export const ASPECT_CONTROL_LEVELS: readonly { value: AspectControlLevel; label: string }[] = [
+  { value: 'control',   label: 'We control it' },
+  { value: 'influence', label: 'We can only influence it' },
 ]
 
 export const ASPECT_STATUSES: readonly { value: AspectStatus; label: string }[] = [
@@ -109,6 +116,8 @@ export interface AspectInput {
   processArea:      string
   lifeCycleStage:   AspectLifeCycleStage
   flow:             AspectFlow | null
+  /** Null until the organization decides; the report card counts the undecided. */
+  controlLevel:     AspectControlLevel | null
   status:           AspectStatus
   controls:         string | null
   notes:            string | null
@@ -146,6 +155,9 @@ export function validateAspectInput(input: AspectInput): FieldError[] {
   }
   if (input.flow !== null && input.flow !== 'input' && input.flow !== 'output') {
     errors.push({ field: 'flow', message: 'must be input, output, or empty' })
+  }
+  if (input.controlLevel !== null && !ASPECT_CONTROL_LEVELS.some(c => c.value === input.controlLevel)) {
+    errors.push({ field: 'controlLevel', message: 'must be control, influence, or empty' })
   }
   if (!ASPECT_STATUSES.some(s => s.value === input.status)) {
     errors.push({ field: 'status', message: 'is not a recognised status' })

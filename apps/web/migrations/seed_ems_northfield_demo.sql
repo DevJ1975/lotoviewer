@@ -10,7 +10,7 @@
 -- database (SQL Editor or psql). It never touches an existing tenant.
 --
 -- Prereqs: migrations 027 (tenants), 209 (facilities), 294 (Environmental
--- opt-in) and 295-301 (Phase 1 registers) applied.
+-- opt-in), 295-301 (Phase 1 registers) and 302 (Phase 1.1) applied.
 --
 -- Idempotent: every row has a fixed id or natural key, so a re-run finds
 -- what it made before and changes nothing. Dates are relative to the day it
@@ -47,10 +47,16 @@ select t.id, 'Northfield Plant', 'Northfield', 'TX', true
 --
 -- The story the registers tell on the hub:
 --   context          green: five issues, climate change among them
---   scope & policy   green: scope v1 and a complete policy v1 signed after it
+--   scope & policy   green: scope v1, stating what the plant controls and
+--                    influences, and a complete policy v1 signed after it and
+--                    communicated within the plant and to customers
 --   aspects          green: all 25 scored and in review; the walk-down shows
---                    coverage gaps where abnormal or emergency is unscored
+--                    coverage gaps where abnormal or emergency is unscored;
+--                    23 the plant controls, 2 it can only influence
 --   obligations      amber: one review overdue, one evaluation overdue
+--   processes        red: no one owns a process or a clause 5.3 role, because
+--                    owners must be real members. The presenter assigns them
+--                    on the Processes screen, which makes a good live step.
 --
 -- Completed evaluations need a person and evidence files (migrations 298 and
 -- 299), which SQL cannot supply honestly. apps/web/scripts/seed-ems-northfield-
@@ -59,7 +65,7 @@ select t.id, 'Northfield Plant', 'Northfield', 'TX', true
 
 -- Fixed ids: 4e0f (for "NF") + a register number + the row's ordinal.
 --   4e0f0001 aspects   4e0f0002 obligations   4e0f0003 evaluations
---   4e0f0004 issues    4e0f0005 parties
+--   4e0f0004 issues    4e0f0005 parties       4e0f0006 policy communications
 create temp table northfield on commit drop as
 select t.id as tenant_id,
        f.id as facility_id,
@@ -100,12 +106,14 @@ on conflict (id) do nothing;
 -- Clause 4.3: where the EMS applies.
 insert into public.ms_scope_statements
   (tenant_id, discipline, version, legal_entity, physical_boundary, activities, products_services,
-   effective_from, next_review_due)
+   control_and_influence, effective_from, next_review_due)
 select nf.tenant_id, 'ems', 1,
        'Northfield Forge & Finish LLC',
        'The Northfield Plant in Northfield, TX: forge shop, heat treatment, machining and finishing buildings, and the yard inside the fence line.',
        'Closed-die forging, heat treatment, CNC machining, painting and powder coating of steel parts.',
        'Forged and finished steel components for industrial equipment makers.',
+       'The plant controls every activity inside the fence line. It can only influence the mills that make its steel, '
+       || 'the carrier that ships its parts, and how customers use and finally dispose of them.',
        current_date - 200, current_date + 165
   from northfield nf
 on conflict (tenant_id, discipline, version) do nothing;
@@ -124,6 +132,18 @@ select nf.tenant_id, 'ems', 1,
        current_date - 190, current_date + 175
   from northfield nf
 on conflict (tenant_id, discipline, version) do nothing;
+
+-- Clause 5.2: the policy communicated within the plant, and made available to customers.
+insert into public.ms_policy_communications
+  (id, tenant_id, discipline, policy_id, audience, method, communicated_on)
+select pg_temp.northfield_id(6, v.n), nf.tenant_id, 'ems', p.id, v.audience, v.method, current_date - v.days_ago
+  from northfield nf
+  join public.ms_policies p on p.tenant_id = nf.tenant_id and p.discipline = 'ems' and p.version = 1
+ cross join (values
+   (1, 'internal', 'Posted at both plant entrances and in the break room; read out at the all-hands meeting.', 185),
+   (2, 'external', 'Sent to the two largest customers with the annual supplier questionnaire.', 120)
+ ) as v(n, audience, method, days_ago)
+on conflict (id) do nothing;
 
 -- The tenant's default scoring method: exactly what the API creates on first use
 -- (DEFAULT_SCORING_METHOD in packages/core/src/scoringMethod.ts).
@@ -228,11 +248,14 @@ insert into northfield_aspects values
        'transport', 'output', 'Full-load scheduling with the carrier', 'identified',
        1, 4,  null, null,  null, null);
 
+-- Clause 6.1.2 asks which aspects the plant controls and which it can only
+-- influence: the supplier's mill and the carrier's trucks are the latter.
 insert into public.environmental_aspects
   (id, tenant_id, facility_id, process_area, activity, aspect, impact, life_cycle_stage, flow, controls, status,
-   last_reviewed_at, next_review_due)
+   control_level, last_reviewed_at, next_review_due)
 select pg_temp.northfield_id(1, a.n), nf.tenant_id, nf.facility_id, a.process_area, a.activity, a.aspect, a.impact,
        a.life_cycle_stage, a.flow, a.controls, a.status,
+       case when a.life_cycle_stage in ('raw_material', 'transport') then 'influence' else 'control' end,
        now() - interval '60 days', current_date + 120 + a.n * 7
   from northfield nf
  cross join northfield_aspects a

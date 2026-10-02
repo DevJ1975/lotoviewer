@@ -27,15 +27,16 @@ import ComplianceObligationsPage from '@/app/environmental/obligations/page'
 const health: RegistersHealth = {
   asOf: '2026-10-02',
   context: { health: 'green', active: 1, reviewOverdue: 0, climateRecorded: true },
-  scopeAndPolicy: { health: 'green', scopeVersion: 1, policyVersion: 1, policyComplete: true, signatoryStale: false },
+  scopeAndPolicy: { health: 'green', scopeVersion: 1, policyVersion: 1, policyComplete: true, signatoryStale: false, scopeStatesControlAndInfluence: true, policyCommunicatedInternally: true },
   aspects: { health: 'green', active: 1, reviewOverdue: 0, unscored: 0 },
   obligations: { health: 'green', active: 1, reviewOverdue: 0, evaluationsOverdue: 0, unscheduled: 0, deadlinesMissed: 0 },
+  responsibilities: { health: 'green', rolesUnassigned: 0, processesUnassigned: 0 },
 }
 
 function aspect(id: string): AspectRow {
   return {
     id, facility_id: 'fac-1', activity: `Activity ${id}`, aspect: 'Aspect', impact: 'Impact', process_area: 'Finishing',
-    life_cycle_stage: 'operation', flow: null, status: 'identified', controls: null, notes: null, source_reference: null,
+    life_cycle_stage: 'operation', flow: null, control_level: null, status: 'identified', controls: null, notes: null, source_reference: null,
     obsolete_at: null, obsolete_reason: null, last_reviewed_at: null, next_review_due: '2099-01-01',
     significant: false, max_score: null, current_scores: [],
   }

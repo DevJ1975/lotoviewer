@@ -8,13 +8,14 @@
 // interchangeable; any other header is reported as ignored, never guessed):
 //   activity, aspect, impact, process_area
 // Optional:
-//   life_cycle_stage, flow, status, controls, notes, source_reference
+//   life_cycle_stage, flow, control_level, status, controls, notes, source_reference
 //   operating_condition, severity, likelihood, rationale   (one first score;
 //   all four together, or none)
 
 import {
   validateAspectInput,
   validateAspectScoreInput,
+  type AspectControlLevel,
   type AspectFlow,
   type AspectInput,
   type AspectLifeCycleStage,
@@ -27,7 +28,7 @@ import { cell, normalizeHeader, parseCsv } from '@/lib/csvImport'
 
 export const ASPECT_CSV_REQUIRED = ['activity', 'aspect', 'impact', 'process_area'] as const
 const OPTIONAL = [
-  'life_cycle_stage', 'flow', 'status', 'controls', 'notes', 'source_reference',
+  'life_cycle_stage', 'flow', 'control_level', 'status', 'controls', 'notes', 'source_reference',
   'operating_condition', 'severity', 'likelihood', 'rationale',
 ] as const
 const SCORE_COLUMNS = ['operating_condition', 'severity', 'likelihood', 'rationale'] as const
@@ -54,7 +55,7 @@ export interface AspectCsvParseResult {
 /** A template to download: every column, and one invented example row. */
 export const ASPECT_CSV_TEMPLATE = [
   [...ASPECT_CSV_REQUIRED, ...OPTIONAL].join(','),
-  'Parts degreasing,Solvent vapour release,Air pollution (VOC),Finishing,operation,output,controlled,'
+  'Parts degreasing,Solvent vapour release,Air pollution (VOC),Finishing,operation,output,control,controlled,'
     + 'Lidded tank; fume extraction,,SDS-114,normal,3,4,Daily use; lid left open during breaks',
 ].join('\n') + '\n'
 
@@ -80,7 +81,7 @@ function headerIndex(header: string[]): HeaderIndex {
 /** Core validators name fields as code does; a CSV user knows them by their column names. */
 const COLUMN_FOR_FIELD: Record<string, string> = {
   processArea: 'process_area', lifeCycleStage: 'life_cycle_stage', sourceReference: 'source_reference',
-  operatingCondition: 'operating_condition',
+  operatingCondition: 'operating_condition', controlLevel: 'control_level',
 }
 const asColumnError = (e: { field: string; message: string }) => `${COLUMN_FOR_FIELD[e.field] ?? e.field} ${e.message}`
 
@@ -102,6 +103,7 @@ export function parseAspectCsv(text: string): AspectCsvParseResult {
       processArea:     get(row, 'process_area'),
       lifeCycleStage:  (optional(get(row, 'life_cycle_stage').toLowerCase()) ?? 'operation') as AspectLifeCycleStage,
       flow:            optional(get(row, 'flow').toLowerCase()) as AspectFlow | null,
+      controlLevel:    optional(get(row, 'control_level').toLowerCase()) as AspectControlLevel | null,
       status:          (optional(get(row, 'status').toLowerCase()) ?? 'identified') as AspectStatus,
       controls:        optional(get(row, 'controls')),
       notes:           optional(get(row, 'notes')),
@@ -136,6 +138,7 @@ export function aspectBody(aspect: AspectInput) {
     process_area:     aspect.processArea,
     life_cycle_stage: aspect.lifeCycleStage,
     flow:             aspect.flow,
+    control_level:    aspect.controlLevel,
     status:           aspect.status,
     controls:         aspect.controls,
     notes:            aspect.notes,

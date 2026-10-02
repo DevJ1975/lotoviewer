@@ -1,15 +1,17 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { FileDown, Loader2 } from 'lucide-react'
 import {
   EmsApiError,
   getPolicy,
   getScope,
+  recordPolicyCommunication,
   savePolicy,
   saveScope,
   type FieldError,
   type PolicyCommitmentOption,
+  type PolicyCommunicationRow,
   type PolicyRow,
   type ScopeRow,
 } from '@/lib/environmental/client'
@@ -18,15 +20,27 @@ import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_ERROR, INPUT, LABEL, LABEL_TEXT
 // Clauses 4.3 and 5.2: the EMS scope and the environmental policy. Both are
 // numbered versions that are never edited: a change is a new version, so
 // the record shows what was in force when. The policy must state every
-// commitment clause 5.2 requires before it can be saved.
+// commitment clause 5.2 requires before it can be saved, and is then
+// communicated within the organization and made available outside it: the
+// communications are recorded here, and both documents download as one PDF
+// for interested parties.
+
+const AUDIENCE_LABELS: Record<PolicyCommunicationRow['audience'], string> = {
+  internal: 'Within the organization',
+  external: 'To interested parties outside it',
+}
+
+const NOTICE = 'rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100'
 
 type PolicyState = Awaited<ReturnType<typeof getPolicy>>
 
 export function ScopePolicyTab({ tenantId, canEdit, onChanged }: { tenantId: string; canEdit: boolean; onChanged: () => void }) {
   const [scope, setScope] = useState<{ current: ScopeRow | null; versions: ScopeRow[] } | null>(null)
   const [policy, setPolicy] = useState<PolicyState | null>(null)
-  const [editing, setEditing] = useState<'scope' | 'policy' | null>(null)
+  const [editing, setEditing] = useState<'scope' | 'policy' | 'communication' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setError(null)
@@ -47,11 +61,46 @@ export function ScopePolicyTab({ tenantId, canEdit, onChanged }: { tenantId: str
     onChanged()
   }
 
+  async function exportStatement(current: { scope: ScopeRow; policy: PolicyRow }, commitments: readonly PolicyCommitmentOption[]) {
+    setExporting(true)
+    setExportError(null)
+    try {
+      const { generatePolicyScopeStatement } = await import('@/lib/pdfEmsPolicyScope')
+      const issuedOn = new Date().toISOString().slice(0, 10)
+      const bytes = await generatePolicyScopeStatement({ ...current, commitments, issuedOn })
+      const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `environmental-policy-and-scope-${issuedOn}.pdf`
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Could not create the PDF.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   if (error) return <p className={FIELD_ERROR} role="alert">{error}</p>
   if (!scope || !policy) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
 
+  const shareable = scope.current && policy.current ? { scope: scope.current, policy: policy.current } : null
+
   return (
     <div className="space-y-8">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+        <p className="text-xs text-slate-500">
+          ISO 14001 asks for the policy and the scope to be available to interested parties. Download both as one PDF to share.
+        </p>
+        <button type="button" className={BUTTON_SECONDARY} disabled={!shareable || exporting}
+          onClick={() => shareable && void exportStatement(shareable, policy.requiredCommitments)}>
+          {exporting ? <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" /> : <FileDown className="mr-1 inline h-3.5 w-3.5" />}
+          Download for interested parties
+        </button>
+        {!shareable && <p className="w-full text-[11px] text-slate-500">Available once both a scope and a policy are on record.</p>}
+        {exportError && <p className={`w-full ${FIELD_ERROR}`} role="alert">{exportError}</p>}
+      </div>
+
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold">Scope of the EMS{scope.current ? ` · version ${scope.current.version}` : ''}</h3>
@@ -64,14 +113,23 @@ export function ScopePolicyTab({ tenantId, canEdit, onChanged }: { tenantId: str
         {editing === 'scope' ? (
           <ScopeForm tenantId={tenantId} current={scope.current} onSaved={() => void saved()} onCancel={() => setEditing(null)} />
         ) : scope.current ? (
-          <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-            <Entry term="Legal entity" value={scope.current.legal_entity} />
-            <Entry term="In force from" value={scope.current.effective_from} />
-            <Entry term="Physical boundary" value={scope.current.physical_boundary} />
-            <Entry term="Activities" value={scope.current.activities} />
-            <Entry term="Products and services" value={scope.current.products_services} />
-            <Entry term="Next review" value={scope.current.next_review_due} />
-          </dl>
+          <>
+            {scope.current.control_and_influence === null && (
+              <p className={NOTICE}>
+                This version does not say what the organization can control and what it can only influence (clause 4.3 e). Save a new version that does.
+              </p>
+            )}
+            <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+              <Entry term="Legal entity" value={scope.current.legal_entity} />
+              <Entry term="In force from" value={scope.current.effective_from} />
+              <Entry term="Physical boundary" value={scope.current.physical_boundary} />
+              <Entry term="Activities" value={scope.current.activities} />
+              <Entry term="Products and services" value={scope.current.products_services} />
+              <Entry term="What we control and what we can only influence" value={scope.current.control_and_influence ?? 'Not stated'} />
+              <Entry term="Exclusions" value={scope.current.exclusions ?? 'None'} />
+              <Entry term="Next review" value={scope.current.next_review_due} />
+            </dl>
+          </>
         ) : (
           <p className="text-sm italic text-slate-500">The scope has not been documented.</p>
         )}
@@ -88,7 +146,7 @@ export function ScopePolicyTab({ tenantId, canEdit, onChanged }: { tenantId: str
           )}
         </div>
         {policy.signatoryStale && (
-          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+          <p className={NOTICE}>
             The legal entity in the scope changed after this policy was signed, so it carries a prior owner&apos;s signature. Have the current top management sign a new version.
           </p>
         )}
@@ -112,6 +170,38 @@ export function ScopePolicyTab({ tenantId, canEdit, onChanged }: { tenantId: str
         )}
         <History items={policy.versions.map(v => `v${v.version} · signed ${v.signed_at} by ${v.signatory_name}`)} />
       </section>
+
+      {policy.current && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold">Communication of the policy</h3>
+            {canEdit && editing !== 'communication' && (
+              <button type="button" className={BUTTON_SECONDARY} onClick={() => setEditing('communication')}>Record a communication</button>
+            )}
+          </div>
+          {!policy.communicatedInternally && (
+            <p className={NOTICE}>
+              Version {policy.current.version} has no record of being communicated within the organization, as clause 5.2 requires.
+            </p>
+          )}
+          {editing === 'communication' && (
+            <CommunicationForm tenantId={tenantId} policyId={policy.current.id}
+              onSaved={() => void saved()} onCancel={() => setEditing(null)} />
+          )}
+          {policy.communications.length > 0 ? (
+            <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+              {policy.communications.map(c => (
+                <li key={c.id} className="py-2">
+                  <p className="text-xs text-slate-500">{c.communicated_on} · {AUDIENCE_LABELS[c.audience]}</p>
+                  <p className="text-slate-800 dark:text-slate-100">{c.method}</p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm italic text-slate-500">No communication of this version is recorded.</p>
+          )}
+        </section>
+      )}
     </div>
   )
 }
@@ -162,6 +252,8 @@ function ScopeForm({ tenantId, current, onSaved, onCancel }: {
     physical_boundary: current?.physical_boundary ?? '',
     activities:        current?.activities ?? '',
     products_services: current?.products_services ?? '',
+    control_and_influence: current?.control_and_influence ?? '',
+    exclusions:        current?.exclusions ?? '',
     effective_from:    new Date().toISOString().slice(0, 10),
   })
   const { saving, error, fieldErrors, run } = useSaving()
@@ -177,18 +269,72 @@ function ScopeForm({ tenantId, current, onSaved, onCancel }: {
   )
   return (
     <form className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900" noValidate
-      onSubmit={e => { e.preventDefault(); void run(() => saveScope(tenantId, form), onSaved) }}>
+      onSubmit={e => {
+        e.preventDefault()
+        void run(() => saveScope(tenantId, { ...form, exclusions: form.exclusions.trim() || null }), onSaved)
+      }}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {field('legal_entity', 'Legal entity', 1)}
         {field('effective_from', 'In force from', 1)}
         {field('physical_boundary', 'Physical boundary')}
         {field('activities', 'Activities')}
         {field('products_services', 'Products and services')}
+        {field('control_and_influence', 'What we control, and what we can only influence')}
+        {field('exclusions', 'Exclusions, and why (optional)')}
       </div>
-      {generalError(error, fieldErrors, ['legal_entity', 'physical_boundary', 'activities', 'products_services', 'effective_from']) && <p className={FIELD_ERROR} role="alert">{generalError(error, fieldErrors, ['legal_entity', 'physical_boundary', 'activities', 'products_services', 'effective_from'])}</p>}
+      {generalError(error, fieldErrors, SCOPE_FIELDS) && <p className={FIELD_ERROR} role="alert">{generalError(error, fieldErrors, SCOPE_FIELDS)}</p>}
       <div className="flex justify-end gap-2">
         <button type="button" className={BUTTON_SECONDARY} onClick={onCancel} disabled={saving}>Cancel</button>
         <button type="submit" className={BUTTON_PRIMARY} disabled={saving}>{saving ? 'Saving…' : 'Save version'}</button>
+      </div>
+    </form>
+  )
+}
+
+const SCOPE_FIELDS = [
+  'legal_entity', 'physical_boundary', 'activities', 'products_services', 'control_and_influence', 'exclusions', 'effective_from',
+]
+
+function CommunicationForm({ tenantId, policyId, onSaved, onCancel }: {
+  tenantId: string; policyId: string; onSaved: () => void; onCancel: () => void
+}) {
+  const [audience, setAudience] = useState<PolicyCommunicationRow['audience']>('internal')
+  const [method, setMethod] = useState('')
+  const [communicatedOn, setCommunicatedOn] = useState(new Date().toISOString().slice(0, 10))
+  const { saving, error, fieldErrors, run } = useSaving()
+  const shown = ['audience', 'method', 'communicated_on']
+
+  return (
+    <form className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900" noValidate
+      onSubmit={e => {
+        e.preventDefault()
+        void run(() => recordPolicyCommunication(tenantId, {
+          policy_id: policyId, audience, method, communicated_on: communicatedOn,
+        }), onSaved)
+      }}>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className={LABEL}>
+          <span className={LABEL_TEXT}>Communicated</span>
+          <select className={INPUT} value={audience} onChange={e => setAudience(e.target.value as PolicyCommunicationRow['audience'])}>
+            {Object.entries(AUDIENCE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+        <label className={LABEL}>
+          <span className={LABEL_TEXT}>On</span>
+          <input className={INPUT} type="date" value={communicatedOn} onChange={e => setCommunicatedOn(e.target.value)} />
+          {errorFor(fieldErrors, 'communicated_on') && <p className={FIELD_ERROR}>{errorFor(fieldErrors, 'communicated_on')}</p>}
+        </label>
+      </div>
+      <label className={LABEL}>
+        <span className={LABEL_TEXT}>How, and to whom</span>
+        <textarea className={INPUT} rows={2} value={method} onChange={e => setMethod(e.target.value)}
+          placeholder="Posted at both entrances; read out at the all-hands meeting" />
+        {errorFor(fieldErrors, 'method') && <p className={FIELD_ERROR}>{errorFor(fieldErrors, 'method')}</p>}
+      </label>
+      {generalError(error, fieldErrors, shown) && <p className={FIELD_ERROR} role="alert">{generalError(error, fieldErrors, shown)}</p>}
+      <div className="flex justify-end gap-2">
+        <button type="button" className={BUTTON_SECONDARY} onClick={onCancel} disabled={saving}>Cancel</button>
+        <button type="submit" className={BUTTON_PRIMARY} disabled={saving}>{saving ? 'Saving…' : 'Record'}</button>
       </div>
     </form>
   )

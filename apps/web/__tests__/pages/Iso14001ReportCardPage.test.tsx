@@ -35,12 +35,13 @@ function healthy(): ReadinessSignals {
   return {
     contextIssuesActive: 8, contextIssuesReviewOverdue: 0, climateIssueRecorded: true,
     interestedPartiesActive: 5, interestedPartiesReviewOverdue: 0,
-    scopeOnFile: true, scopeReviewOverdue: false, policySignatoryStale: false,
+    scopeOnFile: true, scopeReviewOverdue: false, scopeStatesControlAndInfluence: true, policySignatoryStale: false,
+    policyCommunicatedInternally: true, rolesUnassigned: 0, processesUnassigned: 0,
     risks: { count: 12, ageDays: 30 },
     documentsRegisterLive: true, policyApproved: true, policyReviewOverdue: false,
     requiredDocsMissing: 0, docsReviewOverdue: 0, risksWithoutControls: 0,
     aspectsTotal: 14, aspectsSignificant: 5, significantUncontrolled: 0,
-    aspectsUnscored: 0, aspectsReviewOverdue: 0,
+    aspectsUnscored: 0, aspectsControlUndetermined: 0, aspectsReviewOverdue: 0,
     obligationsTotal: 6, obligationsOverdue: 0, obligationsReviewOverdue: 0,
     complianceEvalAgeDays: 50, evaluationsOverdue: 0, obligationsUnscheduled: 0, evaluationsUndetermined: 0,
     significantUnaddressed: 0,
@@ -61,8 +62,8 @@ describe('ISO 14001 report card page', () => {
     await waitFor(() => {
       expect(screen.getByText('Ready with gaps')).toBeInTheDocument()
     })
-    expect(screen.getByText('76%')).toBeInTheDocument()
-    expect(screen.getByText('16 of 21 clauses')).toBeInTheDocument()
+    expect(screen.getByText('77%')).toBeInTheDocument()
+    expect(screen.getByText('17 of 22 clauses')).toBeInTheDocument()
   })
 
   it('never shows Ready while clauses are not assessed, and names them instead', async () => {

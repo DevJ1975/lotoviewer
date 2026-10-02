@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { ADMIN_A, TENANT_A, TENANT_B, asMemberA, callAs, gateRejects, jsonRequest, resetStore, seed } from './_emsHarness'
 import { GET } from '@/app/api/environmental/registers/health/route'
+import { RESPONSIBILITY_KEYS } from '@soteria/core/emsProcesses'
 
 const TODAY = new Date().toISOString().slice(0, 10)
 const PAST = '2020-01-01'
@@ -38,6 +39,7 @@ describe('GET /api/environmental/registers/health', () => {
       scopeAndPolicy: { health: 'red', scopeVersion: null, policyVersion: null },
       aspects: { health: 'red', active: 0 },
       obligations: { health: 'red', active: 0 },
+      responsibilities: { health: 'red', rolesUnassigned: 2, processesUnassigned: 14 },
     })
   })
 
@@ -97,22 +99,71 @@ describe('GET /api/environmental/registers/health', () => {
   })
 
   it('grades scope and policy together', async () => {
-    seed('ms_scope_statements', [{ tenant_id: TENANT_A, discipline: 'ems', version: 1, legal_entity: 'Northfield Forge & Finish LLC', effective_from: '2026-01-01', next_review_due: FUTURE }])
+    seed('ms_scope_statements', [{
+      tenant_id: TENANT_A, discipline: 'ems', version: 1, legal_entity: 'Northfield Forge & Finish LLC', effective_from: '2026-01-01',
+      next_review_due: FUTURE, control_and_influence: 'On-site operations; suppliers and carriers by influence',
+    }])
     expect((await health()).body.scopeAndPolicy).toMatchObject({ health: 'red', scopeVersion: 1, policyVersion: null })
 
     seed('ms_policies', [{
-      tenant_id: TENANT_A, discipline: 'ems', version: 1, commitments: { 'ems.protect_environment': true },
+      id: 'p1', tenant_id: TENANT_A, discipline: 'ems', version: 1, commitments: { 'ems.protect_environment': true },
       signatory_name: 'Plant Manager', signed_at: '2026-02-01', next_review_due: FUTURE,
     }])
     expect((await health()).body.scopeAndPolicy).toMatchObject({ health: 'amber', policyComplete: false })
 
     seed('ms_policies', [{
-      tenant_id: TENANT_A, discipline: 'ems', version: 2, commitments: COMPLETE_COMMITMENTS,
+      id: 'p2', tenant_id: TENANT_A, discipline: 'ems', version: 2, commitments: COMPLETE_COMMITMENTS,
       signatory_name: 'Plant Manager', signed_at: '2026-02-01', next_review_due: FUTURE,
     }])
+    expect((await health()).body.scopeAndPolicy).toMatchObject({ health: 'amber', policyCommunicatedInternally: false })
+
+    seed('ms_policy_communications', [{ tenant_id: TENANT_A, discipline: 'ems', policy_id: 'p2', audience: 'internal' }])
     expect((await health()).body.scopeAndPolicy).toEqual({
       health: 'green', scopeVersion: 1, policyVersion: 2, policyComplete: true, signatoryStale: false,
+      scopeStatesControlAndInfluence: true, policyCommunicatedInternally: true,
     })
+  })
+
+  it('counts only an internal communication of the policy in force', async () => {
+    seed('ms_scope_statements', [{
+      tenant_id: TENANT_A, discipline: 'ems', version: 1, legal_entity: 'Northfield Forge & Finish LLC', effective_from: '2026-01-01',
+      next_review_due: FUTURE, control_and_influence: 'Stated',
+    }])
+    seed('ms_policies', [
+      { id: 'p1', tenant_id: TENANT_A, discipline: 'ems', version: 1, commitments: COMPLETE_COMMITMENTS, signatory_name: 'A', signed_at: '2025-01-01', next_review_due: FUTURE },
+      { id: 'p2', tenant_id: TENANT_A, discipline: 'ems', version: 2, commitments: COMPLETE_COMMITMENTS, signatory_name: 'A', signed_at: '2026-01-01', next_review_due: FUTURE },
+    ])
+    seed('ms_policy_communications', [
+      { tenant_id: TENANT_A, discipline: 'ems', policy_id: 'p1', audience: 'internal' },
+      { tenant_id: TENANT_A, discipline: 'ems', policy_id: 'p2', audience: 'external' },
+      { tenant_id: TENANT_B, discipline: 'ems', policy_id: 'p2', audience: 'internal' },
+    ])
+    expect((await health()).body.scopeAndPolicy).toMatchObject({ health: 'amber', policyCommunicatedInternally: false })
+  })
+
+  it('keeps scope and policy amber while the scope is silent on control and influence (4.3 e)', async () => {
+    seed('ms_scope_statements', [{
+      tenant_id: TENANT_A, discipline: 'ems', version: 1, legal_entity: 'Northfield Forge & Finish LLC', effective_from: '2026-01-01',
+      next_review_due: FUTURE, control_and_influence: null,
+    }])
+    seed('ms_policies', [{ id: 'p1', tenant_id: TENANT_A, discipline: 'ems', version: 1, commitments: COMPLETE_COMMITMENTS, signatory_name: 'A', signed_at: '2026-02-01', next_review_due: FUTURE }])
+    seed('ms_policy_communications', [{ tenant_id: TENANT_A, discipline: 'ems', policy_id: 'p1', audience: 'internal' }])
+    expect((await health()).body.scopeAndPolicy).toMatchObject({ health: 'amber', scopeStatesControlAndInfluence: false })
+  })
+
+  it('grades responsibilities: red without the 5.3 roles, amber with processes unowned, green when all are held', async () => {
+    const held = (key: string, owner: string | null = ADMIN_A) =>
+      ({ tenant_id: TENANT_A, discipline: 'ems', responsibility_key: key, owner_user_id: owner })
+    seed('ms_responsibilities', [held('system_conformity'), held('performance_reporting', null)])
+    expect((await health()).body.responsibilities).toEqual({ health: 'red', rolesUnassigned: 1, processesUnassigned: 14 })
+
+    resetStore()
+    seed('ms_responsibilities', [held('system_conformity'), held('performance_reporting'), { ...held('aspects'), tenant_id: TENANT_B }])
+    expect((await health()).body.responsibilities).toEqual({ health: 'amber', rolesUnassigned: 0, processesUnassigned: 14 })
+
+    resetStore()
+    seed('ms_responsibilities', RESPONSIBILITY_KEYS.map(key => held(key)))
+    expect((await health()).body.responsibilities).toEqual({ health: 'green', rolesUnassigned: 0, processesUnassigned: 0 })
   })
 
   it('lets a member read it, passes gate failures through, and refuses an OH&S discipline', async () => {

@@ -58,6 +58,8 @@ export async function POST(req: Request) {
       physical_boundary: scope.physicalBoundary,
       activities:        scope.activities,
       products_services: scope.productsServices,
+      control_and_influence: scope.controlAndInfluence,
+      exclusions:        scope.exclusions,
       effective_from:    scope.effectiveFrom,
       approved_by:       gate.userId,
     })

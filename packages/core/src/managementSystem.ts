@@ -212,17 +212,25 @@ export interface ScopeAndPolicyState {
   policyComplete:      boolean
   /** policySignatoryStale() for the current policy. */
   signatoryStale:      boolean
+  /** The current scope says what the organization can control and influence (4.3 e). */
+  scopeStatesControlAndInfluence: boolean
+  /** The current policy has been communicated within the organization (5.2). */
+  policyCommunicatedInternally:   boolean
 }
 
 /**
  * Health of clauses 4.3 and 5.2 together: red until both a scope and a
  * policy exist; amber while the policy leaves out a required commitment,
- * carries a prior owner's signature, or either document is past review.
+ * carries a prior owner's signature, or has not been communicated within the
+ * organization, while the scope does not say what the organization controls
+ * and influences, or while either document is past review.
  */
 export function scopeAndPolicyHealth(state: ScopeAndPolicyState, today: string): RegisterHealth {
   if (state.scopeNextReviewDue === null || state.policyNextReviewDue === null) return 'red'
   const reviewOverdue = state.scopeNextReviewDue < today || state.policyNextReviewDue < today
-  return reviewOverdue || !state.policyComplete || state.signatoryStale ? 'amber' : 'green'
+  const incomplete = !state.policyComplete || state.signatoryStale
+    || !state.scopeStatesControlAndInfluence || !state.policyCommunicatedInternally
+  return reviewOverdue || incomplete ? 'amber' : 'green'
 }
 
 // ── Register inputs ──────────────────────────────────────────────────────
@@ -305,6 +313,10 @@ export interface ScopeStatementInput {
   physicalBoundary: string
   activities:       string
   productsServices: string
+  /** Clause 4.3 e): the organization's authority and ability to exercise control and influence. */
+  controlAndInfluence: string
+  /** What the scope leaves out and why; null when nothing is excluded. */
+  exclusions:       string | null
   /** ISO calendar date from which this version is the scope. */
   effectiveFrom:    string
 }
@@ -316,6 +328,8 @@ export function validateScopeStatementInput(input: ScopeStatementInput): FieldEr
   requireText(errors, 'physicalBoundary', input.physicalBoundary, 4000)
   requireText(errors, 'activities', input.activities, 4000)
   requireText(errors, 'productsServices', input.productsServices, 4000)
+  requireText(errors, 'controlAndInfluence', input.controlAndInfluence, 4000)
+  limitText(errors, 'exclusions', input.exclusions, 4000)
   if (!isCalendarDate(input.effectiveFrom)) errors.push({ field: 'effectiveFrom', message: 'must be a date (YYYY-MM-DD)' })
   return errors
 }
@@ -347,5 +361,31 @@ export function validatePolicyInput(input: PolicyInput): FieldError[] {
   requireText(errors, 'signatoryName', input.signatoryName, 200)
   limitText(errors, 'signatoryTitle', input.signatoryTitle, 200)
   if (!isCalendarDate(input.signedAt)) errors.push({ field: 'signedAt', message: 'must be a date (YYYY-MM-DD)' })
+  return errors
+}
+
+/** Clause 5.2: communicated within the organization, or made available to interested parties outside it. */
+export const POLICY_AUDIENCES = ['internal', 'external'] as const
+export type PolicyAudience = typeof POLICY_AUDIENCES[number]
+
+export interface PolicyCommunicationInput {
+  audience:       PolicyAudience
+  /** How, and to whom: "Posted at both entrances; read out at the July all-hands". */
+  method:         string
+  /** ISO calendar date it was communicated. */
+  communicatedOn: string
+}
+
+/**
+ * A record that the policy reached people. Dated no later than `today`:
+ * it records a communication that happened, not a plan.
+ * @param today Today's ISO calendar date (YYYY-MM-DD).
+ */
+export function validatePolicyCommunicationInput(input: PolicyCommunicationInput, today: string): FieldError[] {
+  const errors: FieldError[] = []
+  if (!POLICY_AUDIENCES.includes(input.audience)) errors.push({ field: 'audience', message: 'must be internal or external' })
+  requireText(errors, 'method', input.method, 2000)
+  if (!isCalendarDate(input.communicatedOn)) errors.push({ field: 'communicatedOn', message: 'must be a date (YYYY-MM-DD)' })
+  else if (input.communicatedOn > today) errors.push({ field: 'communicatedOn', message: 'cannot be in the future' })
   return errors
 }

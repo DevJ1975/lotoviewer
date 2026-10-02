@@ -27,8 +27,9 @@ language sql as $$ select nextval('public.tenant_number_seq')::text $$;
 let db: PGlite
 let tenantId: string
 
-async function count(sql: string): Promise<number> {
-  return Number(await scalar<number | string>(db, sql, [tenantId]))
+/** A count, with the tenant as $1 and any further parameters after it. */
+async function count(sql: string, params: unknown[] = []): Promise<number> {
+  return Number(await scalar<number | string>(db, sql, [tenantId, ...params]))
 }
 
 /** Insert the columns a row names, as PostgREST would; omitted columns take their defaults. */
@@ -121,17 +122,32 @@ describe('seed_ems_northfield_demo.sql', () => {
       .toEqual({ reviewOverdue: 1, evaluationsOverdue: 1, unscheduled: 0, deadlinesMissed: 0 })
   })
 
-  it('has a scope and a complete policy signed after it', async () => {
-    const policy = (await db.query<{ commitments: Record<string, boolean>; signatory_name: string; signed_at: string; next_review_due: string }>(
-      `select commitments, signatory_name, signed_at::text, next_review_due::text from public.ms_policies where tenant_id = $1`, [tenantId])).rows[0]
-    const scopeReviewDue = await scalar<string>(db, `select next_review_due::text from public.ms_scope_statements where tenant_id = $1`, [tenantId])
+  it('has a scope stating control and influence, and a complete policy signed after it and communicated', async () => {
+    const policy = (await db.query<{ id: string; commitments: Record<string, boolean>; signatory_name: string; signed_at: string; next_review_due: string }>(
+      `select id, commitments, signatory_name, signed_at::text, next_review_due::text from public.ms_policies where tenant_id = $1`, [tenantId])).rows[0]
+    const scope = (await db.query<{ next_review_due: string; control_and_influence: string | null }>(
+      `select next_review_due::text, control_and_influence from public.ms_scope_statements where tenant_id = $1`, [tenantId])).rows[0]
+    const internal = await count(
+      `select count(*) from public.ms_policy_communications where tenant_id = $1 and policy_id = $2 and audience = 'internal'`, [policy.id])
     const complete = policyIsComplete({ commitments: policy.commitments, signatoryName: policy.signatory_name, signedAt: policy.signed_at }, 'ems')
     const today = (await scalar<string>(db, `select current_date::text`))!
 
     expect(complete).toBe(true)
     expect(scopeAndPolicyHealth({
-      scopeNextReviewDue: scopeReviewDue, policyNextReviewDue: policy.next_review_due, policyComplete: complete, signatoryStale: false,
+      scopeNextReviewDue: scope.next_review_due, policyNextReviewDue: policy.next_review_due, policyComplete: complete, signatoryStale: false,
+      scopeStatesControlAndInfluence: scope.control_and_influence !== null, policyCommunicatedInternally: internal > 0,
     }, today)).toBe('green')
+  })
+
+  it('says which aspects the plant controls and which it can only influence', async () => {
+    const levels = (await db.query<{ control_level: string; n: number }>(
+      `select control_level, count(*)::int as n from public.environmental_aspects where tenant_id = $1
+        group by control_level order by control_level`, [tenantId])).rows
+    expect(levels).toEqual([{ control_level: 'control', n: 23 }, { control_level: 'influence', n: 2 }])
+  })
+
+  it('leaves every process and clause 5.3 role unowned, for the presenter to assign to real members', async () => {
+    expect(await count(`select count(*) from public.ms_responsibilities where tenant_id = $1`)).toBe(0)
   })
 
   it('links interested parties\' adopted needs to the obligations they became', async () => {
@@ -154,7 +170,8 @@ describe('seed_ems_northfield_demo.sql', () => {
              (select count(*) from public.ms_context_issues where tenant_id = $1)              as issues,
              (select count(*) from public.ms_interested_parties where tenant_id = $1)          as parties,
              (select count(*) from public.ms_scope_statements where tenant_id = $1)            as scopes,
-             (select count(*) from public.ms_policies where tenant_id = $1)                    as policies`, [tenantId])).rows[0]
+             (select count(*) from public.ms_policies where tenant_id = $1)                    as policies,
+             (select count(*) from public.ms_policy_communications where tenant_id = $1)       as communications`, [tenantId])).rows[0]
     const before = await snapshot()
     await db.exec(migrationSql('seed_ems_northfield_demo.sql'))
     expect(await snapshot()).toEqual(before)

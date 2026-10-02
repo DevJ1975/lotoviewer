@@ -1,9 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import {
+  ASPECT_CONTROL_LEVELS,
   ASPECT_LIFE_CYCLE_STAGES,
   ASPECT_STATUSES,
+  type AspectControlLevel,
   type AspectFlow,
   type AspectLifeCycleStage,
   type AspectStatus,
@@ -23,6 +25,9 @@ import { TermTooltip } from '../../_components/TermTooltip'
 // not part of this form: each operating condition is scored separately,
 // with its own rationale, from the aspect's sheet.
 
+/** Fields whose errors show beside their input; any other error shows above the buttons. */
+const SHOWN_FIELDS = ['activity', 'process_area', 'aspect', 'impact', 'control_level', 'controls', 'source_reference', 'notes']
+
 interface Props {
   tenantId:     string
   /** The aspect being edited, or null to record a new one. */
@@ -41,6 +46,7 @@ export function AspectForm({ tenantId, initial, processAreas, onSaved, onCancel 
     process_area:     initial?.process_area ?? '',
     life_cycle_stage: (initial?.life_cycle_stage ?? 'operation') as AspectLifeCycleStage,
     flow:             (initial?.flow ?? '') as '' | AspectFlow,
+    control_level:    (initial?.control_level ?? '') as '' | AspectControlLevel,
     status:           (initial?.status ?? 'identified') as AspectStatus,
     controls:         initial?.controls ?? '',
     notes:            initial?.notes ?? '',
@@ -49,6 +55,7 @@ export function AspectForm({ tenantId, initial, processAreas, onSaved, onCancel 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldError[]>([])
+  const controlHintId = useId()
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm(f => ({ ...f, [key]: value }))
 
@@ -60,6 +67,7 @@ export function AspectForm({ tenantId, initial, processAreas, onSaved, onCancel 
     const body: AspectBody = {
       ...form,
       flow:             form.flow || null,
+      control_level:    form.control_level || null,
       controls:         form.controls || null,
       notes:            form.notes || null,
       source_reference: form.source_reference || null,
@@ -127,6 +135,20 @@ export function AspectForm({ tenantId, initial, processAreas, onSaved, onCancel 
             <option value="output">Output (emission, discharge, waste)</option>
           </select>
         </label>
+        <div className={LABEL}>
+          <label className={LABEL}>
+            <span className={LABEL_TEXT}>Control or influence</span>
+            <select className={INPUT} value={form.control_level} aria-describedby={controlHintId}
+              onChange={e => set('control_level', e.target.value as '' | AspectControlLevel)}>
+              <option value="">Not decided yet</option>
+              {ASPECT_CONTROL_LEVELS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+          <p id={controlHintId} className="text-[11px] text-slate-500">
+            Clause 6.1.2: a supplier&apos;s, carrier&apos;s or customer&apos;s aspect is one you can only influence.
+          </p>
+          {fieldError('control_level')}
+        </div>
         <label className={`${LABEL} sm:col-span-2`}>
           <span className={LABEL_TEXT}>Existing or planned controls (optional)</span>
           <input className={INPUT} value={form.controls} onChange={e => set('controls', e.target.value)}
@@ -151,7 +173,7 @@ export function AspectForm({ tenantId, initial, processAreas, onSaved, onCancel 
           {fieldError('notes')}
         </label>
       </div>
-      {generalError(error, fieldErrors, ['activity', 'process_area', 'aspect', 'impact', 'controls', 'source_reference', 'notes']) && <p className={FIELD_ERROR} role="alert">{generalError(error, fieldErrors, ['activity', 'process_area', 'aspect', 'impact', 'controls', 'source_reference', 'notes'])}</p>}
+      {generalError(error, fieldErrors, SHOWN_FIELDS) && <p className={FIELD_ERROR} role="alert">{generalError(error, fieldErrors, SHOWN_FIELDS)}</p>}
       <div className="flex justify-end gap-2">
         <button type="button" className={BUTTON_SECONDARY} onClick={onCancel} disabled={saving}>Cancel</button>
         <button type="submit" className={BUTTON_PRIMARY} disabled={saving}>

@@ -16,10 +16,13 @@ import * as parties from '@/app/api/environmental/interested-parties/route'
 import * as party from '@/app/api/environmental/interested-parties/[id]/route'
 import * as scope from '@/app/api/environmental/scope/route'
 import * as policy from '@/app/api/environmental/policy/route'
+import * as policyCommunications from '@/app/api/environmental/policy/communications/route'
 
 const ISSUE_A = 'c0000000-0000-4000-8000-00000000000a'
 const OBLIGATION_A = 'b0000000-0000-4000-8000-00000000000a'
 const OBLIGATION_B = 'b0000000-0000-4000-8000-00000000000b'
+const POLICY_A = 'd0000000-0000-4000-8000-00000000000a'
+const POLICY_B = 'd0000000-0000-4000-8000-00000000000b'
 
 function contextIssueRow(over: Record<string, unknown> = {}) {
   return {
@@ -42,7 +45,19 @@ const validScope = {
   physical_boundary: 'The fenced Northfield, TX site, including the stormwater outfall',
   activities: 'Forging, machining, powder coating, shipping',
   products_services: 'Forged steel brackets and fittings',
+  control_and_influence: 'We control every on-site operation; we influence our steel suppliers and freight carriers.',
   effective_from: '2026-09-01',
+}
+
+const validCommunication = {
+  policy_id: POLICY_A, audience: 'internal', method: 'Posted at both entrances; read out at the all-hands', communicated_on: '2026-09-20',
+}
+
+function policyRow(over: Record<string, unknown> = {}) {
+  return {
+    id: POLICY_A, tenant_id: TENANT_A, discipline: 'ems', version: 1, ...validPolicy,
+    next_review_due: '2027-09-15', created_at: '2026-09-15T00:00:00Z', ...over,
+  }
 }
 
 beforeEach(resetStore)
@@ -62,6 +77,7 @@ describe('gating, for every register route', () => {
     ['PATCH interested-party', () => party.PATCH(jsonRequest('/x', 'PATCH', { name: 'n' }), idContext(ISSUE_A))],
     ['POST scope', () => scope.POST(jsonRequest('/x', 'POST', validScope))],
     ['POST policy', () => policy.POST(jsonRequest('/x', 'POST', validPolicy))],
+    ['POST policy communication', () => policyCommunications.POST(jsonRequest('/x', 'POST', validCommunication))],
   ]
 
   it.each([...reads, ...writeCalls])('%s passes an authentication failure through', async (_name, call) => {
@@ -305,6 +321,22 @@ describe('scope', () => {
     expect(bad.status).toBe(400)
   })
 
+  it('requires what the organization can control and influence (4.3 e), and keeps exclusions when given', async () => {
+    const missing = await scope.POST(jsonRequest('/x', 'POST', { ...validScope, control_and_influence: ' ' }))
+    expect(missing.status).toBe(400)
+    expect((await missing.json()).fieldErrors).toEqual([{ field: 'control_and_influence', message: 'is required' }])
+
+    const res = await scope.POST(jsonRequest('/x', 'POST', { ...validScope, exclusions: '  The leased warehouse, run by its landlord.  ' }))
+    expect((await res.json()).scope).toMatchObject({
+      control_and_influence: validScope.control_and_influence, exclusions: 'The leased warehouse, run by its landlord.',
+    })
+  })
+
+  it('stores no exclusions as null, not as an empty statement', async () => {
+    await scope.POST(jsonRequest('/x', 'POST', { ...validScope, exclusions: '' }))
+    expect(writes[0].payload).toMatchObject({ exclusions: null })
+  })
+
   it('answers 409 when another admin saved the same version first', async () => {
     failNext('ms_scope_statements', { code: '23505', message: 'duplicate key' }, 'insert')
     const res = await scope.POST(jsonRequest('/x', 'POST', validScope))
@@ -380,6 +412,68 @@ describe('policy', () => {
 
   it('reports no policy as incomplete rather than failing', async () => {
     const body = await (await policy.GET(jsonRequest('/api/environmental/policy', 'GET'))).json()
-    expect(body).toMatchObject({ current: null, versions: [], complete: false, signatoryStale: false })
+    expect(body).toMatchObject({
+      current: null, versions: [], complete: false, signatoryStale: false, communications: [], communicatedInternally: false,
+    })
+  })
+
+  it('reports how the policy in force has been communicated, newest first, and only that version\'s', async () => {
+    seed('ms_policies', [policyRow({ id: 'p-old', version: 1 }), policyRow({ version: 2 })])
+    seed('ms_policy_communications', [
+      { tenant_id: TENANT_A, discipline: 'ems', policy_id: 'p-old', audience: 'internal', method: 'Old notice', communicated_on: '2025-01-10' },
+      { tenant_id: TENANT_A, discipline: 'ems', policy_id: POLICY_A, audience: 'external', method: 'Company website', communicated_on: '2026-09-01' },
+      { tenant_id: TENANT_A, discipline: 'ems', policy_id: POLICY_A, audience: 'external', method: 'Sent to our main customer', communicated_on: '2026-09-25' },
+    ])
+    const body = await (await policy.GET(jsonRequest('/api/environmental/policy', 'GET'))).json()
+    expect(body.communications.map((c: { method: string }) => c.method)).toEqual(['Sent to our main customer', 'Company website'])
+    // Version 1 was communicated within the organization; version 2 has only been published outside it.
+    expect(body.communicatedInternally).toBe(false)
+  })
+})
+
+describe('policy communications', () => {
+  beforeEach(() => seed('ms_policies', [policyRow(), policyRow({ id: POLICY_B, tenant_id: TENANT_B })]))
+
+  it('records a communication of the tenant\'s policy, by whom, in the policy\'s discipline', async () => {
+    const res = await policyCommunications.POST(jsonRequest('/x', 'POST', { ...validCommunication, tenant_id: TENANT_B, recorded_by: 'x' }))
+    expect(res.status).toBe(201)
+    expect((await res.json()).communication).toMatchObject({
+      tenant_id: TENANT_A, discipline: 'ems', policy_id: POLICY_A, audience: 'internal',
+      communicated_on: '2026-09-20', recorded_by: ADMIN_A,
+    })
+  })
+
+  it('takes the discipline from the policy, never from the body', async () => {
+    const INTEGRATED = 'd0000000-0000-4000-8000-0000000000c1'
+    seed('ms_policies', [policyRow({ id: INTEGRATED, discipline: 'integrated', version: 1 })])
+    const res = await policyCommunications.POST(jsonRequest('/x', 'POST', { ...validCommunication, policy_id: INTEGRATED, discipline: 'ems' }))
+    expect(res.status).toBe(201)
+    expect((await res.json()).communication.discipline).toBe('integrated')
+  })
+
+  it('answers 404 for another tenant\'s policy, and writes nothing', async () => {
+    const res = await policyCommunications.POST(jsonRequest('/x', 'POST', { ...validCommunication, policy_id: POLICY_B }))
+    expect(res.status).toBe(404)
+    expect(writes).toEqual([])
+  })
+
+  it('defaults the date to today, and refuses one in the future', async () => {
+    const today = new Date().toISOString().slice(0, 10)
+    const res = await policyCommunications.POST(jsonRequest('/x', 'POST', { ...validCommunication, communicated_on: undefined }))
+    expect((await res.json()).communication.communicated_on).toBe(today)
+    const future = await policyCommunications.POST(jsonRequest('/x', 'POST', { ...validCommunication, communicated_on: '2999-01-01' }))
+    expect(future.status).toBe(400)
+    expect((await future.json()).fieldErrors).toEqual([{ field: 'communicated_on', message: 'cannot be in the future' }])
+  })
+
+  it('reports every field problem at once, with the column names', async () => {
+    const res = await policyCommunications.POST(jsonRequest('/x', 'POST', { policy_id: POLICY_A, audience: 'everyone', method: '' }))
+    expect((await res.json()).fieldErrors.map((e: { field: string }) => e.field)).toEqual(['audience', 'method'])
+  })
+
+  it('refuses a policy id that is not an id', async () => {
+    const res = await policyCommunications.POST(jsonRequest('/x', 'POST', { ...validCommunication, policy_id: 'latest' }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).fieldErrors).toEqual([{ field: 'policy_id', message: 'must be a policy id' }])
   })
 })

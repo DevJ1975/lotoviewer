@@ -11,26 +11,27 @@ recording an evaluation result, which the assigned evaluator may also do.
 
 ## The hub: `/environmental`
 
-The **Context, scope & policy**, **Aspects & impacts** and **Compliance obligations** cards on the hub each
-carry a traffic light. The Context card shows the worse of its two registers: context,
-and scope and policy.
+The **Context, scope & policy**, **Processes & responsibilities**, **Aspects & impacts** and
+**Compliance obligations** cards on the hub each carry a traffic light. The Context card
+shows the worse of its two registers: context, and scope and policy.
 
 | Light | Meaning |
 | --- | --- |
-| Red | The register is empty, or a required record (scope or policy) is missing. |
-| Amber | Something needs attention: a review is overdue, an aspect is unscored, a compliance deadline has passed with the obligation still open, an evaluation is overdue, an obligation has no evaluation frequency, the policy is incomplete, or no climate-change determination is recorded. |
+| Red | The register is empty, a required record (scope or policy) is missing, or no one holds one of the two roles clause 5.3 names. |
+| Amber | Something needs attention: a review is overdue, an aspect is unscored, a compliance deadline has passed with the obligation still open, an evaluation is overdue, an obligation has no evaluation frequency, the policy is incomplete or has not been communicated within the organization, the scope does not say what the organization controls and influences, no climate-change determination is recorded, or an EMS process has no owner. |
 | Green | Every record is in date and complete. |
 
 A light changes as soon as the underlying record does, and each card opens the
 register behind it. The ISO 14001 report card (`/environmental/report-card`) uses the
 same records, and its "fix" links open the right tab of the right screen.
 
-The report card marks five clauses **Not assessed**: 7.2 competence, 7.3 awareness,
-7.4 communication, 8.1 operational control and 8.2 emergency preparedness. The
-platform holds no environmental record for them yet. Safety training, toolbox talks
-and safety inspections are not evidence of these clauses, so the card does not grade
-them from those records. Check these clauses against your own records before an
-audit. While any clause is not assessed, the card says *Ready with gaps* at best.
+The report card grades clause 5.3 from the Processes page. It marks five clauses
+**Not assessed**: 7.2 competence, 7.3 awareness, 7.4 communication, 8.1 operational
+control and 8.2 emergency preparedness. The platform holds no environmental record for
+them yet. Safety training, toolbox talks and safety inspections are not evidence of
+these clauses, so the card does not grade them from those records. Check these clauses
+against your own records before an audit. While any clause is not assessed, the card
+says *Ready with gaps* at best.
 
 ---
 
@@ -69,8 +70,11 @@ Who has a stake in your EMS, and what they need from you.
 ### Scope and policy (4.3 and 5.2)
 
 - **Document the scope**: the **Legal entity**, the **Physical boundary**, the
-  **Activities** and the **Products and services**. Each save creates a new
-  version, and earlier versions stay listed.
+  **Activities**, the **Products and services**, and **What we control, and what we can
+  only influence** (clause 4.3 e). If the scope leaves anything out, say what and why
+  under **Exclusions, and why**. Each save creates a new version, and earlier versions
+  stay listed. A version saved before this field existed is flagged until a new version
+  states it.
 - **Record the policy**: the **Policy text**, who it is **Signed by**, and the date
   **Signed on**. You cannot save it until you tick all three commitments that clause
   5.2 requires:
@@ -81,6 +85,33 @@ Who has a stake in your EMS, and what they need from you.
 - If the scope's legal entity changes after the policy was signed, the page warns
   that the policy *carries a prior owner's signature*. The light stays amber until top
   management signs a new version.
+- **Record a communication** each time the policy reaches people: choose *Within the
+  organization* or *To interested parties outside it*, say **How, and to whom**, and give
+  the date. Clause 5.2 requires the policy to be communicated within the organization,
+  so the light stays amber until the version in force has one internal communication.
+  Communications are never edited or deleted. To correct one, record the right one.
+- **Download for interested parties** saves the policy and the scope as one PDF, ready
+  to send to a customer, a regulator or a neighbour. It contains only what the two
+  documents state: no review dates and no names other than the policy's signatory.
+
+---
+
+## Processes and responsibilities: `/environmental/processes`
+
+Clauses 4.4 and 5.3. The page maps the processes an EMS needs and how each one's
+outputs feed the others, with an owner for each.
+
+- The two roles clause 5.3 names come first: **Ensuring the EMS conforms to ISO 14001**
+  and **Reporting EMS performance to top management**. Until both have an owner, the
+  light is red.
+- Every process is listed, including those the platform does not keep records for yet
+  (competence, communication, documented information, operational control, emergency
+  preparedness and internal audit). The organization runs them on its own records, but
+  each still needs an owner. Until each has one, the light is amber.
+- An admin picks the owner from the organization's members, and the clear button
+  removes it. Everyone in the organization can see who owns what, because clause 5.3
+  asks for responsibilities to be communicated.
+- If an owner leaves the organization, the page says so: reassign the process.
 
 ---
 
@@ -96,9 +127,14 @@ the environment, and which of those interactions are significant.
   the **Life-cycle stage**, the **Flow** (*Input* for resource use, *Output* for
   emissions, discharges and waste), the **Control status**, **Existing or planned
   controls**, a **Source reference** and **Notes**.
+- **Control or influence.** Clause 6.1.2 asks which aspects the organization can
+  control and which it can only influence. The second kind includes a supplier's
+  emissions, a carrier's trucks, and how customers use and dispose of what you make. The
+  register marks the second kind *Influence only*. Until each aspect is decided, the
+  report card lists the undecided ones under 6.1.2.
 - **Import CSV** loads many aspects at once. Use **Download template** for the
-  columns. `activity`, `aspect`, `impact` and `process_area` are required. A row can
-  also carry one score (`operating_condition`, `severity`, `likelihood` and
+  columns. `activity`, `aspect`, `impact` and `process_area` are required.
+  `control_level` takes `control` or `influence`. A row can also carry one score (`operating_condition`, `severity`, `likelihood` and
   `rationale`). The import reports each row it could not load.
 
 ### Scoring
@@ -210,7 +246,8 @@ record in it is invented. To load it into a development or demo database:
 
 1. Run `apps/web/migrations/seed_ems_northfield_demo.sql` in the SQL editor. This
    loads every register, two open evaluations (one overdue), and a deliberately
-   overdue obligation review.
+   overdue obligation review. Process owners must be real members, so the seed assigns
+   none. Assigning them on the Processes page makes a good live step in a demo.
 2. Optionally, to add the completed evaluations, run
    `node apps/web/scripts/seed-ems-northfield-evidence.mjs --as <your email>`, with
    `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set. This adds:

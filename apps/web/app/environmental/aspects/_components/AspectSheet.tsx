@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import {
+  ASPECT_CONTROL_LEVELS,
   ASPECT_OPERATING_CONDITIONS,
   scoreAspect as scoreUnderMethod,
   type AspectOperatingCondition,
@@ -107,6 +108,8 @@ export function AspectSheet({ tenantId, aspectId, canEdit, processAreas, onChang
             <Fact label="Process area" value={aspect.process_area ?? '—'} />
             <Fact label="Life-cycle stage" value={aspect.life_cycle_stage.replace(/_/g, ' ')} />
             <Fact label="Flow" value={aspect.flow ?? '—'} />
+            <Fact label="Control or influence"
+              value={ASPECT_CONTROL_LEVELS.find(c => c.value === aspect.control_level)?.label ?? 'Not decided yet'} />
             <Fact label="Control status" value={aspect.status} />
             <Fact label="Controls" value={aspect.controls ?? 'None recorded'} wide />
             {aspect.source_reference && <Fact label="Source" value={aspect.source_reference} />}

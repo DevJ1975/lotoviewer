@@ -5,16 +5,16 @@ import { ChevronDown, X, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
 
-// Member picker for the risk wizard's Assign step. Loads the
-// active tenant's tenant_memberships once on mount + caches them
-// across the three picker instances (owner / reviewer / approver)
-// so we don't fire 3 identical fetches.
+// Member picker for the risk wizard's Assign step, also used by the
+// environmental process map. Loads the active tenant's tenant_memberships
+// once and caches them across every picker on the page (owner / reviewer /
+// approver here; one per process there) so they share one fetch.
 //
 // Uses controlled-component state — caller owns the user_id; the
 // picker just renders display + dispatches changes. Empty string
 // means "unassigned."
 
-interface Member {
+export interface Member {
   user_id:   string
   role:      string
   email:     string | null
@@ -33,11 +33,11 @@ interface Props {
 // switch via the `tenant?.id` dep.
 const cache = new Map<string, Member[]>()
 
-export default function MemberPicker({ value, onChange, placeholder = 'Unassigned' }: Props) {
+/** The active tenant's members, for pickers and for showing who holds a role read-only. */
+export function useTenantMembers(): { members: Member[] | null; error: string | null } {
   const { tenant } = useTenant()
   const [members, setMembers] = useState<Member[] | null>(null)
   const [error, setError]     = useState<string | null>(null)
-  const [open, setOpen]       = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -68,6 +68,18 @@ export default function MemberPicker({ value, onChange, placeholder = 'Unassigne
     return () => { cancelled = true }
   }, [tenant?.id])
 
+  return { members, error }
+}
+
+/** How a member is named on screen: their name, else their email, else their id. */
+export function memberName(member: Member): string {
+  return member.full_name ?? member.email ?? member.user_id
+}
+
+export default function MemberPicker({ value, onChange, placeholder = 'Unassigned' }: Props) {
+  const { members, error } = useTenantMembers()
+  const [open, setOpen]    = useState(false)
+
   const selected = members?.find(m => m.user_id === value) ?? null
 
   return (
@@ -80,7 +92,7 @@ export default function MemberPicker({ value, onChange, placeholder = 'Unassigne
         >
           {selected ? (
             <span>
-              <span className="font-medium">{selected.full_name ?? selected.email ?? selected.user_id}</span>
+              <span className="font-medium">{memberName(selected)}</span>
               {selected.role && (
                 <span className="ml-2 text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   {selected.role}
@@ -136,7 +148,7 @@ export default function MemberPicker({ value, onChange, placeholder = 'Unassigne
               }
             >
               <div className="font-medium text-slate-800 dark:text-slate-200">
-                {m.full_name ?? m.email ?? m.user_id}
+                {memberName(m)}
               </div>
               <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2">
                 {m.email && <span>{m.email}</span>}

@@ -121,7 +121,7 @@ describe('currentScoresByCondition', () => {
 describe('validateAspectInput', () => {
   const valid: AspectInput = {
     activity: 'Parts degreasing', aspect: 'Solvent vapour release', impact: 'Air pollution (VOC)',
-    processArea: 'Finishing', lifeCycleStage: 'operation', flow: 'output', status: 'identified',
+    processArea: 'Finishing', lifeCycleStage: 'operation', flow: 'output', controlLevel: 'control', status: 'identified',
     controls: null, notes: null, sourceReference: null,
   }
   const fields = (input: AspectInput) => validateAspectInput(input).map(e => e.field)
@@ -147,10 +147,16 @@ describe('validateAspectInput', () => {
     expect(fields({ ...valid, lifeCycleStage: 'mining' as AspectInput['lifeCycleStage'] })).toEqual(['lifeCycleStage'])
     expect(fields({ ...valid, flow: 'sideways' as AspectInput['flow'] })).toEqual(['flow'])
     expect(fields({ ...valid, status: 'obsolete' as AspectInput['status'] })).toEqual(['status'])
+    expect(fields({ ...valid, controlLevel: 'partial' as AspectInput['controlLevel'] })).toEqual(['controlLevel'])
   })
 
   it('accepts an empty flow', () => {
     expect(fields({ ...valid, flow: null })).toEqual([])
+  })
+
+  it('accepts an aspect it can only influence, or one not yet decided', () => {
+    expect(fields({ ...valid, controlLevel: 'influence' })).toEqual([])
+    expect(fields({ ...valid, controlLevel: null })).toEqual([])
   })
 })
 

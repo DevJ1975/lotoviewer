@@ -12,12 +12,13 @@ function signals(overrides: Partial<ReadinessSignals> = {}): ReadinessSignals {
   return {
     contextIssuesActive: 0, contextIssuesReviewOverdue: 0, climateIssueRecorded: false,
     interestedPartiesActive: 0, interestedPartiesReviewOverdue: 0,
-    scopeOnFile: false, scopeReviewOverdue: false, policySignatoryStale: false,
+    scopeOnFile: false, scopeReviewOverdue: false, scopeStatesControlAndInfluence: false, policySignatoryStale: false,
+    policyCommunicatedInternally: false, rolesUnassigned: 2, processesUnassigned: 14,
     risks: { count: 12, ageDays: 30 },
     documentsRegisterLive: false, policyApproved: false, policyReviewOverdue: false,
     requiredDocsMissing: 0, docsReviewOverdue: 0, risksWithoutControls: 0,
     aspectsTotal: 14, aspectsSignificant: 5, significantUncontrolled: 1,
-    aspectsUnscored: 0, aspectsReviewOverdue: 0,
+    aspectsUnscored: 0, aspectsControlUndetermined: 0, aspectsReviewOverdue: 0,
     obligationsTotal: 6, obligationsOverdue: 1, obligationsReviewOverdue: 0,
     complianceEvalAgeDays: 50, evaluationsOverdue: 0, obligationsUnscheduled: 0, evaluationsUndetermined: 0,
     significantUnaddressed: 1,
@@ -88,6 +89,7 @@ describe('generateIso14001ReportCard', () => {
       significantUncontrolled: 0, significantUnaddressed: 0,
       obligationsOverdue: 0, objectivesStaleReadings: 0,
       contextIssuesActive: 8, climateIssueRecorded: true, interestedPartiesActive: 5, scopeOnFile: true,
+      scopeStatesControlAndInfluence: true, policyCommunicatedInternally: true, rolesUnassigned: 0, processesUnassigned: 0,
     }))
     // Ready with gaps, not Ready: clauses 7.2 to 8.2 are not assessed.
     expect(card.band).toBe('ready_with_gaps')

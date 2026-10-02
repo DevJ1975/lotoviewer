@@ -5,7 +5,7 @@ This file answers the nine Phase 0 discovery questions in
 excerpt each, then inventories the ISO 14001 features the repo already ships.
 Keep it current: every phase updates it when it learns something new.
 
-**As of:** 2026-10-01, `main` at `7c26827` (v1.19.0). Section 11 was added for Phase 1 on 2026-10-02.
+**As of:** 2026-10-01, `main` at `7c26827` (v1.19.0). Section 11 was added for Phase 1 on 2026-10-02, and extended for Phase 1.1 the same day.
 
 **The one finding that changes the plan:** the plan assumes a greenfield EMS, but the
 repo already has an `environmental` (ISO 14001) module plus hazardous waste,
@@ -395,6 +395,22 @@ Things learned along the way:
   lives in `packages/core` so it can be tested there.
 - In Postgres, `least(null, 5)` is 5, not null. Rollbacks that rebuild a required column
   from optional data must use `coalesce`.
+
+### Phase 1.1: the ISO 14001 audit's fixes
+
+Added 2026-10-02 on `feat/ems-phase1-1-audit-fixes`. An ISO 14001 lead-auditor review of
+Phase 1 found the report card grading five clauses from safety records, and four minor
+gaps: control or influence on aspects, the scope's control-and-influence statement and
+exclusions, policy communication, and owners with a process map.
+
+| Concern | Where |
+| --- | --- |
+| Schema | `apps/web/migrations/302_ems_phase1_audit_fixes.sql` and `302_rollback.sql`: `environmental_aspects.control_level`, the scope's `control_and_influence` and `exclusions`, `ms_policy_communications`, `ms_responsibilities`. Re-running 297 after 302 fails cleanly, because 297's view lacks `control_level` |
+| Report card | `packages/core/src/iso14001Readiness.ts`: a `not_assessed` verdict for clauses with no environmental source yet (7.2, 7.3, 7.4, 8.1, 8.2), replacing `not_applicable`; clause 5.3 added to `iso14001.ts` |
+| Process map | `packages/core/src/emsProcesses.ts` (the static map, its keys and coverage), `/api/environmental/responsibilities`, and `app/environmental/processes/page.tsx` |
+| Policy | `POST /api/environmental/policy/communications`; `lib/pdfEmsPolicyScope.ts` builds the PDF for interested parties in the browser |
+| Members | `useTenantMembers()` and `memberName()` in `app/risk/_components/wizard/MemberPicker.tsx`, shared by the risk wizard and the process map |
+| Tests | `emsPhase1_1.db.test.ts` (302 for real), `responsibilities.test.ts`, `pdfEmsPolicyScope.test.ts` (reads the printed text back), `EnvironmentalProcessesPage.test.tsx`, `EnvironmentalHubPage.test.tsx` |
 
 ## 12. Pre-existing defects noticed during discovery (not fixed here)
 

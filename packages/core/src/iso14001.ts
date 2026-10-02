@@ -47,7 +47,12 @@ export const ISO14001_CLAUSE_MAP: readonly Iso14001ClauseEntry[] = [
   {
     code:    '5.2',
     title:   'Environmental policy',
-    sources: ['ms_policies'],
+    sources: ['ms_policies', 'ms_policy_communications'],
+  },
+  {
+    code:    '5.3',
+    title:   'Organizational roles, responsibilities and authorities',
+    sources: ['ms_responsibilities'],
   },
   {
     code:    '6.1.1',

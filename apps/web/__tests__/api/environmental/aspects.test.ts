@@ -114,6 +114,20 @@ describe('POST /aspects', () => {
     expect((await res.json()).fieldErrors.map((e: { field: string }) => e.field)).toEqual(['aspect', 'impact', 'process_area'])
   })
 
+  it('records whether the organization controls the aspect or only influences it (6.1.2)', async () => {
+    const res = await aspects.POST(jsonRequest('/x', 'POST', { ...newAspect, control_level: 'influence' }))
+    expect(res.status).toBe(201)
+    expect((await res.json()).aspect).toMatchObject({ control_level: 'influence' })
+  })
+
+  it('leaves control or influence undecided when not given, and refuses anything else', async () => {
+    await aspects.POST(jsonRequest('/x', 'POST', newAspect))
+    expect(writes[0].payload).toMatchObject({ control_level: null })
+    const res = await aspects.POST(jsonRequest('/x', 'POST', { ...newAspect, control_level: 'partial' }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).fieldErrors).toEqual([{ field: 'control_level', message: 'must be control, influence, or empty' }])
+  })
+
   it('never stores a score sent with the aspect', async () => {
     await aspects.POST(jsonRequest('/x', 'POST', { ...newAspect, severity: 5, likelihood: 5, significant: true }))
     expect(writes[0].payload).not.toHaveProperty('severity')
@@ -210,6 +224,12 @@ describe('GET and PATCH /aspects/[id]', () => {
     const res = await aspect.PATCH(jsonRequest('/x', 'PATCH', { controls: 'Lid kept closed', severity: 5 }), idContext(ASPECT_A))
     expect(res.status).toBe(200)
     expect(writes.at(-1)?.payload).toEqual({ updated_by: ADMIN_A, controls: 'Lid kept closed' })
+  })
+
+  it('lets an admin decide control or influence on an existing aspect', async () => {
+    const res = await aspect.PATCH(jsonRequest('/x', 'PATCH', { control_level: 'control' }), idContext(ASPECT_A))
+    expect(res.status).toBe(200)
+    expect(writes.at(-1)?.payload).toEqual({ updated_by: ADMIN_A, control_level: 'control' })
   })
 
   it('refuses an edit that changes no editable field, such as a score', async () => {

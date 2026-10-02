@@ -219,6 +219,9 @@ export default function EnvironmentalAspectsPage() {
                       {row.activity}
                     </button>
                     <p className="text-xs text-slate-500 dark:text-slate-400">{row.aspect} → {row.impact}</p>
+                    {row.control_level === 'influence' && (
+                      <p className="text-[11px] font-semibold text-sky-700 dark:text-sky-300">Influence only</p>
+                    )}
                     {row.obsolete_at && <p className="text-[11px] italic text-slate-400">Obsolete: {row.obsolete_reason}</p>}
                   </td>
                   <td className="px-4 py-2 text-xs text-slate-600 dark:text-slate-300">{row.process_area ?? '—'}</td>

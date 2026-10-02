@@ -108,12 +108,21 @@ export interface ReadinessSignals {
   // 4.3 Scope
   scopeOnFile:           boolean
   scopeReviewOverdue:    boolean
+  /** The scope in force says what the organization can control and influence (4.3 e). */
+  scopeStatesControlAndInfluence: boolean
   // 5.2 Policy (the versioned policy record)
   /** The policy in force is signed and states every commitment its standard requires. */
   policyApproved:        boolean
   policyReviewOverdue:   boolean
   /** The legal entity changed after the policy was signed (Lesson L3). */
   policySignatoryStale:  boolean
+  /** The policy in force has a recorded communication within the organization. */
+  policyCommunicatedInternally: boolean
+  // 5.3 Roles (the responsibilities on the EMS process map)
+  /** Clause 5.3 a) and b) roles with no one assigned. */
+  rolesUnassigned:       number
+  /** EMS processes with no owner. */
+  processesUnassigned:   number
   // 6.1.1 and 6.1.4 (the risk register)
   risks:                 Recency
   // 7.5 Documented information (phase 3 tables)
@@ -128,6 +137,8 @@ export interface ReadinessSignals {
   significantUncontrolled: number
   /** Active aspects with no score under any operating condition. */
   aspectsUnscored:       number
+  /** Active aspects not yet marked as controlled or only influenced. */
+  aspectsControlUndetermined: number
   aspectsReviewOverdue:  number
   // 6.1.3 / 9.1.2 Compliance obligations (the environmental register)
   obligationsTotal:      number
@@ -246,8 +257,10 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
   // 4.3 — Scope of the EMS.
   push('4.3', '/environmental/context?tab=scope', [
     [!s.scopeOnFile, 'gap', 'The scope of the environmental management system is not documented.'],
+    [!s.scopeStatesControlAndInfluence, 'attention',
+      'The EMS scope does not say what the organization can control and what it can only influence (4.3 e).'],
     [s.scopeReviewOverdue, 'attention', 'The EMS scope is past its review date.'],
-  ], ['conforming', 'The EMS scope is documented and within its review date.'])
+  ], ['conforming', 'The EMS scope is documented, says what the organization controls and influences, and is within its review date.'])
 
   // 5.2 — Environmental policy.
   push('5.2', '/environmental/context?tab=policy', [
@@ -255,8 +268,19 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
       'No signed environmental policy stating every commitment the standard requires.'],
     [s.policySignatoryStale, 'attention',
       'The policy was signed before the organization’s legal entity changed, so it carries a prior owner’s signature.'],
+    [!s.policyCommunicatedInternally, 'attention',
+      'The policy in force has no record of being communicated within the organization.'],
     [s.policyReviewOverdue, 'attention', 'The environmental policy is past its scheduled review date.'],
-  ], ['conforming', 'A signed environmental policy states every required commitment and is within its review cycle.'])
+  ], ['conforming',
+    'A signed environmental policy states every required commitment, has been communicated within the organization, and is within its review cycle.'])
+
+  // 5.3 — Roles, responsibilities and authorities.
+  push('5.3', '/environmental/processes', [
+    [s.rolesUnassigned > 0, 'gap',
+      'Clause 5.3’s roles are not all assigned: someone must answer for the EMS conforming to the standard and for reporting its performance to top management.'],
+    [s.processesUnassigned > 0, 'attention',
+      `${count(s.processesUnassigned, 'EMS process has', 'EMS processes have')} no owner.`],
+  ], ['conforming', 'Responsibility for the EMS and for reporting its performance is assigned, and every EMS process has an owner.'])
 
   // 6.1.1 — Actions to address risks and opportunities.
   push('6.1.1', '/risk', [
@@ -272,6 +296,8 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
       `${count(s.aspectsUnscored, 'aspect has', 'aspects have')} not been scored under any operating condition.`],
     [s.significantUncontrolled > 0, 'attention',
       `${count(s.significantUncontrolled, 'significant aspect has', 'significant aspects have')} no operational control or linked risk.`],
+    [s.aspectsControlUndetermined > 0, 'attention',
+      `${count(s.aspectsControlUndetermined, 'aspect does', 'aspects do')} not record whether the organization controls ${s.aspectsControlUndetermined === 1 ? 'it' : 'them'} or can only influence ${s.aspectsControlUndetermined === 1 ? 'it' : 'them'}.`],
     [s.aspectsReviewOverdue > 0, 'attention',
       `${count(s.aspectsReviewOverdue, 'aspect is past its', 'aspects are past their')} review date.`],
   ], ['conforming',

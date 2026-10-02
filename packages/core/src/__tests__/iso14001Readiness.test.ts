@@ -20,9 +20,13 @@ function healthy(): ReadinessSignals {
     interestedPartiesReviewOverdue: 0,
     scopeOnFile:           true,
     scopeReviewOverdue:    false,
+    scopeStatesControlAndInfluence: true,
     policyApproved:        true,
     policyReviewOverdue:   false,
     policySignatoryStale:  false,
+    policyCommunicatedInternally: true,
+    rolesUnassigned:       0,
+    processesUnassigned:   0,
     risks:                 { count: 12, ageDays: 30 },
     documentsRegisterLive: true,
     requiredDocsMissing:   0,
@@ -32,6 +36,7 @@ function healthy(): ReadinessSignals {
     aspectsSignificant:    5,
     significantUncontrolled: 0,
     aspectsUnscored:       0,
+    aspectsControlUndetermined: 0,
     aspectsReviewOverdue:  0,
     obligationsTotal:      6,
     obligationsOverdue:    0,
@@ -110,9 +115,9 @@ describe('assessIso14001 — a fully evidenced EMS', () => {
 })
 
 describe('assessIso14001 — clauses with no environmental source', () => {
-  // MJ-1 of the Phase 1 audit: these clauses used to read LOTO training,
-  // toolbox talks, Prop 65 notices and any inspection. Safety records are
-  // not environmental evidence, so the card must not grade from them.
+  // These clauses used to read LOTO training, toolbox talks, Prop 65
+  // notices and any inspection. Safety records are not environmental
+  // evidence, so the card must not grade from them.
   it.each(NOT_ASSESSED)('grades %s not assessed, never blocking, with no fix link', code => {
     const clause = assessIso14001(healthy()).clauses.find(c => c.code === code)!
     expect(clause.verdict).toBe('not_assessed')
@@ -138,13 +143,18 @@ describe('assessIso14001 — per-clause verdicts', () => {
     ['4.2',   'attention', { interestedPartiesReviewOverdue: 1 },         'interested party past review'],
     ['4.3',   'gap',       { scopeOnFile: false },                        'no documented scope'],
     ['4.3',   'attention', { scopeReviewOverdue: true },                  'scope past review'],
+    ['4.3',   'attention', { scopeStatesControlAndInfluence: false },     'a scope silent on control and influence'],
     ['5.2',   'gap',       { policyApproved: false },                     'no signed, complete policy'],
     ['5.2',   'attention', { policySignatoryStale: true },                'policy signed by a prior owner'],
+    ['5.2',   'attention', { policyCommunicatedInternally: false },       'a policy never communicated internally'],
     ['5.2',   'attention', { policyReviewOverdue: true },                 'policy past review'],
+    ['5.3',   'gap',       { rolesUnassigned: 1 },                        'a clause 5.3 role with no one'],
+    ['5.3',   'attention', { processesUnassigned: 3 },                    'processes with no owner'],
     ['6.1.1', 'attention', { risksWithoutControls: 3 },                   'uncontrolled risks'],
     ['6.1.2', 'gap',       { aspectsTotal: 0, aspectsSignificant: 0 },    'empty aspects register'],
     ['6.1.2', 'attention', { significantUncontrolled: 2 },                'uncontrolled significant aspects'],
     ['6.1.2', 'attention', { aspectsUnscored: 1 },                        'an unscored aspect'],
+    ['6.1.2', 'attention', { aspectsControlUndetermined: 2 },             'aspects not marked control or influence'],
     ['6.1.2', 'attention', { aspectsReviewOverdue: 3 },                   'aspects past review'],
     ['6.1.3', 'gap',       { obligationsTotal: 0 },                       'no obligations'],
     ['6.1.3', 'attention', { obligationsOverdue: 1 },                     'overdue obligation'],
@@ -171,6 +181,17 @@ describe('assessIso14001 — per-clause verdicts', () => {
 
   it.each(cases)('clause %s reads %s when there is %s', (code, expected, patch) => {
     expect(verdictFor(code, patch)).toBe(expected)
+  })
+
+  it('words each new Phase 1.1 finding the way an auditor would read it', () => {
+    const reason = (code: string, patch: Partial<ReadinessSignals>) =>
+      assessIso14001({ ...healthy(), ...patch }).clauses.find(c => c.code === code)!.reason
+    expect(reason('6.1.2', { aspectsControlUndetermined: 1 }))
+      .toBe('1 aspect does not record whether the organization controls it or can only influence it.')
+    expect(reason('6.1.2', { aspectsControlUndetermined: 3 }))
+      .toBe('3 aspects do not record whether the organization controls them or can only influence them.')
+    expect(reason('5.3', { processesUnassigned: 1 })).toBe('1 EMS process has no owner.')
+    expect(reason('4.3', { scopeStatesControlAndInfluence: false })).toContain('(4.3 e)')
   })
 
   it('treats a reading exactly at the window boundary as still current', () => {
@@ -283,8 +304,15 @@ describe('assessIso14001 — the WLS demo seed story', () => {
     climateIssueRecorded:    false,
     interestedPartiesActive: 0,
     scopeOnFile:             false,
+    scopeStatesControlAndInfluence: false,
     policyApproved:          false,
+    policyCommunicatedInternally: false,
     complianceEvalAgeDays:   null,
+    // Nor responsibilities (Phase 1.1), and its aspects predate control
+    // and influence, so all 14 are undecided.
+    rolesUnassigned:            2,
+    processesUnassigned:        14,
+    aspectsControlUndetermined: 14,
     // 14 aspects, 5 significant, 1 of those (bulk diesel) uncontrolled
     // and with no objective.
     aspectsTotal:            14,
@@ -329,7 +357,8 @@ describe('assessIso14001 — the WLS demo seed story', () => {
       '4.1':   'gap',          // the WLS seed records no context issues
       '4.2':   'gap',          // ... no interested parties
       '4.3':   'gap',          // ... no scope
-      '5.2':   'gap',          // ... and no policy
+      '5.2':   'gap',          // ... no policy
+      '5.3':   'gap',          // ... and no one assigned the 5.3 roles
       '9.1.2': 'gap',          // no compliance evaluation on record
       '7.5':   'gap',          // no documents register yet (phase 3)
       '9.2':   'gap',          // no audit programme yet (phase 4)

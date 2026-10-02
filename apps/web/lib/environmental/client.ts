@@ -2,6 +2,7 @@ import { readActiveFacility, supabase } from '@/lib/supabase'
 import type { RegisterHealth } from '@soteria/core/managementSystem'
 import type { AspectOperatingCondition } from '@soteria/core/environmentalAspect'
 import type { EvaluationResult } from '@soteria/core/complianceEvaluation'
+import type { ResponsibilityCoverage, ResponsibilityKey } from '@soteria/core/emsProcesses'
 
 // Browser client for /api/environmental/*. Same shape as lib/fleet/client.ts
 // (bearer token, x-active-tenant, a readJson that surfaces the API's message),
@@ -58,11 +59,15 @@ const query = (params: Record<string, string | number | boolean | null | undefin
 export interface RegistersHealth {
   asOf: string
   context:        { health: RegisterHealth; active: number; reviewOverdue: number; climateRecorded: boolean }
-  scopeAndPolicy: { health: RegisterHealth; scopeVersion: number | null; policyVersion: number | null; policyComplete: boolean; signatoryStale: boolean }
+  scopeAndPolicy: {
+    health: RegisterHealth; scopeVersion: number | null; policyVersion: number | null; policyComplete: boolean; signatoryStale: boolean
+    scopeStatesControlAndInfluence: boolean; policyCommunicatedInternally: boolean
+  }
   aspects:        { health: RegisterHealth; active: number; reviewOverdue: number; unscored: number }
   obligations:    {
     health: RegisterHealth; active: number; reviewOverdue: number; evaluationsOverdue: number; unscheduled: number; deadlinesMissed: number
   }
+  responsibilities: { health: RegisterHealth } & ResponsibilityCoverage
 }
 
 export const getRegistersHealth = (tenantId: string) =>
@@ -77,7 +82,7 @@ export interface CurrentScore {
 export interface AspectRow {
   id: string; facility_id: string | null
   activity: string; aspect: string; impact: string; process_area: string | null
-  life_cycle_stage: string; flow: 'input' | 'output' | null; status: string
+  life_cycle_stage: string; flow: 'input' | 'output' | null; control_level: 'control' | 'influence' | null; status: string
   controls: string | null; notes: string | null; source_reference: string | null
   obsolete_at: string | null; obsolete_reason: string | null
   last_reviewed_at: string | null; next_review_due: string
@@ -101,7 +106,8 @@ export const getAspect = (tenantId: string, id: string) =>
   call<{ aspect: AspectRow; history: ScoreHistoryRow[]; obligationIds: string[] }>(tenantId, `/api/environmental/aspects/${id}`)
 
 export type AspectBody = Partial<Pick<AspectRow,
-  'activity' | 'aspect' | 'impact' | 'process_area' | 'life_cycle_stage' | 'flow' | 'status' | 'controls' | 'notes' | 'source_reference'>>
+  'activity' | 'aspect' | 'impact' | 'process_area' | 'life_cycle_stage' | 'flow' | 'control_level' | 'status' | 'controls'
+  | 'notes' | 'source_reference'>>
 
 export const createAspect = (tenantId: string, body: AspectBody) =>
   call<{ aspect: AspectRow }>(tenantId, '/api/environmental/aspects', { method: 'POST', body })
@@ -236,7 +242,8 @@ export interface InterestedPartyRow {
 
 export interface ScopeRow {
   id: string; version: number; legal_entity: string; physical_boundary: string; activities: string
-  products_services: string; effective_from: string; next_review_due: string; created_at: string
+  products_services: string; control_and_influence: string | null; exclusions: string | null
+  effective_from: string; next_review_due: string; created_at: string
 }
 
 export interface PolicyRow {
@@ -245,6 +252,11 @@ export interface PolicyRow {
 }
 
 export interface PolicyCommitmentOption { key: string; label: string }
+
+export interface PolicyCommunicationRow {
+  id: string; policy_id: string; audience: 'internal' | 'external'; method: string; communicated_on: string
+  recorded_by: string | null; created_at: string
+}
 
 type RegisterStatus = 'active' | 'retired' | 'all'
 
@@ -282,7 +294,25 @@ export const getPolicy = (tenantId: string) =>
   call<{
     current: PolicyRow | null; versions: PolicyRow[]; requiredCommitments: PolicyCommitmentOption[]
     complete: boolean; signatoryStale: boolean
+    communications: PolicyCommunicationRow[]; communicatedInternally: boolean
   }>(tenantId, '/api/environmental/policy')
 
 export const savePolicy = (tenantId: string, body: Omit<PolicyRow, 'id' | 'version' | 'next_review_due' | 'created_at'>) =>
   call<{ policy: PolicyRow }>(tenantId, '/api/environmental/policy', { method: 'POST', body })
+
+export const recordPolicyCommunication = (tenantId: string, body: Pick<PolicyCommunicationRow, 'policy_id' | 'audience' | 'method' | 'communicated_on'>) =>
+  call<{ communication: PolicyCommunicationRow }>(tenantId, '/api/environmental/policy/communications', { method: 'POST', body })
+
+// ── Processes and responsibilities (clauses 4.4, 5.3) ───────────────────
+export interface ResponsibilityRow {
+  responsibility_key: ResponsibilityKey; owner_user_id: string | null; assigned_by: string | null; updated_at: string
+}
+
+export const getResponsibilities = (tenantId: string) =>
+  call<{ responsibilities: ResponsibilityRow[]; coverage: ResponsibilityCoverage; health: RegisterHealth }>(
+    tenantId, '/api/environmental/responsibilities')
+
+export const assignResponsibility = (tenantId: string, key: ResponsibilityKey, ownerUserId: string | null) =>
+  call<{ responsibility: ResponsibilityRow }>(tenantId, `/api/environmental/responsibilities/${key}`, {
+    method: 'PUT', body: { owner_user_id: ownerUserId },
+  })
