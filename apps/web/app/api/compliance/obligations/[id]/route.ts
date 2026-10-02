@@ -44,6 +44,13 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
 
   try {
     const { error } = await g.authedClient.from('compliance_calendar_obligations').delete().eq('id', id)
+    // Compliance evaluations are records of what was checked and found, so
+    // they hold their obligation in place (migration 298, no on-delete action).
+    if (error?.code === '23503') {
+      return Response.json({
+        error: 'This obligation has compliance evaluations on record. Dismiss it instead of deleting it.',
+      }, { status: 409 })
+    }
     if (error) return sanitizeError(error, 'DELETE /api/compliance/obligations/[id]')
     return Response.json({ ok: true })
   } catch (e) {
