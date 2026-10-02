@@ -54,6 +54,9 @@ export function obligationRegisterInputFrom(raw: JsonObject): Parsed<ObligationR
   return errors.length === 0 ? { ok: true, input } : { ok: false, errors }
 }
 
+/** Ten years, the same ceiling as the evaluation cadence; well inside the int column. */
+const MAX_CUSTOM_CADENCE_DAYS = 3650
+
 export interface ObligationDeadline {
   nextDueAt:   string
   cadence:     ObligationCadence
@@ -76,8 +79,8 @@ export function obligationDeadlineFrom(raw: JsonObject): Parsed<ObligationDeadli
   let cadenceDays: number | null = null
   if (cadence === 'custom_days') {
     cadenceDays = typeof raw.cadence_days === 'number' ? raw.cadence_days : Number.NaN
-    if (!Number.isInteger(cadenceDays) || cadenceDays < 1) {
-      errors.push({ field: 'cadenceDays', message: 'must be a whole number of days when cadence is custom_days' })
+    if (!Number.isInteger(cadenceDays) || cadenceDays < 1 || cadenceDays > MAX_CUSTOM_CADENCE_DAYS) {
+      errors.push({ field: 'cadenceDays', message: `must be a whole number of days from 1 to ${MAX_CUSTOM_CADENCE_DAYS} when cadence is custom_days` })
     }
   }
   return errors.length === 0 ? { ok: true, input: { nextDueAt, cadence, cadenceDays } } : { ok: false, errors }

@@ -6,7 +6,7 @@
 // hash recorded when it was filed. Node environment: FormData and File are
 // the real undici ones the route receives in production.
 
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createHash } from 'node:crypto'
 import {
   ADMIN_A, FACILITY_A, MEMBER_A, TENANT_A, TENANT_B,
@@ -18,6 +18,7 @@ import * as upload from '@/app/api/environmental/evidence/route'
 import * as download from '@/app/api/environmental/evidence/[id]/download/route'
 import * as openEvaluation from '@/app/api/environmental/obligations/[id]/evaluations/route'
 import * as complete from '@/app/api/environmental/evaluations/[id]/complete/route'
+import { MAX_EVIDENCE_BYTES, MAX_EVIDENCE_REQUEST_BYTES } from '@/lib/environmental/evidence'
 
 const OBLIGATION = 'b0000000-0000-4000-8000-00000000000a'
 const OBLIGATION_B = 'b0000000-0000-4000-8000-00000000000b'
@@ -66,7 +67,7 @@ beforeEach(() => {
 })
 
 describe('POST /evidence', () => {
-  it('stores the file privately under the tenant, typed and hashed by the server', async () => {
+  it('stores the file privately under the tenant, typed, named and hashed by the server', async () => {
     const res = await upload.POST(uploadRequest(evidenceFields({
       file: new File([PDF], 'site photo.jpg', { type: 'image/jpeg' }),   // declared type is a lie
     })))
@@ -74,7 +75,8 @@ describe('POST /evidence', () => {
     const { evidence } = await res.json()
     expect(evidence).toMatchObject({
       tenant_id: TENANT_A, facility_id: FACILITY_A, subject_id: EVALUATION, kind: 'document',
-      mime_type: 'application/pdf', file_name: 'site photo.jpg', file_size_bytes: PDF.byteLength,
+      // Named for what it is: a saved download opens by its extension, not its content type.
+      mime_type: 'application/pdf', file_name: 'site photo.pdf', file_size_bytes: PDF.byteLength,
       sha256: sha(PDF), uploaded_by: ADMIN_A,
     })
     expect(evidence).not.toHaveProperty('storage_path')
@@ -92,12 +94,20 @@ describe('POST /evidence', () => {
     expect(rowsIn('ms_evidence')).toEqual([])
   })
 
-  it('refuses a file over 25 MB before reading it', async () => {
+  it('refuses a file over 4 MB, which would not fit the platform\'s request limit', async () => {
     const res = await upload.POST(uploadRequest(evidenceFields({
-      file: new File([new Uint8Array(25 * 1024 * 1024 + 1)], 'huge.pdf'),
+      file: new File([new Uint8Array(MAX_EVIDENCE_BYTES + 1)], 'huge.pdf'),
     })))
     expect(res.status).toBe(413)
     expect(objects.size).toBe(0)
+  })
+
+  it('refuses an oversized request from its declared length, without reading the body', async () => {
+    const formData = vi.fn()
+    const oversized = { headers: new Headers({ 'content-length': String(MAX_EVIDENCE_REQUEST_BYTES + 1) }), formData } as unknown as Request
+    const res = await upload.POST(oversized)
+    expect(res.status).toBe(413)
+    expect(formData).not.toHaveBeenCalled()
   })
 
   it('reports every missing field by name', async () => {
@@ -139,6 +149,22 @@ describe('POST /evidence', () => {
     expect(objects.size).toBe(0)
   })
 
+  it('never removes a stored object that filed evidence already points to', async () => {
+    const filed = (await (await upload.POST(uploadRequest(evidenceFields()))).json()).evidence
+    failNext('ms_evidence', { code: 'XX000', message: 'connection reset' }, 'insert')
+    expect((await upload.POST(uploadRequest(evidenceFields()))).status).toBe(500)
+    expect(objects.size).toBe(1)
+    expect((await download.GET(jsonRequest('/x', 'GET'), idContext(filed.id))).status).toBe(200)
+  })
+
+  it('answers 409 when the evaluation is completed while the file uploads', async () => {
+    failNext('ms_evidence', { code: '23000', message: 'evaluation is complete and sealed' }, 'insert')
+    const res = await upload.POST(uploadRequest(evidenceFields()))
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toMatch(/sealed/)
+    expect(objects.size).toBe(0)
+  })
+
   it('supersedes an earlier file on the same evaluation, once, with a reason', async () => {
     const first = (await (await upload.POST(uploadRequest(evidenceFields()))).json()).evidence
 
@@ -160,6 +186,21 @@ describe('POST /evidence', () => {
       file: new File([PDF, ' '], 'third.pdf'), supersedes_id: first.id, superseded_reason: 'Again',
     })))
     expect(twice.status).toBe(409)
+  })
+
+  it('says so when someone else replaced the file first, and keeps the new one alongside', async () => {
+    const first = (await (await upload.POST(uploadRequest(evidenceFields()))).json()).evidence
+    beforeNext('ms_evidence', 'update', () => {
+      Object.assign(rowsIn('ms_evidence').find(e => e.id === first.id)!, {
+        superseded_by: 'someone-else', superseded_at: '2026-10-02T00:00:00Z', superseded_reason: 'Their reason',
+      })
+    })
+    const res = await upload.POST(uploadRequest(evidenceFields({
+      file: new File([PNG], 'retake.png'), supersedes_id: first.id, superseded_reason: 'My reason',
+    })))
+    expect(res.status).toBe(409)
+    expect((await res.json()).evidence.file_name).toBe('retake.png')
+    expect(rowsIn('ms_evidence').find(e => e.id === first.id)).toMatchObject({ superseded_reason: 'Their reason' })
   })
 
   it('refuses to supersede evidence that belongs to another evaluation', async () => {

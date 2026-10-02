@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireTenantModuleAdmin } from '@/lib/auth/tenantGate'
 import { sanitizeError } from '@/lib/security/sanitizeError'
 import {
+  EMS_DISCIPLINES,
   ENVIRONMENTAL_MODULE,
   UUID_RE,
   gateFailure,
@@ -39,6 +40,7 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     .select('*')
     .eq('id', id)
     .eq('tenant_id', gate.tenantId)
+    .in('discipline', EMS_DISCIPLINES)   // an OH&S party is not this module's to edit
     .maybeSingle()
   if (readError) return sanitizeError(readError, 'environmental/interested-parties/[id]/PATCH read')
   if (!current) return notFound()

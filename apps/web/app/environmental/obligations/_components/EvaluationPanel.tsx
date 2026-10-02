@@ -135,7 +135,7 @@ function UploadForm({ tenantId, evaluationId, current, onUploaded }: {
         <input className={INPUT} aria-label="Why the earlier file is replaced" value={reason}
           onChange={e => setReason(e.target.value)} placeholder="Why the earlier file is replaced" />
       )}
-      <p className="text-[11px] text-slate-500">PDF, JPEG, PNG or WebP, up to 25 MB. Files are never deleted; a wrong one is replaced, with a reason.</p>
+      <p className="text-[11px] text-slate-500">PDF, JPEG, PNG or WebP, up to 4 MB. Files are never deleted; a wrong one is replaced, with a reason.</p>
       {error && <p className={FIELD_ERROR} role="alert">{error}</p>}
       <button type="submit" className={BUTTON_SECONDARY} disabled={busy || !file || (replaces !== '' && reason.trim() === '')}>
         {busy ? 'Attaching…' : 'Attach'}

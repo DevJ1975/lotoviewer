@@ -24,20 +24,20 @@ function sha256Hex(seed: number): string {
   return seed.toString(16).padStart(64, '0')
 }
 
-async function insertObligation(db: PGlite, tenantId = IDS.tenantA): Promise<string> {
+async function insertObligation(db: PGlite, tenantId: string = IDS.tenantA): Promise<string> {
   return (await scalar<string>(db,
     `insert into public.compliance_calendar_obligations
        (tenant_id, title, next_due_at, source_kind, jurisdiction, evaluation_cadence_days)
      values ($1, 'Air permit monitoring', current_date + 30, 'permit', 'state:TX', 365) returning id`, [tenantId]))!
 }
 
-async function openEvaluation(db: PGlite, obligationId: string, assignedTo: string | null = null, tenantId = IDS.tenantA): Promise<string> {
+async function openEvaluation(db: PGlite, obligationId: string, assignedTo: string | null = null, tenantId: string = IDS.tenantA): Promise<string> {
   return (await scalar<string>(db,
     `insert into public.ms_compliance_evaluations (tenant_id, obligation_id, scheduled_for, assigned_to)
      values ($1, $2, current_date, $3) returning id`, [tenantId, obligationId, assignedTo]))!
 }
 
-async function attachEvidence(db: PGlite, evaluationId: string, seed: number, tenantId = IDS.tenantA): Promise<string> {
+async function attachEvidence(db: PGlite, evaluationId: string, seed: number, tenantId: string = IDS.tenantA): Promise<string> {
   return (await scalar<string>(db,
     `insert into public.ms_evidence
        (tenant_id, subject_type, subject_id, kind, storage_path, file_name, mime_type, file_size_bytes, sha256, uploaded_by)

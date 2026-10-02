@@ -5,6 +5,7 @@ import { sanitizeError } from '@/lib/security/sanitizeError'
 import {
   EMS_DISCIPLINES,
   ENVIRONMENTAL_MODULE,
+  MAX_LIST_OFFSET,
   gateFailure,
   invalidInput,
   invalidJson,
@@ -45,8 +46,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'review_due must be overdue' }, { status: 400 })
   }
   const offset = Number(params.get('offset') ?? '0')
-  if (!Number.isInteger(offset) || offset < 0) {
-    return NextResponse.json({ error: 'offset must be a whole number of at least 0' }, { status: 400 })
+  if (!Number.isInteger(offset) || offset < 0 || offset > MAX_LIST_OFFSET) {
+    return NextResponse.json({ error: `offset must be a whole number from 0 to ${MAX_LIST_OFFSET}` }, { status: 400 })
   }
 
   let query = gate.authedClient

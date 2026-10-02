@@ -157,9 +157,10 @@ reminder. An admin can also **Start an evaluation now**.
 
 On the obligation's page, under **Evaluation of compliance**:
 
-1. **Attach evidence**: a PDF, JPEG, PNG or WebP file of up to 25 MB, filed as a
+1. **Attach evidence**: a PDF, JPEG, PNG or WebP file of up to 4 MB, filed as a
    *Document*, *Photo*, *Sample result* or *Signature*. The server checks the file's
-   real type from its contents and records a SHA-256 fingerprint of it.
+   real type from its contents, names it for that type, and records a SHA-256
+   fingerprint of it. Compress a larger scan or photo before attaching it.
 2. **Record result**:
    - *Compliant* or *Noncompliant* needs at least one current evidence file.
    - *Noncompliant* also opens a nonconformity. Name the **Nonconformity to open** and

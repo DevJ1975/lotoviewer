@@ -98,6 +98,12 @@ describe('POST /obligations', () => {
     expect((await res.json()).obligation.evaluation_cadence_days).toBeNull()
   })
 
+  it('refuses a custom deadline cadence too large to store, by name, instead of failing as a 500', async () => {
+    const res = await obligations.POST(jsonRequest('/x', 'POST', { ...newObligation, cadence: 'custom_days', cadence_days: 1e10 }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).fieldErrors).toEqual([expect.objectContaining({ field: 'cadence_days' })])
+  })
+
   it('refuses an OH&S-only obligation: that register is Phase 8\'s', async () => {
     const res = await obligations.POST(jsonRequest('/x', 'POST', { ...newObligation, discipline: 'ohs' }))
     expect((await res.json()).fieldErrors).toEqual([{ field: 'discipline', message: 'must be ems or integrated' }])
@@ -148,7 +154,7 @@ describe('GET /obligations', () => {
     expect(await ids('?status=all')).toEqual([OB_B])
   })
 
-  it.each(['?status=open', '?last_result=bad', '?review_due=later', '?offset=x'])('refuses %s', async query => {
+  it.each(['?status=open', '?last_result=bad', '?review_due=later', '?offset=x', '?offset=1e30'])('refuses %s', async query => {
     expect((await obligations.GET(jsonRequest(`/api/environmental/obligations${query}`, 'GET'))).status).toBe(400)
   })
 })

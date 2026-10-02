@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
 import type { FieldError } from '@soteria/core/hazardousWaste'
 import { EVALUATION_RESULTS, evaluationCompletionGaps, type EvaluationResult } from '@soteria/core/complianceEvaluation'
 import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
@@ -132,8 +133,17 @@ export async function POST(req: Request, ctx: RouteContext) {
   }
 
   // The nonconformity exists only for this result; if the result is not recorded, take it back.
+  // A failed withdrawal leaves an orphan finding, so it is reported rather than ignored.
   const withdrawNonconformity = async () => {
-    if (nonconformity) await gate.authedClient.from('nonconformities').delete().eq('id', nonconformity.id).eq('tenant_id', gate.tenantId)
+    if (!nonconformity) return
+    const { error } = await gate.authedClient.from('nonconformities').delete().eq('id', nonconformity.id).eq('tenant_id', gate.tenantId)
+    if (error) {
+      Sentry.captureException(error, {
+        level: 'warning',
+        tags:  { route: 'environmental/evaluations/[id]/complete', step: 'withdraw-nonconformity' },
+        extra: { nonconformityId: nonconformity.id, tenantId: gate.tenantId },
+      })
+    }
   }
 
   const { data: completed, error } = await gate.authedClient

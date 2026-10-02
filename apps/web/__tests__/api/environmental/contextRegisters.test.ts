@@ -210,6 +210,13 @@ describe('context issues', () => {
     expect(res.status).toBe(500)
     expect(await res.json()).toEqual({ error: 'internal' })
   })
+
+  it('leaves an OH&S issue to the OH&S module: no edit, no review stamp', async () => {
+    seed('ms_context_issues', [contextIssueRow({ discipline: 'ohs' })])
+    expect((await contextIssue.PATCH(jsonRequest('/x', 'PATCH', { discipline: 'ems' }), idContext(ISSUE_A))).status).toBe(404)
+    expect((await contextIssueReview.POST(jsonRequest('/x', 'POST'), idContext(ISSUE_A))).status).toBe(404)
+    expect(rowsIn('ms_context_issues')[0]).toMatchObject({ discipline: 'ohs', last_reviewed_at: null })
+  })
 })
 
 describe('interested parties', () => {

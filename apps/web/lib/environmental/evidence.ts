@@ -7,8 +7,16 @@ import { verifyJPEG, verifyPDF, verifyPNG, verifyWebP } from '@/lib/security/mag
 
 export const EVIDENCE_BUCKET = 'ms-evidence'
 
-/** The bucket's own limit (migration 299): 25 MiB. */
-export const MAX_EVIDENCE_BYTES = 25 * 1024 * 1024
+/**
+ * The largest file the upload route accepts. Vercel caps a request body at
+ * 4.5 MB, so a file must fit under that with the multipart wrapping around
+ * it; the bucket's own 25 MiB limit (migration 299) leaves room for a later
+ * direct-to-storage upload, the superadmin policy upload's pattern.
+ */
+export const MAX_EVIDENCE_BYTES = 4 * 1024 * 1024
+
+/** Checked from content-length before the body is read, so an oversized request is never buffered. */
+export const MAX_EVIDENCE_REQUEST_BYTES = 4_500_000
 
 export const EVIDENCE_KINDS = ['photo', 'document', 'sample_result', 'signature'] as const
 export type EvidenceKind = typeof EVIDENCE_KINDS[number]
@@ -42,11 +50,17 @@ export function sha256Hex(bytes: Uint8Array): string {
 
 const UNSAFE_FILE_NAME_CHARACTERS = /[\u0000-\u001f\u007f/\\:*?"<>|]+/g
 
-/** A name fit to show and to offer as a download: no path, no control characters, at most 200 characters. */
-export function safeFileName(name: string, fallbackExtension: string): string {
+/**
+ * A name fit to show and to offer as a download: no path, no control
+ * characters, at most 200 characters, and the extension of the type the
+ * server detected, never the uploader's. A saved download is opened by its
+ * extension, so a file that is really a PDF must not arrive as "report.hta".
+ */
+export function safeFileName(name: string, extension: string): string {
   const base = name.split(/[/\\]/).pop() ?? ''
-  const cleaned = base.replace(UNSAFE_FILE_NAME_CHARACTERS, '_').trim().slice(-200)
-  return cleaned.length > 0 && cleaned !== '.' && cleaned !== '..' ? cleaned : `evidence.${fallbackExtension}`
+  const stem = base.replace(UNSAFE_FILE_NAME_CHARACTERS, '_').replace(/\.[A-Za-z0-9]{1,10}$/, '').replace(/\.+$/, '').trim()
+  const usable = stem.length > 0 && stem !== '.' && stem !== '..' ? stem : 'evidence'
+  return `${usable.slice(-(199 - extension.length))}.${extension}`
 }
 
 /**

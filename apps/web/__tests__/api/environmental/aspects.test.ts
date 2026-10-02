@@ -174,7 +174,7 @@ describe('GET /aspects', () => {
     expect(second.body.nextOffset).toBeNull()
   })
 
-  it.each(['?status=deleted', '?significant=yes', '?review_due=soon', '?offset=-1', '?offset=1.5'])(
+  it.each(['?status=deleted', '?significant=yes', '?review_due=soon', '?offset=-1', '?offset=1.5', '?offset=1e30'])(
     'refuses %s', async query => {
       expect((await list(query)).status).toBe(400)
     })

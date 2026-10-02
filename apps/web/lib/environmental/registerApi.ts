@@ -24,6 +24,9 @@ export type JsonObject = Record<string, unknown>
 /** The disciplines the environmental routes read and write; OH&S-only records are Phase 8's. */
 export const EMS_DISCIPLINES = registerDisciplines('ems')
 
+/** Further than any register pages; a larger offset is a malformed request, not a 500 from PostgREST. */
+export const MAX_LIST_OFFSET = 1_000_000
+
 /** A known discipline these routes may not write. An unknown one is the core validator's to report. */
 export function emsDisciplineErrors(discipline: Discipline): FieldError[] {
   return DISCIPLINES.includes(discipline) && !EMS_DISCIPLINES.includes(discipline)
@@ -122,13 +125,15 @@ export function reviewRouteFor(table: ReviewableRegister) {
     const gate = await requireTenantModuleAdmin(req, ENVIRONMENTAL_MODULE)
     if (!gate.ok) return gateFailure(gate)
 
-    const { data, error } = await gate.authedClient
+    let review = gate.authedClient
       .from(table)
       .update(reviewStamp(gate.userId))
       .eq('id', id)
       .eq('tenant_id', gate.tenantId)
-      .select('*')
-      .maybeSingle()
+    // These routes reach environmental rows only; an OH&S row is the OH&S
+    // module's to review. Aspects have no discipline: they are environmental.
+    if (table !== 'environmental_aspects') review = review.in('discipline', EMS_DISCIPLINES)
+    const { data, error } = await review.select('*').maybeSingle()
     if (error) return sanitizeError(error, `environmental/${table}/review/POST`)
     if (!data) return notFound()
     return NextResponse.json({ row: data })

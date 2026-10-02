@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
 import type { FieldError } from '@soteria/core/hazardousWaste'
 import { validateRetirementReason } from '@soteria/core/managementSystem'
 import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
@@ -11,6 +12,7 @@ import {
   EVIDENCE_PUBLIC_COLUMNS,
   EVIDENCE_SUBJECT_TYPES,
   MAX_EVIDENCE_BYTES,
+  MAX_EVIDENCE_REQUEST_BYTES,
   detectEvidenceType,
   evidenceStoragePath,
   safeFileName,
@@ -32,9 +34,37 @@ const ADMIN_ROLES = new Set(['owner', 'admin', 'superadmin'])
 
 interface EvaluationRow { id: string; facility_id: string | null; assigned_to: string | null; completed_at: string | null }
 
+const TOO_LARGE = 'Evidence files are limited to 4 MB. Compress the scan or photo and try again.'
+const SEALED = 'This evaluation is complete; its evidence is sealed with it.'
+
+/** Migration 299's trigger: the evaluation was completed while this upload was in flight. */
+const isSealed = (error: { code?: string } | null) => error?.code === '23000'
+
+/**
+ * Remove a stored object only when no evidence row points at it. The path is
+ * the content's hash, so the object may already back a filed row (a retry, or
+ * an insert that committed before its reply was lost); evidence is never deleted.
+ */
+async function removeIfUnreferenced(admin: ReturnType<typeof supabaseAdmin>, storagePath: string): Promise<void> {
+  const { data, error } = await admin.from('ms_evidence').select('id').eq('storage_path', storagePath).limit(1)
+  if (error || (data ?? []).length > 0) {
+    if (error) Sentry.captureException(error, { level: 'warning', tags: { route: 'environmental/evidence', step: 'cleanup-check' } })
+    return
+  }
+  const removed = await admin.storage.from(EVIDENCE_BUCKET).remove([storagePath])
+  if (removed.error) {
+    Sentry.captureException(removed.error, { level: 'warning', tags: { route: 'environmental/evidence', step: 'cleanup' } })
+  }
+}
+
 export async function POST(req: Request) {
   const gate = await requireTenantModuleMember(req, ENVIRONMENTAL_MODULE)
   if (!gate.ok) return gateFailure(gate)
+
+  const declaredLength = Number(req.headers.get('content-length') ?? 0)
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_EVIDENCE_REQUEST_BYTES) {
+    return NextResponse.json({ error: TOO_LARGE }, { status: 413 })
+  }
 
   let form: FormData
   try { form = await req.formData() }
@@ -62,9 +92,7 @@ export async function POST(req: Request) {
   }
   if (errors.length > 0) return invalidInput(errors)
   const upload = file as File
-  if (upload.size > MAX_EVIDENCE_BYTES) {
-    return NextResponse.json({ error: 'Evidence files are limited to 25 MB.' }, { status: 413 })
-  }
+  if (upload.size > MAX_EVIDENCE_BYTES) return NextResponse.json({ error: TOO_LARGE }, { status: 413 })
 
   const { data: evaluation, error: evaluationError } = await gate.authedClient
     .from('ms_compliance_evaluations')
@@ -75,9 +103,7 @@ export async function POST(req: Request) {
   if (evaluationError) return sanitizeError(evaluationError, 'environmental/evidence/POST evaluation')
   if (!evaluation) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const subject = evaluation as EvaluationRow
-  if (subject.completed_at) {
-    return NextResponse.json({ error: 'This evaluation is complete; its evidence is sealed with it.' }, { status: 409 })
-  }
+  if (subject.completed_at) return NextResponse.json({ error: SEALED }, { status: 409 })
   if (!ADMIN_ROLES.has(gate.role) && subject.assigned_to !== gate.userId) {
     return NextResponse.json({ error: 'Only an admin or the assigned evaluator can attach evidence.' }, { status: 403 })
   }
@@ -135,19 +161,29 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'This file is already attached to this evaluation.' }, { status: 409 })
   }
   if (insertError) {
-    await admin.storage.from(EVIDENCE_BUCKET).remove([storagePath])
+    await removeIfUnreferenced(admin, storagePath)
+    if (isSealed(insertError)) return NextResponse.json({ error: SEALED }, { status: 409 })
     return sanitizeError(insertError, 'environmental/evidence/POST insert')
   }
   const evidence = row as unknown as { id: string }
 
   if (supersedesId) {
-    const { error } = await admin
+    const { data: replaced, error } = await admin
       .from('ms_evidence')
       .update({ superseded_by: evidence.id, superseded_at: new Date().toISOString(), superseded_reason: supersededReason })
       .eq('id', supersedesId)
       .eq('tenant_id', gate.tenantId)
       .is('superseded_by', null)
+      .select('id')
+    if (isSealed(error)) return NextResponse.json({ error: SEALED, evidence: row }, { status: 409 })
     if (error) return sanitizeError(error, 'environmental/evidence/POST supersede')
+    if ((replaced ?? []).length === 0) {
+      // Someone else replaced it first. The new file is filed, but alongside it, not in its place.
+      return NextResponse.json({
+        error: 'Someone else replaced that file first. Yours is attached alongside it; replace one of them if it should go.',
+        evidence: row,
+      }, { status: 409 })
+    }
   }
 
   return NextResponse.json({ evidence: row }, { status: 201 })
