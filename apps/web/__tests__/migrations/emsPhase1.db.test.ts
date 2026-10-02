@@ -351,6 +351,32 @@ describe('EMS Phase 1 migrations on a real Postgres', () => {
         .rejects.toMatchObject({ code: '23503' })
     })
 
+    it('shows each obligation\'s latest result and open evaluation in the register view', async () => {
+      const obligation = await insertObligation(db, IDS.tenantA, 'Wastewater pretreatment permit')
+      const first = await openEvaluation(db, IDS.tenantA, obligation)
+      await db.query(
+        `update public.ms_compliance_evaluations
+            set completed_at = now() - interval '2 days', result = 'undetermined', evaluator_id = $2 where id = $1`,
+        [first, IDS.ownerA])
+      const second = await openEvaluation(db, IDS.tenantA, obligation)
+      await attachEvidence(db, IDS.tenantA, second, 8)
+      await db.query(
+        `update public.ms_compliance_evaluations
+            set completed_at = now() - interval '1 day', result = 'compliant', evaluator_id = $2 where id = $1`,
+        [second, IDS.ownerA])
+      const open = await openEvaluation(db, IDS.tenantA, obligation, IDS.memberA)
+
+      const row = await db.query(
+        `select last_evaluation_id, last_result, open_evaluation_id, open_evaluation_assignee
+           from public.ms_obligation_register where id = $1`, [obligation])
+      expect(row.rows).toEqual([{
+        last_evaluation_id: second, last_result: 'compliant', open_evaluation_id: open, open_evaluation_assignee: IDS.memberA,
+      }])
+      await asCaller(db, adminB, async () => {
+        expect(await count(db, 'select count(*) from public.ms_obligation_register where id = $1', [obligation])).toBe(0)
+      })
+    })
+
     it('refuses an obligation from another tenant', async () => {
       const foreignObligation = await insertObligation(db, IDS.tenantB, 'Someone else\'s permit')
       await expect(openEvaluation(db, IDS.tenantA, foreignObligation)).rejects.toMatchObject({ code: '23503' })
@@ -539,7 +565,8 @@ describe('EMS Phase 1 rollbacks', () => {
     await rollBackPhase1()
     for (const relation of ['ms_context_issues', 'ms_interested_parties', 'ms_scope_statements', 'ms_policies',
       'ms_scoring_methods', 'environmental_aspect_scores', 'environmental_aspect_obligations',
-      'environmental_aspect_current_scores', 'environmental_aspect_register', 'ms_compliance_evaluations', 'ms_evidence']) {
+      'environmental_aspect_current_scores', 'environmental_aspect_register', 'ms_compliance_evaluations',
+      'ms_obligation_register', 'ms_evidence']) {
       expect(await scalar(db, 'select to_regclass($1)::text', [`public.${relation}`])).toBeNull()
     }
     const policies = await db.query<{ policyname: string }>(

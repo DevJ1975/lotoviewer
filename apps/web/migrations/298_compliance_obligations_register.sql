@@ -256,6 +256,41 @@ create policy ms_compliance_evaluations_evaluator_update on public.ms_compliance
   );
 revoke delete on public.ms_compliance_evaluations from authenticated, anon;
 
+-- ── ms_obligation_register: the register's list in one query ─────────────
+-- Each obligation with its latest completed evaluation and its open one
+-- folded in, joined laterally on idx_ms_compliance_evaluations_latest so
+-- tenant and facility filters reach the obligations first. Columns are
+-- listed rather than o.*, so the calendar can change without this view
+-- pinning a column it no longer wants.
+create or replace view public.ms_obligation_register
+with (security_invoker = true) as
+select o.id, o.tenant_id, o.facility_id, o.title, o.description, o.regulatory_ref, o.category,
+       o.cadence, o.cadence_days, o.next_due_at, o.owner_user_id, o.site_label, o.status,
+       o.source, o.system_key, o.discipline, o.source_kind, o.jurisdiction, o.applicability_rationale,
+       o.evaluation_cadence_days, o.last_reviewed_at, o.reviewed_by, o.next_review_due,
+       o.created_by, o.created_at, o.updated_at,
+       last_eval.id               as last_evaluation_id,
+       last_eval.completed_at     as last_evaluated_at,
+       last_eval.result           as last_result,
+       last_eval.nonconformity_id as last_nonconformity_id,
+       open_eval.id               as open_evaluation_id,
+       open_eval.scheduled_for    as open_evaluation_due,
+       open_eval.assigned_to      as open_evaluation_assignee
+  from public.compliance_calendar_obligations o
+  left join lateral (
+    select e.id, e.completed_at, e.result, e.nonconformity_id
+      from public.ms_compliance_evaluations e
+     where e.tenant_id = o.tenant_id and e.obligation_id = o.id and e.completed_at is not null
+     order by e.completed_at desc, e.id desc
+     limit 1
+  ) last_eval on true
+  left join lateral (
+    select e.id, e.scheduled_for, e.assigned_to
+      from public.ms_compliance_evaluations e
+     where e.tenant_id = o.tenant_id and e.obligation_id = o.id and e.completed_at is null
+     limit 1   -- uq_ms_compliance_evaluations_open: there is at most one
+  ) open_eval on true;
+
 notify pgrst, 'reload schema';
 
 commit;

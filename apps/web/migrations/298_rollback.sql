@@ -9,6 +9,7 @@
 
 begin;
 
+drop view  if exists public.ms_obligation_register;
 drop table if exists public.ms_compliance_evaluations;
 drop function if exists public.ms_compliance_evaluations_sealed();
 alter table public.nonconformities drop constraint if exists nonconformities_tenant_id_id_key;

@@ -3,6 +3,7 @@ import { requireTenantModuleAdmin, requireTenantModuleMember } from '@/lib/auth/
 import { sanitizeError } from '@/lib/security/sanitizeError'
 import {
   ENVIRONMENTAL_MODULE,
+  emsDisciplineParam,
   gateFailure,
   invalidInput,
   invalidJson,
@@ -10,7 +11,7 @@ import {
   readJsonObject,
   versionConflict,
 } from '@/lib/environmental/registerApi'
-import { emsDisciplineParam, scopeStatementInputFrom } from '@/lib/environmental/contextRegisters'
+import { scopeStatementInputFrom } from '@/lib/environmental/contextRegisters'
 
 // GET  /api/environmental/scope?discipline=ems   The scope in force and every earlier version (clause 4.3).
 // POST /api/environmental/scope                  Save a new version; versions are never edited. Admins only.

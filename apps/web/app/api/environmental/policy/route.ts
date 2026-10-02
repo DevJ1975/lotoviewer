@@ -8,6 +8,7 @@ import { requireTenantModuleAdmin, requireTenantModuleMember } from '@/lib/auth/
 import { sanitizeError } from '@/lib/security/sanitizeError'
 import {
   ENVIRONMENTAL_MODULE,
+  emsDisciplineParam,
   gateFailure,
   invalidInput,
   invalidJson,
@@ -15,7 +16,7 @@ import {
   readJsonObject,
   versionConflict,
 } from '@/lib/environmental/registerApi'
-import { emsDisciplineParam, policyInputFrom } from '@/lib/environmental/contextRegisters'
+import { policyInputFrom } from '@/lib/environmental/contextRegisters'
 
 // GET  /api/environmental/policy?discipline=ems   The policy in force, its earlier versions,
 //                                                 the commitments it must state, and whether a

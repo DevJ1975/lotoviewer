@@ -1,7 +1,5 @@
 import type { FieldError } from '@soteria/core/hazardousWaste'
 import {
-  DISCIPLINES,
-  registerDisciplines,
   validateContextIssueInput,
   validateInterestedPartyInput,
   validatePolicyInput,
@@ -15,7 +13,7 @@ import {
   type PolicyInput,
   type ScopeStatementInput,
 } from '@soteria/core/managementSystem'
-import { invalidInput, UUID_RE, optionalText, text, todayUtc, type JsonObject } from './registerApi'
+import { emsDisciplineErrors, invalidInput, UUID_RE, optionalText, text, todayUtc, type JsonObject } from './registerApi'
 
 // Request bodies for the context, interested-party, scope and policy
 // registers (clauses 4.1, 4.2, 4.3, 5.2), turned into validated core inputs.
@@ -27,22 +25,6 @@ export type Parsed<T> = { ok: true; input: T } | { ok: false; errors: FieldError
 
 function parsed<T>(input: T, errors: FieldError[]): Parsed<T> {
   return errors.length === 0 ? { ok: true, input } : { ok: false, errors }
-}
-
-const EMS_DISCIPLINES = registerDisciplines('ems')
-
-/** The environmental routes write environmental and integrated records only; OH&S records are Phase 8's. */
-function emsDisciplineErrors(discipline: Discipline): FieldError[] {
-  const known = DISCIPLINES.includes(discipline)
-  return known && !EMS_DISCIPLINES.includes(discipline)
-    ? [{ field: 'discipline', message: 'must be ems or integrated' }]
-    : []
-}
-
-/** ?discipline= on the scope and policy reads: ems unless the caller asks for integrated. */
-export function emsDisciplineParam(raw: string | null): Discipline | null {
-  const discipline = (raw ?? 'ems') as Discipline
-  return EMS_DISCIPLINES.includes(discipline) ? discipline : null
 }
 
 export function contextIssueInputFrom(raw: JsonObject): Parsed<ContextIssueInput> {

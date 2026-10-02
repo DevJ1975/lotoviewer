@@ -241,10 +241,32 @@ function aspectRegister(): Row[] {
   })
 }
 
+function obligationRegister(): Row[] {
+  const evaluations = rowsIn('ms_compliance_evaluations')
+  return rowsIn('compliance_calendar_obligations').map(obligation => {
+    const mine = evaluations.filter(e => e.tenant_id === obligation.tenant_id && e.obligation_id === obligation.id)
+    const last = mine
+      .filter(e => e.completed_at != null)
+      .sort((a, b) => compare(b.completed_at, a.completed_at) || compare(b.id, a.id))[0]
+    const open = mine.find(e => e.completed_at == null)
+    return {
+      ...obligation,
+      last_evaluation_id:       last?.id ?? null,
+      last_evaluated_at:        last?.completed_at ?? null,
+      last_result:              last?.result ?? null,
+      last_nonconformity_id:    last?.nonconformity_id ?? null,
+      open_evaluation_id:       open?.id ?? null,
+      open_evaluation_due:      open?.scheduled_for ?? null,
+      open_evaluation_assignee: open?.assigned_to ?? null,
+    }
+  })
+}
+
 const VIEWS: Partial<Record<string, () => Row[]>> = {
   environmental_aspect_score_history:  scoreHistory,
   environmental_aspect_current_scores: currentScores,
   environmental_aspect_register:       aspectRegister,
+  ms_obligation_register:              obligationRegister,
 }
 
 function run(state: QueryState): { data: unknown; error: DbError | null } {

@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { FieldError } from '@soteria/core/hazardousWaste'
-import { DEFAULT_REVIEW_CADENCE_DAYS, nextReviewDue, type Discipline } from '@soteria/core/managementSystem'
+import {
+  DEFAULT_REVIEW_CADENCE_DAYS,
+  DISCIPLINES,
+  nextReviewDue,
+  registerDisciplines,
+  type Discipline,
+} from '@soteria/core/managementSystem'
 import { requireTenantModuleAdmin } from '@/lib/auth/tenantGate'
 import { sanitizeError } from '@/lib/security/sanitizeError'
 
@@ -14,6 +20,22 @@ export const ENVIRONMENTAL_MODULE = 'environmental'
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export type JsonObject = Record<string, unknown>
+
+/** The disciplines the environmental routes read and write; OH&S-only records are Phase 8's. */
+export const EMS_DISCIPLINES = registerDisciplines('ems')
+
+/** A known discipline these routes may not write. An unknown one is the core validator's to report. */
+export function emsDisciplineErrors(discipline: Discipline): FieldError[] {
+  return DISCIPLINES.includes(discipline) && !EMS_DISCIPLINES.includes(discipline)
+    ? [{ field: 'discipline', message: 'must be ems or integrated' }]
+    : []
+}
+
+/** ?discipline= on the scope and policy reads: ems unless the caller asks for integrated. */
+export function emsDisciplineParam(raw: string | null): Discipline | null {
+  const discipline = (raw ?? 'ems') as Discipline
+  return EMS_DISCIPLINES.includes(discipline) ? discipline : null
+}
 
 export interface RouteContext { params: Promise<{ id: string }> }
 

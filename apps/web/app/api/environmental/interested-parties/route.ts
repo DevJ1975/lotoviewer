@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
-import { registerDisciplines } from '@soteria/core/managementSystem'
 import { requireTenantModuleAdmin, requireTenantModuleMember } from '@/lib/auth/tenantGate'
 import { sanitizeError } from '@/lib/security/sanitizeError'
-import { ENVIRONMENTAL_MODULE, gateFailure, invalidInput, invalidJson, readJsonObject } from '@/lib/environmental/registerApi'
+import { EMS_DISCIPLINES, ENVIRONMENTAL_MODULE, gateFailure, invalidInput, invalidJson, readJsonObject } from '@/lib/environmental/registerApi'
 import { interestedPartyInputFrom, unknownObligation } from '@/lib/environmental/contextRegisters'
 
 // GET  /api/environmental/interested-parties   Interested parties and their needs (clause 4.2).
@@ -27,7 +26,7 @@ export async function GET(req: Request) {
     .from('ms_interested_parties')
     .select('*')
     .eq('tenant_id', gate.tenantId)
-    .in('discipline', registerDisciplines('ems'))
+    .in('discipline', EMS_DISCIPLINES)
   if (status === 'active')  query = query.is('retired_at', null)
   if (status === 'retired') query = query.not('retired_at', 'is', null)
 
