@@ -174,6 +174,22 @@ describe('migration 302 on a real Postgres', () => {
     })
   })
 
+  describe('deleting a tenant', () => {
+    it('takes its policy communications and responsibilities with it, in one statement', async () => {
+      const policy = await insertPolicy(db, IDS.tenantB)
+      await communicate(db, IDS.tenantB, policy)
+      await db.query(
+        `insert into public.ms_responsibilities (tenant_id, responsibility_key, owner_user_id) values ($1, 'aspects', $2)`,
+        [IDS.tenantB, IDS.adminB])
+
+      await db.query('delete from public.tenants where id = $1', [IDS.tenantB])
+
+      for (const table of ['ms_policy_communications', 'ms_responsibilities', 'ms_policies']) {
+        expect(await count(db, `select count(*) from public.${table} where tenant_id = $1`, [IDS.tenantB])).toBe(0)
+      }
+    })
+  })
+
   describe('re-running and rolling back', () => {
     it('re-runs without changing anything', async () => {
       const before = await count(db, 'select count(*) from public.ms_policy_communications')
