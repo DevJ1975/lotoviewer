@@ -92,6 +92,9 @@ export const UNIQUE_KEYS: Record<string, { columns: string[]; where?: (row: Row)
   // uq_ms_scoring_methods_default (migration 296)
   ms_scoring_methods:  [{ columns: ['tenant_id', 'discipline'], where: row => row.is_default === true && row.retired_at == null }],
   environmental_aspect_obligations: [{ columns: ['aspect_id', 'obligation_id'] }],
+  // uq_ms_compliance_evaluations_open (migration 298)
+  ms_compliance_evaluations: [{ columns: ['obligation_id'], where: row => row.completed_at == null }],
+  ms_evidence: [{ columns: ['tenant_id', 'subject_type', 'subject_id', 'sha256'] }],
 }
 
 /** Same-tenant composite foreign keys, per table: (columns) → table(references). */
@@ -138,6 +141,7 @@ export function resetStore(): void {
   writes.length = 0
   failures = []
   hooks = []
+  objects.clear()
   idCounter = 0
   captureExceptionMock.mockReset()
   asAdminA()
@@ -368,6 +372,35 @@ function builder(table: string) {
 }
 
 const client = { from: (table: string) => builder(table) }
+
+// ── storage (the private ms-evidence bucket) ──────────────────────────
+/** Stored objects by `${bucket}/${path}`. */
+export const objects = new Map<string, Uint8Array<ArrayBuffer>>()
+
+function storageBucket(bucket: string) {
+  const key = (path: string) => `${bucket}/${path}`
+  return {
+    async upload(path: string, bytes: Uint8Array, options: { upsert?: boolean } = {}) {
+      if (objects.has(key(path)) && !options.upsert) return { data: null, error: { message: 'The resource already exists' } }
+      objects.set(key(path), new Uint8Array(bytes))
+      return { data: { path }, error: null }
+    },
+    async download(path: string) {
+      const stored = objects.get(key(path))
+      return stored
+        ? { data: new Blob([stored]), error: null }
+        : { data: null, error: { message: 'Object not found' } }
+    },
+    async remove(paths: string[]) {
+      for (const path of paths) objects.delete(key(path))
+      return { data: paths.map(name => ({ name })), error: null }
+    },
+  }
+}
+
+vi.mock('@/lib/supabaseAdmin', () => ({
+  supabaseAdmin: () => ({ from: (table: string) => builder(table), storage: { from: storageBucket } }),
+}))
 
 // ── requests ──────────────────────────────────────────────────────────
 export function jsonRequest(path: string, method: string, body?: unknown): Request {
