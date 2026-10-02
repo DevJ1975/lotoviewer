@@ -65,6 +65,8 @@ export interface ImpactTarget {
   href:         string | null
   /** A permit's holder of record now, for the confirm-holder rule. */
   holder?:      string
+  /** True for a permit that has been retired. */
+  retired?:     boolean
 }
 
 type Targets = Map<string, ImpactTarget>
@@ -98,7 +100,7 @@ export async function loadImpactTargets(
       : client.from(table).select(columns).eq('tenant_id', tenantId).in('id', ids)
 
   const [permits, scopes, policies, aspects, obligations] = await Promise.all([
-    read('environmental_permits', 'id, title, agency, holder_of_record', idsOf('permit')),
+    read('environmental_permits', 'id, title, agency, holder_of_record, retired_at', idsOf('permit')),
     read('ms_scope_statements', 'id, version, legal_entity', idsOf('scope')),
     read('ms_policies', 'id, version, signed_at', idsOf('policy')),
     read('environmental_aspects', 'id, aspect, process_area', idsOf('aspect')),
@@ -107,9 +109,10 @@ export async function loadImpactTargets(
   const error = permits.error ?? scopes.error ?? policies.error ?? aspects.error ?? obligations.error
   if (error) return { targets, error }
 
-  for (const row of (permits.data ?? []) as unknown as { id: string; title: string; agency: string; holder_of_record: string }[]) {
+  for (const row of (permits.data ?? []) as unknown as { id: string; title: string; agency: string; holder_of_record: string; retired_at: string | null }[]) {
     targets.set(targetKey('permit', row.id), {
       label: `${row.title} (${row.agency})`, href: `/environmental/permits/${row.id}`, holder: row.holder_of_record,
+      retired: row.retired_at !== null,
     })
   }
   for (const row of (scopes.data ?? []) as unknown as { id: string; version: number; legal_entity: string }[]) {

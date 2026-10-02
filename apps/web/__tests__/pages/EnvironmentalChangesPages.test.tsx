@@ -54,7 +54,9 @@ describe('/environmental/changes', () => {
     expect(await screen.findByRole('link', { name: 'Sale of the plant' })).toHaveAttribute('href', '/environmental/changes/ch1')
     expect(api.listChanges).toHaveBeenCalledWith('tenant-1', 'open')
     expect(screen.getByText('4 of 11 resolved')).toBeInTheDocument()
-    expect(screen.getByText('0 of 0 resolved')).toBeInTheDocument()
+    // Nothing listed is not "complete": the row says nothing was checked automatically.
+    expect(screen.getByText('No records listed automatically')).toBeInTheDocument()
+    expect(screen.queryByText('0 of 0 resolved')).not.toBeInTheDocument()
     expect(screen.getByText(/Change of owner or legal name · opened 2026-10-01/)).toBeInTheDocument()
   })
 
@@ -106,6 +108,15 @@ describe('/environmental/changes', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('opens with an empty checklist')
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'x' } })
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('warns when a named process area matches no aspect, since that looks like a change that touches nothing', async () => {
+    api.previewChange.mockResolvedValue({ preview: { impacts: 0, byTarget: {} } })
+    render(<ChangesPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'New change' }))
+    fireEvent.change(screen.getByLabelText(/Process area it happens in/), { target: { value: 'Paint Booth 2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Preview impacts' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('No aspect is recorded in "Paint Booth 2"')
   })
 
   it('will not open a change of owner from a single site, and says to switch to all facilities', async () => {

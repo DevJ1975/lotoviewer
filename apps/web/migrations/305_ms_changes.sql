@@ -121,6 +121,8 @@ set search_path = pg_catalog, public
 as $$
 declare
   v_unresolved int;
+  v_permit     text;
+  v_scope      text;
 begin
   if tg_op = 'INSERT' then
     if new.status <> 'open' or new.ended_at is not null then
@@ -151,6 +153,31 @@ begin
         case when v_unresolved = 1 then 'is' else 'are' end
         using errcode = 'check_violation';
     end if;
+    -- A change of owner is done when the records say so, not when its checklist does: a permit
+    -- added after it opened is not on the checklist, and a checklist can be empty.
+    if new.kind = 'ownership_name' then
+      select p.title into v_permit
+        from public.environmental_permits p
+       where p.tenant_id = new.tenant_id and p.retired_at is null
+         and (new.facility_id is null or p.facility_id = new.facility_id)
+         and public.ms_normalize_legal_entity(p.holder_of_record) <> public.ms_normalize_legal_entity(new.new_legal_entity)
+       order by p.title
+       limit 1;
+      if v_permit is not null then
+        raise exception 'The permit "%" still names another holder. Update its holder of record, or retire it, first.', v_permit
+          using errcode = 'check_violation';
+      end if;
+      select s.legal_entity into v_scope
+        from public.ms_scope_statements s
+       where s.tenant_id = new.tenant_id and s.discipline = new.discipline
+       order by s.version desc
+       limit 1;
+      if v_scope is not null
+         and public.ms_normalize_legal_entity(v_scope) <> public.ms_normalize_legal_entity(new.new_legal_entity) then
+        raise exception 'The scope in force does not name the new legal entity yet. Issue a new scope version first.'
+          using errcode = 'check_violation';
+      end if;
+    end if;
   end if;
   if new.status <> 'open' then
     new.ended_at := now();
@@ -176,6 +203,7 @@ declare
   v_change          public.ms_changes%rowtype;
   v_discipline      text;
   v_holder          text;
+  v_retired         timestamptz;
   v_scope_entity    text;
   v_scope_from      date;
   v_policy_signed   date;
@@ -223,11 +251,14 @@ begin
       raise exception 'Attach evidence for this step first.' using errcode = 'check_violation';
     end if;
     if new.step = 'confirm_holder' then
-      select holder_of_record into v_holder
+      select holder_of_record, retired_at into v_holder, v_retired
         from public.environmental_permits
        where tenant_id = new.tenant_id and id = new.target_id;
-      if v_holder is null
-         or public.ms_normalize_legal_entity(v_holder) <> public.ms_normalize_legal_entity(v_change.new_legal_entity) then
+      -- A permit retired while the change was open has no holder left to confirm, and a
+      -- retired permit cannot be edited; the step still needs its evidence.
+      if v_retired is null
+         and (v_holder is null
+              or public.ms_normalize_legal_entity(v_holder) <> public.ms_normalize_legal_entity(v_change.new_legal_entity)) then
         raise exception 'The permit still names another holder. Update its holder of record to the new legal entity first.'
           using errcode = 'check_violation';
       end if;

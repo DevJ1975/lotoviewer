@@ -11,10 +11,12 @@ export interface HealthFact {
   warn?: boolean
 }
 
-export function RegisterHealthStrip({ title, health, facts }: {
+export function RegisterHealthStrip({ title, health, facts, labels }: {
   title: string
   health: RegisterHealth | null
   facts: HealthFact[]
+  /** Replaces the light's default words, for a register the defaults would mislead about. */
+  labels?: Partial<Record<RegisterHealth, string>>
 }) {
   return (
     <section
@@ -22,7 +24,7 @@ export function RegisterHealthStrip({ title, health, facts }: {
       className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900"
     >
       <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{title}</span>
-      {health && <RegisterHealthBadge health={health} />}
+      {health && <RegisterHealthBadge health={health} labels={labels} />}
       {facts.map(fact => (
         <span key={fact.label} className="text-xs text-slate-600 dark:text-slate-300">
           <span className={`placard-numeric font-semibold ${fact.warn ? 'text-amber-700 dark:text-amber-300' : 'text-slate-900 dark:text-slate-100'}`}>

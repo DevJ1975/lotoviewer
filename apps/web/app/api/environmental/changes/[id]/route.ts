@@ -104,6 +104,7 @@ export async function GET(req: Request, ctx: RouteContext) {
         evidenceCount:  evidenceRows.filter(e => e.subject_id === impact.id && e.superseded_by === null).length,
         note:           null,
         permitHolder:   impact.target_type === 'permit' ? target.holder ?? null : null,
+        permitRetired:  impact.target_type === 'permit' && target.retired === true,
         scopeInForce,
         policySignedAt,
       })
@@ -156,6 +157,13 @@ export async function PATCH(req: Request, ctx: RouteContext) {
   const change = current as unknown as ChangeRow
   if (change.status !== 'open') {
     return NextResponse.json({ error: `This change is ${change.status}, so it can no longer be edited.` }, { status: 409 })
+  }
+
+  // Closing a change of owner re-checks every active permit; a selected site would hide the others'.
+  if (status === 'closed' && change.kind === 'ownership_name' && gate.facilityId !== null) {
+    return NextResponse.json({
+      error: 'A change of owner or legal name covers every site. Switch to all facilities and try again.',
+    }, { status: 400 })
   }
 
   const patch: Record<string, unknown> = {}

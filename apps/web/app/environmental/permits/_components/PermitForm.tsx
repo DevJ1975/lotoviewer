@@ -190,7 +190,7 @@ export function PermitForm({ tenantId, initial, defaultHolder, onSaved, onCancel
         <label className="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-300 sm:col-span-2">
           <input type="checkbox" className="mt-0.5" checked={form.business_critical}
             onChange={e => set('business_critical', e.target.checked)} />
-          <span>Business-critical: operations stop without it, so its renewal notices also reach the Compliance obligations holder and, at 30 days, every owner and admin.</span>
+          <span>Business-critical: operations stop without it, so its renewal notices also reach the Compliance obligations holder and, at 30 days and once the date has passed, every owner and admin.</span>
         </label>
         <label className={`${LABEL} sm:col-span-2`}>
           <span className={LABEL_TEXT}>Notes (optional)</span>

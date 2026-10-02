@@ -272,7 +272,15 @@ describe('PATCH /changes/[id]', () => {
     })
   })
 
+  it('refuses to close a change of owner from one site, which would hide the other sites\' permits from the re-check', async () => {
+    const res = await patch({ status: 'closed' })   // admin A, at FACILITY_A
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/every site/)
+    expect(rowsIn('ms_changes')[0].status).toBe('open')
+  })
+
   it('closes a change once every impact is resolved, and says what is left otherwise', async () => {
+    rollUp()
     seed('ms_change_impacts', [impactRow({ id: 'i2' })])
     const refused = await patch({ status: 'closed' })
     expect(refused.status).toBe(409)

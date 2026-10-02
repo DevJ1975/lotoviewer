@@ -127,19 +127,21 @@ export function planPermitNotices(input: PlanInput): PlannedNotice[] {
     })
   }
 
-  const conditionsById = new Map(input.conditions.map(c => [c.id, c]))
+  // A retired permit leaves every notice, its conditions' reminders included; `permits` holds only active ones.
+  const activeConditions = input.conditions.filter(c => permitsById.has(c.permit_id))
+  const conditionsById = new Map(activeConditions.map(c => [c.id, c]))
   const reminders: ConditionReminder[] = conditionRemindersDue(
-    input.conditions.map(c => ({ id: c.id, nextDueAt: c.next_due_at, active: true })), today, alreadySent,
+    activeConditions.map(c => ({ id: c.id, nextDueAt: c.next_due_at, active: true })), today, alreadySent,
   )
   for (const reminder of reminders) {
     const condition = conditionsById.get(reminder.obligationId)!
-    const permit = permitsById.get(condition.permit_id)
+    const permit = permitsById.get(condition.permit_id)!
     planned.push({
       tenantId: condition.tenant_id, subjectType: 'compliance_obligation', subjectId: condition.id, noticeKey: reminder.noticeKey,
       recipients: unique(ownerOrAdmins(condition.owner_user_id, peopleOf(condition.tenant_id))),
       condition: {
         conditionTitle: condition.title,
-        permitTitle:    permit?.title ?? 'its permit',
+        permitTitle:    permit.title,
         dueOn:          reminder.dueOn,
         stage:          reminder.stage,
         url:            `${baseUrl}/environmental/permits/${condition.permit_id}`,

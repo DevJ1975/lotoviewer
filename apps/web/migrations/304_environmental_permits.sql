@@ -110,6 +110,37 @@ create policy environmental_permits_admin_write on public.environmental_permits
 -- Retire instead. The service role can still delete, so a tenant's cascade works.
 revoke delete on public.environmental_permits from authenticated, anon;
 
+-- A retired permit is history: nothing about it changes, except that removing a
+-- member clears them as its owner (the foreign key's own update). And a renewal
+-- application belongs to the term it was filed for, so when the term's dates
+-- change without the submission being recorded again, the submission is cleared:
+-- otherwise correcting a permit to its next term would leave it "renewal
+-- submitted" and silence every notice for that term.
+create or replace function public.ms_environmental_permits_guard()
+returns trigger
+language plpgsql
+set search_path = pg_catalog, public
+as $$
+begin
+  if old.retired_at is not null then
+    if (to_jsonb(new) - 'owner_user_id' - 'updated_at') is distinct from (to_jsonb(old) - 'owner_user_id' - 'updated_at') then
+      raise exception 'A retired permit is kept as history and is not edited.' using errcode = 'check_violation';
+    end if;
+    return new;
+  end if;
+  if (new.issued_on, new.expires_on, new.renewal_application_due_on)
+       is distinct from (old.issued_on, old.expires_on, old.renewal_application_due_on)
+     and new.renewal_submitted_on is not distinct from old.renewal_submitted_on then
+    new.renewal_submitted_on := null;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_environmental_permits_guard on public.environmental_permits;
+create trigger trg_environmental_permits_guard
+  before update on public.environmental_permits
+  for each row execute function public.ms_environmental_permits_guard();
+
 drop trigger if exists trg_environmental_permits_touch on public.environmental_permits;
 create trigger trg_environmental_permits_touch
   before update on public.environmental_permits

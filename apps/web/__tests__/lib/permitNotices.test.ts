@@ -83,9 +83,8 @@ describe('planPermitNotices', () => {
   })
 
   it('sends a condition with no owner, or whose owner has left, to the admins', () => {
-    const notices = plan({
-      permits: [], conditions: [condition({ owner_user_id: null }), condition({ id: 'c2', owner_user_id: STRANGER })],
-    })
+    const notices = plan({ conditions: [condition({ owner_user_id: null }), condition({ id: 'c2', owner_user_id: STRANGER })] })
+      .filter(notice => notice.condition)
     expect(notices.map(n => n.recipients)).toEqual([[ADMIN_1, ADMIN_2], [ADMIN_1, ADMIN_2]])
   })
 
@@ -98,8 +97,7 @@ describe('planPermitNotices', () => {
     expect(notice.recipients).toEqual([])
   })
 
-  it('names a condition\'s permit as "its permit" when the permit is not among those read', () => {
-    const [notice] = plan({ permits: [], conditions: [condition({ permit_id: 'gone' })] })
-    expect(notice.condition?.permitTitle).toBe('its permit')
+  it('sends no reminder for a condition whose permit is not active, so retiring a permit silences its conditions too', () => {
+    expect(plan({ permits: [], conditions: [condition({ permit_id: 'retired-or-gone' })] })).toEqual([])
   })
 })

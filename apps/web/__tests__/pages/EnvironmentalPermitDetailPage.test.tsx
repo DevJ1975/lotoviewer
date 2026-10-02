@@ -18,10 +18,13 @@ const api = vi.hoisted(() => ({
 vi.mock('next/navigation', () => ({ useParams: () => ({ id: 'p1' }) }))
 vi.mock('@/components/TenantProvider', () => ({ useTenant: () => ({ tenantId: 'tenant-1', role: access.role }) }))
 vi.mock('@/components/AuthProvider', () => ({ useAuth: () => ({ userId: access.userId, profile: { is_superadmin: false } }) }))
+const members = vi.hoisted(() => ({
+  list: [{ user_id: 'u-owner', role: 'member', email: 'owner@example.test', full_name: 'Demo Condition Owner' }] as { user_id: string; role: string; email: string; full_name: string }[] | null,
+}))
 vi.mock('@/app/risk/_components/wizard/MemberPicker', () => ({
   default: () => <span>member picker</span>,
   memberName: (member: { full_name: string | null }) => member.full_name ?? 'Unnamed',
-  useTenantMembers: () => ({ members: [{ user_id: 'u-owner', role: 'member', email: 'owner@example.test', full_name: 'Demo Condition Owner' }], error: null }),
+  useTenantMembers: () => ({ members: members.list, error: null }),
 }))
 vi.mock('@/lib/environmental/client', async importOriginal => ({
   ...(await importOriginal<typeof import('@/lib/environmental/client')>()),
@@ -52,6 +55,7 @@ const detail = (over: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   access.role = 'admin'
   access.userId = 'u-admin'
+  members.list = [{ user_id: 'u-owner', role: 'member', email: 'owner@example.test', full_name: 'Demo Condition Owner' }]
   for (const fn of Object.values(api)) fn.mockReset()
   api.getPermit.mockResolvedValue(detail())
   api.listOccurrences.mockResolvedValue({ occurrences: [], evidence: [] })
@@ -81,7 +85,8 @@ describe('permit page', () => {
       permit: permit({ standing: 'expired_renewal_pending', renewal_submitted_on: '2026-09-01', expires_on: '2026-09-30' }),
     }))
     render(<PermitDetailPage />)
-    expect(await screen.findByText(/confirm its status with the agency/)).toBeInTheDocument()
+    expect(await screen.findByText('Past its recorded expiry, renewal pending')).toBeInTheDocument()
+    expect(screen.getByText('Confirm its status with the agency.')).toBeInTheDocument()
   })
 
   it('lists the changes that touched it, linking to each', async () => {
@@ -146,12 +151,55 @@ describe('renewal', () => {
     render(<PermitDetailPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Record the renewed term' }))
     fireEvent.change(screen.getByLabelText('Issued on'), { target: { value: '2027-01-01' } })
-    fireEvent.change(screen.getByLabelText('Expires on (blank: no fixed term)'), { target: { value: '2026-01-01' } })
+    fireEvent.change(screen.getByLabelText('Expires on'), { target: { value: '2026-01-01' } })
     fireEvent.click(screen.getByRole('button', { name: 'Record renewed term' }))
     expect(await screen.findByText('must be after the issue date')).toBeInTheDocument()
     expect(api.recordRenewedTerm).toHaveBeenCalledWith('tenant-1', 'p1', {
       issued_on: '2027-01-01', expires_on: '2026-01-01', renewal_application_due_on: null, permit_number: 'DEMO-IWD-0001',
     })
+  })
+})
+
+describe('the renewed term', () => {
+  it('will not take a blank expiry for "no fixed term": that has to be said', async () => {
+    api.recordRenewedTerm.mockResolvedValue({ permit: permit() })
+    render(<PermitDetailPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Record the renewed term' }))
+    expect(screen.getByText(/The current term is issued 2024-01-01 and expires 2027-01-01/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Issued on'), { target: { value: '2027-01-01' } })
+    expect(screen.getByRole('button', { name: 'Record renewed term' })).toBeDisabled()
+
+    fireEvent.click(screen.getByLabelText('The renewed permit has no fixed term'))
+    expect(screen.getByLabelText('Expires on')).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Record renewed term' }))
+    await waitFor(() => expect(api.recordRenewedTerm).toHaveBeenCalledWith('tenant-1', 'p1', expect.objectContaining({ issued_on: '2027-01-01', expires_on: null })))
+  })
+})
+
+describe('after the page has loaded', () => {
+  it('says so when a reload fails, rather than leaving old data as if it were current, and can retry', async () => {
+    api.reviewPermit.mockResolvedValue({ row: permit() })
+    render(<PermitDetailPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Mark reviewed' }))
+    api.getPermit.mockRejectedValueOnce(new Error('Could not reach the server'))
+    // The review's own reload fails.
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Could not reach the server')
+    expect(alert).toHaveTextContent('may be out of date')
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  })
+
+  it('shows an export-controlled document\'s name, without a download that would be refused, to a member', async () => {
+    access.role = 'member'
+    api.getPermit.mockResolvedValue(detail({
+      documents: [{ id: 'd1', subject_id: 'p1', kind: 'document', file_name: 'Drawing.pdf', mime_type: 'application/pdf', file_size_bytes: 1, sha256: 'a'.repeat(64),
+        uploaded_by: 'u1', uploaded_at: '2026-10-01T00:00:00Z', superseded_by: null, superseded_at: null, superseded_reason: null, export_controlled: true }],
+    }))
+    render(<PermitDetailPage />)
+    expect(await screen.findByText('Drawing.pdf')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Drawing.pdf' })).not.toBeInTheDocument()
+    expect(screen.getByText(/owners and admins can download it/)).toBeInTheDocument()
   })
 })
 
@@ -161,6 +209,7 @@ describe('retiring and reviewing', () => {
     render(<PermitDetailPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Retire' }))
     expect(screen.getByText(/kept as history/)).toBeInTheDocument()
+    expect(screen.getByText(/conditions stay in the obligations register/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Retire permit' })).toBeDisabled()
     fireEvent.change(screen.getByLabelText('Why the permit is retired'), { target: { value: 'Process discontinued' } })
     fireEvent.click(screen.getByRole('button', { name: 'Retire permit' }))
@@ -240,6 +289,29 @@ describe('conditions', () => {
     await waitFor(() => expect(api.addPermitCondition).toHaveBeenCalledWith('tenant-1', 'p1', {
       title: 'Calibrate the flow meter', next_due_at: '2027-02-01', cadence: 'annual', cadence_days: null, owner_user_id: null, description: null,
     }))
+  })
+
+  it('shows a one-off condition that was done as Done, and still lets its proof be attached', async () => {
+    api.getPermit.mockResolvedValue(detail({ conditions: [condition({ status: 'completed', cadence: 'once' })] }))
+    api.listOccurrences.mockResolvedValue({
+      occurrences: [{ id: 'occ1', obligation_id: 'c1', occurrence_at: '2099-01-15', completed_at: '2026-10-02T00:00:00Z', completed_by: 'u-admin', note: null }],
+      evidence: [],
+    })
+    render(<PermitDetailPage />)
+    const conditions = await section()
+    expect(conditions.getByText('Done')).toBeInTheDocument()
+    expect(conditions.queryByText('Dismissed')).not.toBeInTheDocument()
+    fireEvent.click(conditions.getByRole('button', { name: 'See history' }))
+    expect(await conditions.findByLabelText('Evidence file')).toBeInTheDocument()
+    expect(conditions.queryByRole('button', { name: 'Mark done' })).not.toBeInTheDocument()
+  })
+
+  it('does not say an owner has left while the member list is still loading', async () => {
+    members.list = null
+    render(<PermitDetailPage />)
+    const conditions = await section()
+    expect(conditions.queryByText(/no longer a member/)).not.toBeInTheDocument()
+    expect(conditions.getByText(/Quarterly · Owner/)).toBeInTheDocument()
   })
 
   it('says what an empty list means', async () => {

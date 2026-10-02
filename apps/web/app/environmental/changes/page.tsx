@@ -38,6 +38,7 @@ export default function ChangesPage() {
     if (!tenantId) return
     const current = ++generation.current
     setLoadError(null)
+    setChanges(null)   // never leave the previous status's changes under the new one's label
     try {
       const result = await listChanges(tenantId, status)
       if (current === generation.current) setChanges(result.changes)
@@ -102,7 +103,7 @@ export default function ChangesPage() {
                   {change.status !== 'open' && ` · ${change.status}`}
                 </p>
               </div>
-              <Progress resolved={change.impacts_resolved} total={change.impacts_total} />
+              <Progress resolved={change.impacts_resolved} total={change.impacts_total} label={`Impacts resolved: ${change.title}`} />
             </li>
           ))}
         </ul>

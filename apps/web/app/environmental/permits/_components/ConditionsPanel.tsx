@@ -55,7 +55,7 @@ export function ConditionsPanel({ tenantId, permitId, retired, conditions, canEd
         <ul className="divide-y divide-slate-100 rounded-xl border border-slate-100 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
           {conditions.map(condition => (
             <ConditionItem key={condition.id} tenantId={tenantId} condition={condition} members={members} today={today}
-              canEdit={canEdit} retired={retired} onChanged={onChanged} />
+              canEdit={canEdit} onChanged={onChanged} />
           ))}
         </ul>
       )}
@@ -63,15 +63,17 @@ export function ConditionsPanel({ tenantId, permitId, retired, conditions, canEd
   )
 }
 
-function ConditionItem({ tenantId, condition, members, today, canEdit, retired, onChanged }: {
+function ConditionItem({ tenantId, condition, members, today, canEdit, onChanged }: {
   tenantId: string; condition: PermitCondition; members: Member[] | null; today: string
-  canEdit: boolean; retired: boolean; onChanged: () => void
+  canEdit: boolean; onChanged: () => void
 }) {
   const { userId } = useAuth()
   const [open, setOpen] = useState(false)
   const owner = condition.owner_user_id && members ? members.find(m => m.user_id === condition.owner_user_id) ?? null : null
   const overdue = condition.status === 'open' && condition.next_due_at < today
-  const mayRecord = !retired && condition.status === 'open' && (canEdit || (userId !== null && condition.owner_user_id === userId))
+  const isOwnerOrAdmin = canEdit || (userId !== null && condition.owner_user_id === userId)
+  // A retired permit's conditions stay obligations until dismissed, so they can still be done.
+  const mayRecord = condition.status === 'open' && isOwnerOrAdmin
 
   return (
     <li className="space-y-2 p-3">
@@ -80,12 +82,15 @@ function ConditionItem({ tenantId, condition, members, today, canEdit, retired, 
           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{condition.title}</p>
           <p className="text-xs text-slate-500">
             {CADENCE_LABEL[condition.cadence] ?? condition.cadence}
-            {' · '}{owner ? memberName(owner) : condition.owner_user_id ? 'Owner no longer a member' : 'No owner: admins are told'}
+            {' · '}{owner ? memberName(owner)
+              : condition.owner_user_id ? (members === null ? 'Owner' : 'Owner no longer a member')
+              : 'No owner: admins are told'}
           </p>
         </div>
         <div className="text-right text-xs">
           <p className={overdue ? 'font-semibold text-rose-700 dark:text-rose-300' : 'text-slate-600 dark:text-slate-300'}>
-            {condition.status === 'open' ? `${overdue ? 'Overdue since' : 'Due'} ${condition.next_due_at}` : 'Dismissed'}
+            {condition.status === 'open' ? `${overdue ? 'Overdue since' : 'Due'} ${condition.next_due_at}`
+              : condition.status === 'completed' ? 'Done' : 'Dismissed'}
           </p>
           <button type="button" className="mt-1 text-brand-navy hover:underline dark:text-brand-yellow"
             aria-expanded={open} onClick={() => setOpen(o => !o)}>
@@ -94,14 +99,14 @@ function ConditionItem({ tenantId, condition, members, today, canEdit, retired, 
         </div>
       </div>
       {open && (
-        <ConditionHistory tenantId={tenantId} condition={condition} mayRecord={mayRecord} onChanged={onChanged} />
+        <ConditionHistory tenantId={tenantId} condition={condition} mayRecord={mayRecord} mayAttach={isOwnerOrAdmin} canDownloadControlled={canEdit} onChanged={onChanged} />
       )}
     </li>
   )
 }
 
-function ConditionHistory({ tenantId, condition, mayRecord, onChanged }: {
-  tenantId: string; condition: PermitCondition; mayRecord: boolean; onChanged: () => void
+function ConditionHistory({ tenantId, condition, mayRecord, mayAttach, canDownloadControlled, onChanged }: {
+  tenantId: string; condition: PermitCondition; mayRecord: boolean; mayAttach: boolean; canDownloadControlled: boolean; onChanged: () => void
 }) {
   const [occurrences, setOccurrences] = useState<OccurrenceRow[] | null>(null)
   const [evidence, setEvidence] = useState<EvidenceRow[]>([])
@@ -168,8 +173,8 @@ function ConditionHistory({ tenantId, condition, mayRecord, onChanged }: {
                   <span className="text-slate-500"> · recorded {occurrence.completed_at.slice(0, 10)}</span>
                   {occurrence.note && <span className="text-slate-600 dark:text-slate-300"> · {occurrence.note}</span>}
                 </p>
-                <EvidenceList tenantId={tenantId} evidence={files} />
-                {mayRecord && (occurrence.id === justRecorded || files.length === 0) && (
+                <EvidenceList tenantId={tenantId} evidence={files} canDownloadControlled={canDownloadControlled} />
+                {mayAttach && (occurrence.id === justRecorded || files.length === 0) && (
                   <EvidenceUpload tenantId={tenantId} subjectType="compliance_calendar_event" subjectId={occurrence.id}
                     current={files.filter(f => !f.superseded_by)} onUploaded={() => void load()} />
                 )}

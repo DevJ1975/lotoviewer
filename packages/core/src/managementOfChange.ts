@@ -247,6 +247,8 @@ export interface ResolutionContext {
   note:           string | null
   /** The permit's holder of record now; needed for the confirm-holder step. */
   permitHolder:   string | null
+  /** True when the permit was retired: it has no holder left to confirm, and cannot be edited. */
+  permitRetired:  boolean
   /** The scope in force; needed for scope and policy impacts. */
   scopeInForce:   { legalEntity: string; effectiveFrom: string } | null
   /** When the policy in force was signed; needed for the policy impact. */
@@ -265,8 +267,8 @@ export function impactResolutionGaps(impact: ImpactForResolution, context: Resol
     const gaps: ResolutionGap[] = []
     if (context.evidenceCount === 0) gaps.push('evidence_required')
     if (impact.step === 'confirm_holder') {
-      const updated = context.permitHolder !== null && context.newLegalEntity !== null
-        && sameLegalEntity(context.permitHolder, context.newLegalEntity)
+      const updated = context.permitRetired || (context.permitHolder !== null && context.newLegalEntity !== null
+        && sameLegalEntity(context.permitHolder, context.newLegalEntity))
       if (!updated) gaps.push('holder_not_updated')
     }
     return gaps

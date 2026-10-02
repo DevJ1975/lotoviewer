@@ -140,6 +140,12 @@ export default function ChangeDetailPage() {
         </section>
       ))}
 
+      {loadError && (
+        <div role="alert" className="flex items-center justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
+          <span>{loadError} What is shown may be out of date.</span>
+          <button type="button" className={BUTTON_SECONDARY} onClick={() => void load()}>Retry</button>
+        </div>
+      )}
       {actionError && (
         <div role="alert" className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>{actionError}</span>

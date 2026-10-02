@@ -10,7 +10,13 @@ const LOOK: Record<RegisterHealth, { label: string; className: string }> = {
   red:   { label: 'Missing',         className: 'safety-tag-danger' },
 }
 
-export function RegisterHealthBadge({ health }: { health: RegisterHealth }) {
+/**
+ * The permits register is judged on dates and names, not on whether records exist,
+ * so "Missing" and "Current" would say more than the light knows.
+ */
+export const PERMIT_LIGHT_LABELS: Partial<Record<RegisterHealth, string>> = { red: 'Action needed', green: 'Nothing due' }
+
+export function RegisterHealthBadge({ health, labels }: { health: RegisterHealth; labels?: Partial<Record<RegisterHealth, string>> }) {
   const { label, className } = LOOK[health]
-  return <span className={`safety-tag ${className}`}>{label}</span>
+  return <span className={`safety-tag ${className}`}>{labels?.[health] ?? label}</span>
 }

@@ -20,7 +20,8 @@ const TARGET_LABEL: Record<string, string> = {
   permit: 'permit step', scope: 'scope', policy: 'policy', aspect: 'aspect', obligation: 'obligation', objective: 'objective',
 }
 
-const SITE_KINDS: readonly ChangeKind[] = ['equipment', 'process']
+// Kinds that happen somewhere on site name the process area they touch; a chemical change may, to list its aspects too.
+const AREA_KINDS: readonly ChangeKind[] = ['equipment', 'process', 'chemical']
 
 const SHOWN_FIELDS = ['title', 'description', 'kind', 'processArea', 'newLegalEntity', 'effectiveOn']
 
@@ -49,7 +50,7 @@ export function ChangeForm({ tenantId, facilityChosen, onOpened, onCancel }: {
     kind: form.kind,
     title: form.title,
     description: form.description,
-    process_area: SITE_KINDS.includes(form.kind) ? form.process_area || null : null,
+    process_area: AREA_KINDS.includes(form.kind) ? form.process_area || null : null,
     new_legal_entity: ownership ? form.new_legal_entity || null : null,
     effective_on: form.effective_on || null,
   })
@@ -68,9 +69,13 @@ export function ChangeForm({ tenantId, facilityChosen, onOpened, onCancel }: {
   const showPreview = () => run(async () => {
     const { preview: result } = await previewChange(tenantId, body())
     const parts = Object.entries(result.byTarget).map(([target, count]) => `${count} ${TARGET_LABEL[target] ?? target}${count === 1 ? '' : 's'}`)
-    setPreview(result.impacts === 0
-      ? 'This change touches no records automatically: it opens with an empty checklist.'
-      : `This will create ${result.impacts} ${result.impacts === 1 ? 'impact' : 'impacts'} to resolve: ${parts.join(', ')}.`)
+    // An area that matches no aspect (a typo, or a name the register does not use) looks the same as a change that touches nothing.
+    const areaMatchedNothing = result.impacts === 0 && AREA_KINDS.includes(form.kind) && form.process_area.trim() !== ''
+    setPreview(areaMatchedNothing
+      ? `No aspect is recorded in "${form.process_area.trim()}". Check the process area matches the aspects register; as it stands, this change opens with an empty checklist.`
+      : result.impacts === 0
+        ? 'This change touches no records automatically: it opens with an empty checklist.'
+        : `This will create ${result.impacts} ${result.impacts === 1 ? 'impact' : 'impacts'} to resolve: ${parts.join(', ')}.`)
   }, 'Could not work out the impacts.')
 
   const submit = (e: React.FormEvent) => {
@@ -86,7 +91,8 @@ export function ChangeForm({ tenantId, facilityChosen, onOpened, onCancel }: {
 
   return (
     <form onSubmit={submit} className="space-y-3" noValidate>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* Disabled while a request is out, so an answer can never describe values the form no longer holds. */}
+      <fieldset disabled={saving} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className={LABEL}>
           <span className={LABEL_TEXT}>What kind of change</span>
           <select className={INPUT} value={form.kind} onChange={e => set('kind', e.target.value as ChangeKind)}>
@@ -109,9 +115,9 @@ export function ChangeForm({ tenantId, facilityChosen, onOpened, onCancel }: {
           <textarea className={INPUT} rows={3} value={form.description} onChange={e => set('description', e.target.value)} />
           {fieldError('description')}
         </label>
-        {SITE_KINDS.includes(form.kind) && (
+        {AREA_KINDS.includes(form.kind) && (
           <label className={`${LABEL} sm:col-span-2`}>
-            <span className={LABEL_TEXT}>Process area it happens in</span>
+            <span className={LABEL_TEXT}>Process area it happens in{form.kind === 'chemical' ? ' (optional)' : ' (as named in the aspects register)'}</span>
             <input className={INPUT} value={form.process_area} onChange={e => set('process_area', e.target.value)} placeholder="e.g. Paint booth" />
             {fieldError('processArea')}
           </label>
@@ -124,7 +130,7 @@ export function ChangeForm({ tenantId, facilityChosen, onOpened, onCancel }: {
             {fieldError('newLegalEntity')}
           </label>
         )}
-      </div>
+      </fieldset>
       {needsSite && (
         <p className="text-xs text-amber-800 dark:text-amber-200">
           A change of owner or legal name covers every site. Switch to all facilities in the header to open it.

@@ -119,6 +119,12 @@ export default function PermitDetailPage() {
           </span>
         </div>
       )}
+      {loadError && (
+        <div role="alert" className="flex items-center justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
+          <span>{loadError} What is shown may be out of date.</span>
+          <button type="button" className={BUTTON_SECONDARY} onClick={() => void load()}>Retry</button>
+        </div>
+      )}
       {retired && (
         <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
           Retired {permit.retired_at?.slice(0, 10)}: {permit.retired_reason}. It is kept as history.
@@ -128,7 +134,8 @@ export default function PermitDetailPage() {
       <section className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-3">
         <Fact label="Held by" value={permit.holder_of_record} />
         <Fact label="Jurisdiction" value={permit.jurisdiction} />
-        <Fact label="Owner" value={owner ? memberName(owner) : permit.owner_user_id ? 'No longer a member' : 'Unassigned'} />
+        <Fact label="Owner" value={owner ? memberName(owner)
+          : permit.owner_user_id ? (members === null ? '…' : 'No longer a member') : 'Unassigned'} />
         <Fact label="Issued" value={permit.issued_on ?? '—'} />
         <Fact label="Expires" value={permit.expires_on ?? 'No fixed term'} />
         <Fact label="Renewal application due" value={permit.renewal_application_due_on ?? '—'} />
@@ -143,7 +150,7 @@ export default function PermitDetailPage() {
 
       <section className="space-y-2" aria-label="Documents">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Documents</h3>
-        <EvidenceList tenantId={tenantId} evidence={documents} />
+        <EvidenceList tenantId={tenantId} evidence={documents} canDownloadControlled={canEdit} />
         {canEdit && !retired && (
           <EvidenceUpload tenantId={tenantId} subjectType="environmental_permit" subjectId={permit.id}
             current={current} onUploaded={() => void load()} />
@@ -181,7 +188,7 @@ export default function PermitDetailPage() {
           </div>
           {retiring && (
             <ReasonPrompt
-              explanation="A retired permit leaves every countdown and notice but is kept as history, with its documents. Say why it is no longer held."
+              explanation="A retired permit leaves the renewal countdown and its notices, and is kept as history with its documents. Its conditions stay in the obligations register until they are dismissed there. Say why it is no longer held."
               label="Why the permit is retired" placeholder="e.g. Surrendered when the process was discontinued" confirmLabel="Retire permit"
               onCancel={() => setRetiring(false)}
               onSubmit={async reason => { await retirePermit(tenantId, permit.id, reason); setRetiring(false); await load() }} />

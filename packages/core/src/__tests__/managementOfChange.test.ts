@@ -145,7 +145,7 @@ describe('changeCloseGaps', () => {
 
 describe('impactResolutionGaps', () => {
   const ctx = (overrides: Partial<ResolutionContext> = {}): ResolutionContext => ({
-    changeOpen: true, newLegalEntity: NEW_ENTITY, evidenceCount: 1, note: null, permitHolder: NEW_ENTITY,
+    changeOpen: true, newLegalEntity: NEW_ENTITY, evidenceCount: 1, note: null, permitHolder: NEW_ENTITY, permitRetired: false,
     scopeInForce: { legalEntity: NEW_ENTITY, effectiveFrom: '2026-11-01' }, policySignedAt: '2026-11-01', ...overrides,
   })
   const step = (s: 'notify_agency' | 'submit_transfer' | 'confirm_holder') =>
@@ -168,6 +168,10 @@ describe('impactResolutionGaps', () => {
       .toEqual(['holder_not_updated'])
     expect(impactResolutionGaps(step('confirm_holder'), ctx({ permitHolder: 'Northfield Forge & Finish Holdings, LLC' })))
       .toEqual([])
+    // A permit retired while the change was open has no holder to confirm, and cannot be edited to match.
+    expect(impactResolutionGaps(step('confirm_holder'), ctx({ permitHolder: 'Northfield Metal Products Inc.', permitRetired: true }))).toEqual([])
+    expect(impactResolutionGaps(step('confirm_holder'), ctx({ permitHolder: 'Northfield Metal Products Inc.', permitRetired: true, evidenceCount: 0 })))
+      .toEqual(['evidence_required'])
     expect(impactResolutionGaps(step('confirm_holder'), ctx({ evidenceCount: 0, permitHolder: null })))
       .toEqual(['evidence_required', 'holder_not_updated'])
   })

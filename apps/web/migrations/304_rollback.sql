@@ -12,6 +12,11 @@
 
 begin;
 
+-- Evidence filed against permits (subject_type 'environmental_permit') and its stored
+-- files stay where they are, pointing at permits that no longer exist; 306's rollback
+-- says what happens to those rows.
+drop trigger if exists trg_environmental_permits_guard on public.environmental_permits;
+drop function if exists public.ms_environmental_permits_guard();
 drop table if exists public.ms_notification_log;
 drop function if exists public.ms_record_obligation_occurrence(uuid, date, text);
 drop function if exists public.ms_advance_due_date(date, text, int);

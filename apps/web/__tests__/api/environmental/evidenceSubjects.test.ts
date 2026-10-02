@@ -136,6 +136,35 @@ describe('GET /evidence/[id]/download: export-controlled files', () => {
   })
 })
 
+describe('replacing a file', () => {
+  const EARLIER = 'e1de0000-0000-4000-8000-0000000000e1'
+  const OTHER_PDF = new TextEncoder().encode('%PDF-1.7\n2 0 obj << /Type /Catalog >> endobj\n%%EOF\n')
+
+  function earlierFile(exportControlled: boolean) {
+    seed('ms_evidence', [{
+      id: EARLIER, tenant_id: TENANT_A, subject_type: 'environmental_permit', subject_id: PERMIT, sha256: sha(PDF),
+      storage_path: 'x', file_name: 'Drawing.pdf', export_controlled: exportControlled, superseded_by: null,
+    }])
+  }
+  const replace = () => upload.POST(uploadRequest({
+    subject_type: 'environmental_permit', subject_id: PERMIT, kind: 'document', supersedes_id: EARLIER, superseded_reason: 'Corrected drawing',
+  }, OTHER_PDF as Uint8Array<ArrayBuffer>))
+
+  it('keeps an export-controlled file controlled when its replacement is not marked, so replacing is never a way to release it', async () => {
+    earlierFile(true)
+    expect((await replace()).status).toBe(201)
+    const replacement = rowsIn('ms_evidence').find(row => row.id !== EARLIER)!
+    expect(replacement.export_controlled).toBe(true)
+    expect(rowsIn('ms_evidence').find(row => row.id === EARLIER)).toMatchObject({ superseded_by: replacement.id })
+  })
+
+  it('leaves an ordinary replacement ordinary', async () => {
+    earlierFile(false)
+    expect((await replace()).status).toBe(201)
+    expect(rowsIn('ms_evidence').find(row => row.id !== EARLIER)!.export_controlled).toBe(false)
+  })
+})
+
 describe('direct-to-storage upload', () => {
   const start = (body: Record<string, unknown>) => startUpload.POST(jsonRequest('/x', 'POST', body))
   const permitFields = { subject_type: 'environmental_permit', subject_id: PERMIT, kind: 'document' }

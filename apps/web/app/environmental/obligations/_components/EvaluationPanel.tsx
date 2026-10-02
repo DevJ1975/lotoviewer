@@ -26,8 +26,10 @@ const GAP_SENTENCE: Record<string, string> = {
   notes_required:    'Say in the notes why the obligation does not apply.',
   result_required:   'Choose a result.',
 }
-export function EvaluationPanel({ tenantId, evaluation, evidence, canAct, onChanged }: {
-  tenantId: string; evaluation: EvaluationRow; evidence: readonly EvidenceRow[]; canAct: boolean; onChanged: () => void
+export function EvaluationPanel({ tenantId, evaluation, evidence, canAct, canDownloadControlled, onChanged }: {
+  tenantId: string; evaluation: EvaluationRow; evidence: readonly EvidenceRow[]; canAct: boolean
+  /** Owners and admins only: the evaluator may attach an export-controlled file but not download it. */
+  canDownloadControlled: boolean; onChanged: () => void
 }) {
   const current = evidence.filter(e => !e.superseded_by)
   return (
@@ -35,7 +37,7 @@ export function EvaluationPanel({ tenantId, evaluation, evidence, canAct, onChan
       <h4 className="text-xs font-semibold text-sky-900 dark:text-sky-100">
         Open evaluation · due {evaluation.scheduled_for}
       </h4>
-      <EvidenceList tenantId={tenantId} evidence={evidence} />
+      <EvidenceList tenantId={tenantId} evidence={evidence} canDownloadControlled={canDownloadControlled} />
       {canAct ? (
         <>
           <EvidenceUpload tenantId={tenantId} subjectType="compliance_evaluation" subjectId={evaluation.id}

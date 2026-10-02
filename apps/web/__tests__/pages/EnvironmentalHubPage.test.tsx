@@ -69,17 +69,27 @@ describe('/environmental hub', () => {
     }))
     render(<EnvironmentalHomePage />)
     const card = await cardFor('Permits')
-    expect(card.getByText('Missing')).toBeInTheDocument()
-    expect(card.getByText('6 in force · 1 renewal deadlines missed · 2 holder mismatch · 1 renewals due within 90 days')).toBeInTheDocument()
+    // A permits light judges dates and names, so it never says "Missing" or "Current".
+    expect(card.getByText('Action needed')).toBeInTheDocument()
+    expect(card.queryByText('Missing')).not.toBeInTheDocument()
+    expect(card.getByText('6 on file · 1 renewal deadlines missed · 2 holder mismatch · 1 renewals due within 90 days')).toBeInTheDocument()
     expect(card.getByText('Clause 6.1.3')).toBeInTheDocument()
+  })
+
+  it('says why the permits light is amber when only conditions or reviews are overdue', async () => {
+    api.getRegistersHealth.mockResolvedValue(health(ALL_HELD, { ...QUIET_PERMITS, health: 'amber', conditionsOverdue: 2, reviewOverdue: 1 }))
+    render(<EnvironmentalHomePage />)
+    const card = await cardFor('Permits')
+    expect(card.getByText('Needs attention')).toBeInTheDocument()
+    expect(card.getByText('5 on file · 2 conditions overdue · 1 reviews overdue')).toBeInTheDocument()
   })
 
   it('shows a quiet permits card as just the count, and links to the vault', async () => {
     api.getRegistersHealth.mockResolvedValue(health(ALL_HELD))
     render(<EnvironmentalHomePage />)
     const card = await cardFor('Permits')
-    expect(card.getByText('Current')).toBeInTheDocument()
-    expect(card.getByText('5 in force')).toBeInTheDocument()
+    expect(card.getByText('Nothing due')).toBeInTheDocument()
+    expect(card.getByText('5 on file')).toBeInTheDocument()
     expect((await screen.findByText('Permits')).closest('a')).toHaveAttribute('href', '/environmental/permits')
   })
 

@@ -205,6 +205,19 @@ describe('who hears about a renewal', () => {
 })
 
 describe('condition reminders', () => {
+  // A condition is reminded about only while its permit is active, and this one's expiry is far off.
+  beforeEach(() => seed('environmental_permits', [permit('p-air')]))
+
+  it('sends nothing for the conditions of a retired permit, which has left every notice', async () => {
+    rowsIn('environmental_permits').length = 0
+    seed('environmental_permits', [permit('p-air', { retired_at: '2026-09-01T00:00:00Z' })])
+    seed('compliance_calendar_obligations', [condition('c1', { next_due_at: inDays(10) }), condition('late', { next_due_at: inDays(-3) })])
+    const body = await (await cron()).json()
+    expect(body.conditionReminders).toBe(0)
+    expect(sendMock).not.toHaveBeenCalled()
+    expect(rowsIn('ms_notification_log')).toEqual([])
+  })
+
   it('reminds 14 days ahead, not 15, and once more when overdue', async () => {
     seed('compliance_calendar_obligations', [
       condition('c14', { next_due_at: inDays(14) }), condition('c15', { next_due_at: inDays(15) }),

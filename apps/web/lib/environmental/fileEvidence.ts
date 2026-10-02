@@ -60,10 +60,12 @@ export async function fileEvidence(filing: EvidenceFiling, route: string): Promi
   const { tenantId, subjectType, subjectId, subject } = filing
   const admin = supabaseAdmin()
 
+  // A replacement of an export-controlled file is export-controlled too: replacing must never be a way to release it.
+  let exportControlled = filing.exportControlled
   if (filing.supersedes) {
     const { data: earlier, error } = await admin
       .from('ms_evidence')
-      .select('id, superseded_by')
+      .select('id, superseded_by, export_controlled')
       .eq('id', filing.supersedes.id)
       .eq('tenant_id', tenantId)
       .eq('subject_type', subjectType)
@@ -74,6 +76,7 @@ export async function fileEvidence(filing: EvidenceFiling, route: string): Promi
     if ((earlier as { superseded_by: string | null }).superseded_by) {
       return NextResponse.json({ error: 'That file has already been superseded.' }, { status: 409 })
     }
+    exportControlled ||= (earlier as { export_controlled: boolean }).export_controlled === true
   }
 
   const type = detectEvidenceType(filing.bytes)
@@ -101,7 +104,7 @@ export async function fileEvidence(filing: EvidenceFiling, route: string): Promi
       file_size_bytes:   filing.bytes.byteLength,
       sha256,
       uploaded_by:       filing.userId,
-      export_controlled: filing.exportControlled,
+      export_controlled: exportControlled,
     })
     .select(EVIDENCE_PUBLIC_COLUMNS)
     .single()

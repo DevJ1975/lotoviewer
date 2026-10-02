@@ -40,7 +40,8 @@ import {
 // it goes out once, however often the job runs; the deadline is part of the key, so a new
 // term starts a new countdown. A notice nobody could be told about (no one to tell, or every
 // send failed) is released, and tried again tomorrow. A recipient who has opted out of
-// reminder emails counts as told.
+// reminder emails counts as told. Delivery is at most once: a notice is claimed before it is
+// sent, so a run that dies between the claim and the send loses that notice for good.
 //
 // Auth: Bearer CRON_SECRET (Vercel) or x-internal-secret INTERNAL_PUSH_SECRET, as for every
 // route under /api/cron. Vercel schedule: 15 14 * * *.
@@ -209,15 +210,18 @@ async function sendNotices(req: Request, result: CronResponse): Promise<void> {
   const peopleOf = (tenantId: string) => people.get(tenantId)!
   for (const ids of chunks(dueTenantIds, ID_CHUNK)) {
     for (const owners of chunks([...namedOwners], ID_CHUNK)) {
-      const { data, error } = await admin.from('tenant_memberships').select('tenant_id, user_id')
+      const members = await readAll<{ tenant_id: string; user_id: string }>('owner memberships', (from, to) => admin
+        .from('tenant_memberships').select('tenant_id, user_id')
         .in('tenant_id', ids).in('user_id', owners).is('invite_cancelled_at', null)
-      if (error) throw new ReadFailure(error, 'owner memberships')
-      for (const m of data ?? []) peopleOf(m.tenant_id as string).activeMembers.add(m.user_id as string)
+        .order('tenant_id').order('user_id').range(from, to))
+      for (const m of members) peopleOf(m.tenant_id).activeMembers.add(m.user_id)
     }
-    const { data: admins, error: adminError } = await admin.from('tenant_memberships').select('tenant_id, user_id')
+    // Paged: a hundred tenants can hold more admins than one response returns, and a tenant cut off here would get no notice.
+    const admins = await readAll<{ tenant_id: string; user_id: string }>('admin memberships', (from, to) => admin
+      .from('tenant_memberships').select('tenant_id, user_id')
       .in('tenant_id', ids).in('role', ['owner', 'admin']).is('invite_cancelled_at', null)
-    if (adminError) throw new ReadFailure(adminError, 'admin memberships')
-    for (const m of admins ?? []) peopleOf(m.tenant_id as string).admins.push(m.user_id as string)
+      .order('tenant_id').order('user_id').range(from, to))
+    for (const m of admins) peopleOf(m.tenant_id).admins.push(m.user_id)
 
     const { data: holders, error: holderError } = await admin.from('ms_responsibilities').select('tenant_id, owner_user_id')
       .in('tenant_id', ids).eq('discipline', 'ems').eq('responsibility_key', 'obligations').not('owner_user_id', 'is', null)

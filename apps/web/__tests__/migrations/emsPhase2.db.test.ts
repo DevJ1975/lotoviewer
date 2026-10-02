@@ -183,6 +183,50 @@ describe('migrations 304-306 on a real Postgres', () => {
     })
   })
 
+  describe('the permit guard (304)', () => {
+    const retire = (permit: string) => db.query(
+      `update public.environmental_permits set retired_at = now(), retired_reason = 'Surrendered' where id = $1`, [permit])
+
+    it('keeps a retired permit as history: it cannot be un-retired or edited, even by a client with write access', async () => {
+      const permit = await insertPermit(db, IDS.tenantA, { holder_of_record: OLD_ENTITY })
+      await retire(permit)
+      for (const change of [
+        'retired_at = null, retired_reason = null', `holder_of_record = 'Someone else'`, `title = 'Renamed'`, `business_critical = true`,
+      ]) {
+        await expect(asCaller(db, ownerA, () => db.query(`update public.environmental_permits set ${change} where id = $1`, [permit])), change)
+          .rejects.toMatchObject({ code: '23514' })
+      }
+      expect(await scalar(db, 'select title from public.environmental_permits where id = $1', [permit])).toBe('Paint booth permit')
+    })
+
+    it('still clears a retired permit\'s owner when that member leaves', async () => {
+      const permit = await insertPermit(db, IDS.tenantA, { owner_user_id: IDS.memberA })
+      await retire(permit)
+      await db.query('delete from public.tenant_memberships where user_id = $1 and tenant_id = $2', [IDS.memberA, IDS.tenantA])
+      expect(await scalar(db, 'select owner_user_id from public.environmental_permits where id = $1', [permit])).toBeNull()
+      await db.query(`insert into public.tenant_memberships (user_id, tenant_id, role) values ($1, $2, 'member')`, [IDS.memberA, IDS.tenantA])
+    })
+
+    it('clears a submitted renewal when the term\'s dates change without it being recorded again', async () => {
+      const submitted = async () => scalar<string | null>(db, 'select renewal_submitted_on::text from public.environmental_permits where id = $1', [permit])
+      const permit = await insertPermit(db, IDS.tenantA, { issued_on: '2025-01-01', expires_on: '2027-01-01', renewal_submitted_on: '2026-10-01' })
+
+      // Other fields, and a correction that does not touch the term, leave it alone.
+      await db.query(`update public.environmental_permits set business_critical = true, notes = 'x' where id = $1`, [permit])
+      expect(await submitted()).toBe('2026-10-01')
+
+      // The next term entered by editing the dates: the submission belonged to the old one.
+      await db.query(`update public.environmental_permits set issued_on = '2027-01-01', expires_on = '2030-01-01' where id = $1`, [permit])
+      expect(await submitted()).toBeNull()
+    })
+
+    it('keeps a submission recorded in the same write as the dates', async () => {
+      const permit = await insertPermit(db, IDS.tenantA, { issued_on: '2025-01-01', expires_on: '2027-01-01' })
+      await db.query(`update public.environmental_permits set renewal_application_due_on = '2026-12-01', renewal_submitted_on = '2026-10-02' where id = $1`, [permit])
+      expect(await scalar(db, 'select renewal_submitted_on::text from public.environmental_permits where id = $1', [permit])).toBe('2026-10-02')
+    })
+  })
+
   describe('conditions are obligations (304)', () => {
     it('links a condition only to its own tenant\'s permit, and only as a permit obligation', async () => {
       const permitA = await insertPermit(db, IDS.tenantA)
@@ -371,16 +415,43 @@ describe('migrations 304-306 on a real Postgres', () => {
         await resolve(db, policyImpact)
       })
 
-      it('closes only when every impact is resolved, then seals the change', async () => {
+      it('closes only when every impact is resolved and no active permit still names the old holder, then seals the change', async () => {
         const close = () => asCaller(db, ownerA, () => db.query(`update public.ms_changes set status = 'closed' where id = $1`, [changeId]))
         await expect(close()).rejects.toMatchObject({ code: '23514' })
         await fileEvidence(db, IDS.tenantA, 'ms_change_impact', steps.submit_transfer)
         await resolve(db, steps.submit_transfer)
+
+        // Every impact is resolved, but a permit added after the change opened is not on its checklist.
+        await db.query(
+          `update public.environmental_permits set retired_at = now(), retired_reason = 'Test cleanup'
+            where tenant_id = $1 and retired_at is null and id <> $2`, [IDS.tenantA, permit])
+        const late = await insertPermit(db, IDS.tenantA, { title: 'Late permit', holder_of_record: OLD_ENTITY })
+        await expect(close()).rejects.toMatchObject({ code: '23514', message: expect.stringContaining('"Late permit" still names another holder') })
+        await db.query(`update public.environmental_permits set holder_of_record = $2 where id = $1`, [late, NEW_ENTITY])
         await close()
         expect(await scalar(db, 'select ended_by from public.ms_changes where id = $1', [changeId])).toBe(IDS.ownerA)
         await expect(asCaller(db, ownerA, () => db.query(`update public.ms_changes set title = 'Renamed' where id = $1`, [changeId])))
           .rejects.toMatchObject({ code: '23514' })
       })
+    })
+
+    it('lets a permit retired while the change was open be confirmed with its evidence, since it has no holder left to update', async () => {
+      const permit = await insertPermit(db, IDS.tenantA, { title: 'Retired mid-change', holder_of_record: OLD_ENTITY })
+      const id = await openChange(db, ownerA, { kind: 'ownership_name', title: 'Second sale', description: 'x', new_legal_entity: 'Third Owner LLC' },
+        [{ target_type: 'permit', target_id: permit, step: 'confirm_holder', step_order: 3, action_required: 'Confirm the holder.' }])
+      const impact = (await scalar<string>(db, 'select id from public.ms_change_impacts where change_id = $1', [id]))!
+      await fileEvidence(db, IDS.tenantA, 'ms_change_impact', impact)
+      await expect(resolve(db, impact)).rejects.toMatchObject({ code: '23514' })
+      await db.query(`update public.environmental_permits set retired_at = now(), retired_reason = 'Surrendered' where id = $1`, [permit])
+      await resolve(db, impact)
+    })
+
+    it('does not let a change of owner with an empty checklist close while a permit still names the old holder', async () => {
+      await insertPermit(db, IDS.tenantA, { title: 'Still old', holder_of_record: OLD_ENTITY })
+      const id = await openChange(db, ownerA, { kind: 'ownership_name', title: 'Bare change', description: 'x', new_legal_entity: 'Fourth Owner LLC' }, [])
+      await expect(asCaller(db, ownerA, () => db.query(`update public.ms_changes set status = 'closed' where id = $1`, [id])))
+        .rejects.toMatchObject({ code: '23514', message: expect.stringContaining('still names another holder') })
+      await asCaller(db, ownerA, () => db.query(`update public.ms_changes set status = 'cancelled', cancelled_reason = 'Not going ahead' where id = $1`, [id]))
     })
 
     it('needs a note to resolve any other impact', async () => {

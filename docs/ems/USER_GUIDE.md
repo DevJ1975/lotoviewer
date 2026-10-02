@@ -18,8 +18,12 @@ shows the worse of its two registers: context, and scope and policy.
 | Light | Meaning |
 | --- | --- |
 | Red | The register is empty, a required record (scope or policy) is missing, or no one holds one of the two roles clause 5.3 names. For Permits: a renewal deadline has passed with no renewal submitted, or a permit is held by someone other than the legal entity in the scope. |
-| Amber | Something needs attention: a review is overdue, an aspect is unscored, a compliance deadline has passed with the obligation still open, an evaluation is overdue, an obligation has no evaluation frequency, the policy is incomplete or has not been communicated within the organization, the scope does not say what the organization controls and influences, no climate-change determination is recorded, or an EMS process has no owner. For Permits: nothing is recorded yet, a renewal is due within 90 days or was submitted and is pending, a permit condition is overdue, or a permit review is overdue. |
+| Amber | Something needs attention: a review is overdue, an aspect is unscored, a compliance deadline has passed with the obligation still open, an evaluation is overdue, an obligation has no evaluation frequency, the policy is incomplete or has not been communicated within the organization, the scope does not say what the organization controls and influences, no climate-change determination is recorded, or an EMS process has no owner. For Permits: nothing is recorded yet, a renewal deadline is within 90 days with nothing submitted, a permit past its recorded expiry has a renewal pending, a permit condition is overdue, or a permit review is overdue. |
 | Green | Every record is in date and complete. |
+
+The Permits light is judged on dates and names, not on whether the platform can tell a
+permit is valid, so its words differ: red reads **Action needed**, green **Nothing due**.
+The platform shows what was recorded, never what is legally in force.
 
 A light changes as soon as the underlying record does, and each card opens the
 register behind it. The ISO 14001 report card (`/environmental/report-card`) uses the
@@ -282,9 +286,16 @@ its expiry otherwise. The card says which: *Renewal application due* or *Expires
 escalates at 180, 90 and 30 days, then once the date has passed. Those intervals are
 this product's own; the permit says what it actually requires.
 
-- **Record renewal application submitted** stops the countdown and its notices.
+- **Record renewal application submitted** stops the countdown and its notices. The date
+  is your word and is not checked against a receipt, so the pill is amber, not green, and
+  red when it falls after the permit's own renewal-application date. File the receipt
+  under **Documents**.
 - **Record the renewed term** takes the new dates from the agency's renewal and starts
-  the countdown again.
+  the countdown again. A blank expiry is not accepted: tick *The renewed permit has no
+  fixed term* if that is what the agency issued. The old term is not kept as a record of
+  its own, so file the renewed permit under Documents.
+- Correcting the dates of an active permit with **Edit** clears a recorded submission,
+  because the submission belonged to the term the dates described.
 - An expired permit with a renewal pending shows *confirm its status with the agency*.
   Whether it stays in force while the agency reviews depends on the program and the
   agency, so the screen does not say.
@@ -312,14 +323,18 @@ is not recorded yet, because there is nothing to compare with.
   link an obligation that already exists, edit it and choose its **Linked permit**; only
   an obligation whose source is a permit can be linked.
 - **Mark done** records that the condition was done for the deadline shown, with an
-  optional note, and moves the deadline on by its repeat. The condition's owner or an
+  optional note, and moves the deadline on by its repeat; a one-off condition shows as
+  *Done*. The condition's owner or an
   admin can do it. Attach the evidence to that occurrence straight afterwards, so the
   file proves that instance.
 - **Documents** holds the permit itself and anything issued under it. Tick
   **Export-controlled** for a file that is subject to ITAR or EAR: only owners and admins
-  can then download it. A file is replaced, not deleted.
-- **Retire** takes a permit out of every countdown and notice, with a reason. It is kept
-  as history, with its documents.
+  can then download it; others see its name and are told who can. A file is replaced, not
+  deleted, and the replacement of an export-controlled file is export-controlled too.
+- **Retire** takes a permit out of the renewal countdown and its notices, with a reason.
+  It is kept as history, with its documents, and can no longer be edited. Its conditions
+  stay in the obligations register until they are dismissed there, and they no longer get
+  permit reminders.
 - **Mark reviewed** confirms the record is still right and moves its next review out.
 
 The hazardous-waste EPA ID is also held in the site's hazardous-waste profile. Until a
@@ -336,8 +351,10 @@ none is forgotten, and the change closes only when each has been dealt with.
   chemical*, *Process change*, *Change of owner or legal name*, *Personnel change* or
   *Other change*. **Preview impacts** says how many impacts opening it will create
   before anything is created.
-- An equipment or process change lists the active aspects in the process area it names.
-  A chemical change lists the open air and waste obligations. A personnel or other
+- An equipment or process change lists the active aspects in the process area it names,
+  spelled as in the aspects register; **Preview impacts** warns when the area matches no
+  aspect. A chemical change lists the open air and waste obligations, and the aspects in a
+  process area too when it names one. A personnel or other
   change lists nothing automatically, so its checklist starts empty. The list is worked
   out when the change opens; a record added later is not on it.
 - A **change of owner or legal name** covers every site, so open it with *All
@@ -351,8 +368,12 @@ holder** is also refused until the permit's holder of record has been edited to 
 the new legal entity. The scope is resolved once a new scope version names the new
 entity, and the policy once it has been signed again after that. Any other impact
 needs a note saying what was done. If the database still refuses, the screen shows its
-reason. **Close change** is available once every impact is resolved. **Cancel change**
-needs a reason and keeps the impacts as history. Once a change has ended, its impacts
+reason. A permit retired while the change was open needs only its evidence for the last
+step. **Close change** is available once every impact is resolved. Closing a change of
+owner also re-checks every active permit, including any added after the change opened,
+and needs *All facilities* chosen: it is refused while one still names the old holder, so
+update its holder of record or retire it first. **Cancel change** needs a reason and
+keeps the impacts as history. Once a change has ended, its impacts
 and their evidence no longer change.
 
 ---

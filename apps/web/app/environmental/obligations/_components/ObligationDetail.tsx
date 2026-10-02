@@ -117,7 +117,7 @@ export function ObligationDetail({ tenantId, obligationId, canEdit, onChanged }:
         <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Evaluation of compliance</h3>
         {open ? (
           <EvaluationPanel tenantId={tenantId} evaluation={open} evidence={evidenceFor(open.id)}
-            canAct={mayEvaluate} onChanged={() => void changed()} />
+            canAct={mayEvaluate} canDownloadControlled={canEdit} onChanged={() => void changed()} />
         ) : canEdit && obligation.status !== 'dismissed' ? (
           <button type="button" className={BUTTON_PRIMARY} disabled={busy}
             onClick={() => void act(() => openEvaluation(tenantId, obligation.id))}>
@@ -140,7 +140,7 @@ export function ObligationDetail({ tenantId, obligationId, canEdit, onChanged }:
                   )}
                 </div>
                 {e.notes && <p className="text-xs text-slate-600 dark:text-slate-300">{e.notes}</p>}
-                <EvidenceList tenantId={tenantId} evidence={evidenceFor(e.id)} />
+                <EvidenceList tenantId={tenantId} evidence={evidenceFor(e.id)} canDownloadControlled={canEdit} />
               </li>
             ))}
           </ul>

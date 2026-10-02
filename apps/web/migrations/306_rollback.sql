@@ -5,6 +5,9 @@
 -- occurrence or an obligation survives (evidence is never deleted); new
 -- rows are held to 299's list again.
 --
+-- The restored check is NOT VALID, which still applies to every UPDATE: after the rollback,
+-- evidence filed under the new subjects can no longer be superseded.
+--
 -- export_controlled stays, still fixed by the append-only rule, so a flag
 -- set before the rollback is still there if 306 is applied again.
 --

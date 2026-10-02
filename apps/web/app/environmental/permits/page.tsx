@@ -22,6 +22,7 @@ import {
 import { STANDING_LABEL } from '@/lib/environmental/permitDisplay'
 import { useCanEditRegisters } from '../_components/access'
 import { BUTTON_PRIMARY, INPUT, LABEL, LABEL_TEXT } from '../_components/formStyles'
+import { PERMIT_LIGHT_LABELS } from '../_components/RegisterHealthBadge'
 import { RegisterHealthStrip } from '../_components/RegisterHealthStrip'
 import { BusinessCriticalBadge, HolderMismatchBadge, RenewalBadge } from './_components/PermitBadges'
 import { PermitForm } from './_components/PermitForm'
@@ -64,6 +65,7 @@ export default function PermitsPage() {
     if (!tenantId) return
     const current = ++generation.current
     setLoadError(null)
+    setPermits(null)   // never leave the previous filter's permits under the new one's label
     void getRegistersHealth(tenantId)
       .then(registers => { if (current === generation.current) setHealth(registers.permits) })
       .catch(() => { if (current === generation.current) setHealth(null) })   // the list reports its own errors
@@ -99,8 +101,8 @@ export default function PermitsPage() {
         </p>
       </div>
 
-      <RegisterHealthStrip title="Permits" health={health?.health ?? null} facts={health ? [
-        { label: 'in force', value: health.active },
+      <RegisterHealthStrip title="Permits" health={health?.health ?? null} labels={PERMIT_LIGHT_LABELS} facts={health ? [
+        { label: 'active records', value: health.active },
         { label: 'renewal deadline missed', value: health.deadlineMissed, warn: health.deadlineMissed > 0 },
         { label: 'holder mismatch', value: health.holderMismatch, warn: health.holderMismatch > 0 },
         { label: 'renewal due within 90 days', value: health.renewalSoon, warn: health.renewalSoon > 0 },

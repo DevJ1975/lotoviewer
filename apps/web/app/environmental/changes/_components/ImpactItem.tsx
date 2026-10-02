@@ -51,7 +51,7 @@ export function ImpactItem({ tenantId, changeId, impact, evidence, canResolve, o
       </div>
       {(evidence.length > 0 || (!resolved && open)) && (
         <div className="ml-4 space-y-2">
-          <EvidenceList tenantId={tenantId} evidence={evidence} />
+          <EvidenceList tenantId={tenantId} evidence={evidence} canDownloadControlled={canResolve} />
           {canResolve && open && !resolved && (
             <EvidenceUpload tenantId={tenantId} subjectType="ms_change_impact" subjectId={impact.id}
               current={evidence.filter(e => !e.superseded_by)} onUploaded={onChanged} />

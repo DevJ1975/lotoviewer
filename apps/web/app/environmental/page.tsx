@@ -13,7 +13,7 @@ import OpsSpinner from '@/components/OpsSpinner'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import { getRegistersHealth, type RegistersHealth } from '@/lib/environmental/client'
-import { RegisterHealthBadge } from './_components/RegisterHealthBadge'
+import { PERMIT_LIGHT_LABELS, RegisterHealthBadge } from './_components/RegisterHealthBadge'
 
 // /environmental — EMS module home.
 //
@@ -193,10 +193,12 @@ export default function EnvironmentalHomePage() {
         ].join(' · ')
       case '/environmental/permits':
         return [
-          `${health.permits.active} in force`,
+          `${health.permits.active} on file`,
           health.permits.deadlineMissed > 0 && `${health.permits.deadlineMissed} renewal deadlines missed`,
           health.permits.holderMismatch > 0 && `${health.permits.holderMismatch} holder mismatch`,
           health.permits.renewalSoon > 0 && `${health.permits.renewalSoon} renewals due within 90 days`,
+          health.permits.conditionsOverdue > 0 && `${health.permits.conditionsOverdue} conditions overdue`,
+          health.permits.reviewOverdue > 0 && `${health.permits.reviewOverdue} reviews overdue`,
         ].filter(Boolean).join(' · ')
       case '/environmental/changes':
         return `${counts.openChanges} open`
@@ -242,7 +244,9 @@ export default function EnvironmentalHomePage() {
                 </span>
                 <span className="placard-label text-slate-500 dark:text-slate-400">{clause}</span>
                 {healthFor(href) && (
-                  <span className="ml-auto"><RegisterHealthBadge health={healthFor(href)!} /></span>
+                  <span className="ml-auto">
+                    <RegisterHealthBadge health={healthFor(href)!} labels={href === '/environmental/permits' ? PERMIT_LIGHT_LABELS : undefined} />
+                  </span>
                 )}
               </span>
               <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</span>

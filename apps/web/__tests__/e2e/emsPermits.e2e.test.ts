@@ -16,7 +16,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { advanceDueDate } from '@soteria/core/complianceCalendar'
 import {
-  ADMIN_A, FACILITY_A, MEMBER_A, TENANT_A,
+  ADMIN_A, MEMBER_A, TENANT_A,
   asAdminA, asMemberA, callAs, failNext, idContext, jsonRequest, onRpc, resetStore, rowsIn, seed,
 } from '../api/environmental/_emsHarness'
 
