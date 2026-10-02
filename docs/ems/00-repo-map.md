@@ -399,7 +399,7 @@ Things learned along the way:
 ### Phase 1.1: the ISO 14001 audit's fixes
 
 Added 2026-10-02 on `feat/ems-phase1-1-audit-fixes`. An ISO 14001 lead-auditor review of
-Phase 1 found the report card grading five clauses from safety records, and four minor
+Phase 1 ([phase-1-audit.md](./phase-1-audit.md)) found the report card grading five clauses from safety records, and four minor
 gaps: control or influence on aspects, the scope's control-and-influence statement and
 exclusions, policy communication, and owners with a process map.
 
