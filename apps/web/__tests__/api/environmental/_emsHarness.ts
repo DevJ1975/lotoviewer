@@ -201,6 +201,8 @@ const COLUMN_DEFAULTS: Record<string, () => Row> = {
   ms_interested_parties:           reviewDueInAYear,
   environmental_aspects:           reviewDueInAYear,
   compliance_calendar_obligations: () => ({ status: 'open', permit_id: null, ...reviewDueInAYear() }),
+  // An evaluation opens uncompleted (migration 298); the evidence route reads completed_at to decide whether it is sealed.
+  ms_compliance_evaluations: () => ({ completed_at: null }),
   // Migrations 304-306.
   environmental_permits: () => ({
     instrument: 'permit', business_critical: false, owner_user_id: null, retired_at: null, retired_reason: null,
