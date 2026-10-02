@@ -9,6 +9,7 @@ import {
   permitsHealth,
   renewalDeadline,
   renewalDeadlineMissed,
+  renewalDueSoon,
   renewalNoticesDue,
   sentNoticeKey,
   validatePermitInput,
@@ -110,6 +111,23 @@ describe('renewalDeadlineMissed', () => {
     expect(renewalDeadlineMissed({ ...base, renewalSubmittedOn: inDays(-3) }, TODAY)).toBe(false)
     expect(renewalDeadlineMissed({ ...base, retiredAt: '2026-09-01T00:00:00Z' }, TODAY)).toBe(false)
     expect(renewalDeadlineMissed({ ...base, expiresOn: null, renewalApplicationDueOn: null }, TODAY)).toBe(false)
+  })
+})
+
+describe('renewalDueSoon', () => {
+  const base = { retiredAt: null, renewalApplicationDueOn: null, renewalSubmittedOn: null }
+
+  it('is true from 90 days out to the deadline itself', () => {
+    expect(renewalDueSoon({ ...base, expiresOn: inDays(91) }, TODAY)).toBe(false)
+    expect(renewalDueSoon({ ...base, expiresOn: inDays(90) }, TODAY)).toBe(true)
+    expect(renewalDueSoon({ ...base, expiresOn: TODAY }, TODAY)).toBe(true)
+  })
+
+  it('is false once passed (that is red), submitted, retired, or with no term', () => {
+    expect(renewalDueSoon({ ...base, expiresOn: inDays(-1) }, TODAY)).toBe(false)
+    expect(renewalDueSoon({ ...base, expiresOn: inDays(30), renewalSubmittedOn: inDays(-2) }, TODAY)).toBe(false)
+    expect(renewalDueSoon({ ...base, expiresOn: inDays(30), retiredAt: '2026-09-01T00:00:00Z' }, TODAY)).toBe(false)
+    expect(renewalDueSoon({ ...base, expiresOn: null }, TODAY)).toBe(false)
   })
 })
 

@@ -221,3 +221,43 @@ describe('GET, PATCH and review /obligations/[id]', () => {
     expect((await review.POST(jsonRequest('/x', 'POST'), idContext(OB_B))).status).toBe(404)
   })
 })
+
+describe('PATCH /obligations/[id]: the permit a condition belongs to (Phase 2)', () => {
+  const PERMIT = 'f0000000-0000-4000-8000-00000000000a'
+  const patch = (body: unknown) => obligation.PATCH(jsonRequest('/x', 'PATCH', body), idContext(OB_A))
+
+  beforeEach(() => {
+    seed('compliance_calendar_obligations', [obligationRow({ permit_id: null })])
+    seed('environmental_permits', [
+      { id: PERMIT, tenant_id: TENANT_A, retired_at: null },
+      { id: 'f0000000-0000-4000-8000-0000000000b0', tenant_id: TENANT_B, retired_at: null },
+      { id: 'f0000000-0000-4000-8000-0000000000a9', tenant_id: TENANT_A, retired_at: '2026-01-01T00:00:00Z' },
+    ])
+  })
+
+  it('links a permit obligation to its permit, and unlinks it', async () => {
+    expect((await patch({ permit_id: PERMIT })).status).toBe(200)
+    expect(rowsIn('compliance_calendar_obligations')[0].permit_id).toBe(PERMIT)
+    expect((await patch({ permit_id: null })).status).toBe(200)
+    expect(rowsIn('compliance_calendar_obligations')[0].permit_id).toBeNull()
+  })
+
+  it('refuses another tenant\'s permit, a retired one, and a malformed id', async () => {
+    expect((await patch({ permit_id: 'f0000000-0000-4000-8000-0000000000b0' })).status).toBe(400)
+    expect((await patch({ permit_id: 'f0000000-0000-4000-8000-0000000000a9' })).status).toBe(409)
+    expect((await patch({ permit_id: 'permit-7' })).status).toBe(400)
+    expect(rowsIn('compliance_calendar_obligations')[0].permit_id).toBeNull()
+  })
+
+  it('links only an obligation whose source is a permit, and keeps a linked one a permit obligation', async () => {
+    rowsIn('compliance_calendar_obligations')[0].source_kind = 'law'
+    const refused = await patch({ permit_id: PERMIT })
+    expect(refused.status).toBe(400)
+    expect((await refused.json()).fieldErrors[0].field).toBe('permit_id')
+
+    Object.assign(rowsIn('compliance_calendar_obligations')[0], { source_kind: 'permit', permit_id: PERMIT })
+    const changing = await patch({ source_kind: 'law' })
+    expect(changing.status).toBe(400)
+    expect((await changing.json()).fieldErrors[0].field).toBe('source_kind')
+  })
+})

@@ -18,7 +18,9 @@ import { OBLIGATION_EDITABLE, obligationRegisterInputFrom } from '@/lib/environm
 //                                             evaluation of it (newest first), the
 //                                             evidence filed against those evaluations,
 //                                             and the aspects linked to it.
-// PATCH /api/environmental/obligations/[id]   Edit the register fields. Admins only.
+// PATCH /api/environmental/obligations/[id]   Edit the register fields, or link the
+//                                             obligation to the permit it is a condition of
+//                                             (permit_id, or null to unlink). Admins only.
 //                                             Deadlines stay with /api/compliance/obligations.
 
 export async function GET(req: Request, ctx: RouteContext) {
@@ -82,7 +84,12 @@ export async function PATCH(req: Request, ctx: RouteContext) {
   if (!body) return invalidJson()
 
   const edits = (Object.keys(OBLIGATION_EDITABLE) as (keyof typeof OBLIGATION_EDITABLE)[]).filter(column => column in body)
-  if (edits.length === 0) return NextResponse.json({ error: 'Nothing to change' }, { status: 400 })
+  const linking = 'permit_id' in body
+  if (edits.length === 0 && !linking) return NextResponse.json({ error: 'Nothing to change' }, { status: 400 })
+  const permitId = body.permit_id ?? null
+  if (linking && permitId !== null && (typeof permitId !== 'string' || !UUID_RE.test(permitId))) {
+    return invalidInput([{ field: 'permitId', message: 'must be a permit id, or null to unlink' }])
+  }
 
   const { data: current, error: readError } = await gate.authedClient
     .from('compliance_calendar_obligations')
@@ -97,8 +104,31 @@ export async function PATCH(req: Request, ctx: RouteContext) {
   const parsed = obligationRegisterInputFrom({ ...current, ...body })
   if (!parsed.ok) return invalidInput(parsed.errors)
 
+  // A condition is an obligation whose source is a permit (migration 304's check).
+  const linkedPermit = linking ? permitId : (current as { permit_id: string | null }).permit_id
+  if (linkedPermit !== null && parsed.input.sourceKind !== 'permit') {
+    return invalidInput([{
+      field: linking ? 'permitId' : 'sourceKind',
+      message: 'only an obligation whose source is a permit can be linked to one; unlink the permit first',
+    }])
+  }
+  if (linking && permitId !== null) {
+    const { data: permit, error } = await gate.authedClient
+      .from('environmental_permits')
+      .select('id, retired_at')
+      .eq('id', permitId)
+      .eq('tenant_id', gate.tenantId)
+      .maybeSingle()
+    if (error) return sanitizeError(error, 'environmental/obligations/[id]/PATCH permit')
+    if (!permit) return invalidInput([{ field: 'permitId', message: 'is not a permit in this organization' }])
+    if ((permit as { retired_at: string | null }).retired_at) {
+      return NextResponse.json({ error: 'That permit is retired, so it takes no new conditions.' }, { status: 409 })
+    }
+  }
+
   const patch: Record<string, unknown> = {}
   for (const column of edits) patch[column] = parsed.input[OBLIGATION_EDITABLE[column]]
+  if (linking) patch.permit_id = permitId
 
   const { data, error } = await gate.authedClient
     .from('compliance_calendar_obligations')

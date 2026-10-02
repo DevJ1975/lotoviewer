@@ -128,6 +128,18 @@ export function renewalDeadlineMissed(permit: PermitForStanding, today: string):
   return deadline !== null && deadline < today
 }
 
+/**
+ * True for an active permit whose renewal deadline is 90 days or less away
+ * with nothing submitted: soon enough to show amber before it turns red.
+ */
+export function renewalDueSoon(permit: PermitForStanding, today: string): boolean {
+  if (permit.retiredAt !== null || permit.renewalSubmittedOn !== null) return false
+  const deadline = renewalDeadline(permit)
+  if (deadline === null) return false
+  const { tier } = permitEscalation(deadline, today)
+  return tier === 90 || tier === 30
+}
+
 // ── Holder of record (D11) ───────────────────────────────────────────────
 
 /**
@@ -175,15 +187,9 @@ export function permitsHealth(input: PermitsHealthInput): RegisterHealth {
     || holderOfRecordMismatch(permit.holderOfRecord, legalEntityInForce) === true)
   if (danger) return 'red'
 
-  const renewalSoon = (permit: PermitHealthRow) => {
-    const deadline = renewalDeadline(permit)
-    if (deadline === null || permit.renewalSubmittedOn !== null) return false
-    const { tier } = permitEscalation(deadline, today)
-    return tier === 90 || tier === 30
-  }
   const attention = conditionsOverdue > 0 || active.some(permit =>
     permit.nextReviewDue < today
-    || renewalSoon(permit)
+    || renewalDueSoon(permit, today)
     || permitStanding(permit, today) === 'expired_renewal_pending')
   return attention ? 'amber' : 'green'
 }

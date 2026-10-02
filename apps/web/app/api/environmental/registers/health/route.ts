@@ -6,6 +6,13 @@ import {
   scopeAndPolicyHealth,
 } from '@soteria/core/managementSystem'
 import { responsibilitiesHealth, responsibilityCoverage } from '@soteria/core/emsProcesses'
+import {
+  holderOfRecordMismatch,
+  permitsHealth,
+  renewalDeadlineMissed,
+  renewalDueSoon,
+  type PermitHealthRow,
+} from '@soteria/core/environmentalPermit'
 import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
 import { sanitizeError } from '@/lib/security/sanitizeError'
 import {
@@ -29,12 +36,21 @@ import {
 //     responsibilities red: a clause 5.3 role has no one; amber: an EMS process has no owner
 //                      (an owner is always a current member: migration 302's foreign key clears
 //                      the assignment when the membership is removed)
+//     permits          red: a renewal deadline passed with nothing submitted, or a holder of record
+//                      other than the scope's legal entity; amber: none recorded (a site may hold
+//                      none), a renewal within 90 days, an expired permit's renewal pending, an
+//                      overdue condition, or an overdue review (Phase 2 plan D17)
 //
 // Counts come from the database (count=exact, no rows), so the answer is right however
-// large the register, with no row cap to truncate it.
+// large the register, with no row cap to truncate it. Permits are the exception: their
+// light needs each permit's dates, and a site holds tens of them, so their rows are read.
 
 interface PolicyRow {
   id: string; commitments: Record<string, boolean>; signatory_name: string; signed_at: string; next_review_due: string; version: number
+}
+interface PermitRow {
+  holder_of_record: string; expires_on: string | null; renewal_application_due_on: string | null
+  renewal_submitted_on: string | null; next_review_due: string
 }
 interface ScopeRow {
   version: number; legal_entity: string; effective_from: string; next_review_due: string; control_and_influence: string | null
@@ -73,12 +89,17 @@ export async function GET(req: Request) {
       .eq('tenant_id', gate.tenantId).eq('discipline', discipline).order('version', { ascending: false }).limit(1).maybeSingle(),
     db.from('ms_responsibilities').select('responsibility_key')
       .eq('tenant_id', gate.tenantId).eq('discipline', discipline).not('owner_user_id', 'is', null),
+    db.from('environmental_permits')
+      .select('holder_of_record, expires_on, renewal_application_due_on, renewal_submitted_on, next_review_due')
+      .eq('tenant_id', gate.tenantId).is('retired_at', null).limit(1000),
+    count('compliance_calendar_obligations').not('permit_id', 'is', null).eq('status', 'open').lt('next_due_at', today),
   ] as const)
   const failed = results.find(r => r.error)?.error
   if (failed) return sanitizeError(failed, 'environmental/registers/health/GET')
 
   const [issues, issuesOverdue, climate, aspects, aspectsOverdue, unscored, obligations, obligationsOverdue,
-    unscheduled, deadlinesMissed, evaluationsOverdue, scopeVersions, policyResult, heldResponsibilities] = results
+    unscheduled, deadlinesMissed, evaluationsOverdue, scopeVersions, policyResult, heldResponsibilities,
+    permitResult, conditionsOverdue] = results
   const n = (r: { count?: number | null }) => r.count ?? 0
 
   const scopes = (scopeVersions.data ?? []) as ScopeRow[]
@@ -100,6 +121,16 @@ export async function GET(req: Request) {
     if (internal.error) return sanitizeError(internal.error, 'environmental/registers/health/GET communications')
     policyCommunicatedInternally = n(internal) > 0
   }
+
+  const permits: PermitHealthRow[] = ((permitResult.data ?? []) as PermitRow[]).map(p => ({
+    retiredAt:               null,
+    expiresOn:               p.expires_on,
+    renewalApplicationDueOn: p.renewal_application_due_on,
+    renewalSubmittedOn:      p.renewal_submitted_on,
+    holderOfRecord:          p.holder_of_record,
+    nextReviewDue:           p.next_review_due,
+  }))
+  const legalEntityInForce = scope?.legal_entity ?? null
 
   const coverage = responsibilityCoverage(new Set(
     ((heldResponsibilities.data ?? []) as { responsibility_key: string }[]).map(r => r.responsibility_key),
@@ -149,6 +180,15 @@ export async function GET(req: Request) {
     responsibilities: {
       health: responsibilitiesHealth(coverage),
       ...coverage,
+    },
+    permits: {
+      health:            permitsHealth({ permits, conditionsOverdue: n(conditionsOverdue), legalEntityInForce, today }),
+      active:            permits.length,
+      deadlineMissed:    permits.filter(p => renewalDeadlineMissed(p, today)).length,
+      holderMismatch:    permits.filter(p => holderOfRecordMismatch(p.holderOfRecord, legalEntityInForce) === true).length,
+      renewalSoon:       permits.filter(p => renewalDueSoon(p, today)).length,
+      conditionsOverdue: n(conditionsOverdue),
+      reviewOverdue:     permits.filter(p => p.nextReviewDue < today).length,
     },
   })
 }

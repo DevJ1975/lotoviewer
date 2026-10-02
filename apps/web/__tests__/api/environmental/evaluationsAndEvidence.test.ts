@@ -208,7 +208,7 @@ describe('POST /evidence', () => {
     const res = await upload.POST(uploadRequest(evidenceFields({
       supersedes_id: 'e1de0000-0000-4000-8000-000000000001', superseded_reason: 'x',
     })))
-    expect((await res.json()).fieldErrors).toEqual([{ field: 'supersedes_id', message: 'is not evidence on this evaluation' }])
+    expect((await res.json()).fieldErrors).toEqual([{ field: 'supersedes_id', message: 'is not evidence on this record' }])
   })
 
   it('passes gate failures through', async () => {

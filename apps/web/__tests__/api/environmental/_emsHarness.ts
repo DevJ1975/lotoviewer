@@ -97,6 +97,11 @@ export const UNIQUE_KEYS: Record<string, { columns: string[]; where?: (row: Row)
   ms_compliance_evaluations: [{ columns: ['obligation_id'], where: row => row.completed_at == null }],
   ms_evidence: [{ columns: ['tenant_id', 'subject_type', 'subject_id', 'sha256'] }],
   ms_responsibilities: [{ columns: ['tenant_id', 'discipline', 'responsibility_key'] }],
+  // uq_environmental_permits_number (migration 304), without its case and space folding
+  environmental_permits: [{
+    columns: ['tenant_id', 'agency', 'permit_number'],
+    where: row => row.permit_number != null && row.retired_at == null,
+  }],
 }
 
 /** Same-tenant composite foreign keys, per table: (columns) → table(references). */
@@ -117,6 +122,15 @@ export const FOREIGN_KEYS: Record<string, { columns: string[]; table: string; re
   ],
   ms_responsibilities: [
     { columns: ['owner_user_id', 'tenant_id'], table: 'tenant_memberships', references: ['user_id', 'tenant_id'] },
+  ],
+  environmental_permits: [
+    { columns: ['owner_user_id', 'tenant_id'], table: 'tenant_memberships', references: ['user_id', 'tenant_id'] },
+  ],
+  compliance_calendar_obligations: [
+    { columns: ['tenant_id', 'permit_id'], table: 'environmental_permits', references: ['tenant_id', 'id'] },
+  ],
+  ms_change_impacts: [
+    { columns: ['tenant_id', 'change_id'], table: 'ms_changes', references: ['tenant_id', 'id'] },
   ],
 }
 
@@ -143,13 +157,34 @@ export function beforeNext(table: string, mode: QueryState['mode'], action: () =
   hooks.push({ table, mode, action })
 }
 
+// ── database functions (supabase.rpc) ─────────────────────────────────
+// The PGlite suites prove what each function does; here a test says what it
+// returns, and checks the route called it as it should.
+export type RpcHandler = (args: Record<string, unknown>) => { data: unknown; error: DbError | null }
+const rpcHandlers = new Map<string, RpcHandler>()
+/** Every function call since the last reset, in order. */
+export const rpcCalls: { name: string; args: Record<string, unknown> }[] = []
+/** How the database answers `name` until the next reset. */
+export function onRpc(name: string, handler: RpcHandler): void {
+  rpcHandlers.set(name, handler)
+}
+async function rpc(name: string, args: Record<string, unknown> = {}) {
+  rpcCalls.push({ name, args })
+  const handler = rpcHandlers.get(name)
+  if (!handler) return { data: null, error: { code: '42883', message: `function ${name} does not exist` } }
+  return handler(args)
+}
+
 let idCounter = 0
 export function resetStore(): void {
   store.clear()
   writes.length = 0
   failures = []
   hooks = []
+  rpcHandlers.clear()
+  rpcCalls.length = 0
   objects.clear()
+  objectCreatedAt.clear()
   idCounter = 0
   captureExceptionMock.mockReset()
   asAdminA()
@@ -163,7 +198,15 @@ const COLUMN_DEFAULTS: Record<string, () => Row> = {
   ms_context_issues:               reviewDueInAYear,
   ms_interested_parties:           reviewDueInAYear,
   environmental_aspects:           reviewDueInAYear,
-  compliance_calendar_obligations: () => ({ status: 'open', ...reviewDueInAYear() }),
+  compliance_calendar_obligations: () => ({ status: 'open', permit_id: null, ...reviewDueInAYear() }),
+  // Migrations 304-306.
+  environmental_permits: () => ({
+    instrument: 'permit', business_critical: false, owner_user_id: null, retired_at: null, retired_reason: null,
+    renewal_submitted_on: null, renewal_application_due_on: null, issued_on: null, expires_on: null, ...reviewDueInAYear(),
+  }),
+  ms_changes:        () => ({ status: 'open', opened_at: new Date().toISOString(), ended_at: null, ended_by: null }),
+  ms_change_impacts: () => ({ step: null, step_order: 0, resolved_at: null, resolved_by: null, resolution_note: null }),
+  ms_evidence:       () => ({ export_controlled: false, superseded_by: null }),
 }
 
 function nextId(): string {
@@ -404,7 +447,7 @@ function builder(table: string) {
   return chain
 }
 
-const client = { from: (table: string) => builder(table) }
+const client = { from: (table: string) => builder(table), rpc }
 /** The same store as a plain client, for code that takes the browser `supabase` export. */
 export const emsClient = client
 
@@ -418,6 +461,7 @@ function storageBucket(bucket: string) {
     async upload(path: string, bytes: Uint8Array, options: { upsert?: boolean } = {}) {
       if (objects.has(key(path)) && !options.upsert) return { data: null, error: { message: 'The resource already exists' } }
       objects.set(key(path), new Uint8Array(bytes))
+      if (!objectCreatedAt.has(key(path))) objectCreatedAt.set(key(path), new Date().toISOString())
       return { data: { path }, error: null }
     },
     async download(path: string) {
@@ -430,8 +474,27 @@ function storageBucket(bucket: string) {
       for (const path of paths) objects.delete(key(path))
       return { data: paths.map(name => ({ name })), error: null }
     },
+    async createSignedUploadUrl(path: string) {
+      return { data: { path, token: `signed:${path}`, signedUrl: `https://storage.test/${bucket}/${path}` }, error: null }
+    },
+    /** One folder level, as Storage lists it: files with their creation time, and sub-folders by name. */
+    async list(prefix = '') {
+      const base = `${bucket}/${prefix ? `${prefix}/` : ''}`
+      const entries = new Map<string, { name: string; id: string | null; created_at: string | null }>()
+      for (const stored of objects.keys()) {
+        if (!stored.startsWith(base)) continue
+        const [name, ...rest] = stored.slice(base.length).split('/')
+        entries.set(name, rest.length > 0
+          ? { name, id: null, created_at: null }
+          : { name, id: name, created_at: objectCreatedAt.get(stored) ?? new Date().toISOString() })
+      }
+      return { data: [...entries.values()], error: null }
+    },
   }
 }
+
+/** When each stored object was created, for the sweep of unfinalized uploads; set a past time to age one. */
+export const objectCreatedAt = new Map<string, string>()
 
 vi.mock('@/lib/supabaseAdmin', () => ({
   supabaseAdmin: () => ({ from: (table: string) => builder(table), storage: { from: storageBucket } }),

@@ -10,12 +10,17 @@ import { EVIDENCE_BUCKET, sha256Hex } from '@/lib/environmental/evidence'
 //   file that was filed: the stored bytes are re-hashed and compared with the SHA-256
 //   recorded at upload. A mismatch is never served; it answers 409 and is reported.
 //
-// Members of the tenant may download (RLS on ms_evidence decides which rows they see).
+// Members of the tenant may download (RLS on ms_evidence decides which rows they see),
+// except that an export-controlled file goes only to owners and admins (Phase 2 Q3).
 // The bytes come from the private bucket through the service role.
 
 export const runtime = 'nodejs'
 
-interface EvidenceRow { id: string; storage_path: string; sha256: string; mime_type: string; file_name: string }
+interface EvidenceRow {
+  id: string; storage_path: string; sha256: string; mime_type: string; file_name: string; export_controlled: boolean
+}
+
+const ADMIN_ROLES = new Set(['owner', 'admin', 'superadmin'])
 
 function contentDisposition(fileName: string): string {
   const ascii = fileName.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_')
@@ -31,13 +36,18 @@ export async function GET(req: Request, ctx: RouteContext) {
 
   const { data, error } = await gate.authedClient
     .from('ms_evidence')
-    .select('id, storage_path, sha256, mime_type, file_name')
+    .select('id, storage_path, sha256, mime_type, file_name, export_controlled')
     .eq('id', id)
     .eq('tenant_id', gate.tenantId)
     .maybeSingle()
   if (error) return sanitizeError(error, 'environmental/evidence/[id]/download/GET')
   if (!data) return notFound()
   const evidence = data as EvidenceRow
+  if (evidence.export_controlled && !ADMIN_ROLES.has(gate.role)) {
+    return NextResponse.json({
+      error: 'This file is export-controlled, so only owners and admins can download it.',
+    }, { status: 403 })
+  }
 
   const file = await supabaseAdmin().storage.from(EVIDENCE_BUCKET).download(evidence.storage_path)
   if (file.error || !file.data) {

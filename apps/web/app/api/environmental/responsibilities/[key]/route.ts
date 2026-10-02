@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { isResponsibilityKey } from '@soteria/core/emsProcesses'
 import { requireTenantModuleAdmin } from '@/lib/auth/tenantGate'
 import { sanitizeError } from '@/lib/security/sanitizeError'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
   ENVIRONMENTAL_MODULE,
   UUID_RE,
@@ -10,6 +9,8 @@ import {
   gateFailure,
   invalidInput,
   invalidJson,
+  isCurrentMember,
+  notAMember,
   readJsonObject,
 } from '@/lib/environmental/registerApi'
 
@@ -38,17 +39,10 @@ export async function PUT(req: Request, ctx: KeyContext) {
     return invalidInput([{ field: 'ownerUserId', message: 'must be a user id, or null to unassign' }])
   }
 
-  const notAMember = () => invalidInput([{ field: 'ownerUserId', message: 'is not a member of this organization' }])
   if (owner !== null) {
-    const { data: membership, error } = await supabaseAdmin()
-      .from('tenant_memberships')
-      .select('user_id')
-      .eq('tenant_id', gate.tenantId)
-      .eq('user_id', owner)
-      .is('invite_cancelled_at', null)
-      .maybeSingle()
+    const { member, error } = await isCurrentMember(gate.tenantId, owner)
     if (error) return sanitizeError(error, 'environmental/responsibilities/[key]/PUT owner')
-    if (!membership) return notAMember()
+    if (!member) return notAMember()
   }
 
   // The membership can go between the check above and the write; the foreign key then refuses it.

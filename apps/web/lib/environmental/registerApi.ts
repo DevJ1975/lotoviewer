@@ -10,6 +10,7 @@ import {
 } from '@soteria/core/managementSystem'
 import { requireTenantModuleAdmin } from '@/lib/auth/tenantGate'
 import { sanitizeError } from '@/lib/security/sanitizeError'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 // What every /api/environmental register route shares: reading the body,
 // answering with field errors, and the "mark reviewed" action that every
@@ -115,12 +116,41 @@ export function reviewStamp(userId: string, now: Date = new Date()) {
   }
 }
 
+/**
+ * Whether a user holds a current membership of the tenant: not a cancelled
+ * invitation. Read with the service role, because a member's own client
+ * cannot see anyone else's membership. Owners of records must pass this; a
+ * membership removed after the check is caught by each table's foreign key.
+ */
+export async function isCurrentMember(
+  tenantId: string,
+  userId: string,
+): Promise<{ member: true; error: null } | { member: false; error: unknown }> {
+  const { data, error } = await supabaseAdmin()
+    .from('tenant_memberships')
+    .select('user_id')
+    .eq('tenant_id', tenantId)
+    .eq('user_id', userId)
+    .is('invite_cancelled_at', null)
+    .maybeSingle()
+  if (error) return { member: false, error }
+  return data ? { member: true, error: null } : { member: false, error: null }
+}
+
+export function notAMember(): NextResponse {
+  return invalidInput([{ field: 'ownerUserId', message: 'is not a member of this organization' }])
+}
+
 /** The register tables whose rows carry review dates. */
 export type ReviewableRegister =
   | 'ms_context_issues'
   | 'ms_interested_parties'
   | 'environmental_aspects'
   | 'compliance_calendar_obligations'
+  | 'environmental_permits'
+
+/** Registers of environmental records only, so they carry no discipline column. */
+const ENVIRONMENTAL_ONLY: ReadonlySet<ReviewableRegister> = new Set(['environmental_aspects', 'environmental_permits'])
 
 /**
  * POST /api/environmental/<register>/[id]/review for one register: an admin
@@ -141,8 +171,8 @@ export function reviewRouteFor(table: ReviewableRegister) {
       .eq('id', id)
       .eq('tenant_id', gate.tenantId)
     // These routes reach environmental rows only; an OH&S row is the OH&S
-    // module's to review. Aspects have no discipline: they are environmental.
-    if (table !== 'environmental_aspects') review = review.in('discipline', EMS_DISCIPLINES)
+    // module's to review. Aspects and permits have no discipline: they are environmental.
+    if (!ENVIRONMENTAL_ONLY.has(table)) review = review.in('discipline', EMS_DISCIPLINES)
     const { data, error } = await review.select('*').maybeSingle()
     if (error) return sanitizeError(error, `environmental/${table}/review/POST`)
     if (!data) return notFound()

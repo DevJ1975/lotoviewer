@@ -166,6 +166,33 @@ describe('GET /api/environmental/registers/health', () => {
     expect((await health()).body.responsibilities).toEqual({ health: 'green', rolesUnassigned: 0, processesUnassigned: 0 })
   })
 
+  it('grades permits: amber when none are recorded, red for a missed deadline or another holder, green when in order', async () => {
+    const permit = (over: Record<string, unknown>) => ({
+      tenant_id: TENANT_A, retired_at: null, holder_of_record: 'Northfield Forge & Finish LLC', expires_on: FUTURE,
+      renewal_application_due_on: null, renewal_submitted_on: null, next_review_due: FUTURE, ...over,
+    })
+    expect((await health()).body.permits).toMatchObject({ health: 'amber', active: 0 })
+
+    seed('ms_scope_statements', [{ tenant_id: TENANT_A, discipline: 'ems', version: 1, legal_entity: 'Northfield Forge & Finish LLC', next_review_due: FUTURE }])
+    seed('environmental_permits', [permit({}), permit({ tenant_id: TENANT_B, expires_on: PAST })])
+    expect((await health()).body.permits).toMatchObject({ health: 'green', active: 1 })
+
+    seed('environmental_permits', [permit({ holder_of_record: 'Northfield Metal Products Inc.' })])
+    expect((await health()).body.permits).toMatchObject({ health: 'red', holderMismatch: 1 })
+
+    resetStore()
+    seed('ms_scope_statements', [{ tenant_id: TENANT_A, discipline: 'ems', version: 1, legal_entity: 'Northfield Forge & Finish LLC', next_review_due: FUTURE }])
+    seed('environmental_permits', [permit({ expires_on: PAST }), permit({ expires_on: PAST, renewal_submitted_on: PAST })])
+    expect((await health()).body.permits).toMatchObject({ health: 'red', deadlineMissed: 1, active: 2 })
+  })
+
+  it('turns permits amber for an overdue condition', async () => {
+    seed('environmental_permits', [{ tenant_id: TENANT_A, retired_at: null, holder_of_record: 'Anyone', expires_on: null,
+      renewal_application_due_on: null, renewal_submitted_on: null, next_review_due: FUTURE }])
+    seed('compliance_calendar_obligations', [obligation({ permit_id: 'p1', next_due_at: PAST })])
+    expect((await health()).body.permits).toMatchObject({ health: 'amber', conditionsOverdue: 1 })
+  })
+
   it('lets a member read it, passes gate failures through, and refuses an OH&S discipline', async () => {
     asMemberA()
     expect((await health()).status).toBe(200)
