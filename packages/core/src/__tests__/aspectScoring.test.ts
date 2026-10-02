@@ -7,6 +7,7 @@ import {
   validateAspectScoreInput,
   type AspectInput,
   type AspectOperatingCondition,
+  walkdownGroups,
 } from '../environmentalAspect'
 import { DEFAULT_SCORING_METHOD, type ScoringMethodDefinition } from '../scoringMethod'
 
@@ -176,5 +177,37 @@ describe('validateAspectScoreInput', () => {
 
   it('rejects an unknown operating condition', () => {
     expect(fields({ ...valid, operatingCondition: 'startup' })).toEqual(['operatingCondition'])
+  })
+})
+
+describe('walkdownGroups', () => {
+  const aspect = (activity: string, processArea: string | null, significant: boolean, maxScore: number | null) =>
+    ({ activity, processArea, significant, maxScore })
+
+  it('groups by process area alphabetically, with unassigned aspects last', () => {
+    const groups = walkdownGroups([
+      aspect('Boiler firing', 'Utilities', false, 6),
+      aspect('Yard sweeping', null, false, null),
+      aspect('Parts degreasing', 'Finishing', true, 12),
+      aspect('Leak check', '  ', false, 2),
+    ])
+    expect(groups.map(g => g.processArea)).toEqual(['Finishing', 'Utilities', 'No process area'])
+    expect(groups[2].aspects.map(a => a.activity)).toEqual(['Leak check', 'Yard sweeping'])
+  })
+
+  it('puts significant aspects first, then the highest score, then the activity', () => {
+    const [group] = walkdownGroups([
+      aspect('Rinse tank', 'Finishing', false, 9),
+      aspect('Unscored line', 'Finishing', false, null),
+      aspect('Powder booth', 'Finishing', true, 12),
+      aspect('Acid dip', 'Finishing', true, 20),
+      aspect('Buffing', 'Finishing', false, 9),
+    ])
+    expect(group.aspects.map(a => a.activity)).toEqual(['Acid dip', 'Powder booth', 'Buffing', 'Rinse tank', 'Unscored line'])
+  })
+
+  it('names the unassigned group as asked, and returns nothing for no aspects', () => {
+    expect(walkdownGroups([aspect('A', null, false, null)], 'Unassigned')[0].processArea).toBe('Unassigned')
+    expect(walkdownGroups([])).toEqual([])
   })
 })

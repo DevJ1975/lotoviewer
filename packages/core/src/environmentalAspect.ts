@@ -178,3 +178,46 @@ export function validateAspectScoreInput(input: AspectScoreInput, method: Scorin
   else if (input.rationale.length > RATIONALE_MAX) errors.push({ field: 'rationale', message: `must be at most ${RATIONALE_MAX} characters` })
   return errors
 }
+
+// ── Walk-down list (the mobile register) ──────────────────────────────────
+
+export interface WalkdownAspect {
+  activity:    string
+  processArea: string | null
+  significant: boolean
+  /** Highest current score across conditions; null when unscored. */
+  maxScore:    number | null
+}
+
+export interface WalkdownGroup<T> {
+  processArea: string
+  aspects:     T[]
+}
+
+/**
+ * Aspects as a supervisor walks the site: grouped by process area
+ * (alphabetical, unassigned last), significant aspects first in each
+ * group, then by highest score, then by activity.
+ */
+export function walkdownGroups<T extends WalkdownAspect>(
+  aspects: readonly T[],
+  unassignedLabel = 'No process area',
+): WalkdownGroup<T>[] {
+  const byArea = new Map<string | null, T[]>()
+  for (const aspect of aspects) {
+    const area = aspect.processArea?.trim() || null
+    byArea.set(area, [...(byArea.get(area) ?? []), aspect])
+  }
+  const areas = [...byArea.keys()].sort((a, b) => {
+    if (a === null) return 1
+    if (b === null) return -1
+    return a.localeCompare(b)
+  })
+  return areas.map(area => ({
+    processArea: area ?? unassignedLabel,
+    aspects: [...byArea.get(area)!].sort((a, b) =>
+      Number(b.significant) - Number(a.significant)
+      || (b.maxScore ?? -1) - (a.maxScore ?? -1)
+      || a.activity.localeCompare(b.activity)),
+  }))
+}
