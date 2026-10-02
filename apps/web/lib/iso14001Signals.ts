@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import { reviewHasOutputs } from '@soteria/core/managementReview'
+import { policyIsComplete, policySignatoryStale, registerDisciplines } from '@soteria/core/managementSystem'
 import {
   READINESS_WINDOWS,
   type ReadinessSignals,
@@ -19,6 +20,10 @@ import {
 // phases 3 and 4) are represented by the `*Live` booleans rather than
 // by querying and swallowing a 42P01. Guessing from a caught error
 // would make a network blip look like a missing feature.
+//
+// The context, scope and policy, aspect and obligation clauses read the
+// Phase 1 registers (migrations 295-299); environmental registers count
+// environmental and integrated rows, never OH&S-only ones.
 
 const DOCUMENTS_REGISTER_LIVE = false  // flip when controlled_documents ships
 const AUDIT_PROGRAMME_LIVE    = false  // flip when internal_audits ships
@@ -53,37 +58,60 @@ export async function fetchIso14001Signals(
   tenantModules: Record<string, boolean> | null | undefined,
 ): Promise<ReadinessSignals> {
   const t = (table: string) => supabase.from(table).select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId)
+  const ems = registerDisciplines('ems')
+  const activeIssues = () => t('ms_context_issues').in('discipline', ems).is('retired_at', null)
+  const activeParties = () => t('ms_interested_parties').in('discipline', ems).is('retired_at', null)
+  const registerObligations = () => t('compliance_calendar_obligations').in('discipline', ems).neq('status', 'dismissed')
   const today = new Date().toISOString().slice(0, 10)
   const readingCutoff = new Date(Date.now() - READINESS_WINDOWS.objectiveReadingDays * 86_400_000)
     .toISOString().slice(0, 10)
 
   const [
+    contextIssues, contextIssuesOverdue, climateIssues,
+    parties, partiesOverdue,
+    scopes, policies,
     risks, riskReviews, riskControls,
     aspects, objectives, objectiveReadings,
-    obligations, obligationsOverdue,
+    obligations, obligationsOverdue, obligationsReviewOverdue,
+    lastEvaluation, evaluationsOverdue, obligationsUnscheduled, evaluationsUndetermined,
     training,
     reviews,
     nonconformities, ncActions,
     inspections,
-    complianceEvents, toolboxTalks, prop65Notifications,
+    toolboxTalks, prop65Notifications,
   ] = await Promise.all([
+    activeIssues(),
+    activeIssues().lt('next_review_due', today),
+    activeIssues().eq('kind', 'climate'),
+    activeParties(),
+    activeParties().lt('next_review_due', today),
+    supabase.from('ms_scope_statements').select('version, legal_entity, effective_from, next_review_due')
+      .eq('tenant_id', tenantId).eq('discipline', 'ems').order('version', { ascending: false }),
+    supabase.from('ms_policies').select('commitments, signatory_name, signed_at, next_review_due')
+      .eq('tenant_id', tenantId).eq('discipline', 'ems').order('version', { ascending: false }).limit(1),
     supabase.from('risks').select('id, updated_at').eq('tenant_id', tenantId).limit(5000),
     supabase.from('risk_reviews').select('created_at').eq('tenant_id', tenantId)
       .order('created_at', { ascending: false }).limit(1),
     supabase.from('risk_controls').select('risk_id').eq('tenant_id', tenantId).limit(10_000),
-    supabase.from('environmental_aspects')
-      .select('id, is_significant, controls, related_risk_id, status, updated_at')
-      .eq('tenant_id', tenantId).limit(5000),
+    supabase.from('environmental_aspect_register')
+      .select('id, significant, max_score, controls, related_risk_id, next_review_due')
+      .eq('tenant_id', tenantId).is('obsolete_at', null).limit(5000),
     supabase.from('environmental_objectives')
       .select('id, status, target_value, target_date, related_aspect_id')
       .eq('tenant_id', tenantId).limit(2000),
     supabase.from('environmental_objective_readings')
       .select('objective_id, reading_date').eq('tenant_id', tenantId)
       .gte('reading_date', readingCutoff).limit(10_000),
-    t('compliance_calendar_obligations'),
-    supabase.from('compliance_calendar_obligations')
-      .select('id', { count: 'exact', head: true })
-      .eq('tenant_id', tenantId).eq('status', 'open').lt('next_due_at', today),
+    registerObligations(),
+    registerObligations().eq('status', 'open').lt('next_due_at', today),
+    registerObligations().lt('next_review_due', today),
+    // An undetermined result leaves the status unknown, so it is not an evaluation of compliance here.
+    supabase.from('ms_compliance_evaluations').select('completed_at')
+      .eq('tenant_id', tenantId).in('discipline', ems).not('completed_at', 'is', null).neq('result', 'undetermined')
+      .order('completed_at', { ascending: false }).limit(1),
+    t('ms_compliance_evaluations').in('discipline', ems).is('completed_at', null).lt('scheduled_for', today),
+    registerObligations().is('evaluation_cadence_days', null),
+    t('ms_obligation_register').in('discipline', ems).neq('status', 'dismissed').eq('last_result', 'undetermined'),
     supabase.from('loto_training_records').select('expires_at').eq('tenant_id', tenantId).limit(10_000),
     supabase.from('management_reviews')
       .select('review_date, conclusions, decisions, status')
@@ -96,9 +124,6 @@ export async function fetchIso14001Signals(
       .eq('tenant_id', tenantId).limit(10_000),
     supabase.from('inspections')
       .select('id, status, due_at, submitted_at').eq('tenant_id', tenantId).limit(5000),
-    supabase.from('compliance_calendar_events')
-      .select('completed_at').eq('tenant_id', tenantId)
-      .order('completed_at', { ascending: false }).limit(1),
     supabase.from('toolbox_talks')
       .select('talk_date').eq('tenant_id', tenantId)
       .order('talk_date', { ascending: false }).limit(1),
@@ -115,7 +140,20 @@ export async function fetchIso14001Signals(
   const inspectionRows = inspections.data ?? []
   const riskRows      = risks.data ?? []
 
-  const significant = aspectRows.filter(a => a.is_significant)
+  const significant = aspectRows.filter(a => a.significant)
+
+  // The policy in force, judged by the same rules the policy route applies.
+  const scopeRows = scopes.data ?? []
+  const policy = (policies.data ?? [])[0] ?? null
+  const policyApproved = policy !== null && policyIsComplete({
+    commitments:   policy.commitments as Record<string, boolean>,
+    signatoryName: policy.signatory_name,
+    signedAt:      policy.signed_at,
+  }, 'ems')
+  const signatoryStale = policy !== null && policySignatoryStale(
+    { signedAt: policy.signed_at },
+    scopeRows.map(sv => ({ version: sv.version, legalEntity: sv.legal_entity, effectiveFrom: sv.effective_from })),
+  )
   const controlledRiskIds = new Set((riskControls.data ?? []).map(c => c.risk_id))
   const objectivesActive = objectiveRows.filter(o => o.status !== 'cancelled')
   const objectiveIdsWithReading = new Set(readingRows.map(r => r.objective_id))
@@ -142,6 +180,18 @@ export async function fetchIso14001Signals(
   return {
     disabledModules,
 
+    contextIssuesActive:            countRows(contextIssues),
+    contextIssuesReviewOverdue:     countRows(contextIssuesOverdue),
+    climateIssueRecorded:           countRows(climateIssues) > 0,
+    interestedPartiesActive:        countRows(parties),
+    interestedPartiesReviewOverdue: countRows(partiesOverdue),
+    scopeOnFile:        scopeRows.length > 0,
+    scopeReviewOverdue: scopeRows.length > 0 && scopeRows[0].next_review_due < today,
+
+    policyApproved,
+    policyReviewOverdue: policy !== null && policy.next_review_due < today,
+    policySignatoryStale: signatoryStale,
+
     risks: {
       count:   riskRows.length,
       ageDays: newestAgeDays(riskReviews.data ?? [], 'created_at')
@@ -149,8 +199,6 @@ export async function fetchIso14001Signals(
     },
 
     documentsRegisterLive: DOCUMENTS_REGISTER_LIVE,
-    policyApproved:        false,
-    policyReviewOverdue:   false,
     requiredDocsMissing:   0,
     docsReviewOverdue:     0,
 
@@ -159,16 +207,19 @@ export async function fetchIso14001Signals(
     aspectsTotal:            aspectRows.length,
     aspectsSignificant:      significant.length,
     significantUncontrolled: significant.filter(a => !a.controls?.trim() && !a.related_risk_id).length,
-    aspectsRegisterAgeDays:  newestAgeDays(aspectRows, 'updated_at'),
+    aspectsUnscored:         aspectRows.filter(a => a.max_score === null).length,
+    aspectsReviewOverdue:    aspectRows.filter(a => a.next_review_due < today).length,
 
-    obligationsTotal:      countRows(obligations),
-    obligationsOverdue:    countRows(obligationsOverdue),
-    // 9.1.2 has no dedicated evaluation record. The closest true
-    // artifact is the compliance-calendar completion log: signing off an
-    // obligation IS an act of evaluating compliance against it. Reported
-    // as-is rather than inferred from "nothing is overdue", which would
-    // score an empty calendar as evaluated.
-    complianceEvalAgeDays: newestAgeDays(complianceEvents.data ?? [], 'completed_at'),
+    obligationsTotal:         countRows(obligations),
+    obligationsOverdue:       countRows(obligationsOverdue),
+    obligationsReviewOverdue: countRows(obligationsReviewOverdue),
+    // 9.1.2 reads the evaluation record itself: compliant and noncompliant
+    // results are backed by evidence (migration 299 enforces it), and a
+    // not-applicable one by notes; an undetermined one establishes nothing.
+    complianceEvalAgeDays:   newestAgeDays(lastEvaluation.data ?? [], 'completed_at'),
+    evaluationsOverdue:      countRows(evaluationsOverdue),
+    obligationsUnscheduled:  countRows(obligationsUnscheduled),
+    evaluationsUndetermined: countRows(evaluationsUndetermined),
 
     significantUnaddressed: significant.filter(a =>
       !aspectIdsWithObjective.has(a.id) && !a.controls?.trim() && !a.related_risk_id,

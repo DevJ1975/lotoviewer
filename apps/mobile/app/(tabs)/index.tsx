@@ -6,6 +6,7 @@ import { Text, View } from '@/components/Themed'
 import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
+import { isModuleVisible } from '@soteria/core/moduleVisibility'
 
 // Phase 3 dashboard. Read-only summary:
 //   - Greeting (signed-in user's email).
@@ -15,6 +16,9 @@ import { supabase } from '@/lib/supabase'
 //
 // Counts come from a HEAD-only count() query so we don't pull rows
 // just to render a number.
+//
+// Module entry cards appear only when the tenant has the module on
+// (isModuleVisible), so a switched-off module never shows a dead door.
 
 export default function DashboardScreen() {
   const { session, signOut } = useAuth()
@@ -88,6 +92,19 @@ export default function DashboardScreen() {
         </View>
       </View>
 
+      {isModuleVisible('environmental', tenant?.modules) && (
+        <Link href="/environmental/aspects" asChild>
+          <Pressable>
+            {({ pressed }) => (
+              <View style={[styles.moduleCard, pressed && styles.tenantPillPressed]}>
+                <Text style={styles.moduleCardTitle}>Environmental aspects</Text>
+                <Text style={styles.moduleCardHint}>Walk-down list: significant aspects first, by process area</Text>
+              </View>
+            )}
+          </Pressable>
+        </Link>
+      )}
+
       <View style={styles.spacer} />
 
       <TouchableOpacity style={styles.signOutBtn} onPress={() => { void signOut() }}>
@@ -113,6 +130,9 @@ const styles = StyleSheet.create({
   statLabel:          { fontSize: 11, fontWeight: '600', opacity: 0.6, textTransform: 'uppercase', letterSpacing: 0.5 },
   statValue:          { fontSize: 28, fontWeight: '700' },
   statError:          { fontSize: 12, color: '#b91c1c' },
+  moduleCard:         { padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#cbd5e1', gap: 4 },
+  moduleCardTitle:    { fontSize: 15, fontWeight: '600' },
+  moduleCardHint:     { fontSize: 12, opacity: 0.6 },
   spacer:             { flex: 1 },
   signOutBtn:         { alignSelf: 'center', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: '#94a3b8' },
   signOutText:        { fontSize: 14, fontWeight: '600' },

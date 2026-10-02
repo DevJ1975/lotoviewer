@@ -44,10 +44,12 @@ interface ReadingRow {
 }
 
 interface AspectOption {
-  id:             string
-  activity:       string
-  aspect:         string
-  is_significant: boolean
+  id:          string
+  activity:    string
+  aspect:      string
+  /** Significant under any operating condition (environmental_aspect_register). */
+  significant: boolean
+  obsolete_at: string | null
 }
 
 const STATUS_BADGE: Record<ObjectiveStatus, string> = {
@@ -111,10 +113,11 @@ export default function EnvironmentalObjectivesPage() {
           .order('reading_date', { ascending: false })
           .limit(5000),
         supabase
-          .from('environmental_aspects')
-          .select('id, activity, aspect, is_significant')
+          .from('environmental_aspect_register')
+          // Obsolete aspects too, so an objective linked to one keeps its label.
+          .select('id, activity, aspect, significant, obsolete_at')
           .eq('tenant_id', tenantId)
-          .order('significance_score', { ascending: false })
+          .order('max_score', { ascending: false, nullsFirst: false })
           .limit(1000),
       ])
       if (obj.error) throw new Error(formatSupabaseError(obj.error, 'load objectives'))
@@ -141,7 +144,7 @@ export default function EnvironmentalObjectivesPage() {
 
   const aspectLabel = useMemo(() => {
     const m = new Map<string, string>()
-    for (const a of aspects) m.set(a.id, `${a.activity} — ${a.aspect}`)
+    for (const a of aspects) m.set(a.id, `${a.activity} — ${a.aspect}${a.obsolete_at ? ' (obsolete)' : ''}`)
     return m
   }, [aspects])
 
@@ -292,9 +295,9 @@ export default function EnvironmentalObjectivesPage() {
               <select value={relatedAspectId} onChange={e => setRelatedAspectId(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm">
                 <option value="">—</option>
-                {aspects.map(a => (
+                {aspects.filter(a => a.obsolete_at === null).map(a => (
                   <option key={a.id} value={a.id}>
-                    {a.is_significant ? '★ ' : ''}{a.activity} — {a.aspect}
+                    {a.significant ? '★ ' : ''}{a.activity} — {a.aspect}
                   </option>
                 ))}
               </select>
