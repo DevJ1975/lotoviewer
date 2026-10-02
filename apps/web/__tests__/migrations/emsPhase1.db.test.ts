@@ -14,6 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { PGlite } from '@electric-sql/pglite'
 import { scoreAspect } from '@soteria/core/environmentalAspect'
 import { DEFAULT_SCORING_METHOD, type ScoringMethodDefinition } from '@soteria/core/scoringMethod'
+import { DELETE_ORDER } from '@/lib/demoReset'
 import { IDS, PHASE1_MIGRATIONS, asCaller, createEmsDatabase, migrationSql, scalar } from './_emsTestDatabase'
 
 const DB_SETUP_TIMEOUT_MS = 120_000
@@ -476,6 +477,32 @@ describe('EMS Phase 1 migrations on a real Postgres', () => {
         `insert into public.ms_interested_parties (tenant_id, name, needs_expectations, becomes_obligation, obligation_id)
          values ($1, 'County water district', 'Discharge within permit limits', true, $2)`,
         [IDS.tenantA, foreignObligation])).rejects.toMatchObject({ code: '23503' })
+    })
+  })
+
+  describe('the demo reset (lib/demoReset.ts)', () => {
+    it('wipes the demo tenant in DELETE_ORDER without tripping a foreign key, then reseeds', async () => {
+      // A sealed noncompliant evaluation with evidence and its nonconformity:
+      // the rows whose no-action references decide the order.
+      const obligation = await insertObligation(db, IDS.tenantA, 'Air permit opacity readings')
+      const evaluation = await openEvaluation(db, IDS.tenantA, obligation)
+      await attachEvidence(db, IDS.tenantA, evaluation, 9)
+      const nonconformity = await scalar<string>(db,
+        `insert into public.nonconformities (tenant_id, title) values ($1, 'Opacity log gap') returning id`, [IDS.tenantA])
+      await db.query(
+        `update public.ms_compliance_evaluations
+            set completed_at = now(), result = 'noncompliant', evaluator_id = $2, nonconformity_id = $3 where id = $1`,
+        [evaluation, IDS.ownerA, nonconformity])
+
+      for (const table of DELETE_ORDER) {
+        if (await scalar(db, 'select to_regclass($1)::text', [`public.${table}`]) === null) continue   // the route skips 42P01 too
+        await db.query(`delete from public.${table} where tenant_id = $1`, [IDS.tenantA])
+      }
+      expect(await count(db, 'select count(*) from public.ms_compliance_evaluations where tenant_id = $1', [IDS.tenantA])).toBe(0)
+
+      await db.query('select public.seed_wls_iso14001_demo()')
+      expect(await count(db, 'select count(*) from public.environmental_aspect_register where tenant_id = $1 and significant',
+        [IDS.tenantA])).toBe(5)
     })
   })
 
