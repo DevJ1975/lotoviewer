@@ -253,39 +253,48 @@ describe('assessIso14001 — coverage arithmetic', () => {
   })
 })
 
-describe('assessIso14001 — phase-3/4 tables absent', () => {
+describe('assessIso14001 — documents register and audit programme absent', () => {
   // The report card ships before the documents register and the audit
-  // programme exist. It must say so honestly rather than blaming the
-  // tenant for records they were never given a place to keep.
+  // programme exist. The organization may keep both elsewhere, so the card
+  // must neither blame it for records it was never given a place to keep
+  // nor guess that they are in order.
   const preRelease: ReadinessSignals = {
     ...healthy(),
     documentsRegisterLive: false,
     auditProgrammeLive:    false,
   }
+  const clause = (card: ReturnType<typeof assessIso14001>, code: string) =>
+    card.clauses.find(c => c.code === code)!
 
-  it('reports 7.5 and 9.2 as gaps naming the missing feature', () => {
+  it('reads 7.5 and 9.2 as not assessed, naming what the platform lacks', () => {
     const card = assessIso14001(preRelease)
-    const docs  = card.clauses.find(c => c.code === '7.5')!
-    const audit = card.clauses.find(c => c.code === '9.2')!
-    expect(docs.verdict).toBe('gap')
-    expect(docs.reason).toContain('No controlled-document register yet')
-    expect(audit.verdict).toBe('gap')
-    expect(audit.reason).toContain('No internal-audit programme yet')
+    expect(clause(card, '7.5').verdict).toBe('not_assessed')
+    expect(clause(card, '7.5').reason).toMatch(/^Not assessed: .*controlled-document register/)
+    expect(clause(card, '9.2').verdict).toBe('not_assessed')
+    expect(clause(card, '9.2').reason).toMatch(/^Not assessed: .*internal-audit programme/)
+  })
+
+  it('never blocks on them, so a tenant can reach Ready with gaps', () => {
+    const card = assessIso14001(preRelease)
+    expect(card.blockers).toEqual([])
+    expect(card.band).toBe('ready_with_gaps')
+    expect(card.headline).toBe('Every clause the platform can assess has current evidence. '
+      + 'Check 7.2, 7.3, 7.4, 7.5, 8.1, 8.2, 9.2 against your own records before an audit.')
   })
 
   it('offers no fix link for a feature that does not exist yet', () => {
     const card = assessIso14001(preRelease)
-    expect(card.clauses.find(c => c.code === '7.5')!.fixHref).toBeNull()
-    expect(card.clauses.find(c => c.code === '9.2')!.fixHref).toBeNull()
+    expect(clause(card, '7.5').fixHref).toBeNull()
+    expect(clause(card, '9.2').fixHref).toBeNull()
   })
 
-  it('still gives every other clause a working fix link', () => {
-    const card = assessIso14001(preRelease)
-    const broken = card.clauses
-      .filter(c => c.verdict !== 'conforming' && c.verdict !== 'not_assessed')
-      .filter(c => !['7.5', '9.2'].includes(c.code))
-      .filter(c => c.fixHref === null)
-    expect(broken.map(c => c.code)).toEqual([])
+  it('blocks on a real gap once the register is live, because both stay core clauses', () => {
+    const docs  = assessIso14001({ ...healthy(), requiredDocsMissing: 1 })
+    const audit = assessIso14001({ ...healthy(), lastAuditAgeDays: null })
+    expect(clause(docs, '7.5').blocking).toBe(true)
+    expect(clause(audit, '9.2').blocking).toBe(true)
+    expect(docs.band).toBe('not_ready')
+    expect(audit.band).toBe('not_ready')
   })
 })
 
@@ -362,13 +371,13 @@ describe('assessIso14001 — the WLS demo seed story', () => {
       '5.2':   'gap',          // ... no policy
       '5.3':   'gap',          // ... and no one assigned the 5.3 roles
       '9.1.2': 'gap',          // no compliance evaluation on record
-      '7.5':   'gap',          // no documents register yet (phase 3)
-      '9.2':   'gap',          // no audit programme yet (phase 4)
       '7.2':   'not_assessed', // no environmental source yet, whatever
       '7.3':   'not_assessed', // the tenant's safety modules hold
       '7.4':   'not_assessed',
+      '7.5':   'not_assessed', // no documents register yet
       '8.1':   'not_assessed',
       '8.2':   'not_assessed',
+      '9.2':   'not_assessed', // no audit programme yet
     })
   })
 
@@ -386,17 +395,16 @@ describe('assessIso14001 — the WLS demo seed story', () => {
     expect(card.counts.not_assessed).toBeGreaterThan(0)
   })
 
-  it('produces the headline migration 256 documents', () => {
+  it('names the open major as the only reason it is not ready', () => {
     // Only the headline is pinned, not the overall counts. The seed owns
     // eight clauses; the rest of the card depends on what other modules
     // put in the tenant (risks, training currency, inspections), which
     // this fixture cannot speak for — an earlier version of this test
     // asserted counts that did not hold against the real demo tenant.
+    // Migration 256's header quotes the headline as it read when the seed
+    // shipped, when 7.5 and 9.2 still counted as gaps.
     const card = assessIso14001(demo)
-    expect(card.headline).toBe(
-      'Not ready for a certification audit — 1 open major nonconformity; '
-      + 'no evidence for clauses 7.5, 9.2.',
-    )
-    expect(card.blockers.map(b => b.code)).toEqual(['7.5', '9.2'])
+    expect(card.headline).toBe('Not ready for a certification audit — 1 open major nonconformity.')
+    expect(card.blockers).toEqual([])
   })
 })

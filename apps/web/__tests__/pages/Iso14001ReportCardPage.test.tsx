@@ -97,7 +97,7 @@ describe('ISO 14001 report card page', () => {
   })
 
   it('lists blocking findings separately from the clause table', async () => {
-    signals.current = { ...healthy(), documentsRegisterLive: false, requiredDocsMissing: 0 }
+    signals.current = { ...healthy(), requiredDocsMissing: 1 }
     render(<Iso14001ReportCardPage />)
     await waitFor(() => expect(screen.getByText('Blocking findings')).toBeInTheDocument())
     expect(screen.getAllByText('Documented information').length).toBeGreaterThan(0)
@@ -106,9 +106,12 @@ describe('ISO 14001 report card page', () => {
   it('offers no Fix link for a clause whose feature has not shipped', async () => {
     signals.current = { ...healthy(), documentsRegisterLive: false, auditProgrammeLive: false }
     render(<Iso14001ReportCardPage />)
-    await waitFor(() => expect(screen.getByText('Not ready')).toBeInTheDocument())
-    // 7.5 and 9.2 are gaps with a null fixHref, so no dead link is rendered
-    // for them. Any "Fix" link that IS present must point somewhere real.
+    // Not assessed rather than a gap: the organization may keep these records
+    // elsewhere, so they hold the band at Ready with gaps and never block.
+    await waitFor(() => expect(screen.getByText('Ready with gaps')).toBeInTheDocument())
+    expect(screen.queryByText('Blocking findings')).not.toBeInTheDocument()
+    // 7.5 and 9.2 carry a null fixHref, so no dead link is rendered for
+    // them. Any "Fix" link that IS present must point somewhere real.
     for (const link of screen.queryAllByRole('link', { name: /Fix/ })) {
       expect(link.getAttribute('href')).toMatch(/^\//)
     }

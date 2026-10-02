@@ -97,7 +97,7 @@ As of 2026-10-02.
 
 | Finding | Status |
 | --- | --- |
-| MJ-1 | **Addressed in PR #315** (`25c2f6c`). Clauses 7.2, 7.3, 7.4, 8.1 and 8.2 read *not assessed*, with the reason, until environmental sources exist. A not-assessed clause is never conforming and never blocking, stays in the coverage denominator, and holds the band at *ready with gaps*. |
+| MJ-1 | **Addressed in PR #315** (`25c2f6c`). Clauses 7.2, 7.3, 7.4, 8.1 and 8.2 read *not assessed*, with the reason, until environmental sources exist. A not-assessed clause is never conforming and never blocking, stays in the coverage denominator, and holds the band at *ready with gaps*. The review of that PR found the same fault in reverse on 7.5 and 9.2: they read as blocking gaps only because their registers are unbuilt, which held every tenant at *not ready*. They now read *not assessed* too until the registers ship, and stay core clauses, so a real gap blocks once they do. |
 | MJ-2 | **Open.** Recommended as a separate platform PR; not started. |
 | mn-1 | **Addressed in PR #315.** `environmental_aspects.control_level` (migration 302, proposed, not applied), in the form, sheet and CSV import. The report card counts undecided aspects. |
 | mn-2 | **Addressed in PR #315.** The scope's control-and-influence statement (required on new versions) and exclusions (migration 302). The scope and policy download together as one PDF for interested parties. |

@@ -344,15 +344,23 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
     'Not assessed: apart from the policy, the platform does not yet record internal and external environmental communication.',
     null))
 
-  // 7.5 — Documented information. Register arrives in phase 3.
-  push('7.5', s.documentsRegisterLive ? '/documents' : null, [
-    [!s.documentsRegisterLive, 'gap',
-      'No controlled-document register yet — documented information cannot be version-controlled in the platform.'],
-    [s.requiredDocsMissing > 0, 'gap',
-      `${count(s.requiredDocsMissing, 'document the standard requires is', 'documents the standard requires are')} absent from the register.`],
-    [s.docsReviewOverdue > 0, 'attention',
-      `${count(s.docsReviewOverdue, 'controlled document is past its', 'controlled documents are past their')} review date.`],
-  ], ['conforming', 'Every required document is approved and within its review cycle.'])
+  // 7.5 and 9.2 — until the platform keeps the register, it cannot see the
+  // organization's controlled documents or audit programme, which is not the
+  // same as their being absent. Grading that as a gap blocked every tenant
+  // on a feature the platform has not shipped. Once the register is live a
+  // real gap blocks again: both stay in CORE_CLAUSES.
+  if (s.documentsRegisterLive) {
+    push('7.5', '/documents', [
+      [s.requiredDocsMissing > 0, 'gap',
+        `${count(s.requiredDocsMissing, 'document the standard requires is', 'documents the standard requires are')} absent from the register.`],
+      [s.docsReviewOverdue > 0, 'attention',
+        `${count(s.docsReviewOverdue, 'controlled document is past its', 'controlled documents are past their')} review date.`],
+    ], ['conforming', 'Every required document is approved and within its review cycle.'])
+  } else {
+    out.push(assess('7.5', 'not_assessed',
+      'Not assessed: the platform does not yet keep a controlled-document register, so it cannot tell whether the documents the standard requires are approved and current.',
+      null))
+  }
 
   // 8.1 and 8.2 — likewise. An inspection says nothing about which aspect
   // or obligation it controls until Phases 2 and 4 tie them together, and
@@ -384,16 +392,20 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
       'Compliance has not been evaluated in over a year.'],
   ], ['conforming', 'Compliance evaluated against evidence within the last year, with nothing past due.'])
 
-  // 9.2 — Internal audit. Programme arrives in phase 4.
-  push('9.2', s.auditProgrammeLive ? '/environmental/audits' : null, [
-    [!s.auditProgrammeLive, 'gap',
-      'No internal-audit programme yet — audit planning and clause coverage are not tracked in the platform.'],
-    [s.lastAuditAgeDays === null, 'gap', 'No internal audit has been carried out.'],
-    [older(s.lastAuditAgeDays, READINESS_WINDOWS.annualReviewDays), 'attention',
-      'The last internal audit was over a year ago.'],
-    [s.auditClausesUncovered > 0, 'attention',
-      `${count(s.auditClausesUncovered, 'clause has', 'clauses have')} not been audited in the current cycle.`],
-  ], ['conforming', 'The internal-audit programme covers every clause and is current.'])
+  // 9.2 — Internal audit. Not assessed until the programme ships, as 7.5.
+  if (s.auditProgrammeLive) {
+    push('9.2', '/environmental/audits', [
+      [s.lastAuditAgeDays === null, 'gap', 'No internal audit has been carried out.'],
+      [older(s.lastAuditAgeDays, READINESS_WINDOWS.annualReviewDays), 'attention',
+        'The last internal audit was over a year ago.'],
+      [s.auditClausesUncovered > 0, 'attention',
+        `${count(s.auditClausesUncovered, 'clause has', 'clauses have')} not been audited in the current cycle.`],
+    ], ['conforming', 'The internal-audit programme covers every clause and is current.'])
+  } else {
+    out.push(assess('9.2', 'not_assessed',
+      'Not assessed: the platform does not yet keep an internal-audit programme, so it cannot tell whether audits are planned, held and cover every clause.',
+      null))
+  }
 
   // 9.3 — Management review.
   push('9.3', '/environmental/management-review', [

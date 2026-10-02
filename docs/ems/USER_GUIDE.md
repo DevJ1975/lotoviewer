@@ -25,14 +25,20 @@ A light changes as soon as the underlying record does, and each card opens the
 register behind it. The ISO 14001 report card (`/environmental/report-card`) uses the
 same records, and its "fix" links open the right tab of the right screen.
 
-The report card grades clause 5.3 from the Processes page. It marks five clauses
-**Not assessed**: 7.2 competence, 7.3 awareness, 7.4 communication, 8.1 operational
-control and 8.2 emergency preparedness. The platform holds no environmental record for
-them yet. Safety training, toolbox talks and safety inspections are not evidence of
-these clauses unless they cover environmental work, and the platform cannot yet tell
-which ones do, so the card does not grade them from those records. Check these clauses
-against your own records before an audit. While any clause is not assessed, the card
-says *Ready with gaps* at best.
+The report card grades clause 5.3 from the Processes page. It marks seven clauses
+**Not assessed**, because the platform holds no environmental record for them yet:
+
+- **7.5 documented information and 9.2 internal audit.** The platform has no
+  controlled-document register or internal-audit programme yet. Keep that evidence in
+  your own document system and reference it from the management review.
+- **7.2 competence, 7.3 awareness, 7.4 communication, 8.1 operational control and 8.2
+  emergency preparedness.** Safety training, toolbox talks and safety inspections are
+  not evidence of these clauses unless they cover environmental work, and the platform
+  cannot yet tell which ones do, so the card does not grade them from those records.
+
+A clause that is not assessed never blocks, and it never counts as evidence. Check these
+clauses against your own records before an audit. While any clause is not assessed, the
+card says *Ready with gaps* at best.
 
 ---
 

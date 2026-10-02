@@ -25,8 +25,9 @@ import {
 // The context, scope and policy, aspect and obligation clauses read the
 // Phase 1 registers (migrations 295-299); environmental registers count
 // environmental and integrated rows, never OH&S-only ones. Clauses 7.2 to
-// 8.2 read nothing: the readiness module grades them not assessed until an
-// environmental source exists, rather than from safety records.
+// 8.2 and 9.2 read nothing: the readiness module grades them not assessed
+// until an environmental source exists, rather than from safety records or
+// from the absence of a register the platform has not shipped.
 
 const DOCUMENTS_REGISTER_LIVE = false  // flip when controlled_documents ships
 const AUDIT_PROGRAMME_LIVE    = false  // flip when internal_audits ships
