@@ -4,6 +4,7 @@ import { ActivityIndicator, RefreshControl, SectionList, StyleSheet } from 'reac
 import { Text, View } from '@/components/Themed'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
+import { isModuleVisible } from '@soteria/core/moduleVisibility'
 import {
   OPERATING_CONDITION_ORDER,
   walkdownGroups,
@@ -14,7 +15,9 @@ import {
 // walk-down (plan D14). Read-only: grouped by process area, significant
 // aspects first, with N / A / E chips showing which operating conditions
 // have been scored. Reads environmental_aspect_register under RLS, the same
-// view the web register uses, so both show the same significance.
+// view the web register uses, so both show the same significance. The
+// screen checks the module itself, so a deep link cannot open it while the
+// Environmental module is off.
 
 interface CurrentScore { operating_condition: AspectOperatingCondition; score: number; significant: boolean }
 
@@ -36,12 +39,13 @@ const LETTER: Record<AspectOperatingCondition, string> = { normal: 'N', abnormal
 
 export default function EnvironmentalAspectsScreen() {
   const { tenant } = useTenant()
+  const moduleOn = isModuleVisible('environmental', tenant?.modules)
   const [rows, setRows] = useState<WalkdownRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenant?.id || !moduleOn) return
     setError(null)
     const { data, error: readError } = await supabase
       .from('environmental_aspect_register')
@@ -51,7 +55,7 @@ export default function EnvironmentalAspectsScreen() {
       .limit(2000)
     if (readError) { setError(readError.message); return }
     setRows(((data ?? []) as RegisterRow[]).map(row => ({ ...row, processArea: row.process_area, maxScore: row.max_score })))
-  }, [tenant?.id])
+  }, [tenant?.id, moduleOn])
 
   useEffect(() => { void load() }, [load])
 
@@ -61,6 +65,9 @@ export default function EnvironmentalAspectsScreen() {
     setRefreshing(false)
   }
 
+  if (tenant && !moduleOn) {
+    return <View style={styles.center}><Text style={styles.empty}>The Environmental module is not enabled for this organization.</Text></View>
+  }
   if (error) return <View style={styles.center}><Text style={styles.error}>{error}</Text></View>
   if (rows === null) return <View style={styles.center}><ActivityIndicator /></View>
 
