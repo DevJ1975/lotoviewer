@@ -1,7 +1,7 @@
 // @vitest-environment node
 //
 // The Northfield demo seed (apps/web/migrations/seed_ems_northfield_demo.sql)
-// runs against a real Postgres with migrations 295-301 applied, twice, so a
+// runs against a real Postgres with migrations 295-306 applied, twice, so a
 // broken insert or a non-idempotent re-run fails here rather than in front
 // of a demo audience. It also pins the story the hub tells about the seed,
 // and inserts exactly the rows the companion evidence script writes
@@ -11,6 +11,7 @@
 import { createHash } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { PGlite } from '@electric-sql/pglite'
+import { permitStanding, permitsHealth, renewalDeadline, permitEscalation, holderOfRecordMismatch } from '@soteria/core/environmentalPermit'
 import { policyIsComplete, registerHealthFromCounts, scopeAndPolicyHealth } from '@soteria/core/managementSystem'
 import { COMPLETIONS, completionRows } from '../../scripts/seed-ems-northfield-evidence.mjs'
 import { IDS, createEmsDatabase, migrationSql, scalar } from './_emsTestDatabase'
@@ -158,6 +159,82 @@ describe('seed_ems_northfield_demo.sql', () => {
        where p.tenant_id = $1 and p.becomes_obligation`)).toBe(2)
   })
 
+  it('records five permits, every number starting DEMO- so none can match a real authorization', async () => {
+    const numbers = (await db.query<{ permit_number: string | null }>(
+      `select permit_number from public.environmental_permits where tenant_id = $1 order by permit_number`, [tenantId])).rows
+    expect(numbers).toHaveLength(5)
+    expect(numbers.every(row => row.permit_number?.startsWith('DEMO-'))).toBe(true)
+    expect(await count(`select count(*) from public.environmental_permits where tenant_id = $1 and facility_id is null`)).toBe(0)
+  })
+
+  it('holds the stormwater coverage in a prior owner\'s name, and nothing else', async () => {
+    const mismatched = await db.query<{ title: string; holder_of_record: string }>(`
+      select p.title, p.holder_of_record from public.environmental_permits p
+       where p.tenant_id = $1
+         and public.ms_normalize_legal_entity(p.holder_of_record)
+           <> public.ms_normalize_legal_entity((select legal_entity from public.ms_scope_statements where tenant_id = $1))`, [tenantId])
+    expect(mismatched.rows).toEqual([{ title: 'Industrial stormwater general permit coverage', holder_of_record: 'Northfield Metal Products Inc.' }])
+  })
+
+  it('puts the business-critical wastewater permit in its 30-day tier, 29 days from the application date', async () => {
+    const row = (await db.query<{ expires_on: string; renewal_application_due_on: string; today: string; business_critical: boolean }>(`
+      select expires_on::text, renewal_application_due_on::text, current_date::text as today, business_critical
+        from public.environmental_permits where tenant_id = $1 and permit_number = 'DEMO-IWD-0001'`, [tenantId])).rows[0]
+    const dates = { expiresOn: row.expires_on, renewalApplicationDueOn: row.renewal_application_due_on }
+    expect(row.business_critical).toBe(true)
+    expect(renewalDeadline(dates)).toBe(row.renewal_application_due_on)
+    expect(permitEscalation(row.renewal_application_due_on, row.today)).toMatchObject({ tier: 30, daysLeft: 29 })
+  })
+
+  it('gives the permit by rule, the plan and the EPA ID registration no fixed term', async () => {
+    expect(await count(`
+      select count(*) from public.environmental_permits
+       where tenant_id = $1 and expires_on is null and permit_number in ('DEMO-PBR-0001', 'DEMO-SPCC-0001', 'DEMO-EPAID-0001')`)).toBe(3)
+  })
+
+  it('links the stormwater, paint booth and wastewater obligations to their permits as conditions', async () => {
+    const links = await db.query<{ condition: string; permit: string }>(`
+      select o.title as condition, p.permit_number as permit
+        from public.compliance_calendar_obligations o
+        join public.environmental_permits p on p.id = o.permit_id
+       where o.tenant_id = $1 order by p.permit_number`, [tenantId])
+    expect(links.rows).toEqual([
+      { condition: 'Industrial wastewater discharge permit', permit: 'DEMO-IWD-0001' },
+      { condition: 'Surface coating permit by rule', permit: 'DEMO-PBR-0001' },
+      { condition: 'Industrial stormwater permit: quarterly visual monitoring', permit: 'DEMO-TXR05-0001' },
+    ])
+  })
+
+  it('tells the permits story on the hub: red, for the holder mismatch alone', async () => {
+    const permits = (await db.query<{
+      expires_on: string | null; renewal_application_due_on: string | null; renewal_submitted_on: string | null
+      holder_of_record: string; next_review_due: string
+    }>(`select expires_on::text, renewal_application_due_on::text, renewal_submitted_on::text, holder_of_record, next_review_due::text
+          from public.environmental_permits where tenant_id = $1`, [tenantId])).rows
+    const entity = (await scalar<string>(db, `select legal_entity from public.ms_scope_statements where tenant_id = $1`, [tenantId]))!
+    const today = (await scalar<string>(db, `select current_date::text`))!
+    const rows = permits.map(p => ({
+      retiredAt: null, expiresOn: p.expires_on, renewalApplicationDueOn: p.renewal_application_due_on,
+      renewalSubmittedOn: p.renewal_submitted_on, holderOfRecord: p.holder_of_record, nextReviewDue: p.next_review_due,
+    }))
+    const conditionsOverdue = await count(`
+      select count(*) from public.compliance_calendar_obligations
+       where tenant_id = $1 and permit_id is not null and status = 'open' and next_due_at < current_date`)
+
+    expect(permitsHealth({ permits: rows, conditionsOverdue, legalEntityInForce: entity, today })).toBe('red')
+    expect(rows.filter(r => holderOfRecordMismatch(r.holderOfRecord, entity) === true)).toHaveLength(1)
+    expect(conditionsOverdue).toBe(0)
+    // Without the mismatch the card would be amber, for the wastewater renewal now inside its 90 days, not red.
+    expect(permitsHealth({ permits: rows, conditionsOverdue, legalEntityInForce: null, today })).toBe('amber')
+    expect(rows.map(r => permitStanding({ ...r, retiredAt: null }, today)).sort())
+      .toEqual(['current', 'no_expiry', 'no_expiry', 'no_expiry', 'renewal_due'])
+  })
+
+  it('seeds no change records and no permit owners, for the presenter to create and assign live', async () => {
+    expect(await count(`select count(*) from public.ms_changes where tenant_id = $1`)).toBe(0)
+    expect(await count(`select count(*) from public.environmental_permits where tenant_id = $1 and owner_user_id is not null`)).toBe(0)
+  })
+
   it('changes nothing when run again', async () => {
     const snapshot = async () => (await db.query(`
       select (select count(*) from public.tenants where slug = 'northfield-forge-demo')      as tenants,
@@ -171,7 +248,9 @@ describe('seed_ems_northfield_demo.sql', () => {
              (select count(*) from public.ms_interested_parties where tenant_id = $1)          as parties,
              (select count(*) from public.ms_scope_statements where tenant_id = $1)            as scopes,
              (select count(*) from public.ms_policies where tenant_id = $1)                    as policies,
-             (select count(*) from public.ms_policy_communications where tenant_id = $1)       as communications`, [tenantId])).rows[0]
+             (select count(*) from public.ms_policy_communications where tenant_id = $1)       as communications,
+             (select count(*) from public.environmental_permits where tenant_id = $1)          as permits,
+             (select count(*) from public.compliance_calendar_obligations where tenant_id = $1 and permit_id is not null) as conditions`, [tenantId])).rows[0]
     const before = await snapshot()
     await db.exec(migrationSql('seed_ems_northfield_demo.sql'))
     expect(await snapshot()).toEqual(before)

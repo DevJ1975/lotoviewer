@@ -10,7 +10,8 @@
 -- database (SQL Editor or psql). It never touches an existing tenant.
 --
 -- Prereqs: migrations 027 (tenants), 209 (facilities), 294 (Environmental
--- opt-in), 295-301 (Phase 1 registers) and 302 (Phase 1.1) applied.
+-- opt-in), 295-301 (Phase 1 registers), 302 (Phase 1.1) and 304-306 (Phase 2:
+-- permits, management of change, evidence subjects) applied.
 --
 -- Idempotent: every row has a fixed id or natural key, so a re-run finds
 -- what it made before and changes nothing. Dates are relative to the day it
@@ -66,6 +67,7 @@ select t.id, 'Northfield Plant', 'Northfield', 'TX', true
 -- Fixed ids: 4e0f (for "NF") + a register number + the row's ordinal.
 --   4e0f0001 aspects   4e0f0002 obligations   4e0f0003 evaluations
 --   4e0f0004 issues    4e0f0005 parties       4e0f0006 policy communications
+--   4e0f0007 permits
 create temp table northfield on commit drop as
 select t.id as tenant_id,
        f.id as facility_id,
@@ -384,5 +386,63 @@ select pg_temp.northfield_id(3, e.n), nf.tenant_id, nf.facility_id, 'ems', pg_te
   from northfield nf
  cross join (values (5, 8, 14), (6, 6, -10)) as e(n, obligation, scheduled_in_days)
 on conflict do nothing;
+
+-- ── Phase 2: the permit vault ──────────────────────────────────────────────
+--
+-- The story the Permits card tells on the hub:
+--   permits          red: the stormwater coverage is still held in the prior
+--                    owner's name, which is not the legal entity in the scope.
+--                    The wastewater permit is business-critical and its renewal
+--                    application is due 29 days from the day the seed runs, so
+--                    it shows the 30-day badge.
+--
+-- Every number starts DEMO-, so none can match a real authorization. No change
+-- record is seeded: the presenter opens the change of owner live (from All
+-- facilities), which produces a transfer checklist for each permit.
+--
+-- The hazardous waste EPA ID also lives in the site's hazardous-waste profile
+-- (facilities.settings.hazardous_waste.epa_id_number). Until a later phase links
+-- the two it is entered in both places; this seed leaves the profile alone.
+--
+-- No owners are assigned, because an owner must be a real member; with none, the
+-- nightly job tells the tenant's owners and admins.
+insert into public.environmental_permits
+  (id, tenant_id, facility_id, program, instrument, title, agency, permit_number, jurisdiction, holder_of_record,
+   issued_on, expires_on, renewal_application_due_on, business_critical, notes)
+select pg_temp.northfield_id(7, p.n), nf.tenant_id, nf.facility_id, p.program, p.instrument, p.title, p.agency, p.permit_number,
+       p.jurisdiction, p.holder, current_date + p.issued_in, current_date + p.expires_in, current_date + p.renewal_in,
+       p.business_critical, p.notes
+  from northfield nf
+ cross join (values
+   (1, 'stormwater', 'permit', 'Industrial stormwater general permit coverage', 'Texas Commission on Environmental Quality',
+       'DEMO-TXR05-0001', 'state:TX', 'Northfield Metal Products Inc.', -1400, 425, null::int, false,
+       'Coverage was obtained by the previous owner and has not been transferred.'),
+   (2, 'wastewater', 'permit', 'Industrial wastewater discharge permit', 'City of Northfield',
+       'DEMO-IWD-0001', 'local:Northfield', 'Northfield Forge & Finish LLC', -1066, 89, 29, true,
+       'The plant cannot send process water to the sewer without it.'),
+   (3, 'air', 'registration', 'Paint booth permit by rule registration', 'Texas Commission on Environmental Quality',
+       'DEMO-PBR-0001', 'state:TX', 'Northfield Forge & Finish LLC', -900, null, null, false,
+       'A permit by rule has no fixed term.'),
+   (4, 'spcc', 'plan', 'Spill Prevention, Control, and Countermeasure plan', 'U.S. EPA Region 6',
+       'DEMO-SPCC-0001', 'federal', 'Northfield Forge & Finish LLC', -700, null, null, false,
+       'A plan the plant keeps and reviews; it is not issued by the agency.'),
+   (5, 'waste', 'registration', 'Hazardous waste generator EPA ID registration', 'Texas Commission on Environmental Quality',
+       'DEMO-EPAID-0001', 'state:TX', 'Northfield Forge & Finish LLC', -1800, null, null, false,
+       null)
+ ) as p(n, program, instrument, title, agency, permit_number, jurisdiction, holder, issued_in, expires_in, renewal_in,
+        business_critical, notes)
+on conflict (id) do nothing;
+
+-- Three obligations whose source is a permit become that permit's conditions
+-- (obligation ordinal, permit ordinal): stormwater monitoring, the paint booth's
+-- coating records, and the wastewater self-monitoring reports. Already linked
+-- ones are left alone, so a re-run changes nothing.
+update public.compliance_calendar_obligations o
+   set permit_id = pg_temp.northfield_id(7, link.permit_n)
+  from northfield nf
+ cross join (values (9, 1), (10, 3), (11, 2)) as link(obligation_n, permit_n)
+ where o.id = pg_temp.northfield_id(2, link.obligation_n)
+   and o.tenant_id = nf.tenant_id
+   and o.permit_id is null;
 
 commit;
