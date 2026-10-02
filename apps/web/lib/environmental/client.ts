@@ -11,7 +11,13 @@ import type { EvaluationResult } from '@soteria/core/complianceEvaluation'
 export interface FieldError { field: string; message: string }
 
 export class EmsApiError extends Error {
-  constructor(message: string, readonly status: number, readonly fieldErrors: FieldError[] = []) {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly fieldErrors: FieldError[] = [],
+    /** The whole error body, for the routes that say more (a 422's gaps, a policy's missing commitments). */
+    readonly details: Record<string, unknown> = {},
+  ) {
     super(message)
   }
 }
@@ -35,7 +41,7 @@ async function call<T>(tenantId: string, path: string, init: { method?: string; 
     body:    init.body === undefined ? undefined : isForm ? init.body as FormData : JSON.stringify(init.body),
   })
   const json = await res.json().catch(() => ({})) as { error?: string; fieldErrors?: FieldError[] }
-  if (!res.ok) throw new EmsApiError(json.error ?? `HTTP ${res.status}`, res.status, json.fieldErrors ?? [])
+  if (!res.ok) throw new EmsApiError(json.error ?? `HTTP ${res.status}`, res.status, json.fieldErrors ?? [], json)
   return json as T
 }
 
@@ -146,8 +152,11 @@ export interface ObligationFilters {
 export const listObligations = (tenantId: string, filters: ObligationFilters = {}) =>
   call<{ obligations: ObligationRow[]; nextOffset: number | null }>(tenantId, `/api/environmental/obligations${query({ ...filters })}`)
 
+export interface LinkedAspect { id: string; activity: string; aspect: string; obsolete_at: string | null }
+
 export const getObligation = (tenantId: string, id: string) =>
-  call<{ obligation: ObligationRow; evaluations: EvaluationRow[]; evidence: EvidenceRow[] }>(tenantId, `/api/environmental/obligations/${id}`)
+  call<{ obligation: ObligationRow; evaluations: EvaluationRow[]; evidence: EvidenceRow[]; linkedAspects: LinkedAspect[] }>(
+    tenantId, `/api/environmental/obligations/${id}`)
 
 export interface ObligationBody {
   discipline?: 'ems' | 'integrated'; title?: string; description?: string | null; source_kind?: string

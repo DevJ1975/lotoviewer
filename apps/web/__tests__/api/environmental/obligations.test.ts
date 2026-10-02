@@ -171,7 +171,13 @@ describe('GET, PATCH and review /obligations/[id]', () => {
   })
 
   it('returns the obligation, its evaluations newest first, and their evidence without storage paths', async () => {
+    seed('environmental_aspects', [
+      { id: 'asp1', tenant_id: TENANT_A, activity: 'Stormwater runoff', aspect: 'Sediment', obsolete_at: null },
+      { id: 'asp2', tenant_id: TENANT_A, activity: 'Parts washing', aspect: 'Solvent', obsolete_at: null },
+    ])
+    seed('environmental_aspect_obligations', [{ tenant_id: TENANT_A, aspect_id: 'asp1', obligation_id: OB_A }])
     const body = await (await obligation.GET(jsonRequest('/x', 'GET'), idContext(OB_A))).json()
+    expect(body.linkedAspects).toEqual([{ id: 'asp1', activity: 'Stormwater runoff', aspect: 'Sediment', obsolete_at: null }])
     expect(body.obligation).toMatchObject({ id: OB_A, last_result: 'compliant', open_evaluation_id: 'e2' })
     expect(body.evaluations.map((e: { id: string }) => e.id)).toEqual(['e2', 'e1'])
     expect(body.evidence.map((e: { id: string }) => e.id)).toEqual(['ev1'])

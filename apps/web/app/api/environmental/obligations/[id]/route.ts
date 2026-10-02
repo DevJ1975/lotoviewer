@@ -15,8 +15,9 @@ import {
 import { OBLIGATION_EDITABLE, obligationRegisterInputFrom } from '@/lib/environmental/obligations'
 
 // GET   /api/environmental/obligations/[id]   One obligation: its register row, every
-//                                             evaluation of it (newest first), and the
-//                                             evidence filed against those evaluations.
+//                                             evaluation of it (newest first), the
+//                                             evidence filed against those evaluations,
+//                                             and the aspects linked to it.
 // PATCH /api/environmental/obligations/[id]   Edit the register fields. Admins only.
 //                                             Deadlines stay with /api/compliance/obligations.
 
@@ -27,16 +28,31 @@ export async function GET(req: Request, ctx: RouteContext) {
   const gate = await requireTenantModuleMember(req, ENVIRONMENTAL_MODULE)
   if (!gate.ok) return gateFailure(gate)
 
-  const [obligation, evaluations] = await Promise.all([
+  const [obligation, evaluations, links] = await Promise.all([
     gate.authedClient.from('ms_obligation_register').select('*')
       .eq('id', id).eq('tenant_id', gate.tenantId).in('discipline', EMS_DISCIPLINES).maybeSingle(),
     gate.authedClient.from('ms_compliance_evaluations').select('*')
       .eq('obligation_id', id).eq('tenant_id', gate.tenantId)
       .order('created_at', { ascending: false }).order('id', { ascending: false }),
+    gate.authedClient.from('environmental_aspect_obligations').select('aspect_id')
+      .eq('obligation_id', id).eq('tenant_id', gate.tenantId),
   ])
-  const failed = obligation.error ?? evaluations.error
+  const failed = obligation.error ?? evaluations.error ?? links.error
   if (failed) return sanitizeError(failed, 'environmental/obligations/[id]/GET')
   if (!obligation.data) return notFound()
+
+  const aspectIds = (links.data ?? []).map(link => (link as { aspect_id: string }).aspect_id)
+  let linkedAspects: unknown[] = []
+  if (aspectIds.length > 0) {
+    const { data, error } = await gate.authedClient
+      .from('environmental_aspects')
+      .select('id, activity, aspect, obsolete_at')
+      .eq('tenant_id', gate.tenantId)
+      .in('id', aspectIds)
+      .order('activity')
+    if (error) return sanitizeError(error, 'environmental/obligations/[id]/GET aspects')
+    linkedAspects = data ?? []
+  }
 
   const evaluationIds = (evaluations.data ?? []).map(e => (e as { id: string }).id)
   let evidence: unknown[] = []
@@ -52,7 +68,7 @@ export async function GET(req: Request, ctx: RouteContext) {
     evidence = data ?? []
   }
 
-  return NextResponse.json({ obligation: obligation.data, evaluations: evaluations.data ?? [], evidence })
+  return NextResponse.json({ obligation: obligation.data, evaluations: evaluations.data ?? [], evidence, linkedAspects })
 }
 
 export async function PATCH(req: Request, ctx: RouteContext) {
