@@ -50,6 +50,10 @@
       "schedule": "45 13 * * *"
     },
     {
+      "path": "/api/cron/environmental-permits",
+      "schedule": "15 14 * * *"
+    },
+    {
       "path": "/api/cron/incident-trends-weekly",
       "schedule": "0 14 * * 1"
     },

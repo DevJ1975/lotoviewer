@@ -97,6 +97,8 @@ export const UNIQUE_KEYS: Record<string, { columns: string[]; where?: (row: Row)
   ms_compliance_evaluations: [{ columns: ['obligation_id'], where: row => row.completed_at == null }],
   ms_evidence: [{ columns: ['tenant_id', 'subject_type', 'subject_id', 'sha256'] }],
   ms_responsibilities: [{ columns: ['tenant_id', 'discipline', 'responsibility_key'] }],
+  // ms_notification_log's unique key (migration 304): a notice is claimed once
+  ms_notification_log: [{ columns: ['tenant_id', 'subject_type', 'subject_id', 'notice_key'] }],
   // uq_environmental_permits_number (migration 304), without its case and space folding
   environmental_permits: [{
     columns: ['tenant_id', 'agency', 'permit_number'],
