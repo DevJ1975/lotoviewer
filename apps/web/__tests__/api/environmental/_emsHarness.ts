@@ -12,6 +12,7 @@
 
 import { vi } from 'vitest'
 import { currentScoresByCondition, scoreAspect, type AspectOperatingCondition } from '@soteria/core/environmentalAspect'
+import { addCalendarDays } from '@soteria/core/managementSystem'
 
 // ── tenant gate ───────────────────────────────────────────────────────
 export const TENANT_A = '11111111-1111-4111-8111-111111111111'
@@ -145,6 +146,17 @@ export function resetStore(): void {
   idCounter = 0
   captureExceptionMock.mockReset()
   asAdminA()
+}
+
+// Column defaults the migrations declare and the routes rely on: a new
+// register row's first review falls a year out (migrations 295, 297, 298),
+// and a new obligation is open (migration 192).
+const reviewDueInAYear = (): Row => ({ next_review_due: addCalendarDays(new Date().toISOString().slice(0, 10), 365) })
+const COLUMN_DEFAULTS: Record<string, () => Row> = {
+  ms_context_issues:               reviewDueInAYear,
+  ms_interested_parties:           reviewDueInAYear,
+  environmental_aspects:           reviewDueInAYear,
+  compliance_calendar_obligations: () => ({ status: 'open', ...reviewDueInAYear() }),
 }
 
 function nextId(): string {
@@ -293,7 +305,7 @@ function run(state: QueryState): { data: unknown; error: DbError | null; count?:
     writes.push({ table: state.table, mode: 'insert', payload: state.payload })
     const now = new Date().toISOString()
     const incoming = (Array.isArray(state.payload) ? state.payload : [state.payload!])
-      .map(raw => ({ id: nextId(), created_at: now, updated_at: now, ...raw }))
+      .map(raw => ({ id: nextId(), created_at: now, updated_at: now, ...COLUMN_DEFAULTS[state.table]?.(), ...raw }))
     for (const [i, row] of incoming.entries()) {
       const error = violation(state.table, row, [...rows, ...incoming.slice(0, i)])
       if (error) return { data: null, error }
