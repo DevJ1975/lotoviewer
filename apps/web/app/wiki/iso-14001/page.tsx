@@ -15,6 +15,27 @@ import {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.4.0',
+    date: '2026-10-02',
+    changes: [
+      'Updated "How Soteria supports an EMS" for permits and management of change. Added a permit vault under 6.1.3: renewal countdowns that escalate at 180, 90 and 30 days (the platform\'s own intervals, not a regulatory lead time), a holder-of-record check against the EMS scope, conditions that are linked obligations marked done with evidence, and export-controlled documents. Added management of change under 6.1.4 and 8.1, including the three-step permit transfer that a change of owner or legal name opens for every active permit.',
+    ],
+  },
+  {
+    version: '1.3.0',
+    date: '2026-10-02',
+    changes: [
+      'The report card now marks 7.2 competence, 7.3 awareness, 7.4 communication, 8.1 operational control and 8.2 emergency preparedness as "not assessed" instead of grading them from safety records, and will not call the system ready while any clause is unassessed. 7.5 documented information and 9.2 internal audit, which have no register in the platform yet, read "not assessed" too instead of blocking every tenant\'s card. Added clause 5.3 to the card. Updated "How Soteria supports an EMS" for: the process map with an owner for each process and the two clause 5.3 roles (4.4, 5.3); the scope\'s control-and-influence statement and exclusions (4.3); recorded policy communications, and the policy and scope as one PDF for interested parties (5.2); and whether each aspect is one the organization controls or can only influence (6.1.2). The clause map page no longer claims the platform satisfies each clause: it shows where evidence can be held, for a person to pin.',
+    ],
+  },
+  {
+    version: '1.2.0',
+    date: '2026-10-02',
+    changes: [
+      'Updated "How Soteria supports an EMS" for the new registers: context, interested parties, scope and policy (4.1-4.3, 5.2); aspects scored per operating condition with a rationale and a stored method (6.1.2); and the compliance obligations register with scheduled, evidence-backed evaluations (6.1.3 / 9.1.2), where a missing evaluation frequency is flagged and an undetermined result does not count. Added the red/amber/green register health and how evidence integrity is kept. Corrected the note on the 2015 revision: it adopted Annex SL\'s high-level structure.',
+    ],
+  },
+  {
     version: '1.1.0',
     date: '2026-08-19',
     changes: [

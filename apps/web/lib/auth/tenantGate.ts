@@ -208,3 +208,17 @@ export async function requireTenantModuleMember(req: Request, moduleId: string):
     tenantSettings: (tenant.settings ?? null) as Record<string, unknown> | null,
   }
 }
+
+/**
+ * requireTenantModuleMember, then owner / admin only (superadmins pass).
+ * For writes to records whose RLS admits only current_user_admin_tenant_ids():
+ * answering 403 here beats letting the insert fail as an opaque RLS refusal.
+ */
+export async function requireTenantModuleAdmin(req: Request, moduleId: string): Promise<TenantModuleGate> {
+  const member = await requireTenantModuleMember(req, moduleId)
+  if (!member.ok) return member
+  if (member.role !== 'owner' && member.role !== 'admin' && member.role !== 'superadmin') {
+    return { ok: false, status: 403, message: 'Tenant admin or owner required' }
+  }
+  return member
+}

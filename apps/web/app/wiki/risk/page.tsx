@@ -1,10 +1,18 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.1.0'
-const LAST_UPDATED    = '2026-05-15'
+const CURRENT_VERSION = '1.2.0'
+const LAST_UPDATED    = '2026-10-02'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.2.0',
+    date:    '2026-10-02',
+    changes: [
+      'The member picker in the Assign step now closes with Escape or a click outside it, not only when the pointer leaves, '
+      + 'and tells assistive technology whether its list is open. Pickers on the same page share one member lookup.',
+    ],
+  },
   {
     version: '1.1.0',
     date:    '2026-05-15',

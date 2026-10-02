@@ -61,6 +61,14 @@ export interface FeatureDef {
   // Allows href:null without tripping the "live features must be
   // routable" registry invariant.
   internal?:   boolean
+  // Visibility for a tenant whose `modules` jsonb has no key for this
+  // module. Omitted means visible, which is how every module behaved
+  // before opt-in existed. Set false for an opt-in module: tenants see
+  // it only once their `modules[id]` is explicitly true. Any writer of
+  // tenants.modules can set that: a superadmin, a tenant admin through
+  // the Operator Console, or a tenant owner. Top-level modules only —
+  // children always inherit their parent.
+  defaultEnabled?: boolean
   // Lucide icon name (e.g. 'Lock', 'Flame'). Stored as a string so
   // packages/core stays free of lucide-react (web vs. native split).
   // Resolved to a component via apps/web/lib/moduleVisuals.ts. Set on
@@ -1001,13 +1009,18 @@ export const FEATURES: FeatureDef[] = [
   // no module of their own; this entry gives them a home, a tenant
   // toggle, and a drawer row. The report card is the module's reason
   // to exist — it reads the registers and says what an auditor would.
+  //
+  // Opt-in (docs/ems/adr/0001): the EMS grows phase by phase, so a tenant
+  // sees it only once enabled. Migration 294 kept it on for tenants that
+  // already had environmental records.
   {
     id:          'environmental',
     name:        'Environmental (ISO 14001)',
-    description: 'EMS aspects & impacts, objectives, management review, nonconformities, and an audit-readiness report card',
+    description: 'EMS context, scope & policy, aspects & impacts, compliance obligations, permits, management of change, objectives, management review, nonconformities, and an audit-readiness report card',
     href:        '/environmental',
     category:    'safety',
     enabled:     true,
+    defaultEnabled: false,
     comingSoon:  false,
     icon:        'Mountain',
     color:       'emerald',
@@ -1023,10 +1036,50 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
   },
   {
+    id:          'environmental-context',
+    name:        'Context, Scope & Policy',
+    description: 'Clauses 4.1-4.3 & 5.2 — issues (climate included), interested parties, the EMS scope, and the signed policy',
+    href:        '/environmental/context',
+    category:    'safety',
+    parent:      'environmental',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
     id:          'environmental-aspects',
     name:        'Aspects & Impacts',
-    description: 'Clause 6.1.2 register — activities, aspects, impacts, and significance scoring',
+    description: 'Clause 6.1.2 register — aspects scored under normal, abnormal and emergency conditions',
     href:        '/environmental/aspects',
+    category:    'safety',
+    parent:      'environmental',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'environmental-obligations',
+    name:        'Compliance Obligations',
+    description: 'Clauses 6.1.3 & 9.1.2 — the legal register and evidence-backed evaluations of compliance',
+    href:        '/environmental/obligations',
+    category:    'safety',
+    parent:      'environmental',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'environmental-permits',
+    name:        'Permits',
+    description: 'Clause 6.1.3 — the permit vault: renewal countdowns, holder of record, conditions, and documents',
+    href:        '/environmental/permits',
+    category:    'safety',
+    parent:      'environmental',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
+    id:          'environmental-changes',
+    name:        'Management of Change',
+    description: 'Clauses 6.1.4 & 8.1 — a change to equipment, a chemical, a process or the owner, and the records it touches',
+    href:        '/environmental/changes',
     category:    'safety',
     parent:      'environmental',
     enabled:     true,

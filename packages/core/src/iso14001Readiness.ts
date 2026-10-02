@@ -26,8 +26,10 @@ export type ClauseVerdict =
   | 'attention'
   /** No evidence at all — an auditor would raise a finding. */
   | 'gap'
-  /** No module that feeds this clause is enabled for the tenant. */
-  | 'not_applicable'
+  /** The platform holds no environmental record this clause can be judged
+   *  from yet. Neither conforming nor a gap: the evidence may well exist
+   *  outside the platform, and the card must not guess either way. */
+  | 'not_assessed'
 
 export interface ClauseAssessment {
   code:     string
@@ -46,7 +48,9 @@ export type ReadinessBand = 'ready' | 'ready_with_gaps' | 'not_ready'
 
 export interface Iso14001ReportCard {
   clauses:  readonly ClauseAssessment[]
-  /** Share of applicable clauses that are conforming, 0-100 integer.
+  /** Share of clauses that are conforming, 0-100 integer. A clause the
+   *  platform cannot assess stays in the denominator: coverage is what the
+   *  platform can evidence, so it never rises by leaving a clause out.
    *  Labelled "evidence coverage" in every surface — never "compliant". */
   coverage: number
   counts:   Record<ClauseVerdict, number>
@@ -68,8 +72,6 @@ export const READINESS_WINDOWS = {
   annualReviewDays:    365,
   /** §9.1.1 — a monitored objective needs a reasonably recent reading. */
   objectiveReadingDays: 90,
-  /** §7.2 — competence expiring inside this window is a warning. */
-  trainingExpiryWarnDays: 30,
 } as const
 
 // A gap on one of these is enough to fail an audit on its own: they are
@@ -95,28 +97,67 @@ export interface Recency {
 }
 
 export interface ReadinessSignals {
-  /** Module ids the tenant has switched off. Drives `not_applicable`. */
-  disabledModules: readonly string[]
-
-  // 4.1 Context
-  risks:                 Recency
-  // 5.2 Policy · 7.5 Documented information (phase 3 tables)
-  documentsRegisterLive: boolean
+  // 4.1 Context (the context register)
+  contextIssuesActive:        number
+  contextIssuesReviewOverdue: number
+  /** An active climate-kind issue records the climate-change determination (Amd 1:2024). */
+  climateIssueRecorded:       boolean
+  // 4.2 Interested parties
+  interestedPartiesActive:        number
+  interestedPartiesReviewOverdue: number
+  // 4.3 Scope
+  scopeOnFile:           boolean
+  scopeReviewOverdue:    boolean
+  /** The scope in force says what the organization can control and influence (4.3 e). */
+  scopeStatesControlAndInfluence: boolean
+  // 5.2 Policy (the versioned policy record)
+  /** The policy in force is signed and states every commitment its standard requires. */
   policyApproved:        boolean
   policyReviewOverdue:   boolean
+  /** The legal entity changed after the policy was signed (Lesson L3). */
+  policySignatoryStale:  boolean
+  /** A communication of the policy in force within the organization is recorded. */
+  policyCommunicatedInternally: boolean
+  // 5.3 Roles (the responsibilities on the EMS process map)
+  /** Clause 5.3 a) and b) roles with no one assigned. */
+  rolesUnassigned:       number
+  /** EMS processes with no owner. */
+  processesUnassigned:   number
+  // 6.1.1 and 6.1.4 (the risk register)
+  risks:                 Recency
+  // 7.5 Documented information (phase 3 tables)
+  documentsRegisterLive: boolean
   requiredDocsMissing:   number
   docsReviewOverdue:     number
   // 6.1.1
   risksWithoutControls:  number
-  // 6.1.2 Aspects
+  // 6.1.2 Aspects (active ones)
   aspectsTotal:          number
   aspectsSignificant:    number
   significantUncontrolled: number
-  aspectsRegisterAgeDays: number | null
-  // 6.1.3 / 9.1.2 Compliance obligations
+  /** Active aspects with no score under any operating condition. */
+  aspectsUnscored:       number
+  /** Active aspects not yet marked as controlled or only influenced. */
+  aspectsControlUndetermined: number
+  aspectsReviewOverdue:  number
+  // 6.1.3 / 9.1.2 Compliance obligations (the environmental register)
   obligationsTotal:      number
+  /** Obligations past their calendar deadline. */
   obligationsOverdue:    number
+  obligationsReviewOverdue: number
+  /** Age of the newest evaluation that established compliance status (any result but undetermined). */
   complianceEvalAgeDays: number | null
+  /** Open compliance evaluations past their scheduled date. */
+  evaluationsOverdue:    number
+  /** Obligations with no evaluation frequency: clause 9.1.2 a) asks for one for each. */
+  obligationsUnscheduled: number
+  /** Obligations whose latest result is undetermined: their compliance status is unknown. */
+  evaluationsUndetermined: number
+  // 6.1.3 The permit vault (Phase 2)
+  /** Active permits whose renewal deadline passed with no renewal submitted. */
+  permitsDeadlineMissed: number
+  /** Active permits naming a holder other than the legal entity in the scope in force. */
+  permitsHolderMismatch: number
   // 6.1.4
   significantUnaddressed: number
   // 6.2.1 Objectives
@@ -124,18 +165,6 @@ export interface ReadinessSignals {
   objectivesLinked:      number
   objectivesWithTargets: number
   objectivesAchieved:    number
-  // 7.2 / 7.3 Competence & awareness
-  trainingRecords:       number
-  trainingExpired:       number
-  trainingExpiringSoon:  number
-  awarenessAgeDays:      number | null
-  // 7.4 Communication
-  communicationAgeDays:  number | null
-  // 8.1 Operational control
-  operationalInspections: number
-  operationalOverdue:     number
-  // 8.2 Emergency preparedness
-  emergencyDrillAgeDays: number | null
   // 9.1.1 Monitoring
   objectivesStaleReadings: number
   // 9.2 Internal audit (phase 4 tables)
@@ -200,7 +229,6 @@ function firstMatch(
 // ─── The assessment ────────────────────────────────────────────────────────
 
 export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
-  const off = (moduleId: string) => s.disabledModules.includes(moduleId)
   const out: ClauseAssessment[] = []
 
   const push = (
@@ -214,19 +242,50 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
   }
 
   // 4.1 — Context of the organization.
-  push('4.1', '/risk', [
-    [s.risks.count === 0, 'gap', 'No risk register entries define the organization’s context.'],
-    [older(s.risks.ageDays, READINESS_WINDOWS.annualReviewDays), 'attention',
-      'The risk register has not been reviewed in over a year.'],
-  ], ['conforming', `${s.risks.count} risk register entries, reviewed within the last year.`])
+  push('4.1', '/environmental/context', [
+    [s.contextIssuesActive === 0, 'gap', 'No internal or external issues are recorded in the context register.'],
+    [!s.climateIssueRecorded, 'attention',
+      'The context register does not yet record whether climate change is a relevant issue (Amendment 1:2024).'],
+    [s.contextIssuesReviewOverdue > 0, 'attention',
+      `${count(s.contextIssuesReviewOverdue, 'context issue is past its', 'context issues are past their')} review date.`],
+  ], ['conforming',
+    `${count(s.contextIssuesActive, 'context issue', 'context issues')} recorded, the climate-change determination among them, all within review.`])
 
-  // 5.2 — Environmental policy. Lives in the documents register (phase 3).
-  push('5.2', s.documentsRegisterLive ? '/documents' : null, [
-    [!s.documentsRegisterLive, 'gap',
-      'No controlled-document register yet, so the environmental policy cannot be version-controlled here.'],
-    [!s.policyApproved, 'gap', 'No approved environmental policy document.'],
+  // 4.2 — Needs and expectations of interested parties.
+  push('4.2', '/environmental/context?tab=parties', [
+    [s.interestedPartiesActive === 0, 'gap', 'No interested parties or their needs and expectations are recorded.'],
+    [s.interestedPartiesReviewOverdue > 0, 'attention',
+      `${count(s.interestedPartiesReviewOverdue, 'interested party is past its', 'interested parties are past their')} review date.`],
+  ], ['conforming',
+    `${count(s.interestedPartiesActive, 'interested party', 'interested parties')} recorded with their needs, all within review.`])
+
+  // 4.3 — Scope of the EMS.
+  push('4.3', '/environmental/context?tab=scope', [
+    [!s.scopeOnFile, 'gap', 'The scope of the environmental management system is not documented.'],
+    [!s.scopeStatesControlAndInfluence, 'attention',
+      'The EMS scope does not record how the organization’s authority and ability to exercise control and influence were considered (4.3 e).'],
+    [s.scopeReviewOverdue, 'attention', 'The EMS scope is past its review date.'],
+  ], ['conforming', 'The EMS scope is documented, records how control and influence were considered, and is within its review date.'])
+
+  // 5.2 — Environmental policy.
+  push('5.2', '/environmental/context?tab=policy', [
+    [!s.policyApproved, 'gap',
+      'No signed environmental policy stating every commitment the standard requires.'],
+    [s.policySignatoryStale, 'attention',
+      'The policy was signed before the organization’s legal entity changed, so it carries a prior owner’s signature.'],
+    [!s.policyCommunicatedInternally, 'attention',
+      'No communication of the policy in force within the organization is recorded.'],
     [s.policyReviewOverdue, 'attention', 'The environmental policy is past its scheduled review date.'],
-  ], ['conforming', 'An approved environmental policy is on file and within its review cycle.'])
+  ], ['conforming',
+    'A signed environmental policy states every required commitment, its communication within the organization is recorded, and it is within its review cycle.'])
+
+  // 5.3 — Roles, responsibilities and authorities.
+  push('5.3', '/environmental/processes', [
+    [s.rolesUnassigned > 0, 'gap',
+      'Clause 5.3’s roles are not all assigned: someone must answer for the EMS conforming to the standard and for reporting its performance to top management.'],
+    [s.processesUnassigned > 0, 'attention',
+      `${count(s.processesUnassigned, 'EMS process has', 'EMS processes have')} no owner.`],
+  ], ['conforming', 'Responsibility for the EMS and for reporting its performance is assigned, and every EMS process has an owner.'])
 
   // 6.1.1 — Actions to address risks and opportunities.
   push('6.1.1', '/risk', [
@@ -238,19 +297,32 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
   // 6.1.2 — Environmental aspects. The defining 14001 register.
   push('6.1.2', '/environmental/aspects', [
     [s.aspectsTotal === 0, 'gap', 'The environmental aspects register is empty.'],
+    [s.aspectsUnscored > 0, 'attention',
+      `${count(s.aspectsUnscored, 'aspect has', 'aspects have')} not been scored under any operating condition.`],
     [s.significantUncontrolled > 0, 'attention',
       `${count(s.significantUncontrolled, 'significant aspect has', 'significant aspects have')} no operational control or linked risk.`],
-    [older(s.aspectsRegisterAgeDays, READINESS_WINDOWS.annualReviewDays), 'attention',
-      'The aspects register has not been updated in over a year.'],
+    [s.aspectsControlUndetermined > 0, 'attention',
+      `${count(s.aspectsControlUndetermined, 'aspect does', 'aspects do')} not record whether the organization controls ${s.aspectsControlUndetermined === 1 ? 'it' : 'them'} or can only influence ${s.aspectsControlUndetermined === 1 ? 'it' : 'them'}.`],
+    [s.aspectsReviewOverdue > 0, 'attention',
+      `${count(s.aspectsReviewOverdue, 'aspect is past its', 'aspects are past their')} review date.`],
   ], ['conforming',
-    `${s.aspectsTotal} aspects recorded, ${s.aspectsSignificant} significant, all controlled.`])
+    `${s.aspectsTotal} aspects recorded, ${s.aspectsSignificant} significant, all scored, controlled and within review.`])
 
-  // 6.1.3 — Compliance obligations.
-  push('6.1.3', '/admin/compliance/calendar', [
-    [s.obligationsTotal === 0, 'gap', 'No compliance obligations are on the calendar.'],
+  // 6.1.3 — Compliance obligations. A permit that lapsed or names a previous
+  // owner outranks a late deadline, so its finding comes first and its fix
+  // link opens the permits register.
+  const permitFinding = s.permitsDeadlineMissed > 0 || s.permitsHolderMismatch > 0
+  push('6.1.3', s.obligationsTotal > 0 && permitFinding ? '/environmental/permits' : '/environmental/obligations', [
+    [s.obligationsTotal === 0, 'gap', 'The compliance obligations register is empty.'],
+    [s.permitsDeadlineMissed > 0, 'attention',
+      `${count(s.permitsDeadlineMissed, 'permit has passed its', 'permits have passed their')} renewal deadline with no renewal submitted.`],
+    [s.permitsHolderMismatch > 0, 'attention',
+      `${count(s.permitsHolderMismatch, 'permit names', 'permits name')} a holder other than the legal entity in the scope.`],
     [s.obligationsOverdue > 0, 'attention',
       `${count(s.obligationsOverdue, 'compliance obligation is past its', 'compliance obligations are past their')} due date.`],
-  ], ['conforming', `${s.obligationsTotal} obligations tracked, none overdue.`])
+    [s.obligationsReviewOverdue > 0, 'attention',
+      `${count(s.obligationsReviewOverdue, 'obligation is past its', 'obligations are past their')} register review date.`],
+  ], ['conforming', `${s.obligationsTotal} obligations in the register, none overdue.`])
 
   // 6.1.4 — Planning action on significant aspects.
   push('6.1.4', '/environmental/objectives', [
@@ -268,51 +340,49 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
       `${count(s.objectivesActive - s.objectivesLinked, 'objective is', 'objectives are')} not linked to a significant aspect.`],
   ], ['conforming', `${s.objectivesActive} measurable objectives, each tied to a significant aspect.`])
 
-  // 7.2 — Competence.
-  push('7.2', '/admin/people/training-competency-matrix', [
-    [off('loto'), 'not_applicable', 'No module contributing competence records is enabled.'],
-    [s.trainingRecords === 0, 'gap', 'No training records on file.'],
-    [s.trainingExpired > 0, 'attention', `${count(s.trainingExpired, 'required training record has', 'required training records have')} expired.`],
-    [s.trainingExpiringSoon > 0, 'attention',
-      `${count(s.trainingExpiringSoon, 'training record expires', 'training records expire')} within ${READINESS_WINDOWS.trainingExpiryWarnDays} days.`],
-  ], ['conforming', 'Required competence records are current.'])
+  // 7.2 to 7.4 — no environmental source yet. The platform cannot tell which
+  // LOTO training records, toolbox talks or Prop 65 notices address
+  // environmental aspects (a hazardous-waste course would; a lockout course
+  // would not), so grading from all of them showed conformity an auditor
+  // would reject, and their absence showed gaps that may not exist. Phase 6
+  // brings the environmental training matrix and communications log.
+  out.push(assess('7.2', 'not_assessed',
+    'Not assessed: the platform cannot yet tell which training records cover work that affects environmental performance, so it does not grade competence from them.',
+    null))
+  out.push(assess('7.3', 'not_assessed',
+    'Not assessed: the platform does not yet record whether workers know the policy and the significant aspects of their work.',
+    null))
+  out.push(assess('7.4', 'not_assessed',
+    'Not assessed: apart from the policy, the platform does not yet record internal and external environmental communication.',
+    null))
 
-  // 7.3 — Awareness.
-  push('7.3', '/toolbox-talks', [
-    [s.awarenessAgeDays === null, 'gap', 'No record of EMS awareness being communicated to workers.'],
-    [older(s.awarenessAgeDays, READINESS_WINDOWS.annualReviewDays), 'attention',
-      'EMS awareness has not been communicated in over a year.'],
-  ], ['conforming', 'EMS awareness communicated within the last year.'])
+  // 7.5 and 9.2 — until the platform keeps the register, it cannot see the
+  // organization's controlled documents or audit programme, which is not the
+  // same as their being absent. Grading that as a gap blocked every tenant
+  // on a feature the platform has not shipped. Once the register is live a
+  // real gap blocks again: both stay in CORE_CLAUSES.
+  if (s.documentsRegisterLive) {
+    push('7.5', '/documents', [
+      [s.requiredDocsMissing > 0, 'gap',
+        `${count(s.requiredDocsMissing, 'document the standard requires is', 'documents the standard requires are')} absent from the register.`],
+      [s.docsReviewOverdue > 0, 'attention',
+        `${count(s.docsReviewOverdue, 'controlled document is past its', 'controlled documents are past their')} review date.`],
+    ], ['conforming', 'Every required document is approved and within its review cycle.'])
+  } else {
+    out.push(assess('7.5', 'not_assessed',
+      'Not assessed: the platform does not yet keep a controlled-document register, so it cannot tell whether the documents the standard requires are approved and current.',
+      null))
+  }
 
-  // 7.4 — Communication.
-  push('7.4', '/safety-boards', [
-    [s.communicationAgeDays === null, 'gap', 'No internal or external environmental communication recorded.'],
-    [older(s.communicationAgeDays, READINESS_WINDOWS.annualReviewDays), 'attention',
-      'No environmental communication recorded in over a year.'],
-  ], ['conforming', 'Environmental communication recorded within the last year.'])
-
-  // 7.5 — Documented information. Register arrives in phase 3.
-  push('7.5', s.documentsRegisterLive ? '/documents' : null, [
-    [!s.documentsRegisterLive, 'gap',
-      'No controlled-document register yet — documented information cannot be version-controlled in the platform.'],
-    [s.requiredDocsMissing > 0, 'gap',
-      `${count(s.requiredDocsMissing, 'document the standard requires is', 'documents the standard requires are')} absent from the register.`],
-    [s.docsReviewOverdue > 0, 'attention',
-      `${count(s.docsReviewOverdue, 'controlled document is past its', 'controlled documents are past their')} review date.`],
-  ], ['conforming', 'Every required document is approved and within its review cycle.'])
-
-  // 8.1 — Operational planning and control.
-  push('8.1', '/inspections', [
-    [s.operationalInspections === 0, 'gap', 'No operational control checks have been carried out.'],
-    [s.operationalOverdue > 0, 'attention', `${count(s.operationalOverdue, 'operational check is', 'operational checks are')} overdue.`],
-  ], ['conforming', `${s.operationalInspections} operational control checks completed on cadence.`])
-
-  // 8.2 — Emergency preparedness and response.
-  push('8.2', '/incidents', [
-    [s.emergencyDrillAgeDays === null, 'gap', 'No emergency preparedness drill or test on record.'],
-    [older(s.emergencyDrillAgeDays, READINESS_WINDOWS.annualReviewDays), 'attention',
-      'No emergency preparedness drill or test in over a year.'],
-  ], ['conforming', 'Emergency preparedness tested within the last year.'])
+  // 8.1 and 8.2 — likewise. An inspection says nothing about which aspect
+  // or obligation it controls until Phases 2 and 4 tie them together, and
+  // nothing in the platform records an environmental drill yet.
+  out.push(assess('8.1', 'not_assessed',
+    'Not assessed: the platform does not yet tie operational checks to significant aspects or compliance obligations.',
+    null))
+  out.push(assess('8.2', 'not_assessed',
+    'Not assessed: the platform does not yet record environmental emergency drills or tests.',
+    null))
 
   // 9.1.1 — Monitoring, measurement, analysis and evaluation.
   push('9.1.1', '/environmental/objectives', [
@@ -322,22 +392,32 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
   ], ['conforming', 'Every active objective has a current reading.'])
 
   // 9.1.2 — Evaluation of compliance.
-  push('9.1.2', '/admin/compliance/calendar', [
+  push('9.1.2', '/environmental/obligations', [
     [s.complianceEvalAgeDays === null, 'gap', 'Compliance status has never been formally evaluated.'],
+    [s.evaluationsOverdue > 0, 'attention',
+      `${count(s.evaluationsOverdue, 'compliance evaluation is', 'compliance evaluations are')} past due.`],
+    [s.evaluationsUndetermined > 0, 'attention',
+      `${count(s.evaluationsUndetermined, 'obligation has', 'obligations have')} an undetermined compliance status.`],
+    [s.obligationsUnscheduled > 0, 'attention',
+      `${count(s.obligationsUnscheduled, 'obligation has', 'obligations have')} no evaluation frequency (clause 9.1.2 a).`],
     [older(s.complianceEvalAgeDays, READINESS_WINDOWS.annualReviewDays), 'attention',
       'Compliance has not been evaluated in over a year.'],
-  ], ['conforming', 'Compliance evaluated within the last year.'])
+  ], ['conforming', 'Compliance evaluated against evidence within the last year, with nothing past due.'])
 
-  // 9.2 — Internal audit. Programme arrives in phase 4.
-  push('9.2', s.auditProgrammeLive ? '/environmental/audits' : null, [
-    [!s.auditProgrammeLive, 'gap',
-      'No internal-audit programme yet — audit planning and clause coverage are not tracked in the platform.'],
-    [s.lastAuditAgeDays === null, 'gap', 'No internal audit has been carried out.'],
-    [older(s.lastAuditAgeDays, READINESS_WINDOWS.annualReviewDays), 'attention',
-      'The last internal audit was over a year ago.'],
-    [s.auditClausesUncovered > 0, 'attention',
-      `${count(s.auditClausesUncovered, 'clause has', 'clauses have')} not been audited in the current cycle.`],
-  ], ['conforming', 'The internal-audit programme covers every clause and is current.'])
+  // 9.2 — Internal audit. Not assessed until the programme ships, as 7.5.
+  if (s.auditProgrammeLive) {
+    push('9.2', '/environmental/audits', [
+      [s.lastAuditAgeDays === null, 'gap', 'No internal audit has been carried out.'],
+      [older(s.lastAuditAgeDays, READINESS_WINDOWS.annualReviewDays), 'attention',
+        'The last internal audit was over a year ago.'],
+      [s.auditClausesUncovered > 0, 'attention',
+        `${count(s.auditClausesUncovered, 'clause has', 'clauses have')} not been audited in the current cycle.`],
+    ], ['conforming', 'The internal-audit programme covers every clause and is current.'])
+  } else {
+    out.push(assess('9.2', 'not_assessed',
+      'Not assessed: the platform does not yet keep an internal-audit programme, so it cannot tell whether audits are planned, held and cover every clause.',
+      null))
+  }
 
   // 9.3 — Management review.
   push('9.3', '/environmental/management-review', [
@@ -372,14 +452,13 @@ export function assessIso14001(s: ReadinessSignals): Iso14001ReportCard {
 
 function rollUp(clauses: ClauseAssessment[], s: ReadinessSignals): Iso14001ReportCard {
   const counts: Record<ClauseVerdict, number> = {
-    conforming: 0, attention: 0, gap: 0, not_applicable: 0,
+    conforming: 0, attention: 0, gap: 0, not_assessed: 0,
   }
   for (const c of clauses) counts[c.verdict]++
 
-  const applicable = clauses.length - counts.not_applicable
-  const coverage = applicable === 0
+  const coverage = clauses.length === 0
     ? 0
-    : Math.round((counts.conforming / applicable) * 100)
+    : Math.round((counts.conforming / clauses.length) * 100)
 
   // An open major is a blocker in its own right even though 10.2 reads
   // "attention" — the register is working, the finding is not closed.
@@ -387,21 +466,32 @@ function rollUp(clauses: ClauseAssessment[], s: ReadinessSignals): Iso14001Repor
   const blockers = clauses.filter(c => c.blocking)
   const openMajor = s.openMajorNonconformities > 0
 
+  // "Ready" is a claim about every clause, so one the platform cannot see
+  // holds the band at ready-with-gaps however green the rest is.
   const band: ReadinessBand =
     openMajor || blockers.length > 0 ? 'not_ready'
-      : counts.attention > 0 || counts.gap > 0 ? 'ready_with_gaps'
+      : counts.attention > 0 || counts.gap > 0 || counts.not_assessed > 0 ? 'ready_with_gaps'
         : 'ready'
 
-  return { clauses, coverage, counts, blockers, band, headline: headlineFor(band, blockers, s) }
+  return { clauses, coverage, counts, blockers, band, headline: headlineFor(band, clauses, blockers, s) }
 }
 
 function headlineFor(
   band: ReadinessBand,
+  clauses: readonly ClauseAssessment[],
   blockers: readonly ClauseAssessment[],
   s: ReadinessSignals,
 ): string {
-  if (band === 'ready') return 'Every applicable clause has current evidence.'
-  if (band === 'ready_with_gaps') return 'Evidence is in place, with clauses needing attention before an audit.'
+  if (band === 'ready') return 'Every clause has current evidence.'
+  if (band === 'ready_with_gaps') {
+    const unassessed = clauses.filter(c => c.verdict === 'not_assessed').map(c => c.code)
+    const needsWork = clauses.some(c => c.verdict === 'attention' || c.verdict === 'gap')
+    if (!needsWork) {
+      return `Every clause the platform can assess has current evidence. Check ${unassessed.join(', ')} against your own records before an audit.`
+    }
+    const offPlatform = unassessed.length > 0 ? ` Check ${unassessed.join(', ')} against your own records too.` : ''
+    return `Evidence is in place, with clauses needing attention before an audit.${offPlatform}`
+  }
 
   const parts: string[] = []
   if (s.openMajorNonconformities > 0) {
