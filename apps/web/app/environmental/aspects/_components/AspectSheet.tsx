@@ -23,6 +23,7 @@ import {
   type ScoreHistoryRow,
 } from '@/lib/environmental/client'
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_ERROR, INPUT, LABEL, LABEL_TEXT, errorFor } from '../../_components/formStyles'
+import { ReasonPrompt } from '../../_components/ReasonPrompt'
 import { TermTooltip } from '../../_components/TermTooltip'
 import { AspectForm } from './AspectForm'
 import { ConditionChips } from './ConditionChips'
@@ -154,8 +155,11 @@ export function AspectSheet({ tenantId, aspectId, canEdit, processAreas, onChang
           </section>
 
           {mode === 'obsolete' && (
-            <ObsoleteForm tenantId={tenantId} aspectId={aspect.id}
-              onDone={() => void changed()} onCancel={() => setMode('view')} />
+            <ReasonPrompt
+              explanation="An obsolete aspect leaves the active register but keeps its scores and history. Say why it no longer applies."
+              label="Why the aspect is obsolete" placeholder="e.g. Degreasing line removed in March" confirmLabel="Mark obsolete"
+              onSubmit={async reason => { await obsoleteAspect(tenantId, aspect.id, reason); await changed() }}
+              onCancel={() => setMode('view')} />
           )}
 
           {writable && mode === 'view' && (
@@ -306,33 +310,5 @@ function LinkEditor({ tenantId, aspectId, obligations, linkedIds, onSaved, onCan
         }}>{saving ? 'Saving…' : 'Save links'}</button>
       </div>
     </div>
-  )
-}
-
-function ObsoleteForm({ tenantId, aspectId, onDone, onCancel }: {
-  tenantId: string; aspectId: string; onDone: () => void; onCancel: () => void
-}) {
-  const [reason, setReason] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  return (
-    <section className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
-      <p className="text-xs text-amber-900 dark:text-amber-100">
-        An obsolete aspect leaves the active register but keeps its scores and history. Say why it no longer applies.
-      </p>
-      <textarea className={INPUT} rows={2} value={reason} onChange={e => setReason(e.target.value)}
-        aria-label="Why the aspect is obsolete" placeholder="e.g. Degreasing line removed in March" />
-      {error && <p className={FIELD_ERROR} role="alert">{error}</p>}
-      <div className="flex justify-end gap-2">
-        <button type="button" className={BUTTON_SECONDARY} onClick={onCancel} disabled={saving}>Cancel</button>
-        <button type="button" className={BUTTON_PRIMARY} disabled={saving || reason.trim().length === 0} onClick={async () => {
-          setSaving(true)
-          setError(null)
-          try { await obsoleteAspect(tenantId, aspectId, reason); onDone() }
-          catch (err) { setError(err instanceof Error ? err.message : 'Could not retire the aspect.') }
-          finally { setSaving(false) }
-        }}>{saving ? 'Saving…' : 'Mark obsolete'}</button>
-      </div>
-    </section>
   )
 }
