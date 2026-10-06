@@ -10,6 +10,7 @@ validation loudly instead of silently shipping the wrong shape to the queue.
 from __future__ import annotations
 
 from typing import Literal, Optional
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -136,3 +137,14 @@ class ParseStageRequest(BaseModel):
     sds_id: str
     tenant_id: str
     product_id: Optional[str] = None
+
+
+class EnqueueParseJobRequest(BaseModel):
+    sds_id: UUID
+    tenant_id: UUID
+    requested_by: Optional[UUID] = None
+
+
+class ParseJobResponse(BaseModel):
+    job_id: str
+    status: Literal["queued", "running", "succeeded", "failed"]

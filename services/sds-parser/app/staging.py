@@ -18,6 +18,7 @@ import os
 from typing import Optional
 
 from .parser import PARSER_MODEL
+from .pipeline import parse_sds_pdf
 from .schema import CONFIDENCE_SCORE
 
 SDS_BUCKET = "chemical-sds"
@@ -27,7 +28,8 @@ class StagingError(RuntimeError):
     """Raised for misconfiguration or when the SDS row can't be found."""
 
 
-def _client():
+def service_client():
+    """A Supabase client with the service-role key. Raises StagingError if unconfigured."""
     url = os.environ.get("SUPABASE_URL")
     key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
@@ -44,7 +46,7 @@ def _client():
 
 def download_sds(sds_id: str, tenant_id: str, product_id: Optional[str] = None) -> bytes:
     """Look up the SDS row (tenant-scoped) and download its PDF from storage."""
-    client = _client()
+    client = service_client()
     query = (
         client.table("chemical_sds_documents")
         .select("id, storage_path, tenant_id, product_id")
@@ -67,7 +69,7 @@ def download_sds(sds_id: str, tenant_id: str, product_id: Optional[str] = None) 
 def stage_parsed(sds_id: str, tenant_id: str, payload: dict) -> dict:
     """Write the parsed payload back to chemical_sds_documents as a pending
     review — identical columns to the AI parse route."""
-    client = _client()
+    client = service_client()
     overall = payload.get("confidence", {}).get("overall", "low")
     update = {
         "parsed_payload": payload,
@@ -91,3 +93,12 @@ def stage_parsed(sds_id: str, tenant_id: str, payload: dict) -> dict:
         "parse_confidence": update["parse_confidence"],
         "parse_review_status": "pending",
     }
+
+
+def parse_and_stage(sds_id: str, tenant_id: str, product_id: Optional[str] = None) -> tuple[dict, dict]:
+    """Download an SDS, parse it (OCR for scans), and stage it for review.
+
+    Returns ``(staged, parsed)``. Raises StagingError or PdfTextError.
+    """
+    parsed = parse_sds_pdf(download_sds(sds_id, tenant_id, product_id))
+    return stage_parsed(sds_id, tenant_id, parsed), parsed

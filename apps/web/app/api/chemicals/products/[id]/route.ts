@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { requireTenantMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -28,6 +29,44 @@ const PATCHABLE_FIELDS = new Set([
 
 interface Ctx { params: Promise<{ id: string }> }
 
+interface ParseJobSummary {
+  status:     'queued' | 'running' | 'succeeded' | 'failed'
+  last_error: string | null
+  created_at: string
+}
+
+// "sds_parse_jobs isn't in the schema yet" — migration 294 is applied by hand,
+// so this route can ship first. Only that is shrugged off; any other error is
+// a real failure, the same as for the revisions read.
+//   42P01    Postgres undefined_table
+//   PGRST205 PostgREST cannot find the table in its schema cache
+const SCHEMA_MISSING_CODES = new Set(['42P01', 'PGRST205'])
+
+// The latest background parse job per SDS, so the page can say a queued parse
+// is still running — or why it failed — instead of leaving the user waiting
+// on a review-queue entry that will never arrive.
+async function latestParseJobs(
+  client: SupabaseClient,
+  sdsIds: string[],
+): Promise<Map<string, ParseJobSummary>> {
+  const latest = new Map<string, ParseJobSummary>()
+  if (sdsIds.length === 0) return latest
+
+  const { data, error } = await client
+    .from('sds_parse_jobs')
+    .select('sds_id, status, last_error, created_at')
+    .in('sds_id', sdsIds)
+    .order('created_at', { ascending: false })
+  if (error) {
+    if (SCHEMA_MISSING_CODES.has(error.code ?? '')) return latest
+    throw new Error(error.message)
+  }
+  for (const { sds_id, ...job } of data ?? []) {
+    if (!latest.has(sds_id)) latest.set(sds_id, job as ParseJobSummary)
+  }
+  return latest
+}
+
 export async function GET(req: Request, ctx: Ctx) {
   const gate = await requireTenantMember(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
@@ -53,7 +92,11 @@ export async function GET(req: Request, ctx: Ctx) {
       .order('created_at',    { ascending: false })
     if (sErr) throw new Error(sErr.message)
 
-    return NextResponse.json({ product, revisions: revisions ?? [] })
+    const parseJobs = await latestParseJobs(gate.authedClient, (revisions ?? []).map(r => r.id))
+    return NextResponse.json({
+      product,
+      revisions: (revisions ?? []).map(r => ({ ...r, parse_job: parseJobs.get(r.id) ?? null })),
+    })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
