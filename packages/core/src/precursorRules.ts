@@ -261,8 +261,9 @@ interface ValidationLabel {
 }
 
 // Reuses discoverLeadingSignals rather than re-deriving correlation here: the
-// reliability gate (≥12 overlapping months, |r| ≥ 0.3) is already stated and
-// tested there, and two thresholds for one question would drift.
+// reliability gate (≥12 overlapping months, and a lead that survives the
+// detrended permutation test with false-discovery control) is stated and
+// tested there, and two gates for one question would drift.
 function validationLabels(history: PrecursorHistory): Map<string, ValidationLabel> {
   const series: LeadingSignalSeries[] = Object.entries(history.seriesByCondition)
     .filter((entry): entry is [string, readonly number[]] => Array.isArray(entry[1]))

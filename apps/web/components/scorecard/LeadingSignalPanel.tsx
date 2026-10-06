@@ -6,8 +6,10 @@ import { supabase } from '@/lib/supabase'
 
 // Exploratory lead/lag panel. Shows which leading indicators historically
 // precede recordables for THIS tenant, at what lag, and how strongly —
-// computed deterministically server-side from monthly series (laggedCorrelation).
-// Presented explicitly as correlation, not causation.
+// computed deterministically server-side (discoverLeadingSignals): each lead is
+// tested against shuffled copies of its own data, after removing trends, with
+// false-discovery control across indicators. Presented as hypotheses to
+// investigate, never as cause.
 
 interface LeadingSignal {
   key: string
@@ -15,6 +17,8 @@ interface LeadingSignal {
   bestLag: number
   r: number
   nMonths: number
+  p: number
+  q: number
   direction: 'predicts_more' | 'predicts_fewer' | 'none'
   reliable: boolean
 }
@@ -59,7 +63,7 @@ export default function LeadingSignalPanel({ tenantId }: { tenantId: string }) {
     <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-3">
       <header className="flex items-center gap-2">
         <Activity className="h-4 w-4 text-brand-navy" />
-        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Leading indicator signals</h3>
+        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Leading-indicator hypotheses to investigate</h3>
       </header>
 
       {insufficient ? (
@@ -68,7 +72,7 @@ export default function LeadingSignalPanel({ tenantId }: { tenantId: string }) {
         </p>
       ) : reliable.length === 0 ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          No leading indicator shows a reliable lead/lag relationship with recordables in the available history. That is common — and better than a spurious one.
+          No leading indicator shows a lead/lag relationship with recordables that beats chance in the available history. That is common — and better than a spurious one.
         </p>
       ) : (
         <ul className="space-y-2">
@@ -85,7 +89,7 @@ export default function LeadingSignalPanel({ tenantId }: { tenantId: string }) {
                   {s.bestLag > 0 ? ` ~${s.bestLag} mo later` : ' (same month)'}
                 </p>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  r&nbsp;{s.r >= 0 ? '+' : ''}{s.r.toFixed(2)} · {s.nMonths} months of overlap
+                  r&nbsp;{s.r >= 0 ? '+' : ''}{s.r.toFixed(2)} · q&nbsp;{s.q < 0.01 ? '<\u00a00.01' : s.q.toFixed(2)} · {s.nMonths} months of overlap
                 </p>
               </div>
             </li>
@@ -95,7 +99,7 @@ export default function LeadingSignalPanel({ tenantId }: { tenantId: string }) {
 
       <p className="flex items-start gap-1.5 text-[11px] text-slate-400">
         <Info className="h-3 w-3 mt-0.5 shrink-0" />
-        Exploratory — this is correlation over monthly counts, not proof of cause. Use it to decide what to watch, then confirm on the ground.
+        Exploratory. Each hypothesis beat 999 shuffled copies of its own data, with trends removed, and passed a false-discovery check (q ≤ 0.10). It is still correlation over monthly counts, not proof of cause: use it to decide what to watch, then confirm on the ground.
       </p>
     </div>
   )

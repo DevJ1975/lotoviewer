@@ -11,8 +11,14 @@ import { discoverLeadingSignals, type LeadingSignalSeries } from '@soteria/core/
 // series — "when near-miss reporting drops, recordables rise ~2 months later."
 // Admin-gated. All computation is deterministic; there is no LLM here.
 //
-// Honest by construction: it returns r + the overlap n and flags `reliable`
-// only with enough history; the UI must present it as correlation, not cause.
+// Honest by construction: it returns r, the overlap n, and permutation p / BH
+// q, and flags `reliable` only with enough history AND a lead that beats chance
+// (see discoverLeadingSignals). The UI presents it as hypotheses, not cause.
+//
+// CAPAs opened is deliberately NOT an indicator: corrective actions are opened
+// because of incidents (incident_actions.incident_id is NOT NULL), so that
+// series is a consequence of the outcome, not a precursor to it (EHS scorecard
+// analytics review, §9).
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -66,12 +72,11 @@ export async function GET(req: NextRequest) {
 
     // Incidents + classifications drive the lagging (recordable) series and the
     // near-miss leading series — always available.
-    const [incRes, classRes, inspDates, bbsUnsafeDates, capaDates] = await Promise.all([
+    const [incRes, classRes, inspDates, bbsUnsafeDates] = await Promise.all([
       admin.from('incidents').select('id, incident_type, occurred_at').eq('tenant_id', gate.tenantId).gte('occurred_at', sinceIso),
       admin.from('incident_classifications').select('incident_id, meets_recording_criteria').eq('tenant_id', gate.tenantId),
       safeDates(admin.from('inspections').select('created_at').eq('tenant_id', gate.tenantId).eq('result', 'fail').gte('created_at', sinceIso), 'created_at'),
       safeDates(admin.from('bbs_observations').select('observed_at').eq('tenant_id', gate.tenantId).in('kind', ['unsafe_act', 'unsafe_condition']).gte('observed_at', sinceIso), 'observed_at'),
-      safeDates(admin.from('incident_actions').select('created_at').eq('tenant_id', gate.tenantId).gte('created_at', sinceIso), 'created_at'),
     ])
     if (incRes.error) throw new Error(incRes.error.message)
 
@@ -88,7 +93,6 @@ export async function GET(req: NextRequest) {
       { key: 'near_miss_reporting', label: 'Near-miss reporting', monthly: nearMissMonthly },
       { key: 'inspection_failures', label: 'Failing inspections', monthly: bucket(inspDates, axis) },
       { key: 'bbs_at_risk', label: 'BBS at-risk observations', monthly: bucket(bbsUnsafeDates, axis) },
-      { key: 'capa_opened', label: 'CAPAs opened', monthly: bucket(capaDates, axis) },
     ].filter(s => s.monthly.some(v => v > 0)) // drop indicators with no activity
 
     const signals = discoverLeadingSignals(series, recordablesMonthly, { maxLag: 4, minMonths: 12 })
