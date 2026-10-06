@@ -1,51 +1,126 @@
 import { describe, it, expect } from 'vitest'
 import { discoverLeadingSignals, type LeadingSignalSeries } from '../leadingIndicatorSignals'
+import { seededRandom } from '../statistics'
 
-// Recordables that lag an indicator by exactly 2 months: recordables[i+2] = i.
-// (14 months of history.)
-const RECORDABLES = [0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+// A non-monotonic monthly pattern. Recordables that echo it 2 months later
+// are a genuine lead; two lines that merely rise together are not — a shared
+// trend is exactly what the discovery test discounts.
+const PATTERN = [2, 5, 1, 8, 3, 7, 2, 9, 4, 6, 1, 8, 5, 3]
+const ECHO_2_MONTHS_LATER = [0, 0, ...PATTERN.slice(0, 12)] // recordables[i] = PATTERN[i-2]
 
 describe('discoverLeadingSignals', () => {
   it('finds the lag at which an indicator best precedes recordables', () => {
-    // Non-monotonic pattern so only the TRUE lag aligns perfectly (a shifted
-    // straight line correlates at every lag, which wouldn't isolate the lag).
-    const pattern = [2, 5, 1, 8, 3, 7, 2, 9, 4, 6, 1, 8, 5, 3]
-    const recs = [0, 0, ...pattern.slice(0, 12)] // recs[i] = pattern[i-2]
-    const leads2: LeadingSignalSeries = { key: 'x', label: 'X', monthly: pattern }
-    const [sig] = discoverLeadingSignals([leads2], recs)
+    const leads2: LeadingSignalSeries = { key: 'x', label: 'X', monthly: PATTERN }
+    const [sig] = discoverLeadingSignals([leads2], ECHO_2_MONTHS_LATER)
     expect(sig.bestLag).toBe(2)
     expect(sig.r).toBeCloseTo(1, 6)
     expect(sig.direction).toBe('predicts_more')
     expect(sig.reliable).toBe(true)
     expect(sig.nMonths).toBe(12)
+    // No shuffle of the pattern lines up perfectly, so p sits at its floor.
+    expect(sig.p).toBeCloseTo(1 / 1000, 10)
   })
 
   it('labels an inverse (protective) leader as predicting fewer recordables', () => {
     const protective: LeadingSignalSeries = {
       key: 'nm', label: 'Near-miss reporting',
-      monthly: [14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1], // falls as recordables rise
+      monthly: PATTERN.map(v => 10 - v), // dips exactly when recordables later spike
     }
-    const [sig] = discoverLeadingSignals([protective], RECORDABLES)
+    const [sig] = discoverLeadingSignals([protective], ECHO_2_MONTHS_LATER)
     expect(sig.r).toBeLessThan(0)
     expect(sig.direction).toBe('predicts_fewer')
   })
 
+  it('does not report two unrelated series as a signal just because both rise', () => {
+    // A maturing BBS programme and a growing headcount: steady growth, with
+    // month-to-month wobbles that have nothing to do with each other.
+    const indicator   = PATTERN.map((wobble, month) => 10 + 3 * month + wobble)
+    const recordables = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7].map((wobble, month) => 2 + month + wobble)
+    const [sig] = discoverLeadingSignals([{ key: 'bbs', label: 'BBS', monthly: indicator }], recordables)
+    expect(sig.reliable).toBe(false)
+    expect(sig.direction).toBe('none')
+  })
+
   it('marks a signal unreliable when history is too short but still correlatable', () => {
-    // overlap ≥ 3 (so not dropped) but < minMonths → present, not reliable.
-    const short: LeadingSignalSeries = { key: 's', label: 'S', monthly: [1, 2, 3, 4] }
-    const [sig] = discoverLeadingSignals([short], [1, 2, 3, 4], { minMonths: 12 })
+    const short: LeadingSignalSeries = { key: 's', label: 'S', monthly: [1, 3, 2, 4, 2] }
+    const [sig] = discoverLeadingSignals([short], [2, 1, 4, 3, 5], { minMonths: 12 })
     expect(sig.reliable).toBe(false)
   })
 
-  it('drops a series with too little overlap to correlate at any lag', () => {
-    const tiny: LeadingSignalSeries = { key: 't', label: 'T', monthly: [1, 2] }
-    expect(discoverLeadingSignals([tiny], [1, 2])).toHaveLength(0)
+  it('drops a series with too little overlap or variation to correlate at any lag', () => {
+    expect(discoverLeadingSignals([{ key: 't', label: 'T', monthly: [1, 2, 3] }], [1, 2, 3])).toHaveLength(0)
+    // A perfectly straight series has no swings around its trend to compare.
+    const straight = { key: 'line', label: 'line', monthly: [1, 2, 3, 4, 5, 6, 7, 8] }
+    expect(discoverLeadingSignals([straight], [3, 1, 4, 1, 5, 9, 2, 6])).toHaveLength(0)
   })
 
   it('ranks reliable signals ahead of unreliable ones', () => {
-    const strong: LeadingSignalSeries = { key: 'strong', label: 'strong', monthly: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] }
+    const strong: LeadingSignalSeries = { key: 'strong', label: 'strong', monthly: PATTERN }
     const weak: LeadingSignalSeries = { key: 'weak', label: 'weak', monthly: [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7] }
-    const out = discoverLeadingSignals([weak, strong], RECORDABLES)
-    expect(out[0].key).toBe('strong') // reliable, strong |r| ranks first
+    const out = discoverLeadingSignals([weak, strong], ECHO_2_MONTHS_LATER)
+    expect(out[0].key).toBe('strong')
+    expect(out[0].reliable).toBe(true)
+  })
+
+  it('adjusts for testing several indicators at once (q ≥ p) and is deterministic', () => {
+    const series = [
+      { key: 'a', label: 'A', monthly: PATTERN },
+      { key: 'b', label: 'B', monthly: [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7] },
+    ]
+    const first = discoverLeadingSignals(series, ECHO_2_MONTHS_LATER)
+    for (const s of first) expect(s.q).toBeGreaterThanOrEqual(s.p)
+    expect(discoverLeadingSignals(series, ECHO_2_MONTHS_LATER)).toEqual(first)
+  })
+
+  it('ignores months before the modules went live instead of reading them as zeros', () => {
+    // Incidents (hence recordables AND near-miss reporting) went live in
+    // month 6. Zero-filling months 0–5 gives both series a shared
+    // "nothing, then something" step — a strong-looking, invented signal.
+    const goLive = 6
+    const recordables = [0, 0, 0, 0, 0, 0, 2, 1, 3, 1, 2, 2, 1, 3, 2, 1, 2, 3]
+    const nearMiss    = [0, 0, 0, 0, 0, 0, 5, 7, 4, 6, 5, 6, 7, 5, 6, 4, 6, 5]
+
+    const [zeroFilled] = discoverLeadingSignals([{ key: 'nm', label: 'NM', monthly: nearMiss }], recordables)
+    expect(zeroFilled.nMonths).toBeGreaterThanOrEqual(14) // the illusion of history
+
+    const [observed] = discoverLeadingSignals(
+      [{ key: 'nm', label: 'NM', monthly: nearMiss, observedFrom: goLive }], recordables)
+    expect(observed.nMonths).toBeLessThan(12) // only 12 months exist; a lead uses at most 11
+    expect(observed.reliable).toBe(false)
+  })
+
+  it('never reports a same-month move as a lead', () => {
+    // Inspections that react to an injury in the same month track recordables
+    // exactly — reverse causation, not a leading indicator.
+    const recordables = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3, 2, 3]
+    const reactive = recordables.map(r => r + 4)
+    const out = discoverLeadingSignals([{ key: 'insp', label: 'Inspections', monthly: reactive }], recordables)
+    for (const signal of out) {
+      expect(signal.bestLag).toBeGreaterThanOrEqual(1)
+      expect(signal.reliable).toBe(false)
+    }
+  })
+
+  it('keeps false alarms near the FDR level on data with no real relationship', () => {
+    // The old fixed |r| ≥ 0.3 cut-off flagged ~77% of such indicators and put
+    // at least one false signal on ~99% of panels (scorecard review, §9).
+    const random = seededRandom(2026)
+    const poisson = (lambda: number) => {
+      let k = 0, product = 1
+      const limit = Math.exp(-lambda)
+      do { k++; product *= random() } while (product > limit)
+      return k - 1
+    }
+    const months = (lambda: number) => Array.from({ length: 18 }, () => poisson(lambda))
+
+    const PANELS = 120
+    let panelsWithAFalseSignal = 0
+    for (let panel = 0; panel < PANELS; panel++) {
+      const indicators = [5, 8, 3].map((lambda, i) => ({ key: `k${i}`, label: `k${i}`, monthly: months(lambda) }))
+      const signals = discoverLeadingSignals(indicators, months(1.5), { permutations: 199 })
+      if (signals.some(s => s.reliable)) panelsWithAFalseSignal++
+    }
+    // Nominal rate under this null is 10%; the bound leaves room for sampling noise.
+    expect(panelsWithAFalseSignal / PANELS).toBeLessThan(0.2)
   })
 })

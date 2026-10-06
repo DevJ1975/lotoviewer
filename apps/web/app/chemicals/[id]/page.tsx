@@ -61,6 +61,8 @@ interface Revision {
   parse_confidence: number | null
   superseded_at:  string | null
   created_at:     string
+  // Latest background parse (backup parser), or null if none was ever queued.
+  parse_job:      { status: 'queued' | 'running' | 'succeeded' | 'failed'; last_error: string | null } | null
 }
 
 export default function ChemicalDetailPage() {
@@ -75,6 +77,7 @@ export default function ChemicalDetailPage() {
   const [loading,    setLoading]   = useState(true)
   const [uploading,  setUploading] = useState(false)
   const [parsingId,  setParsingId]  = useState<string | null>(null)
+  const [parseNotice, setParseNotice] = useState<string | null>(null)
   const [checkingDrift, setCheckingDrift] = useState(false)
   const [driftMessage, setDriftMessage] = useState<string | null>(null)
   const [revisionDate, setRevisionDate] = useState('')
@@ -162,6 +165,7 @@ export default function ChemicalDetailPage() {
     if (!id) return
     setParsingId(sdsId)
     setError(null)
+    setParseNotice(null)
     try {
       const headers = await buildHeaders()
       const res  = await fetch(`/api/chemicals/products/${id}/sds/${sdsId}/parse`, {
@@ -171,6 +175,11 @@ export default function ChemicalDetailPage() {
       const body = await res.json()
       if (!res.ok) {
         setError(body.error ?? `HTTP ${res.status}`)
+        return
+      }
+      // 202: the backup parser queued it, so it is not in the review queue yet.
+      if (res.status === 202) {
+        setParseNotice('Parsing in the background with the backup parser. A scanned SDS can take a few minutes; it will appear in the SDS review queue when done.')
         return
       }
       router.push('/chemicals/review')
@@ -435,6 +444,11 @@ export default function ChemicalDetailPage() {
             {driftMessage}
           </div>
         )}
+        {parseNotice && (
+          <div role="status" className="mb-3 rounded border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/20 px-3 py-2 text-sm text-indigo-800 dark:text-indigo-300">
+            {parseNotice}
+          </div>
+        )}
 
         {candidates !== null && (
           <SdsCandidatePicker
@@ -489,6 +503,12 @@ export default function ChemicalDetailPage() {
           <ul className="divide-y divide-slate-200 dark:divide-slate-800 rounded border border-slate-200 dark:border-slate-800 overflow-hidden">
             {revisions.map(rev => {
               const isActive = rev.id === product.active_sds_id
+              const parseJobLive = rev.parse_job?.status === 'queued' || rev.parse_job?.status === 'running'
+              // A failed background parse matters only while the SDS has no parse
+              // at all; once any parser has succeeded, the failure is history.
+              const parseJobError = rev.parse_job?.status === 'failed' && !rev.parse_model
+                ? rev.parse_job.last_error ?? 'Unknown error'
+                : null
               return (
                 <li key={rev.id} className="px-3 py-2 flex flex-wrap items-center gap-3 text-sm">
                   <FileText className="w-4 h-4 text-slate-400" />
@@ -509,6 +529,19 @@ export default function ChemicalDetailPage() {
                   {rev.parse_review_status === 'pending' && (
                     <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-semibold rounded bg-indigo-100 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300">
                       AWAITING REVIEW
+                    </span>
+                  )}
+                  {parseJobLive && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      <Loader2 className="w-3 h-3 animate-spin" /> PARSING IN BACKGROUND
+                    </span>
+                  )}
+                  {parseJobError && (
+                    <span className="inline-flex items-center gap-2 text-[11px] text-rose-700 dark:text-rose-300">
+                      <span className="px-2 py-0.5 font-semibold rounded bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300">
+                        BACKGROUND PARSE FAILED
+                      </span>
+                      {parseJobError}
                     </span>
                   )}
                   <button

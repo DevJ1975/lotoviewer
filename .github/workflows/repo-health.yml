@@ -82,3 +82,30 @@ jobs:
         env:
           ALLOW_DEEPLINK_PLACEHOLDERS: '1'
         run: npm run build
+
+  # The Python services run outside the Node toolchain, so the jobs above never
+  # execute their tests. Tesseract is installed so the SDS parser's OCR tests
+  # run here instead of skipping themselves.
+  python-services:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/sds-parser
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'  # matches services/sds-parser/Dockerfile
+          cache: pip
+          cache-dependency-path: services/sds-parser/requirements.txt
+
+      - name: Install Tesseract
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Test sds-parser
+        run: python -m unittest discover -s tests -v

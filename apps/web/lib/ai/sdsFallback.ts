@@ -8,11 +8,19 @@ import type { ParsedSdsPayload } from '@soteria/core/chemicals'
 // shape, so the route persists and reviews it identically (the deterministic
 // parser caps its own confidence at "medium", so a human still reviews).
 //
+// The route first asks the service to parse in the background
+// (enqueueSdsParseJob): a scanned SDS needs OCR, which can take minutes and
+// outlast this request. A service without background jobs switched on answers
+// 503, and the route then parses synchronously (parseSdsViaFallback).
+//
 // Entirely opt-in: with SDS_PARSER_URL unset this is a no-op and the route
 // behaves exactly as before. Set SDS_PARSER_URL (and, if the service requires
 // it, SDS_PARSER_API_KEY) to enable.
 
-const TIMEOUT_MS = 30_000
+const PARSE_TIMEOUT_MS = 30_000
+// Enqueueing is two small database writes on the service; anything slower
+// means it is struggling, and the synchronous path is the better bet.
+const ENQUEUE_TIMEOUT_MS = 10_000
 
 /** True when the operator has pointed the deployment at a parser service. */
 export function sdsFallbackConfigured(): boolean {
@@ -38,33 +46,60 @@ export function isAiUnavailable(err: unknown): boolean {
 }
 
 /**
+ * Ask the service to parse an SDS in the background (POST /jobs/parse-sds).
+ * Its worker OCRs the PDF if needed and stages the result into the SDS Review
+ * Queue. Returns the job id, or null when the fallback isn't configured, the
+ * service has background jobs off (503), or the call fails — the caller then
+ * parses synchronously. Never throws.
+ */
+export async function enqueueSdsParseJob(
+  ids: { sdsId: string; tenantId: string; userId: string },
+): Promise<{ jobId: string } | null> {
+  const url = serviceUrl('/jobs/parse-sds')
+  if (!url) return null
+
+  const body = JSON.stringify({ sds_id: ids.sdsId, tenant_id: ids.tenantId, requested_by: ids.userId })
+  const headers = serviceHeaders({ 'content-type': 'application/json' })
+  try {
+    const resp = await fetch(url, { method: 'POST', body, headers, signal: AbortSignal.timeout(ENQUEUE_TIMEOUT_MS) })
+    if (resp.status !== 202) return null
+    const json = (await resp.json()) as { job_id?: unknown }
+    return typeof json.job_id === 'string' ? { jobId: json.job_id } : null
+  } catch {
+    return null
+  }
+}
+
+/**
  * POST the PDF to the parser service's /parse/file endpoint. Returns the parsed
  * payload, or null when the fallback isn't configured or the call fails — the
  * caller then surfaces the original Anthropic error. Never throws.
  */
 export async function parseSdsViaFallback(pdf: Buffer): Promise<ParsedSdsPayload | null> {
-  const base = process.env.SDS_PARSER_URL
-  if (!base) return null
+  const url = serviceUrl('/parse/file')
+  if (!url) return null
 
-  const url = `${base.replace(/\/+$/, '')}/parse/file`
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
+  const form = new FormData()
+  // Copy into a plain Uint8Array — a Node Buffer's ArrayBufferLike backing
+  // isn't directly assignable to BlobPart under the DOM lib types.
+  form.append('file', new Blob([new Uint8Array(pdf)], { type: 'application/pdf' }), 'sds.pdf')
   try {
-    const form = new FormData()
-    // Copy into a plain Uint8Array — a Node Buffer's ArrayBufferLike backing
-    // isn't directly assignable to BlobPart under the DOM lib types.
-    form.append('file', new Blob([new Uint8Array(pdf)], { type: 'application/pdf' }), 'sds.pdf')
-
-    const headers: Record<string, string> = {}
-    const apiKey = process.env.SDS_PARSER_API_KEY
-    if (apiKey) headers['x-api-key'] = apiKey
-
-    const resp = await fetch(url, { method: 'POST', body: form, headers, signal: ctrl.signal })
+    const resp = await fetch(url, {
+      method: 'POST', body: form, headers: serviceHeaders(), signal: AbortSignal.timeout(PARSE_TIMEOUT_MS),
+    })
     if (!resp.ok) return null
     return (await resp.json()) as ParsedSdsPayload
   } catch {
     return null
-  } finally {
-    clearTimeout(timer)
   }
+}
+
+function serviceUrl(path: string): string | null {
+  const base = process.env.SDS_PARSER_URL
+  return base ? `${base.replace(/\/+$/, '')}${path}` : null
+}
+
+function serviceHeaders(headers: Record<string, string> = {}): Record<string, string> {
+  const apiKey = process.env.SDS_PARSER_API_KEY
+  return apiKey ? { ...headers, 'x-api-key': apiKey } : headers
 }

@@ -12,6 +12,7 @@ import unittest
 from pathlib import Path
 
 from app.parser import (
+    apply_ocr_caveats,
     is_valid_cas,
     normalize_date,
     parse_sds_text,
@@ -163,6 +164,30 @@ class FullParseTests(unittest.TestCase):
             "sds_revision_date", "sds_language", "confidence", "parser_notes",
         }
         self.assertEqual(set(self.p.keys()), required)
+
+
+class OcrCaveatTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.parsed = parse_sds_text(FIXTURE)
+
+    def test_ocr_parse_is_flagged_low_confidence_for_review(self) -> None:
+        marked = apply_ocr_caveats(self.parsed)
+        self.assertEqual(marked["confidence"]["overall"], "low")
+        self.assertIn("OCR", marked["parser_notes"])
+        self.assertNotIn("not read", marked["parser_notes"])
+
+    def test_section_bands_are_left_intact(self) -> None:
+        marked = apply_ocr_caveats(self.parsed)
+        self.assertEqual(marked["confidence"]["identification"], "high")
+
+    def test_skipped_pages_are_disclosed(self) -> None:
+        marked = apply_ocr_caveats(self.parsed, pages_skipped=4)
+        self.assertIn("last 4 page(s) were not read", marked["parser_notes"])
+
+    def test_input_payload_is_not_mutated(self) -> None:
+        apply_ocr_caveats(self.parsed)
+        self.assertEqual(self.parsed["confidence"]["overall"], "medium")
+        self.assertNotIn("OCR", self.parsed["parser_notes"])
 
 
 class EmptyInputTests(unittest.TestCase):
