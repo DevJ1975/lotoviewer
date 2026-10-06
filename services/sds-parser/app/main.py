@@ -25,7 +25,7 @@ import os
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
-from .parser import parse_sds_text
+from .parser import apply_ocr_caveats, parse_sds_text
 from .pdf_text import PdfTextError, extract_text_from_pdf
 from .schema import ParsedSdsPayload, ParseStageRequest, ParseTextRequest, ParseUrlRequest
 
@@ -52,6 +52,18 @@ def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
         raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
 
 
+def _parse_pdf_bytes(data: bytes) -> dict:
+    """Extract text (OCR for scans) and parse it; unreadable PDFs become a 422."""
+    try:
+        extracted = extract_text_from_pdf(data)
+    except PdfTextError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    parsed = parse_sds_text(extracted.text)
+    if extracted.via_ocr:
+        return apply_ocr_caveats(parsed, extracted.pages_skipped)
+    return parsed
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -69,11 +81,7 @@ async def parse_file(file: UploadFile = File(...)) -> dict:
     data = await file.read()
     if len(data) > MAX_PDF_BYTES:
         raise HTTPException(status_code=413, detail=f"PDF exceeds {MAX_PDF_BYTES // 1_000_000} MB")
-    try:
-        text = extract_text_from_pdf(data)
-    except PdfTextError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return parse_sds_text(text)
+    return _parse_pdf_bytes(data)
 
 
 @app.post("/parse/url", response_model=ParsedSdsPayload, dependencies=[Depends(require_api_key)])
@@ -88,11 +96,7 @@ async def parse_url(body: ParseUrlRequest) -> dict:
         raise HTTPException(status_code=502, detail=f"Could not fetch PDF: {exc}") from exc
     if len(data) > MAX_PDF_BYTES:
         raise HTTPException(status_code=413, detail=f"PDF exceeds {MAX_PDF_BYTES // 1_000_000} MB")
-    try:
-        text = extract_text_from_pdf(data)
-    except PdfTextError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return parse_sds_text(text)
+    return _parse_pdf_bytes(data)
 
 
 @app.post("/parse/stage", dependencies=[Depends(require_api_key)])
@@ -104,11 +108,7 @@ def parse_stage(body: ParseStageRequest) -> JSONResponse:
         data = download_sds(body.sds_id, body.tenant_id, body.product_id)
     except StagingError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    try:
-        text = extract_text_from_pdf(data)
-    except PdfTextError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    parsed = parse_sds_text(text)
+    parsed = _parse_pdf_bytes(data)
     try:
         staged = stage_parsed(body.sds_id, body.tenant_id, parsed)
     except StagingError as exc:

@@ -30,9 +30,19 @@ aid, firefighting, spill cleanup, storage, incompatibilities, DOT transport,
 NFPA 704 ratings, and the revision date. Anything not found is `null`/`[]` —
 it never guesses.
 
-> **Limitation:** it reads the PDF *text layer*. A scanned / image-only SDS with
-> no text (and image-only GHS pictograms) can't be read without OCR, which is
-> out of scope. Those return a clear 422.
+### Scanned SDSs (OCR)
+
+Most SDS PDFs carry a *text layer*, which is read directly. A scanned /
+image-only SDS has none, so the service renders each page (PDFium, via
+`pypdfium2`) and reads it with **Tesseract** OCR — up to the first 30 pages.
+Because OCR can misread digits (flash points, exposure limits, UN numbers), an
+OCR'd parse is marked **`overall: "low"`** confidence and its `parser_notes`
+tell the reviewer to check every number against the original. A scan that
+yields too little text to be an SDS (blank, faint, or not an SDS) returns a
+clear 422.
+
+> **Limitation:** GHS pictograms that exist only as images are not captured,
+> and OCR is English-only.
 
 ## Endpoints
 
@@ -56,6 +66,7 @@ writes the parse back to `chemical_sds_documents` (`parsed_payload`,
 cd services/sds-parser
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+sudo apt-get install tesseract-ocr   # macOS: brew install tesseract — only needed for scanned PDFs
 cp .env.example .env            # set SDS_PARSER_API_KEY (and Supabase vars for /stage)
 uvicorn app.main:app --reload   # http://localhost:8000/docs
 ```
@@ -91,7 +102,9 @@ docker run -p 8000:8000 --env-file services/sds-parser/.env sds-parser
 
 ## Tests
 
-The parser is stdlib-only and tested without any installs:
+The parser is stdlib-only, so its tests run without any installs. The PDF /
+OCR tests (`tests/test_pdf_text.py`) build their PDFs in memory and skip
+themselves unless `requirements.txt` and the `tesseract` binary are installed:
 
 ```bash
 cd services/sds-parser
