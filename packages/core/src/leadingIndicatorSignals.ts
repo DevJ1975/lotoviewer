@@ -10,8 +10,8 @@
 //
 // Picking the best of several lags on 12–18 noisy monthly counts finds a
 // strong-looking r by luck almost every time: a fixed |r| ≥ 0.3 cut-off
-// flagged ~77% of indicators that had no relationship at all (EHS scorecard
-// analytics review, §9). So each indicator is tested against chance instead:
+// flagged about three in four indicators that had no relationship at all
+// (EHS scorecard analytics review, §9). So each indicator is tested against chance instead:
 // its months are shuffled many times, the same best-lag scan runs on every
 // shuffle, and p is the share of shuffles that look at least as strong. The
 // p-values are then Benjamini–Hochberg adjusted across the indicators, and
@@ -23,6 +23,20 @@
 // So each aligned window is detrended first, and the test asks the question a
 // leading indicator should answer: do its swings around its own trend precede
 // swings in recordables around theirs?
+//
+// Two more things would manufacture signals, so they are excluded outright:
+//   - Lag 0. A same-month move is not a lead, and it is where reverse
+//     causation hides (an inspection blitz the week after an injury) — the
+//     same leak that keeps "CAPAs opened" out of the indicator list.
+//   - Months before a module went live. They were unobserved, not zero, and
+//     zero-filling them gives the indicator and recordables a shared
+//     "nothing, then something" step that no straight-line detrend removes.
+//     Callers mark the first observed month with `observedFrom`.
+//
+// What remains is documented, not fixed: seasonality and strongly persistent
+// monthly rates (large tenants) still run up to ~1.8× the nominal false-alarm
+// rate, and only the existence of a link is tested — the lag, direction and r
+// reported are the best of those scanned, so they overstate the certainty.
 
 import { benjaminiHochberg, linearRegression, pearson, seededRandom, shuffled } from './statistics'
 
@@ -31,6 +45,10 @@ export interface LeadingSignalSeries {
   label:   string
   /** Monthly values, oldest → newest, index-aligned with recordablesMonthly. */
   monthly: number[]
+  /** Index of the first month in which both this indicator and recordables
+   *  were being recorded. Earlier months are left out (see the header).
+   *  Default 0. */
+  observedFrom?: number
 }
 
 export type SignalDirection = 'predicts_more' | 'predicts_fewer' | 'none'
@@ -38,11 +56,11 @@ export type SignalDirection = 'predicts_more' | 'predicts_fewer' | 'none'
 export interface LeadingSignal {
   key:       string
   label:     string
-  /** Months this indicator leads recordables (0 = concurrent). */
+  /** Months this indicator leads recordables (1..maxLag). */
   bestLag:   number
   /** Correlation at bestLag after removing each window's linear trend, in [-1, 1]. */
   r:         number
-  /** Overlapping months used for the correlation at bestLag. */
+  /** Observed, overlapping months used for the correlation at bestLag. */
   nMonths:   number
   /** Permutation p-value: the chance a shuffled series scans to an |r| this strong. */
   p:         number
@@ -56,20 +74,27 @@ export interface LeadingSignal {
   reliable:  boolean
 }
 
+/** Shuffles per indicator unless overridden; resolves p down to 0.001. */
+export const DEFAULT_PERMUTATIONS = 999
+/** Highest BH q-value that still counts unless overridden. */
+export const DEFAULT_FDR_LEVEL = 0.1
+
 export interface DiscoverOptions {
-  /** Largest lead (months) to scan. Default 4. */
+  /** Largest lead (months) to scan, from 1. Default 4. */
   maxLag?:       number
   /** Minimum overlapping months before a signal is `reliable`. Default 12. */
   minMonths?:    number
-  /** Highest BH q-value that still counts as a signal. Default 0.1 — this is
-   *  a screen for what to investigate, not a verdict. */
+  /** Highest BH q-value that still counts as a signal. Default
+   *  DEFAULT_FDR_LEVEL — this is a screen for what to investigate, not a verdict. */
   fdrLevel?:     number
-  /** Shuffles per indicator. Default 999, which resolves p down to 0.001. */
+  /** Shuffles per indicator. Default DEFAULT_PERMUTATIONS. */
   permutations?: number
 }
 
 // Fixed, so the same data always yields the same p-values.
 const PERMUTATION_SEED = 0x5afe7
+// The shortest lead scanned: lag 0 is a same-month move, not a lead.
+const FIRST_LAG = 1
 // A line fitted through fewer aligned months leaves too few residuals for a
 // correlation between them to mean anything.
 const MIN_OVERLAP = 4
@@ -81,7 +106,7 @@ const FLAT_RESIDUAL = 1e-9
 const TIE_TOLERANCE = 1e-12
 
 /**
- * For each leading series, scan lags 0..maxLag against the recordable series,
+ * For each leading series, scan lags 1..maxLag against the recordable series,
  * keep the lag with the strongest |correlation|, and test it against chance.
  * Returns the signals ranked reliable-first, then by |r| descending. Series
  * with too little overlap or variation to correlate at any lag are dropped.
@@ -91,22 +116,25 @@ export function discoverLeadingSignals(
   recordablesMonthly: readonly number[],
   opts: DiscoverOptions = {},
 ): LeadingSignal[] {
-  const maxLag       = Math.max(0, opts.maxLag ?? 4)
+  const maxLag       = Math.max(FIRST_LAG, opts.maxLag ?? 4)
   const minMonths    = opts.minMonths ?? 12
-  const fdrLevel     = opts.fdrLevel ?? 0.1
-  const permutations = opts.permutations ?? 999
+  const fdrLevel     = opts.fdrLevel ?? DEFAULT_FDR_LEVEL
+  const permutations = opts.permutations ?? DEFAULT_PERMUTATIONS
 
   const tested = series.flatMap(s => {
-    const best = strongestLag(s.monthly, recordablesMonthly, maxLag)
+    const from = Math.max(0, s.observedFrom ?? 0)
+    const indicator = s.monthly.slice(from)
+    const recordables = recordablesMonthly.slice(from)
+    const best = strongestLag(indicator, recordables, maxLag)
     if (best === null) return [] // never enough overlap or variation to correlate
-    const p = permutationPValue(s.monthly, recordablesMonthly, maxLag, Math.abs(best.r), permutations)
-    return [{ s, best, p }]
+    const p = permutationPValue(indicator, recordables, maxLag, Math.abs(best.r), permutations)
+    return [{ s, indicator, recordables, best, p }]
   })
   const qs = benjaminiHochberg(tested.map(t => t.p))
 
-  const out: LeadingSignal[] = tested.map(({ s, best, p }, i) => {
+  const out: LeadingSignal[] = tested.map(({ s, indicator, recordables, best, p }, i) => {
     const q = qs[i]!
-    const nMonths = Math.min(s.monthly.length, recordablesMonthly.length - best.lag)
+    const nMonths = Math.min(indicator.length, recordables.length - best.lag)
     const significant = q <= fdrLevel
     return {
       key: s.key, label: s.label, bestLag: best.lag, r: best.r, nMonths, p, q,
@@ -126,7 +154,7 @@ function strongestLag(
   maxLag: number,
 ): { lag: number; r: number } | null {
   let best: { lag: number; r: number } | null = null
-  for (let lag = 0; lag <= maxLag; lag++) {
+  for (let lag = FIRST_LAG; lag <= maxLag; lag++) {
     const r = trendFreeCorrelation(indicator, recordables, lag)
     if (r == null) continue
     if (best === null || Math.abs(r) > Math.abs(best.r)) best = { lag, r }

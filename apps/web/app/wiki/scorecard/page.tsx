@@ -13,11 +13,17 @@ const CHANGELOG: ChangelogEntry[] = [
       'flag any indicator whose best monthly correlation with recordables ' +
       'reached 0.3 — which, on 12–18 months of counts, happens by luck for about ' +
       'three indicators in four. Each one is now tested against 999 shuffled ' +
-      'copies of its own history, with trends removed so that two series that ' +
-      'merely grow together do not count, and with a false-discovery check ' +
-      'across indicators (q ≤ 0.10). Fewer signals will show; the ones that do ' +
-      'have earned it. The panel is renamed “Leading-indicator hypotheses to ' +
-      'investigate” and shows q beside r.',
+      'versions of its own history, with straight-line trends removed so that ' +
+      'two series that merely grow together do not count, and with a ' +
+      'false-discovery check across indicators (q ≤ 0.10). Fewer signals will ' +
+      'show, and up to about 1 in 10 of those may still be chance. The panel is ' +
+      'renamed “Leading-indicator hypotheses to investigate” and shows q beside r.',
+      'A lead must now be at least one month: a same-month move is not a lead, ' +
+      'and it is where reverse causation hides (inspections stepped up right ' +
+      'after an injury). Months before a module went live are left out rather ' +
+      'than counted as zeros, so a newly onboarded site no longer sees signals ' +
+      'manufactured by its own start date — and the 12-month history ' +
+      'requirement now counts real months.',
       'Corrective actions opened are no longer offered as a leading indicator: ' +
       'they are opened because of incidents, so they follow the outcome rather ' +
       'than precede it.',
@@ -661,7 +667,11 @@ export default function WikiScorecardPage() {
               strong-looking correlation by luck most of the time, so most of what
               the old panel showed was noise. A signal that no longer appears is
               one your data cannot yet tell apart from chance: a reason to keep
-              watching that indicator, not proof that it does not matter.</>,
+              watching that indicator, not proof that it does not matter. The
+              panel also looks at a rolling 18 months, so a hypothesis close to
+              the threshold can come and go as months roll over. Treat one that
+              persists across several months as worth a closer look, and one that
+              flickers as unproven.</>,
           },
           {
             q: 'How fresh is the data?',

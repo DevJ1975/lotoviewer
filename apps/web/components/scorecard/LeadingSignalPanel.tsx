@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Activity, ArrowRight, Info, Loader2, TrendingDown, TrendingUp } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { DEFAULT_FDR_LEVEL, DEFAULT_PERMUTATIONS } from '@soteria/core/leadingIndicatorSignals'
 
 // Exploratory lead/lag panel. Shows which leading indicators historically
 // precede recordables for THIS tenant, at what lag, and how strongly —
@@ -86,7 +87,7 @@ export default function LeadingSignalPanel({ tenantId }: { tenantId: string }) {
                   <strong>{s.label}</strong>
                   <ArrowRight className="inline h-3 w-3 mx-1 text-slate-400" />
                   {s.direction === 'predicts_more' ? 'precedes MORE recordables' : 'precedes FEWER recordables'}
-                  {s.bestLag > 0 ? ` ~${s.bestLag} mo later` : ' (same month)'}
+                  {` ~${s.bestLag} mo later`}
                 </p>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
                   r&nbsp;{s.r >= 0 ? '+' : ''}{s.r.toFixed(2)} · q&nbsp;{s.q < 0.01 ? '<\u00a00.01' : s.q.toFixed(2)} · {s.nMonths} months of overlap
@@ -99,7 +100,7 @@ export default function LeadingSignalPanel({ tenantId }: { tenantId: string }) {
 
       <p className="flex items-start gap-1.5 text-[11px] text-slate-400">
         <Info className="h-3 w-3 mt-0.5 shrink-0" />
-        Exploratory. Each hypothesis beat 999 shuffled copies of its own data, with trends removed, and passed a false-discovery check (q ≤ 0.10). It is still correlation over monthly counts, not proof of cause: use it to decide what to watch, then confirm on the ground.
+        Exploratory. A hypothesis is shown only if it looked stronger than at least {Math.round((1 - DEFAULT_FDR_LEVEL) * 100)}% of {DEFAULT_PERMUTATIONS} shuffled versions of the same months (straight-line trends removed) and passed a false-discovery check (q&nbsp;≤&nbsp;{DEFAULT_FDR_LEVEL.toFixed(2)}), so up to about 1 in {Math.round(1 / DEFAULT_FDR_LEVEL)} shown may still be chance. The lag and direction are best guesses, and r is the best of the lags scanned, so it overstates the strength. Correlation, not proof of cause: use it to decide what to watch, then confirm on the ground.
       </p>
     </div>
   )

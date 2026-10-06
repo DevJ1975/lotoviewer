@@ -12,8 +12,9 @@ import { discoverLeadingSignals, type LeadingSignalSeries } from '@soteria/core/
 // Admin-gated. All computation is deterministic; there is no LLM here.
 //
 // Honest by construction: it returns r, the overlap n, and permutation p / BH
-// q, and flags `reliable` only with enough history AND a lead that beats chance
-// (see discoverLeadingSignals). The UI presents it as hypotheses, not cause.
+// q, and flags `reliable` only with enough OBSERVED history (months since the
+// modules went live, not the 18-month axis) AND a lead that beats chance (see
+// discoverLeadingSignals). The UI presents it as hypotheses, not cause.
 //
 // CAPAs opened is deliberately NOT an indicator: corrective actions are opened
 // because of incidents (incident_actions.incident_id is NOT NULL), so that
@@ -61,6 +62,18 @@ async function safeDates(
   }
 }
 
+// The month a module went live for this tenant, as an index into the axis
+// (0 when it predates the window). Months before it were unobserved, not zero,
+// and discoverLeadingSignals leaves them out. Null (never used) maps past the
+// end, so nothing is observed.
+function observedFromIndex(axis: string[], goLiveIso: string | null): number {
+  if (!goLiveIso) return axis.length
+  const month = goLiveIso.slice(0, 7)
+  if (month <= axis[0]!) return 0
+  const i = axis.indexOf(month)
+  return i === -1 ? axis.length : i
+}
+
 export async function GET(req: NextRequest) {
   const gate = await requireTenantAdmin(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
@@ -72,13 +85,29 @@ export async function GET(req: NextRequest) {
 
     // Incidents + classifications drive the lagging (recordable) series and the
     // near-miss leading series — always available.
-    const [incRes, classRes, inspDates, bbsUnsafeDates] = await Promise.all([
+    //
+    // Each module's go-live is the first SYSTEM timestamp it recorded, not the
+    // earliest event date: one backdated incident does not mean the module was
+    // in use back then.
+    const firstRecorded = (table: string, field: string) =>
+      admin.from(table).select(field).eq('tenant_id', gate.tenantId).order(field, { ascending: true }).limit(1)
+    const [incRes, classRes, inspDates, bbsUnsafeDates, incFirst, [inspFirst], [bbsFirst]] = await Promise.all([
       admin.from('incidents').select('id, incident_type, occurred_at').eq('tenant_id', gate.tenantId).gte('occurred_at', sinceIso),
       admin.from('incident_classifications').select('incident_id, meets_recording_criteria').eq('tenant_id', gate.tenantId),
       safeDates(admin.from('inspections').select('created_at').eq('tenant_id', gate.tenantId).eq('result', 'fail').gte('created_at', sinceIso), 'created_at'),
       safeDates(admin.from('bbs_observations').select('observed_at').eq('tenant_id', gate.tenantId).in('kind', ['unsafe_act', 'unsafe_condition']).gte('observed_at', sinceIso), 'observed_at'),
+      admin.from('incidents').select('reported_at').eq('tenant_id', gate.tenantId).order('reported_at', { ascending: true }).limit(1),
+      safeDates(firstRecorded('inspections', 'created_at'), 'created_at'),
+      safeDates(firstRecorded('bbs_observations', 'created_at'), 'created_at'),
     ])
     if (incRes.error) throw new Error(incRes.error.message)
+    if (incFirst.error) throw new Error(incFirst.error.message)
+
+    // Every indicator is paired with recordables, so a month counts only once
+    // BOTH modules were live.
+    const incidentsFrom = observedFromIndex(axis, incFirst.data?.[0]?.reported_at ?? null)
+    const bothLiveFrom = (goLiveIso: string | undefined) =>
+      Math.max(incidentsFrom, observedFromIndex(axis, goLiveIso ?? null))
 
     const recordableIds = new Set(
       ((classRes.data ?? []) as { incident_id: string; meets_recording_criteria: boolean }[])
@@ -90,9 +119,9 @@ export async function GET(req: NextRequest) {
     const nearMissMonthly = bucket(incidents.filter(i => i.incident_type === 'near_miss').map(i => i.occurred_at), axis)
 
     const series: LeadingSignalSeries[] = [
-      { key: 'near_miss_reporting', label: 'Near-miss reporting', monthly: nearMissMonthly },
-      { key: 'inspection_failures', label: 'Failing inspections', monthly: bucket(inspDates, axis) },
-      { key: 'bbs_at_risk', label: 'BBS at-risk observations', monthly: bucket(bbsUnsafeDates, axis) },
+      { key: 'near_miss_reporting', label: 'Near-miss reporting', monthly: nearMissMonthly, observedFrom: incidentsFrom },
+      { key: 'inspection_failures', label: 'Failing inspections', monthly: bucket(inspDates, axis), observedFrom: bothLiveFrom(inspFirst) },
+      { key: 'bbs_at_risk', label: 'BBS at-risk observations', monthly: bucket(bbsUnsafeDates, axis), observedFrom: bothLiveFrom(bbsFirst) },
     ].filter(s => s.monthly.some(v => v > 0)) // drop indicators with no activity
 
     const signals = discoverLeadingSignals(series, recordablesMonthly, { maxLag: 4, minMonths: 12 })

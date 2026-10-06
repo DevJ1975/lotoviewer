@@ -72,6 +72,35 @@ describe('discoverLeadingSignals', () => {
     expect(discoverLeadingSignals(series, ECHO_2_MONTHS_LATER)).toEqual(first)
   })
 
+  it('ignores months before the modules went live instead of reading them as zeros', () => {
+    // Incidents (hence recordables AND near-miss reporting) went live in
+    // month 6. Zero-filling months 0–5 gives both series a shared
+    // "nothing, then something" step — a strong-looking, invented signal.
+    const goLive = 6
+    const recordables = [0, 0, 0, 0, 0, 0, 2, 1, 3, 1, 2, 2, 1, 3, 2, 1, 2, 3]
+    const nearMiss    = [0, 0, 0, 0, 0, 0, 5, 7, 4, 6, 5, 6, 7, 5, 6, 4, 6, 5]
+
+    const [zeroFilled] = discoverLeadingSignals([{ key: 'nm', label: 'NM', monthly: nearMiss }], recordables)
+    expect(zeroFilled.nMonths).toBeGreaterThanOrEqual(14) // the illusion of history
+
+    const [observed] = discoverLeadingSignals(
+      [{ key: 'nm', label: 'NM', monthly: nearMiss, observedFrom: goLive }], recordables)
+    expect(observed.nMonths).toBeLessThan(12) // only 12 months exist; a lead uses at most 11
+    expect(observed.reliable).toBe(false)
+  })
+
+  it('never reports a same-month move as a lead', () => {
+    // Inspections that react to an injury in the same month track recordables
+    // exactly — reverse causation, not a leading indicator.
+    const recordables = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3, 2, 3]
+    const reactive = recordables.map(r => r + 4)
+    const out = discoverLeadingSignals([{ key: 'insp', label: 'Inspections', monthly: reactive }], recordables)
+    for (const signal of out) {
+      expect(signal.bestLag).toBeGreaterThanOrEqual(1)
+      expect(signal.reliable).toBe(false)
+    }
+  })
+
   it('keeps false alarms near the FDR level on data with no real relationship', () => {
     // The old fixed |r| ≥ 0.3 cut-off flagged ~77% of such indicators and put
     // at least one false signal on ~99% of panels (scorecard review, §9).
