@@ -1,10 +1,28 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.15.1'
-const LAST_UPDATED    = '2026-09-27'
+const CURRENT_VERSION = '1.15.2'
+const LAST_UPDATED    = '2026-10-06'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.15.2',
+    date:    '2026-10-06',
+    changes: [
+      'Fixed: the leading-indicator panel no longer invents signals. It used to ' +
+      'flag any indicator whose best monthly correlation with recordables ' +
+      'reached 0.3 — which, on 12–18 months of counts, happens by luck for about ' +
+      'three indicators in four. Each one is now tested against 999 shuffled ' +
+      'copies of its own history, with trends removed so that two series that ' +
+      'merely grow together do not count, and with a false-discovery check ' +
+      'across indicators (q ≤ 0.10). Fewer signals will show; the ones that do ' +
+      'have earned it. The panel is renamed “Leading-indicator hypotheses to ' +
+      'investigate” and shows q beside r.',
+      'Corrective actions opened are no longer offered as a leading indicator: ' +
+      'they are opened because of incidents, so they follow the outcome rather ' +
+      'than precede it.',
+    ],
+  },
   {
     version: '1.15.1',
     date:    '2026-09-27',
@@ -634,6 +652,16 @@ export default function WikiScorecardPage() {
               technician shouldn&apos;t need (and shouldn&apos;t be measured
               against publicly). Admins and the EHS director get the
               strategic view; the operational data is on the home dashboard.</>,
+          },
+          {
+            q: 'A leading signal I used to see has disappeared — why?',
+            a: <>Since version 1.15.2 the panel tests each signal against chance
+              instead of accepting any correlation of 0.3 or more. Picking the
+              best of five lags on a year or so of monthly counts finds a
+              strong-looking correlation by luck most of the time, so most of what
+              the old panel showed was noise. A signal that no longer appears is
+              one your data cannot yet tell apart from chance: a reason to keep
+              watching that indicator, not proof that it does not matter.</>,
           },
           {
             q: 'How fresh is the data?',
