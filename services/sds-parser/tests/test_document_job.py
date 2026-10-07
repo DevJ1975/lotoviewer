@@ -311,7 +311,7 @@ class RecordFailureTests(unittest.TestCase):
 
 class RegisteredKindTests(unittest.TestCase):
     def test_the_service_registers_the_kind(self) -> None:
-        self.assertEqual(get_registry().names(), ["document_extract"])
+        self.assertEqual(get_registry().names(), ["document_extract", "regulation_ingest"])
 
     def test_a_job_that_can_never_succeed_ends_failed_for_the_user_too(self) -> None:
         client = FakeClient([row()], b"not a pdf at all")

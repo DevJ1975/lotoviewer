@@ -118,6 +118,42 @@ It needs migrations 295 and 296, `SERVICE_JOBS_ENABLED=true`, and the Supabase
 vars. With the service unreachable or jobs off, uploading answers 503 and
 removes the upload rather than leaving a document waiting forever.
 
+### Regulation loader
+
+The second registered kind is **`regulation_ingest`**, a *platform-level* job
+(no tenant: the regulation documents are shared by every tenant) that loads a
+part of the CFR into the assistant's knowledge base. A superadmin queues it from
+**Superadmin → Regulation freshness**. It fetches the part from the eCFR API,
+splits it into sections, chunks and embeds them with Voyage (`voyage-3-large`,
+the model the assistant searches with), and replaces each section atomically
+(migration 297). The parts it can load are listed in `app/regulations/catalog.py`
+(40 CFR 261, 262, 263, 112, 122, 403 and 70).
+
+* **Dry run first.** It fetches and parses but writes nothing and costs nothing,
+  and reports how many sections it found, how many chunks and tokens a real run
+  would embed, and a sample of titles, so the parse can be checked before paying
+  to embed it. The web app defaults to a dry run.
+* **Fails safe.** A result less than half the size of what is already stored is
+  refused as a parsing problem (it would otherwise prune a good corpus), as is a
+  run that would embed more than 20,000 chunks.
+* **Resumable and cheap to repeat.** A section whose title and text are unchanged
+  is skipped, so a retry, or a re-run after one new amendment, re-embeds only
+  what changed. A run interrupted part-way keeps what it wrote and is not marked
+  complete.
+* **Records the snapshot** in `regulation_update_checks` (creating the row on a
+  part's first load), after which the bi-monthly freshness cron watches it.
+
+It needs migrations 295 and 297, `SERVICE_JOBS_ENABLED=true`, the Supabase vars,
+and `VOYAGE_API_KEY` (not needed for a dry run). State regulations (Cal/OSHA
+Title 8, TCEQ Title 30 TAC) are not on eCFR; they ship as reviewed markdown
+through the web app's seed route.
+
+> **Not yet run against the live eCFR or Voyage APIs.** It was written without
+> network access to either, so the XML parser accepts both plausible forms of the
+> section number and the first real run should be a dry run. Document links are
+> built as `…/title-40/part-262/section-262.10` and have not been checked to
+> resolve.
+
 ## Run it
 
 ```bash
@@ -158,6 +194,7 @@ docker run -p 8000:8000 --env-file services/sds-parser/.env sds-parser
 | `SUPABASE_URL` | for `/parse/stage` and jobs | Project URL. |
 | `SUPABASE_SERVICE_ROLE_KEY` | for `/parse/stage` and jobs | Server-side only; bypasses RLS, so every query is tenant-scoped. |
 | `SDS_PARSE_JOBS_ENABLED` | optional | `true` starts the background worker and enables `/jobs/parse-sds`. Needs migration 294. |
+| `VOYAGE_API_KEY` | for loading regulations | Embeds regulation text (not needed for a dry run). The same key the web app uses. |
 | `SERVICE_JOBS_ENABLED` | optional | `true` starts the generic worker and enables `POST /jobs` (the document reader). Needs migrations 295 and 296. |
 
 ## Tests

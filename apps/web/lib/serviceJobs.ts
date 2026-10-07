@@ -16,7 +16,8 @@ const ENQUEUE_TIMEOUT_MS = 10_000
 
 export interface EnqueueServiceJobArgs {
   kind:        string
-  tenantId:    string
+  /** Omit for a platform-level job (e.g. loading shared regulations). */
+  tenantId?:   string
   payload:     Record<string, unknown>
   requestedBy?: string
   /** At most one live job per (kind, tenant, dedupeKey); a repeat returns the live one. */
@@ -38,7 +39,7 @@ export async function enqueueServiceJob(args: EnqueueServiceJobArgs): Promise<{ 
 
   const body = JSON.stringify({
     kind: args.kind,
-    tenant_id: args.tenantId,
+    tenant_id: args.tenantId ?? null,
     payload: args.payload,
     requested_by: args.requestedBy,
     dedupe_key: args.dedupeKey,

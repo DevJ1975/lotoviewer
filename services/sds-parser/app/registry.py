@@ -15,7 +15,9 @@ from .service_jobs import JobRegistry
 @lru_cache(maxsize=1)
 def get_registry() -> JobRegistry:
     from .documents.job import DOCUMENT_EXTRACT_KIND
+    from .regulations.job import REGULATION_INGEST_KIND
 
     registry = JobRegistry()
     registry.register(DOCUMENT_EXTRACT_KIND)
+    registry.register(REGULATION_INGEST_KIND)
     return registry

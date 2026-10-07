@@ -51,6 +51,14 @@ describe('enqueueServiceJob', () => {
     })
   })
 
+  it('queues a platform job with no tenant', async () => {
+    process.env.SDS_PARSER_URL = 'http://svc'
+    const fetchMock = stubFetch(async () => ({ status: 202, json: async () => ({ job_id: 'j' }) }))
+    await enqueueServiceJob({ kind: 'regulation_ingest', payload: { source: 'epa-40-cfr-262' } })
+    const [, init] = fetchMock.mock.calls[0] as [string, { body: string }]
+    expect(JSON.parse(init.body).tenant_id).toBeNull()
+  })
+
   it('omits the api key header when none is configured', async () => {
     process.env.SDS_PARSER_URL = 'http://svc'
     delete process.env.SDS_PARSER_API_KEY
