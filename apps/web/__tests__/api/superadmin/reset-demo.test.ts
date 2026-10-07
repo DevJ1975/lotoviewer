@@ -1,12 +1,24 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { vi } from 'vitest'
 import {
   authAdminMock, gateOk, gateRejects, mockState, resetMocks, emptyRequest, ctxFor,
 } from './_helpers'
+
+// The environmental seed goes through the product's own apply-library and checklist code and has
+// its own tests (lib/environmental/demoSeed.test.ts); here it is a collaborator whose outcome the
+// reset route must report.
+const seedEnvironmentalDemo = vi.fn()
+vi.mock('@/lib/environmental/demoSeed', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/environmental/demoSeed')>('@/lib/environmental/demoSeed')
+  return { ...actual, seedEnvironmentalDemo: (...a: unknown[]) => seedEnvironmentalDemo(...a) }
+})
+vi.mock('@/lib/environmental/demoStore', () => ({ supabaseDemoStore: () => ({}) }))
+const SUMMARY = { sites: 3, permits: 5, outfalls: 5, evaluations: 14, deadlines: 5, runs: 4, libraryItems: 40 }
 import { POST as resetDemo } from '@/app/api/superadmin/tenants/[number]/reset-demo/route'
 import { DELETE as deleteUser } from '@/app/api/superadmin/users/[user_id]/route'
 
 describe('POST /api/superadmin/tenants/[number]/reset-demo', () => {
-  beforeEach(() => { resetMocks(); gateOk() })
+  beforeEach(() => { resetMocks(); gateOk(); seedEnvironmentalDemo.mockReset(); seedEnvironmentalDemo.mockResolvedValue(SUMMARY) })
 
   it('returns 401 when the gate rejects', async () => {
     gateRejects(403, 'Superadmin only')
@@ -109,6 +121,71 @@ describe('POST /api/superadmin/tenants/[number]/reset-demo', () => {
     expect(body.seedSkipped).toBe(false)
     expect(body.seedsMissing).toContain('seed_wls_equipment_readiness_demo')
     expect(body.note).toMatch(/not present in this database/)
+  })
+
+  describe('environmental compliance demo', () => {
+    const demoTenant = () => mockState.queue('tenants', { data: { id: 'T2', tenant_number: '0002', name: 'WLS Demo', is_demo: true }, error: null })
+
+    it('wipes the environmental tables, children before parents, and the environmental rows that share a table', async () => {
+      demoTenant()
+      const r = await resetDemo(emptyRequest('POST'), ctxFor({ number: '0002' }))
+      expect(r.status).toBe(200)
+      const wiped = mockState.deletes.map(d => d.table)
+      for (const table of ['stormwater_outfalls', 'environmental_permits', 'environmental_site_profiles', 'legal_register', 'inspections', 'compliance_calendar_obligations']) {
+        expect(wiped, table).toContain(table)
+      }
+      // The legacy tables reference legal_register without cascade, so they go first.
+      expect(wiped.indexOf('compliance_obligations')).toBeLessThan(wiped.indexOf('legal_register'))
+      expect(wiped.indexOf('compliance_obligation_completions')).toBeLessThan(wiped.indexOf('compliance_obligations'))
+    })
+
+    it('never wipes safety inspections or system calendar rows wholesale: those two tables are only cleared by their environmental filter', async () => {
+      demoTenant()
+      const body = await (await resetDemo(emptyRequest('POST'), ctxFor({ number: '0002' }))).json()
+      expect(body.wiped['inspections (environmental)']).toBeDefined()
+      expect(body.wiped['compliance_calendar_obligations (environmental)']).toBeDefined()
+      // The plain-table list must not contain either, or the filter would be moot.
+      expect(Object.keys(body.wiped)).not.toContain('inspections')
+      expect(Object.keys(body.wiped)).not.toContain('compliance_calendar_obligations')
+    })
+
+    it('seeds the environmental demo after the SQL seeds and reports what it made', async () => {
+      demoTenant()
+      mockState.queue('rpc:seed_wls_demo', { data: 'Seeded WLS Demo', error: null })
+      const body = await (await resetDemo(emptyRequest('POST'), ctxFor({ number: '0002' }))).json()
+      expect(seedEnvironmentalDemo).toHaveBeenCalledTimes(1)
+      expect(body.environmentalSeed).toMatchObject({ ok: true })
+      expect(body.seed).toMatch(/environmental demo: 3 sites, 5 permits/)
+      expect(body.note).toBe('Wiped and re-seeded canonical demo data.')
+    })
+
+    it('still resets, loudly, when the environmental seed cannot run (no members, or migrations 299-303 not applied)', async () => {
+      demoTenant()
+      seedEnvironmentalDemo.mockRejectedValue(new Error('The demo account has no members to own the demo records. Add a member and run it again.'))
+      const r = await resetDemo(emptyRequest('POST'), ctxFor({ number: '0002' }))
+      expect(r.status).toBe(200)
+      const body = await r.json()
+      expect(body.ok).toBe(true)
+      expect(body.environmentalSeed).toMatchObject({ ok: false })
+      expect(body.note).toMatch(/environmental demo was NOT seeded: The demo account has no members/)
+    })
+
+    it('treats a missing environmental table or column as nothing to wipe rather than a failure', async () => {
+      demoTenant()
+      mockState.queue('stormwater_outfalls', { data: null, error: { message: 'relation does not exist', code: '42P01' } })
+      mockState.queue('inspections', { data: null, error: { message: 'column does not exist', code: '42703' } })
+      const r = await resetDemo(emptyRequest('POST'), ctxFor({ number: '0002' }))
+      expect(r.status).toBe(200)
+      const body = await r.json()
+      expect(body.skipped).toContain('stormwater_outfalls')
+      expect(body.skipped).toContain('inspections.domain')
+    })
+
+    it('does not touch the environmental seed for a non-demo tenant', async () => {
+      mockState.queue('tenants', { data: { id: 'T1', tenant_number: '0001', name: 'Snak King', is_demo: false }, error: null })
+      expect((await resetDemo(emptyRequest('POST'), ctxFor({ number: '0001' }))).status).toBe(403)
+      expect(seedEnvironmentalDemo).not.toHaveBeenCalled()
+    })
   })
 
   it('skips a domain table with PG 42P01 (table does not exist) instead of failing', async () => {

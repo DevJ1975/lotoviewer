@@ -181,14 +181,17 @@ export function requireTenantAdmin(req: Request) {
   return gate(req, { requireRole: 'admin' })
 }
 
-export async function requireTenantModuleMember(req: Request, moduleId: string): Promise<TenantModuleGate> {
-  const member = await requireTenantMember(req)
-  if (!member.ok) return member
+/**
+ * Layers the tenant's module toggle on top of an already-resolved role gate.
+ * Shared by the member and admin variants so the two cannot drift apart.
+ */
+async function withModuleEnabled(roleGate: TenantGate, moduleId: string): Promise<TenantModuleGate> {
+  if (!roleGate.ok) return roleGate
 
   const { data: tenant, error } = await supabaseAdmin()
     .from('tenants')
     .select('name, modules, settings, disabled_at')
-    .eq('id', member.tenantId)
+    .eq('id', roleGate.tenantId)
     .maybeSingle()
 
   if (error) return { ok: false, status: 500, message: error.message }
@@ -202,9 +205,18 @@ export async function requireTenantModuleMember(req: Request, moduleId: string):
   }
 
   return {
-    ...member,
+    ...roleGate,
     tenantName:     typeof tenant.name === 'string' ? tenant.name : null,
     tenantModules:  modules,
     tenantSettings: (tenant.settings ?? null) as Record<string, unknown> | null,
   }
+}
+
+export async function requireTenantModuleMember(req: Request, moduleId: string): Promise<TenantModuleGate> {
+  return withModuleEnabled(await requireTenantMember(req), moduleId)
+}
+
+/** Tenant admin or owner, and the module must be enabled for the tenant. */
+export async function requireTenantModuleAdmin(req: Request, moduleId: string): Promise<TenantModuleGate> {
+  return withModuleEnabled(await requireTenantAdmin(req), moduleId)
 }

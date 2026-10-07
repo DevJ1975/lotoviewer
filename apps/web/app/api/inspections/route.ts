@@ -13,6 +13,8 @@ export async function GET(req: Request) {
     const { data, error } = await g.authedClient
       .from('inspections')
       .select('id, title, template_id, status, result, score, max_score, due_at, started_at, submitted_at')
+      // Environmental checklists have their own screens; here they would read as safety inspections.
+      .eq('domain', 'safety')
       .order('started_at', { ascending: false })
     if (error) return sanitizeError(error, 'GET /api/inspections')
 

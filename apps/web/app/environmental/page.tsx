@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
-  AlertTriangle, BarChart3, ClipboardCheck, Gauge, Mountain, ScrollText,
+  AlertTriangle, BarChart3, ClipboardCheck, Gauge, Mountain, ScrollText, ShieldCheck,
 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { PageHeader } from '@/components/PageHeader'
 import OpsSpinner from '@/components/OpsSpinner'
+import EnvironmentalKpiPanel from '@/app/_components/EnvironmentalKpiPanel'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
 
@@ -29,6 +30,13 @@ interface RegisterCounts {
 }
 
 const CARDS = [
+  {
+    href:  '/environmental/compliance',
+    Icon:  ShieldCheck,
+    title: 'Compliance suite',
+    desc:  'Permits, checklists, deadlines and the legal register for each site, with the state\'s rules layered on the federal baseline.',
+    clause: 'Clauses 6.1.3 & 8.1',
+  },
   {
     href:  '/environmental/report-card',
     Icon:  Gauge,
@@ -136,6 +144,8 @@ export default function EnvironmentalHomePage() {
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>{loadError}</span>
         </div>
       )}
+
+      <EnvironmentalKpiPanel />
 
       {!counts && !loadError ? (
         <div className="flex items-center justify-center py-16"><OpsSpinner /></div>

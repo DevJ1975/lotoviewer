@@ -3,6 +3,8 @@ import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { isValidTenantNumber } from '@/lib/validation/tenants'
+import { describeSummary, seedEnvironmentalDemo } from '@/lib/environmental/demoSeed'
+import { supabaseDemoStore } from '@/lib/environmental/demoStore'
 
 // POST /api/superadmin/tenants/[number]/reset-demo
 //
@@ -77,6 +79,17 @@ const DELETE_ORDER: readonly string[] = [
   'environmental_objectives',
   'environmental_aspects',
   'management_reviews',
+  // Environmental compliance suite (migrations 299-303). The demo is seeded through the
+  // product's own apply-library and checklist code (seedEnvironmentalDemo, below), so these
+  // are wiped to let that seed recreate them. The legacy compliance_obligations tables
+  // (migration 298) reference legal_register without cascade, so they go first; they are
+  // empty in practice and are not seeded.
+  'stormwater_outfalls',
+  'environmental_permits',
+  'environmental_site_profiles',
+  'compliance_obligation_completions',
+  'compliance_obligations',
+  'legal_register',
   // Parents.
   'loto_equipment',
   'loto_confined_space_permits',
@@ -112,6 +125,16 @@ const SEED_FUNCTIONS = [
   'seed_wls_iso14001_demo',
   'seed_wls_equipment_readiness_demo',
 ] as const
+
+// Environmental rows that share a table with other modules' data, so a plain tenant wipe
+// would take too much (or, for the calendar, the system-seeded rows this route cannot
+// restore). Checklist runs go with their inspection (responses and the companion row
+// cascade); completion events go with their deadline. The template instances are
+// configuration and are kept: the seed reuses them.
+const ENVIRONMENTAL_WIPES: ReadonlyArray<{ table: string; column: string; value: string }> = [
+  { table: 'inspections',                    column: 'domain',   value: 'environmental' },
+  { table: 'compliance_calendar_obligations', column: 'category', value: 'environmental' },
+]
 
 /** Postgres/PostgREST codes meaning "this function is not in the database". */
 const MISSING_FUNCTION_CODES = new Set(['42883', 'PGRST202'])
@@ -182,6 +205,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     }
   }
 
+  for (const w of ENVIRONMENTAL_WIPES) {
+    const { error: delErr, count } = await admin
+      .from(w.table)
+      .delete({ count: 'exact' })
+      .eq('tenant_id', tenant.id)
+      .eq(w.column, w.value)
+    if (delErr) {
+      if ((delErr as { code?: string }).code === '42P01') { skipped.push(w.table); continue }
+      // The domain/category columns arrive with migrations 301/302; before them there is nothing environmental to wipe.
+      if ((delErr as { code?: string }).code === '42703') { skipped.push(`${w.table}.${w.column}`); continue }
+      Sentry.captureException(delErr, { tags: { route: '/api/superadmin/tenants/[number]/reset-demo', stage: 'wipe-environmental' } })
+      return NextResponse.json({ error: `Wipe failed at ${w.table}: ${delErr.message}`, wiped }, { status: 500 })
+    }
+    wiped[`${w.table} (environmental)`] = count ?? 0
+  }
+
   // Re-seed. Every function runs against any demo tenant; each resolves the
   // demo tenant itself by is_demo. A function absent from this database is
   // skipped so older/partial schemas still reset cleanly.
@@ -205,6 +244,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     if (typeof data === 'string') seedMessages.push(data)
   }
 
+  // The environmental suite is seeded through the product's own code, after the SQL seeds
+  // (it needs the demo account's members). A failure is reported, not fatal: a database
+  // without migrations 299-303, or an account with no members, must still reset.
+  let environmentalSeed: { ok: true; summary: string } | { ok: false; error: string }
+  try {
+    environmentalSeed = { ok: true, summary: describeSummary(await seedEnvironmentalDemo(supabaseDemoStore(admin, tenant.id), new Date())) }
+    seedMessages.push(environmentalSeed.summary)
+  } catch (err) {
+    Sentry.captureException(err, { tags: { route: '/api/superadmin/tenants/[number]/reset-demo', stage: 'seed-environmental' } })
+    environmentalSeed = { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+
   const seedResult = seedMessages.length > 0 ? seedMessages.join('; ') : null
   // Only true when the database has none of the seed functions at all — not
   // when a single optional one is missing.
@@ -220,7 +271,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     // Surfaced so a partially-migrated database is visible rather than
     // silently under-seeded — the failure mode this route already had.
     seedsMissing,
-    note: seedSkipped
+    environmentalSeed,
+    note: !environmentalSeed.ok
+      ? `Wiped and re-seeded, but the environmental demo was NOT seeded: ${environmentalSeed.error}`
+      : seedSkipped
       ? 'No seed functions found in this database — only the wipe ran. Apply the seed migrations to re-seed.'
       : seedsMissing.length > 0
         ? `Wiped and re-seeded. ${seedsMissing.length} seed function(s) not present in this database: ${seedsMissing.join(', ')}.`

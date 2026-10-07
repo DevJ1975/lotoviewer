@@ -31,8 +31,8 @@ export interface ManualSection {
 
 export const MANUAL_TITLE        = 'ISO 14001 — Environmental Management'
 export const MANUAL_SUBTITLE     = 'A plain-language implementation guide to the environmental management-system standard — clause by clause, with the records an auditor will ask for and where Soteria produces them.'
-export const MANUAL_VERSION      = '1.1.0'
-export const MANUAL_LAST_UPDATED = '2026-08-19'
+export const MANUAL_VERSION      = '1.2.0'
+export const MANUAL_LAST_UPDATED = '2026-10-07'
 
 export const SECTIONS: ManualSection[] = [
   // ────────────────────────────────────────────────────────────────
@@ -336,8 +336,8 @@ export const SECTIONS: ManualSection[] = [
     bullets: [
       'Clause 6.1.2 (aspects & impacts) — the Environmental module\'s aspects register scores significance as severity × likelihood on a 1-5 scale, significant at 12 or higher, so the criterion an auditor asks for is documented and repeatable.',
       'Clause 6.2 / 9.1.1 (objectives & monitoring) — measurable objectives with a baseline, target, target date, and periodic readings; progress is evaluated in the improvement direction you set.',
-      'Clause 6.1.3 / 9.1.2 (compliance obligations & evaluation) — the Compliance Calendar tracks recurring regulatory and permit obligations with overdue/due-soon status, and each completion is a recorded evaluation.',
-      'Clause 8.1 (operational control for chemicals & waste) — the Chemicals, Prop 65, and hazardous-waste features capture substance inventories, exposure assessments, and disposal records.',
+      'Clause 6.1.3 / 9.1.2 (compliance obligations & evaluation) — the Compliance Calendar tracks recurring regulatory and permit obligations with overdue/due-soon status, and each completion is a recorded evaluation. The Environmental Compliance suite adds a per-site legal register and permits, and fills the calendar with the federal baseline plus California and Texas deadlines for each site.',
+      'Clause 8.1 (operational control for chemicals & waste) — the Chemicals, Prop 65, and hazardous-waste features capture substance inventories, exposure assessments, and disposal records, and the suite\'s stormwater, outfall and wastewater checklists record the routine inspections that show operations stay under control.',
       'Clause 9.3 (management review) — reviews carry the standard §9.3.2 input agenda and §9.3.3 output slots; a review with no recorded conclusions or decisions is flagged rather than counted.',
       'Clause 10.2 (nonconformity & corrective action) — findings from any source, with corrective actions whose effectiveness check must be signed by someone other than the person who completed the work. Separation of duty is enforced in the database, not just the UI.',
       'Clause 7.5 (documented information) — partially covered: signed/sealed PDF artifacts carry chain-of-custody hashes (see the Integrity & Compliance wiki page), but a controlled-document register with revision and approval control is not shipped yet.',
@@ -347,6 +347,7 @@ export const SECTIONS: ManualSection[] = [
       { label: 'Soteria — Environmental / ISO 14001 (live module)', url: '/environmental' },
       { label: 'Soteria — Audit readiness report card', url: '/environmental/report-card' },
       { label: 'Soteria — Compliance Calendar (live module)', url: '/admin/compliance/calendar' },
+      { label: 'Soteria — Environmental Compliance suite', url: '/environmental/compliance' },
     ],
   },
 
