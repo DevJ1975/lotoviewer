@@ -132,7 +132,9 @@ async function runCron(): Promise<NextResponse> {
     if (needsUpdate && !notifiedRecently) {
       const sent = await sendRegulationUpdateAlert({
         to,
+        source:           row.source,
         title:            row.title,
+        ecfrTitle:        row.ecfr_title,
         ecfrPart:         row.ecfr_part,
         latestAmendment:  latest,
         ingestedSnapshot: row.ingested_snapshot,

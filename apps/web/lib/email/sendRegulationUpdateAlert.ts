@@ -1,17 +1,24 @@
 // Regulation-freshness alert — emailed by /api/cron/check-regulation-updates when
 // eCFR has amended a tracked regulation (e.g. 29 CFR Part 1910) more recently than
-// the snapshot the RAG corpus reflects. The fix is an operator action, not an
-// in-app one: re-run scripts/osha_1910_ingest.py, so the email carries the command
-// rather than a dashboard link. Same posture as the other senders (boolean return,
-// never throws, every send logged via instrument.ts).
+// the snapshot the RAG corpus reflects. Federal OSHA 1910 is refreshed by an
+// operator re-running scripts/osha_1910_ingest.py, so its email carries that
+// command; every other tracked part is loaded by the Python service from
+// Superadmin → Regulation freshness, so its email points there instead. Same
+// posture as the other senders (boolean return, never throws, every send logged
+// via instrument.ts).
 
 import { Resend } from 'resend'
 import * as Sentry from '@sentry/nextjs'
 import { logEmailSend } from '@/lib/email/instrument'
 
+/** The one corpus still refreshed by the offline script rather than the service. */
+const OFFLINE_SCRIPT_SOURCE = 'osha-29-cfr-1910'
+
 export interface RegulationUpdateAlertArgs {
   to:                string
+  source:            string        // regulation_update_checks.source, e.g. "osha-29-cfr-1910"
   title:             string        // "Federal OSHA 29 CFR Part 1910 (General Industry)"
+  ecfrTitle:         string        // "29"
   ecfrPart:          string        // "1910"
   latestAmendment:   string        // eCFR's newest amendment date for the part (ISO)
   ingestedSnapshot:  string | null // the snapshot the corpus currently reflects (ISO), or null
@@ -34,21 +41,31 @@ export async function sendRegulationUpdateAlert(args: RegulationUpdateAlertArgs)
             ?? 'SoteriaField <invites@soteriafield.app>'
 
   const have = args.ingestedSnapshot ?? 'never ingested'
-  const cmd  = `python scripts/osha_1910_ingest.py all --date ${args.latestAmendment}`
+  const part = `${args.ecfrTitle} CFR ${args.ecfrPart}`
+  const cmd  = args.source === OFFLINE_SCRIPT_SOURCE
+    ? `python scripts/osha_1910_ingest.py all --date ${args.latestAmendment}`
+    : null
 
-  const text = `A tracked regulation in the assistant's knowledge base is out of date.
-
-  Regulation:        ${args.title}
-  eCFR part:         29 CFR ${args.ecfrPart}
-  Latest amendment:  ${args.latestAmendment}
-  Corpus reflects:   ${have}
-
-To refresh the RAG corpus, run the ingester with the new snapshot date and apply
+  const refresh = cmd
+    ? `To refresh the RAG corpus, run the ingester with the new snapshot date and apply
 the generated SQL batches to Supabase:
 
   ${cmd}
 
-The ingest is idempotent — only changed sections are rewritten.
+The ingest is idempotent — only changed sections are rewritten.`
+    : `To refresh the RAG corpus, open Superadmin → Regulation freshness, choose this
+part, and queue a load for ${args.latestAmendment}. Run it as a dry run first: it
+costs nothing and shows what would change. Only sections whose text changed are
+re-embedded.`
+
+  const text = `A tracked regulation in the assistant's knowledge base is out of date.
+
+  Regulation:        ${args.title}
+  eCFR part:         ${part}
+  Latest amendment:  ${args.latestAmendment}
+  Corpus reflects:   ${have}
+
+${refresh}
 
 — SoteriaField
 `
@@ -71,12 +88,14 @@ The ingest is idempotent — only changed sections are rewritten.
         eCFR has a newer amendment for <strong>${safe(args.title)}</strong> than the snapshot the assistant's RAG corpus reflects.
       </p>
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px 0;font-size:13px;color:#1a2230;">
-        <tr><td style="padding:2px 12px 2px 0;color:#5b6675;">eCFR part</td><td>29 CFR ${safe(args.ecfrPart)}</td></tr>
+        <tr><td style="padding:2px 12px 2px 0;color:#5b6675;">eCFR part</td><td>${safe(part)}</td></tr>
         <tr><td style="padding:2px 12px 2px 0;color:#5b6675;">Latest amendment</td><td><strong>${safe(args.latestAmendment)}</strong></td></tr>
         <tr><td style="padding:2px 12px 2px 0;color:#5b6675;">Corpus reflects</td><td>${safe(have)}</td></tr>
       </table>
-      <p style="margin:0 0 8px 0;font-size:13px;color:#5b6675;">Refresh the corpus by re-running the ingester (idempotent — only changed sections are rewritten):</p>
-      <pre style="margin:0;background:#0f1729;color:#e6edf7;padding:12px 14px;border-radius:8px;font-size:12px;overflow:auto;">${safe(cmd)}</pre>
+      ${cmd
+        ? `<p style="margin:0 0 8px 0;font-size:13px;color:#5b6675;">Refresh the corpus by re-running the ingester (idempotent — only changed sections are rewritten):</p>
+      <pre style="margin:0;background:#0f1729;color:#e6edf7;padding:12px 14px;border-radius:8px;font-size:12px;overflow:auto;">${safe(cmd)}</pre>`
+        : `<p style="margin:0;font-size:13px;color:#5b6675;">Open <strong>Superadmin → Regulation freshness</strong>, choose this part, and queue a load for ${safe(args.latestAmendment)}. Run it as a dry run first: it costs nothing and shows what would change.</p>`}
     </td></tr>
   </table>
 </td></tr>
