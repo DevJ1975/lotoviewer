@@ -3,6 +3,9 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { FEATURES } from '@soteria/core'
 import { trir as trirRate, dart as dartRate } from '@soteria/core/incidentScorecardMetrics'
 import { computeIncidentRisk } from '@/lib/incidentRiskFeatures'
+import { daysUntilDue } from '@soteria/core/complianceCalendar'
+import { normalizeStateCode } from '@soteria/core/environmental/jurisdiction'
+import { findGuidance, groupBySite, standingOf } from '@/lib/environmental/assistant'
 
 // Tool registry for the home-page assistant.
 //
@@ -510,7 +513,7 @@ const compliance_obligations_due: ToolDef = {
   definition: {
     name: 'compliance_obligations_due',
     description:
-      'List compliance-calendar obligations that are overdue or due soon (excludes snoozed and not-applicable items). Use for "what compliance deadlines are coming up", "overdue obligations", "regulatory due dates".',
+      'List open compliance-calendar deadlines that are overdue or due soon, with the site each belongs to. Use for "what compliance deadlines are coming up", "overdue obligations", "regulatory due dates", "permit renewals due".',
     input_schema: {
       type: 'object',
       properties: {
@@ -523,19 +526,106 @@ const compliance_obligations_due: ToolDef = {
     const i = (input ?? {}) as { within_days?: number; limit?: number }
     const within = Math.min(Math.max(1, i.within_days ?? 45), 120)
     const cap = Math.min(Math.max(1, i.limit ?? 25), 50)
-    const nowIso = new Date().toISOString()
     const admin = supabaseAdmin()
-    const { data, error } = await admin.from('compliance_obligations')
-      .select('title, category, jurisdiction, frequency, next_due_date, responsible_party, last_completed_at, snoozed_until')
+    // The compliance calendar (compliance_calendar_obligations) is the live table. This tool used to read the
+    // legacy compliance_obligations table, which nothing writes to, so it always answered "nothing due".
+    const { data, error } = await admin.from('compliance_calendar_obligations')
+      .select('title, category, program, regulatory_ref, cadence, next_due_at, facility_id, owner_user_id')
       .eq('tenant_id', ctx.tenantId)
-      .eq('not_applicable', false)
-      .not('next_due_date', 'is', null)
-      .lte('next_due_date', ymdFromNow(within))
-      .order('next_due_date', { ascending: true })
+      .eq('status', 'open')
+      .lte('next_due_at', ymdFromNow(within))
+      .order('next_due_at', { ascending: true })
       .limit(cap)
     if (error) return fail(error.message)
-    const rows = ((data ?? []) as { snoozed_until: string | null }[]).filter(r => !r.snoozed_until || r.snoozed_until < nowIso)
-    return ok(rows)
+    const rows = (data ?? []) as Array<{
+      title: string; category: string; program: string | null; regulatory_ref: string | null; cadence: string
+      next_due_at: string; facility_id: string | null; owner_user_id: string | null
+    }>
+
+    const siteIds = [...new Set(rows.map(r => r.facility_id).filter((id): id is string => !!id))]
+    const siteNames = new Map<string, string>()
+    if (siteIds.length > 0) {
+      const { data: sites } = await admin.from('facilities').select('id, name').eq('tenant_id', ctx.tenantId).in('id', siteIds)
+      for (const s of (sites ?? []) as Array<{ id: string; name: string }>) siteNames.set(s.id, s.name)
+    }
+
+    const now = new Date()
+    return ok(rows.map(r => {
+      const days = daysUntilDue(r.next_due_at, now)
+      return {
+        title: r.title, category: r.category, program: r.program, regulatory_ref: r.regulatory_ref, cadence: r.cadence,
+        due: r.next_due_at, days_until: days, overdue: days < 0,
+        site: r.facility_id ? siteNames.get(r.facility_id) ?? 'A site' : 'All sites',
+        assigned: r.owner_user_id !== null,
+      }
+    }))
+  },
+}
+
+const environmental_guidance: ToolDef = {
+  definition: {
+    name: 'environmental_guidance',
+    description:
+      'How-to guidance and the legal requirements for environmental compliance programs (stormwater, outfall inspections, air, wastewater, hazardous waste, manifests, SPCC, EPCRA), for the user\'s state, with citations. Use for "how do I do a stormwater inspection", "what does the permit require", "what are our hazardous waste obligations in Texas". The content is a draft awaiting expert review: always relay its disclaimer and any "needsChecking" notes, and never present it as legal advice.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        program: { type: 'string', enum: ['stormwater', 'outfall', 'air', 'wastewater', 'hazardous_waste', 'manifest', 'spcc', 'epcra'], description: 'Which program. Omit for all.' },
+        topic: { type: 'string', description: 'What the user asked, in a few words, e.g. "visual inspection of an outfall".' },
+        state: { type: 'string', description: 'Two-letter state code. Omit to use the account\'s state when it has sites in only one.' },
+      },
+    },
+  },
+  async handler(input, ctx) {
+    const i = (input ?? {}) as { program?: string; topic?: string; state?: string }
+    const admin = supabaseAdmin()
+    const { data, error } = await admin.from('facilities').select('state').eq('tenant_id', ctx.tenantId)
+    if (error) return fail(error.message)
+    const siteStates = [...new Set(((data ?? []) as Array<{ state: string | null }>)
+      .map(f => normalizeStateCode(f.state)).filter((s): s is string => !!s))].sort()
+    const requested = normalizeStateCode(i.state)
+    const state = requested ?? (siteStates.length === 1 ? siteStates[0]! : null)
+    return ok({
+      ...findGuidance({ program: i.program, topic: i.topic, state }),
+      stateUsed: state,
+      // With sites in several states and none named, only the federal baseline is shown: say so, so the model can ask which.
+      siteStates,
+    })
+  },
+}
+
+const environmental_compliance_status: ToolDef = {
+  definition: {
+    name: 'environmental_compliance_status',
+    description:
+      'Where each site stands on environmental compliance: overdue and upcoming deadlines, permits expiring or expired, requirements rated non-compliant or needing attention, overdue legal reviews, and open environmental findings. Use for "how are we doing on environmental compliance", "any permits expiring", "what is overdue at the Houston site".',
+    input_schema: { type: 'object', properties: {} },
+  },
+  async handler(_input, ctx) {
+    const admin = supabaseAdmin()
+    const [sites, obligations, permits, legal, findings] = await Promise.all([
+      admin.from('facilities').select('id, name, state').eq('tenant_id', ctx.tenantId).order('name', { ascending: true }).limit(25),
+      admin.from('compliance_calendar_obligations').select('facility_id, status, next_due_at, lead_days').eq('tenant_id', ctx.tenantId).eq('category', 'environmental'),
+      admin.from('environmental_permits').select('facility_id, status, expiration_date, renewal_lead_days').eq('tenant_id', ctx.tenantId),
+      admin.from('legal_register').select('facility_id, applicability, compliance_status, last_reviewed_at, next_review_due').eq('tenant_id', ctx.tenantId),
+      admin.from('nonconformities').select('facility_id, status').eq('tenant_id', ctx.tenantId).like('source_reference', 'env-%'),
+    ])
+    const failed = [sites, obligations, permits, legal, findings].find(r => r.error)
+    if (failed?.error) return fail(failed.error.message)
+
+    type Row<T> = T & { facility_id: string | null }
+    const now = new Date()
+    const standings = ((sites.data ?? []) as Array<{ id: string; name: string; state: string | null }>).map(site => standingOf({
+      site,
+      obligations: groupBySite((obligations.data ?? []) as Row<{ status: string; next_due_at: string; lead_days: number }>[], site.id),
+      permits:     groupBySite((permits.data ?? []) as Row<{ status: string; expiration_date: string | null; renewal_lead_days: number }>[], site.id),
+      legal:       groupBySite((legal.data ?? []) as Row<{ applicability: string; compliance_status: string; last_reviewed_at: string | null; next_review_due: string | null }>[], site.id),
+      findings:    groupBySite((findings.data ?? []) as Row<{ status: string }>[], site.id),
+    }, now))
+    return ok({
+      sites: standings,
+      note: 'Library content is a draft pending expert review. Figures cover records entered in the Environmental compliance suite.',
+    })
   },
 }
 
@@ -671,6 +761,8 @@ export const ASSISTANT_TOOLS: Record<string, ToolDef> = {
   active_permits,
   recent_inspections,
   compliance_obligations_due,
+  environmental_guidance,
+  environmental_compliance_status,
   near_misses_recent,
   scorecard_kpis,
   incident_risk_score,
