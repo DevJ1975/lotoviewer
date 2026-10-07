@@ -41,7 +41,10 @@ class JobError(Exception):
 
 class PermanentJobError(JobError):
     """The job can never succeed (unreadable file, bad payload). Fail it now:
-    another attempt would read the same bytes."""
+    another attempt would read the same bytes.
+
+    The message is handed to the kind's ``on_failed`` hook as text that is safe
+    to show a user, so a handler must not put internals in it."""
 
 
 class LeaseLostError(JobError):
@@ -101,6 +104,12 @@ class JobKind:
     # on the worker. Raises JobNotFoundError. Gets (client, tenant_id, payload).
     verify: Optional[Callable[[Any, Optional[str], dict], None]] = None
     max_attempts: int = 3
+    # Runs once, after the job is recorded as failed (permanently, or on its final
+    # attempt), so the kind can tell the record it was working on that no result
+    # is coming. Without it a user-facing row would wait on a dead job forever.
+    # ``permanent`` says the message came from a PermanentJobError and is safe to
+    # show a user; otherwise it carries the underlying exception text.
+    on_failed: Optional[Callable[..., None]] = None
 
 
 @dataclass
@@ -131,7 +140,9 @@ class JobStore(Protocol):
     def heartbeat(self, job: ServiceJob, progress: Optional[dict]) -> bool: ...
     def succeed(self, job: ServiceJob, result: Optional[dict]) -> None: ...
     def requeue(self, job: ServiceJob, error: str) -> None: ...
-    def fail(self, job: ServiceJob, error: str) -> None: ...
+    def fail(self, job: ServiceJob, error: str) -> bool:
+        """True when the failure was recorded; False when the job had been taken over."""
+        ...
 
 
 def enqueue_job(
@@ -157,22 +168,35 @@ def process_next_job(store: JobStore, registry: JobRegistry) -> bool:
     job = store.claim(registry.names())
     if job is None:
         return False
+    kind: Optional[JobKind] = None
     try:
         kind = registry.get(job.kind)
         result = kind.handler(job, JobContext(job, store))
     except LeaseLostError as exc:
         logger.warning("%s", exc)  # someone else owns the job now; record nothing
     except PermanentJobError as exc:
-        store.fail(job, str(exc))
+        _give_up(store, kind, job, str(exc), permanent=True)
     except Exception as exc:  # network, storage, database: worth another attempt
         logger.exception("job %s (%s) failed on attempt %d", job.id, job.kind, job.attempts)
         if job.attempts >= job.max_attempts:
-            store.fail(job, f"Gave up after {job.attempts} attempts: {exc}")
+            _give_up(store, kind, job, f"Gave up after {job.attempts} attempts: {exc}", permanent=False)
         else:
             store.requeue(job, str(exc))
     else:
         store.succeed(job, result)
     return True
+
+
+def _give_up(store: JobStore, kind: Optional[JobKind], job: ServiceJob, message: str, *, permanent: bool) -> None:
+    recorded = store.fail(job, message)
+    # A fenced-out failure must not reach the kind's hook: the worker that took
+    # the job over may be about to succeed, and the hook would contradict it.
+    if not recorded or kind is None or kind.on_failed is None:
+        return
+    try:
+        kind.on_failed(job, message, permanent=permanent)
+    except Exception:  # the job is already recorded as failed; do not retry it
+        logger.exception("on_failed hook for job %s (%s) raised", job.id, job.kind)
 
 
 class JobWorker:
@@ -264,10 +288,10 @@ class SupabaseJobStore:
         retry_at = datetime.now(timezone.utc) + timedelta(seconds=RETRY_BACKOFF_SECONDS * job.attempts)
         self._finish(job, {"status": "queued", "run_after": retry_at.isoformat(), "last_error": error})
 
-    def fail(self, job: ServiceJob, error: str) -> None:
-        self._finish(job, {"status": "failed", "finished_at": _now(), "last_error": error})
+    def fail(self, job: ServiceJob, error: str) -> bool:
+        return self._finish(job, {"status": "failed", "finished_at": _now(), "last_error": error})
 
-    def _finish(self, job: ServiceJob, changes: dict) -> None:
+    def _finish(self, job: ServiceJob, changes: dict) -> bool:
         res = (
             self._client.table(self.TABLE)
             .update({**changes, "lease_expires_at": None})
@@ -276,6 +300,8 @@ class SupabaseJobStore:
         )
         if not res.data:
             logger.warning("job %s attempt %d was taken over; not recording", job.id, job.attempts)
+            return False
+        return True
 
     def _live_job(self, kind: str, tenant_id: Optional[str], dedupe_key: str) -> Optional[ServiceJob]:
         query = (

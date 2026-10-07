@@ -43,9 +43,10 @@ def make_job(kind: str = "demo", attempts: int = 1, max_attempts: int = 3, tenan
 class FakeStore:
     """In-memory JobStore recording every outcome."""
 
-    def __init__(self, jobs: list[ServiceJob] | None = None, heartbeat_ok: bool = True) -> None:
+    def __init__(self, jobs: list[ServiceJob] | None = None, heartbeat_ok: bool = True, fail_recorded: bool = True) -> None:
         self.pending = list(jobs or [])
         self.heartbeat_ok = heartbeat_ok
+        self.fail_recorded = fail_recorded
         self.claimed_kinds: list[list[str]] = []
         self.heartbeats: list[Optional[dict]] = []
         self.outcomes: list[tuple] = []
@@ -76,6 +77,7 @@ class FakeStore:
 
     def fail(self, job, error):
         self.outcomes.append(("failed", job.id, error))
+        return self.fail_recorded
 
 
 def registry_with(handler, **kind_options) -> JobRegistry:
@@ -216,6 +218,65 @@ class ProcessNextJobTests(unittest.TestCase):
         with self.assertLogs("app.service_jobs", level="ERROR"):
             process_next_job(store, registry_with(lambda job, ctx: None))
         self.assertEqual(store.outcomes[0][0], "requeued")
+
+
+class OnFailedHookTests(unittest.TestCase):
+    def run_job(self, job, *, handler, hook, fail_recorded=True):
+        store = FakeStore([job], fail_recorded=fail_recorded)
+        process_next_job(store, registry_with(handler, on_failed=hook))
+        return store
+
+    def test_a_permanent_failure_tells_the_kind_why(self) -> None:
+        hook = mock.Mock()
+        job = make_job()
+        self.run_job(job, handler=mock.Mock(side_effect=PermanentJobError("blank scan")), hook=hook)
+        hook.assert_called_once_with(job, "blank scan", permanent=True)
+
+    def test_giving_up_after_the_last_attempt_tells_the_kind(self) -> None:
+        hook = mock.Mock()
+        job = make_job(attempts=3, max_attempts=3)
+        with self.assertLogs("app.service_jobs", level="ERROR"):
+            self.run_job(job, handler=mock.Mock(side_effect=ConnectionError("down")), hook=hook)
+        (called_job, message), options = hook.call_args
+        self.assertEqual(called_job, job)
+        self.assertIn("Gave up after 3 attempts", message)
+        # The message carries the raw exception, so it is not user-safe.
+        self.assertEqual(options, {"permanent": False})
+
+    def test_a_retry_is_not_a_failure(self) -> None:
+        # The record must keep waiting while attempts remain.
+        hook = mock.Mock()
+        with self.assertLogs("app.service_jobs", level="ERROR"):
+            self.run_job(make_job(attempts=1), handler=mock.Mock(side_effect=ConnectionError("blip")), hook=hook)
+        hook.assert_not_called()
+
+    def test_success_and_lost_leases_do_not_call_it(self) -> None:
+        hook = mock.Mock()
+        self.run_job(make_job(), handler=lambda job, ctx: None, hook=hook)
+        with self.assertLogs("app.service_jobs", level="WARNING"):
+            self.run_job(make_job(), handler=mock.Mock(side_effect=LeaseLostError("lost")), hook=hook)
+        hook.assert_not_called()
+
+    def test_a_failure_that_was_fenced_out_does_not_call_it(self) -> None:
+        # The worker that took the job over may be about to succeed; the hook
+        # would mark the record failed underneath it.
+        hook = mock.Mock()
+        store = self.run_job(
+            make_job(), handler=mock.Mock(side_effect=PermanentJobError("x")), hook=hook, fail_recorded=False,
+        )
+        self.assertEqual(store.outcomes[0][0], "failed")
+        hook.assert_not_called()
+
+    def test_a_raising_hook_cannot_undo_the_recorded_failure_or_stop_the_worker(self) -> None:
+        hook = mock.Mock(side_effect=RuntimeError("database down"))
+        with self.assertLogs("app.service_jobs", level="ERROR"):
+            store = self.run_job(make_job(), handler=mock.Mock(side_effect=PermanentJobError("x")), hook=hook)
+        self.assertEqual(store.outcomes, [("failed", "job-1", "x")])
+
+    def test_a_kind_without_a_hook_fails_normally(self) -> None:
+        store = FakeStore([make_job()])
+        process_next_job(store, registry_with(mock.Mock(side_effect=PermanentJobError("x"))))
+        self.assertEqual(store.outcomes, [("failed", "job-1", "x")])
 
 
 class JobContextTests(unittest.TestCase):
@@ -399,7 +460,12 @@ class SupabaseJobStoreTests(unittest.TestCase):
     def test_finishing_a_taken_over_job_is_logged_not_raised(self) -> None:
         client = RecordingClient(lambda target, chain: SimpleNamespace(data=[]))
         with self.assertLogs("app.service_jobs", level="WARNING"):
-            SupabaseJobStore(client).fail(make_job(), "boom")
+            recorded = SupabaseJobStore(client).fail(make_job(), "boom")
+        self.assertFalse(recorded)
+
+    def test_failing_a_job_this_worker_still_holds_reports_it_recorded(self) -> None:
+        client = RecordingClient(lambda target, chain: SimpleNamespace(data=[job_row(status="failed")]))
+        self.assertTrue(SupabaseJobStore(client).fail(make_job(), "boom"))
 
 
 @unittest.skipUnless(importlib.util.find_spec("httpx"), "needs httpx for FastAPI's TestClient")

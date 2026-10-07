@@ -57,6 +57,17 @@ class ExtractTextTests(unittest.TestCase):
         with self.assertRaisesRegex(PdfTextError, "too little text to be an SDS"):
             extract_text_from_pdf(text_layer_pdf(["Page 1 of 1"]))
 
+    def test_the_error_names_what_the_caller_was_reading(self) -> None:
+        # A permit reader must not tell its user their document "is not an SDS".
+        with self.assertRaisesRegex(PdfTextError, "too little text to be an environmental document"):
+            extract_text_from_pdf(text_layer_pdf(["Page 1 of 1"]), subject="an environmental document")
+
+    def test_ocr_progress_is_reported_through_to_the_caller(self) -> None:
+        pages = []
+        two_pages = scanned_pdf(FIXTURE_LINES, lines_per_page=len(FIXTURE_LINES) // 2 + 1)
+        extract_text_from_pdf(two_pages, on_ocr_page=lambda done, total: pages.append((done, total)))
+        self.assertEqual(pages, [(1, 2), (2, 2)])
+
     def test_unreadable_bytes_raise_pdf_text_error(self) -> None:
         with self.assertRaises(PdfTextError):
             extract_text_from_pdf(b"this is not a pdf")
@@ -70,6 +81,22 @@ class OcrPdfTests(unittest.TestCase):
         self.assertEqual((result.pages_read, result.total_pages, result.pages_skipped), (1, 2, 1))
         self.assertIn("Page one", result.text)
         self.assertNotIn("Page two", result.text)
+
+    def test_a_callback_that_raises_stops_the_ocr_and_propagates(self) -> None:
+        # How a job that lost its lease abandons a long scan mid-way.
+        class Stop(Exception):
+            pass
+
+        seen = []
+
+        def on_page(done, total):
+            seen.append(done)
+            raise Stop()
+
+        two_pages = scanned_pdf(["Page one"] * 3 + ["Page two"] * 3, lines_per_page=3)
+        with self.assertRaises(Stop):
+            ocr_pdf(two_pages, on_page=on_page)
+        self.assertEqual(seen, [1])
 
     def test_missing_tesseract_binary_is_an_ocr_error(self) -> None:
         import pytesseract  # optional dependency; the skip guard ensures it exists
