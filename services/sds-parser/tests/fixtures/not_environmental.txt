@@ -1,0 +1,7 @@
+INVOICE 2026-0457
+Bill to: Example Catering LLC
+Item        Qty   Price
+Paper cups  500   $41.00
+Napkins     200   $12.50
+Total due by 03/31/2026: $53.50
+Order number 884421 shipped on March 3, 2026.
