@@ -110,9 +110,9 @@ export interface Permit {
 }
 export const listPermits = (scope: Scope) => api<{ permits: Permit[] }>(scope, '/api/environmental/permits')
 export const createPermit = (scope: Scope, body: Record<string, unknown>) =>
-  api<{ permit: Permit }>(scope, '/api/environmental/permits', { method: 'POST', body })
+  api<{ permit: Omit<Permit, 'health'> }>(scope, '/api/environmental/permits', { method: 'POST', body })
 export const updatePermit = (scope: Scope, id: string, body: Record<string, unknown>) =>
-  api<{ permit: Permit }>(scope, `/api/environmental/permits/${id}`, { method: 'PATCH', body })
+  api<{ permit: Omit<Permit, 'health'> }>(scope, `/api/environmental/permits/${id}`, { method: 'PATCH', body })
 export const deletePermit = (scope: Scope, id: string) =>
   api<{ ok: true }>(scope, `/api/environmental/permits/${id}`, { method: 'DELETE' })
 
@@ -184,15 +184,15 @@ export const listLegal = (scope: Scope, filters: { program?: string; compliance_
   return api<{ entries: LegalEntry[] }>(scope, `/api/environmental/legal${params.size ? `?${params}` : ''}`)
 }
 export const createLegal = (scope: Scope, body: Record<string, unknown>) =>
-  api<{ entry: LegalEntry }>(scope, '/api/environmental/legal', { method: 'POST', body })
+  api<{ entry: Omit<LegalEntry, 'review'> }>(scope, '/api/environmental/legal', { method: 'POST', body })
 export const updateLegal = (scope: Scope, id: string, body: Record<string, unknown>) =>
-  api<{ entry: LegalEntry }>(scope, `/api/environmental/legal/${id}`, { method: 'PATCH', body })
+  api<{ entry: Omit<LegalEntry, 'review'> }>(scope, `/api/environmental/legal/${id}`, { method: 'PATCH', body })
 export const deleteLegal = (scope: Scope, id: string) =>
   api<{ ok: true; warning?: string }>(scope, `/api/environmental/legal/${id}`, { method: 'DELETE' })
 export const evaluateLegal = (scope: Scope, id: string, body: { applicability: Applicability; compliance_status: ComplianceStatus; note?: string | null; evidence_path?: string | null }) =>
-  api<{ entry: LegalEntry }>(scope, `/api/environmental/legal/${id}/evaluate`, { method: 'POST', body })
+  api<{ entry: Omit<LegalEntry, 'review'> }>(scope, `/api/environmental/legal/${id}/evaluate`, { method: 'POST', body })
 export const reviewLegal = (scope: Scope, id: string) =>
-  api<{ entry: LegalEntry }>(scope, `/api/environmental/legal/${id}/review`, { method: 'POST', body: {} })
+  api<{ entry: Omit<LegalEntry, 'review'> }>(scope, `/api/environmental/legal/${id}/review`, { method: 'POST', body: {} })
 
 // ── members (owner pickers) ─────────────────────────────────────────────────
 export interface MemberOption { user_id: string; display_name: string; email: string | null }

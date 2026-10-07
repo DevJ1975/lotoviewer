@@ -47,7 +47,7 @@ export function OwnerPicker({ scope, value, valueLabel, onChange, disabled }: Pr
   return (
     <div className="relative">
       <input
-        role="combobox" aria-expanded={open} aria-controls={listId} aria-autocomplete="list"
+        role="combobox" aria-label="Search people" aria-expanded={open} aria-controls={listId} aria-autocomplete="list"
         value={query} disabled={disabled} placeholder="Search people…" className={inputCls}
         onFocus={() => setOpen(true)} onChange={e => { setQuery(e.target.value); setOpen(true) }}
         onBlur={() => setTimeout(() => setOpen(false), 150)}

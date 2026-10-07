@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Camera, FileText, Loader2, X } from 'lucide-react'
-import { evidenceProblem, evidenceUrl, uploadEvidence } from '@/lib/environmental/evidence'
+import { evidenceProblem, uploadEvidence } from '@/lib/environmental/evidence'
+import { useEvidenceUrl } from '@/lib/environmental/useEvidenceUrl'
 import { secondaryButtonCls } from './form'
 
 // Attach a photo or PDF as evidence. Uploads straight to the private bucket under
@@ -26,14 +27,7 @@ export function EvidenceUpload({ tenantId, folder, value, onChange, label = 'Att
   const input = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [url, setUrl] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    setUrl(null)
-    if (value) void evidenceUrl(value).then(u => { if (!cancelled) setUrl(u) })
-    return () => { cancelled = true }
-  }, [value])
+  const url = useEvidenceUrl(value)
 
   async function pick(file: File | undefined) {
     if (!file) return
