@@ -6,10 +6,11 @@ The fixtures are synthetic: formats are realistic, identifiers are fake.
 
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
-from app.documents.classify import classify_document
+from app.documents.classify import DOC_TYPES, classify_document
 from app.documents.extract import extract_document
 from app.documents.fields import (
     extract_dot_numbers,
@@ -35,6 +36,21 @@ def values(fields, key: str) -> list[str]:
 
 def by_key(result: dict, key: str) -> list[str]:
     return [f["value"] for f in result["fields"] if f["key"] == key]
+
+
+MIGRATION = Path(__file__).resolve().parents[3] / "apps" / "web" / "migrations" / "296_document_extractions.sql"
+
+
+class SchemaAgreementTests(unittest.TestCase):
+    @unittest.skipUnless(MIGRATION.exists(), "the web app's migrations are not alongside the service")
+    def test_every_document_type_the_classifier_can_return_is_allowed_by_the_database(self) -> None:
+        # A type the CHECK constraint rejects would make the job's final save fail
+        # after the document had already been read.
+        sql = re.sub(r"--[^\n]*", "", MIGRATION.read_text(encoding="utf-8"))
+        match = re.search(r"doc_type\s+text check \(doc_type is null or doc_type in \((.*?)\)\)", sql, re.DOTALL)
+        self.assertIsNotNone(match, "doc_type CHECK not found in migration 296")
+        allowed = set(re.findall(r"'([a-z_]+)'", match.group(1)))
+        self.assertEqual(set(DOC_TYPES), allowed)
 
 
 class ClassifyTests(unittest.TestCase):
