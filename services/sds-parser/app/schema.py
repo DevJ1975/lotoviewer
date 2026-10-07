@@ -148,3 +148,19 @@ class EnqueueParseJobRequest(BaseModel):
 class ParseJobResponse(BaseModel):
     job_id: str
     status: Literal["queued", "running", "succeeded", "failed"]
+
+
+class EnqueueJobRequest(BaseModel):
+    kind: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    # Omit for platform-level kinds (e.g. loading shared regulations).
+    tenant_id: Optional[UUID] = None
+    payload: dict = Field(default_factory=dict)
+    requested_by: Optional[UUID] = None
+    # At most one live job per (kind, tenant, dedupe_key); a repeat returns it.
+    dedupe_key: Optional[str] = Field(default=None, max_length=200)
+
+
+class EnqueueJobResponse(BaseModel):
+    job_id: str
+    kind: str
+    status: Literal["queued", "running", "succeeded", "failed"]

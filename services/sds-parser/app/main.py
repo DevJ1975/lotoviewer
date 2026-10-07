@@ -31,11 +31,15 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
+from . import service_jobs
 from .jobs import Job, JobNotFoundError, JobStore, JobWorker, SupabaseJobStore
 from .parser import parse_sds_text
 from .pdf_text import PdfTextError
 from .pipeline import parse_sds_pdf
+from .registry import get_registry
 from .schema import (
+    EnqueueJobRequest,
+    EnqueueJobResponse,
     EnqueueParseJobRequest,
     ParsedSdsPayload,
     ParseJobResponse,
@@ -49,16 +53,31 @@ def jobs_enabled() -> bool:
     return os.environ.get("SDS_PARSE_JOBS_ENABLED", "").lower() == "true"
 
 
+def service_jobs_enabled() -> bool:
+    return os.environ.get("SERVICE_JOBS_ENABLED", "").lower() == "true"
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # One worker per process. Claims use SKIP LOCKED, so running more replicas
-    # (or uvicorn workers) only adds throughput, never double-processing.
-    worker = _start_job_worker() if jobs_enabled() else None
+    # One worker per process per queue. Claims use SKIP LOCKED, so running more
+    # replicas (or uvicorn workers) only adds throughput, never double-processing.
+    workers = []
+    if jobs_enabled():
+        workers.append(_start_job_worker())
+    if service_jobs_enabled():
+        workers.append(_start_service_job_worker())
     try:
         yield
     finally:
-        if worker:
+        for worker in workers:
             worker.stop()
+
+
+def _start_service_job_worker() -> service_jobs.JobWorker:
+    from .staging import service_client  # lazy: optional dependency
+    worker = service_jobs.JobWorker(service_jobs.SupabaseJobStore(service_client()), get_registry())
+    worker.start()
+    return worker
 
 
 def _start_job_worker() -> JobWorker:
@@ -181,3 +200,46 @@ def enqueue_parse_job(body: EnqueueParseJobRequest, store: JobStore = Depends(ge
     except JobNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"job_id": job.id, "status": job.status}
+
+
+def get_service_job_store() -> service_jobs.SupabaseJobStore:
+    """The generic job store, or a 503 when it is off — callers then fall back."""
+    if not service_jobs_enabled():
+        raise HTTPException(
+            status_code=503,
+            detail="Background jobs are disabled (set SERVICE_JOBS_ENABLED=true).",
+        )
+    from .staging import StagingError, service_client
+    try:
+        return service_jobs.SupabaseJobStore(service_client())
+    except StagingError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post(
+    "/jobs",
+    status_code=202,
+    response_model=EnqueueJobResponse,
+    dependencies=[Depends(require_api_key)],
+)
+def enqueue_service_job(
+    body: EnqueueJobRequest,
+    store: service_jobs.SupabaseJobStore = Depends(get_service_job_store),
+) -> dict:
+    """Queue any registered kind of background job."""
+    try:
+        job = service_jobs.enqueue_job(
+            store, get_registry(), store.client,
+            kind=body.kind,
+            tenant_id=str(body.tenant_id) if body.tenant_id else None,
+            payload=body.payload,
+            requested_by=str(body.requested_by) if body.requested_by else None,
+            dedupe_key=body.dedupe_key,
+        )
+    except service_jobs.UnknownJobKind as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except service_jobs.InvalidJobPayload as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except service_jobs.JobNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"job_id": job.id, "kind": job.kind, "status": job.status}
