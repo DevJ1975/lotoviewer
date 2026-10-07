@@ -12,6 +12,7 @@
     "data_hygiene_snak_king_2026_05_06": "data_hygiene_snak_king_2026-05-06.sql",
     "tenants_industry_profile": "283_recover_tenants_industry_profile.sql",
     "construction_projects": "284_recover_construction_projects.sql",
+    "compliance_calendar_and_legal_registry_139": "298_recover_legal_registry.sql",
     "fix_project_calendar_ordinal_assignment": "285_recover_fix_project_calendar_ordinal_assignment.sql"
   },
   "repo_applied_without_ledger": [
@@ -112,7 +113,6 @@
     "20260509145418": "tenant_secrets_envelope_114",
     "20260509145927": "webhook_url_safety_116",
     "20260509150121": "loto_photos_tenant_select_115",
-    "20260513205353": "compliance_calendar_and_legal_registry_139",
     "20260518180104": "alter_loto_equipment_add_cad_parent_facility_columns",
     "20260518180121": "create_loto_cad_drawings_table",
     "20260518180143": "create_loto_drawing_defects_table",
