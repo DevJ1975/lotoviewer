@@ -15,6 +15,13 @@ import {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.2.0',
+    date: '2026-10-07',
+    changes: [
+      'The Environmental home now links to the new Environmental Compliance suite (per-site permits, legal register, deadlines and stormwater/outfall/wastewater checklists) and shows its status panel. "How Soteria supports an EMS" now says how the suite feeds clauses 6.1.3, 8.1 and 9.1.2. The audit-readiness scoring itself is unchanged: it already counted every calendar obligation, completion and submitted inspection.',
+    ],
+  },
+  {
     version: '1.1.0',
     date: '2026-08-19',
     changes: [

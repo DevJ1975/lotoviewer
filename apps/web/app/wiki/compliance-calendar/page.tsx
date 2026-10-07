@@ -1,9 +1,16 @@
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-23'
+const CURRENT_VERSION = '1.0.1'
+const LAST_UPDATED    = '2026-10-07'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.0.1',
+    date:    '2026-10-07',
+    changes: [
+      "Deadlines can now carry a program, owner, reminder window and library source. Quarterly and half-year deadlines stay on period ends (Mar 31 → Jun 30, not Jul 1), the page has a month grid, and open deadlines are emailed weekly to their owner (or to the account's admins when there is none). See the Environmental Compliance page for the environmental deadlines.",
+    ],
+  },
   { version: '1.0.0', date: '2026-05-23', changes: ['Initial compliance calendar page.'] },
 ]
 
