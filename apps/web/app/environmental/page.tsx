@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
-  AlertTriangle, BarChart3, ClipboardCheck, Gauge, Mountain, ScrollText,
+  AlertTriangle, BarChart3, ClipboardCheck, FileSearch, Gauge, Mountain, ScrollText,
 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { PageHeader } from '@/components/PageHeader'
@@ -56,6 +56,13 @@ const CARDS = [
     title: 'Management review',
     desc:  'Periodic EMS reviews with the standard input and output agenda.',
     clause: 'Clause 9.3',
+  },
+  {
+    href:  '/environmental/documents',
+    Icon:  FileSearch,
+    title: 'Permit & manifest reader',
+    desc:  'Read permit and manifest PDFs; review identifiers and expiry dates before they reach the calendar.',
+    clause: 'Clauses 6.1.3 & 9.1.2',
   },
   {
     href:  '/environmental/nonconformities',

@@ -1053,6 +1053,16 @@ export const FEATURES: FeatureDef[] = [
     comingSoon:  false,
   },
   {
+    id:          'environmental-documents',
+    name:        'Permit & Manifest Reader',
+    description: 'Upload a permit, SWPPP or hazardous waste manifest; review the identifiers and expiry dates read from it before they reach the compliance calendar',
+    href:        '/environmental/documents',
+    category:    'safety',
+    parent:      'environmental',
+    enabled:     true,
+    comingSoon:  false,
+  },
+  {
     id:          'environmental-nonconformities',
     name:        'Nonconformities & CAPA',
     description: 'Clause 10.2 — findings from audits, reviews, compliance, or aspects with verified corrective actions',

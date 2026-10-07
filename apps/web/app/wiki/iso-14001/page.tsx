@@ -15,6 +15,13 @@ import {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.2.0',
+    date: '2026-10-07',
+    changes: [
+      'Added the Permit & Manifest Reader to "How Soteria supports an EMS". Upload a permit, SWPPP or hazardous waste manifest and it proposes the identifiers and expiration/renewal dates it finds beside the text they came from; scans are OCR-read and always low confidence with nothing pre-ticked; an admin approves each value, and confirmed dates become Compliance Calendar entries. States plainly that it matches patterns rather than using AI, does not read permit limits or conditions, and is not a controlled-document register (clause 7.5 is still open).',
+    ],
+  },
+  {
     version: '1.1.0',
     date: '2026-08-19',
     changes: [

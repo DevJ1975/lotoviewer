@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
-import { ENVIRONMENTAL_MODULE, findDocument } from '@/lib/environmental/documentApi'
+import { ENVIRONMENTAL_MODULE, findDocument, type DocumentRow } from '@/lib/environmental/documentApi'
 
 // GET /api/environmental/documents/[id]
 // One document including the service's proposal (fields, each with the text it
@@ -19,6 +19,7 @@ export async function GET(req: Request, ctx: Ctx) {
   if ('response' in found) return found.response
 
   // storage_path is an internal key; the file is reached through ./url.
-  const { storage_path: _storagePath, ...document } = found.document
+  const document: Partial<DocumentRow> = { ...found.document }
+  delete document.storage_path
   return NextResponse.json({ document })
 }
