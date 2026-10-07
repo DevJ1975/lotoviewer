@@ -54,6 +54,7 @@ clear 422.
 | POST | `/parse/url` | `{"url": "https://.../sds.pdf"}` | `ParsedSdsPayload` |
 | POST | `/parse/stage` | `{"sds_id","tenant_id","product_id?"}` | `{staged, parsed}` |
 | POST | `/jobs/parse-sds` | `{"sds_id","tenant_id","requested_by?"}` | `202 {job_id, status}` |
+| POST | `/jobs` | `{"kind","tenant_id?","payload","requested_by?","dedupe_key?"}` | `202 {job_id, kind, status}` |
 
 `/parse/stage` downloads the SDS from the Supabase `chemical-sds` bucket and
 writes the parse back to `chemical_sds_documents` (`parsed_payload`,
@@ -82,6 +83,40 @@ stages it into the review queue exactly like `/parse/stage`.
 To turn it on: apply migration 294, set the Supabase vars, and set
 `SDS_PARSE_JOBS_ENABLED=true`. With it off, `/jobs/parse-sds` answers 503 and
 the web app falls back to parsing synchronously.
+
+### Generic jobs and the document reader
+
+`/jobs/parse-sds` is the first of a reusable queue. `POST /jobs` queues any
+registered *kind* of work in `service_jobs` (migration 295); `app/registry.py`
+lists the kinds this service can run, and a worker claims only those. Adding a
+kind means writing a handler and registering it, with no new table or worker.
+A handler can extend its own lease with `ctx.heartbeat()`, fail for good with
+`PermanentJobError`, and register an `on_failed` hook so the record a user is
+waiting on does not stay "processing" after its job gives up.
+
+The first kind is **`document_extract`**, behind the web app's *Permit &
+Manifest Reader* (`/environmental/documents`, migration 296). It downloads an
+uploaded PDF from the private `environmental-docs` bucket, reads it (OCR for a
+scan, with a heartbeat after every page), classifies it and extracts
+identifiers and dates, then stages the result as a **proposal** for an admin to
+approve. It deliberately uses pattern matching, not AI:
+
+* **Classifies** a hazardous waste manifest, stormwater / air / wastewater
+  permit, SWPPP or monitoring report (anything else is `other`).
+* **Extracts** manifest tracking numbers, EPA ID numbers, federal waste codes,
+  UN/NA numbers, TCEQ RN/CN and `TXR05` authorizations, Water Board order
+  numbers, NPDES IDs, labelled permit numbers, and expiration / renewal /
+  effective / issue / ship dates. Each value carries a confidence and the text
+  it came from.
+* **Does not read** permit limits, benchmarks or conditions, state waste codes,
+  company names, addresses or quantities, and does not tell a manifest's
+  generator, transporter and facility EPA IDs apart.
+* **Trusts a scan least.** OCR output is always `low` confidence, digit
+  look-alikes it repairs are flagged, and the web UI starts with nothing ticked.
+
+It needs migrations 295 and 296, `SERVICE_JOBS_ENABLED=true`, and the Supabase
+vars. With the service unreachable or jobs off, uploading answers 503 and
+removes the upload rather than leaving a document waiting forever.
 
 ## Run it
 
@@ -123,6 +158,7 @@ docker run -p 8000:8000 --env-file services/sds-parser/.env sds-parser
 | `SUPABASE_URL` | for `/parse/stage` and jobs | Project URL. |
 | `SUPABASE_SERVICE_ROLE_KEY` | for `/parse/stage` and jobs | Server-side only; bypasses RLS, so every query is tenant-scoped. |
 | `SDS_PARSE_JOBS_ENABLED` | optional | `true` starts the background worker and enables `/jobs/parse-sds`. Needs migration 294. |
+| `SERVICE_JOBS_ENABLED` | optional | `true` starts the generic worker and enables `POST /jobs` (the document reader). Needs migrations 295 and 296. |
 
 ## Tests
 

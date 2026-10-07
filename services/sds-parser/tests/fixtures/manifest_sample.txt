@@ -1,0 +1,21 @@
+UNIFORM HAZARDOUS WASTE MANIFEST
+EPA Form 8700-22 (Rev. 3-2022)
+
+1. Generator ID Number: CAD000000001            3. Emergency Response Phone: (555) 010-0100
+   Manifest Tracking Number: 012345678JJK
+5. Generator's Name and Mailing Address
+   Example Foods Manufacturing, Inc. - SAMPLE DOCUMENT, NOT A REAL MANIFEST
+6. Transporter 1 Company Name            U.S. EPA ID Number: CAD000000002
+7. Transporter 2 Company Name            U.S. EPA ID Number: TXD000000003
+8. Designated Facility Name and Site Address
+   Facility U.S. EPA ID Number: CAD000000004
+
+9a. HM   9b. U.S. DOT Description (including Proper Shipping Name, Hazard Class, ID Number, and Packing Group)
+ X   1. UN1993, Waste Flammable liquids, n.o.s. (acetone, toluene), 3, II
+ X   2. UN1263, Waste Paint, 3, III
+13. Waste Codes: D001 F003 F005
+    State waste codes: 331
+
+14. Special Handling Instructions and Additional Information
+Date of shipment: 03/15/2026
+Transporter signature   Date shipped: March 15, 2026

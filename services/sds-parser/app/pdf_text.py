@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass
+from typing import Callable, Optional
 
 from .ocr import OcrError, ocr_pdf
 
@@ -31,8 +32,17 @@ class ExtractedText:
     pages_skipped: int = 0
 
 
-def extract_text_from_pdf(data: bytes) -> ExtractedText:
+def extract_text_from_pdf(
+    data: bytes,
+    *,
+    subject: str = "an SDS",
+    on_ocr_page: Optional[Callable[[int, int], None]] = None,
+) -> ExtractedText:
     """Extract text from PDF bytes, falling back to OCR for scanned documents.
+
+    ``subject`` (with its article) only words the errors, so a permit reader
+    does not tell its user their document is not an SDS. ``on_ocr_page`` is
+    passed to ``ocr_pdf``.
 
     Raises PdfTextError when the PDF is unreadable, or when it has no usable
     text layer and OCR is unavailable or finds nothing.
@@ -42,16 +52,16 @@ def extract_text_from_pdf(data: bytes) -> ExtractedText:
         return ExtractedText(text=text, via_ocr=False)
 
     try:
-        ocr = ocr_pdf(data)
+        ocr = ocr_pdf(data, on_page=on_ocr_page)
     except OcrError as exc:
         raise PdfTextError(
-            f"No usable text layer in PDF (likely a scanned SDS) and OCR failed: {exc}"
+            f"No usable text layer in PDF (likely a scan) and OCR failed: {exc}"
         ) from exc
 
     if _visible_char_count(ocr.text) < MIN_SDS_TEXT_CHARS:
         raise PdfTextError(
-            "No usable text layer in PDF and OCR found too little text to be an SDS. "
-            "The scan may be blank, too faint, or not an SDS."
+            f"No usable text layer in PDF and OCR found too little text to be {subject}. "
+            f"The scan may be blank, too faint, or not {subject}."
         )
     return ExtractedText(text=ocr.text, via_ocr=True, pages_skipped=ocr.pages_skipped)
 

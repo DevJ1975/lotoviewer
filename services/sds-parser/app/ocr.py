@@ -14,6 +14,7 @@ every text-layer PDF.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable, Optional
 
 # Tesseract's accuracy on 8-10 pt SDS body text falls off sharply below
 # ~300 DPI; rendering higher mostly costs time and memory.
@@ -44,8 +45,16 @@ class OcrResult:
         return self.total_pages - self.pages_read
 
 
-def ocr_pdf(data: bytes, max_pages: int = MAX_OCR_PAGES) -> OcrResult:
-    """Render up to ``max_pages`` pages of a PDF and OCR them in order."""
+def ocr_pdf(
+    data: bytes,
+    max_pages: int = MAX_OCR_PAGES,
+    on_page: Optional[Callable[[int, int], None]] = None,
+) -> OcrResult:
+    """Render up to ``max_pages`` pages of a PDF and OCR them in order.
+
+    ``on_page(done, total)`` runs after each page, so a long job can extend its
+    lease. An exception it raises stops the OCR and propagates unchanged.
+    """
     try:
         import pypdfium2 as pdfium  # lazy: OCR deps are only needed for scans
         import pytesseract
@@ -60,9 +69,11 @@ def ocr_pdf(data: bytes, max_pages: int = MAX_OCR_PAGES) -> OcrResult:
     try:
         total_pages = len(document)
         pages_to_read = min(total_pages, max_pages)
-        page_texts = [
-            _ocr_page(document[index], pytesseract) for index in range(pages_to_read)
-        ]
+        page_texts = []
+        for index in range(pages_to_read):
+            page_texts.append(_ocr_page(document[index], pytesseract))
+            if on_page:
+                on_page(index + 1, pages_to_read)
     finally:
         document.close()
 

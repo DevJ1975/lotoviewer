@@ -31,8 +31,8 @@ export interface ManualSection {
 
 export const MANUAL_TITLE        = 'ISO 14001 — Environmental Management'
 export const MANUAL_SUBTITLE     = 'A plain-language implementation guide to the environmental management-system standard — clause by clause, with the records an auditor will ask for and where Soteria produces them.'
-export const MANUAL_VERSION      = '1.1.0'
-export const MANUAL_LAST_UPDATED = '2026-08-19'
+export const MANUAL_VERSION      = '1.2.0'
+export const MANUAL_LAST_UPDATED = '2026-10-07'
 
 export const SECTIONS: ManualSection[] = [
   // ────────────────────────────────────────────────────────────────
@@ -337,6 +337,7 @@ export const SECTIONS: ManualSection[] = [
       'Clause 6.1.2 (aspects & impacts) — the Environmental module\'s aspects register scores significance as severity × likelihood on a 1-5 scale, significant at 12 or higher, so the criterion an auditor asks for is documented and repeatable.',
       'Clause 6.2 / 9.1.1 (objectives & monitoring) — measurable objectives with a baseline, target, target date, and periodic readings; progress is evaluated in the improvement direction you set.',
       'Clause 6.1.3 / 9.1.2 (compliance obligations & evaluation) — the Compliance Calendar tracks recurring regulatory and permit obligations with overdue/due-soon status, and each completion is a recorded evaluation.',
+      'Clause 6.1.3 / 9.1.2 (reading permits and manifests) — the Permit & Manifest Reader accepts a PDF of a stormwater, air or wastewater permit, a SWPPP, or a hazardous waste manifest and proposes the permit and manifest identifiers and the expiration and renewal dates it finds, each beside the exact text it came from. It matches patterns; it is not AI and it does not interpret limits or conditions. A scanned document is read with OCR and is always marked low confidence with nothing pre-ticked. An admin checks each value against the original and approves it, and only then does a confirmed expiration or renewal date become a Compliance Calendar entry that names the source document. It is a way to get permit dates onto the calendar; it is not a controlled-document register, so it does not close clause 7.5.',
       'Clause 8.1 (operational control for chemicals & waste) — the Chemicals, Prop 65, and hazardous-waste features capture substance inventories, exposure assessments, and disposal records.',
       'Clause 9.3 (management review) — reviews carry the standard §9.3.2 input agenda and §9.3.3 output slots; a review with no recorded conclusions or decisions is flagged rather than counted.',
       'Clause 10.2 (nonconformity & corrective action) — findings from any source, with corrective actions whose effectiveness check must be signed by someone other than the person who completed the work. Separation of duty is enforced in the database, not just the UI.',
@@ -346,6 +347,7 @@ export const SECTIONS: ManualSection[] = [
     citations: [
       { label: 'Soteria — Environmental / ISO 14001 (live module)', url: '/environmental' },
       { label: 'Soteria — Audit readiness report card', url: '/environmental/report-card' },
+      { label: 'Soteria — Permit & manifest reader', url: '/environmental/documents' },
       { label: 'Soteria — Compliance Calendar (live module)', url: '/admin/compliance/calendar' },
     ],
   },

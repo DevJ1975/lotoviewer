@@ -1,0 +1,11 @@
+SAMPLE AIR QUALITY MANAGEMENT DISTRICT
+PERMIT TO OPERATE
+
+Facility ID: 123456
+Permit No.: F98765
+Permit holder: Example Foods Manufacturing, Inc. - SAMPLE DOCUMENT
+Equipment: Natural gas fired boiler, 12 MMBtu/hr (emission unit 3)
+Permit Issued: 04/01/2024
+Expires: April 30, 2027
+Renewal application due: 2027-01-30
+Title V applicability: not applicable. Emission limits are listed on page 3.
