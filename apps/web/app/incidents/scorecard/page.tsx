@@ -117,7 +117,7 @@ function ScorecardBody({ m, monthMax, windowDays, tenantId }: { m: IncidentScore
           <Kpi label="TRIR"           value={fmt(m.trir)}          help={ciRange(rateInterval(m.totalRecordable, m.hoursWorked)) ?? 'per 100 FTE'} />
           <Kpi label="DART"           value={fmt(m.dart)}          help={ciRange(rateInterval(m.totalDeaths + m.totalDaysAwayCases + m.totalRestrictedCases, m.hoursWorked)) ?? 'per 100 FTE'} />
           <Kpi label="LTIR"           value={fmt(m.ltir)}          help={ciRange(rateInterval(m.totalDeaths + m.totalDaysAwayCases, m.hoursWorked)) ?? 'lost-time only'} />
-          <Kpi label="Severity rate"  value={fmt(m.severityRate)}  help={ciRange(rateInterval(m.totalDaysAwayCount, m.hoursWorked)) ?? 'days × 200K / hrs'} />
+          <Kpi label="Severity rate"  value={fmt(m.severityRate)}  help="days × 200K / hrs" />
           <Kpi label="Recordables"    value={String(m.totalRecordable)} />
           <Kpi label="Days-away cases" value={String(m.totalDaysAwayCases)} />
           <Kpi label="Restricted"     value={String(m.totalRestrictedCases)} />

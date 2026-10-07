@@ -1035,7 +1035,7 @@ function IncidentScorecardSection({ metrics: m, annualHistory, targetRows, naics
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <IncidentStatCard icon={Gauge} label="Severity rate" value={fmtRate(m.severityRate)} sub={ciSub(rateInterval(m.totalDaysAwayCount, m.hoursWorked), 'days × 200K / hrs')} accent="neutral" href="/osha" detail={kpi.severity} onDrill={onDrill} />
+        <IncidentStatCard icon={Gauge} label="Severity rate" value={fmtRate(m.severityRate)} sub="days × 200K / hrs" accent="neutral" href="/osha" detail={kpi.severity} onDrill={onDrill} />
         <IncidentStatCard icon={ClipboardCheck} label="CAPA on time" value={fmtPct(m.actionClosureOnTimePct)} sub="closed by due date" accent={pctTone(m.actionClosureOnTimePct)} href="/incidents" detail={kpi.capa} onDrill={onDrill} />
         <IncidentStatCard icon={ShieldCheck} label="RCA completion" value={fmtPct(m.rcaCompletionPct)} sub={m.totalRecordable > 0 ? `95% CI ${pctCiText(wilsonInterval(m.recordablesWithCompletedRca, m.totalRecordable))} · ${m.recordablesWithCompletedRca}/${m.totalRecordable}` : `${m.recordablesWithCompletedRca} of ${m.totalRecordable} recordable`} accent={pctTone(m.rcaCompletionPct)} href="/incidents" detail={kpi.rca} onDrill={onDrill} />
         <IncidentStatCard icon={Timer} label="Time to close" value={m.meanTimeToCloseDays === null ? '—' : m.meanTimeToCloseDays.toFixed(1)} sub="avg days, reported→closed" accent="neutral" href="/incidents" detail={kpi.time_to_close} onDrill={onDrill} />

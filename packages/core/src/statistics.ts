@@ -213,6 +213,7 @@ function lnGamma(x: number): number {
 }
 
 const GAMMA_MAX_ITERATIONS = 100_000
+const MAX_EXACT_COUNT = 1e9
 const GAMMA_EPSILON = 1e-15
 
 /**
@@ -270,8 +271,8 @@ function gammaQuantile(a: number, p: number): number {
  * Exact (Garwood) confidence interval for a Poisson COUNT: lower = the mean for
  * which seeing `count` or more has probability α/2, upper = the mean for which
  * seeing `count` or fewer has probability α/2. Conservative by construction
- * (coverage is at least the stated level), which is the right direction for
- * safety data.
+ * (actual coverage is at least the stated level, often noticeably more at small
+ * counts), which is the right direction for safety data.
  *
  * This replaces count ± z·√count, which breaks down exactly where TRIR lives:
  * with ZERO recordables it reported an interval of 0 to 0, claiming perfect
@@ -284,6 +285,11 @@ function gammaQuantile(a: number, p: number): number {
 export function poissonCountInterval(count: number, confidence = 0.95): ConfidenceInterval {
   if (!(confidence > 0 && confidence < 1)) {
     throw new RangeError(`confidence must be strictly between 0 and 1, got ${confidence}`)
+  }
+  // The gamma routines run out of iterations well above this, and would answer
+  // wrongly rather than fail; no incident count is anywhere near it.
+  if (!Number.isFinite(count) || count > MAX_EXACT_COUNT) {
+    throw new RangeError(`count must be a finite number no larger than ${MAX_EXACT_COUNT}, got ${count}`)
   }
   const c = Math.max(0, count)
   const tail = (1 - confidence) / 2
@@ -298,11 +304,12 @@ export function poissonCountInterval(count: number, confidence = 0.95): Confiden
  * Confidence interval for an OSHA-style rate = count · base / hours. The count
  * is Poisson, so the rate interval is the exact count interval scaled by
  * base/hours. Null when hours <= 0 (caller renders "—"). This is what turns
- * "TRIR 1.33" into "TRIR 1.33 (0.03–7.42)" and stops a 1-recordable tenant, or a
+ * "TRIR 1.33" into "TRIR 1.33 (0.03–7.43)" and stops a 1-recordable tenant, or a
  * 0-recordable one, reading as precise.
  */
 export function rateInterval(count: number, hours: number, base = 200_000, confidence = 0.95): ConfidenceInterval | null {
-  if (hours <= 0) return null
+  // `!(hours > 0)` also rejects NaN, which `hours <= 0` lets through.
+  if (!(hours > 0) || !Number.isFinite(hours)) return null
   const ci = poissonCountInterval(count, confidence)
   const scale = base / hours
   return { point: ci.point * scale, lower: ci.lower * scale, upper: ci.upper * scale }

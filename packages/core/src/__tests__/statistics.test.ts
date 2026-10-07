@@ -174,6 +174,14 @@ describe('counts / rates', () => {
     for (const bad of [0, 1, -0.5, 1.5, NaN]) expect(() => poissonCountInterval(3, bad)).toThrow(RangeError)
   })
 
+  it('poissonCountInterval: refuses a count it cannot answer correctly instead of guessing', () => {
+    for (const bad of [NaN, Infinity, -Infinity, 1e10]) expect(() => poissonCountInterval(bad)).toThrow(RangeError)
+  })
+
+  it('rateInterval: no interval for exposure that is zero, negative, infinite or not a number', () => {
+    for (const hours of [0, -1, NaN, Infinity]) expect(rateInterval(3, hours), String(hours)).toBeNull()
+  })
+
   it('rateInterval: scales the count interval by base/hours; null when hours=0', () => {
     // 1 recordable in 100k hours → TRIR point = 1·200000/100000 = 2
     const ci = rateInterval(1, 100_000)!
