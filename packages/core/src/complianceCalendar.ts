@@ -58,10 +58,24 @@ const MONTHS_BY_CADENCE: Partial<Record<ObligationCadence, number>> = {
  * recur (the caller should mark them completed instead); returns the input
  * unchanged for `once`.
  */
+export interface AdvanceOptions {
+  /**
+   * Keep month-end deadlines at month end. Without it, JS date overflow lets a
+   * Mar 31 quarterly deadline become Jul 1 and then Oct 1: it drifts off the
+   * period end it was meant to track. With it, a deadline on the last day of its
+   * month stays on the last day (Mar 31 -> Jun 30 -> Sep 30 -> Dec 31), and a
+   * day that does not exist in the target month is clamped to its last day
+   * (Jan 31 + 1 month -> Feb 28 or 29). Off by default: existing obligations
+   * keep the behaviour they were created under.
+   */
+  clampToMonthEnd?: boolean
+}
+
 export function advanceDueDate(
   current: string | Date,
   cadence: ObligationCadence,
   cadenceDays?: number | null,
+  options: AdvanceOptions = {},
 ): string {
   const base = toUtcDay(current)
   if (cadence === 'once') return fmt(base)
@@ -71,10 +85,22 @@ export function advanceDueDate(
   }
   const months = MONTHS_BY_CADENCE[cadence]
   if (!months) return fmt(base)
+  if (options.clampToMonthEnd) {
+    const wasMonthEnd = base.getUTCDate() === daysInMonth(base.getUTCFullYear(), base.getUTCMonth())
+    const targetMonth = base.getUTCMonth() + months
+    const targetYear = base.getUTCFullYear() + Math.floor(targetMonth / 12)
+    const month = ((targetMonth % 12) + 12) % 12
+    const last = daysInMonth(targetYear, month)
+    return fmt(new Date(Date.UTC(targetYear, month, wasMonthEnd ? last : Math.min(base.getUTCDate(), last))))
+  }
   // Anchor to the same day-of-month; JS Date normalizes overflow (e.g. Jan 31
   // + 1mo → Mar 3), which is acceptable for compliance cadences.
   const next = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + months, base.getUTCDate()))
   return fmt(next)
+}
+
+function daysInMonth(year: number, monthIndex: number): number {
+  return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()
 }
 
 /** Next occurrence of (month, day) on or after `from`, as YYYY-MM-DD. */
@@ -168,4 +194,94 @@ export function planSystemSeeds(
     })
   }
   return out
+}
+
+// ── Month grid ──────────────────────────────────────────────────────────────
+
+export interface GridDay<T> {
+  date:    string
+  inMonth: boolean
+  items:   T[]
+}
+
+/**
+ * A month as weeks of seven days (Sunday first), padded with the neighbouring
+ * months' days so every row is complete. Items are placed by `dueDate`; anything
+ * outside the visible weeks is simply not in the grid.
+ */
+export function buildMonthGrid<T extends { dueDate: string }>(
+  year: number,
+  month: number,
+  items: readonly T[],
+): GridDay<T>[][] {
+  const first = new Date(Date.UTC(year, month - 1, 1))
+  const start = new Date(first.getTime() - first.getUTCDay() * DAY_MS)
+  const byDate = new Map<string, T[]>()
+  for (const item of items) {
+    const key = item.dueDate.slice(0, 10)
+    byDate.set(key, [...(byDate.get(key) ?? []), item])
+  }
+  const weekCount = Math.ceil((first.getUTCDay() + daysInMonth(year, month - 1)) / 7)
+  const weeks: GridDay<T>[][] = []
+  for (let w = 0; w < weekCount; w++) {
+    const week: GridDay<T>[] = []
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(start.getTime() + (w * 7 + d) * DAY_MS)
+      week.push({ date: fmt(day), inMonth: day.getUTCMonth() === month - 1, items: byDate.get(fmt(day)) ?? [] })
+    }
+    weeks.push(week)
+  }
+  return weeks
+}
+
+// ── Reminders ───────────────────────────────────────────────────────────────
+
+export const REMINDER_INTERVAL_DAYS = 7
+
+export interface ReminderCandidate {
+  status:         string
+  nextDueAt:      string
+  leadDays:       number
+  /** The date a reminder was last sent for it (YYYY-MM-DD), or null. */
+  lastRemindedOn: string | null
+}
+
+/**
+ * Whether to remind about an obligation today: it is open, it is inside its lead
+ * window (or already overdue), and it has not been reminded in the last week.
+ * Overdue items keep getting a weekly nudge rather than one email and silence,
+ * and nothing is sent more than weekly, so a manual re-run never spams.
+ */
+export function reminderDue(candidate: ReminderCandidate, now: Date = new Date()): boolean {
+  if (candidate.status !== 'open') return false
+  if (daysUntilDue(candidate.nextDueAt, now) > candidate.leadDays) return false
+  if (candidate.lastRemindedOn === null) return true
+  return -daysUntilDue(candidate.lastRemindedOn, now) >= REMINDER_INTERVAL_DAYS
+}
+
+export interface DigestRow {
+  title:     string
+  nextDueAt: string
+  leadDays:  number
+  status:    string
+}
+
+export interface ComplianceDigest {
+  overdue: Array<DigestRow & { daysOverdue: number }>
+  dueSoon: Array<DigestRow & { daysUntil: number }>
+}
+
+/** Open obligations that are overdue or inside their lead window, most urgent first. */
+export function buildComplianceDigest(rows: readonly DigestRow[], now: Date = new Date()): ComplianceDigest {
+  const overdue: ComplianceDigest['overdue'] = []
+  const dueSoon: ComplianceDigest['dueSoon'] = []
+  for (const row of rows) {
+    if (row.status !== 'open') continue
+    const days = daysUntilDue(row.nextDueAt, now)
+    if (days < 0) overdue.push({ ...row, daysOverdue: -days })
+    else if (days <= row.leadDays) dueSoon.push({ ...row, daysUntil: days })
+  }
+  overdue.sort((a, b) => b.daysOverdue - a.daysOverdue)
+  dueSoon.sort((a, b) => a.daysUntil - b.daysUntil)
+  return { overdue, dueSoon }
 }
