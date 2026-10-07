@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildTemplateRows, missingRequiredItems, failuresToNonconformities, checklistDueStatus,
-  jurisdictionKey, ENV_TEMPLATE_CATEGORY, type FailableItem,
+  jurisdictionKey, templateInstanceKey, ENV_TEMPLATE_CATEGORY, type FailableItem,
 } from '../../environmental/checklists'
 import type { ChecklistItemDef, ResolvedChecklistTemplate } from '../../environmental/content'
 import { EMPTY_SITE_PROFILE } from '../../environmental/siteProfile'
@@ -20,6 +20,49 @@ const template = (items: ReturnType<typeof item>[]): ResolvedChecklistTemplate =
 
 const ctx = (profile = {}) => ({ profile: { ...EMPTY_SITE_PROFILE, ...profile }, generatorCategory: null })
 const version = { libraryVersion: '0.1.0', lastVerified: null }
+
+describe('templateInstanceKey', () => {
+  const gated = template([
+    item('always'),
+    item('air-only', { appliesWhen: { airPermitType: ['title_v'] } }),
+    item('swppp-only', { appliesWhen: { stormwaterCoverage: ['general_permit'] } }),
+  ])
+  const chain = ['federal', 'CA'] as const
+
+  it('is just the layers when every item applies, so ordinary sites share one instance', () => {
+    const everything = ctx({ airPermitType: 'title_v', stormwaterCoverage: 'general_permit' })
+    expect(templateInstanceKey(gated, everything, chain)).toBe('federal+CA')
+    expect(templateInstanceKey(template([item('a'), item('b')]), ctx(), chain)).toBe('federal+CA')
+  })
+
+  it('gives sites with different applicable items different instances, so one site never inherits another\'s checklist', () => {
+    const titleV = ctx({ airPermitType: 'title_v' })
+    const stormwater = ctx({ stormwaterCoverage: 'general_permit' })
+    const a = templateInstanceKey(gated, titleV, chain)
+    const b = templateInstanceKey(gated, stormwater, chain)
+    expect(a).toMatch(/^federal\+CA#[0-9a-f]{8}$/)
+    expect(b).toMatch(/^federal\+CA#[0-9a-f]{8}$/)
+    expect(a).not.toBe(b)
+  })
+
+  it('is the same for sites whose profiles differ but whose applicable items do not', () => {
+    // Neither site has an air permit or a general stormwater permit, so both get only 'always'.
+    expect(templateInstanceKey(gated, ctx({ wastewaterDischarge: 'none' }), chain))
+      .toBe(templateInstanceKey(gated, ctx({ notes: 'x', potwName: 'City POTW' }), chain))
+  })
+
+  it('is deterministic, and fits the 40-character column', () => {
+    const key = templateInstanceKey(gated, ctx({ airPermitType: 'title_v' }), ['federal', 'CA'])
+    expect(key).toBe(templateInstanceKey(gated, ctx({ airPermitType: 'title_v' }), ['federal', 'CA']))
+    expect(key.length).toBeLessThanOrEqual(40)
+  })
+
+  it('is what the companion row records', () => {
+    const rows = buildTemplateRows(gated, ctx({ airPermitType: 'title_v' }), chain, version)
+    expect(rows.companion.jurisdiction_key).toBe(templateInstanceKey(gated, ctx({ airPermitType: 'title_v' }), chain))
+    expect(rows.items.map(i => i.config.library_item_id)).toEqual(['always', 'air-only'])
+  })
+})
 
 describe('buildTemplateRows', () => {
   it('produces ordinary engine rows in the environmental category', () => {

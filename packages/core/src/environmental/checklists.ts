@@ -51,9 +51,38 @@ export interface TemplateRows {
   companion: CompanionInsert
 }
 
-/** The key a template instance is stored under: library id + the layers that built it. */
+/** The layers a template was built from, e.g. "federal+CA". */
 export function jurisdictionKey(chain: readonly JurisdictionCode[]): string {
   return chain.join('+')
+}
+
+/** FNV-1a, 32 bit, as 8 hex digits: a short stable fingerprint, not a security hash. */
+function fingerprint(parts: readonly string[]): string {
+  let hash = 0x811c9dc5
+  for (const char of parts.join('|')) {
+    hash ^= char.codePointAt(0)!
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return hash.toString(16).padStart(8, '0')
+}
+
+/**
+ * The key a template instance is stored under for a site.
+ *
+ * A template instance is shared by every site in the tenant that has the same
+ * jurisdiction layers, but which items it holds depends on the site's profile
+ * (a site without an air permit has no air items). Keying by layers alone would
+ * hand the second site whatever item set the first one happened to produce. So
+ * when some item is left out, the key also carries a fingerprint of the items
+ * that remain: sites with the same applicable set share an instance, sites with
+ * a different set get their own, and re-applying never duplicates.
+ */
+export function templateInstanceKey(
+  template: ResolvedChecklistTemplate, context: ApplicabilityContext, chain: readonly JurisdictionCode[],
+): string {
+  const base = jurisdictionKey(chain)
+  const applicable = template.items.filter(item => applies(item.appliesWhen, context))
+  return applicable.length === template.items.length ? base : `${base}#${fingerprint(applicable.map(item => item.id))}`
 }
 
 const configCitations = (citations: Citation[]) =>
@@ -98,7 +127,7 @@ export function buildTemplateRows(
     items,
     companion: {
       library_key:      template.id,
-      jurisdiction_key: jurisdictionKey(chain),
+      jurisdiction_key: templateInstanceKey(template, context, chain),
       program:          template.program,
       subject_type:     template.subjectType,
       cadence:          template.cadence,
