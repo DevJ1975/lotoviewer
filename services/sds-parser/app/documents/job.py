@@ -15,6 +15,7 @@ import logging
 import re
 from typing import Any, Optional
 
+from ..db import open_client
 from ..pdf_text import PdfTextError, extract_text_from_pdf
 from ..service_jobs import (
     InvalidJobPayload,
@@ -42,12 +43,6 @@ UNREADABLE_MESSAGE = (
 )
 NOT_A_PDF_MESSAGE = "This file isn't a readable PDF. Upload the PDF again."
 GAVE_UP_MESSAGE = "We couldn't finish reading this document. Please try again later or upload it again."
-
-
-def open_client() -> Any:
-    from ..staging import service_client  # lazy: needs the web stack's optional dependencies
-
-    return service_client()
 
 
 def validate_payload(payload: dict) -> dict:

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ECFR>
+<!-- Synthetic, eCFR-shaped sample: invented text, not the regulation. -->
+<DIV5 N="262" TYPE="PART">
+  <HEAD>PART 262—STANDARDS APPLICABLE TO GENERATORS OF HAZARDOUS WASTE (SAMPLE)</HEAD>
+  <AUTH><HED>Authority:</HED><PSPACE>Sample authority text.</PSPACE></AUTH>
+  <DIV6 N="A" TYPE="SUBPART">
+    <HEAD>Subpart A—General</HEAD>
+    <DIV8 N="§ 262.10" TYPE="SECTION">
+      <HEAD>§ 262.10 Purpose, scope, and applicability.</HEAD>
+      <P>(a) <I>Purpose.</I> This part establishes the sample standards for generators of hazardous waste.</P>
+      <P>(b) <I>Scope.</I> A generator must determine whether its waste is hazardous. See paragraph (a) of this section.</P>
+      <CITA TYPE="N">[81 FR 85732, Nov. 28, 2016]</CITA>
+    </DIV8>
+    <DIV8 N="§ 262.11" TYPE="SECTION">
+      <HEAD>§ 262.11 Hazardous waste determination and recordkeeping.</HEAD>
+      <P>(a) A person who generates a solid waste must determine if that waste is a hazardous waste.</P>
+      <EXTRACT><P>(1) Sample extract paragraph with a reference.</P></EXTRACT>
+    </DIV8>
+    <DIV8 N="§ 262.12" TYPE="SECTION">
+      <HEAD>§ 262.12 [Reserved]</HEAD>
+    </DIV8>
+  </DIV6>
+  <DIV6 N="C" TYPE="SUBPART">
+    <HEAD>Subpart C—Pre-Transport Requirements</HEAD>
+    <DIV7 TYPE="SUBJGRP"><HEAD>Marking</HEAD>
+      <DIV8 N="§ 262.32" TYPE="SECTION">
+        <HEAD>§ 262.32 Marking.</HEAD>
+        <P>(a) Before transporting, a generator must mark each container.</P>
+        <GPOTABLE>
+          <BOXHD><CHED>Item</CHED><CHED>Limit</CHED></BOXHD>
+          <ROW><ENT>Label</ENT><ENT>Required</ENT></ROW>
+          <ROW><ENT>Date</ENT><ENT>Required</ENT></ROW>
+        </GPOTABLE>
+      </DIV8>
+    </DIV7>
+  </DIV6>
+  <DIV9 N="Appendix to Part 262" TYPE="APPENDIX">
+    <HEAD>Appendix to Part 262—Sample Appendix</HEAD>
+    <P>This appendix has sample content.</P>
+  </DIV9>
+</DIV5>
+</ECFR>
