@@ -8,6 +8,7 @@ import {
 import { useTenant } from '@/components/TenantProvider'
 import { PageHeader } from '@/components/PageHeader'
 import OpsSpinner from '@/components/OpsSpinner'
+import EnvironmentalKpiPanel from '@/app/_components/EnvironmentalKpiPanel'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
 
@@ -143,6 +144,8 @@ export default function EnvironmentalHomePage() {
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>{loadError}</span>
         </div>
       )}
+
+      <EnvironmentalKpiPanel />
 
       {!counts && !loadError ? (
         <div className="flex items-center justify-center py-16"><OpsSpinner /></div>
