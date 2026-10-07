@@ -195,27 +195,115 @@ export function wilsonInterval(successes: number, trials: number, z = 1.96): Con
   return { point: p, lower: Math.max(0, center - half), upper: Math.min(1, center + half) }
 }
 
+// ── Exact Poisson interval ──────────────────────────────────────────────────
+
+/** ln Γ(x) for x > 0: Lanczos approximation (g = 7, n = 9), ~15 significant digits. */
+function lnGamma(x: number): number {
+  const coefficients = [
+    0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313,
+    -176.61502916214059, 12.507343278686905, -0.13857109526572012,
+    9.9843695780195716e-6, 1.5056327351493116e-7,
+  ]
+  if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - lnGamma(1 - x)
+  const z = x - 1
+  let sum = coefficients[0]!
+  for (let i = 1; i < coefficients.length; i++) sum += coefficients[i]! / (z + i)
+  const t = z + 7.5
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(sum)
+}
+
+const GAMMA_MAX_ITERATIONS = 100_000
+const GAMMA_EPSILON = 1e-15
+
 /**
- * Normal-approximation confidence interval for a Poisson COUNT (rare events):
- * count ± z·√count, lower floored at 0. Same form as the Poisson prediction
- * interval in forecast.ts. Approximate for very small counts — its purpose is
- * to show that a headline built on a handful of events is not precise.
+ * Regularized lower incomplete gamma P(a, x): the CDF of a Gamma(a, 1) variable.
+ * Series for x < a + 1, Lentz continued fraction for the complement above that
+ * (Numerical Recipes 6.2): each converges quickly on its own side.
  */
-export function poissonCountInterval(count: number, z = 1.96): ConfidenceInterval {
+function regularizedGammaP(a: number, x: number): number {
+  if (x <= 0) return 0
+  const prefix = Math.exp(-x + a * Math.log(x) - lnGamma(a))
+  if (x < a + 1) {
+    let term = 1 / a
+    let sum = term
+    for (let n = 1; n < GAMMA_MAX_ITERATIONS; n++) {
+      term *= x / (a + n)
+      sum += term
+      if (Math.abs(term) < Math.abs(sum) * GAMMA_EPSILON) break
+    }
+    return sum * prefix
+  }
+  const tiny = 1e-300
+  let b = x + 1 - a
+  let c = 1 / tiny
+  let d = 1 / b
+  let h = d
+  for (let i = 1; i < GAMMA_MAX_ITERATIONS; i++) {
+    const an = -i * (i - a)
+    b += 2
+    d = an * d + b
+    if (Math.abs(d) < tiny) d = tiny
+    c = b + an / c
+    if (Math.abs(c) < tiny) c = tiny
+    d = 1 / d
+    const delta = d * c
+    h *= delta
+    if (Math.abs(delta - 1) < GAMMA_EPSILON) break
+  }
+  return 1 - prefix * h
+}
+
+/** The x with P(a, x) = p, by bisection (P increases with x). Cheap at the sizes used here. */
+function gammaQuantile(a: number, p: number): number {
+  let lo = 0
+  let hi = Math.max(1, a)
+  while (regularizedGammaP(a, hi) < p && hi < 1e12) hi *= 2
+  for (let i = 0; i < 200 && hi - lo > 1e-14 * hi; i++) {
+    const mid = (lo + hi) / 2
+    if (regularizedGammaP(a, mid) < p) lo = mid
+    else hi = mid
+  }
+  return (lo + hi) / 2
+}
+
+/**
+ * Exact (Garwood) confidence interval for a Poisson COUNT: lower = the mean for
+ * which seeing `count` or more has probability α/2, upper = the mean for which
+ * seeing `count` or fewer has probability α/2. Conservative by construction
+ * (coverage is at least the stated level), which is the right direction for
+ * safety data.
+ *
+ * This replaces count ± z·√count, which breaks down exactly where TRIR lives:
+ * with ZERO recordables it reported an interval of 0 to 0, claiming perfect
+ * precision, and with 1 or 2 it understated the upper bound by roughly a third.
+ * The exact upper bound for zero events at 95% is 3.69 events, which is what a
+ * plant with no recordables can actually say.
+ *
+ * `confidence` is the level (default 0.95) and must be strictly between 0 and 1.
+ */
+export function poissonCountInterval(count: number, confidence = 0.95): ConfidenceInterval {
+  if (!(confidence > 0 && confidence < 1)) {
+    throw new RangeError(`confidence must be strictly between 0 and 1, got ${confidence}`)
+  }
   const c = Math.max(0, count)
-  const half = z * Math.sqrt(c)
-  return { point: c, lower: Math.max(0, c - half), upper: c + half }
+  const tail = (1 - confidence) / 2
+  return {
+    point: c,
+    lower: c === 0 ? 0 : gammaQuantile(c, tail),
+    upper: gammaQuantile(c + 1, 1 - tail),
+  }
 }
 
 /**
  * Confidence interval for an OSHA-style rate = count · base / hours. The count
- * is Poisson, so the rate interval is the count interval scaled by base/hours.
- * Null when hours <= 0 (caller renders "—"). This is what turns "TRIR 1.33"
- * into "TRIR 1.33 (0.2–3.9)" and stops a 1-recordable tenant reading as precise.
+ * is Poisson, so the rate interval is the exact count interval scaled by
+ * base/hours. Null when hours <= 0 (caller renders "—"). This is what turns
+ * "TRIR 1.33" into "TRIR 1.33 (0.03–7.42)" and stops a 1-recordable tenant, or a
+ * 0-recordable one, reading as precise.
  */
-export function rateInterval(count: number, hours: number, base = 200_000, z = 1.96): ConfidenceInterval | null {
+export function rateInterval(count: number, hours: number, base = 200_000, confidence = 0.95): ConfidenceInterval | null {
   if (hours <= 0) return null
-  const ci = poissonCountInterval(count, z)
+  const ci = poissonCountInterval(count, confidence)
   const scale = base / hours
   return { point: ci.point * scale, lower: ci.lower * scale, upper: ci.upper * scale }
 }
