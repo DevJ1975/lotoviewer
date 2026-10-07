@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildEvidencePath, evidenceProblem, safeFileName } from '@/lib/environmental/evidence'
+import { buildEvidencePath, dataUrlToFile, evidenceProblem, safeFileName } from '@/lib/environmental/evidence'
 
 const TENANT = '11111111-1111-1111-1111-111111111111'
 
@@ -49,5 +49,20 @@ describe('evidenceProblem', () => {
     expect(evidenceProblem({ size: 10, type: 'application/zip' })).toMatch(/JPEG, PNG or WebP/)
     expect(evidenceProblem({ size: 25 * 1024 * 1024 + 1, type: 'image/png' })).toMatch(/25 MB/)
     expect(evidenceProblem({ size: 0, type: 'image/png' })).toMatch(/empty/)
+  })
+})
+
+describe('dataUrlToFile', () => {
+  it('turns a canvas data URL into a PNG file with the same bytes', async () => {
+    const file = dataUrlToFile(`data:image/png;base64,${btoa('hello')}`, 'signature.png')
+    expect(file.name).toBe('signature.png')
+    expect(file.type).toBe('image/png')
+    expect(file.size).toBe(5)
+    expect(await file.text()).toBe('hello')
+  })
+
+  it('is accepted by the upload checks', () => {
+    const file = dataUrlToFile(`data:image/png;base64,${btoa('x')}`, 'signature.png')
+    expect(evidenceProblem(file)).toBeNull()
   })
 })

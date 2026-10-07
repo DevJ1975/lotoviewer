@@ -44,3 +44,11 @@ export async function evidenceUrl(path: string, seconds = 3600): Promise<string 
   const { data, error } = await supabase.storage.from(EVIDENCE_BUCKET).createSignedUrl(path, seconds)
   return error ? null : data.signedUrl
 }
+
+/** A canvas drawing (a data URL) as a PNG file, ready to upload. */
+export function dataUrlToFile(dataUrl: string, fileName: string): File {
+  const [header, base64 = ''] = dataUrl.split(',')
+  const type = /^data:([^;]+);base64$/.exec(header ?? '')?.[1] ?? 'image/png'
+  const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+  return new File([bytes], fileName, { type })
+}
