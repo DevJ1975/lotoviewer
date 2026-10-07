@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { failedSafetyInspections } from '@/lib/insights/safetyInspections'
 import { discoverLeadingSignals, type LeadingSignalSeries } from '@soteria/core/leadingIndicatorSignals'
 
 // GET /api/insights/leading-signals
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest) {
     const [incRes, classRes, inspDates, bbsUnsafeDates, capaDates] = await Promise.all([
       admin.from('incidents').select('id, incident_type, occurred_at').eq('tenant_id', gate.tenantId).gte('occurred_at', sinceIso),
       admin.from('incident_classifications').select('incident_id, meets_recording_criteria').eq('tenant_id', gate.tenantId),
-      safeDates(admin.from('inspections').select('created_at').eq('tenant_id', gate.tenantId).eq('result', 'fail').gte('created_at', sinceIso), 'created_at'),
+      safeDates(failedSafetyInspections(admin, gate.tenantId, sinceIso), 'created_at'),
       safeDates(admin.from('bbs_observations').select('observed_at').eq('tenant_id', gate.tenantId).in('kind', ['unsafe_act', 'unsafe_condition']).gte('observed_at', sinceIso), 'observed_at'),
       safeDates(admin.from('incident_actions').select('created_at').eq('tenant_id', gate.tenantId).gte('created_at', sinceIso), 'created_at'),
     ])
