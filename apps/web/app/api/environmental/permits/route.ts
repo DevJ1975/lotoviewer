@@ -15,7 +15,7 @@ export async function GET(req: Request) {
 
   const requested = new URL(req.url).searchParams.get('facility_id')
   if (requested && !UUID_RE.test(requested)) return badId()
-  const facilityId = requested ?? g.facilityId
+  const facilityId = requested || g.facilityId
 
   try {
     let query = g.authedClient.from('environmental_permits').select('*').eq('tenant_id', g.tenantId)

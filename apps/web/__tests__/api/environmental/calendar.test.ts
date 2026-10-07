@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
-  adminGate, memberGate, allow, refuse, resetGates, fakeSupabase, jsonRequest, params,
+  adminGate, memberGate, allow, refuse, resetGates, fakeSupabase, jsonRequest, params, members,
   TENANT, FACILITY, USER,
 } from './_harness'
 import { GET, POST } from '@/app/api/environmental/calendar/route'
@@ -96,6 +96,16 @@ describe('POST /api/environmental/calendar', () => {
     })
   })
 
+  it('refuses a new deadline whose owner is not a member of the account, before any insert', async () => {
+    const db = fakeSupabase({ facilities: [{ data: { id: FACILITY } }], compliance_calendar_obligations: [{ data: row() }] })
+    allow(adminGate, db.client)
+    const res = await post({ ...valid, owner_user_id: OWNER })
+    expect(res.status).toBe(400)
+    expect(db.used('compliance_calendar_obligations', 'insert')).toEqual([])
+    members.add(OWNER)
+    expect((await post({ ...valid, owner_user_id: OWNER })).status).toBe(201)
+  })
+
   it('makes a deadline shared by every site when facility_id is explicitly null, without a site lookup', async () => {
     const db = fakeSupabase({ compliance_calendar_obligations: [{ data: row({ facility_id: null }) }] })
     allow(adminGate, db.client)
@@ -124,11 +134,27 @@ describe('PATCH /api/environmental/calendar/[id]', () => {
   it('assigns an owner and changes the reminder window, keeping everything else and ignoring a site change', async () => {
     const db = fakeSupabase({ compliance_calendar_obligations: [{ data: row() }, { data: row({ owner_user_id: OWNER, lead_days: 10 }) }] })
     allow(adminGate, db.client)
+    members.add(OWNER)
     const res = await patch({ owner_user_id: OWNER, lead_days: 10, facility_id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' })
     expect(res.status).toBe(200)
     expect(db.arg('compliance_calendar_obligations', 'update')).toMatchObject({
       owner_user_id: OWNER, lead_days: 10, facility_id: FACILITY, title: 'Quarterly visual assessment', cadence: 'quarterly', next_due_at: '2026-09-30',
     })
+  })
+
+  it('refuses to assign someone who is not a member of the account, and updates nothing', async () => {
+    const db = fakeSupabase({ compliance_calendar_obligations: [{ data: row() }, { data: row() }] })
+    allow(adminGate, db.client)
+    const res = await patch({ owner_user_id: OWNER })
+    expect(res.status).toBe(400)
+    expect(JSON.stringify(await res.json())).toMatch(/member of this account/)
+    expect(db.used('compliance_calendar_obligations', 'update')).toEqual([])
+  })
+
+  it('does not re-check an owner who is already assigned, so an old assignment never blocks an edit', async () => {
+    const db = fakeSupabase({ compliance_calendar_obligations: [{ data: row({ owner_user_id: OWNER }) }, { data: row({ owner_user_id: OWNER, lead_days: 7 }) }] })
+    allow(adminGate, db.client)
+    expect((await patch({ lead_days: 7 })).status).toBe(200)
   })
 
   it('can dismiss a deadline', async () => {

@@ -4,7 +4,8 @@
 import { classifyUrgency } from '../complianceCalendar'
 import { applies, type ApplicabilityContext } from './applicability'
 import type { ResolvedLibrary } from './content'
-import type { EnvProgram } from './siteProfile'
+import { ENV_PROGRAMS, type EnvProgram } from './siteProfile'
+import { UUID_PATTERN, isRealDate } from './validation'
 
 export const LEGAL_APPLICABILITY = ['applicable', 'not_applicable', 'under_review'] as const
 export type LegalApplicability = typeof LEGAL_APPLICABILITY[number]
@@ -12,7 +13,13 @@ export type LegalApplicability = typeof LEGAL_APPLICABILITY[number]
 export const LEGAL_COMPLIANCE = ['not_evaluated', 'compliant', 'attention', 'non_compliant'] as const
 export type LegalCompliance = typeof LEGAL_COMPLIANCE[number]
 
-export type ReviewFrequency = 'annual' | 'biennial'
+export const REVIEW_FREQUENCIES = ['annual', 'biennial'] as const
+export type ReviewFrequency = typeof REVIEW_FREQUENCIES[number]
+
+/** The stored column is free text, so anything that is not a known frequency reads as "none". */
+export function parseReviewFrequency(value: unknown): ReviewFrequency | null {
+  return (REVIEW_FREQUENCIES as readonly unknown[]).includes(value) ? value as ReviewFrequency : null
+}
 
 export type ReviewState = 'never_reviewed' | 'ok' | 'due_soon' | 'overdue'
 
@@ -32,12 +39,28 @@ export function reviewState(
 }
 
 /** The date the next review falls due, a year or two after this one. */
+export function nextReviewDate(reviewedOn: string, frequency: ReviewFrequency): string
+export function nextReviewDate(reviewedOn: string, frequency: ReviewFrequency | null): string | null
 export function nextReviewDate(reviewedOn: string, frequency: ReviewFrequency | null): string | null {
   if (frequency === null) return null
   const [y, m, d] = reviewedOn.slice(0, 10).split('-').map(Number)
   const years = frequency === 'biennial' ? 2 : 1
   const lastDay = new Date(Date.UTC(y! + years, m!, 0)).getUTCDate()
   return new Date(Date.UTC(y! + years, m! - 1, Math.min(d!, lastDay))).toISOString().slice(0, 10)
+}
+
+export interface ReviewPlan {
+  last_reviewed_at: string
+  next_review_due:  string
+}
+
+/**
+ * What recording a review writes. An entry with no review frequency is reviewed
+ * yearly: a review that left no next date would let the entry drop out of the
+ * review cycle for good.
+ */
+export function planReview(reviewedOn: string, frequency: ReviewFrequency | null): ReviewPlan {
+  return { last_reviewed_at: reviewedOn, next_review_due: nextReviewDate(reviewedOn, frequency ?? 'annual') }
 }
 
 export interface LegalEntryPlan {
@@ -143,4 +166,196 @@ export function validateEvaluation(input: unknown): EvaluationValidation {
     return { ok: false, errors: ['Say what is wrong: a rating of attention or non_compliant needs a note.'] }
   }
   return { ok: true, evaluation: { applicability: a, complianceStatus: s, note } }
+}
+
+// ── a custom entry, or the descriptive fields of any entry ──────────────────
+
+export interface LegalEntryInput {
+  /** Null: a requirement for the whole company rather than one site. */
+  facilityId:        string | null
+  title:             string
+  citation:          string
+  jurisdiction:      string
+  authority:         string | null
+  summary:           string | null
+  applicabilityNote: string | null
+  sourceUrl:         string | null
+  effectiveDate:     string | null
+  reviewFrequency:   ReviewFrequency | null
+  program:           EnvProgram | null
+  ownerUserId:       string | null
+  tags:              string[]
+  evidencePath:      string | null
+}
+
+export type LegalEntryValidation =
+  | { ok: true; entry: LegalEntryInput }
+  | { ok: false; errors: string[] }
+
+const JURISDICTION = /^(federal|[A-Z]{2})$/
+// A scheme allow-list: the address becomes a link, and "javascript:" must not.
+const HTTP_URL = /^https?:\/\/[^\s/?#]\S*$/i
+const MAX_TAGS = 20
+const MAX_TAG_LENGTH = 50
+const MAX_EVIDENCE_PATH = 300
+
+/**
+ * Evidence is a stored file that later becomes a signed URL, so a path outside
+ * the caller's own folder (`prefix`) is refused. Empty clears the evidence.
+ */
+export function validateEvidencePath(
+  value: unknown, prefix: string,
+): { ok: true; path: string | null } | { ok: false; error: string } {
+  if (value === null || value === '') return { ok: true, path: null }
+  if (typeof value === 'string' && value.length <= MAX_EVIDENCE_PATH && value.startsWith(prefix) && !value.includes('..')) {
+    return { ok: true, path: value }
+  }
+  return { ok: false, error: 'evidence_path must be a file you uploaded to this account.' }
+}
+
+/**
+ * Validate the descriptive fields of a register entry (snake_case, like the
+ * table): everything needed to add a custom entry, and everything a person may
+ * edit on any entry. Left out of a partial update, a field keeps the value in
+ * `current`.
+ *
+ * The evaluation (applicability, compliance_status, evaluation_note) and the
+ * server-owned columns (source, library_key, the last_* stamps) are not read at
+ * all: a body that carries them cannot change them here. The evaluation has its
+ * own rules in validateEvaluation.
+ */
+export function validateLegalEntry(
+  input: unknown,
+  options: { evidencePathPrefix: string; current?: LegalEntryInput },
+): LegalEntryValidation {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) return { ok: false, errors: ['Expected an object.'] }
+  const body = input as Record<string, unknown>
+  const current = options.current
+  const errors: string[] = []
+  const has = (key: string) => key in body
+
+  const text = (
+    key: string, max: number, keep: string | null,
+    rules: { required?: boolean; shape?: { pattern: RegExp; message: string } } = {},
+  ): string | null => {
+    if (!has(key)) {
+      if (rules.required && keep === null) errors.push(`${key} is required.`)
+      return keep
+    }
+    const v = body[key]
+    if (v !== null && typeof v !== 'string') { errors.push(`${key} must be text.`); return keep }
+    const t = (v ?? '').trim()
+    if (t.length > max) { errors.push(`${key} is too long (the limit is ${max} characters).`); return keep }
+    if (t === '') {
+      if (rules.required) errors.push(`${key} is required.`)
+      return null
+    }
+    if (rules.shape && !rules.shape.pattern.test(t)) { errors.push(rules.shape.message); return keep }
+    return t
+  }
+  const id = (key: string, keep: string | null): string | null => {
+    if (!has(key)) return keep
+    const v = body[key]
+    if (v === null) return null
+    if (typeof v === 'string' && UUID_PATTERN.test(v)) return v.toLowerCase()
+    errors.push(`${key} must be an id, or null.`)
+    return keep
+  }
+  const enumOrNull = <T extends string>(key: string, allowed: readonly T[], keep: T | null): T | null => {
+    if (!has(key)) return keep
+    const v = body[key]
+    if (v === null || v === '') return null
+    if (typeof v === 'string' && (allowed as readonly string[]).includes(v)) return v as T
+    errors.push(`${key} must be one of: ${allowed.join(', ')}, or empty.`)
+    return keep
+  }
+
+  let effectiveDate = current?.effectiveDate ?? null
+  if (has('effective_date')) {
+    const v = body.effective_date
+    if (v === null || v === '') effectiveDate = null
+    else if (typeof v === 'string' && isRealDate(v)) effectiveDate = v
+    else errors.push('effective_date must be a date like 2027-04-30.')
+  }
+
+  let tags = current?.tags ?? []
+  if (has('tags')) {
+    const v = body.tags
+    if (!Array.isArray(v) || v.length > MAX_TAGS) errors.push(`tags must be a list of at most ${MAX_TAGS}.`)
+    else if (v.some(tag => typeof tag !== 'string' || tag.trim() === '' || tag.trim().length > MAX_TAG_LENGTH)) {
+      errors.push(`Each tag must be text of 1 to ${MAX_TAG_LENGTH} characters.`)
+    } else tags = (v as string[]).map(tag => tag.trim())
+  }
+
+  let evidencePath = current?.evidencePath ?? null
+  if (has('evidence_path')) {
+    const checked = validateEvidencePath(body.evidence_path, options.evidencePathPrefix)
+    if (checked.ok) evidencePath = checked.path
+    else errors.push(checked.error)
+  }
+
+  const entry: LegalEntryInput = {
+    facilityId:        id('facility_id', current?.facilityId ?? null),
+    title:             text('title', 300, current?.title ?? null, { required: true }) ?? '',
+    citation:          text('citation', 300, current?.citation ?? null, { required: true }) ?? '',
+    jurisdiction:      text('jurisdiction', 20, current?.jurisdiction ?? null, {
+      required: true, shape: { pattern: JURISDICTION, message: 'jurisdiction must be "federal" or a two-letter state code like CA.' },
+    }) ?? '',
+    authority:         text('authority', 300, current?.authority ?? null),
+    summary:           text('summary', 4000, current?.summary ?? null),
+    applicabilityNote: text('applicability_note', 2000, current?.applicabilityNote ?? null),
+    sourceUrl:         text('source_url', 500, current?.sourceUrl ?? null, {
+      shape: { pattern: HTTP_URL, message: 'source_url must be a web address starting with http:// or https://.' },
+    }),
+    effectiveDate,
+    reviewFrequency:   enumOrNull('review_frequency', REVIEW_FREQUENCIES, current?.reviewFrequency ?? null),
+    program:           enumOrNull('program', ENV_PROGRAMS, current?.program ?? null),
+    ownerUserId:       id('owner_user_id', current?.ownerUserId ?? null),
+    tags,
+    evidencePath,
+  }
+  return errors.length > 0 ? { ok: false, errors } : { ok: true, entry }
+}
+
+// ── table <-> domain ────────────────────────────────────────────────────────
+
+/** The descriptive fields as table columns. The inverse of parseLegalRow; it never carries the evaluation or the server-owned columns. */
+export function toLegalRow(entry: LegalEntryInput): Record<string, unknown> {
+  return {
+    facility_id:        entry.facilityId,
+    title:              entry.title,
+    citation:           entry.citation,
+    jurisdiction:       entry.jurisdiction,
+    authority:          entry.authority,
+    summary:            entry.summary,
+    applicability_note: entry.applicabilityNote,
+    source_url:         entry.sourceUrl,
+    effective_date:     entry.effectiveDate,
+    review_frequency:   entry.reviewFrequency,
+    program:            entry.program,
+    owner_user_id:      entry.ownerUserId,
+    tags:               entry.tags,
+    evidence_path:      entry.evidencePath,
+  }
+}
+
+/** A stored register row as the domain object, used as `current` for a partial update. */
+export function parseLegalRow(row: Record<string, unknown>): LegalEntryInput {
+  const str = (v: unknown) => (typeof v === 'string' ? v : null)
+  return {
+    facilityId:        str(row.facility_id),
+    title:             str(row.title) ?? '',
+    citation:          str(row.citation) ?? '',
+    jurisdiction:      str(row.jurisdiction) ?? '',
+    authority:         str(row.authority),
+    summary:           str(row.summary),
+    applicabilityNote: str(row.applicability_note),
+    sourceUrl:         str(row.source_url),
+    effectiveDate:     str(row.effective_date),
+    reviewFrequency:   parseReviewFrequency(row.review_frequency),
+    program:           (ENV_PROGRAMS as readonly unknown[]).includes(row.program) ? row.program as EnvProgram : null,
+    ownerUserId:       str(row.owner_user_id),
+    tags:              Array.isArray(row.tags) ? row.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+    evidencePath:      str(row.evidence_path),
+  }
 }

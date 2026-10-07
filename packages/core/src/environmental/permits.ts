@@ -4,6 +4,7 @@ import { daysUntilDue } from '../complianceCalendar'
 import type { PlannedObligation } from './calendarPlan'
 import { LIBRARY_CATEGORY, librarySystemKey } from './calendarPlan'
 import type { EnvProgram } from './siteProfile'
+import { UUID_PATTERN, isRealDate } from './validation'
 
 export const PERMIT_PROGRAMS = ['stormwater', 'air', 'wastewater', 'hazardous_waste', 'spcc', 'other'] as const
 export type PermitProgram = typeof PERMIT_PROGRAMS[number]
@@ -113,15 +114,8 @@ export type PermitValidation =
   | { ok: true; permit: PermitInput }
   | { ok: false; errors: string[] }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 const MAX_CONDITIONS = 100
 const MAX_IDENTIFIERS = 20
-
-function isRealDate(value: string): boolean {
-  return ISO_DATE.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`))
-    && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value
-}
 
 /**
  * Validate a permit request body (snake_case, like the table). `documentPathPrefix`
@@ -166,7 +160,7 @@ export function validatePermit(
 
   let facilityId = current?.facilityId ?? ''
   if (has('facility_id')) {
-    if (typeof body.facility_id === 'string' && UUID.test(body.facility_id)) facilityId = body.facility_id.toLowerCase()
+    if (typeof body.facility_id === 'string' && UUID_PATTERN.test(body.facility_id)) facilityId = body.facility_id.toLowerCase()
     else errors.push('facility_id must be an id.')
   }
   if (!facilityId && !errors.some(e => e.startsWith('facility_id'))) errors.push('facility_id is required: a permit belongs to one site.')

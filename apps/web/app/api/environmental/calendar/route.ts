@@ -4,6 +4,7 @@ import { classifyUrgency, daysUntilDue } from '@soteria/core/complianceCalendar'
 import { LIBRARY_CATEGORY } from '@soteria/core/environmental/calendarPlan'
 import { toDeadlineRow, validateDeadline } from '@soteria/core/environmental/deadlines'
 import { badId, invalid, readJson, refused, UUID_RE } from '@/lib/environmental/http'
+import { isActiveMember, OWNER_NOT_MEMBER } from '@/lib/environmental/members'
 
 // The environmental compliance calendar: its deadlines (members read) and custom
 // deadlines (tenant admins create). Library deadlines arrive through apply-library
@@ -20,7 +21,7 @@ export async function GET(req: Request) {
   const query = new URL(req.url).searchParams
   const requested = query.get('facility_id')
   if (requested && !UUID_RE.test(requested)) return badId()
-  const facilityId = requested ?? g.facilityId
+  const facilityId = requested || g.facilityId
   const status = query.get('status') ?? 'open'
   if (!(STATUS_FILTERS as readonly string[]).includes(status)) return invalid([`status must be one of: ${STATUS_FILTERS.join(', ')}.`])
   const program = query.get('program')
@@ -72,6 +73,7 @@ export async function POST(req: Request) {
   const { deadline } = result
 
   try {
+    if (deadline.ownerUserId && !(await isActiveMember(g.tenantId, deadline.ownerUserId))) return invalid([OWNER_NOT_MEMBER])
     if (deadline.facilityId) {
       // The deadline's site column is a plain reference, so confirm the caller can see that site.
       const { data: site, error: siteError } = await g.authedClient.from('facilities').select('id').eq('id', deadline.facilityId).maybeSingle()

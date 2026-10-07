@@ -26,7 +26,7 @@ export async function GET(req: Request) {
 
   const requested = new URL(req.url).searchParams.get('facility_id')
   if (requested && !UUID_RE.test(requested)) return badId()
-  const facilityId = requested ?? g.facilityId
+  const facilityId = requested || g.facilityId
   if (!facilityId) return facilityRequired()
 
   try {

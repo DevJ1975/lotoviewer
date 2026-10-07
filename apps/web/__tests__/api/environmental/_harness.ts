@@ -24,6 +24,23 @@ vi.mock('@/lib/security/sanitizeError', () => ({
   sanitizeError: (error: unknown) => { hoisted.sanitized.push(error); return Response.json({ error: 'internal' }, { status: 500 }) },
 }))
 
+// Users the service-client membership lookup reports as belonging to the tenant.
+const membership = vi.hoisted(() => ({ members: new Set<string>() }))
+export const members = membership.members
+vi.mock('@/lib/supabaseAdmin', () => ({
+  supabaseAdmin: () => ({
+    from: () => {
+      let userId = ''
+      const query: Record<string, unknown> = {
+        select: () => query,
+        eq: (column: string, value: string) => { if (column === 'user_id') userId = value; return query },
+        maybeSingle: async () => ({ data: membership.members.has(userId) ? { user_id: userId, invite_cancelled_at: null } : null, error: null }),
+      }
+      return query
+    },
+  }),
+}))
+
 export const TENANT = '11111111-1111-1111-1111-111111111111'
 export const FACILITY = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 export const OTHER_FACILITY = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
@@ -51,6 +68,7 @@ export function resetGates() {
   memberGate.mockReset()
   adminGate.mockReset()
   sanitized.length = 0
+  members.clear()
 }
 
 // ── fake Supabase client ────────────────────────────────────────────────────

@@ -3,6 +3,7 @@ import { sanitizeError } from '@/lib/security/sanitizeError'
 import { LIBRARY_CATEGORY } from '@soteria/core/environmental/calendarPlan'
 import { parseDeadlineRow, toDeadlineRow, validateDeadline } from '@soteria/core/environmental/deadlines'
 import { badId, invalid, notFound, readJson, refused, UUID_RE } from '@/lib/environmental/http'
+import { isActiveMember, OWNER_NOT_MEMBER } from '@/lib/environmental/members'
 
 // Edit one environmental deadline (tenant admins): its owner, date, reminder
 // window, or status (dismiss / reopen). A deadline stays on its site, so
@@ -30,6 +31,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
     const result = validateDeadline(changes, parseDeadlineRow(existing))
     if (!result.ok) return invalid(result.errors)
+    const { ownerUserId } = result.deadline
+    if (ownerUserId && ownerUserId !== existing.owner_user_id && !(await isActiveMember(g.tenantId, ownerUserId))) {
+      return invalid([OWNER_NOT_MEMBER])
+    }
 
     const { data, error } = await g.authedClient.from('compliance_calendar_obligations')
       .update({ ...toDeadlineRow(result.deadline), updated_at: new Date().toISOString() })

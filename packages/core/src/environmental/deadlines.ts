@@ -5,6 +5,7 @@
 
 import type { ObligationCadence } from '../complianceCalendar'
 import { ENV_PROGRAMS, type EnvProgram } from './siteProfile'
+import { UUID_PATTERN, isRealDate } from './validation'
 
 export const DEADLINE_CADENCES: readonly ObligationCadence[] = [
   'once', 'monthly', 'quarterly', 'semiannual', 'annual', 'biennial', 'triennial', 'quinquennial', 'custom_days',
@@ -35,12 +36,7 @@ export type DeadlineValidation =
   | { ok: true; deadline: DeadlineInput }
   | { ok: false; errors: string[] }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_CADENCE_DAYS = 3650
-
-function isRealDate(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value
-}
 
 /** Validate a deadline request body (snake_case). Fields left out keep their value in `current`. */
 export function validateDeadline(input: unknown, current?: DeadlineInput): DeadlineValidation {
@@ -62,7 +58,7 @@ export function validateDeadline(input: unknown, current?: DeadlineInput): Deadl
     if (!has(key)) return keep
     const v = body[key]
     if (v === null || v === '') return null
-    if (typeof v === 'string' && UUID.test(v)) return v.toLowerCase()
+    if (typeof v === 'string' && UUID_PATTERN.test(v)) return v.toLowerCase()
     errors.push(`${key} must be an id.`)
     return keep
   }
