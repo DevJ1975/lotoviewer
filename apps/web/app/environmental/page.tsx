@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
-  AlertTriangle, BarChart3, ClipboardCheck, Gauge, Mountain, ScrollText,
+  AlertTriangle, BarChart3, ClipboardCheck, Gauge, Mountain, ScrollText, ShieldCheck,
 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { PageHeader } from '@/components/PageHeader'
@@ -29,6 +29,13 @@ interface RegisterCounts {
 }
 
 const CARDS = [
+  {
+    href:  '/environmental/compliance',
+    Icon:  ShieldCheck,
+    title: 'Compliance suite',
+    desc:  'Permits, checklists, deadlines and the legal register for each site, with the state\'s rules layered on the federal baseline.',
+    clause: 'Clauses 6.1.3 & 8.1',
+  },
   {
     href:  '/environmental/report-card',
     Icon:  Gauge,
