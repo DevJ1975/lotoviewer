@@ -1,10 +1,17 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.15.2'
-const LAST_UPDATED    = '2026-10-06'
+const CURRENT_VERSION = '1.15.3'
+const LAST_UPDATED    = '2026-10-07'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.15.3',
+    date:    '2026-10-07',
+    changes: [
+      "Confidence intervals on the rate cards are now exact (Garwood) Poisson intervals instead of count ± 1.96·√count. The old form showed a plant with no recordables as 0 to 0, claiming perfect precision, and understated the upper limit at 1-3 events. Clarified how to read overlapping intervals.",
+    ],
+  },
   {
     version: '1.15.2',
     date:    '2026-10-06',
@@ -416,8 +423,21 @@ export default function WikiScorecardPage() {
         </p>
         <ul>
           <li>
-            <strong>Rates</strong> use a Poisson interval, which is the right model
-            for counting rare events over an exposure period.
+            <strong>TRIR, DART and LTIR</strong> use an <em>exact</em> (Garwood)
+            Poisson interval, the right model for counting rare events over an
+            exposure period. It is deliberately wide at small counts: a plant with{' '}
+            <strong>no</strong> recordables still shows an upper limit, because zero
+            events in a year does not prove the true rate is zero. For zero events
+            that limit is about 3.7 events, which a card shows as a rate:
+            3.7 × 200,000 ÷ your hours. Exact intervals run conservative, so
+            read &ldquo;95%&rdquo; as <em>at least</em> 95%, noticeably more at small
+            counts.
+          </li>
+          <li>
+            <strong>Severity rate</strong> shows no interval. It counts lost
+            <em> days</em>, which arrive in clumps from a few cases rather than as
+            independent events, so a Poisson interval would look far more precise
+            than the data are.
           </li>
           <li>
             <strong>Percentages</strong> (RCA completion) use a Wilson interval,
@@ -425,11 +445,16 @@ export default function WikiScorecardPage() {
           </li>
         </ul>
         <p>
-          <strong>How to use it:</strong> if this period&apos;s interval overlaps
-          last period&apos;s, you cannot claim the metric moved. That is not a
-          technicality — acting on a move that is inside the interval is how
-          programs end up crediting an intervention for what was chance, and then
-          repeating it.
+          <strong>How to use it:</strong> if this period&apos;s interval and last
+          period&apos;s do not overlap at all, the change is unlikely to be chance.
+          If they overlap, the data cannot tell you either way. These intervals
+          are conservative, so a real change can hide inside an overlap: zero
+          recordables one year and six the next, at equal hours, give overlapping
+          intervals even though the difference is statistically real. Judge a change
+          by its direction across several periods, not by one pair of cards. That
+          matters because acting on a move that is inside the noise is how programs
+          end up crediting an intervention for what was chance, and then repeating
+          it.
         </p>
         <p>
           The forecast and control chart carry the same discipline: the forecast
