@@ -20,8 +20,12 @@
 //
 // The clock is passed in rather than read, so this is deterministic in tests.
 
-/** How long a published note keeps showing in the banner. */
-export const RELEASE_NOTE_BANNER_DAYS = 7
+/**
+ * How long a published note keeps showing in the banner. Four weeks, so people
+ * on leave or rotating shifts still catch a release; anyone who has read it
+ * dismisses it, which is what keeps the longer window from becoming furniture.
+ */
+export const RELEASE_NOTE_BANNER_DAYS = 28
 
 const DAY_MS = 86_400_000
 

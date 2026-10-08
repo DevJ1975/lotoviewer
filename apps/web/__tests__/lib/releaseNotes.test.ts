@@ -11,12 +11,15 @@ import {
 
 const DAY = 86_400_000
 const NOW = Date.parse('2026-07-30T12:00:00Z')
+// Everything below is relative to the window, so these tests keep their meaning
+// if the window is ever retuned; one test pins the number itself.
+const WINDOW = RELEASE_NOTE_BANNER_DAYS * DAY
 
 const ago = (ms: number) => new Date(NOW - ms).toISOString()
 
 describe('RELEASE_NOTE_BANNER_DAYS', () => {
-  it('is one week', () => {
-    expect(RELEASE_NOTE_BANNER_DAYS).toBe(7)
+  it('is four weeks', () => {
+    expect(RELEASE_NOTE_BANNER_DAYS).toBe(28)
   })
 })
 
@@ -25,23 +28,23 @@ describe('isReleaseNoteFresh', () => {
     expect(isReleaseNoteFresh(ago(0), NOW)).toBe(true)
   })
 
-  it('shows a note published six days ago', () => {
-    expect(isReleaseNoteFresh(ago(6 * DAY), NOW)).toBe(true)
+  it('shows a note published a day inside the window', () => {
+    expect(isReleaseNoteFresh(ago(WINDOW - DAY), NOW)).toBe(true)
   })
 
-  it('hides a note published eight days ago', () => {
-    expect(isReleaseNoteFresh(ago(8 * DAY), NOW)).toBe(false)
+  it('hides a note published a day past the window', () => {
+    expect(isReleaseNoteFresh(ago(WINDOW + DAY), NOW)).toBe(false)
   })
 
-  // The exact boundary, both sides — a week is the window, so the instant it
-  // elapses the banner is done.
+  // The exact boundary, both sides — the instant the window elapses the
+  // banner is done.
   it('is fresh one minute before the boundary and stale one minute after', () => {
-    expect(isReleaseNoteFresh(ago(7 * DAY - 60_000), NOW)).toBe(true)
-    expect(isReleaseNoteFresh(ago(7 * DAY + 60_000), NOW)).toBe(false)
+    expect(isReleaseNoteFresh(ago(WINDOW - 60_000), NOW)).toBe(true)
+    expect(isReleaseNoteFresh(ago(WINDOW + 60_000), NOW)).toBe(false)
   })
 
-  it('treats exactly seven days as expired', () => {
-    expect(isReleaseNoteFresh(ago(7 * DAY), NOW)).toBe(false)
+  it('treats exactly one full window as expired', () => {
+    expect(isReleaseNoteFresh(ago(WINDOW), NOW)).toBe(false)
   })
 
   // Clock skew between the database and a browser shouldn't blank the banner.
@@ -72,7 +75,7 @@ describe('isReleaseNoteFresh', () => {
 
 describe('releaseNoteCutoffIso', () => {
   it('is exactly one window back from now', () => {
-    expect(releaseNoteCutoffIso(NOW)).toBe(new Date(NOW - 7 * DAY).toISOString())
+    expect(releaseNoteCutoffIso(NOW)).toBe(new Date(NOW - WINDOW).toISOString())
   })
 
   // The API filters on this and the component re-checks with
