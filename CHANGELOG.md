@@ -12,6 +12,60 @@ app at `/superadmin/release-notes`.
 
 _Nothing pending._
 
+## [1.20.0] — 2026-10-08
+
+Covers the two changes that landed after 1.19.0: the September bug hunt (#309)
+and the fix for scheduled jobs that existed but were never registered (#324).
+
+### Added
+- **A guard against unscheduled cron routes.** A test now fails when a route
+  under `app/api/cron/` has no entry in `vercel.json` and no written reason for
+  being manual-only. The gap it closes is silent: the route deploys, passes
+  review and never fires.
+
+### Changed
+- **The release-note banner now shows for four weeks, up from one.** Dismissing
+  it is still the way out for anyone who has read it. The banner shows only the
+  newest published note, so a later release replaces this one early.
+
+### Fixed
+- **Scheduled Hazard Hunts never generated.** `/api/cron/hazard-hunt-generate`
+  was never added to `vercel.json`, so no hunt was ever created from a
+  schedule. It now runs daily, and Superadmin → Run now can trigger it. Runs it
+  creates carry no facility: a schedule belongs to a shared template, and a
+  facility-less row is visible in both the all-facilities and single-facility
+  views. Because cadence adherence is completed ÷ generated, sites with active
+  schedules will now see generated runs count toward it.
+- **Three more jobs that documented their own schedule were never registered.**
+  Safety board digests (hourly), webhook-delivery reconciliation (every five
+  minutes, so deliveries stop reading "pending" in the superadmin explorer) and
+  the superadmin morning report (daily) now run. Digests reach only people who
+  chose daily or weekly.
+- **The OSHA ITA coverage check told some establishments they did not need to
+  file.** A NAICS code listed in both Appendix A and Appendix B collapsed to B
+  only, so a dual-listed establishment with 20–99 employees was reported as not
+  required to submit its 300A. Both appendices are now evaluated independently.
+- **Mean time to close and mean days to return to work were understated.** Rows
+  with unparseable or back-dated timestamps were left out of the sum but still
+  counted in the divisor. Both now divide by contributing rows only.
+- **A "fail" on an informational inspection item (text, photo, signature) could
+  fail the whole inspection** and open a corrective action. Only scorable items
+  can fail it now.
+- **SDS revision comparisons showed phantom changes** for optional fields an
+  older record did not carry. A missing value is now treated as absent.
+
+### Security
+- **Support chat trusted a client-supplied tenant.** It used the active-tenant
+  header for service-role reads and the tenant's stored AI key without checking
+  the caller belonged to that tenant. Membership is now verified, and an
+  unverified tenant falls back to the tenantless experience.
+- **Incident corrective-action owners were not checked against the tenant.** An
+  owner id from another tenant would have been looked up and emailed the
+  incident's details. The owner must now be an active member of the tenant.
+- **The anonymous-report endpoints returned raw database error messages.** They
+  now go through the same sanitiser as their sibling routes: full detail to
+  Sentry, a generic body to the client.
+
 ## [1.19.0] — 2026-08-29
 
 Cut the same day as 1.18.0. That release went out mid-way through clearing
