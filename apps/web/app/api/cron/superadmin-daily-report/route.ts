@@ -24,7 +24,8 @@ import { sendDailyReport } from '@/lib/email/sendDailyReport'
 //       trigger=manual on the cron_runs row but the email still goes
 //       out (idempotent — same for_date row gets updated).
 //
-// Schedule: 0 12 * * * (07:00 EST). vercel.json gets the entry.
+// Schedule (vercel.json): 5 12 * * * (07:05 EST) — five minutes past noon UTC so
+// it does not fire alongside training-expiry-reminders at 12:00.
 
 export const runtime = 'nodejs'
 // Six aggregation queries, then a Sonnet synthesis call, then an email. The

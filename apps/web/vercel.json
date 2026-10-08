@@ -100,6 +100,22 @@
     {
       "path": "/api/cron/vision-sweep-resume",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/hazard-hunt-generate",
+      "schedule": "10 11 * * *"
+    },
+    {
+      "path": "/api/cron/webhook-reconcile",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/superadmin-daily-report",
+      "schedule": "5 12 * * *"
+    },
+    {
+      "path": "/api/cron/safety-board-digests",
+      "schedule": "20 * * * *"
     }
   ]
 }
