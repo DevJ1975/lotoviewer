@@ -466,10 +466,11 @@ Baseline release. Earlier history is tracked in git and in the in-app release
 notes (`/superadmin/release-notes`); this changelog starts the forward record
 from 1.9.0.
 
-[Unreleased]: https://github.com/devj1975/lotoviewer/compare/v1.17.1...HEAD
+[Unreleased]: https://github.com/devj1975/lotoviewer/compare/v1.19.0...HEAD
+[1.19.0]: https://github.com/devj1975/lotoviewer/compare/v1.18.0...v1.19.0
+[1.18.0]: https://github.com/devj1975/lotoviewer/compare/v1.17.1...v1.18.0
 [1.17.1]: https://github.com/devj1975/lotoviewer/compare/v1.17.0...v1.17.1
 [1.17.0]: https://github.com/devj1975/lotoviewer/compare/v1.16.0...v1.17.0
-[1.10.0 – 1.16.0]: https://github.com/devj1975/lotoviewer/compare/v1.9.0...v1.16.0
-[Unreleased]: https://github.com/devj1975/lotoviewer/compare/v1.10.0...HEAD
+[1.11.0 – 1.16.0]: https://github.com/devj1975/lotoviewer/compare/v1.10.0...v1.16.0
 [1.10.0]: https://github.com/devj1975/lotoviewer/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/devj1975/lotoviewer/releases/tag/v1.9.0
