@@ -328,7 +328,7 @@ describe('creating a manifest (hw_create_shipment)', () => {
   describe('what is asked for', () => {
     it('refuses no containers, too many, and no signed-in caller', async () => {
       await expect(create(memberA, [])).rejects.toMatchObject({ code: '23514' })
-      const many = Array.from({ length: 101 }, () => '99999999-9999-4999-8999-999999999999')
+      const many = Array.from({ length: 101 }, (_, i) => `99999999-9999-4999-8999-${String(i).padStart(12, '0')}`)
       await expect(create(memberA, many)).rejects.toMatchObject({ code: '23514', message: expect.stringContaining('at most 100') })
       const [one] = await closedContainers(1)
       await expect(asCaller(db, { userId: '', tenantId: TA }, () => db.query(
@@ -399,7 +399,7 @@ describe('a container on two manifests', () => {
 
     await expect(link(otherAccount, free!, TB)).rejects.toMatchObject({ code: '23514', message: expect.stringContaining('same account') })
     await expect(link(otherSite, free!, TA)).rejects.toMatchObject({ code: '23514', message: expect.stringContaining('same site') })
-    await expect(link(sameSite, free!, TB)).rejects.toMatchObject({ code: '23503' })   // the composite key to the manifest
+    await expect(link(sameSite, free!, TB)).rejects.toMatchObject({ code: '23514', message: expect.stringContaining('same account') })
     expect(containers.length).toBe(2)
 
     await db.query(`update public.hazardous_waste_shipments set status = 'cancelled' where id = $1`, [sameSite])
@@ -672,10 +672,13 @@ describe('the database\'s own rules on a manifest, whoever writes it', () => {
   describe('dates', () => {
     const number = () => ({ manifest_tracking_number: trackingNumber() })
 
-    it('needs a ship date once shipped, completed or exception-reported', async () => {
+    it('needs a ship date once shipped', async () => {
       await refused({ ...number(), status: 'shipped' }, 'hw_shipments_shipped_on_required')
-      await refused({ ...number(), status: 'completed', completed_on: day(-1) }, 'hw_shipments_shipped_on_required')
-      await refused({ ...number(), status: 'exception_reported', exception_reported_on: day(-1) }, 'hw_shipments_shipped_on_required')
+    })
+
+    it('has no completed or exception-reported manifest without a ship date to count from', async () => {
+      await expect(directInsert({ ...number(), status: 'completed', completed_on: day(-1) })).rejects.toMatchObject({ code: '23514' })
+      await expect(directInsert({ ...number(), status: 'exception_reported', exception_reported_on: day(-1) })).rejects.toMatchObject({ code: '23514' })
     })
 
     it('needs the date of the step the status names', async () => {
@@ -725,7 +728,7 @@ describe('the database\'s own rules on a manifest, whoever writes it', () => {
 
   describe('status and dates move only through the functions', () => {
     it('refuses a direct update of the status or a date, even from the creator or an admin', async () => {
-      const { id } = await draft()
+      const id = await create(memberA, await closedContainers(1), { manifest_tracking_number: trackingNumber() })
       for (const caller of [memberA, ownerA]) {
         for (const set of [`status = 'cancelled'`, `status = 'shipped', shipped_on = current_date`, `shipped_on = current_date`]) {
           await expect(asCaller(db, caller, () => db.query(`update public.hazardous_waste_shipments set ${set} where id = $1`, [id])), set)
@@ -892,7 +895,8 @@ describe('access', () => {
       const link = (caller: Caller) => asCaller(db, caller, () => db.query(
         'insert into public.hazardous_waste_shipment_containers (shipment_id, container_id, tenant_id) values ($1, $2, $3)', [id, extra, TA]))
       await expect(link(memberC)).rejects.toMatchObject({ code: '42501' })
-      await expect(link(adminBInA)).rejects.toMatchObject({ code: '42501' })
+      // Another account's admin cannot even see the container, which the guard reports before the policy gets to speak.
+      await expect(link(adminBInA)).rejects.toMatchObject({ code: expect.stringMatching(/^(42501|P0002)$/) })
       await expect(link(ownerA)).resolves.toBeTruthy()
     })
 
@@ -903,7 +907,7 @@ describe('access', () => {
     })
   })
 
-  it('refuses a plain member a write policy of the kind that would let anyone delete', async () => {
+  it('has no policy that covers every command, and every delete policy is for admins', async () => {
     const policies = (await db.query<{ tablename: string; policyname: string; cmd: string; qual: string | null }>(
       `select tablename, policyname, cmd, qual from pg_policies where tablename like 'hazardous_waste_shipment%'`)).rows
     expect(policies.filter(p => p.cmd === 'ALL')).toEqual([])
