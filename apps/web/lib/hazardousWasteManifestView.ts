@@ -1,0 +1,152 @@
+import {
+  MANIFEST_TRANSITIONS, manifestClockRule,
+  type HazardousWasteShipmentRow, type ManifestAction, type ManifestClockStage, type ManifestReturnClock, type ManifestStatus,
+} from '@soteria/core/hazardousWasteManifest'
+import type { HazardousWasteContainerStatus } from '@soteria/core/hazardousWaste'
+
+// What the manifest screens and the /api/hazardous-waste/manifests routes share: the shapes
+// the routes answer with, and the words and colours the screens put on them. The rules
+// themselves (the clock, the legal moves) are @soteria/core's.
+
+/** A container as a manifest lists it. */
+export interface ManifestContainerRef {
+  id:     string
+  label:  string
+  status: HazardousWasteContainerStatus
+  /** The waste stream's name, on the detail view. */
+  stream_name?: string | null
+}
+
+export interface ManifestListItem extends HazardousWasteShipmentRow {
+  containers: ManifestContainerRef[]
+  clock:      ManifestReturnClock
+}
+
+export interface ManifestDetail extends ManifestListItem {
+  /** Three years after shipping; null until it ships. */
+  retention_end: string | null
+  /** Whether this caller may edit or move it: its creator, or a tenant admin. */
+  can_modify:    boolean
+}
+
+/** A closed container that could go on a new manifest. */
+export interface ShippableContainer {
+  id:                      string
+  label:                   string
+  area_location:           string | null
+  volume_quantity:         number | null
+  volume_unit:             string | null
+  accumulation_started_at: string | null
+  stream: { id: string; name: string; waste_codes: string[] } | null
+}
+
+type Role = 'owner' | 'admin' | 'member' | 'viewer' | 'superadmin'
+
+/** The creator may edit and move their own manifest; an admin may edit and move anyone's. RLS holds the same rule. */
+export function canModifyManifest(role: Role, userId: string, createdBy: string | null): boolean {
+  return role === 'owner' || role === 'admin' || role === 'superadmin' || (createdBy !== null && createdBy === userId)
+}
+
+export const MANIFEST_STATUS_LABEL: Record<ManifestStatus, string> = {
+  draft:              'Draft',
+  shipped:            'Shipped',
+  completed:          'Completed',
+  exception_reported: 'Exception reported',
+  cancelled:          'Cancelled',
+}
+
+export const CONTAINER_STATUS_LABEL: Record<HazardousWasteContainerStatus, string> = {
+  open:        'Open',
+  closed:      'Closed',
+  in_shipment: 'In shipment',
+  disposed:    'Disposed',
+}
+
+export const MANIFEST_STAGE_LABEL: Record<ManifestClockStage, string> = {
+  draft:                'Draft',
+  on_track:             'On track',
+  follow_up_due:        'Follow up now',
+  exception_report_due: 'Exception report due',
+  completed:            'Signed copy received',
+  exception_reported:   'Exception report filed',
+  cancelled:            'Cancelled',
+  not_applicable:       'No return clock',
+}
+
+/** Colour is never the only signal: every stage also has its words. */
+export const MANIFEST_STAGE_TONE: Record<ManifestClockStage, string> = {
+  draft:                'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  on_track:             'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
+  follow_up_due:        'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
+  exception_report_due: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
+  completed:            'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200',
+  exception_reported:   'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200',
+  cancelled:            'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+  not_applicable:       'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+}
+
+export const MANIFEST_ACTION_LABEL: Record<ManifestAction, string> = {
+  ship:           'Ship',
+  receive:        'Record signed copy',
+  file_exception: 'File exception report',
+  cancel:         'Cancel manifest',
+}
+
+/** What the date an action asks for is called. Null where it asks for none. */
+export const MANIFEST_ACTION_DATE_LABEL: Record<ManifestAction, string | null> = {
+  ship:           'Date the transporter accepted the waste',
+  receive:        'Date the signed copy was received',
+  file_exception: 'Date the exception report was filed',
+  cancel:         null,
+}
+
+/**
+ * The chip on a manifest: "Day 36 of 45 · Follow up now" while the clock runs, the stage
+ * alone once it has stopped or never started.
+ */
+export function clockChipText(item: Pick<ManifestListItem, 'clock' | 'generator_category' | 'jurisdiction'>): string {
+  const { clock } = item
+  const rule = manifestClockRule(item.generator_category, item.jurisdiction)
+  if (clock.daysSinceShipped === null || rule === null) return MANIFEST_STAGE_LABEL[clock.stage]
+  return `Day ${clock.daysSinceShipped} of ${rule.exceptionReportDay} · ${MANIFEST_STAGE_LABEL[clock.stage]}`
+}
+
+/** Says, in the words a person would use, what an action will do to the manifest's containers. */
+export function containerEffectText(action: ManifestAction, containerCount: number): string {
+  const containers = `${containerCount} container${containerCount === 1 ? '' : 's'}`
+  const after = MANIFEST_TRANSITIONS[action].containersAfter
+  if (after === null) return `The ${containers} stay In shipment.`
+  if (after === 'disposed') return `The ${containers} become Disposed and leave the active container list.`
+  return `The ${containers} go back to ${CONTAINER_STATUS_LABEL[after]} and can go on another manifest.`
+}
+
+export interface TimelineEntry { key: string; label: string; date: string | null }
+
+/** The manifest's life in order. A step not yet taken has no date. */
+export function timelineEntries(row: Pick<HazardousWasteShipmentRow, 'status' | 'created_at' | 'updated_at' | 'shipped_on' | 'completed_on' | 'exception_reported_on'>): TimelineEntry[] {
+  const entries: TimelineEntry[] = [
+    { key: 'drafted', label: 'Drafted', date: row.created_at.slice(0, 10) },
+    { key: 'shipped', label: 'Shipped: transporter accepted the waste', date: row.shipped_on },
+  ]
+  if (row.status === 'exception_reported') {
+    entries.push({ key: 'exception', label: 'Exception report filed', date: row.exception_reported_on })
+  } else if (row.status !== 'cancelled') {
+    entries.push({ key: 'completed', label: 'Signed copy received', date: row.completed_on })
+  }
+  // A cancelled manifest cannot be edited, so its last update is the day it was cancelled.
+  if (row.status === 'cancelled') entries.push({ key: 'cancelled', label: 'Cancelled', date: row.updated_at.slice(0, 10) })
+  return entries
+}
+
+/** A YYYY-MM-DD for people: "5 Apr 2026". The day is read as written, never shifted by the viewer's zone. */
+export function formatDay(day: string | null): string {
+  if (!day) return '—'
+  const [year, month, date] = day.split('-').map(Number) as [number, number, number]
+  return new Date(Date.UTC(year, month - 1, date)).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+}
+
+/** Today in the viewer's own calendar, as YYYY-MM-DD: the latest a date field should offer. */
+export function todayLocal(now: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
