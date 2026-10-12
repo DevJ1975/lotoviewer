@@ -56,6 +56,17 @@ export const MANIFEST_STATUS_LABEL: Record<ManifestStatus, string> = {
   cancelled:          'Cancelled',
 }
 
+export const GENERATOR_CATEGORY_LABEL: Record<RcraGeneratorCategory, string> = {
+  lqg:  'LQG: large quantity generator',
+  sqg:  'SQG: small quantity generator',
+  vsqg: 'VSQG: very small quantity generator',
+}
+
+/** 'federal' as "Federal (40 CFR)", 'state:CA' as "State rules: CA". */
+export function jurisdictionLabel(jurisdiction: string): string {
+  return jurisdiction === 'federal' ? 'Federal (40 CFR)' : `State rules: ${jurisdiction.slice('state:'.length)}`
+}
+
 export const CONTAINER_STATUS_LABEL: Record<HazardousWasteContainerStatus, string> = {
   open:        'Open',
   closed:      'Closed',

@@ -25,12 +25,14 @@ const TA = IDS.tenantA
 const TB = IDS.tenantB
 const MEMBER_C = '00000000-0000-4000-8000-0000000000c3'   // a second plain member of tenant A
 const SUPERADMIN = '00000000-0000-4000-8000-0000000000e5'
+const DUAL = '00000000-0000-4000-8000-0000000000d7'   // administers tenant A, and is only a member of tenant B
 
 const ownerA   = { userId: IDS.ownerA,  tenantId: TA }
 const memberA  = { userId: IDS.memberA, tenantId: TA }
 const memberC  = { userId: MEMBER_C,    tenantId: TA }
 const adminBInA = { userId: IDS.adminB, tenantId: TA }   // an admin of ANOTHER account working in this one's context
 const superadmin = { userId: SUPERADMIN, tenantId: TA }
+const dualAcrossTenants = { userId: DUAL }   // no active tenant: the roll-up
 
 let db: PGlite
 let siteA: string
@@ -64,6 +66,18 @@ const resultRow = (fields: Record<string, unknown> = {}) => ({
 const limit = (fields: Record<string, unknown> = {}) => insert(db, 'monitoring_limits', limitRow(fields))
 const result = (fields: Record<string, unknown> = {}) => insert(db, 'monitoring_results', resultRow(fields))
 
+/**
+ * An insert that asks for nothing back. With RETURNING, the new row must also pass the read policy,
+ * which would refuse a wrong-site or wrong-tenant insert on its own; without it, only the insert
+ * policy is on trial.
+ */
+const insertQuietly = (table: string, row: Record<string, unknown>) => {
+  const columns = Object.keys(row)
+  return db.query(`insert into public.${table} (${columns.join(', ')}) values (${columns.map((_, i) => `$${i + 1}`).join(', ')})`, columns.map(c => row[c]))
+}
+const limitQuietly = (fields: Record<string, unknown> = {}) => insertQuietly('monitoring_limits', limitRow(fields))
+const resultQuietly = (fields: Record<string, unknown> = {}) => insertQuietly('monitoring_results', resultRow(fields))
+
 const libraryLimit = (fields: Record<string, unknown> = {}) => limit({
   source: 'library', library_key: 'ca-igp-tss-annual', citation: 'IGP Table 2', verify: 'Confirm against the permit.', ...fields,
 })
@@ -79,9 +93,9 @@ const visible = (caller: Parameters<typeof asCaller>[1], table: string, id: stri
 beforeAll(async () => {
   db = await createSuiteDatabase({ extra: [MIGRATION] })
   await db.exec(`
-    insert into auth.users (id, email) values ('${MEMBER_C}', 'member-c@example.test'), ('${SUPERADMIN}', 'super@example.test');
-    insert into public.profiles (id, email, is_superadmin) values ('${MEMBER_C}', 'member-c@example.test', false), ('${SUPERADMIN}', 'super@example.test', true);
-    insert into public.tenant_memberships (user_id, tenant_id, role) values ('${MEMBER_C}', '${TA}', 'member');
+    insert into auth.users (id, email) values ('${MEMBER_C}', 'member-c@example.test'), ('${SUPERADMIN}', 'super@example.test'), ('${DUAL}', 'dual@example.test');
+    insert into public.profiles (id, email, is_superadmin) values ('${MEMBER_C}', 'member-c@example.test', false), ('${SUPERADMIN}', 'super@example.test', true), ('${DUAL}', 'dual@example.test', false);
+    insert into public.tenant_memberships (user_id, tenant_id, role) values ('${MEMBER_C}', '${TA}', 'member'), ('${DUAL}', '${TA}', 'admin'), ('${DUAL}', '${TB}', 'member');
   `)
   siteA = (await scalar<string>(db, 'select id from public.facilities where tenant_id = $1 and is_primary', [TA]))!
   siteOfTenantB = (await scalar<string>(db, 'select id from public.facilities where tenant_id = $1 and is_primary', [TB]))!
@@ -388,7 +402,7 @@ describe('limits: who may read and write', () => {
     const id = await asCaller(db, ownerA, () => limit({ parameter: 'Admin wrote this' }))
     expect(id).toBeTruthy()
 
-    await expect(asCaller(db, memberA, () => limit({ parameter: 'Member wrote this' }))).rejects.toMatchObject({ code: '42501' })
+    await expect(asCaller(db, memberA, () => limitQuietly({ parameter: 'Member wrote this' }))).rejects.toMatchObject({ code: '42501' })
 
     const changed = await asCaller(db, memberA, () => db.query(`update public.monitoring_limits set value = 1 where id = $1`, [id]))
     expect(changed.affectedRows).toBe(0)
@@ -403,14 +417,14 @@ describe('limits: who may read and write', () => {
   })
 
   it('refuses an admin of another account, even working in this account\'s context', async () => {
-    await expect(asCaller(db, adminBInA, () => limit({ parameter: 'Other tenant admin' }))).rejects.toMatchObject({ code: '42501' })
+    await expect(asCaller(db, adminBInA, () => limitQuietly({ parameter: 'Other tenant admin' }))).rejects.toMatchObject({ code: '42501' })
     const id = await limit()
     const changed = await asCaller(db, adminBInA, () => db.query(`update public.monitoring_limits set value = 1 where id = $1`, [id]))
     expect(changed.affectedRows).toBe(0)
   })
 
   it('refuses a write into a tenant other than the active one, even by an admin of both', async () => {
-    await expect(asCaller(db, { userId: IDS.ownerA, tenantId: TB }, () => limit({ parameter: 'Wrong context' }))).rejects.toMatchObject({ code: '42501' })
+    await expect(asCaller(db, { userId: IDS.ownerA, tenantId: TB }, () => limitQuietly({ parameter: 'Wrong context' }))).rejects.toMatchObject({ code: '42501' })
   })
 
   it('shows a member only the site they are working at, and everything in the roll-up', async () => {
@@ -426,7 +440,7 @@ describe('limits: who may read and write', () => {
   })
 
   it('keeps an admin at one site from writing a limit for another', async () => {
-    await expect(asCaller(db, { ...ownerA, facilityId: siteB }, () => limit({ facility_id: siteA }))).rejects.toMatchObject({ code: '42501' })
+    await expect(asCaller(db, { ...ownerA, facilityId: siteB }, () => limitQuietly({ facility_id: siteA }))).rejects.toMatchObject({ code: '42501' })
     await expect(asCaller(db, { ...ownerA, facilityId: siteA }, () => limit({ facility_id: siteA, parameter: 'At A' }))).resolves.toBeTruthy()
   })
 
@@ -451,8 +465,8 @@ describe('results: who may read, add, change and remove', () => {
   })
 
   it('refuses a result that names someone else as the sampler, or nobody', async () => {
-    await expect(asCaller(db, memberA, () => result({ sampled_by: IDS.ownerA }))).rejects.toMatchObject({ code: '42501' })
-    await expect(asCaller(db, memberA, () => result({ sampled_by: null }))).rejects.toMatchObject({ code: '42501' })
+    await expect(asCaller(db, memberA, () => resultQuietly({ sampled_by: IDS.ownerA }))).rejects.toMatchObject({ code: '42501' })
+    await expect(asCaller(db, memberA, () => resultQuietly({ sampled_by: null }))).rejects.toMatchObject({ code: '42501' })
   })
 
   it('refuses a plain member who tries to change a result, even their own: it is a record', async () => {
@@ -493,16 +507,26 @@ describe('results: who may read, add, change and remove', () => {
     expect((await db.query('select tenant_id, facility_id from public.monitoring_results where id = $1', [id])).rows).toEqual([{ tenant_id: TA, facility_id: siteA }])
   })
 
+  it('does not let someone who administers one tenant and is only a member of another move a result between them', async () => {
+    const id = await result()
+    await expect(asCaller(db, dualAcrossTenants, () => db.query(
+      `update public.monitoring_results set tenant_id = $2, facility_id = $3, outfall_id = null where id = $1`, [id, TB, siteOfTenantB],
+    ))).rejects.toMatchObject({ code: '42501' })
+    expect(await scalar(db, 'select tenant_id from public.monitoring_results where id = $1', [id])).toBe(TA)
+    // what that person may do in the tenant they administer is unchanged
+    expect((await asCaller(db, dualAcrossTenants, () => db.query(`update public.monitoring_results set value = 7 where id = $1`, [id]))).affectedRows).toBe(1)
+  })
+
   it('refuses an admin of another account: no read, no add, no change, no removal', async () => {
     const id = await result()
-    await expect(asCaller(db, adminBInA, () => result({ sampled_by: IDS.adminB }))).rejects.toMatchObject({ code: '42501' })
+    await expect(asCaller(db, adminBInA, () => resultQuietly({ sampled_by: IDS.adminB }))).rejects.toMatchObject({ code: '42501' })
     expect((await asCaller(db, adminBInA, () => db.query(`update public.monitoring_results set value = 1 where id = $1`, [id]))).affectedRows).toBe(0)
     expect((await asCaller(db, adminBInA, () => db.query(`delete from public.monitoring_results where id = $1`, [id]))).affectedRows).toBe(0)
     expect(await count('select count(*) from public.monitoring_results where id = $1', [id])).toBe(1)
   })
 
   it('refuses a member working in another tenant\'s context', async () => {
-    await expect(asCaller(db, { userId: IDS.memberA, tenantId: TB }, () => result({ sampled_by: IDS.memberA }))).rejects.toMatchObject({ code: '42501' })
+    await expect(asCaller(db, { userId: IDS.memberA, tenantId: TB }, () => resultQuietly({ sampled_by: IDS.memberA }))).rejects.toMatchObject({ code: '42501' })
   })
 
   it('shows and accepts a member\'s results only at the site they are working at', async () => {
@@ -513,7 +537,7 @@ describe('results: who may read, add, change and remove', () => {
     expect(await visible({ ...memberA, facilityId: siteB }, 'monitoring_results', atB)).toBe(1)
     expect(await visible({ ...memberA, facilityId: siteA }, 'monitoring_results', atB)).toBe(0)
 
-    await expect(asCaller(db, { ...memberA, facilityId: siteB }, () => result({ sampled_by: IDS.memberA, facility_id: siteA }))).rejects.toMatchObject({ code: '42501' })
+    await expect(asCaller(db, { ...memberA, facilityId: siteB }, () => resultQuietly({ sampled_by: IDS.memberA, facility_id: siteA, outfall_id: null }))).rejects.toMatchObject({ code: '42501' })
     await expect(asCaller(db, { ...memberA, facilityId: siteA }, () => result({ sampled_by: IDS.memberA, facility_id: siteA }))).resolves.toBeTruthy()
   })
 
