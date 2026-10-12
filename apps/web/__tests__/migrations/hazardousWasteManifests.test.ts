@@ -217,6 +217,13 @@ describe('migration 317: the rest of the design', () => {
     expect(forward).toContain('container_id uuid not null references public.hazardous_waste_containers(id),')
   })
 
+  it('locks the containers in a fixed order before reading their status, so two manifests over the same containers cannot both take them or deadlock', () => {
+    // Two sessions cannot be run against one PGlite connection, so the property is pinned in the text.
+    const lock = forward.indexOf('order by c.id for update')
+    expect(lock).toBeGreaterThan(-1)
+    expect(lock).toBeLessThan(forward.indexOf("c.status <> 'closed'"))
+  })
+
   it('the manifest is a draft with no dates, and past draft its dates are checked', () => {
     for (const name of ['hw_shipments_tracking_once_past_draft', 'hw_shipments_shipped_on_required', 'hw_shipments_completed_on_required',
       'hw_shipments_exception_on_required', 'hw_shipments_completed_after_shipped', 'hw_shipments_exception_after_shipped',
