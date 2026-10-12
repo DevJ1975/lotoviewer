@@ -201,7 +201,8 @@ create policy monitoring_results_member_insert on public.monitoring_results
   for insert to authenticated
   with check (
     (public.active_tenant_id() is null or tenant_id = public.active_tenant_id())
-    and (tenant_id in (select public.current_user_tenant_ids()) or public.is_superadmin())
+    and (public.active_facility_id() is null or facility_id = public.active_facility_id())
+    and true
     and sampled_by = auth.uid()
   );
 
