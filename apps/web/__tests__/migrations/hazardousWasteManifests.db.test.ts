@@ -424,7 +424,7 @@ describe('each layer holds with the other out of the way', () => {
     const { id } = await draft()
     const links = (caller: Caller) => asCaller(db, caller, async () => Number((await db.query<{ n: string }>(
       'select count(*) as n from public.hazardous_waste_shipment_containers where shipment_id = $1', [id])).rows[0]!.n))
-    await db.exec('alter table public.hazardous_waste_shipments no force row level security; alter table public.hazardous_waste_shipments disable row level security')
+    await db.exec('alter table public.hazardous_waste_shipments disable row level security')
     try {
       expect(await links({ ...memberC, facilityId: siteA })).toBe(2)
       expect(await links({ ...memberC, facilityId: siteB })).toBe(0)
@@ -788,11 +788,20 @@ describe('the database\'s own rules on a manifest, whoever writes it', () => {
       expect(await statusesOf(containers)).toEqual(['in_shipment', 'in_shipment'])
     })
 
-    it('does not leave the way open after a transition: the next direct update is refused again', async () => {
+    it('does not leave the way open after a transition: a direct update in the same transaction is refused again', async () => {
       const { id } = await draft()
-      await transition(ownerA, id, 'ship', day(-1))
-      await expect(asCaller(db, ownerA, () => db.query(`update public.hazardous_waste_shipments set status = 'cancelled' where id = $1`, [id])))
-        .rejects.toMatchObject({ code: '23514' })
+      let refusal: unknown = null
+      await asCaller(db, ownerA, () => db.transaction(async tx => {
+        await tx.query('select public.hw_transition_shipment($1, $2, $3::date)', [id, 'ship', day(-1)])
+        try {
+          await tx.query(`update public.hazardous_waste_shipments set status = 'cancelled' where id = $1`, [id])
+        } catch (error) {
+          refusal = error
+        }
+        await tx.rollback()
+      }))
+      expect(refusal).toMatchObject({ code: '23514', message: expect.stringContaining('only by shipping') })
+      expect((await shipment(id)).status).toBe('draft')   // the whole transaction was rolled back
     })
 
     it('lets a seed put a manifest in a later status by naming it to the guard in the same transaction, and no other manifest', async () => {
