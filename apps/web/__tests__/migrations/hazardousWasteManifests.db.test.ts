@@ -28,6 +28,7 @@ const TA = IDS.tenantA
 const TB = IDS.tenantB
 const MEMBER_C = '00000000-0000-4000-8000-0000000000c3'   // a second plain member of A: not the creator of A's manifests
 const SUPER = '00000000-0000-4000-8000-0000000000e5'      // a superadmin who belongs to no account
+const DUAL = '00000000-0000-4000-8000-0000000000d6'       // a member of both accounts, who can see both accounts' containers
 
 const ownerA = { userId: IDS.ownerA, tenantId: TA }
 const memberA = { userId: IDS.memberA, tenantId: TA }
@@ -123,9 +124,11 @@ async function asOwnerWithClaim<T>(caller: Caller, work: () => Promise<T>): Prom
 beforeAll(async () => {
   db = await createSuiteDatabase({ extra: [MIGRATION] })
   await db.exec(`
-    insert into auth.users (id, email) values ('${MEMBER_C}', 'member-c@example.test'), ('${SUPER}', 'super@example.test');
-    insert into public.profiles (id, email, is_superadmin) values ('${MEMBER_C}', 'member-c@example.test', false), ('${SUPER}', 'super@example.test', true);
-    insert into public.tenant_memberships (user_id, tenant_id, role) values ('${MEMBER_C}', '${TA}', 'member');
+    insert into auth.users (id, email) values ('${MEMBER_C}', 'member-c@example.test'), ('${SUPER}', 'super@example.test'), ('${DUAL}', 'dual@example.test');
+    insert into public.profiles (id, email, is_superadmin) values
+      ('${MEMBER_C}', 'member-c@example.test', false), ('${SUPER}', 'super@example.test', true), ('${DUAL}', 'dual@example.test', false);
+    insert into public.tenant_memberships (user_id, tenant_id, role) values
+      ('${MEMBER_C}', '${TA}', 'member'), ('${DUAL}', '${TA}', 'member'), ('${DUAL}', '${TB}', 'member');
   `)
   siteA = (await scalar<string>(db, 'select id from public.facilities where tenant_id = $1 and is_primary', [TA]))!
   siteB = await insert(db, 'facilities', { tenant_id: TA, name: 'Site B', code: 'SB', is_primary: false })
@@ -301,6 +304,15 @@ describe('creating a manifest (hw_create_shipment)', () => {
       ))).rejects.toMatchObject({ code: 'P0002' })
     })
 
+    it('refuses containers of two accounts on one manifest, for someone who belongs to both and has chosen neither', async () => {
+      const mine = await container()
+      const theirs = await container({ tenant_id: TB, stream_id: streamB, facility_id: siteOfB })
+      await expect(asCaller(db, { userId: DUAL }, () => db.query(
+        'select public.hw_create_shipment($1::uuid[], $2::jsonb)', [[mine, theirs], JSON.stringify({ generator_category: 'lqg' })],
+      ))).rejects.toMatchObject({ code: '23514', message: expect.stringContaining('different accounts') })
+      expect(await statusesOf([mine, theirs])).toEqual(['closed', 'closed'])
+    })
+
     it('makes the manifest at the containers\' site even with no site selected', async () => {
       const [atB] = await closedContainers(1, { facility_id: siteB })
       const id = await create(ownerA, [atB!])
@@ -404,6 +416,22 @@ describe('a container on two manifests', () => {
     expect(containers.length).toBe(2)
 
     await expect(link(leftDraft, free!, TA)).rejects.toMatchObject({ code: '23514', message: expect.stringContaining('draft') })
+  })
+})
+
+describe('the composite keys, with the guard trigger out of the way', () => {
+  it('refuses a container list under another account than its manifest\'s, and a manifest at a site that is not its account\'s', async () => {
+    const [free] = await closedContainers(1)
+    const manifest = await insert(db, 'hazardous_waste_shipments', { tenant_id: TA, facility_id: siteA, generator_category: 'lqg' })
+    await db.exec('alter table public.hazardous_waste_shipment_containers disable trigger trg_hw_shipment_containers_guard')
+    try {
+      await expect(db.query('insert into public.hazardous_waste_shipment_containers (shipment_id, container_id, tenant_id) values ($1, $2, $3)', [manifest, free, TB]))
+        .rejects.toMatchObject({ code: '23503' })
+      await expect(db.query('insert into public.hazardous_waste_shipment_containers (shipment_id, container_id, tenant_id) values ($1, $2, $3)', [manifest, free, TA]))
+        .resolves.toBeTruthy()
+    } finally {
+      await db.exec('alter table public.hazardous_waste_shipment_containers enable trigger trg_hw_shipment_containers_guard')
+    }
   })
 })
 

@@ -99,6 +99,16 @@ describe('what the page shows', () => {
     expect(screen.getByText('Apr 30, 2026')).toBeInTheDocument()
   })
 
+  it('says where the dates come from and that they have not been confirmed, rather than presenting them as settled', async () => {
+    const user = userEvent.setup()
+    await show(SHIPPED())
+    await user.click(screen.getByText('Where these dates come from'))
+    const clock = screen.getByRole('heading', { name: 'Return clock' }).closest('section')!
+    expect(within(clock).getByText('40 CFR 262.42')).toBeInTheDocument()
+    expect(within(clock).getByText('40 CFR 262.40(a)')).toBeInTheDocument()
+    expect(within(clock).getAllByText(/Not yet confirmed/)).toHaveLength(2)
+  })
+
   it('shows the timeline with the steps not yet taken marked as such', async () => {
     await show(SHIPPED())
     const timeline = within(screen.getByRole('list', { name: 'Manifest timeline' }))

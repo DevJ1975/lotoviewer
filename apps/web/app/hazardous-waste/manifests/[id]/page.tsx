@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import type { FieldError } from '@soteria/core/hazardousWaste'
-import { manifestClockRule, type ManifestAction } from '@soteria/core/hazardousWasteManifest'
+import { MANIFEST_CITATIONS, manifestClockRule, type ManifestAction } from '@soteria/core/hazardousWasteManifest'
 import {
   CONTAINER_STATUS_LABEL, GENERATOR_CATEGORY_LABEL, MANIFEST_ACTION_LABEL, MANIFEST_STATUS_LABEL, formatDay, jurisdictionLabel,
   manifestFormFromRow, manifestFormToBody, type ManifestDetail, type ManifestFormValues,
@@ -147,6 +147,16 @@ export default function HazardousWasteManifestDetailPage() {
           <Fact label="Exception report due" value={formatDay(clock.exceptionReportDueOn)} />
           <Fact label="Keep the signed copy until" value={formatDay(manifest.retention_end)} hint="Three years from shipping; your state may require longer." />
         </dl>
+        <details className="mt-3 text-xs text-slate-600 dark:text-slate-300">
+          <summary className="cursor-pointer font-semibold">Where these dates come from</summary>
+          <ul className="mt-2 space-y-2">
+            {([MANIFEST_CITATIONS.returnClock, MANIFEST_CITATIONS.retention] as const).map(citation => (
+              <li key={citation.ref}>
+                <span className="font-semibold">{citation.ref}</span>, {citation.title}. <span className="text-amber-800 dark:text-amber-200">Not yet confirmed: {citation.verify}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
       </Section>
 
       <Section title="What you can do next">
