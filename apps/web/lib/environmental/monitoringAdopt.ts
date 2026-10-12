@@ -1,11 +1,44 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { defaultLimitRow, type DefaultLimit } from '@soteria/core/environmental/monitoringDefaults'
+import { UUID_PATTERN } from '@soteria/core/environmental/validation'
 import { DatabaseError } from './monitoringHttp'
 import { PG_UNIQUE_VIOLATION } from './http'
 
 // Adopting draft default limits for a site (or one of its outfalls). Idempotent: the library
 // key is unique per site and outfall, so adopting again only fills the gaps, and a concurrent
 // adopt that wins the race leaves the loser with "already there", not an error.
+
+const MAX_KEYS = 50
+
+export type AdoptRequest =
+  | { ok: true; keys: string[]; outfallId: string | null; facilityId: string }
+  | { ok: false; errors: string[] }
+
+/** What an adopt request asks for, or everything wrong with it. The site defaults to the active one. */
+export function parseAdoptRequest(body: unknown, activeFacilityId: string | null): AdoptRequest {
+  const input = (typeof body === 'object' && body !== null && !Array.isArray(body) ? body : {}) as Record<string, unknown>
+  const errors: string[] = []
+
+  const keys = input.keys
+  if (!(Array.isArray(keys) && keys.length >= 1 && keys.length <= MAX_KEYS && keys.every(k => typeof k === 'string' && k.length <= 80))) {
+    errors.push(`keys must list between 1 and ${MAX_KEYS} default limits to adopt.`)
+  }
+
+  const outfall = input.outfall_id ?? null
+  if (!(outfall === null || outfall === '' || (typeof outfall === 'string' && UUID_PATTERN.test(outfall)))) errors.push('outfall_id must be an id.')
+
+  const facility = input.facility_id === undefined ? activeFacilityId : input.facility_id
+  if (facility === null) errors.push('facility_id is required: choose a site first.')
+  else if (!(typeof facility === 'string' && UUID_PATTERN.test(facility))) errors.push('facility_id must be an id.')
+
+  if (errors.length > 0) return { ok: false, errors }
+  return {
+    ok: true,
+    keys: [...new Set(keys as string[])],
+    outfallId: outfall ? (outfall as string).toLowerCase() : null,
+    facilityId: (facility as string).toLowerCase(),
+  }
+}
 
 interface Target {
   tenantId:   string
