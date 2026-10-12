@@ -1,9 +1,18 @@
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
+const CURRENT_VERSION = '1.1.0'
 const LAST_UPDATED    = '2026-10-12'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.0',
+    date: '2026-10-12',
+    changes: [
+      'New checklists for air (a permit compliance walkthrough and an emergency engine hours and maintenance log), wastewater (treatment system rounds), the hazardous waste program (an annual review) and hazardous waste shipments (a pre-shipment check), with their deadlines and legal register entries, for the federal baseline, California and Texas. California lowers the engine testing-hours limit and adds the DTSC manifest copy step; Texas adds Texas waste-code and registration questions.',
+      'The weekly accumulation-area inspections in the hazardous waste module now add a state\'s own checks (California and Texas) after the federal ones, each showing the rule it comes from and what a reviewer still has to confirm. Inspections already on file are unchanged.',
+      'The RCRA biennial report is now scheduled for March 1 of even-numbered years only.',
+    ],
+  },
   {
     version: '1.0.0',
     date: '2026-10-12',
@@ -28,6 +37,7 @@ export default function WikiEnvironmentalCompliancePage() {
       toc={[
         { id: 'overview',   label: 'What it\'s for' },
         { id: 'draft',      label: 'Draft content' },
+        { id: 'programs',   label: 'What the library covers' },
         { id: 'setup',      label: 'Setting up a site' },
         { id: 'jurisdiction', label: 'Federal and state rules' },
         { id: 'calendar',   label: 'The calendar' },
@@ -49,10 +59,10 @@ export default function WikiEnvironmentalCompliancePage() {
           deadline it satisfies, without anyone re-keying it.
         </p>
         <p>
-          It covers, today: industrial stormwater and outfall inspections, industrial wastewater
-          pretreatment checks, and a legal register and calendar that also carry the hazardous waste, air,
-          SPCC and EPCRA requirements and deadlines. Dedicated checklists for those other programs, and
-          hazardous waste manifest tracking, are planned and are not in this version.
+          It covers stormwater and outfall inspections, air permits and emergency engines, industrial
+          wastewater, the hazardous waste program and shipments, and carries SPCC and EPCRA deadlines in
+          the same calendar and legal register. See{' '}
+          <a href="#programs" className="underline">What the library covers</a> for the detail.
         </p>
       </Section>
 
@@ -68,6 +78,22 @@ export default function WikiEnvironmentalCompliancePage() {
         <p>
           Treat the library as a well-organized starting point, not as legal advice. Edit what does not fit
           your permit: your permit and your agency are the authority.
+        </p>
+      </Section>
+
+      <Section id="programs" title="What the library covers">
+        <ul className="list-disc space-y-1 pl-5">
+          <li><strong>Stormwater and outfalls:</strong> routine inspections, visual assessments and (California) monthly observations and storm sampling.</li>
+          <li><strong>Air:</strong> a permit compliance walkthrough for sites with a permit or registration, and an emergency engine log for generators and fire pumps. The log checks the hours run for maintenance and testing against the limit (100 federally; California&apos;s engine rule is lower) and keeps real emergencies separate. Deadlines the permit sets, such as Title V certifications, are in the legal register, not invented dates on the calendar.</li>
+          <li><strong>Wastewater:</strong> treatment system rounds for sewer and direct dischargers: pH against the 5.0 federal floor and your own limits, separators, treatment chemicals, alarms, bypass and solids.</li>
+          <li><strong>Hazardous waste:</strong> an annual program review for large and small quantity generators (status, EPA ID, waste determinations, training, emergency readiness, shipping records), the biennial report on March 1 of even years, and the legal register entries. The <em>weekly walks</em> of satellite and central accumulation areas are in the Hazardous waste module, not here, so there is one record of each walk; with a state set on the site they also ask that state&apos;s extra questions.</li>
+          <li><strong>Shipments:</strong> a pre-shipment check to run before the transporter signs. California adds the DTSC copy step and Texas adds its waste-code and registration questions.</li>
+          <li><strong>SPCC and Tier II:</strong> the five-year plan review, the annual briefing and the March 1 inventory, once the site profile says they apply.</li>
+        </ul>
+        <p>
+          Which of these a site sees depends on its profile: the air items need an air permit or registration,
+          the wastewater items a discharge, the hazardous waste items a generator category of large or small.
+          An axis left &quot;not evaluated&quot; shows nothing, rather than guessing.
         </p>
       </Section>
 

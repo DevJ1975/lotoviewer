@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowLeft, Check, ClipboardCheck, Loader2 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
+import { useFacility } from '@/components/FacilityProvider'
 import { supabase } from '@/lib/supabase'
 import {
   HAZARDOUS_WASTE_AREA_LABEL,
@@ -27,6 +28,7 @@ type FindingDraft = Pick<HazardousWasteInspectionFinding, 'check_id'> & {
 
 export default function NewHazardousWasteInspectionPage() {
   const { tenant } = useTenant()
+  const { available: facilities, facility: activeFacility } = useFacility()
   const tenantId = tenant?.id
   const router = useRouter()
   const search = useSearchParams()
@@ -79,7 +81,14 @@ export default function NewHazardousWasteInspectionPage() {
     return areas.find(a => a.id === areaId) ?? null
   }, [areaId, areas])
 
-  const checks = useMemo(() => area ? getChecksForArea(area.area_type) : [], [area])
+  // The state decides which extra checks apply. A shared area (no site) and an area whose
+  // site is not loaded fall back to the active site, then to the federal baseline.
+  const areaState = useMemo(() => {
+    const site = area?.facility_id ? facilities.find(f => f.id === area.facility_id) : undefined
+    return (site ?? activeFacility)?.state ?? null
+  }, [area, facilities, activeFacility])
+
+  const checks = useMemo(() => area ? getChecksForArea(area.area_type, areaState) : [], [area, areaState])
 
   // Whenever the area changes, prime the findings draft so every check
   // for that area_type has a row. Skipping this means the UI can't show
@@ -88,12 +97,12 @@ export default function NewHazardousWasteInspectionPage() {
     if (!area) { setFindings({}); return }
     setFindings(prev => {
       const next: Record<string, FindingDraft> = {}
-      for (const check of getChecksForArea(area.area_type)) {
+      for (const check of getChecksForArea(area.area_type, areaState)) {
         next[check.id] = prev[check.id] ?? { check_id: check.id, status: null, note: '' }
       }
       return next
     })
-  }, [area])
+  }, [area, areaState])
 
   const unanswered = checks.filter(c => findings[c.id]?.status == null).length
   const criticalFails = checks.filter(c =>
@@ -284,6 +293,12 @@ export default function NewHazardousWasteInspectionPage() {
                             )}
                           </p>
                           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{check.detail}</p>
+                          {check.citation && (
+                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                              {check.citation}
+                              {check.verify && <span className="ml-1 italic">Draft, to be confirmed: {check.verify}</span>}
+                            </p>
+                          )}
                         </div>
                         <div className="flex gap-1 shrink-0">
                           <StatusButton current={status} value="pass" onClick={() => setStatus(check.id, 'pass')} />

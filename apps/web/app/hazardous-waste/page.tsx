@@ -230,7 +230,7 @@ export default function HazardousWastePage() {
         <RecentInspections inspections={inspections ?? []} areas={areas ?? []} loading={loading} />
       </section>
 
-      <section className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <Link
           href="/hazardous-waste/streams"
           className="rounded-lg border border-slate-200 dark:border-slate-800 p-4 hover:border-slate-400 dark:hover:border-slate-600 transition-colors"
@@ -247,6 +247,15 @@ export default function HazardousWastePage() {
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Containers →</h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             Physical containers with accumulation aging (LQG / SQG / VSQG). Open over-limit drums first.
+          </p>
+        </Link>
+        <Link
+          href="/hazardous-waste/manifests"
+          className="rounded-lg border border-slate-200 dark:border-slate-800 p-4 hover:border-slate-400 dark:hover:border-slate-600 transition-colors"
+        >
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Manifests →</h2>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Shipments off site and the clock for the signed copy to come back. Ship, record the copy, or file an exception report.
           </p>
         </Link>
       </section>

@@ -85,6 +85,12 @@ export interface ChecklistItemDef {
   guidance?:         string
   citations:         Citation[]
   appliesWhen?:      Applicability
+  /**
+   * Only for an item an overlay adds: put it right after the named item of the same
+   * checklist instead of at the end, so a state's extra question lands in its section
+   * rather than after the signature. Several items with one anchor keep their order.
+   */
+  placeAfter?:       string
 }
 
 export type ChecklistSubjectType = 'facility' | 'outfall' | 'permit' | 'hw_area'
@@ -104,14 +110,16 @@ export interface ChecklistTemplateDef {
 
 /**
  * When an obligation falls due.
- *  annual     - a fixed month and day each year.
+ *  annual     - a fixed month and day each year. `yearParity` restricts the first
+ *               due date to even or odd years, for a duty that falls every other
+ *               year (the RCRA biennial report is due March 1 of even years only).
  *  period_end - the last day of the current month, quarter, half-year or year.
  *               Calendar-year periods: a half ends Jun 30 / Dec 31, which is
  *               also California's industrial stormwater reporting half-year.
  *  rolling    - one cadence from "now" (no fixed calendar anchor).
  */
 export type DueAnchor =
-  | { kind: 'annual'; month: number; day: number }
+  | { kind: 'annual'; month: number; day: number; yearParity?: 'even' | 'odd' }
   | { kind: 'period_end'; period: 'month' | 'quarter' | 'half' | 'year' }
   | { kind: 'rolling' }
 

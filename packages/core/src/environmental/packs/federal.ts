@@ -13,9 +13,13 @@
 // recollection of the rule; they are marked so the reviewer knows exactly what to
 // check. Where a permit or regulation leaves the deadline to the permit itself
 // (Title V certifications, SPCC reviews), the item is in the legal register, not
-// the calendar, rather than carrying an invented date.
+// the calendar, rather than carrying an invented date. The air, wastewater,
+// hazardous waste program and manifest content lives in federalAirWaste.ts.
 
 import type { JurisdictionPack } from '../content'
+import {
+  federalAirWasteChecklists, federalAirWasteGuides, federalAirWasteLegal, federalAirWasteObligations,
+} from './federalAirWaste'
 import { federalGuides } from './guides'
 import { cite, passFail, photoItem, signatureItem, textItem } from './helpers'
 
@@ -167,6 +171,7 @@ export const federalPack: JurisdictionPack = {
           signatureItem('ww.sign', 'Record', 'Signature.', { cite: [cite('40 CFR 403.12(l)', 'Confirm signatory requirements.')], required: true }),
         ],
       },
+      ...federalAirWasteChecklists,
     ],
   },
 
@@ -211,6 +216,7 @@ export const federalPack: JurisdictionPack = {
         appliesWhen: { pretreatment: ['ciu'] },
         legalId: 'lr-fed-pretreatment',
       },
+      ...federalAirWasteObligations,
     ],
   },
 
@@ -317,8 +323,9 @@ export const federalPack: JurisdictionPack = {
         sourceUrl: 'https://www.ecfr.gov/current/title-40/part-403', reviewFrequency: 'annual',
         appliesWhen: { wastewaterDischarge: ['potw_indirect'] },
       },
+      ...federalAirWasteLegal,
     ],
   },
 
-  guides: { add: federalGuides },
+  guides: { add: [...federalGuides, ...federalAirWasteGuides] },
 }

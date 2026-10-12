@@ -66,10 +66,27 @@ const stamp = <T extends Keyed>(item: T, layer: JurisdictionCode, replaced?: Res
 const patchFlat = <T extends Keyed>(existing: Resolved<T>, fields: Partial<Omit<T, 'id'>>, layer: JurisdictionCode): Resolved<T> =>
   ({ ...existing, ...fields, source: layer, overrides: existing.source })
 
+/** Move each item that names a `placeAfter` anchor to just after it, keeping the order they were authored in. */
+function placeAfterAnchors(items: Resolved<ChecklistItemDef>[], layer: JurisdictionCode, templateId: string): Resolved<ChecklistItemDef>[] {
+  const placed = [...items]
+  const lastPlacedAfter = new Map<string, string>()
+  for (const item of items) {
+    if (!item.placeAfter) continue
+    const anchorId = lastPlacedAfter.get(item.placeAfter) ?? item.placeAfter
+    placed.splice(placed.findIndex(i => i.id === item.id), 1)
+    const anchorAt = placed.findIndex(i => i.id === anchorId)
+    if (anchorAt < 0) throw new PackError(layer, `item '${item.id}' of '${templateId}' is placed after '${item.placeAfter}', which is not in that checklist`)
+    placed.splice(anchorAt + 1, 0, item)
+    lastPlacedAfter.set(item.placeAfter, item.id)
+  }
+  return placed
+}
+
 function resolveItems(
   items: Resolved<ChecklistItemDef>[], overlay: Overlay<ChecklistItemDef> | undefined, layer: JurisdictionCode, templateId: string,
 ): Resolved<ChecklistItemDef>[] {
-  return applyOverlay<ChecklistItemDef>(items, overlay, layer, `item of '${templateId}'`, stamp, patchFlat)
+  const resolved = applyOverlay<ChecklistItemDef>(items, overlay, layer, `item of '${templateId}'`, stamp, patchFlat)
+  return placeAfterAnchors(resolved, layer, templateId)
 }
 
 export function resolveLibrary(

@@ -11,6 +11,8 @@ import {
   isValidNfpaRating,
   type DotPackingGroup,
 } from './hazardSymbols'
+import { normalizeStateCode } from './environmental/jurisdiction'
+import { HAZARDOUS_WASTE_STATE_CHECKS } from './hazardousWasteStateChecks'
 
 export const HAZARDOUS_WASTE_AREA_TYPES = [
   'satellite_accumulation',
@@ -27,6 +29,10 @@ export interface HazardousWasteFieldCheck {
   detail: string
   areaTypes: HazardousWasteAreaType[]
   critical: boolean
+  /** Set on a state's additional checks: the rule it comes from. */
+  citation?: string
+  /** Set on a state's additional checks: what a reviewer must confirm before a site relies on it. */
+  verify?: string
 }
 
 export interface HazardousWasteCalendarItem {
@@ -311,17 +317,29 @@ export function createEmptyHazardousWasteFieldDraft(areaType: HazardousWasteArea
   }
 }
 
-export function getChecksForArea(areaType: HazardousWasteAreaType): HazardousWasteFieldCheck[] {
-  return HAZARDOUS_WASTE_FIELD_CHECKS.filter(check => check.areaTypes.includes(areaType))
+/**
+ * The checks for one kind of area. With no `state` (or a state with no additions) these are the
+ * federal baseline, exactly as before; a state's additions follow them. `state` is whatever the
+ * site has on file ("CA", "california").
+ */
+export function getChecksForArea(areaType: HazardousWasteAreaType, state?: string | null): HazardousWasteFieldCheck[] {
+  const stateChecks = HAZARDOUS_WASTE_STATE_CHECKS[normalizeStateCode(state) ?? ''] ?? []
+  return [...HAZARDOUS_WASTE_FIELD_CHECKS, ...stateChecks].filter(check => check.areaTypes.includes(areaType))
 }
 
-export function summarizeHazardousWasteDraft(draft: HazardousWasteFieldDraft): {
+/** Every check any jurisdiction can ask for, for validating a check id that arrives from a client. */
+export const ALL_HAZARDOUS_WASTE_CHECKS: readonly HazardousWasteFieldCheck[] = [
+  ...HAZARDOUS_WASTE_FIELD_CHECKS,
+  ...Object.values(HAZARDOUS_WASTE_STATE_CHECKS).flat(),
+]
+
+export function summarizeHazardousWasteDraft(draft: HazardousWasteFieldDraft, state?: string | null): {
   total: number
   checked: number
   flaggedCritical: number
   readyForReview: boolean
 } {
-  const checks = getChecksForArea(draft.areaType)
+  const checks = getChecksForArea(draft.areaType, state)
   const checked = checks.filter(check => draft.checkedIds.includes(check.id)).length
   const flaggedCritical = checks.filter(check => check.critical && draft.flaggedIds.includes(check.id)).length
   // readyForReview is meaningful only when checks actually apply to the area.
@@ -344,6 +362,8 @@ export function summarizeHazardousWasteDraft(draft: HazardousWasteFieldDraft): {
 export interface HazardousWasteAreaRow {
   id:                   string
   tenant_id:            string
+  /** The site the area is at (null = shared). Absent on rows from before migration 210. */
+  facility_id?:         string | null
   name:                 string
   area_type:            HazardousWasteAreaType
   location_notes:       string | null
@@ -391,8 +411,8 @@ export interface HazardousWasteInspectionRow {
 // `flaggedIds` is a fail; anything in `checkedIds` not also flagged is a
 // pass; everything else is recorded as `na` so the row preserves the
 // full checklist surface area and the binder PDF can show "skipped" items.
-export function findingsFromDraft(draft: HazardousWasteFieldDraft): HazardousWasteInspectionFinding[] {
-  const checks = getChecksForArea(draft.areaType)
+export function findingsFromDraft(draft: HazardousWasteFieldDraft, state?: string | null): HazardousWasteInspectionFinding[] {
+  const checks = getChecksForArea(draft.areaType, state)
   const flagged = new Set(draft.flaggedIds)
   const checked = new Set(draft.checkedIds)
   return checks.map(check => {

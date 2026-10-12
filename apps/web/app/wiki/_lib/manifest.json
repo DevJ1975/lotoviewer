@@ -212,11 +212,18 @@
         "apps/web/lib/environmental/**",
         "apps/web/lib/email/sendComplianceReminder.ts",
         "packages/core/src/environmental/**",
-        "apps/web/migrations/299_environmental_site_profiles.sql",
-        "apps/web/migrations/300_environmental_permits_outfalls.sql",
-        "apps/web/migrations/301_environmental_checklists.sql",
-        "apps/web/migrations/302_compliance_calendar_v2.sql",
-        "apps/web/migrations/303_legal_register_environmental.sql"
+        "packages/core/src/hazardousWasteManifest.ts",
+        "packages/core/src/hazardousWasteStateChecks.ts",
+        "apps/web/app/hazardous-waste/manifests/**",
+        "apps/web/app/api/hazardous-waste/manifests/**",
+        "apps/web/migrations/311_recover_legal_registry.sql",
+        "apps/web/migrations/312_environmental_site_profiles.sql",
+        "apps/web/migrations/313_stormwater_outfalls.sql",
+        "apps/web/migrations/314_environmental_checklists.sql",
+        "apps/web/migrations/315_compliance_calendar_v2.sql",
+        "apps/web/migrations/316_legal_register_environmental.sql",
+        "apps/web/migrations/317_hazardous_waste_shipments.sql",
+        "apps/web/migrations/318_environmental_monitoring.sql"
       ]
     },
     {

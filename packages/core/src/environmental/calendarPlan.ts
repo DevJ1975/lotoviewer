@@ -30,7 +30,8 @@ function periodEnd(period: 'month' | 'quarter' | 'half' | 'year', now: Date): st
 
 /**
  * The first due date for an obligation created `now`.
- *  annual     - the next occurrence of the month and day, today included.
+ *  annual     - the next occurrence of the month and day, today included; with a
+ *               year parity, the next one that falls in an even (or odd) year.
  *  period_end - the end of the current period (due today if today is the last day).
  *  rolling    - one cadence from today.
  */
@@ -38,8 +39,14 @@ export function firstDueDate(
   anchor: DueAnchor, cadence: ObligationCadence, cadenceDays: number | undefined, now: Date,
 ): string {
   switch (anchor.kind) {
-    case 'annual':
-      return nextAnnualOccurrence(anchor.month, anchor.day, now)
+    case 'annual': {
+      const next = nextAnnualOccurrence(anchor.month, anchor.day, now)
+      if (!anchor.yearParity) return next
+      const year = Number(next.slice(0, 4))
+      const rightParity = (year % 2 === 0) === (anchor.yearParity === 'even')
+      // One year on is enough: parity alternates every year.
+      return rightParity ? next : iso(new Date(Date.UTC(year + 1, anchor.month - 1, anchor.day)))
+    }
     case 'period_end':
       return periodEnd(anchor.period, now)
     case 'rolling':

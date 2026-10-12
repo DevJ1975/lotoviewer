@@ -10,6 +10,7 @@ import type { JurisdictionPack } from '../content'
 import { federalPack } from './federal'
 import { txStormwaterGuide } from './guides'
 import { cite, rebase } from './helpers'
+import { txAirWasteLegal, txManifestItems } from './txAirWaste'
 
 const TXR_VERIFY =
   'TPDES MSGP TXR050000 (issued 2021) was due to expire about August 2026. Confirm which permit is in effect and that the part number below matches it. Item wording is derived from the federal baseline: confirm it against the Texas permit text.'
@@ -48,6 +49,10 @@ export const txPack: JurisdictionPack = {
     ],
   },
 
+  checklistItems: {
+    'manifest-pre-shipment': txManifestItems,
+  },
+
   obligations: {
     remove: [
       { id: 'sw-fed-annual-report', reason: 'The EPA NeT annual report belongs to the EPA MSGP. Texas reporting duties come from the permit itself and TCEQ\'s STEERS system; confirm them in TXR050000.' },
@@ -59,6 +64,10 @@ export const txPack: JurisdictionPack = {
       } },
       { id: 'sw-fed-routine-inspection', fields: { citations: INSPECTION } },
       { id: 'sw-fed-quarterly-visual', fields: { citations: VISUAL } },
+      { id: 'hw-fed-biennial-report', fields: {
+        description: 'Large quantity generators report on the previous odd-numbered year by March 1 of each even-numbered year. Texas also collects generator data through the Annual Waste Summary, so confirm with TCEQ which report it expects from your site.',
+        citations: [cite('40 CFR 262.41; 30 TAC §335.9', 'Texas collects generator data through the Annual Waste Summary. Confirm whether TCEQ also requires the federal biennial report from large quantity generators.')],
+      } },
     ],
     add: [
       {
@@ -115,6 +124,7 @@ export const txPack: JurisdictionPack = {
         appliesWhen: { airPermitType: ['registration_or_pbr'] },
         verify: 'Identify each permit by rule the site relies on and confirm its conditions and records.',
       },
+      ...txAirWasteLegal,
     ],
   },
 
