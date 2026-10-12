@@ -9,7 +9,7 @@ import { useFacility } from '@/components/FacilityProvider'
 import { parseFacilityProfile, type FieldError } from '@soteria/core/hazardousWaste'
 import { normalizeWasteCodes } from '@soteria/core/hazardousWasteManifest'
 import {
-  CONTAINER_STATUS_LABEL, manifestFormDefaults, manifestFormToBody, type ManifestFormValues, type ShippableContainer,
+  CONTAINER_STATUS_LABEL, manifestFormDefaults, manifestFormToBody, splitWasteCodes, type ManifestFormValues, type ShippableContainer,
 } from '@/lib/hazardousWasteManifestView'
 import { ManifestFieldsForm } from '../_components/ManifestFieldsForm'
 import { ManifestApiError, createManifest, listShippableContainers } from '../_lib/manifestClient'
@@ -27,11 +27,23 @@ export default function NewHazardousWasteManifestPage() {
   const [containers, setContainers] = useState<ShippableContainer[] | null>(null)
   const [total, setTotal]           = useState(0)
   const [selected, setSelected]     = useState<ReadonlySet<string>>(new Set())
-  const [values, setValues]         = useState<ManifestFormValues>(() => manifestFormDefaults(facility ? parseFacilityProfile(facility.settings) : null))
+  const [values, setValues]         = useState<ManifestFormValues>(() => manifestFormDefaults(null))
+  const [edited, setEdited]         = useState(false)
   const [loadError, setLoadError]   = useState<string | null>(null)
   const [error, setError]           = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldError[]>([])
   const [submitting, setSubmitting] = useState(false)
+
+  // The site's generator profile arrives after the page does; it fills the form only until the person has touched it.
+  const profile = useMemo(() => (facility ? parseFacilityProfile(facility.settings) : null), [facility])
+  useEffect(() => {
+    if (!edited) setValues(manifestFormDefaults(profile))
+  }, [profile, edited])
+
+  const changeValues = (next: ManifestFormValues) => {
+    setEdited(true)
+    setValues(next)
+  }
 
   const load = useCallback(async () => {
     if (!tenantId) return
@@ -153,12 +165,12 @@ export default function NewHazardousWasteManifestPage() {
             </ul>
           </fieldset>
 
-          <ManifestFieldsForm idPrefix="new" values={values} onChange={setValues} fieldErrors={fieldErrors} disabled={submitting} />
+          <ManifestFieldsForm idPrefix="new" values={values} onChange={changeValues} fieldErrors={fieldErrors} disabled={submitting} />
 
-          {suggestedCodes.length > 0 && normalizeWasteCodes([values.wasteCodes]).join() !== suggestedCodes.join() && (
+          {suggestedCodes.length > 0 && normalizeWasteCodes(splitWasteCodes(values.wasteCodes)).join() !== suggestedCodes.join() && (
             <p className="text-xs text-slate-600 dark:text-slate-300">
               The chosen containers&apos; streams carry {suggestedCodes.join(', ')}.{' '}
-              <button type="button" onClick={() => setValues({ ...values, wasteCodes: suggestedCodes.join(', ') })} className="font-semibold text-brand-navy underline">
+              <button type="button" onClick={() => changeValues({ ...values, wasteCodes: suggestedCodes.join(', ') })} className="font-semibold text-brand-navy underline">
                 Use these waste codes
               </button>
             </p>
