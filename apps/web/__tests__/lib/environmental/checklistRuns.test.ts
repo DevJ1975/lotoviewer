@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { advanceDueDate } from '@soteria/core/complianceCalendar'
 import { applies } from '@soteria/core/environmental/applicability'
 import { libraryForState } from '@soteria/core/environmental/packs/index'
 import { EMPTY_SITE_PROFILE, type SiteProfile } from '@soteria/core/environmental/siteProfile'
@@ -46,9 +47,11 @@ interface World {
   snapshot: RunSnapshot
   obligations: Map<string, ObligationRow>
   findings: NonconformityInsert[]
-  events: Array<{ obligationId: string; occurrenceAt: string; inspectionId: string }>
+  events: Array<{ obligationId: string; occurrenceAt: string; inspectionId: string; note: string }>
   log: string[]
   failOn?: string
+  /** What the database says when asked to complete the deadline, instead of completing it. */
+  completion?: 'not_permitted'
   signatureSaved: boolean
 }
 
@@ -79,12 +82,19 @@ function storeFor(w: World): RunStore {
     async saveResponses() { step('responses') },
     async existingFindingRefs() { return new Set(w.findings.map(f => f.source_reference)) },
     async insertFindings(rows) { step('findings'); w.findings.push(...rows) },
-    async recordCompletion(args) {
+    // Mirrors env_complete_obligation (migration 315): only the occurrence still waiting is completed,
+    // once per checklist, and a period-end deadline stays on period ends.
+    async completeOccurrence(args) {
       step('completion')
-      // The unique link to the checklist: a second record of the same run is ignored.
+      if (w.completion === 'not_permitted') return 'not_permitted'
+      const ob = w.obligations.get(args.obligationId)!
+      if (ob.status !== 'open' || ob.next_due_at !== args.occurrenceAt) return 'stale'
       if (!w.events.some(e => e.inspectionId === args.inspectionId)) w.events.push(args)
+      w.obligations.set(ob.id, ob.cadence === 'once'
+        ? { ...ob, status: 'completed' }
+        : { ...ob, next_due_at: advanceDueDate(ob.next_due_at, ob.cadence, ob.cadence_days, { clampToMonthEnd: ob.due_anchor === 'period_end' }) })
+      return 'completed'
     },
-    async advanceObligation(id, update) { step('advance'); w.obligations.set(id, { ...w.obligations.get(id)!, ...update } as ObligationRow) },
     async saveSignature() { step('signature'); w.signatureSaved = true },
     async finalize() { step('finalize'); if (w.snapshot.inspection.status === 'submitted') return false; w.snapshot.inspection.status = 'submitted'; return true },
   }
@@ -132,7 +142,7 @@ describe('submitChecklist', () => {
     expect(r).toMatchObject({ ok: true, result: 'pass', findingsRaised: 0, completedObligation: true })
     expect(w.findings).toEqual([])
     expect(w.obligations.get('ob-1')!.next_due_at).toBe('2026-12-31')
-    expect(w.events).toEqual([{ obligationId: 'ob-1', occurrenceAt: '2026-09-30', inspectionId: 'run-1', userId: 'user-1', note: 'Checklist passed' }])
+    expect(w.events).toEqual([{ obligationId: 'ob-1', occurrenceAt: '2026-09-30', inspectionId: 'run-1', note: 'Checklist passed' }])
   })
 
   it('keeps a quarter-end deadline on quarter ends instead of drifting (Mar 31 -> Jun 30 -> Sep 30)', async () => {
@@ -182,12 +192,42 @@ describe('submitChecklist', () => {
     expect(w.obligations.get('ob-1')).toMatchObject({ status: 'completed', next_due_at: '2026-09-30' })
   })
 
-  it('does not move a deadline that has already moved past the occurrence this run satisfies', async () => {
+  it('does not claim to have completed a deadline that had already moved past the occurrence this run satisfies', async () => {
     const w = world({ obligation: obligation({ next_due_at: '2026-12-31' }), occurrenceAt: '2026-09-30' })
     const r = await submitChecklist(storeFor(w), ctx, 'run-1', input())
-    expect(r).toMatchObject({ ok: true, completedObligation: true })
-    expect(w.log).not.toContain('advance')
+    expect(r).toMatchObject({ ok: true, completedObligation: false })
+    expect(r).not.toHaveProperty('completionPending')
+    expect(w.events).toEqual([])
     expect(w.obligations.get('ob-1')!.next_due_at).toBe('2026-12-31')
+  })
+
+  it('files the checklist but does not complete a deadline the database will not let this person complete', async () => {
+    const w = world(); w.completion = 'not_permitted'
+    const r = await submitChecklist(storeFor(w), ctx, 'run-1', input())
+    expect(r).toMatchObject({ ok: true, completedObligation: false })
+    expect(r).not.toHaveProperty('completionPending')
+    expect(w.snapshot.inspection.status).toBe('submitted')
+    expect(w.obligations.get('ob-1')!.next_due_at).toBe('2026-09-30')
+  })
+
+  it('keeps the checklist filed when completing its deadline fails, says so, and reports the error', async () => {
+    const w = world(); w.failOn = 'completion'
+    const reported: unknown[] = []
+    const r = await submitChecklist(storeFor(w), { ...ctx, onCompletionError: e => reported.push(e) }, 'run-1', input())
+    expect(r).toMatchObject({ ok: true, completedObligation: false, completionPending: true })
+    expect(w.snapshot.inspection.status).toBe('submitted')
+    expect(w.obligations.get('ob-1')!.next_due_at).toBe('2026-09-30')
+    expect(w.events).toEqual([])
+    expect(reported).toHaveLength(1)
+    expect(String(reported[0])).toMatch(/completion failed/)
+  })
+
+  it('never completes the deadline when it loses the race to file the checklist', async () => {
+    const w = world()
+    const racing: RunStore = { ...storeFor(w), async finalize() { return false } }
+    expect(await submitChecklist(racing, ctx, 'run-1', input())).toMatchObject({ ok: false, status: 409, error: 'already_submitted' })
+    expect(w.events).toEqual([])
+    expect(w.log).not.toContain('completion')
   })
 
   it('leaves a closed deadline alone', async () => {
@@ -201,10 +241,10 @@ describe('submitChecklist', () => {
     expect(await submitChecklist(storeFor(w), ctx, 'run-1', input())).toMatchObject({ ok: true, completedObligation: false })
   })
 
-  it('does everything else first and flips to submitted last, so submitted means done', async () => {
+  it('files the checklist first and completes its deadline last: the database only trusts a submitted checklist', async () => {
     const w = world()
     await submitChecklist(storeFor(w), ctx, 'run-1', input({ answers: [{ itemId: 'i1', result: 'fail', value: null, evidenceId: null, note: 'x' }, { itemId: 'ph', result: null, value: 7, evidenceId: null, note: null }] }))
-    expect(w.log).toEqual(['responses', 'findings', 'completion', 'advance', 'signature', 'finalize'])
+    expect(w.log).toEqual(['responses', 'findings', 'signature', 'finalize', 'completion'])
   })
 
   it('can be retried after a failure part-way without duplicating findings or moving the deadline twice', async () => {
@@ -287,7 +327,7 @@ function startStore(w: StartWorld): RunStore {
   const unused = async () => { throw new Error('not used by this flow') }
   return {
     loadRun: unused as never, saveResponses: unused as never, existingFindingRefs: unused as never, insertFindings: unused as never,
-    recordCompletion: unused as never, advanceObligation: unused as never, saveSignature: unused as never, finalize: unused as never,
+    completeOccurrence: unused as never, saveSignature: unused as never, finalize: unused as never,
     async findSubject(_type, id) { return w.subjects.has(id) ? { label: `Outfall ${id}` } : null },
     async getObligation() { return w.obligation },
     async findTemplateId() { return w.existingTemplate },

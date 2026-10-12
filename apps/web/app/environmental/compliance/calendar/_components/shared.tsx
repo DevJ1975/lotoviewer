@@ -3,7 +3,7 @@ import type { ComponentProps } from 'react'
 import { AlertTriangle, Ban, CalendarClock, CheckCircle2, Clock, ListChecks, type LucideIcon } from 'lucide-react'
 import { StatusChip } from '@/components/environmental/badges'
 import { secondaryButtonCls } from '@/components/environmental/form'
-import type { Deadline } from '@/lib/environmental/client'
+import type { Deadline } from '@/lib/environmental/complianceClient'
 import {
   canCompleteDeadline, checklistHref, ORIGIN_LABELS, originOf, programLabel,
   type Actor, type UrgencyBucket,

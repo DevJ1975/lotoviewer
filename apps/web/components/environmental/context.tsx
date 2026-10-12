@@ -8,7 +8,7 @@ import { useFacility } from '@/components/FacilityProvider'
 import { cn } from '@/lib/utils'
 import { getHowTo } from '@soteria/core/environmental/howTo'
 import { libraryForState } from '@soteria/core/environmental/packs/index'
-import type { SiteDetail } from '@/lib/environmental/client'
+import type { SiteDetail } from '@/lib/environmental/complianceClient'
 import { CitationList, DraftBadge } from './badges'
 
 // Context that frames every environmental screen: which part of the suite you
@@ -19,7 +19,7 @@ const TABS = [
   { href: '/environmental/compliance/calendar',   label: 'Calendar' },
   { href: '/environmental/compliance/checklists', label: 'Checklists' },
   { href: '/environmental/compliance/legal',      label: 'Legal register' },
-  { href: '/environmental/compliance/permits',    label: 'Permits' },
+  { href: '/environmental/permits',               label: 'Permits' },
   { href: '/environmental/compliance/outfalls',   label: 'Outfalls' },
 ] as const
 

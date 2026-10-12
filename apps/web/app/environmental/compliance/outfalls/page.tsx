@@ -7,7 +7,8 @@ import OpsSpinner from '@/components/OpsSpinner'
 import { EmptyState } from '@/components/EmptyState'
 import { HowToPanel, JurisdictionBanner, SiteRequired } from '@/components/environmental/context'
 import { ErrorList, primaryButtonCls } from '@/components/environmental/form'
-import { errorList, listOutfalls, listPermits, type Outfall, type Permit, type Scope } from '@/lib/environmental/client'
+import { listPermits, type PermitRow } from '@/lib/environmental/client'
+import { errorList, listOutfalls, type Outfall, type Scope } from '@/lib/environmental/complianceClient'
 import { sortOutfallsByCode } from '@/lib/environmental/outfallView'
 import { useEnvironmentalScope, useEnvironmentalSite } from '@/lib/environmental/useEnvironmental'
 import { DeleteOutfallDialog } from './_components/DeleteOutfallDialog'
@@ -28,7 +29,7 @@ export default function EnvironmentalOutfalls() {
     <>
       <PageHeader
         icon={Droplets}
-        eyebrow="ISO 14001 · 8.1 · 9.1.1"
+        eyebrow="Environmental compliance"
         title="Stormwater outfalls"
         description="Where the site's stormwater leaves it, which permit covers each outfall, and a way to walk each one."
       />
@@ -43,7 +44,7 @@ interface SiteProps { scope: Scope; siteId: string; siteName: string; canAdmin: 
 
 function SiteOutfalls({ scope, siteId, siteName, canAdmin }: SiteProps) {
   const { site, error: siteError } = useEnvironmentalSite()
-  const [loaded, setLoaded] = useState<{ outfalls: Outfall[]; permits: Permit[] } | null>(null)
+  const [loaded, setLoaded] = useState<{ outfalls: Outfall[]; permits: PermitRow[] } | null>(null)
   const [errors, setErrors] = useState<string[]>([])
   const [reloads, setReloads] = useState(0)
   const [editing, setEditing] = useState<{ outfall: Outfall | null } | null>(null)
@@ -51,7 +52,8 @@ function SiteOutfalls({ scope, siteId, siteName, canAdmin }: SiteProps) {
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([listOutfalls(scope), listPermits(scope)])
+    // Retired permits too: an outfall may still be covered by one, and the table must name it.
+    Promise.all([listOutfalls(scope), listPermits(scope.tenantId, { status: 'all' })])
       .then(([o, p]) => { if (!cancelled) { setLoaded({ outfalls: sortOutfallsByCode(o.outfalls), permits: p.permits }); setErrors([]) } })
       .catch(e => { if (!cancelled) setErrors(errorList(e)) })
     return () => { cancelled = true }

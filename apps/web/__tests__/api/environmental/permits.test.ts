@@ -1,201 +1,335 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+// The permit vault behind /api/environmental/permits (Phase 2): permits held to a site,
+// described by the core rules (standing, renewal countdown, holder-of-record check),
+// renewed and retired rather than deleted, with conditions that are obligations.
+// Every read and write stays inside the caller's tenant.
+
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
-  adminGate, memberGate, allow, refuse, resetGates, fakeSupabase, jsonRequest, params,
-  TENANT, FACILITY, OTHER_FACILITY, USER,
-} from './_harness'
-import { GET, POST } from '@/app/api/environmental/permits/route'
-import { PATCH, DELETE } from '@/app/api/environmental/permits/[id]/route'
+  ADMIN_A, FACILITY_A, MEMBER_A, TENANT_A, TENANT_B,
+  asAdminB, asMemberA, beforeNext, callAs, gateRejects, idContext, jsonRequest, resetStore, rowsIn, seed, writes,
+} from './_emsHarness'
 
-const PERMIT_ID = 'f0000000-0000-0000-0000-000000000001'
+import * as permits from '@/app/api/environmental/permits/route'
+import * as permit from '@/app/api/environmental/permits/[id]/route'
+import * as renewal from '@/app/api/environmental/permits/[id]/renewal/route'
+import * as retire from '@/app/api/environmental/permits/[id]/retire/route'
+import * as review from '@/app/api/environmental/permits/[id]/review/route'
+import * as conditions from '@/app/api/environmental/permits/[id]/conditions/route'
 
-const permitRow = (over: Record<string, unknown> = {}) => ({
-  id: PERMIT_ID, tenant_id: TENANT, facility_id: FACILITY, program: 'stormwater', permit_type: 'CA IGP', permit_number: 'WDID-1',
-  issuing_agency: null, jurisdiction: 'CA', status: 'active', effective_date: '2025-07-01', expiration_date: '2030-06-30',
-  renewal_lead_days: 180, identifiers: {}, conditions: [], document_path: null, notes: null, ...over,
+const TODAY = '2026-10-02'
+const PERMIT_A = 'f0000000-0000-4000-8000-00000000000a'
+const PERMIT_B = 'f0000000-0000-4000-8000-00000000000b'
+const NEW_ENTITY = 'Northfield Forge & Finish LLC'
+const OLD_ENTITY = 'Northfield Metal Products Inc.'
+
+function permitRow(over: Record<string, unknown> = {}) {
+  return {
+    id: PERMIT_A, tenant_id: TENANT_A, facility_id: FACILITY_A, program: 'wastewater', instrument: 'permit',
+    title: 'Industrial wastewater discharge permit', agency: 'City of Northfield', permit_number: 'DEMO-IWD-0001',
+    jurisdiction: 'local:Northfield', holder_of_record: NEW_ENTITY, issued_on: '2022-01-01', expires_on: '2027-01-01',
+    renewal_application_due_on: '2026-10-31', renewal_submitted_on: null, business_critical: true, owner_user_id: null,
+    notes: null, retired_at: null, retired_reason: null, last_reviewed_at: null, reviewed_by: null,
+    next_review_due: '2027-06-01', ...over,
+  }
+}
+
+const newPermit = {
+  program: 'air', instrument: 'registration', title: 'Paint booth permit by rule', agency: 'State air agency',
+  permit_number: 'DEMO-PBR-0042', jurisdiction: 'state:TX', holder_of_record: NEW_ENTITY,
+  issued_on: '2024-03-01', expires_on: null, business_critical: false,
+}
+
+beforeEach(() => {
+  resetStore()
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(`${TODAY}T12:00:00Z`))
+  seed('ms_scope_statements', [
+    { tenant_id: TENANT_A, discipline: 'ems', version: 1, legal_entity: OLD_ENTITY },
+    { tenant_id: TENANT_A, discipline: 'ems', version: 2, legal_entity: NEW_ENTITY },
+  ])
+  seed('tenant_memberships', [
+    { user_id: ADMIN_A, tenant_id: TENANT_A, role: 'admin', invite_cancelled_at: null },
+    { user_id: MEMBER_A, tenant_id: TENANT_A, role: 'member', invite_cancelled_at: null },
+  ])
+})
+afterEach(() => vi.useRealTimers())
+
+describe('gating', () => {
+  beforeEach(() => seed('environmental_permits', [permitRow()]))
+
+  it('lets a member read the vault and a permit', async () => {
+    asMemberA()
+    expect((await permits.GET(jsonRequest('/api/environmental/permits', 'GET'))).status).toBe(200)
+    expect((await permit.GET(jsonRequest('/x', 'GET'), idContext(PERMIT_A))).status).toBe(200)
+  })
+
+  it.each([
+    ['POST permits', () => permits.POST(jsonRequest('/x', 'POST', newPermit))],
+    ['PATCH permit', () => permit.PATCH(jsonRequest('/x', 'PATCH', { notes: 'x' }), idContext(PERMIT_A))],
+    ['POST renewal', () => renewal.POST(jsonRequest('/x', 'POST', { action: 'submitted', submitted_on: TODAY }), idContext(PERMIT_A))],
+    ['POST retire', () => retire.POST(jsonRequest('/x', 'POST', { retired_reason: 'x' }), idContext(PERMIT_A))],
+    ['POST review', () => review.POST(jsonRequest('/x', 'POST'), idContext(PERMIT_A))],
+    ['POST condition', () => conditions.POST(jsonRequest('/x', 'POST', { title: 'x', next_due_at: TODAY }), idContext(PERMIT_A))],
+  ])('refuses a member: %s', async (_name, call) => {
+    asMemberA()
+    expect((await call()).status).toBe(403)
+    expect(writes).toEqual([])
+  })
+
+  it('passes gate failures through, including the module being off', async () => {
+    gateRejects(401, 'Invalid session')
+    expect((await permits.GET(jsonRequest('/x', 'GET'))).status).toBe(401)
+    callAs({ userId: ADMIN_A, tenantId: TENANT_A, role: 'owner', moduleOn: false })
+    expect((await permits.GET(jsonRequest('/x', 'GET'))).status).toBe(403)
+  })
 })
 
-const validBody = (over: Record<string, unknown> = {}) => ({
-  program: 'stormwater', permit_type: 'CA IGP', permit_number: 'WDID-1', status: 'active', expiration_date: '2030-06-30', ...over,
+describe('GET /permits', () => {
+  it('describes each permit by the core rules: standing, countdown, holder check, conditions', async () => {
+    seed('environmental_permits', [
+      permitRow(),
+      permitRow({ id: 'f0000000-0000-4000-8000-0000000000a2', permit_number: 'DEMO-SW-1', program: 'stormwater',
+        holder_of_record: OLD_ENTITY, expires_on: null, renewal_application_due_on: null, business_critical: false }),
+    ])
+    seed('compliance_calendar_obligations', [
+      { tenant_id: TENANT_A, permit_id: PERMIT_A, status: 'open', next_due_at: '2026-09-30' },
+      { tenant_id: TENANT_A, permit_id: PERMIT_A, status: 'open', next_due_at: '2026-12-31' },
+      { tenant_id: TENANT_A, permit_id: PERMIT_A, status: 'completed', next_due_at: '2026-01-01' },
+    ])
+    const body = await (await permits.GET(jsonRequest('/api/environmental/permits', 'GET'))).json()
+    expect(body.legalEntityInForce).toBe(NEW_ENTITY)
+    const [discharge, stormwater] = body.permits
+    expect(discharge).toMatchObject({
+      standing: 'renewal_due', renewal_deadline: '2026-10-31', escalation: { tier: 30, daysLeft: 29 },
+      holder_mismatch: false, conditions_open: 2, conditions_overdue: 1,
+    })
+    expect(stormwater).toMatchObject({ standing: 'no_expiry', escalation: null, holder_mismatch: true, conditions_open: 0 })
+  })
+
+  it('never lists another tenant\'s permits', async () => {
+    seed('environmental_permits', [permitRow({ id: PERMIT_B, tenant_id: TENANT_B })])
+    const body = await (await permits.GET(jsonRequest('/api/environmental/permits', 'GET'))).json()
+    expect(body.permits).toEqual([])
+  })
+
+  it('filters by status, program, standing, business-critical and holder mismatch', async () => {
+    seed('environmental_permits', [
+      permitRow(),
+      permitRow({ id: 'f0000000-0000-4000-8000-0000000000a3', permit_number: 'DEMO-A-1', program: 'air',
+        holder_of_record: OLD_ENTITY, business_critical: false, expires_on: '2030-01-01', renewal_application_due_on: null }),
+      permitRow({ id: 'f0000000-0000-4000-8000-0000000000a4', permit_number: 'DEMO-OLD', retired_at: '2025-01-01T00:00:00Z', retired_reason: 'Replaced' }),
+    ])
+    const ids = async (query: string) =>
+      ((await (await permits.GET(jsonRequest(`/api/environmental/permits${query}`, 'GET'))).json()).permits as { id: string }[]).map(p => p.id)
+    expect(await ids('')).toHaveLength(2)
+    expect(await ids('?status=retired')).toEqual(['f0000000-0000-4000-8000-0000000000a4'])
+    expect(await ids('?status=all')).toHaveLength(3)
+    expect(await ids('?program=air')).toEqual(['f0000000-0000-4000-8000-0000000000a3'])
+    expect(await ids('?standing=current')).toEqual(['f0000000-0000-4000-8000-0000000000a3'])
+    expect(await ids('?business_critical=true')).toEqual([PERMIT_A])
+    expect(await ids('?holder_mismatch=true')).toEqual(['f0000000-0000-4000-8000-0000000000a3'])
+  })
+
+  it.each(['?status=lapsed', '?program=noise', '?standing=fine', '?business_critical=yes'])('refuses %s', async query => {
+    expect((await permits.GET(jsonRequest(`/api/environmental/permits${query}`, 'GET'))).status).toBe(400)
+  })
 })
 
-beforeEach(resetGates)
-
-describe('GET /api/environmental/permits', () => {
-  it('passes a gate refusal straight through', async () => {
-    refuse(memberGate, 403, 'Module is not enabled for this tenant')
-    const res = await GET(jsonRequest('/api/environmental/permits', 'GET'))
-    expect(res.status).toBe(403)
-  })
-
-  it('lists the active site\'s permits, each with its health', async () => {
-    const db = fakeSupabase({ environmental_permits: [{ data: [permitRow({ expiration_date: '2020-01-01' }), permitRow({ id: 'p2', status: 'draft' })] }] })
-    allow(memberGate, db.client, { role: 'member' })
-    const res = await GET(jsonRequest('/api/environmental/permits', 'GET'))
-    const body = await res.json()
-    expect(db.filtered('environmental_permits', 'facility_id', FACILITY)).toBe(true)
-    expect(db.filtered('environmental_permits', 'tenant_id', TENANT)).toBe(true)
-    expect(body.permits.map((p: { health: string }) => p.health)).toEqual(['expired', 'not_tracked'])
-  })
-
-  it('lets ?facility_id choose the site, and shows every site in roll-up mode', async () => {
-    const db = fakeSupabase({ environmental_permits: [{ data: [] }] })
-    allow(memberGate, db.client, { facilityId: null })
-    await GET(jsonRequest(`/api/environmental/permits?facility_id=${OTHER_FACILITY}`, 'GET'))
-    expect(db.filtered('environmental_permits', 'facility_id', OTHER_FACILITY)).toBe(true)
-
-    const rollup = fakeSupabase({ environmental_permits: [{ data: [] }] })
-    allow(memberGate, rollup.client, { facilityId: null })
-    await GET(jsonRequest('/api/environmental/permits', 'GET'))
-    expect(rollup.calls[0]!.ops.some(o => o.method === 'eq' && o.args[0] === 'facility_id')).toBe(false)
-  })
-
-  it('rejects a malformed facility id', async () => {
-    allow(memberGate, fakeSupabase().client)
-    expect((await GET(jsonRequest('/api/environmental/permits?facility_id=nope', 'GET'))).status).toBe(400)
-  })
-
-  it('answers 500 without leaking the database error', async () => {
-    allow(memberGate, fakeSupabase({ environmental_permits: [{ error: { message: 'relation exploded' } }] }).client)
-    const res = await GET(jsonRequest('/api/environmental/permits', 'GET'))
-    expect(res.status).toBe(500)
-    expect(JSON.stringify(await res.json())).not.toContain('exploded')
-  })
-})
-
-describe('POST /api/environmental/permits', () => {
-  it('is for tenant admins: a refusal from the admin gate stops it before any query', async () => {
-    const db = fakeSupabase()
-    refuse(adminGate, 403, 'Tenant admin or owner required')
-    expect((await POST(jsonRequest('/api/environmental/permits', 'POST', validBody()))).status).toBe(403)
-    expect(db.calls).toEqual([])
-  })
-
-  it('rejects malformed JSON and an invalid permit, listing every problem', async () => {
-    const db = fakeSupabase()
-    allow(adminGate, db.client)
-    const bad = await POST(new Request('https://example.com/x', { method: 'POST', body: '{' }))
-    expect(bad.status).toBe(400)
-    expect((await bad.json()).error).toBe('invalid_json')
-
-    const res = await POST(jsonRequest('/api/environmental/permits', 'POST', { program: 'nonsense', expiration_date: 'soon' }))
-    const body = await res.json()
-    expect(res.status).toBe(400)
-    expect(body.error).toBe('invalid')
-    expect(body.details.length).toBeGreaterThan(1)
-    expect(db.calls).toEqual([])
-  })
-
-  it('refuses a document path in another tenant\'s folder', async () => {
-    allow(adminGate, fakeSupabase().client)
-    const res = await POST(jsonRequest('/api/environmental/permits', 'POST', validBody({ document_path: '22222222-2222-2222-2222-222222222222/x.pdf' })))
-    expect(res.status).toBe(400)
-  })
-
-  it('creates the permit on the active site and stamps who made it', async () => {
-    const db = fakeSupabase({ environmental_permits: [{ data: permitRow() }], compliance_calendar_obligations: [{ data: null }] })
-    allow(adminGate, db.client)
-    const res = await POST(jsonRequest('/api/environmental/permits', 'POST', validBody()))
+describe('POST /permits', () => {
+  it('records a permit at the active site, as its creator', async () => {
+    const res = await permits.POST(jsonRequest('/x', 'POST', newPermit))
     expect(res.status).toBe(201)
-    expect(db.arg('environmental_permits', 'insert')).toMatchObject({
-      tenant_id: TENANT, facility_id: FACILITY, created_by: USER, updated_by: USER, program: 'stormwater', renewal_lead_days: 180,
+    expect(rowsIn('environmental_permits')[0]).toMatchObject({
+      tenant_id: TENANT_A, facility_id: FACILITY_A, program: 'air', instrument: 'registration', expires_on: null,
+      created_by: ADMIN_A, updated_by: ADMIN_A,
     })
   })
 
-  it('puts a renewal deadline on the calendar for a permit in force, 180 days before it expires', async () => {
-    const db = fakeSupabase({ environmental_permits: [{ data: permitRow() }], compliance_calendar_obligations: [{ data: null }] })
-    allow(adminGate, db.client)
-    await POST(jsonRequest('/api/environmental/permits', 'POST', validBody()))
-    expect(db.arg('compliance_calendar_obligations', 'insert')).toMatchObject({
-      tenant_id: TENANT, facility_id: FACILITY, source: 'library', status: 'open', next_due_at: '2030-01-01',
-      system_key: `env:permit-renewal:${PERMIT_ID}:${FACILITY}`,
-    })
-  })
-
-  it('puts nothing on the calendar for a draft permit', async () => {
-    const db = fakeSupabase({ environmental_permits: [{ data: permitRow({ status: 'draft' }) }], compliance_calendar_obligations: [{ data: null }] })
-    allow(adminGate, db.client)
-    await POST(jsonRequest('/api/environmental/permits', 'POST', validBody({ status: 'draft' })))
-    expect(db.used('compliance_calendar_obligations', 'insert')).toEqual([])
-  })
-
-  it('answers 409 for a duplicate permit number and 404 for a site that is not the tenant\'s', async () => {
-    allow(adminGate, fakeSupabase({ environmental_permits: [{ error: { message: 'dup', code: '23505' } }] }).client)
-    expect((await POST(jsonRequest('/api/environmental/permits', 'POST', validBody()))).status).toBe(409)
-    allow(adminGate, fakeSupabase({ environmental_permits: [{ error: { message: 'fk', code: '23503' } }] }).client)
-    expect((await POST(jsonRequest('/api/environmental/permits', 'POST', validBody({ facility_id: OTHER_FACILITY })))).status).toBe(404)
-  })
-
-  it('needs a site: with none active and none given, it says so', async () => {
-    allow(adminGate, fakeSupabase().client, { facilityId: null })
-    const res = await POST(jsonRequest('/api/environmental/permits', 'POST', validBody()))
+  it('needs a site: a permit is issued to one', async () => {
+    callAs({ userId: ADMIN_A, tenantId: TENANT_A, role: 'admin', facilityId: null })
+    const res = await permits.POST(jsonRequest('/x', 'POST', newPermit))
     expect(res.status).toBe(400)
-    expect(JSON.stringify(await res.json())).toMatch(/facility_id/)
+    expect((await res.json()).error).toMatch(/Select a facility/)
+  })
+
+  it('answers every problem at once, with the column names', async () => {
+    const res = await permits.POST(jsonRequest('/x', 'POST', {
+      ...newPermit, title: '', jurisdiction: 'Texas', expires_on: '2024-01-01', business_critical: 'yes',
+    }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).fieldErrors.map((e: { field: string }) => e.field))
+      .toEqual(['title', 'jurisdiction', 'expires_on', 'business_critical'])
+  })
+
+  it('holds the owner to a current member', async () => {
+    const res = await permits.POST(jsonRequest('/x', 'POST', { ...newPermit, owner_user_id: '00000000-0000-4000-8000-0000000000ff' }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).fieldErrors).toEqual([{ field: 'owner_user_id', message: 'is not a member of this organization' }])
+    expect((await permits.POST(jsonRequest('/x', 'POST', { ...newPermit, owner_user_id: MEMBER_A }))).status).toBe(201)
+  })
+
+  it('refuses a second active permit with the same agency and number', async () => {
+    seed('environmental_permits', [permitRow({ agency: newPermit.agency, permit_number: newPermit.permit_number })])
+    expect((await permits.POST(jsonRequest('/x', 'POST', newPermit))).status).toBe(409)
   })
 })
 
-describe('PATCH /api/environmental/permits/[id]', () => {
-  const patch = (body: unknown, id = PERMIT_ID) => PATCH(jsonRequest(`/api/environmental/permits/${id}`, 'PATCH', body), params({ id }))
+describe('GET and PATCH /permits/[id]', () => {
+  beforeEach(() => seed('environmental_permits', [permitRow(), permitRow({ id: PERMIT_B, tenant_id: TENANT_B })]))
 
-  it('rejects a malformed id', async () => {
-    allow(adminGate, fakeSupabase().client)
-    expect((await patch({}, 'nope')).status).toBe(400)
+  it('returns the permit with its conditions, documents and the changes that touched it', async () => {
+    seed('compliance_calendar_obligations', [{ id: 'c1', tenant_id: TENANT_A, permit_id: PERMIT_A, status: 'open', next_due_at: '2026-12-31' }])
+    seed('ms_evidence', [{ id: 'd1', tenant_id: TENANT_A, subject_type: 'environmental_permit', subject_id: PERMIT_A, uploaded_at: '2026-09-01' }])
+    seed('ms_change_impacts', [{ tenant_id: TENANT_A, change_id: 'ch1', target_type: 'permit', target_id: PERMIT_A, step: 'notify_agency' }])
+    seed('ms_changes', [{ id: 'ch1', tenant_id: TENANT_A, kind: 'ownership_name', title: 'Sale of the plant', status: 'open', opened_at: '2026-09-15' }])
+    const body = await (await permit.GET(jsonRequest('/x', 'GET'), idContext(PERMIT_A))).json()
+    expect(body.permit.standing).toBe('renewal_due')
+    expect(body.conditions.map((c: { id: string }) => c.id)).toEqual(['c1'])
+    expect(body.documents.map((d: { id: string }) => d.id)).toEqual(['d1'])
+    expect(body.changes.map((c: { id: string }) => c.id)).toEqual(['ch1'])
   })
 
-  it('answers 404 for a permit that is not there', async () => {
-    allow(adminGate, fakeSupabase({ environmental_permits: [{ data: null }] }).client)
-    expect((await patch({ notes: 'x' })).status).toBe(404)
+  it('answers 404 for another tenant\'s permit, and never edits it', async () => {
+    expect((await permit.GET(jsonRequest('/x', 'GET'), idContext(PERMIT_B))).status).toBe(404)
+    expect((await permit.PATCH(jsonRequest('/x', 'PATCH', { notes: 'mine now' }), idContext(PERMIT_B))).status).toBe(404)
+    expect(rowsIn('environmental_permits').find(p => p.id === PERMIT_B)?.notes).toBeNull()
   })
 
-  it('changes only what was sent, keeps the permit on its own site even if told otherwise, and moves the renewal deadline', async () => {
-    const updated = permitRow({ expiration_date: '2031-06-30', notes: 'renewed' })
-    const db = fakeSupabase({
-      environmental_permits: [{ data: permitRow() }, { data: updated }],
-      compliance_calendar_obligations: [{ data: { id: 'ob-1', status: 'open', next_due_at: '2030-01-01', title: 'Renew CA IGP WDID-1' } }],
-    })
-    allow(adminGate, db.client)
-    const res = await patch({ expiration_date: '2031-06-30', notes: 'renewed', facility_id: OTHER_FACILITY })
+  it('edits the allowed fields only, and records who', async () => {
+    const res = await permit.PATCH(jsonRequest('/x', 'PATCH', {
+      holder_of_record: OLD_ENTITY, renewal_submitted_on: '2026-01-01', retired_at: '2026-01-01',
+    }), idContext(PERMIT_A))
     expect(res.status).toBe(200)
-    const sent = db.arg('environmental_permits', 'update') as Record<string, unknown>
-    expect(sent).toMatchObject({ facility_id: FACILITY, permit_type: 'CA IGP', permit_number: 'WDID-1', expiration_date: '2031-06-30', notes: 'renewed', updated_by: USER })
-    expect(db.arg('compliance_calendar_obligations', 'update')).toMatchObject({ next_due_at: '2031-01-01' })
-  })
-
-  it('refuses an edit that would make the dates impossible', async () => {
-    allow(adminGate, fakeSupabase({ environmental_permits: [{ data: permitRow() }] }).client)
-    expect((await patch({ expiration_date: '2020-01-01' })).status).toBe(400)
-  })
-
-  it('dismisses the renewal deadline when the permit stops being in force', async () => {
-    const db = fakeSupabase({
-      environmental_permits: [{ data: permitRow() }, { data: permitRow({ status: 'terminated' }) }],
-      compliance_calendar_obligations: [{ data: { id: 'ob-1', status: 'open', next_due_at: '2030-01-01', title: 'Renew CA IGP WDID-1' } }],
+    expect(rowsIn('environmental_permits')[0]).toMatchObject({
+      holder_of_record: OLD_ENTITY, renewal_submitted_on: null, retired_at: null, updated_by: ADMIN_A,
     })
-    allow(adminGate, db.client)
-    await patch({ status: 'terminated' })
-    expect(db.arg('compliance_calendar_obligations', 'update')).toMatchObject({ status: 'dismissed' })
+  })
+
+  it('validates the merged permit, and refuses an empty change', async () => {
+    expect((await permit.PATCH(jsonRequest('/x', 'PATCH', { expires_on: '2021-01-01' }), idContext(PERMIT_A))).status).toBe(400)
+    expect((await permit.PATCH(jsonRequest('/x', 'PATCH', { colour: 'blue' }), idContext(PERMIT_A))).status).toBe(400)
+  })
+
+  it('assigns and clears the owner, holding it to a member', async () => {
+    expect((await permit.PATCH(jsonRequest('/x', 'PATCH', { owner_user_id: MEMBER_A }), idContext(PERMIT_A))).status).toBe(200)
+    expect(rowsIn('environmental_permits')[0].owner_user_id).toBe(MEMBER_A)
+    expect((await permit.PATCH(jsonRequest('/x', 'PATCH', { owner_user_id: null }), idContext(PERMIT_A))).status).toBe(200)
+    expect(rowsIn('environmental_permits')[0].owner_user_id).toBeNull()
+    expect((await permit.PATCH(jsonRequest('/x', 'PATCH', { owner_user_id: 'someone' }), idContext(PERMIT_A))).status).toBe(400)
+  })
+
+  it('keeps a retired permit as history', async () => {
+    rowsIn('environmental_permits')[0].retired_at = '2026-01-01T00:00:00Z'
+    rowsIn('environmental_permits')[0].retired_reason = 'Surrendered'
+    expect((await permit.PATCH(jsonRequest('/x', 'PATCH', { notes: 'x' }), idContext(PERMIT_A))).status).toBe(409)
   })
 })
 
-describe('DELETE /api/environmental/permits/[id]', () => {
-  const remove = (id = PERMIT_ID) => DELETE(jsonRequest(`/api/environmental/permits/${id}`, 'DELETE'), params({ id }))
+describe('POST /permits/[id]/renewal', () => {
+  beforeEach(() => seed('environmental_permits', [permitRow()]))
+  const post = (body: unknown) => renewal.POST(jsonRequest('/x', 'POST', body), idContext(PERMIT_A))
 
-  it('answers 404 for a permit that is not there, and deletes nothing', async () => {
-    const db = fakeSupabase({ environmental_permits: [{ data: null }] })
-    allow(adminGate, db.client)
-    expect((await remove()).status).toBe(404)
-    expect(db.used('environmental_permits', 'delete')).toEqual([])
+  it('records the renewal application, which stops the countdown', async () => {
+    expect((await post({ action: 'submitted', submitted_on: '2026-09-28' })).status).toBe(200)
+    expect(rowsIn('environmental_permits')[0].renewal_submitted_on).toBe('2026-09-28')
   })
 
-  it('deletes the permit and dismisses its renewal deadline', async () => {
-    const db = fakeSupabase({ environmental_permits: [{ data: { id: PERMIT_ID, facility_id: FACILITY } }, { data: null }] })
-    allow(adminGate, db.client)
-    expect((await remove()).status).toBe(200)
-    expect(db.used('environmental_permits', 'delete')).toHaveLength(1)
-    expect(db.arg('compliance_calendar_obligations', 'update')).toMatchObject({ status: 'dismissed' })
+  it('refuses a submission dated in the future or before the current term', async () => {
+    expect((await post({ action: 'submitted', submitted_on: '2026-10-09' })).status).toBe(400)
+    expect((await post({ action: 'submitted', submitted_on: '2021-12-31' })).status).toBe(400)
   })
 
-  it('is admin-only', async () => {
-    refuse(adminGate, 403, 'Tenant admin or owner required')
-    expect((await remove()).status).toBe(403)
+  it('records the renewed term and clears "submitted", so a new countdown starts', async () => {
+    rowsIn('environmental_permits')[0].renewal_submitted_on = '2026-09-28'
+    const res = await post({ action: 'renewed', issued_on: '2027-01-01', expires_on: '2032-01-01', renewal_application_due_on: '2031-07-01', permit_number: 'DEMO-IWD-0002' })
+    expect(res.status).toBe(200)
+    expect(rowsIn('environmental_permits')[0]).toMatchObject({
+      issued_on: '2027-01-01', expires_on: '2032-01-01', renewal_application_due_on: '2031-07-01',
+      renewal_submitted_on: null, permit_number: 'DEMO-IWD-0002',
+    })
+  })
+
+  it('keeps the number when the renewal does not change it', async () => {
+    await post({ action: 'renewed', issued_on: '2027-01-01', expires_on: '2032-01-01' })
+    expect(rowsIn('environmental_permits')[0].permit_number).toBe('DEMO-IWD-0001')
+  })
+
+  it('refuses a term that does not start after the current one, and an unknown action', async () => {
+    expect((await post({ action: 'renewed', issued_on: '2021-06-01', expires_on: '2032-01-01' })).status).toBe(400)
+    expect((await post({ action: 'extended' })).status).toBe(400)
+  })
+
+  it('refuses when the permit changed meanwhile, rather than overwrite it', async () => {
+    beforeNext('environmental_permits', 'update', () => { rowsIn('environmental_permits')[0].issued_on = '2026-06-01' })
+    expect((await post({ action: 'renewed', issued_on: '2027-01-01', expires_on: '2032-01-01' })).status).toBe(409)
+    expect(rowsIn('environmental_permits')[0].expires_on).toBe('2027-01-01')
+  })
+
+  it('does not renew a retired permit', async () => {
+    Object.assign(rowsIn('environmental_permits')[0], { retired_at: '2026-01-01T00:00:00Z', retired_reason: 'x' })
+    expect((await post({ action: 'submitted', submitted_on: TODAY })).status).toBe(409)
+  })
+})
+
+describe('POST /permits/[id]/retire and /review', () => {
+  beforeEach(() => seed('environmental_permits', [permitRow(), permitRow({ id: PERMIT_B, tenant_id: TENANT_B })]))
+
+  it('retires with a reason, once', async () => {
+    expect((await retire.POST(jsonRequest('/x', 'POST', { retired_reason: ' ' }), idContext(PERMIT_A))).status).toBe(400)
+    expect((await retire.POST(jsonRequest('/x', 'POST', { retired_reason: 'Line closed' }), idContext(PERMIT_A))).status).toBe(200)
+    expect(rowsIn('environmental_permits')[0]).toMatchObject({ retired_reason: 'Line closed', updated_by: ADMIN_A })
+    expect((await retire.POST(jsonRequest('/x', 'POST', { retired_reason: 'Again' }), idContext(PERMIT_A))).status).toBe(409)
+    expect((await retire.POST(jsonRequest('/x', 'POST', { retired_reason: 'x' }), idContext(PERMIT_B))).status).toBe(404)
+  })
+
+  it('stamps a review on a permit, which has no discipline to filter on', async () => {
+    expect((await review.POST(jsonRequest('/x', 'POST'), idContext(PERMIT_A))).status).toBe(200)
+    expect(rowsIn('environmental_permits')[0]).toMatchObject({ reviewed_by: ADMIN_A, next_review_due: '2027-10-02' })
+    asAdminB()
+    expect((await review.POST(jsonRequest('/x', 'POST'), idContext(PERMIT_A))).status).toBe(404)
+  })
+})
+
+describe('/permits/[id]/conditions', () => {
+  beforeEach(() => seed('environmental_permits', [permitRow(), permitRow({ id: PERMIT_B, tenant_id: TENANT_B })]))
+  const quarterly = { title: 'Quarterly self-monitoring report', next_due_at: '2026-12-31', cadence: 'quarterly', evaluation_cadence_days: 365 }
+
+  it('adds a condition as an obligation linked to the permit, with its jurisdiction, site and category', async () => {
+    const res = await conditions.POST(jsonRequest('/x', 'POST', { ...quarterly, regulatory_ref: 'Part III.B', owner_user_id: MEMBER_A }), idContext(PERMIT_A))
+    expect(res.status).toBe(201)
+    expect(rowsIn('compliance_calendar_obligations')[0]).toMatchObject({
+      tenant_id: TENANT_A, facility_id: FACILITY_A, permit_id: PERMIT_A, discipline: 'ems', source_kind: 'permit',
+      jurisdiction: 'local:Northfield', category: 'wastewater', regulatory_ref: 'Part III.B', cadence: 'quarterly',
+      next_due_at: '2026-12-31', owner_user_id: MEMBER_A, source: 'tenant', created_by: ADMIN_A,
+    })
+  })
+
+  it('cites the permit number when the condition gives no reference', async () => {
+    await conditions.POST(jsonRequest('/x', 'POST', quarterly), idContext(PERMIT_A))
+    expect(rowsIn('compliance_calendar_obligations')[0].regulatory_ref).toBe('DEMO-IWD-0001')
+  })
+
+  it('needs a due date, and refuses a source or jurisdiction other than the permit\'s', async () => {
+    const res = await conditions.POST(jsonRequest('/x', 'POST', { title: 'Opacity limit' }), idContext(PERMIT_A))
+    expect(res.status).toBe(400)
+    await conditions.POST(jsonRequest('/x', 'POST', { ...quarterly, source_kind: 'law', jurisdiction: 'federal' }), idContext(PERMIT_A))
+    expect(rowsIn('compliance_calendar_obligations')[0]).toMatchObject({ source_kind: 'permit', jurisdiction: 'local:Northfield' })
+  })
+
+  it('takes no conditions on a retired permit or another tenant\'s', async () => {
+    Object.assign(rowsIn('environmental_permits')[0], { retired_at: '2026-01-01T00:00:00Z', retired_reason: 'x' })
+    expect((await conditions.POST(jsonRequest('/x', 'POST', quarterly), idContext(PERMIT_A))).status).toBe(409)
+    expect((await conditions.POST(jsonRequest('/x', 'POST', quarterly), idContext(PERMIT_B))).status).toBe(404)
+    expect(rowsIn('compliance_calendar_obligations')).toEqual([])
+  })
+
+  it('lists the permit\'s conditions, soonest due first', async () => {
+    seed('compliance_calendar_obligations', [
+      { id: 'late', tenant_id: TENANT_A, permit_id: PERMIT_A, next_due_at: '2027-03-31' },
+      { id: 'soon', tenant_id: TENANT_A, permit_id: PERMIT_A, next_due_at: '2026-12-31' },
+      { id: 'other', tenant_id: TENANT_A, permit_id: null, next_due_at: '2026-11-30' },
+    ])
+    const body = await (await conditions.GET(jsonRequest('/x', 'GET'), idContext(PERMIT_A))).json()
+    expect(body.conditions.map((c: { id: string }) => c.id)).toEqual(['soon', 'late'])
   })
 })

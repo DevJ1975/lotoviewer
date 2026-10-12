@@ -1,7 +1,7 @@
 'use client'
 
 import { ConfirmDeleteDialog } from '@/components/environmental/ConfirmDeleteDialog'
-import { deleteOutfall, type Outfall, type Scope } from '@/lib/environmental/client'
+import { deleteOutfall, type Outfall, type Scope } from '@/lib/environmental/complianceClient'
 
 interface Props {
   scope: Scope

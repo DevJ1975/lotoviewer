@@ -1,45 +1,54 @@
--- Rollback for migration 302: compliance calendar v2.
+-- Rollback for migration 302 (Phase 1.1 audit fixes).
 --
--- DESTRUCTIVE: obligations created from the library or by AI (source 'library' or
--- 'ai') are DELETED, because the restored source check only allows 'system' and
--- 'tenant'. The added columns (program, library and checklist links, lead_days,
--- last_reminded_on) are dropped, losing reminder state. The original tenant-only
--- policy is restored, so every facility's deadlines show in every facility's view
--- again.
+-- Lost: every recorded policy communication and responsibility assignment,
+-- each aspect's control or influence, and each scope version's control and
+-- influence statement and exclusions. Export them first if they matter.
 --
--- Idempotent.
+-- Revert the code that reads these columns and tables before running this.
+--
+-- Apply: paste into the SQL Editor, or run with psql.
+-- ────────────────────────────────────────────────────────────────────────────
 
 begin;
 
-delete from public.compliance_calendar_obligations where source in ('library', 'ai');
+drop table if exists public.ms_responsibilities;
+drop table if exists public.ms_policy_communications;
+alter table public.ms_policies drop constraint if exists ms_policies_tenant_id_id_discipline_key;
 
-alter table public.compliance_calendar_obligations drop constraint if exists compliance_calendar_obligations_source_check;
-alter table public.compliance_calendar_obligations
-  add constraint compliance_calendar_obligations_source_check check (source in ('system', 'tenant'));
+alter table public.ms_scope_statements
+  drop column if exists exclusions,
+  drop column if exists control_and_influence;
 
-drop index if exists public.idx_ccal_obligation_facility_due;
+-- A view column cannot be dropped in place, so 297's definition is restored whole.
+drop view if exists public.environmental_aspect_register;
+create view public.environmental_aspect_register
+with (security_invoker = true) as
+select a.id, a.tenant_id, a.facility_id, a.activity, a.aspect, a.impact, a.process_area,
+       a.life_cycle_stage, a.flow, a.controls, a.related_risk_id, a.source_reference, a.status,
+       a.owner_user_id, a.notes, a.obsolete_at, a.obsolete_reason, a.last_reviewed_at, a.reviewed_by,
+       a.next_review_due, a.created_by, a.updated_by, a.created_at, a.updated_at,
+       coalesce(s.significant, false)       as significant,
+       s.max_score,
+       coalesce(s.current_scores, '[]'::jsonb) as current_scores
+  from public.environmental_aspects a
+  left join lateral (
+    select bool_or(c.significant) as significant,
+           max(c.score)           as max_score,
+           jsonb_agg(jsonb_build_object(
+               'operating_condition', c.operating_condition,
+               'severity',            c.severity,
+               'likelihood',          c.likelihood,
+               'score',               c.score,
+               'significant',         c.significant,
+               'method_id',           c.method_id,
+               'scored_at',           c.scored_at)
+             order by array_position(array['normal','abnormal','emergency'], c.operating_condition)
+           ) as current_scores
+      from public.environmental_aspect_current_scores c
+     where c.tenant_id = a.tenant_id and c.aspect_id = a.id
+  ) s on true;
 
-alter table public.compliance_calendar_obligations
-  drop column if exists program,
-  drop column if exists legal_register_id,
-  drop column if exists checklist_template_id,
-  drop column if exists library_key,
-  drop column if exists jurisdiction,
-  drop column if exists due_anchor,
-  drop column if exists lead_days,
-  drop column if exists last_reminded_on;
-
-drop policy if exists ccal_obligations_tenant_scope on public.compliance_calendar_obligations;
-create policy ccal_obligations_tenant_scope on public.compliance_calendar_obligations
-  for all to authenticated
-  using (
-    (public.active_tenant_id() is null or tenant_id = public.active_tenant_id())
-    and (tenant_id in (select public.current_user_tenant_ids()) or public.is_superadmin())
-  )
-  with check (
-    (public.active_tenant_id() is null or tenant_id = public.active_tenant_id())
-    and (tenant_id in (select public.current_user_tenant_ids()) or public.is_superadmin())
-  );
+alter table public.environmental_aspects drop column if exists control_level;
 
 notify pgrst, 'reload schema';
 

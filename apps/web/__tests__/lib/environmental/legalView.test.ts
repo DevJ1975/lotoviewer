@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { libraryForState } from '@soteria/core/environmental/packs/index'
-import type { LegalEntry } from '@/lib/environmental/client'
+import type { LegalEntry } from '@/lib/environmental/complianceClient'
 import {
   evaluationBody, filterEntries, hasActiveFilters, isTileActive, jurisdictionLabel, linkableUrl, NO_FILTERS, ownerName,
   programOf, reviewChip, siteLabel, sortEntries, summarize, SUMMARY_TILES, toggleTile, verifyNoteFor, type LegalFilters,

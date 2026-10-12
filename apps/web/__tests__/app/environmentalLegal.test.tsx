@@ -5,8 +5,8 @@ import EnvironmentalLegalRegister from '@/app/environmental/compliance/legal/pag
 import {
   ApiError, createLegal, deleteLegal, evaluateLegal, listLegal, reviewLegal, searchOwners, updateLegal,
   type LegalEntry, type Scope, type SiteDetail,
-} from '@/lib/environmental/client'
-import { evidenceUrl } from '@/lib/environmental/evidence'
+} from '@/lib/environmental/complianceClient'
+import { evidenceUrl } from '@/lib/environmental/complianceEvidence'
 import { useEnvironmentalScope, useEnvironmentalSite } from '@/lib/environmental/useEnvironmental'
 import { useFacility } from '@/components/FacilityProvider'
 
@@ -14,13 +14,13 @@ import { useFacility } from '@/components/FacilityProvider'
 // providers behind the hooks, and the library (for a Verify note the test controls).
 // The page, its dialogs and the pure view module run for real.
 
-vi.mock('@/lib/environmental/client', async importOriginal => ({
-  ...await importOriginal<typeof import('@/lib/environmental/client')>(),
+vi.mock('@/lib/environmental/complianceClient', async importOriginal => ({
+  ...await importOriginal<typeof import('@/lib/environmental/complianceClient')>(),
   listLegal: vi.fn(), createLegal: vi.fn(), updateLegal: vi.fn(), deleteLegal: vi.fn(),
   evaluateLegal: vi.fn(), reviewLegal: vi.fn(), searchOwners: vi.fn(),
 }))
-vi.mock('@/lib/environmental/evidence', async importOriginal => ({
-  ...await importOriginal<typeof import('@/lib/environmental/evidence')>(),
+vi.mock('@/lib/environmental/complianceEvidence', async importOriginal => ({
+  ...await importOriginal<typeof import('@/lib/environmental/complianceEvidence')>(),
   evidenceUrl: vi.fn(),
 }))
 vi.mock('@/lib/environmental/useEnvironmental', () => ({ useEnvironmentalScope: vi.fn(), useEnvironmentalSite: vi.fn() }))

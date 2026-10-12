@@ -5,14 +5,15 @@
 import { checklistDueStatus } from './checklists'
 import { daysUntilDue, type ObligationCadence } from '../complianceCalendar'
 import { reviewState } from './legalRegister'
-import { permitHealth, type PermitLike } from './permits'
+import { renewalDeadlineMissed, renewalDueSoon, type PermitForStanding } from '../environmentalPermit'
 
 export interface EnvKpiInput {
   obligations: ReadonlyArray<{ status: string; nextDueAt: string; leadDays: number }>
   checklistTemplates: ReadonlyArray<{ lastSubmittedOn: string | null; cadence: ObligationCadence; cadenceDays: number | null }>
   /** Environmental nonconformities (source_reference starting "env-"). */
   findings: ReadonlyArray<{ status: string }>
-  permits: readonly PermitLike[]
+  /** Permits and plans the site holds, in the shape the EMS permit vault stores them. Retired ones are ignored. */
+  permits: readonly PermitForStanding[]
   legal: ReadonlyArray<{ applicability: string; lastReviewedAt: string | null; nextReviewDue: string | null }>
 }
 
@@ -22,8 +23,10 @@ export interface EnvKpis {
   checklistsOverdue:    number
   checklistsNeverRun:   number
   openFindings:         number
-  permitsExpiring:      number
-  permitsExpired:       number
+  /** Active permits whose renewal deadline is 90 days or less away with nothing submitted. */
+  permitsRenewalSoon:   number
+  /** Active permits whose renewal deadline has passed with nothing submitted. */
+  permitsRenewalMissed: number
   legalReviewsOverdue:  number
   legalNeverReviewed:   number
 }
@@ -33,7 +36,7 @@ export function summarizeEnvironmentalKpis(input: EnvKpiInput, now: Date = new D
   const days = (iso: string) => daysUntilDue(iso, now)
 
   const checklists = input.checklistTemplates.map(t => checklistDueStatus(t.lastSubmittedOn, t.cadence, t.cadenceDays, now).status)
-  const permitStates = input.permits.map(p => permitHealth(p, now))
+  const today = now.toISOString().slice(0, 10)
   const applicable = input.legal.filter(l => l.applicability === 'applicable')
   const reviews = applicable.map(l => reviewState(l, now))
 
@@ -43,8 +46,8 @@ export function summarizeEnvironmentalKpis(input: EnvKpiInput, now: Date = new D
     checklistsOverdue:   checklists.filter(s => s === 'overdue').length,
     checklistsNeverRun:  checklists.filter(s => s === 'never').length,
     openFindings:        input.findings.filter(f => f.status === 'open' || f.status === 'in_progress').length,
-    permitsExpiring:     permitStates.filter(s => s === 'expiring').length,
-    permitsExpired:      permitStates.filter(s => s === 'expired').length,
+    permitsRenewalSoon:   input.permits.filter(p => renewalDueSoon(p, today)).length,
+    permitsRenewalMissed: input.permits.filter(p => renewalDeadlineMissed(p, today)).length,
     legalReviewsOverdue: reviews.filter(s => s === 'overdue').length,
     legalNeverReviewed:  reviews.filter(s => s === 'never_reviewed').length,
   }
@@ -52,5 +55,5 @@ export function summarizeEnvironmentalKpis(input: EnvKpiInput, now: Date = new D
 
 /** Anything here wants a person's attention today. */
 export function needsAttention(kpis: EnvKpis): boolean {
-  return kpis.obligationsOverdue + kpis.checklistsOverdue + kpis.permitsExpired + kpis.legalReviewsOverdue > 0
+  return kpis.obligationsOverdue + kpis.checklistsOverdue + kpis.permitsRenewalMissed + kpis.legalReviewsOverdue > 0
 }

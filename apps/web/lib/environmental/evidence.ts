@@ -1,54 +1,113 @@
-import { supabase } from '@/lib/supabase'
+import { createHash } from 'node:crypto'
+import { verifyJPEG, verifyPDF, verifyPNG, verifyWebP } from '@/lib/security/magicBytes'
 
-// Evidence (photos, permit PDFs) lives in the private environmental-evidence
-// bucket. Members may upload under their own tenant's folder; only tenant admins
-// may replace or delete (migration 301). The first path segment must be the tenant
-// id, which is what the storage policies and the API's path checks both read.
+// The evidence store (migration 299, plan D7): files that prove a
+// compliance result. The server decides a file's type from its bytes,
+// hashes it, and keeps it in a private bucket only the server can reach.
 
-export const EVIDENCE_BUCKET = 'environmental-evidence'
-export const EVIDENCE_MAX_BYTES = 25 * 1024 * 1024
-export const EVIDENCE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] as const
+export const EVIDENCE_BUCKET = 'ms-evidence'
 
-/** A file name safe to put in a storage path: no folders, no odd characters, bounded length. */
-export function safeFileName(name: string): string {
-  const base = name.split(/[\\/]/).pop() ?? ''
-  const cleaned = base.normalize('NFKD').replace(/[^\w.\- ]+/g, '').trim().replace(/\s+/g, '-').replace(/^\.+/, '')
-  return (cleaned || 'file').slice(-80)
+/**
+ * The largest file the multipart upload route accepts. Vercel caps a request
+ * body at 4.5 MB, so a file must fit under that with the multipart wrapping
+ * around it. Anything larger goes straight to storage (MAX_DIRECT_EVIDENCE_BYTES).
+ */
+export const MAX_EVIDENCE_BYTES = 4 * 1024 * 1024
+
+/**
+ * The largest file a direct-to-storage upload accepts: the bucket's own
+ * limit (migration 299). Scanned permits run to tens of megabytes (Phase 2 Q2).
+ */
+export const MAX_DIRECT_EVIDENCE_BYTES = 25 * 1024 * 1024
+
+/** Checked from content-length before the body is read, so an oversized request is never buffered. */
+export const MAX_EVIDENCE_REQUEST_BYTES = 4_500_000
+
+export const EVIDENCE_KINDS = ['photo', 'document', 'sample_result', 'signature'] as const
+export type EvidenceKind = typeof EVIDENCE_KINDS[number]
+
+/** What evidence can prove, today. The list grows one phase at a time, as the ms_evidence check does (299, then 306). */
+export const EVIDENCE_SUBJECT_TYPES = [
+  'compliance_evaluation',
+  'environmental_permit',
+  'ms_change_impact',
+  'compliance_calendar_event',
+  'compliance_obligation',
+] as const
+export type EvidenceSubjectType = typeof EVIDENCE_SUBJECT_TYPES[number]
+
+/** Every ms_evidence column a client may see. The storage path stays on the server. */
+export const EVIDENCE_PUBLIC_COLUMNS =
+  'id, tenant_id, facility_id, subject_type, subject_id, kind, file_name, mime_type, file_size_bytes, sha256, '
+  + 'uploaded_by, uploaded_at, superseded_by, superseded_at, superseded_reason, export_controlled'
+
+interface EvidenceType { mimeType: string; extension: string }
+
+// Open question Q2: PDF, JPEG, PNG and WebP, each recognisable by its magic bytes.
+const RECOGNISED: { verify: (bytes: Uint8Array) => boolean; type: EvidenceType }[] = [
+  { verify: verifyPDF,  type: { mimeType: 'application/pdf', extension: 'pdf' } },
+  { verify: verifyJPEG, type: { mimeType: 'image/jpeg',      extension: 'jpg' } },
+  { verify: verifyPNG,  type: { mimeType: 'image/png',       extension: 'png' } },
+  { verify: verifyWebP, type: { mimeType: 'image/webp',      extension: 'webp' } },
+]
+
+/** The file's real type from its leading bytes, or null when it is not an accepted kind of file. The declared type is never trusted. */
+export function detectEvidenceType(bytes: Uint8Array): EvidenceType | null {
+  return RECOGNISED.find(candidate => candidate.verify(bytes))?.type ?? null
 }
 
-/** <tenant>/<folder>/<unique>-<name>. `folder` is a slash-free label such as "permits". */
-export function buildEvidencePath(tenantId: string, folder: string, uniqueId: string, fileName: string): string {
-  return `${tenantId}/${folder.replace(/[^\w-]/g, '')}/${uniqueId}-${safeFileName(fileName)}`
+export function sha256Hex(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex')
 }
 
-/** Why a file cannot be uploaded, or null when it can. Checked first so the person is told at once. */
-export function evidenceProblem(file: { size: number; type: string }): string | null {
-  if (!(EVIDENCE_TYPES as readonly string[]).includes(file.type)) return 'Upload a JPEG, PNG or WebP photo, or a PDF.'
-  if (file.size > EVIDENCE_MAX_BYTES) return 'That file is larger than 25 MB.'
-  if (file.size === 0) return 'That file is empty.'
-  return null
+const UNSAFE_FILE_NAME_CHARACTERS = /[\u0000-\u001f\u007f/\\:*?"<>|]+/g
+
+/**
+ * A name fit to show and to offer as a download: no path, no control
+ * characters, at most 200 characters, and the extension of the type the
+ * server detected, never the uploader's. A saved download is opened by its
+ * extension, so a file that is really a PDF must not arrive as "report.hta".
+ */
+export function safeFileName(name: string, extension: string): string {
+  const base = name.split(/[/\\]/).pop() ?? ''
+  const stem = base.replace(UNSAFE_FILE_NAME_CHARACTERS, '_').replace(/\.[A-Za-z0-9]{1,10}$/, '').replace(/\.+$/, '').trim()
+  const usable = stem.length > 0 && stem !== '.' && stem !== '..' ? stem : 'evidence'
+  return `${usable.slice(-(199 - extension.length))}.${extension}`
 }
 
-/** Upload a file and return its storage path, the value the API stores and checks. */
-export async function uploadEvidence(tenantId: string, folder: string, file: File): Promise<string> {
-  const problem = evidenceProblem(file)
-  if (problem) throw new Error(problem)
-  const path = buildEvidencePath(tenantId, folder, crypto.randomUUID(), file.name)
-  const { error } = await supabase.storage.from(EVIDENCE_BUCKET).upload(path, file, { contentType: file.type, upsert: false })
-  if (error) throw new Error(`Could not upload the file: ${error.message}`)
-  return path
+/**
+ * Where a file lives in the bucket: under its tenant's prefix (migration
+ * 299 checks this), then its subject, then its own hash. Addressing by
+ * hash means a retried upload rewrites identical bytes, never different ones.
+ */
+export function evidenceStoragePath(
+  tenantId: string, subjectType: string, subjectId: string, sha256: string, extension: string,
+): string {
+  return `${tenantId}/${subjectType}/${subjectId}/${sha256}.${extension}`
 }
 
-/** A time-limited link to view a stored file; null if it cannot be signed (deleted, or not yours). */
-export async function evidenceUrl(path: string, seconds = 3600): Promise<string | null> {
-  const { data, error } = await supabase.storage.from(EVIDENCE_BUCKET).createSignedUrl(path, seconds)
-  return error ? null : data.signedUrl
+// ── Direct-to-storage uploads (Phase 2 Q2) ────────────────────────────────
+// The browser uploads a large file straight into the private bucket with a
+// one-time signed URL, under a pending path that names its tenant and its
+// uploader. The finalize route then reads it back, checks its type, hashes
+// it and files it like any other evidence. Unfinalized uploads are swept
+// nightly. The hash is still computed only by the server.
+
+/** Where pending uploads wait. Outside every tenant's evidence prefix, so nothing filed ever lives here. */
+export const PENDING_EVIDENCE_PREFIX = 'pending'
+
+/** A pending upload's path: its tenant, then its uploader and a random id, so only they can finalize it. */
+export function pendingEvidencePath(tenantId: string, userId: string, uploadId: string): string {
+  return `${PENDING_EVIDENCE_PREFIX}/${tenantId}/${userId}--${uploadId}`
 }
 
-/** A canvas drawing (a data URL) as a PNG file, ready to upload. */
-export function dataUrlToFile(dataUrl: string, fileName: string): File {
-  const [header, base64 = ''] = dataUrl.split(',')
-  const type = /^data:([^;]+);base64$/.exec(header ?? '')?.[1] ?? 'image/png'
-  const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
-  return new File([bytes], fileName, { type })
+const UUID_PART = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+
+/** True when `path` is a pending upload this user started for this tenant. */
+export function isOwnPendingPath(path: string, tenantId: string, userId: string): boolean {
+  const pattern = new RegExp(`^${PENDING_EVIDENCE_PREFIX}/${tenantId}/${userId}--${UUID_PART}$`, 'i')
+  return pattern.test(path)
 }
+
+/** How long an upload may wait unfinalized before the nightly sweep removes it. */
+export const PENDING_EVIDENCE_TTL_HOURS = 24

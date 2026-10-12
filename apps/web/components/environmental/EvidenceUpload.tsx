@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { Camera, FileText, Loader2, X } from 'lucide-react'
-import { evidenceProblem, uploadEvidence } from '@/lib/environmental/evidence'
+import { evidenceProblem, uploadEvidence } from '@/lib/environmental/complianceEvidence'
 import { useEvidenceUrl } from '@/lib/environmental/useEvidenceUrl'
 import { secondaryButtonCls } from './form'
 

@@ -43,7 +43,16 @@ const outfallsTable = (o: { stored?: Result; partner?: { site: string }; saved?:
   return o.stored ?? { data: outfallRow() }
 }
 
-const permitAt = (site: string) => rowAt(site, { id: PERMIT_ID })
+/**
+ * The permit PERMIT_ID in the EMS vault, which lives at `site`. A retired permit is
+ * still a row there (the vault retires, never deletes), so only a query that filters
+ * on retired_at would miss it.
+ */
+const permitAt = (site: string, { retired = false } = {}) => (call: Call): Result => {
+  const row = { id: PERMIT_ID, retired_at: retired ? '2026-03-01T00:00:00Z' : null }
+  const dropsRetired = retired && call.ops.some(o => o.args[0] === 'retired_at')
+  return dropsRetired ? { data: null } : rowAt(site, row)(call)
+}
 
 const foreignKeyViolation = (constraint: string): Result => ({
   error: { code: '23503', message: `insert or update on table "stormwater_outfalls" violates foreign key constraint "${constraint}"` },
@@ -207,6 +216,15 @@ describe('POST /api/environmental/outfalls', () => {
       expect(db.used('stormwater_outfalls', 'insert')).toEqual([])
     })
 
+    it('refuses a retired permit that belongs to another site: being retired does not widen the site rule', async () => {
+      const db = fakeSupabase({ environmental_permits: permitAt(OTHER_FACILITY, { retired: true }), stormwater_outfalls: outfallsTable() })
+      allow(adminGate, db.client)
+      const res = await post({ permit_id: PERMIT_ID })
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({ error: 'invalid', details: [expect.stringMatching(/permit_id must be a permit at this site/)] })
+      expect(db.used('stormwater_outfalls', 'insert')).toEqual([])
+    })
+
     it('refuses a partner outfall that belongs to another site, and inserts nothing', async () => {
       const db = fakeSupabase({ stormwater_outfalls: outfallsTable({ partner: { site: OTHER_FACILITY } }) })
       allow(adminGate, db.client)
@@ -251,7 +269,7 @@ describe('POST /api/environmental/outfalls', () => {
     it('is a 400 that names the permit when the database names the permit', async () => {
       allow(adminGate, fakeSupabase({
         environmental_permits: permitAt(FACILITY),
-        stormwater_outfalls: [foreignKeyViolation('stormwater_outfalls_permit_id_fkey')],
+        stormwater_outfalls: [foreignKeyViolation('stormwater_outfalls_permit_fk')],
       }).client)
       const res = await post({ permit_id: PERMIT_ID })
       expect(res.status).toBe(400)
@@ -393,6 +411,45 @@ describe('PATCH /api/environmental/outfalls/[id]', () => {
       expect(res.status).toBe(400)
       expect(await res.json()).toEqual({ error: 'invalid', details: [expect.stringMatching(/permit_id must be a permit at this site/)] })
       expect(db.used('stormwater_outfalls', 'update')).toEqual([])
+    })
+
+    describe('an outfall linked to a permit that has since been retired', () => {
+      const linkedToRetired = () => fakeSupabase({
+        environmental_permits: permitAt(FACILITY, { retired: true }),
+        stormwater_outfalls: outfallsTable({ stored: { data: outfallRow({ permit_id: PERMIT_ID }) } }),
+      })
+
+      it('can still be edited, and keeps the link, when the change leaves the permit alone', async () => {
+        const db = linkedToRetired()
+        allow(adminGate, db.client)
+        const res = await patch({ notes: 'repainted' })
+        expect(res.status).toBe(200)
+        expect(db.arg('stormwater_outfalls', 'update')).toMatchObject({ permit_id: PERMIT_ID, notes: 'repainted' })
+      })
+
+      it('can still be saved from the form, which sends the whole outfall including the same permit', async () => {
+        const db = linkedToRetired()
+        allow(adminGate, db.client)
+        const res = await patch({ code: 'OF-001', name: 'North dock', permit_id: PERMIT_ID, notes: 'repainted' })
+        expect(res.status).toBe(200)
+        expect(db.arg('stormwater_outfalls', 'update')).toMatchObject({ permit_id: PERMIT_ID })
+      })
+
+      it('looks the retired permit up at the outfall\'s own site, inside the tenant', async () => {
+        const db = linkedToRetired()
+        allow(adminGate, db.client)
+        await patch({ notes: 'x' })
+        expect(db.filtered('environmental_permits', 'tenant_id', TENANT)).toBe(true)
+        expect(db.filtered('environmental_permits', 'facility_id', FACILITY)).toBe(true)
+        expect(db.filtered('environmental_permits', 'id', PERMIT_ID)).toBe(true)
+      })
+
+      it('can be unlinked from the retired permit', async () => {
+        const db = linkedToRetired()
+        allow(adminGate, db.client)
+        expect((await patch({ permit_id: null })).status).toBe(200)
+        expect(db.arg('stormwater_outfalls', 'update')).toMatchObject({ permit_id: null })
+      })
     })
 
     it('refuses a partner outfall that belongs to another site, and updates nothing', async () => {

@@ -5,19 +5,20 @@ import { Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { EvidenceUpload } from '@/components/environmental/EvidenceUpload'
 import { ErrorList, Field, inputCls, primaryButtonCls, secondaryButtonCls } from '@/components/environmental/form'
-import { createOutfall, errorList, updateOutfall, type Outfall, type Permit, type Scope } from '@/lib/environmental/client'
+import { createOutfall, errorList, updateOutfall, type Outfall, type Scope } from '@/lib/environmental/complianceClient'
 import {
   blankOutfallForm, buildOutfallRequest, otherOutfallsAtSite, OUTFALL_STATUS_META, OUTFALL_TYPE_LABELS, outfallOptionLabel,
-  outfallToForm, permitsAtSite, type OutfallFormState,
+  outfallPermitLabel, outfallToForm, permitChoicesForOutfall, type OutfallFormState,
 } from '@/lib/environmental/outfallView'
-import { permitLabel } from '@/lib/environmental/permitView'
+import type { PermitRef } from '@/lib/environmental/permitRefs'
 import { OUTFALL_STATUSES, OUTFALL_TYPES, type OutfallStatus, type OutfallType } from '@soteria/core/environmental/outfalls'
 
 // Add an outfall to the active site, or edit one. An outfall's site is fixed once it
 // exists, so the site is never asked for: a new outfall takes the active site from
 // the request's headers, and an edit ignores it. The permit and the outfall it is
 // "substantially identical to" are offered from this site only, because the API
-// refuses any other.
+// refuses any other. A permit that has been retired is not offered again, except the
+// one the outfall is already linked to.
 
 interface Props {
   scope: Scope
@@ -27,7 +28,8 @@ interface Props {
   outfall: Outfall | null
   /** Every outfall at the site, to choose the one this is substantially identical to. */
   outfalls: Outfall[]
-  permits: Permit[]
+  /** The site's permits, retired ones included, so a link to a retired permit can still be shown. */
+  permits: PermitRef[]
   onSaved: () => void
   onClose: () => void
 }
@@ -106,10 +108,10 @@ export function OutfallForm({ scope, siteId, siteName, outfall, outfalls, permit
                 {otherOutfallsAtSite(outfalls, siteId, outfall?.id ?? null).map(o => <option key={o.id} value={o.id}>{outfallOptionLabel(o)}</option>)}
               </select>
             </Field>
-            <Field label="Permit" hint="A permit recorded at this site">
+            <Field label="Permit" hint="A permit in force at this site">
               <select value={form.permitId} onChange={e => set('permitId', e.target.value)} className={inputCls}>
                 <option value="">No permit selected</option>
-                {permitsAtSite(permits, siteId).map(p => <option key={p.id} value={p.id}>{permitLabel(p)}</option>)}
+                {permitChoicesForOutfall(permits, siteId, outfall?.permit_id ?? null).map(p => <option key={p.id} value={p.id}>{outfallPermitLabel(p)}</option>)}
               </select>
             </Field>
           </div>

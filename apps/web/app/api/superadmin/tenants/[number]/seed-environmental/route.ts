@@ -9,9 +9,11 @@ import { supabaseDemoStore } from '@/lib/environmental/demoStore'
 // POST /api/superadmin/tenants/[number]/seed-environmental
 //
 // Seeds (or tops up) the environmental compliance demo on a demo account without
-// wiping anything else: three sites in three situations, with permits, outfalls,
-// requirements, deadlines and checklist history. Safe to repeat: each step finds
-// what it made before and leaves it alone. Reset Demo runs the same seed.
+// wiping anything else: three sites in three situations, with permits (in the EMS
+// permit vault), outfalls, requirements, deadlines and checklist history. It also
+// switches the Environmental module on for the account, because the module is
+// opt-in and the demo would otherwise be unreachable. Safe to repeat: each step
+// finds what it made before and leaves it alone. Reset Demo runs the same seed.
 //
 // Demo accounts only. The seed creates sites and records named DEMO, which must
 // never appear in a customer's real data.

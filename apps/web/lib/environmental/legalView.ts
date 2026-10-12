@@ -1,7 +1,7 @@
 import type { LegalApplicability, LegalCompliance, ReviewFrequency, ReviewState } from '@soteria/core/environmental/legalRegister'
 import { libraryForState } from '@soteria/core/environmental/packs/index'
 import { ENV_PROGRAMS, type EnvProgram } from '@soteria/core/environmental/siteProfile'
-import type { LegalEntry } from './client'
+import type { LegalEntry } from './complianceClient'
 
 // What the legal register screen shows and how it narrows and orders it. Pure
 // functions over rows the API already returned, so the screen's rules are

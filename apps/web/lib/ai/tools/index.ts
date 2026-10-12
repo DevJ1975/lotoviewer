@@ -5,7 +5,7 @@ import { trir as trirRate, dart as dartRate } from '@soteria/core/incidentScorec
 import { computeIncidentRisk } from '@/lib/incidentRiskFeatures'
 import { daysUntilDue } from '@soteria/core/complianceCalendar'
 import { normalizeStateCode } from '@soteria/core/environmental/jurisdiction'
-import { findGuidance, groupBySite, standingOf } from '@/lib/environmental/assistant'
+import { findGuidance, groupBySite, standingOf, type SiteRows } from '@/lib/environmental/assistant'
 
 // Tool registry for the home-page assistant.
 //
@@ -513,7 +513,7 @@ const compliance_obligations_due: ToolDef = {
   definition: {
     name: 'compliance_obligations_due',
     description:
-      'List open compliance-calendar deadlines that are overdue or due soon, with the site each belongs to. Use for "what compliance deadlines are coming up", "overdue obligations", "regulatory due dates", "permit renewals due".',
+      'List open compliance-calendar deadlines that are overdue or due soon, with the site each belongs to. Use for "what compliance deadlines are coming up", "overdue obligations", "regulatory due dates". Permit renewal countdowns are not on the calendar: for those use environmental_compliance_status.',
     input_schema: {
       type: 'object',
       properties: {
@@ -598,7 +598,7 @@ const environmental_compliance_status: ToolDef = {
   definition: {
     name: 'environmental_compliance_status',
     description:
-      'Where each site stands on environmental compliance: overdue and upcoming deadlines, permits expiring or expired, requirements rated non-compliant or needing attention, overdue legal reviews, and open environmental findings. Use for "how are we doing on environmental compliance", "any permits expiring", "what is overdue at the Houston site".',
+      'Where each site stands on environmental compliance: overdue and upcoming deadlines, permits whose renewal is due soon (permitsRenewalSoon: deadline within 90 days, nothing submitted) or whose renewal deadline was missed (permitsRenewalMissed), requirements rated non-compliant or needing attention, overdue legal reviews, and open environmental findings. Say "renewal due soon" and "renewal deadline missed"; a missed renewal deadline does not by itself mean the permit has expired. Use for "how are we doing on environmental compliance", "any permit renewals coming up", "what is overdue at the Houston site".',
     input_schema: { type: 'object', properties: {} },
   },
   async handler(_input, ctx) {
@@ -606,7 +606,7 @@ const environmental_compliance_status: ToolDef = {
     const [sites, obligations, permits, legal, findings] = await Promise.all([
       admin.from('facilities').select('id, name, state').eq('tenant_id', ctx.tenantId).order('name', { ascending: true }).limit(25),
       admin.from('compliance_calendar_obligations').select('facility_id, status, next_due_at, lead_days').eq('tenant_id', ctx.tenantId).eq('category', 'environmental'),
-      admin.from('environmental_permits').select('facility_id, status, expiration_date, renewal_lead_days').eq('tenant_id', ctx.tenantId),
+      admin.from('environmental_permits').select('facility_id, retired_at, expires_on, renewal_application_due_on, renewal_submitted_on').eq('tenant_id', ctx.tenantId),
       admin.from('legal_register').select('facility_id, applicability, compliance_status, last_reviewed_at, next_review_due').eq('tenant_id', ctx.tenantId),
       admin.from('nonconformities').select('facility_id, status').eq('tenant_id', ctx.tenantId).like('source_reference', 'env-%'),
     ])
@@ -618,13 +618,13 @@ const environmental_compliance_status: ToolDef = {
     const standings = ((sites.data ?? []) as Array<{ id: string; name: string; state: string | null }>).map(site => standingOf({
       site,
       obligations: groupBySite((obligations.data ?? []) as Row<{ status: string; next_due_at: string; lead_days: number }>[], site.id),
-      permits:     groupBySite((permits.data ?? []) as Row<{ status: string; expiration_date: string | null; renewal_lead_days: number }>[], site.id),
+      permits:     groupBySite((permits.data ?? []) as Row<SiteRows['permits'][number]>[], site.id),
       legal:       groupBySite((legal.data ?? []) as Row<{ applicability: string; compliance_status: string; last_reviewed_at: string | null; next_review_due: string | null }>[], site.id),
       findings:    groupBySite((findings.data ?? []) as Row<{ status: string }>[], site.id),
     }, now))
     return ok({
       sites: standings,
-      note: 'Library content is a draft pending expert review. Figures cover records entered in the Environmental compliance suite.',
+      note: 'Library content is a draft pending expert review. Figures cover records entered in the Environmental compliance suite and the permit register.',
     })
   },
 }

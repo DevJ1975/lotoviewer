@@ -3,7 +3,7 @@ import {
   EMPTY_ANSWER, dueText, draftKey, groupByProgram, groupBySection, isAnswered, limitsText, numericValue, numericVerdict,
   parseDraft, progress, serializeDraft, toSubmitBody, type Answers,
 } from '@/lib/environmental/runnerView'
-import type { ChecklistTemplateRow, RunItemView } from '@/lib/environmental/client'
+import type { ChecklistTemplateRow, RunItemView } from '@/lib/environmental/complianceClient'
 
 const item = (over: Partial<RunItemView> & { id: string }): RunItemView => ({
   section: 'Observations', prompt: `Prompt ${over.id}`, item_type: 'pass_fail_na', required: true, critical: false, guidance: null,

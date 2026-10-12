@@ -1,6 +1,6 @@
 import type { RcraGeneratorCategory } from '@soteria/core/hazardousWaste'
 import { EMPTY_SITE_PROFILE, type SiteProfile } from '@soteria/core/environmental/siteProfile'
-import type { PermitProgram } from '@soteria/core/environmental/permits'
+import type { PermitProgram } from '@soteria/core/environmentalPermit'
 import type { ApplyResult } from './applyLibrary'
 import type { RunItem } from './checklistRuns'
 
@@ -9,27 +9,31 @@ import type { RunItem } from './checklistRuns'
 // submit a customer uses) so what a prospect sees is what the product does, and
 // the content can never drift from the library.
 //
-//   Anaheim, CA       the busy one: state rules layered on federal, a permit about
-//                     to need renewing, an overdue report, a failed outfall
+//   Anaheim, CA       the busy one: state rules layered on federal, a permit whose
+//                     renewal is coming due, an overdue report, a failed outfall
 //                     inspection with a finding.
 //   Houston, TX       a clean-ish site on Texas rules, one inspection in progress.
 //   Portland, OR      a state the library does not cover yet: shows the federal
 //                     baseline fallback and says so.
 //
-// Names, permit numbers and agencies are placeholders marked DEMO: the demo
-// must never be mistaken for a real permit.
+// The permits go into the EMS permit vault, the same register a customer's permits
+// live in. Names and permit numbers are placeholders marked DEMO: the demo must
+// never be mistaken for a real permit.
 
 export interface DemoPermit {
   key: string
   program: PermitProgram
-  permitType: string
-  permitNumber: string
+  title: string
   agency: string
+  permitNumber: string
+  /** 'federal' or 'state:XX', as the permit vault stores it. */
   jurisdiction: string
   /** Days from today (negative = in the past). */
-  effectiveInDays: number
+  issuedInDays: number
+  /** Null for a permit with no fixed term. */
   expiresInDays: number | null
-  renewalLeadDays: number
+  /** When the permit's own terms put the renewal application due; omitted, the countdown runs to the expiry. */
+  renewalApplicationDueInDays?: number
 }
 
 export interface DemoOutfall {
@@ -95,9 +99,10 @@ export const DEMO_SITES: readonly DemoSite[] = [
       spccApplicable: true, tier2Applicable: true, sicCodes: ['2096'], naicsCodes: ['311919'],
     },
     permits: [
-      { key: 'igp', program: 'stormwater', permitType: 'California Industrial General Permit', permitNumber: 'DEMO WDID 8 30I000001', agency: 'State Water Resources Control Board', jurisdiction: 'CA', effectiveInDays: -700, expiresInDays: 1200, renewalLeadDays: 180 },
-      { key: 'pto', program: 'air', permitType: 'Air district permit to operate', permitNumber: 'DEMO-PTO-0001', agency: 'South Coast AQMD', jurisdiction: 'CA', effectiveInDays: -310, expiresInDays: 55, renewalLeadDays: 90 },
-      { key: 'iwdp', program: 'wastewater', permitType: 'Industrial wastewater discharge permit', permitNumber: 'DEMO-IWDP-0001', agency: 'DEMO County Sanitation District', jurisdiction: 'CA', effectiveInDays: -200, expiresInDays: 400, renewalLeadDays: 120 },
+      { key: 'igp', program: 'stormwater', title: 'California Industrial General Permit', agency: 'State Water Resources Control Board', permitNumber: 'DEMO WDID 8 30I000001', jurisdiction: 'state:CA', issuedInDays: -700, expiresInDays: 1200, renewalApplicationDueInDays: 1020 },
+      // No application date of its own, so the countdown runs to the expiry, which is close: renewal is due soon.
+      { key: 'pto', program: 'air', title: 'Air district permit to operate', agency: 'South Coast AQMD', permitNumber: 'DEMO-PTO-0001', jurisdiction: 'state:CA', issuedInDays: -310, expiresInDays: 55 },
+      { key: 'iwdp', program: 'wastewater', title: 'Industrial wastewater discharge permit', agency: 'DEMO County Sanitation District', permitNumber: 'DEMO-IWDP-0001', jurisdiction: 'state:CA', issuedInDays: -200, expiresInDays: 400, renewalApplicationDueInDays: 280 },
     ],
     outfalls: [
       { code: '001', name: 'North channel discharge', receivingWater: 'DEMO Creek', sampling: true, permitKey: 'igp', latitude: 33.8353, longitude: -117.9145 },
@@ -132,8 +137,8 @@ export const DEMO_SITES: readonly DemoSite[] = [
       wastewaterDischarge: 'none', spccApplicable: true, tier2Applicable: true, sicCodes: ['4225'], naicsCodes: ['493110'],
     },
     permits: [
-      { key: 'msgp', program: 'stormwater', permitType: 'TPDES Multi-Sector General Permit authorization', permitNumber: 'DEMO TXR05-0001', agency: 'Texas Commission on Environmental Quality', jurisdiction: 'TX', effectiveInDays: -500, expiresInDays: 900, renewalLeadDays: 180 },
-      { key: 'pbr', program: 'air', permitType: 'Permit by rule registration', permitNumber: 'DEMO-PBR-0001', agency: 'Texas Commission on Environmental Quality', jurisdiction: 'TX', effectiveInDays: -400, expiresInDays: null, renewalLeadDays: 180 },
+      { key: 'msgp', program: 'stormwater', title: 'TPDES Multi-Sector General Permit authorization', agency: 'Texas Commission on Environmental Quality', permitNumber: 'DEMO TXR05-0001', jurisdiction: 'state:TX', issuedInDays: -500, expiresInDays: 900, renewalApplicationDueInDays: 720 },
+      { key: 'pbr', program: 'air', title: 'Permit by rule registration', agency: 'Texas Commission on Environmental Quality', permitNumber: 'DEMO-PBR-0001', jurisdiction: 'state:TX', issuedInDays: -400, expiresInDays: null },
     ],
     outfalls: [
       { code: '001', name: 'Yard drainage', receivingWater: 'DEMO Bayou', sampling: true, permitKey: 'msgp', latitude: 29.7604, longitude: -95.3698 },
@@ -221,13 +226,15 @@ export function demoAnswers(items: readonly RunItem[], outcome: 'pass' | 'fail',
 
 /** Everything the seed does to the database, behind an interface so its order and idempotency can be tested. */
 export interface DemoStore {
+  /** Switch the Environmental module on for the account, leaving its other module settings as they are. */
+  ensureModuleEnabled(): Promise<void>
   /** Up to three people with a login, used as owners and inspectors. Empty if the account has none. */
   memberIds(): Promise<string[]>
   ensureSite(site: Pick<DemoSite, 'code' | 'name' | 'city' | 'state' | 'generatorCategory'>): Promise<string>
   saveProfile(facilityId: string, profile: Partial<SiteProfile>, confirmedBy: string): Promise<void>
   applyLibrary(facilityId: string, actorUserId: string): Promise<ApplyResult>
-  /** Create the permit if the site has none with this number; return its id either way. */
-  ensurePermit(facilityId: string, permit: DemoPermit, dates: { effective: string; expires: string | null }, actorUserId: string): Promise<string>
+  /** Find the site's active permit with this agency and number in the permit vault, or create it; return its id either way. */
+  ensurePermit(facilityId: string, permit: DemoPermit, dates: { issuedOn: string; expiresOn: string | null; renewalApplicationDueOn: string | null }, actorUserId: string): Promise<string>
   ensureOutfall(facilityId: string, outfall: DemoOutfall, links: { permitId: string | null; sameAsId: string | null }, actorUserId: string): Promise<string>
   evaluateLegal(facilityId: string, evaluation: DemoEvaluation, when: { evaluatedAt: string; reviewedAt: string | null; nextReviewDue: string | null }, actorUserId: string): Promise<boolean>
   setDeadline(facilityId: string, libraryKey: string, change: { dueOn: string; ownerUserId: string | null }): Promise<boolean>
@@ -236,12 +243,15 @@ export interface DemoStore {
 
 const addDays = (now: Date, days: number): Date => new Date(now.getTime() + days * 86_400_000)
 const ymd = (d: Date) => d.toISOString().slice(0, 10)
+const dateInDaysOrNull = (now: Date, days: number | null | undefined): string | null => (days == null ? null : ymd(addDays(now, days)))
 
 export interface DemoSeedSummary {
   sites: number; permits: number; outfalls: number; evaluations: number; deadlines: number; runs: number; libraryItems: number
 }
 
 export async function seedEnvironmentalDemo(store: DemoStore, now: Date, sites: readonly DemoSite[] = DEMO_SITES): Promise<DemoSeedSummary> {
+  // Environmental is opt-in: without the module switched on, the demo account would hold a suite it cannot open.
+  await store.ensureModuleEnabled()
   const members = await store.memberIds()
   if (members.length === 0) throw new Error('The demo account has no members to own the demo records. Add a member and run it again.')
   const actor = members[0]!
@@ -258,8 +268,9 @@ export async function seedEnvironmentalDemo(store: DemoStore, now: Date, sites: 
     const permitIds = new Map<string, string>()
     for (const permit of site.permits) {
       permitIds.set(permit.key, await store.ensurePermit(facilityId, permit, {
-        effective: ymd(addDays(now, permit.effectiveInDays)),
-        expires: permit.expiresInDays === null ? null : ymd(addDays(now, permit.expiresInDays)),
+        issuedOn: ymd(addDays(now, permit.issuedInDays)),
+        expiresOn: dateInDaysOrNull(now, permit.expiresInDays),
+        renewalApplicationDueOn: dateInDaysOrNull(now, permit.renewalApplicationDueInDays),
       }, actor))
       summary.permits += 1
     }

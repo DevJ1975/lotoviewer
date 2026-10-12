@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { evidenceUrl } from './evidence'
+import { evidenceUrl } from './complianceEvidence'
 
 /**
  * A time-limited link to a stored file, or null while it is being signed or when it

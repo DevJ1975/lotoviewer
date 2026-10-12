@@ -9,12 +9,13 @@ import { offSiteReferenceErrors, PARTNER_AT_SITE, PERMIT_AT_SITE } from '@/lib/e
 
 export const runtime = 'nodejs'
 
-// Three ids can point at nothing, and Postgres names the constraint that failed
-// (<table>_<column>_fkey), so the caller hears which one instead of a blanket
-// "site not found". The permit and partner were just read, so reaching these two
-// means the row was deleted in between.
+// Three ids can point at nothing, and Postgres names the constraint that failed, so
+// the caller hears which one instead of a blanket "site not found". The permit's
+// constraint is named in migration 313 because it spans three columns; the other two
+// carry Postgres' default <table>_<column>_fkey names. The permit and partner were
+// just read, so reaching these two means the row was deleted in between.
 function foreignKeyFailure(databaseMessage: string): Response {
-  if (databaseMessage.includes('permit_id')) return invalid([PERMIT_AT_SITE])
+  if (databaseMessage.includes('stormwater_outfalls_permit_fk')) return invalid([PERMIT_AT_SITE])
   if (databaseMessage.includes('substantially_identical_to')) return invalid([PARTNER_AT_SITE])
   if (databaseMessage.includes('facility_id')) return Response.json({ error: 'facility_not_found' }, { status: 404 })
   return Response.json({

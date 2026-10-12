@@ -2,13 +2,11 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { HAZARDOUS_WASTE_FACILITY_SETTINGS_KEY } from '@soteria/core/hazardousWaste'
 import { applies } from '@soteria/core/environmental/applicability'
 import { EMPTY_SITE_PROFILE, toProfileRow } from '@soteria/core/environmental/siteProfile'
-import type { PermitProgram } from '@soteria/core/environmental/permits'
 import { executeApply, planApply } from './applyLibrary'
 import { startChecklist, submitChecklist } from './checklistRuns'
 import { supabaseRunStore } from './checklistStore'
 import { demoAnswers, type DemoStore } from './demoSeed'
 import { readApplyState, supabaseLibraryStore } from './libraryStore'
-import { syncPermitRenewal } from './permitSync'
 import { loadSiteContext } from './siteContext'
 
 // The Supabase side of the demo seed. It uses the service client (a superadmin
@@ -35,6 +33,15 @@ export function supabaseDemoStore(admin: SupabaseClient, tenantId: string): Demo
     .select('id').eq('tenant_id', tenantId).eq('facility_id', facilityId).eq('code', code).maybeSingle())
 
   return {
+    async ensureModuleEnabled() {
+      const tenant = must(await admin.from('tenants').select('modules').eq('id', tenantId).maybeSingle())
+      if (!tenant) throw new Error('The demo account could not be read back.')
+      const modules = (tenant.modules ?? {}) as Record<string, boolean>
+      if (modules.environmental === true) return
+      // Merged, not replaced: the account's other module settings are its own.
+      must(await admin.from('tenants').update({ modules: { ...modules, environmental: true } }).eq('id', tenantId).select('id').single())
+    },
+
     async memberIds() {
       const rows = must(await admin.from('tenant_memberships').select('user_id')
         .eq('tenant_id', tenantId).is('invite_cancelled_at', null).not('user_id', 'is', null).order('user_id', { ascending: true }).limit(3))
@@ -73,23 +80,38 @@ export function supabaseDemoStore(admin: SupabaseClient, tenantId: string): Demo
     },
 
     async ensurePermit(facilityId, permit, dates, actorUserId) {
-      let row = must(await admin.from('environmental_permits').select('*')
-        .eq('tenant_id', tenantId).eq('facility_id', facilityId).eq('program', permit.program).eq('permit_number', permit.permitNumber).maybeSingle())
-      if (!row) {
-        row = required(await admin.from('environmental_permits').insert({
-          tenant_id: tenantId, facility_id: facilityId, program: permit.program, permit_type: permit.permitType,
-          permit_number: permit.permitNumber, issuing_agency: permit.agency, jurisdiction: permit.jurisdiction, status: 'active',
-          effective_date: dates.effective, expiration_date: dates.expires, renewal_lead_days: permit.renewalLeadDays,
-          created_by: actorUserId, updated_by: actorUserId,
-        }).select('*').single())
+      // The vault compares a permit's holder with the legal entity in the EMS scope, so the demo
+      // permits are held by that entity when the account has a scope, and by the account otherwise.
+      const scope = must(await admin.from('ms_scope_statements').select('legal_entity')
+        .eq('tenant_id', tenantId).eq('discipline', 'ems').order('version', { ascending: false }).limit(1).maybeSingle())
+      const tenant = must(await admin.from('tenants').select('name').eq('id', tenantId).maybeSingle())
+      if (!tenant) throw new Error('The demo account could not be read back.')
+      const holder = (scope?.legal_entity as string | undefined) ?? (tenant.name as string)
+      const term = { issued_on: dates.issuedOn, expires_on: dates.expiresOn, renewal_application_due_on: dates.renewalApplicationDueOn }
+
+      // Active only: a retired permit is history, and the vault's unique number applies to active ones.
+      const existing = must(await admin.from('environmental_permits')
+        .select('id, holder_of_record, issued_on, expires_on, renewal_application_due_on')
+        .eq('tenant_id', tenantId).eq('facility_id', facilityId).eq('agency', permit.agency).eq('permit_number', permit.permitNumber)
+        .is('retired_at', null).maybeSingle())
+      if (existing) {
+        // Reset Demo cannot wipe permits (the vault never deletes them), so the story's dates are set
+        // again on every seed; left alone they would age until every demo permit read as missed.
+        const unchanged = existing.holder_of_record === holder && existing.issued_on === term.issued_on
+          && existing.expires_on === term.expires_on && existing.renewal_application_due_on === term.renewal_application_due_on
+        if (!unchanged) {
+          must(await admin.from('environmental_permits').update({ ...term, holder_of_record: holder, updated_by: actorUserId })
+            .eq('id', existing.id as string).select('id').single())
+        }
+        return existing.id as string
       }
-      // The renewal deadline follows the permit; this is a no-op when it already does.
-      await syncPermitRenewal(admin, { tenantId, userId: actorUserId }, {
-        id: row.id as string, facility_id: facilityId, program: row.program as PermitProgram, permit_type: row.permit_type as string,
-        permit_number: row.permit_number as string | null, status: row.status as string,
-        expiration_date: row.expiration_date as string | null, renewal_lead_days: row.renewal_lead_days as number,
-      })
-      return row.id as string
+
+      const created = required(await admin.from('environmental_permits').insert({
+        tenant_id: tenantId, facility_id: facilityId, program: permit.program, instrument: 'permit', title: permit.title,
+        agency: permit.agency, permit_number: permit.permitNumber, jurisdiction: permit.jurisdiction, holder_of_record: holder,
+        ...term, created_by: actorUserId, updated_by: actorUserId,
+      }).select('id').single())
+      return created.id as string
     },
 
     async ensureOutfall(facilityId, outfall, links, actorUserId) {
@@ -150,7 +172,8 @@ export function supabaseDemoStore(admin: SupabaseClient, tenantId: string): Demo
       }
 
       const deadline = run.deadlineKey ? await findDeadline(facilityId, run.deadlineKey) : null
-      const runStore = supabaseRunStore(admin, { tenantId, userId: actorUserId })
+      // The service-role client has no signed-in user for the completion function to check, so it completes directly.
+      const runStore = supabaseRunStore(admin, { tenantId, userId: actorUserId }, { direct: true })
       const started = await startChecklist(runStore, site, actorUserId, {
         libraryKey: run.libraryKey, subjectId, obligationId: deadline ? (deadline.id as string) : null, occurrenceAt: null,
       })

@@ -10,10 +10,12 @@ import { EmptyState } from '@/components/EmptyState'
 import { DraftBadge, StatusChip } from '@/components/environmental/badges'
 import { HowToPanel, JurisdictionBanner, SiteRequired } from '@/components/environmental/context'
 import { ErrorList, Field, inputCls, primaryButtonCls, secondaryButtonCls } from '@/components/environmental/form'
+import { listPermits, type PermitRow } from '@/lib/environmental/client'
 import {
-  errorList, listChecklists, listOutfalls, listPermits, startChecklist,
-  type ChecklistRunRow, type ChecklistTemplateRow, type Outfall, type Permit,
-} from '@/lib/environmental/client'
+  errorList, listChecklists, listOutfalls, startChecklist,
+  type ChecklistRunRow, type ChecklistTemplateRow, type Outfall,
+} from '@/lib/environmental/complianceClient'
+import { permitLabel, permitsAtSite } from '@/lib/environmental/permitRefs'
 import { dueText, groupByProgram, needsSubject } from '@/lib/environmental/runnerView'
 import { useEnvironmentalScope, useEnvironmentalSite } from '@/lib/environmental/useEnvironmental'
 import { ENV_PROGRAM_LABELS } from '@soteria/core/environmental/siteProfile'
@@ -34,7 +36,7 @@ export default function ChecklistsPage() {
     <>
       <PageHeader
         icon={ClipboardCheck}
-        eyebrow="ISO 14001 · 8.1 · 9.1.1"
+        eyebrow="Environmental compliance"
         title="Checklists"
         description="Inspections and sampling records for this site. Each answer is kept as evidence; a failure raises a finding to follow up."
       />
@@ -56,7 +58,7 @@ function SiteChecklists() {
   const [templates, setTemplates] = useState<ChecklistTemplateRow[] | null>(null)
   const [runs, setRuns] = useState<ChecklistRunRow[]>([])
   const [outfalls, setOutfalls] = useState<Outfall[]>([])
-  const [permits, setPermits] = useState<Permit[]>([])
+  const [permits, setPermits] = useState<PermitRow[]>([])
   const [errors, setErrors] = useState<string[]>([])
   const [starting, setStarting] = useState<string | null>(null)
   const [choosing, setChoosing] = useState<string | null>(null)
@@ -71,7 +73,8 @@ function SiteChecklists() {
   useEffect(() => {
     if (!scope || !templates) return
     if (templates.some(t => t.subject_type === 'outfall')) listOutfalls(scope).then(r => setOutfalls(r.outfalls.filter(o => o.status !== 'removed'))).catch(() => undefined)
-    if (templates.some(t => t.subject_type === 'permit')) listPermits(scope).then(r => setPermits(r.permits)).catch(() => undefined)
+    // Only permits in force: a retired permit is not a new subject to inspect.
+    if (templates.some(t => t.subject_type === 'permit')) listPermits(scope.tenantId, { status: 'active' }).then(r => setPermits(r.permits)).catch(() => undefined)
   }, [scope, templates])
 
   const start = useCallback(async (template: ChecklistTemplateRow, subjectId: string | null) => {
@@ -105,7 +108,7 @@ function SiteChecklists() {
   const groups = groupByProgram(templates)
   const subjectOptions = (t: ChecklistTemplateRow) =>
     t.subject_type === 'outfall' ? outfalls.map(o => ({ id: o.id, label: `Outfall ${o.code}${o.name ? `: ${o.name}` : ''}` }))
-    : permits.map(p => ({ id: p.id, label: `${p.permit_type}${p.permit_number ? ` ${p.permit_number}` : ''}` }))
+    : (facilityId ? permitsAtSite(permits, facilityId) : []).map(p => ({ id: p.id, label: permitLabel(p) }))
 
   return (
     <div className="space-y-5">
@@ -139,7 +142,7 @@ function SiteChecklists() {
                     options.length === 0 ? (
                       <p className="text-sm text-amber-800 dark:text-amber-200">
                         Add {t.subject_type === 'outfall' ? 'an outfall' : 'a permit'} first on the{' '}
-                        <Link className="underline" href={`/environmental/compliance/${t.subject_type === 'outfall' ? 'outfalls' : 'permits'}`}>{t.subject_type === 'outfall' ? 'Outfalls' : 'Permits'}</Link> page.
+                        <Link className="underline" href={t.subject_type === 'outfall' ? '/environmental/compliance/outfalls' : '/environmental/permits'}>{t.subject_type === 'outfall' ? 'Outfalls' : 'Permits'}</Link> page.
                       </p>
                     ) : (
                       <div className="flex flex-wrap items-end gap-2">

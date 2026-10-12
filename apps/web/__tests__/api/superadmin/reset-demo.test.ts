@@ -131,12 +131,22 @@ describe('POST /api/superadmin/tenants/[number]/reset-demo', () => {
       const r = await resetDemo(emptyRequest('POST'), ctxFor({ number: '0002' }))
       expect(r.status).toBe(200)
       const wiped = mockState.deletes.map(d => d.table)
-      for (const table of ['stormwater_outfalls', 'environmental_permits', 'environmental_site_profiles', 'legal_register', 'inspections', 'compliance_calendar_obligations']) {
+      for (const table of ['stormwater_outfalls', 'environmental_site_profiles', 'legal_register', 'inspections', 'compliance_calendar_obligations']) {
         expect(wiped, table).toContain(table)
       }
       // The legacy tables reference legal_register without cascade, so they go first.
       expect(wiped.indexOf('compliance_obligations')).toBeLessThan(wiped.indexOf('legal_register'))
       expect(wiped.indexOf('compliance_obligation_completions')).toBeLessThan(wiped.indexOf('compliance_obligations'))
+    })
+
+    // A permit is retired, never deleted (migration 304), and the conditions and outfalls that point at it
+    // outlive a reset; the seed finds its permits again by agency and number instead of recreating them.
+    it('keeps the permit vault: permits are never wiped, only the things that reference them', async () => {
+      demoTenant()
+      const r = await resetDemo(emptyRequest('POST'), ctxFor({ number: '0002' }))
+      expect(r.status).toBe(200)
+      expect(mockState.deletes.map(d => d.table)).not.toContain('environmental_permits')
+      expect((await r.json()).wiped).not.toHaveProperty('environmental_permits')
     })
 
     it('never wipes safety inspections or system calendar rows wholesale: those two tables are only cleared by their environmental filter', async () => {
@@ -159,7 +169,7 @@ describe('POST /api/superadmin/tenants/[number]/reset-demo', () => {
       expect(body.note).toBe('Wiped and re-seeded canonical demo data.')
     })
 
-    it('still resets, loudly, when the environmental seed cannot run (no members, or migrations 299-303 not applied)', async () => {
+    it('still resets, loudly, when the environmental seed cannot run (no members, or migrations 312-316 not applied)', async () => {
       demoTenant()
       seedEnvironmentalDemo.mockRejectedValue(new Error('The demo account has no members to own the demo records. Add a member and run it again.'))
       const r = await resetDemo(emptyRequest('POST'), ctxFor({ number: '0002' }))

@@ -73,6 +73,8 @@ async function runCron(req: Request): Promise<NextResponse> {
     const { data: rows, error } = await admin.from('compliance_calendar_obligations')
       .select('id, tenant_id, facility_id, title, regulatory_ref, status, next_due_at, lead_days, last_reminded_on, owner_user_id')
       .eq('status', 'open').eq('category', 'environmental').lte('next_due_at', horizon)
+      // A permit's own conditions are reminded about by the permit vault's cron; the two must never both send.
+      .is('permit_id', null)
       .order('next_due_at', { ascending: true }).limit(MAX_ROWS)
     if (error) {
       Sentry.captureException(error, { tags: { route: '/api/cron/compliance-calendar-reminders', stage: 'obligations' } })

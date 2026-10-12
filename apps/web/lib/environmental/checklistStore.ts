@@ -1,14 +1,23 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { advanceDueDate } from '@soteria/core/complianceCalendar'
 import type { ChecklistSubjectType } from '@soteria/core/environmental/content'
 import type { NonconformityInsert } from '@soteria/core/environmental/checklists'
 import { createTemplateInstance } from './libraryStore'
-import type { NewRun, ObligationRow, RunItem, RunResponse, RunSnapshot, RunStore } from './checklistRuns'
+import { permitLabel } from './permitRefs'
+import type { CompletionOutcome, NewRun, ObligationRow, RunItem, RunResponse, RunSnapshot, RunStore } from './checklistRuns'
 
 // The Supabase side of checklistRuns. Every statement runs through the caller's
 // own client, so row-level security (tenant, facility and, for evidence, admin
 // rights) applies to each one.
+//
+// The one exception is completing a deadline, which a plain member's own client may
+// not write: that goes through the database function env_complete_obligation
+// (migration 315), which decides who may. A service-role client has no signed-in user
+// for the function to check, so it is used only by the demo seed, through `direct`.
 
 const UNIQUE_VIOLATION = '23505'
+const CHECK_VIOLATION = '23514'
+const NO_DATA_FOUND = 'P0002'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const OBLIGATION_COLUMNS = 'id, title, status, cadence, cadence_days, next_due_at, due_anchor, owner_user_id, facility_id, library_key'
@@ -17,7 +26,39 @@ function fail(error: { message: string } | null): asserts error is null {
   if (error) throw new Error(error.message)
 }
 
-export function supabaseRunStore(client: SupabaseClient, actor: { tenantId: string; userId: string }): RunStore {
+/** The function's refusals that mean "this occurrence is no longer waiting", as opposed to a failure. */
+const isStale = (message: string) => message.startsWith('The occurrence due on') || message.startsWith('This deadline is')
+
+export function supabaseRunStore(
+  client: SupabaseClient, actor: { tenantId: string; userId: string },
+  options: { direct?: boolean } = {},
+): RunStore {
+  // The service-role path (demo seeding only). The same steps as the database function, without its
+  // checks, because there is no signed-in user to check: the event first (the unique link to the
+  // checklist makes it safe to repeat), then the move, only while the deadline still sits on the occurrence.
+  async function completeDirectly(args: { obligationId: string; occurrenceAt: string; inspectionId: string; note: string }): Promise<CompletionOutcome> {
+    const { data: ob, error: readError } = await client.from('compliance_calendar_obligations')
+      .select(OBLIGATION_COLUMNS).eq('tenant_id', actor.tenantId).eq('id', args.obligationId).maybeSingle()
+    fail(readError)
+    const obligation = ob as unknown as ObligationRow | null
+    if (!obligation || obligation.status !== 'open' || obligation.next_due_at !== args.occurrenceAt) return 'stale'
+
+    const { error: eventError } = await client.from('compliance_calendar_events').insert({
+      tenant_id: actor.tenantId, obligation_id: args.obligationId, occurrence_at: args.occurrenceAt,
+      completed_by: actor.userId, inspection_id: args.inspectionId, note: args.note,
+    })
+    if (eventError && eventError.code !== UNIQUE_VIOLATION) throw new Error(eventError.message)
+
+    const update = obligation.cadence === 'once'
+      ? { status: 'completed' }
+      : { next_due_at: advanceDueDate(obligation.next_due_at, obligation.cadence, obligation.cadence_days, { clampToMonthEnd: obligation.due_anchor === 'period_end' }) }
+    const { data: moved, error: moveError } = await client.from('compliance_calendar_obligations')
+      .update({ ...update, updated_at: new Date().toISOString() })
+      .eq('tenant_id', actor.tenantId).eq('id', args.obligationId).eq('next_due_at', args.occurrenceAt).eq('status', 'open').select('id')
+    fail(moveError)
+    return (moved ?? []).length > 0 ? 'completed' : 'stale'
+  }
+
   async function findSubject(type: ChecklistSubjectType, id: string, facilityId: string): Promise<{ label: string } | null> {
     if (!UUID_RE.test(id)) return null
     if (type === 'outfall') {
@@ -27,10 +68,11 @@ export function supabaseRunStore(client: SupabaseClient, actor: { tenantId: stri
       return data ? { label: `Outfall ${data.code as string}` } : null
     }
     if (type === 'permit') {
-      const { data, error } = await client.from('environmental_permits').select('permit_type, permit_number')
+      // Retired permits are found too: a run made while a permit was in force must still name it.
+      const { data, error } = await client.from('environmental_permits').select('title, permit_number')
         .eq('id', id).eq('facility_id', facilityId).maybeSingle()
       fail(error)
-      return data ? { label: [data.permit_type, data.permit_number].filter(Boolean).join(' ') } : null
+      return data ? { label: permitLabel(data) } : null
     }
     if (type === 'hw_area') {
       const { data, error } = await client.from('hazardous_waste_areas').select('name')
@@ -174,19 +216,16 @@ export function supabaseRunStore(client: SupabaseClient, actor: { tenantId: stri
       }
     },
 
-    async recordCompletion({ obligationId, occurrenceAt, inspectionId, userId, note }) {
-      const { error } = await client.from('compliance_calendar_events').insert({
-        tenant_id: actor.tenantId, obligation_id: obligationId, occurrence_at: occurrenceAt,
-        completed_by: userId, inspection_id: inspectionId, note,
-      })
-      // The unique link to the checklist makes this safe to repeat.
-      if (error && error.code !== UNIQUE_VIOLATION) throw new Error(error.message)
-    },
+    async completeOccurrence({ obligationId, occurrenceAt, inspectionId, note }): Promise<CompletionOutcome> {
+      if (options.direct) return completeDirectly({ obligationId, occurrenceAt, inspectionId, note })
 
-    async advanceObligation(id, update) {
-      const { error } = await client.from('compliance_calendar_obligations')
-        .update({ ...update, updated_at: new Date().toISOString() }).eq('tenant_id', actor.tenantId).eq('id', id)
-      fail(error)
+      const { error } = await client.rpc('env_complete_obligation', {
+        p_obligation_id: obligationId, p_due_on: occurrenceAt, p_note: note, p_evidence_id: null, p_inspection_id: inspectionId,
+      })
+      if (!error) return 'completed'
+      if (error.code === NO_DATA_FOUND) return 'not_permitted'
+      if (error.code === CHECK_VIOLATION && isStale(error.message)) return 'stale'
+      throw new Error(error.message)
     },
 
     async saveSignature(inspectionId, signature) {

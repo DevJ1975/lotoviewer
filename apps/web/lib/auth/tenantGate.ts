@@ -181,17 +181,14 @@ export function requireTenantAdmin(req: Request) {
   return gate(req, { requireRole: 'admin' })
 }
 
-/**
- * Layers the tenant's module toggle on top of an already-resolved role gate.
- * Shared by the member and admin variants so the two cannot drift apart.
- */
-async function withModuleEnabled(roleGate: TenantGate, moduleId: string): Promise<TenantModuleGate> {
-  if (!roleGate.ok) return roleGate
+export async function requireTenantModuleMember(req: Request, moduleId: string): Promise<TenantModuleGate> {
+  const member = await requireTenantMember(req)
+  if (!member.ok) return member
 
   const { data: tenant, error } = await supabaseAdmin()
     .from('tenants')
     .select('name, modules, settings, disabled_at')
-    .eq('id', roleGate.tenantId)
+    .eq('id', member.tenantId)
     .maybeSingle()
 
   if (error) return { ok: false, status: 500, message: error.message }
@@ -205,18 +202,23 @@ async function withModuleEnabled(roleGate: TenantGate, moduleId: string): Promis
   }
 
   return {
-    ...roleGate,
+    ...member,
     tenantName:     typeof tenant.name === 'string' ? tenant.name : null,
     tenantModules:  modules,
     tenantSettings: (tenant.settings ?? null) as Record<string, unknown> | null,
   }
 }
 
-export async function requireTenantModuleMember(req: Request, moduleId: string): Promise<TenantModuleGate> {
-  return withModuleEnabled(await requireTenantMember(req), moduleId)
-}
-
-/** Tenant admin or owner, and the module must be enabled for the tenant. */
+/**
+ * requireTenantModuleMember, then owner / admin only (superadmins pass).
+ * For writes to records whose RLS admits only current_user_admin_tenant_ids():
+ * answering 403 here beats letting the insert fail as an opaque RLS refusal.
+ */
 export async function requireTenantModuleAdmin(req: Request, moduleId: string): Promise<TenantModuleGate> {
-  return withModuleEnabled(await requireTenantAdmin(req), moduleId)
+  const member = await requireTenantModuleMember(req, moduleId)
+  if (!member.ok) return member
+  if (member.role !== 'owner' && member.role !== 'admin' && member.role !== 'superadmin') {
+    return { ok: false, status: 403, message: 'Tenant admin or owner required' }
+  }
+  return member
 }

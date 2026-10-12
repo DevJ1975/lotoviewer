@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { Deadline, SiteDetail } from '@/lib/environmental/client'
-import * as client from '@/lib/environmental/client'
+import type { Deadline, SiteDetail } from '@/lib/environmental/complianceClient'
+import * as client from '@/lib/environmental/complianceClient'
 import EnvironmentalCalendarPage from '@/app/environmental/compliance/calendar/page'
 
 // The compliance calendar screen against a mocked API and mocked providers, with
@@ -29,8 +29,8 @@ vi.mock('@/components/FacilityProvider', () => {
     }),
   }
 })
-vi.mock('@/lib/environmental/client', async importOriginal => ({
-  ...(await importOriginal<typeof import('@/lib/environmental/client')>()),
+vi.mock('@/lib/environmental/complianceClient', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/lib/environmental/complianceClient')>()),
   listDeadlines: vi.fn(),
   createDeadline: vi.fn(),
   updateDeadline: vi.fn(),
@@ -67,8 +67,8 @@ const OVERDUE = deadline({
   last_completed_at: new Date(2026, 6, 1, 18, 30).toISOString(),
 })
 const DUE_SOON = deadline({
-  id: 'd-soon', title: 'Renew air permit', next_due_at: '2026-10-19', program: 'air', cadence: 'annual',
-  owner_user_id: 'user-me', library_key: 'permit-renewal:p1', lead_days: 30,
+  id: 'd-soon', title: 'Annual air emissions report', next_due_at: '2026-10-19', program: 'air', cadence: 'annual',
+  owner_user_id: 'user-me', source: 'tenant', lead_days: 30,
 })
 const UPCOMING = deadline({
   id: 'd-upcoming', title: 'Tier II report', next_due_at: '2027-03-01', program: 'epcra', cadence: 'annual',
@@ -134,7 +134,7 @@ describe('list view', () => {
     expect(within(overdue).getByText('Oct 4, 2026')).toBeInTheDocument()
 
     const soon = screen.getByRole('rowgroup', { name: /Due soon/ })
-    expect(within(soon).getByRole('button', { name: 'Renew air permit' })).toBeInTheDocument()
+    expect(within(soon).getByRole('button', { name: 'Annual air emissions report' })).toBeInTheDocument()
     expect(within(soon).getByText('in 12 days')).toBeInTheDocument()
 
     const upcoming = screen.getByRole('rowgroup', { name: /Upcoming/ })
@@ -151,8 +151,21 @@ describe('list view', () => {
     expect(within(overdue).getByText('Last completed Jul 1, 2026')).toBeInTheDocument()
     expect(within(overdue).getByText('Pat Rivera')).toBeInTheDocument()
 
-    expect(within(screen.getByRole('rowgroup', { name: /Due soon/ })).getByText('Permit renewal')).toBeInTheDocument()
+    expect(within(screen.getByRole('rowgroup', { name: /Due soon/ })).getByText('Custom')).toBeInTheDocument()
     expect(within(screen.getByRole('rowgroup', { name: /Upcoming/ })).getByText('Custom')).toBeInTheDocument()
+  })
+
+  it('labels a deadline Library or Custom and nothing else, since EMS registers permit renewals itself', async () => {
+    await openList()
+    const chips = screen.getAllByText(/^(Library|Custom|Permit renewal)$/).map(chip => chip.textContent)
+    expect(chips.sort()).toEqual(['Custom', 'Custom', 'Library'])
+  })
+
+  it('claims no ISO 14001 clause, since nothing on this screen is graded against one', async () => {
+    await openList()
+    const eyebrowAndDescription = [...document.querySelectorAll('[data-slot="page-header"] p')].map(p => p.textContent).join(' ')
+    expect(eyebrowAndDescription).not.toBe('')
+    expect(eyebrowAndDescription).not.toMatch(/ISO 14001|\b\d\.\d(\.\d)?\b/)
   })
 
   it('says "Assigned" for an owner it cannot name and never shows an id', async () => {
@@ -246,7 +259,7 @@ describe('month view', () => {
     await openMonth(user)
     expect(screen.getByRole('button', { name: 'Oct 4, 2026: 1 deadline' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Overdue: Quarterly stormwater inspection' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Due soon: Renew air permit' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Due soon: Annual air emissions report' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Tier II report/ })).not.toBeInTheDocument()
   })
 
@@ -255,7 +268,7 @@ describe('month view', () => {
     await openMonth(user)
     await user.click(screen.getByRole('button', { name: 'Next month' }))
     expect(screen.getByRole('heading', { name: 'November 2026' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Renew air permit/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Annual air emissions report/ })).not.toBeInTheDocument()
 
     for (let i = 0; i < 4; i++) await user.click(screen.getByRole('button', { name: 'Next month' }))
     expect(screen.getByRole('heading', { name: 'March 2027' })).toBeInTheDocument()
@@ -291,8 +304,8 @@ describe('month view', () => {
 
     await user.click(screen.getByRole('button', { name: 'Oct 19, 2026: 1 deadline' }))
     const panel = screen.getByRole('region', { name: 'Due Oct 19, 2026' })
-    await user.click(within(panel).getByRole('button', { name: 'Renew air permit' }))
-    expect(await screen.findByRole('dialog', { name: 'Renew air permit' })).toBeInTheDocument()
+    await user.click(within(panel).getByRole('button', { name: 'Annual air emissions report' }))
+    expect(await screen.findByRole('dialog', { name: 'Annual air emissions report' })).toBeInTheDocument()
   })
 
   it('says so when nothing matches, rather than drawing an empty grid', async () => {
@@ -334,14 +347,14 @@ describe('filters', () => {
     const user = userEvent.setup()
     await openList()
     await user.type(screen.getByLabelText('Search'), 'AIR')
-    expect(screen.getByRole('button', { name: 'Renew air permit' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Annual air emissions report' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Tier II report' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Quarterly stormwater inspection' })).not.toBeInTheDocument()
 
     await user.clear(screen.getByLabelText('Search'))
     await user.type(screen.getByLabelText('Search'), 'msgp')
     expect(screen.getByRole('button', { name: 'Quarterly stormwater inspection' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Renew air permit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Annual air emissions report' })).not.toBeInTheDocument()
   })
 
   it('asks the API for one program', async () => {
@@ -349,7 +362,7 @@ describe('filters', () => {
     await openList()
     await user.selectOptions(screen.getByLabelText('Program'), 'air')
     await waitFor(() => expect(listDeadlines).toHaveBeenLastCalledWith(SCOPE, { status: 'open', program: 'air' }))
-    expect(await screen.findByRole('button', { name: 'Renew air permit' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Annual air emissions report' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Tier II report' })).not.toBeInTheDocument()
   })
 
@@ -361,14 +374,14 @@ describe('filters', () => {
     await user.selectOptions(screen.getByLabelText('Status'), 'completed')
     await waitFor(() => expect(listDeadlines).toHaveBeenLastCalledWith(SCOPE, { status: 'completed' }))
     expect(await screen.findByRole('button', { name: 'Closed out' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Renew air permit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Annual air emissions report' })).not.toBeInTheDocument()
   })
 
   it('shows only what is assigned to the signed-in person', async () => {
     const user = userEvent.setup()
     await openList()
     await user.click(screen.getByLabelText('Assigned to me'))
-    expect(screen.getByRole('button', { name: 'Renew air permit' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Annual air emissions report' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Quarterly stormwater inspection' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Tier II report' })).not.toBeInTheDocument()
 
@@ -459,7 +472,7 @@ describe('completing a deadline', () => {
     completeDeadline.mockResolvedValue({ obligation: finished })
     const user = userEvent.setup()
     await openList()
-    await user.click(screen.getByRole('button', { name: 'Complete Renew air permit' }))
+    await user.click(screen.getByRole('button', { name: 'Complete Annual air emissions report' }))
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark complete' }))
     await waitFor(() => expect(completeDeadline).toHaveBeenCalled())
     expect(completeDeadline.mock.calls[0]![2]).toEqual({ occurrence_at: '2026-10-19' })
@@ -505,7 +518,7 @@ describe('completing a deadline', () => {
     completeDeadline.mockResolvedValue({ obligation: finished })
     const user = userEvent.setup()
     await openList()
-    await user.click(screen.getByRole('button', { name: 'Complete Renew air permit' }))
+    await user.click(screen.getByRole('button', { name: 'Complete Annual air emissions report' }))
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark complete' }))
     await waitFor(() => expect(completeDeadline).toHaveBeenCalledWith(SCOPE, 'd-soon', { occurrence_at: '2026-10-19' }))
   })
@@ -515,9 +528,9 @@ describe('the deadline dialog', () => {
   it('closes on Escape and gives focus back to what opened it', async () => {
     const user = userEvent.setup()
     await openList()
-    const opener = screen.getByRole('button', { name: 'Renew air permit' })
+    const opener = screen.getByRole('button', { name: 'Annual air emissions report' })
     await user.click(opener)
-    await screen.findByRole('dialog', { name: 'Renew air permit' })
+    await screen.findByRole('dialog', { name: 'Annual air emissions report' })
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     await waitFor(() => expect(opener).toHaveFocus())
@@ -542,7 +555,7 @@ describe('the deadline dialog', () => {
     expect(link).toHaveAttribute('href', '/environmental/compliance/checklists?start=sw-routine-inspection&obligation=d-overdue')
   })
 
-  it('offers no checklist for a custom deadline or a permit renewal', async () => {
+  it('offers no checklist for a custom deadline', async () => {
     await openList()
     await screen.findByRole('link', { name: /Run checklist for Quarterly/ })
     expect(screen.getAllByRole('link', { name: /Run checklist/ })).toHaveLength(1)

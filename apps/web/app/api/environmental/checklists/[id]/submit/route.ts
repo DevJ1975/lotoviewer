@@ -1,12 +1,13 @@
+import * as Sentry from '@sentry/nextjs'
 import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
 import { sanitizeError } from '@/lib/security/sanitizeError'
 import { badId, invalid, readJson, refused, UUID_RE } from '@/lib/environmental/http'
 import { parseSubmitBody, submitChecklist } from '@/lib/environmental/checklistRuns'
 import { supabaseRunStore } from '@/lib/environmental/checklistStore'
 
-// Submit a checklist: record the answers, raise findings for failures, complete
-// the deadline it satisfies, and sign. Safe to repeat after a failure: nothing is
-// raised or advanced twice (see checklistRuns).
+// Submit a checklist: record the answers, raise findings for failures, sign, file it,
+// and then complete the deadline it satisfies. Safe to repeat after a failure before it
+// is filed: nothing is raised twice (see checklistRuns).
 
 export const runtime = 'nodejs'
 
@@ -24,7 +25,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   try {
     const outcome = await submitChecklist(
       supabaseRunStore(g.authedClient, { tenantId: g.tenantId, userId: g.userId }),
-      { userId: g.userId, now: new Date() }, id, input.input,
+      {
+        userId: g.userId, now: new Date(),
+        // The checklist is filed; only its deadline could not be completed. Someone should hear about it.
+        onCompletionError: error => Sentry.captureException(error, { tags: { route: '/api/environmental/checklists/[id]/submit', stage: 'complete-deadline' } }),
+      },
+      id, input.input,
     )
     if (!outcome.ok) {
       return Response.json({ error: outcome.error, ...(outcome.missing ? { items: outcome.missing } : {}) }, { status: outcome.status })

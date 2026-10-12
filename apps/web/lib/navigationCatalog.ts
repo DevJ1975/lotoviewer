@@ -157,7 +157,7 @@ const KEYWORDS: Record<string, string[]> = {
   'working-at-heights': ['fall protection', 'harness', 'lanyard', 'srl', 'ladder', 'anchor', 'rescue', 'osha 1910.28', 'osha 1926.501', 'ansi z359'],
   'hot-work': ['permit', 'fire watch', 'spark'],
   'confined-spaces': ['permit', 'entry', 'atmosphere'],
-  environmental: ['iso 14001', 'ems', 'aspects', 'impacts', 'objectives', 'nonconformity', 'capa', 'management review', 'audit readiness', 'report card'],
+  environmental: ['iso 14001', 'ems', 'aspects', 'impacts', 'objectives', 'nonconformity', 'capa', 'management review', 'audit readiness', 'report card', 'permit', 'permits', 'renewal', 'moc', 'management of change'],
   jha: ['job hazard analysis', 'task', 'hazard'],
   'fleet-safety': ['fleet', 'vehicle', 'truck', 'driver', 'journey', 'trip', 'road', 'dot', 'hazmat', 'placard', 'license', 'insurance', 'registration'],
   strike: ['training', 'microlearning', 'lesson'],

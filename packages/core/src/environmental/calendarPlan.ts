@@ -8,8 +8,8 @@ import { advanceDueDate, nextAnnualOccurrence, type ObligationCadence } from '..
 import type { ApplicabilityContext } from './applicability'
 import { applies } from './applicability'
 import type { DueAnchor, Resolved, ObligationDef, ResolvedLibrary } from './content'
-import type { JurisdictionCode } from './jurisdiction'
-import type { EnvProgram } from './siteProfile'
+import { registerJurisdiction, stateName, type JurisdictionCode } from './jurisdiction'
+import { ENV_PROGRAM_LABELS, type EnvProgram } from './siteProfile'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -74,6 +74,23 @@ export interface PlannedObligation {
   /** Library ids the caller resolves to database ids. */
   legal_library_key:     string | null
   checklist_library_key: string | null
+}
+
+/**
+ * The columns the obligations register (migration 298) holds for a deadline the library
+ * planned, beyond what the calendar itself needs. It joins the ISO 14001 register
+ * ('ems'), as a legal requirement. An evaluation frequency is deliberately NOT set: the
+ * register opens an evaluation, and emails its owner, for every deadline that has one, so
+ * a person chooses it for the deadlines that deserve a yearly look.
+ */
+export function registerColumns(plan: PlannedObligation) {
+  const source = plan.jurisdiction === 'federal' ? 'federal' : (stateName(plan.jurisdiction) ?? plan.jurisdiction)
+  return {
+    discipline:              'ems' as const,
+    source_kind:             'law' as const,
+    jurisdiction:            registerJurisdiction(plan.jurisdiction),
+    applicability_rationale: `Added by the ${source} compliance library for this site's ${ENV_PROGRAM_LABELS[plan.program]} profile (${plan.regulatory_ref}). Confirm it against your permits.`,
+  }
 }
 
 export interface LibraryObligationPlan {

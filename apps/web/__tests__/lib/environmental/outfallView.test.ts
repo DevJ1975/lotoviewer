@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import type { Outfall, Permit } from '@/lib/environmental/client'
+import type { Outfall } from '@/lib/environmental/complianceClient'
+import type { PermitRef } from '@/lib/environmental/permitRefs'
 import {
   blankOutfallForm, buildOutfallRequest, coordinatePairProblem, coordinatesLabel, inspectHref, otherOutfallsAtSite,
-  outfallOptionLabel, outfallToForm, permitsAtSite, representativeOfLabel, sortOutfallsByCode, type OutfallFormState,
+  outfallOptionLabel, outfallPermitLabel, outfallToForm, permitChoicesForOutfall, representativeOfLabel, sortOutfallsByCode,
+  type OutfallFormState,
 } from '@/lib/environmental/outfallView'
 
 const outfall = (over: Partial<Outfall> = {}): Outfall => ({
@@ -11,10 +13,9 @@ const outfall = (over: Partial<Outfall> = {}): Outfall => ({
   status: 'active', photo_path: null, notes: null, ...over,
 })
 
-const permit = (over: Partial<Permit> = {}): Permit => ({
-  id: 'p-1', facility_id: 'site-1', program: 'stormwater', permit_type: 'Industrial General Permit', permit_number: 'CAS000001',
-  issuing_agency: null, jurisdiction: null, status: 'active', effective_date: null, expiration_date: null, renewal_lead_days: 180,
-  identifiers: {}, conditions: [], document_path: null, notes: null, health: 'active', ...over,
+const RETIRED_AT = '2026-03-01T00:00:00Z'
+const permit = (over: Partial<PermitRef> = {}): PermitRef => ({
+  id: 'p-1', facility_id: 'site-1', title: 'Industrial General Permit', permit_number: 'CAS000001', retired_at: null, ...over,
 })
 
 describe('representativeOfLabel', () => {
@@ -46,14 +47,40 @@ describe('what an outfall may point to', () => {
     expect(otherOutfallsAtSite([b, a, other], 'site-1', null).map(o => o.id)).toEqual(['o-1', 'o-2'])
   })
 
-  it('offers only the permits at the site, by name', () => {
-    const permits = [permit({ id: 'p-2', permit_type: 'Wastewater Discharge' }), permit({ id: 'p-3', facility_id: 'site-2' }), permit()]
-    expect(permitsAtSite(permits, 'site-1').map(p => p.id)).toEqual(['p-1', 'p-2'])
-  })
-
   it('labels an option by its code, and its name when it has one', () => {
     expect(outfallOptionLabel(a)).toBe('OF-001: North apron')
     expect(outfallOptionLabel(b)).toBe('OF-002')
+  })
+})
+
+describe('the permits an outfall may be covered by', () => {
+  const inForce = permit({ id: 'p-1' })
+  const alsoInForce = permit({ id: 'p-2', title: 'Wastewater Discharge' })
+  const elsewhere = permit({ id: 'p-3', facility_id: 'site-2' })
+  const retired = permit({ id: 'p-4', title: 'Old stormwater permit', retired_at: RETIRED_AT })
+  const ids = (permits: PermitRef[]) => permits.map(p => p.id)
+
+  it('offers the permits in force at the site, by name, and never another site\'s', () => {
+    expect(ids(permitChoicesForOutfall([alsoInForce, elsewhere, inForce], 'site-1', null))).toEqual(['p-1', 'p-2'])
+  })
+
+  it('does not offer a retired permit as a new choice', () => {
+    expect(ids(permitChoicesForOutfall([inForce, retired], 'site-1', null))).toEqual(['p-1'])
+    expect(ids(permitChoicesForOutfall([inForce, retired], 'site-1', 'p-1'))).toEqual(['p-1'])
+  })
+
+  it('keeps offering the retired permit the outfall is linked to now, after the ones in force', () => {
+    expect(ids(permitChoicesForOutfall([retired, inForce], 'site-1', 'p-4'))).toEqual(['p-1', 'p-4'])
+  })
+
+  it('does not offer the linked permit from another site, even when it is the one named', () => {
+    expect(permitChoicesForOutfall([elsewhere], 'site-1', 'p-3')).toEqual([])
+  })
+
+  it('names a retired permit as retired, and a permit in force by its title and number alone', () => {
+    expect(outfallPermitLabel(inForce)).toBe('Industrial General Permit CAS000001')
+    expect(outfallPermitLabel(retired)).toBe('Old stormwater permit CAS000001 (retired)')
+    expect(outfallPermitLabel(permit({ permit_number: null, retired_at: RETIRED_AT }))).toBe('Industrial General Permit (retired)')
   })
 })
 

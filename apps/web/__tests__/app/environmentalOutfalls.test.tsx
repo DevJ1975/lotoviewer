@@ -1,7 +1,8 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { Outfall, Permit, SiteDetail } from '@/lib/environmental/client'
+import type { PermitRow } from '@/lib/environmental/client'
+import type { Outfall, SiteDetail } from '@/lib/environmental/complianceClient'
 
 // The outfalls screen is driven the way an admin or a member would: read the table,
 // start an inspection from a row, and (as an admin) add, edit and delete.
@@ -11,19 +12,23 @@ const listPermits = vi.fn()
 const createOutfall = vi.fn()
 const updateOutfall = vi.fn()
 const deleteOutfall = vi.fn()
-vi.mock('@/lib/environmental/client', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/environmental/client')>('@/lib/environmental/client')
+vi.mock('@/lib/environmental/complianceClient', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/environmental/complianceClient')>('@/lib/environmental/complianceClient')
   return {
     ...actual,
     listOutfalls: (...a: unknown[]) => listOutfalls(...a),
-    listPermits: (...a: unknown[]) => listPermits(...a),
     createOutfall: (...a: unknown[]) => createOutfall(...a),
     updateOutfall: (...a: unknown[]) => updateOutfall(...a),
     deleteOutfall: (...a: unknown[]) => deleteOutfall(...a),
   }
 })
-vi.mock('@/lib/environmental/evidence', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/environmental/evidence')>('@/lib/environmental/evidence')
+// The permits are the EMS permit vault's: this screen reads them through the EMS client.
+vi.mock('@/lib/environmental/client', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/environmental/client')>('@/lib/environmental/client')
+  return { ...actual, listPermits: (...a: unknown[]) => listPermits(...a) }
+})
+vi.mock('@/lib/environmental/complianceEvidence', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/environmental/complianceEvidence')>('@/lib/environmental/complianceEvidence')
   return { ...actual, uploadEvidence: vi.fn(), evidenceUrl: vi.fn().mockResolvedValue('https://signed.example/photo.jpg') }
 })
 
@@ -55,7 +60,7 @@ vi.mock('@/components/PageHeader', () => ({
   PageHeader: ({ title, description }: { title: string; description?: string }) => <header><h1>{title}</h1><p>{description}</p></header>,
 }))
 
-import { ApiError } from '@/lib/environmental/client'
+import { ApiError } from '@/lib/environmental/complianceClient'
 import EnvironmentalOutfalls from '@/app/environmental/compliance/outfalls/page'
 
 const outfall = (over: Partial<Outfall> = {}): Outfall => ({
@@ -63,10 +68,13 @@ const outfall = (over: Partial<Outfall> = {}): Outfall => ({
   latitude: null, longitude: null, outfall_type: 'stormwater', substantially_identical_to: null, is_sampling_point: false,
   status: 'active', photo_path: null, notes: null, ...over,
 })
-const permit = (over: Partial<Permit> = {}): Permit => ({
-  id: 'p-1', facility_id: 'site-1', program: 'stormwater', permit_type: 'Industrial General Permit', permit_number: 'CAS000001',
-  issuing_agency: null, jurisdiction: null, status: 'active', effective_date: null, expiration_date: null, renewal_lead_days: 180,
-  identifiers: {}, conditions: [], document_path: null, notes: null, health: 'active', ...over,
+const permit = (over: Partial<PermitRow> = {}): PermitRow => ({
+  id: 'p-1', facility_id: 'site-1', program: 'stormwater', instrument: 'permit', title: 'Industrial General Permit',
+  agency: 'State Water Board', permit_number: 'CAS000001', jurisdiction: 'state:CA', holder_of_record: 'Acme Foods LLC',
+  issued_on: '2024-01-01', expires_on: '2029-01-01', renewal_application_due_on: null, renewal_submitted_on: null,
+  business_critical: false, owner_user_id: null, notes: null, retired_at: null, retired_reason: null,
+  last_reviewed_at: null, next_review_due: '2027-01-01', standing: 'current', renewal_deadline: '2029-01-01', escalation: null,
+  holder_mismatch: null, conditions_open: 0, conditions_overdue: 0, ...over,
 })
 
 const OF1 = outfall({
@@ -77,8 +85,11 @@ const OF2 = outfall({ id: 'o-2', code: 'OF-002', name: 'South dock', outfall_typ
 const OF3_REMOVED = outfall({ id: 'o-3', code: 'OF-003', status: 'removed' })
 const OF10 = outfall({ id: 'o-10', code: 'OF-10', status: 'inactive', outfall_type: 'authorized_nsw' })
 const PERMIT_HERE = permit({ id: 'p-1' })
-const PERMIT_ALSO_HERE = permit({ id: 'p-2', permit_type: 'Wastewater Discharge', permit_number: 'W-7' })
-const PERMIT_ELSEWHERE = permit({ id: 'p-9', facility_id: 'site-2', permit_type: 'Other Plant Permit', permit_number: 'X-1' })
+const PERMIT_ALSO_HERE = permit({ id: 'p-2', title: 'Wastewater Discharge', permit_number: 'W-7' })
+const PERMIT_ELSEWHERE = permit({ id: 'p-9', facility_id: 'site-2', title: 'Other Plant Permit', permit_number: 'X-1' })
+const RETIRED = { retired_at: '2026-03-01T00:00:00Z', retired_reason: 'Replaced by the 2026 general permit', standing: 'retired' } as const
+const PERMIT_RETIRED_HERE = permit({ id: 'p-8', title: 'Old stormwater permit', permit_number: 'W-0', ...RETIRED })
+const PERMIT_RETIRED_UNUSED = permit({ id: 'p-7', title: 'Superseded air registration', permit_number: null, program: 'air', ...RETIRED })
 
 beforeEach(() => {
   for (const fn of [listOutfalls, listPermits, createOutfall, updateOutfall, deleteOutfall, switchFacility]) fn.mockReset()
@@ -102,7 +113,7 @@ describe('the table', () => {
     render(<EnvironmentalOutfalls />)
     await tableLoaded()
     expect(listOutfalls).toHaveBeenCalledWith(AT_SITE)
-    expect(listPermits).toHaveBeenCalledWith(AT_SITE)
+    expect(listPermits).toHaveBeenCalledWith('tenant-1', { status: 'all' })
   })
 
   it('shows what each outfall is: name, water, type, sampling point, permit, status, location and photo', async () => {
@@ -150,6 +161,89 @@ describe('the table', () => {
     await tableLoaded()
     expect(screen.getByRole('button', { name: /how to use this page/i })).toBeInTheDocument()
     expect(screen.getByText('Federal + TX')).toBeInTheDocument()
+  })
+})
+
+describe('permits that have been retired', () => {
+  const OF_ON_RETIRED = outfall({ id: 'o-5', code: 'OF-005', name: 'West swale', permit_id: 'p-8' })
+  beforeEach(() => {
+    listOutfalls.mockResolvedValue({ outfalls: [OF1, OF_ON_RETIRED] })
+    listPermits.mockResolvedValue({ permits: [PERMIT_HERE, PERMIT_ALSO_HERE, PERMIT_RETIRED_HERE, PERMIT_RETIRED_UNUSED, PERMIT_ELSEWHERE] })
+  })
+
+  async function openEditFor(code: string) {
+    render(<EnvironmentalOutfalls />)
+    await tableLoaded()
+    await userEvent.click(screen.getByRole('button', { name: `Edit ${code}` }))
+    return within(await screen.findByRole('dialog', { name: `Edit outfall ${code}` }))
+  }
+
+  it('still names the retired permit an outfall is covered by, and says it is retired', async () => {
+    render(<EnvironmentalOutfalls />)
+    await tableLoaded()
+    expect(rowOf('OF-005').getByText('Old stormwater permit W-0 (retired)')).toBeInTheDocument()
+    expect(rowOf('OF-001').getByText('Industrial General Permit CAS000001')).toBeInTheDocument()
+  })
+
+  it('keeps the retired permit an outfall is linked to selectable in its form, after the permits in force', async () => {
+    const form = await openEditFor('OF-005')
+    expect(form.getByLabelText(/^Permit/)).toHaveValue('p-8')
+    const options = within(form.getByLabelText(/^Permit/)).getAllByRole('option').map(o => o.textContent)
+    expect(options).toEqual([
+      'No permit selected', 'Industrial General Permit CAS000001', 'Wastewater Discharge W-7', 'Old stormwater permit W-0 (retired)',
+    ])
+  })
+
+  it('saves the outfall with its retired permit still linked when the permit is left alone', async () => {
+    updateOutfall.mockResolvedValue({ outfall: OF_ON_RETIRED })
+    const form = await openEditFor('OF-005')
+    await userEvent.type(form.getByLabelText(/^Notes/), 'Repainted.')
+    await userEvent.click(form.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(updateOutfall).toHaveBeenCalledTimes(1))
+    expect(updateOutfall.mock.calls[0]![1]).toBe('o-5')
+    expect(updateOutfall.mock.calls[0]![2]).toMatchObject({ permit_id: 'p-8', notes: 'Repainted.' })
+  })
+
+  it('does not offer a retired permit to an outfall that is not linked to it', async () => {
+    const form = await openEditFor('OF-001')
+    const options = within(form.getByLabelText(/^Permit/)).getAllByRole('option').map(o => o.textContent)
+    expect(options).toEqual(['No permit selected', 'Industrial General Permit CAS000001', 'Wastewater Discharge W-7'])
+  })
+
+  it('does not offer any retired permit for a new outfall', async () => {
+    render(<EnvironmentalOutfalls />)
+    await tableLoaded()
+    await userEvent.click(screen.getByRole('button', { name: 'Add outfall' }))
+    const form = within(await screen.findByRole('dialog', { name: 'Add an outfall' }))
+    const options = within(form.getByLabelText(/^Permit/)).getAllByRole('option').map(o => o.textContent)
+    expect(options).toEqual(['No permit selected', 'Industrial General Permit CAS000001', 'Wastewater Discharge W-7'])
+  })
+
+  it('lets the outfall be moved from its retired permit to one in force', async () => {
+    updateOutfall.mockResolvedValue({ outfall: OF_ON_RETIRED })
+    const form = await openEditFor('OF-005')
+    await userEvent.selectOptions(form.getByLabelText(/^Permit/), 'p-2')
+    await userEvent.click(form.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(updateOutfall).toHaveBeenCalledTimes(1))
+    expect(updateOutfall.mock.calls[0]![2]).toMatchObject({ permit_id: 'p-2' })
+  })
+})
+
+describe('permit health', () => {
+  it('is not shown here: the Permits register owns what a permit\'s standing means', async () => {
+    const lapsed = permit({
+      id: 'p-1', standing: 'expired', expires_on: '2025-01-01', renewal_deadline: '2024-07-01',
+      escalation: { tier: 'passed', daysLeft: -300, nextTierOn: null }, conditions_overdue: 3,
+    })
+    listPermits.mockResolvedValue({ permits: [lapsed] })
+    render(<EnvironmentalOutfalls />)
+    await tableLoaded()
+
+    const row = rowOf('OF-001')
+    expect(row.getByText('Industrial General Permit CAS000001')).toBeInTheDocument()
+    expect(row.queryByText(/expired|expiring|renewal|overdue|standing/i)).toBeNull()
   })
 })
 

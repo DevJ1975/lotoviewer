@@ -13,7 +13,7 @@ import { ErrorList, Field, inputCls, primaryButtonCls, secondaryButtonCls } from
 import {
   applyLibraryToSite, errorList, listSites, previewLibrary, saveSite,
   type ApplyResponse, type SiteDetail, type SiteSummary,
-} from '@/lib/environmental/client'
+} from '@/lib/environmental/complianceClient'
 import { useEnvironmentalScope, useEnvironmentalSite } from '@/lib/environmental/useEnvironmental'
 import { ENV_PROGRAM_LABELS, type EnvProgram } from '@soteria/core/environmental/siteProfile'
 
@@ -40,7 +40,7 @@ export default function EnvironmentalComplianceHome() {
     <>
       <PageHeader
         icon={ShieldCheck}
-        eyebrow="ISO 14001 · 6.1.3 · 8.1 · 9.1.1"
+        eyebrow="Environmental compliance"
         title="Environmental compliance"
         description="Permits, checklists, deadlines and the legal register for each site, with the state's rules layered on the federal baseline."
       />

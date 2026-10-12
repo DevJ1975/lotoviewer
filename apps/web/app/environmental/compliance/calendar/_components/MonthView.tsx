@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { StatusChip } from '@/components/environmental/badges'
 import { secondaryButtonCls } from '@/components/environmental/form'
 import { cn } from '@/lib/utils'
-import type { Deadline } from '@/lib/environmental/client'
+import type { Deadline } from '@/lib/environmental/complianceClient'
 import {
   bucketOf, BUCKET_LABELS, buildDeadlineMonth, chipsForDay, formatDate, isoDay, monthOf, monthTitle,
   orderByUrgency, shiftMonth, WEEKDAYS, type CalendarDay, type MonthRef,

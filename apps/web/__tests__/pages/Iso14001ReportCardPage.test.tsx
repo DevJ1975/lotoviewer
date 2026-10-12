@@ -33,19 +33,21 @@ vi.mock('@/components/Breadcrumbs', () => ({ Breadcrumbs: () => null }))
 
 function healthy(): ReadinessSignals {
   return {
-    disabledModules: [],
+    contextIssuesActive: 8, contextIssuesReviewOverdue: 0, climateIssueRecorded: true,
+    interestedPartiesActive: 5, interestedPartiesReviewOverdue: 0,
+    scopeOnFile: true, scopeReviewOverdue: false, scopeStatesControlAndInfluence: true, policySignatoryStale: false,
+    policyCommunicatedInternally: true, rolesUnassigned: 0, processesUnassigned: 0,
     risks: { count: 12, ageDays: 30 },
     documentsRegisterLive: true, policyApproved: true, policyReviewOverdue: false,
     requiredDocsMissing: 0, docsReviewOverdue: 0, risksWithoutControls: 0,
     aspectsTotal: 14, aspectsSignificant: 5, significantUncontrolled: 0,
-    aspectsRegisterAgeDays: 20,
-    obligationsTotal: 6, obligationsOverdue: 0, complianceEvalAgeDays: 50,
+    aspectsUnscored: 0, aspectsControlUndetermined: 0, aspectsReviewOverdue: 0,
+    obligationsTotal: 6, obligationsOverdue: 0, obligationsReviewOverdue: 0,
+    complianceEvalAgeDays: 50, evaluationsOverdue: 0, obligationsUnscheduled: 0, evaluationsUndetermined: 0,
+    permitsDeadlineMissed: 0, permitsHolderMismatch: 0,
     significantUnaddressed: 0,
     objectivesActive: 6, objectivesLinked: 6, objectivesWithTargets: 6, objectivesAchieved: 2,
-    trainingRecords: 40, trainingExpired: 0, trainingExpiringSoon: 0,
-    awarenessAgeDays: 45, communicationAgeDays: 45,
-    operationalInspections: 22, operationalOverdue: 0,
-    emergencyDrillAgeDays: 120, objectivesStaleReadings: 0,
+    objectivesStaleReadings: 0,
     auditProgrammeLive: true, lastAuditAgeDays: 90, auditClausesUncovered: 0,
     lastReviewAgeDays: 120, lastReviewHasOutputs: true,
     nonconformityRegisterLive: true, openMajorNonconformities: 0, overdueActions: 0,
@@ -59,9 +61,21 @@ describe('ISO 14001 report card page', () => {
   it('leads with the readiness band, not the percentage', async () => {
     render(<Iso14001ReportCardPage />)
     await waitFor(() => {
-      expect(screen.getByText('Ready for a certification audit')).toBeInTheDocument()
+      expect(screen.getByText('Ready with gaps')).toBeInTheDocument()
     })
-    expect(screen.getByText('100%')).toBeInTheDocument()
+    expect(screen.getByText('77%')).toBeInTheDocument()
+    expect(screen.getByText('17 of 22 clauses')).toBeInTheDocument()
+  })
+
+  it('never shows Ready while clauses are not assessed, and names them instead', async () => {
+    // Every clause the platform can see is green. Clauses 7.2 to 8.2 have no
+    // environmental source yet, so the card must not call the system ready.
+    render(<Iso14001ReportCardPage />)
+    await waitFor(() => expect(screen.getByText('Ready with gaps')).toBeInTheDocument())
+    expect(screen.queryByText('Ready for a certification audit')).toBeNull()
+    expect(screen.getByText(/Check 7\.2, 7\.3, 7\.4, 8\.1, 8\.2 against your own records/)).toBeInTheDocument()
+    expect(screen.getAllByText('Not assessed')).toHaveLength(5)
+    expect(screen.queryAllByRole('link', { name: /Fix/ })).toEqual([])
   })
 
   it('says Not ready when a major is open, however high coverage is', async () => {
@@ -84,7 +98,7 @@ describe('ISO 14001 report card page', () => {
   })
 
   it('lists blocking findings separately from the clause table', async () => {
-    signals.current = { ...healthy(), documentsRegisterLive: false, requiredDocsMissing: 0 }
+    signals.current = { ...healthy(), requiredDocsMissing: 1 }
     render(<Iso14001ReportCardPage />)
     await waitFor(() => expect(screen.getByText('Blocking findings')).toBeInTheDocument())
     expect(screen.getAllByText('Documented information').length).toBeGreaterThan(0)
@@ -93,9 +107,12 @@ describe('ISO 14001 report card page', () => {
   it('offers no Fix link for a clause whose feature has not shipped', async () => {
     signals.current = { ...healthy(), documentsRegisterLive: false, auditProgrammeLive: false }
     render(<Iso14001ReportCardPage />)
-    await waitFor(() => expect(screen.getByText('Not ready')).toBeInTheDocument())
-    // 7.5 and 9.2 are gaps with a null fixHref, so no dead link is rendered
-    // for them. Any "Fix" link that IS present must point somewhere real.
+    // Not assessed rather than a gap: the organization may keep these records
+    // elsewhere, so they hold the band at Ready with gaps and never block.
+    await waitFor(() => expect(screen.getByText('Ready with gaps')).toBeInTheDocument())
+    expect(screen.queryByText('Blocking findings')).not.toBeInTheDocument()
+    // 7.5 and 9.2 carry a null fixHref, so no dead link is rendered for
+    // them. Any "Fix" link that IS present must point somewhere real.
     for (const link of screen.queryAllByRole('link', { name: /Fix/ })) {
       expect(link.getAttribute('href')).toMatch(/^\//)
     }

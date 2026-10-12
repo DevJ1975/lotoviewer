@@ -88,7 +88,7 @@ export function findGuidance(input: GuidanceInput) {
 export interface SiteRows {
   site:        { id: string; name: string; state: string | null }
   obligations: ReadonlyArray<{ status: string; next_due_at: string; lead_days: number }>
-  permits:     ReadonlyArray<{ status: string; expiration_date: string | null; renewal_lead_days: number }>
+  permits:     ReadonlyArray<{ retired_at: string | null; expires_on: string | null; renewal_application_due_on: string | null; renewal_submitted_on: string | null }>
   legal:       ReadonlyArray<{ applicability: string; compliance_status: string; last_reviewed_at: string | null; next_review_due: string | null }>
   findings:    ReadonlyArray<{ status: string }>
 }
@@ -107,7 +107,12 @@ export function standingOf(rows: SiteRows, now: Date): SiteStanding {
     obligations: rows.obligations.map(o => ({ status: o.status, nextDueAt: o.next_due_at, leadDays: o.lead_days })),
     checklistTemplates: [],
     findings: rows.findings,
-    permits: rows.permits.map(p => ({ status: p.status, expirationDate: p.expiration_date, renewalLeadDays: p.renewal_lead_days })),
+    permits: rows.permits.map(p => ({
+      retiredAt: p.retired_at,
+      expiresOn: p.expires_on,
+      renewalApplicationDueOn: p.renewal_application_due_on,
+      renewalSubmittedOn: p.renewal_submitted_on,
+    })),
     legal: rows.legal.map(l => ({ applicability: l.applicability, lastReviewedAt: l.last_reviewed_at, nextReviewDue: l.next_review_due })),
   }, now)
   const applicable = rows.legal.filter(l => l.applicability === 'applicable')

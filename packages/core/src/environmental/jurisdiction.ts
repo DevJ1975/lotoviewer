@@ -27,6 +27,11 @@ export type SupportedState = typeof SUPPORTED_STATES[number]
 
 export type JurisdictionCode = 'federal' | SupportedState
 
+/** How the obligations register (migration 298) stores a pack's jurisdiction: 'federal' or 'state:XX'. */
+export function registerJurisdiction(code: JurisdictionCode): string {
+  return code === 'federal' ? 'federal' : `state:${code}`
+}
+
 const NAME_TO_CODE: ReadonlyMap<string, string> = new Map(
   Object.entries(US_STATES).map(([code, name]) => [name.toLowerCase(), code]),
 )

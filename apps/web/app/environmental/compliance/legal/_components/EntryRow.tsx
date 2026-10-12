@@ -4,7 +4,7 @@ import { Fragment, useMemo, type ReactNode } from 'react'
 import { CalendarCheck, ChevronRight, ClipboardCheck, ExternalLink, Loader2, Pencil, Trash2 } from 'lucide-react'
 import { StatusChip, VerifyNote } from '@/components/environmental/badges'
 import { primaryButtonCls, secondaryButtonCls } from '@/components/environmental/form'
-import type { LegalEntry } from '@/lib/environmental/client'
+import type { LegalEntry } from '@/lib/environmental/complianceClient'
 import { useEvidenceUrl } from '@/lib/environmental/useEvidenceUrl'
 import {
   APPLICABILITY_META, COMPLIANCE_META, jurisdictionLabel, linkableUrl, ownerName, programOf, REVIEW_FREQUENCY_LABELS,

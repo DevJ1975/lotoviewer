@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { TemplateRows } from '@soteria/core/environmental/checklists'
-import type { PlannedObligation } from '@soteria/core/environmental/calendarPlan'
+import { registerColumns, type PlannedObligation } from '@soteria/core/environmental/calendarPlan'
 import type { LegalEntryPlan } from '@soteria/core/environmental/legalRegister'
 import { templateStateKey, type ApplyState, type LibraryStore } from './applyLibrary'
 
@@ -117,7 +117,7 @@ export function supabaseLibraryStore(client: SupabaseClient, actor: Actor): Libr
         status:                'open',
         program:               obligation.program,
         library_key:           obligation.library_key,
-        jurisdiction:          obligation.jurisdiction,
+        ...registerColumns(obligation),
         due_anchor:            obligation.due_anchor,
         lead_days:             obligation.lead_days,
         legal_register_id:     links.legalId,

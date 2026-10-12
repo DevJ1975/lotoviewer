@@ -1,7 +1,7 @@
 import { buildMonthGrid, classifyUrgency, daysUntilDue, type ObligationCadence } from '@soteria/core/complianceCalendar'
 import { libraryForState } from '@soteria/core/environmental/packs/index'
 import { ENV_PROGRAM_LABELS, type EnvProgram } from '@soteria/core/environmental/siteProfile'
-import type { Deadline } from './client'
+import type { Deadline } from './complianceClient'
 
 // The calendar screen's decisions, as pure functions over rows already fetched:
 // which urgency a deadline falls in, how a month lays out, how to word a date,
@@ -202,19 +202,14 @@ export function siteLabel(facilityId: string | null, names: ReadonlyMap<string, 
   return names.get(facilityId) ?? 'Another site'
 }
 
-export type DeadlineOrigin = 'library' | 'custom' | 'permit_renewal'
+export type DeadlineOrigin = 'library' | 'custom'
 
 export const ORIGIN_LABELS: Readonly<Record<DeadlineOrigin, string>> = {
-  library:        'Library',
-  custom:         'Custom',
-  permit_renewal: 'Permit renewal',
+  library: 'Library',
+  custom:  'Custom',
 }
 
-// Mirrors renewalLibraryKey in lib/environmental/permitSync.ts, which is server code.
-const PERMIT_RENEWAL_PREFIX = 'permit-renewal:'
-
 export function originOf(deadline: Deadline): DeadlineOrigin {
-  if (deadline.library_key?.startsWith(PERMIT_RENEWAL_PREFIX)) return 'permit_renewal'
   return deadline.source === 'library' ? 'library' : 'custom'
 }
 

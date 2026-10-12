@@ -1,16 +1,19 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { applies } from '@soteria/core/environmental/applicability'
 import { buildTemplateRows, missingRequiredItems } from '@soteria/core/environmental/checklists'
-import { permitHealth } from '@soteria/core/environmental/permits'
+import { permitStanding, renewalDeadlineMissed, renewalDueSoon, validatePermitInput } from '@soteria/core/environmentalPermit'
 import { libraryForState } from '@soteria/core/environmental/packs/index'
 import { EMPTY_SITE_PROFILE, validateSiteProfile, type SiteProfile } from '@soteria/core/environmental/siteProfile'
 import { evaluateNumeric } from '@soteria/core/inspectionScoring'
+import { ADMIN_A, FACILITY_A, TENANT_A, TENANT_B, emsClient, resetStore, rowsIn, seed, writes } from '../../api/environmental/_emsHarness'
 import type { ApplyResult } from '@/lib/environmental/applyLibrary'
 import type { RunItem } from '@/lib/environmental/checklistRuns'
 import {
   DEMO_SITES, demoAnswers, demoPlaceholderPath, describeSummary, seedEnvironmentalDemo,
-  type DemoEvaluation, type DemoPermit, type DemoRun, type DemoSite, type DemoStore,
+  type DemoEvaluation, type DemoRun, type DemoSite, type DemoStore,
 } from '@/lib/environmental/demoSeed'
+import { supabaseDemoStore } from '@/lib/environmental/demoStore'
 
 const NOW = new Date('2026-10-07T12:00:00Z')
 const TENANT = '11111111-1111-1111-1111-111111111111'
@@ -74,15 +77,33 @@ describe('the demo story matches the library it is seeded from', () => {
 
 describe('what the demo shows', () => {
   const ca = DEMO_SITES.find(s => s.state === 'CA')!
-  it('has a permit inside its renewal window, one in good standing, and one that never expires', () => {
-    const healthOf = (p: DemoPermit, now = NOW) => permitHealth({
-      status: 'active', renewalLeadDays: p.renewalLeadDays,
-      expirationDate: p.expiresInDays === null ? null : ymd(new Date(now.getTime() + p.expiresInDays * 86_400_000)),
-    }, now)
-    const all = DEMO_SITES.flatMap(s => s.permits).map(p => healthOf(p))
-    expect(all).toContain('expiring')
-    expect(all).toContain('active')
-    expect(DEMO_SITES.flatMap(s => s.permits).some(p => p.expiresInDays === null)).toBe(true)
+  it('has a permit whose renewal is due soon, others in good standing, and one that never expires, none already missed', async () => {
+    const world = memoryStore()
+    await seedEnvironmentalDemo(world.store, NOW)
+    const today = ymd(NOW)
+    const permits = [...world.permitDates].map(([key, dates]) => ({ key, term: { retiredAt: null, renewalSubmittedOn: null, ...dates } }))
+    expect(Object.fromEntries(permits.map(p => [p.key, permitStanding(p.term, today)]))).toEqual({
+      igp: 'current', pto: 'renewal_due', iwdp: 'current', msgp: 'current', pbr: 'no_expiry',
+    })
+    expect(permits.filter(p => renewalDueSoon(p.term, today)).map(p => p.key)).toEqual(['pto'])
+    expect(permits.filter(p => renewalDeadlineMissed(p.term, today))).toEqual([])
+  })
+
+  it('has permits the vault would accept, held by the account', async () => {
+    const world = memoryStore()
+    await seedEnvironmentalDemo(world.store, NOW)
+    for (const permit of DEMO_SITES.flatMap(s => s.permits)) {
+      const errors = validatePermitInput({
+        program: permit.program, instrument: 'permit', title: permit.title, agency: permit.agency, permitNumber: permit.permitNumber,
+        jurisdiction: permit.jurisdiction, holderOfRecord: 'Demo Account', businessCritical: false, notes: null, ...world.permitDates.get(permit.key)!,
+      })
+      expect(errors, permit.key).toEqual([])
+    }
+  })
+
+  it('never repeats an agency and permit number, which the vault keeps unique within an account', () => {
+    const identities = DEMO_SITES.flatMap(s => s.permits).map(p => `${p.agency.trim().toLowerCase()}|${p.permitNumber.trim()}`)
+    expect(new Set(identities).size).toBe(identities.length)
   })
 
   it('has a requirement in every standing, including an overdue review', () => {
@@ -170,6 +191,7 @@ function memoryStore(members: string[] = ['u1', 'u2', 'u3']) {
   const calls: string[] = []
   const sites = new Map<string, string>()
   const permits = new Map<string, string>()
+  const permitDates = new Map<string, { issuedOn: string; expiresOn: string | null; renewalApplicationDueOn: string | null }>()
   const outfalls = new Map<string, { id: string; permitId: string | null; sameAsId: string | null }>()
   const evaluations = new Map<string, DemoEvaluation>()
   const deadlines = new Map<string, { dueOn: string; ownerUserId: string | null }>()
@@ -178,11 +200,16 @@ function memoryStore(members: string[] = ['u1', 'u2', 'u3']) {
   const idFor = (map: Map<string, string>, key: string) => { if (!map.has(key)) map.set(key, `id-${nextId++}`); return map.get(key)! }
 
   const store: DemoStore = {
+    async ensureModuleEnabled() { calls.push('module') },
     async memberIds() { return members },
     async ensureSite(site) { calls.push(`site:${site.code}`); return idFor(sites, site.code) },
     async saveProfile(facilityId) { calls.push(`profile:${facilityId}`) },
     async applyLibrary(facilityId) { calls.push(`apply:${facilityId}`); return { legal: { created: 0, alreadyThere: 0 }, templates: { created: 0, alreadyThere: 0 }, obligations: { created: 0, alreadyThere: 0 } } satisfies ApplyResult },
-    async ensurePermit(facilityId, permit) { calls.push(`permit:${permit.key}`); return idFor(permits, `${facilityId}:${permit.permitNumber}`) },
+    async ensurePermit(facilityId, permit, dates) {
+      calls.push(`permit:${permit.key}`)
+      permitDates.set(permit.key, dates)
+      return idFor(permits, `${facilityId}:${permit.permitNumber}`)
+    },
     async ensureOutfall(facilityId, outfall, links) {
       calls.push(`outfall:${outfall.code}`)
       const key = `${facilityId}:${outfall.code}`
@@ -199,12 +226,19 @@ function memoryStore(members: string[] = ['u1', 'u2', 'u3']) {
       return 'created'
     },
   }
-  return { store, calls, sites, permits, outfalls, evaluations, deadlines, runs }
+  return { store, calls, sites, permits, permitDates, outfalls, evaluations, deadlines, runs }
 }
 
 describe('seedEnvironmentalDemo', () => {
   it('refuses to run in an account with nobody to own the records, saying why', async () => {
     await expect(seedEnvironmentalDemo(memoryStore([]).store, NOW)).rejects.toThrow(/no members/)
+  })
+
+  it('switches the Environmental module on first, once, however many sites follow', async () => {
+    const world = memoryStore()
+    await seedEnvironmentalDemo(world.store, NOW)
+    expect(world.calls[0]).toBe('module')
+    expect(world.calls.filter(c => c === 'module')).toHaveLength(1)
   })
 
   it('sets up each site fully, in dependency order: site, profile, library, then permits, outfalls, evaluations, runs, deadlines', async () => {
@@ -217,6 +251,21 @@ describe('seedEnvironmentalDemo', () => {
     expect(order, 'steps run in dependency order').toEqual([...order].sort((x, y) => x - y))
     // Runs finish before deadlines are set, so a completed run cannot undo a deadline the story moved.
     expect(first('deadline:')).toBeGreaterThan(ca.map(c => c.startsWith('run:')).lastIndexOf(true))
+  })
+
+  it('dates each permit from today, with a renewal application date only where its terms give one', async () => {
+    const world = memoryStore()
+    const permit = { program: 'air', title: 'Demo permit', agency: 'Demo agency', jurisdiction: 'federal' } as const
+    const site: DemoSite = {
+      ...DEMO_SITES.find(s => s.state === 'OR')!,
+      permits: [
+        { ...permit, key: 'with-terms', permitNumber: 'DEMO-1', issuedInDays: -10, expiresInDays: 20, renewalApplicationDueInDays: 5 },
+        { ...permit, key: 'no-term', permitNumber: 'DEMO-2', issuedInDays: -3, expiresInDays: null },
+      ],
+    }
+    await seedEnvironmentalDemo(world.store, NOW, [site])
+    expect(world.permitDates.get('with-terms')).toEqual({ issuedOn: '2026-09-27', expiresOn: '2026-10-27', renewalApplicationDueOn: '2026-10-12' })
+    expect(world.permitDates.get('no-term')).toEqual({ issuedOn: '2026-10-04', expiresOn: null, renewalApplicationDueOn: null })
   })
 
   it('creates an outfall after the one it is the same as, and links it', async () => {
@@ -246,11 +295,163 @@ describe('seedEnvironmentalDemo', () => {
     expect(second.runs).toBe(0)
   })
 
-  it('reports what it did in a line a person can read', async () => {
+  it('reports what it did in a line a person can read, without claiming anything about ISO clauses', async () => {
     const summary = await seedEnvironmentalDemo(memoryStore().store, NOW)
     const count = (pick: (s: DemoSite) => unknown[]) => DEMO_SITES.flatMap(pick).length
-    expect(describeSummary(summary)).toBe(
+    const line = describeSummary(summary)
+    expect(line).toBe(
       `environmental demo: ${DEMO_SITES.length} sites, ${count(s => s.permits)} permits, ${count(s => s.outfalls)} outfalls, ${count(s => s.evaluations)} requirements evaluated, ${count(s => s.deadlines)} deadlines set, ${count(s => s.runs)} checklist runs`,
     )
+    expect(line).not.toMatch(/\bISO\b|\bclause/i)
+  })
+})
+
+// ── the Supabase adapter, against the EMS test store ────────────────────────
+// The store enforces the permit vault's unique number (migration 304), so a seed that
+// tried to add a permit twice fails here as it would in the database.
+
+describe('supabaseDemoStore', () => {
+  const adapter = () => supabaseDemoStore(emsClient as unknown as SupabaseClient, TENANT_A)
+  const modulesOf = (tenantId: string) => rowsIn('tenants').find(t => t.id === tenantId)!.modules
+  const tenantWrites = () => writes.filter(w => w.table === 'tenants')
+
+  beforeEach(() => resetStore())
+
+  describe('ensureModuleEnabled', () => {
+    it('switches the Environmental module on', async () => {
+      seed('tenants', [{ id: TENANT_A, name: 'Demo Account', modules: {} }])
+      await adapter().ensureModuleEnabled()
+      expect(modulesOf(TENANT_A)).toEqual({ environmental: true })
+    })
+
+    it('switches it on when it was explicitly off', async () => {
+      seed('tenants', [{ id: TENANT_A, name: 'Demo Account', modules: { environmental: false } }])
+      await adapter().ensureModuleEnabled()
+      expect(modulesOf(TENANT_A)).toEqual({ environmental: true })
+    })
+
+    it('keeps every other module setting the account has', async () => {
+      seed('tenants', [{ id: TENANT_A, name: 'Demo Account', modules: { loto: true, 'hot-work': false, 'confined-spaces': true } }])
+      await adapter().ensureModuleEnabled()
+      expect(modulesOf(TENANT_A)).toEqual({ loto: true, 'hot-work': false, 'confined-spaces': true, environmental: true })
+    })
+
+    it('leaves other accounts alone', async () => {
+      seed('tenants', [{ id: TENANT_A, name: 'Demo Account', modules: {} }, { id: TENANT_B, name: 'Customer', modules: { loto: true } }])
+      await adapter().ensureModuleEnabled()
+      expect(modulesOf(TENANT_B)).toEqual({ loto: true })
+    })
+
+    it('is idempotent: a second run changes nothing and writes nothing', async () => {
+      seed('tenants', [{ id: TENANT_A, name: 'Demo Account', modules: { loto: true } }])
+      await adapter().ensureModuleEnabled()
+      expect(tenantWrites()).toHaveLength(1)
+      await adapter().ensureModuleEnabled()
+      expect(modulesOf(TENANT_A)).toEqual({ loto: true, environmental: true })
+      expect(tenantWrites()).toHaveLength(1)
+    })
+
+    it('says so when the account cannot be read, and writes nothing', async () => {
+      await expect(adapter().ensureModuleEnabled()).rejects.toThrow(/could not be read back/)
+      expect(tenantWrites()).toEqual([])
+    })
+  })
+
+  describe('ensurePermit', () => {
+    const anaheim = DEMO_SITES.find(s => s.state === 'CA')!
+    const iwdp = anaheim.permits.find(p => p.key === 'iwdp')!
+    const dates = { issuedOn: '2026-03-21', expiresOn: '2027-11-11', renewalApplicationDueOn: '2027-07-14' }
+    const permitRows = () => rowsIn('environmental_permits')
+
+    beforeEach(() => seed('tenants', [{ id: TENANT_A, name: 'Demo Account', modules: {} }]))
+
+    it('adds the permit to the vault, held by the account, with the dates it was given', async () => {
+      const id = await adapter().ensurePermit(FACILITY_A, iwdp, dates, ADMIN_A)
+      expect(permitRows()).toEqual([expect.objectContaining({
+        id, tenant_id: TENANT_A, facility_id: FACILITY_A, program: 'wastewater', instrument: 'permit',
+        title: iwdp.title, agency: iwdp.agency, permit_number: iwdp.permitNumber, jurisdiction: 'state:CA',
+        holder_of_record: 'Demo Account', issued_on: '2026-03-21', expires_on: '2027-11-11', renewal_application_due_on: '2027-07-14',
+        created_by: ADMIN_A, updated_by: ADMIN_A, retired_at: null,
+      })])
+    })
+
+    it('leaves the renewal application date and the expiry empty for a permit with neither', async () => {
+      const pbr = DEMO_SITES.find(s => s.state === 'TX')!.permits.find(p => p.key === 'pbr')!
+      await adapter().ensurePermit(FACILITY_A, pbr, { issuedOn: '2025-09-02', expiresOn: null, renewalApplicationDueOn: null }, ADMIN_A)
+      expect(permitRows()).toEqual([expect.objectContaining({ expires_on: null, renewal_application_due_on: null })])
+    })
+
+    it('writes only the permit: renewal countdowns come from the vault, not from the seed', async () => {
+      await adapter().ensurePermit(FACILITY_A, iwdp, dates, ADMIN_A)
+      expect(writes.map(w => w.table)).toEqual(['environmental_permits'])
+    })
+
+    it('is idempotent: a second seed finds the active permit, adds no second one and does not trip the unique number', async () => {
+      const first = await adapter().ensurePermit(FACILITY_A, iwdp, dates, ADMIN_A)
+      const second = await adapter().ensurePermit(FACILITY_A, iwdp, dates, ADMIN_A)
+      expect(second).toBe(first)
+      expect(permitRows()).toHaveLength(1)
+      expect(writes.filter(w => w.table === 'environmental_permits')).toHaveLength(1)
+    })
+
+    it('sets the story\'s dates again on a later seed, because Reset Demo cannot wipe permits and they would otherwise age into red', async () => {
+      const id = await adapter().ensurePermit(FACILITY_A, iwdp, dates, ADMIN_A)
+      const later = { issuedOn: '2026-10-12', expiresOn: '2028-01-01', renewalApplicationDueOn: '2027-09-01' }
+      expect(await adapter().ensurePermit(FACILITY_A, iwdp, later, ADMIN_A)).toBe(id)
+      expect(permitRows()).toEqual([expect.objectContaining({ id, issued_on: '2026-10-12', expires_on: '2028-01-01', renewal_application_due_on: '2027-09-01' })])
+      expect(writes.filter(w => w.table === 'environmental_permits').map(w => w.mode)).toEqual(['insert', 'update'])
+    })
+
+    it('holds the permit in the name of the legal entity in the EMS scope, the newest version, so the vault does not report a holder mismatch', async () => {
+      seed('ms_scope_statements', [
+        { tenant_id: TENANT_A, discipline: 'ems', version: 1, legal_entity: 'Old Name Inc.' },
+        { tenant_id: TENANT_A, discipline: 'ems', version: 2, legal_entity: 'Demo Account LLC' },
+        { tenant_id: TENANT_B, discipline: 'ems', version: 9, legal_entity: 'Someone Else Ltd' },
+      ])
+      await adapter().ensurePermit(FACILITY_A, iwdp, dates, ADMIN_A)
+      expect(permitRows()).toEqual([expect.objectContaining({ holder_of_record: 'Demo Account LLC' })])
+    })
+
+    it('corrects the holder of a permit seeded before the account had a scope', async () => {
+      await adapter().ensurePermit(FACILITY_A, iwdp, dates, ADMIN_A)
+      seed('ms_scope_statements', [{ tenant_id: TENANT_A, discipline: 'ems', version: 1, legal_entity: 'Demo Account LLC' }])
+      await adapter().ensurePermit(FACILITY_A, iwdp, dates, ADMIN_A)
+      expect(permitRows()).toEqual([expect.objectContaining({ holder_of_record: 'Demo Account LLC' })])
+    })
+
+    it('never touches a retired permit when it sets the dates again', async () => {
+      seed('environmental_permits', [{
+        id: 'f0000000-0000-4000-8000-00000000000c', tenant_id: TENANT_A, facility_id: FACILITY_A, agency: iwdp.agency,
+        permit_number: iwdp.permitNumber, retired_at: '2026-01-01T00:00:00Z', retired_reason: 'Superseded', issued_on: '2020-01-01',
+      }])
+      await adapter().ensurePermit(FACILITY_A, iwdp, dates, ADMIN_A)
+      expect(permitRows().find(r => r.id === 'f0000000-0000-4000-8000-00000000000c')).toMatchObject({ issued_on: '2020-01-01' })
+    })
+
+    it('adds a new permit when the earlier one with that number was retired', async () => {
+      seed('environmental_permits', [{
+        id: 'f0000000-0000-4000-8000-00000000000a', tenant_id: TENANT_A, facility_id: FACILITY_A, agency: iwdp.agency,
+        permit_number: iwdp.permitNumber, retired_at: '2026-01-01T00:00:00Z', retired_reason: 'Superseded',
+      }])
+      const id = await adapter().ensurePermit(FACILITY_A, iwdp, dates, ADMIN_A)
+      expect(id).not.toBe('f0000000-0000-4000-8000-00000000000a')
+      expect(permitRows()).toHaveLength(2)
+    })
+
+    it('never reuses another account\'s permit that has the same number', async () => {
+      seed('environmental_permits', [{
+        id: 'f0000000-0000-4000-8000-00000000000b', tenant_id: TENANT_B, facility_id: FACILITY_A, agency: iwdp.agency,
+        permit_number: iwdp.permitNumber, retired_at: null,
+      }])
+      const id = await adapter().ensurePermit(FACILITY_A, iwdp, dates, ADMIN_A)
+      expect(id).not.toBe('f0000000-0000-4000-8000-00000000000b')
+      expect(permitRows().find(r => r.id === id)).toMatchObject({ tenant_id: TENANT_A })
+    })
+
+    it('says so when the account cannot be read, and adds nothing', async () => {
+      resetStore()
+      await expect(adapter().ensurePermit(FACILITY_A, iwdp, dates, ADMIN_A)).rejects.toThrow(/could not be read back/)
+      expect(permitRows()).toEqual([])
+    })
   })
 })

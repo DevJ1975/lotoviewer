@@ -9,7 +9,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { useFacility } from '@/components/FacilityProvider'
 import { HowToPanel, JurisdictionBanner } from '@/components/environmental/context'
 import { ErrorList, Field, inputCls, primaryButtonCls, secondaryButtonCls } from '@/components/environmental/form'
-import { errorList, listLegal, reviewLegal, searchOwners, type LegalEntry, type Scope } from '@/lib/environmental/client'
+import { errorList, listLegal, reviewLegal, searchOwners, type LegalEntry, type Scope } from '@/lib/environmental/complianceClient'
 import {
   APPLICABILITY_META, COMPLIANCE_META, filterEntries, hasActiveFilters, isTileActive, NO_FILTERS, REVIEW_META, sortEntries,
   summarize, toggleTile, type LegalFilters, type Tone,
@@ -57,7 +57,7 @@ export default function EnvironmentalLegalRegister() {
     <>
       <PageHeader
         icon={Scale}
-        eyebrow="ISO 14001 · 6.1.3 · 9.1.2"
+        eyebrow="Environmental compliance"
         title="Legal register"
         description="The laws and permit conditions that bind each site, whether they apply, and whether you are meeting them."
       />

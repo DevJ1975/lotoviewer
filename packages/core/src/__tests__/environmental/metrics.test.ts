@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { summarizeEnvironmentalKpis, needsAttention, type EnvKpiInput } from '../../environmental/metrics'
+import type { PermitForStanding } from '../../environmentalPermit'
 
 const at = (iso: string) => new Date(`${iso}T09:00:00Z`)
 const empty: EnvKpiInput = { obligations: [], checklistTemplates: [], findings: [], permits: [], legal: [] }
@@ -41,17 +42,23 @@ describe('summarizeEnvironmentalKpis', () => {
     expect(summarizeEnvironmentalKpis({ ...empty, findings: [{ status: 'open' }, { status: 'in_progress' }, { status: 'closed' }, { status: 'cancelled' }] }, at('2026-10-07')).openFindings).toBe(2)
   })
 
-  it('counts permits expiring and expired, ignoring ones not in force', () => {
+  it('counts permits by the EMS vault\'s renewal rules: soon is within 90 days, missed is past the deadline, and a retired or submitted one counts as neither', () => {
+    const permit = (over: Partial<PermitForStanding>): PermitForStanding =>
+      ({ retiredAt: null, renewalSubmittedOn: null, renewalApplicationDueOn: null, expiresOn: null, ...over })
     const k = summarizeEnvironmentalKpis({
       ...empty,
       permits: [
-        { status: 'active', expirationDate: '2026-12-01', renewalLeadDays: 180 },  // expiring
-        { status: 'active', expirationDate: '2026-01-01', renewalLeadDays: 180 },  // expired
-        { status: 'active', expirationDate: '2030-01-01', renewalLeadDays: 180 },  // fine
-        { status: 'draft', expirationDate: '2020-01-01', renewalLeadDays: 180 },   // not tracked
+        permit({ expiresOn: '2026-12-01' }),                                       // 55 days out: soon
+        permit({ expiresOn: '2027-03-01' }),                                       // 145 days out: the 180 tier is not "soon"
+        permit({ expiresOn: '2026-01-01' }),                                       // lapsed: missed
+        permit({ expiresOn: '2026-09-01', renewalApplicationDueOn: '2026-12-01' }),// the permit's own renewal date wins, and it is ahead
+        permit({ expiresOn: '2026-12-01', renewalApplicationDueOn: '2026-10-01' }),// application date passed: missed
+        permit({ expiresOn: '2026-01-01', renewalSubmittedOn: '2025-12-01' }),     // renewal submitted: neither
+        permit({ expiresOn: '2026-01-01', retiredAt: '2026-02-01T00:00:00Z' }),    // retired: neither
+        permit({}),                                                                // no fixed term: neither
       ],
     }, at('2026-10-07'))
-    expect(k).toMatchObject({ permitsExpiring: 1, permitsExpired: 1 })
+    expect(k).toMatchObject({ permitsRenewalSoon: 2, permitsRenewalMissed: 2 })
   })
 
   it('counts legal reviews only for requirements that apply to the site', () => {
@@ -74,11 +81,11 @@ describe('needsAttention', () => {
 
   it('is false when nothing is overdue, expired or unreviewed past due', () => {
     expect(needsAttention(base)).toBe(false)
-    expect(needsAttention({ ...base, obligationsDueSoon: 4, permitsExpiring: 2, openFindings: 3, checklistsNeverRun: 2, legalNeverReviewed: 5 })).toBe(false)
+    expect(needsAttention({ ...base, obligationsDueSoon: 4, permitsRenewalSoon: 2, openFindings: 3, checklistsNeverRun: 2, legalNeverReviewed: 5 })).toBe(false)
   })
 
-  it('is true for any overdue obligation, checklist or legal review, or an expired permit', () => {
-    for (const key of ['obligationsOverdue', 'checklistsOverdue', 'permitsExpired', 'legalReviewsOverdue'] as const) {
+  it('is true for any overdue obligation, checklist or legal review, or a permit whose renewal deadline was missed', () => {
+    for (const key of ['obligationsOverdue', 'checklistsOverdue', 'permitsRenewalMissed', 'legalReviewsOverdue'] as const) {
       expect(needsAttention({ ...base, [key]: 1 }), key).toBe(true)
     }
   })

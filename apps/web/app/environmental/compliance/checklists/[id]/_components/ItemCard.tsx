@@ -4,7 +4,7 @@ import { AlertTriangle, CheckCircle2, ChevronDown } from 'lucide-react'
 import { CitationList, StatusChip } from '@/components/environmental/badges'
 import { EvidenceUpload } from '@/components/environmental/EvidenceUpload'
 import { inputCls } from '@/components/environmental/form'
-import type { RunItemView } from '@/lib/environmental/client'
+import type { RunItemView } from '@/lib/environmental/complianceClient'
 import { limitsText, numericVerdict, type Answer } from '@/lib/environmental/runnerView'
 import { cn } from '@/lib/utils'
 

@@ -2,29 +2,31 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-// Migrations 299-303 are the database layer of the Environmental Compliance
-// Suite. These tests pin the properties that are easy to break in a later edit
-// and expensive to discover in production: tenant/facility isolation on every new
-// table, admin-only writes, and rollbacks that actually run. Behaviour was run
-// against Postgres 16 (apply twice, 71 RLS/constraint checks, rollback diffed
-// against the pre-299 schema); the results are recorded in the PR.
+// Migrations 312-316 are the database layer of the Environmental Compliance
+// Suite, applied after the ISO 14001 EMS migrations (294-306) and the legal
+// registry recovery (311). These tests pin the properties that are easy to break in
+// a later edit and expensive to discover in production: tenant/facility isolation on
+// every new table, admin-only writes, rollbacks that never touch what another
+// migration owns, and no policy that reopens a table EMS closed. Behaviour was run
+// against Postgres 16 with EMS applied first (apply twice, RLS and constraint
+// checks, every rollback); the results are recorded in the PR.
 
 const dir = resolve(__dirname, '../../migrations')
 const read = (name: string) => readFileSync(resolve(dir, name), 'utf8')
 const strip = (sql: string) => sql.replace(/--[^\n]*/g, '').replace(/\s+/g, ' ').trim()
 
 const files = {
-  profiles: '299_environmental_site_profiles.sql',
-  permits: '300_environmental_permits_outfalls.sql',
-  checklists: '301_environmental_checklists.sql',
-  calendar: '302_compliance_calendar_v2.sql',
-  legal: '303_legal_register_environmental.sql',
+  profiles: '312_environmental_site_profiles.sql',
+  outfalls: '313_stormwater_outfalls.sql',
+  checklists: '314_environmental_checklists.sql',
+  calendar: '315_compliance_calendar_v2.sql',
+  legal: '316_legal_register_environmental.sql',
 } as const
 
 const migrations = Object.values(files)
 const rollbackOf = (name: string) => name.slice(0, 3) + '_rollback.sql'
 
-describe('migrations 299-303 — structure', () => {
+describe('migrations 312-316 — structure', () => {
   it('each has a rollback and runs in one transaction', () => {
     for (const name of migrations) {
       expect(existsSync(resolve(dir, rollbackOf(name))), `${rollbackOf(name)} missing`).toBe(true)
@@ -59,18 +61,28 @@ describe('migrations 299-303 — structure', () => {
   })
 })
 
-describe('299/300 — site profile, permits, outfalls', () => {
+describe('312/313 — site profile and outfalls', () => {
   const profileCode = strip(read(files.profiles))
-  const permitCode = strip(read(files.permits))
+  const outfallCode = strip(read(files.outfalls))
+  const outfallRollback = strip(read('313_rollback.sql'))
 
   it('one profile per facility, bound to its tenant by a composite foreign key', () => {
     expect(profileCode).toContain('unique (facility_id)')
     expect(profileCode).toContain('foreign key (tenant_id, facility_id) references public.facilities(tenant_id, id) on delete cascade')
   })
 
-  it('permits and outfalls are bound to the tenant the same way', () => {
-    const matches = permitCode.match(/foreign key \(tenant_id, facility_id\) references public\.facilities\(tenant_id, id\)/g) ?? []
-    expect(matches).toHaveLength(2)
+  it('outfalls are bound to the tenant the same way', () => {
+    expect(outfallCode).toContain('foreign key (tenant_id, facility_id) references public.facilities(tenant_id, id) on delete cascade')
+  })
+
+  it("an outfall's permit must be at the outfall's own site: the reference is the composite key, enforced by the database", () => {
+    expect(outfallCode).toContain('foreign key (tenant_id, facility_id, permit_id) references public.environmental_permits (tenant_id, facility_id, id) on delete set null (permit_id)')
+    expect(outfallCode).toContain('unique (tenant_id, facility_id, id)')
+  })
+
+  it("the permit vault's table belongs to migration 304: this suite neither creates nor drops it", () => {
+    expect(outfallCode).not.toMatch(/create table (if not exists )?public\.environmental_permits\b/)
+    expect(outfallRollback).not.toMatch(/drop table (if exists )?public\.environmental_permits\b/)
   })
 
   it('state is validated as a USPS code without failing on rows already in production', () => {
@@ -81,19 +93,21 @@ describe('299/300 — site profile, permits, outfalls', () => {
     expect(profileCode).toContain('create policy env_site_profiles_read')
     expect(profileCode).toContain('create policy env_site_profiles_admin_write')
     expect(profileCode).toContain('current_user_admin_tenant_ids()')
-    expect(permitCode).toContain('_admin_write')
-    expect(permitCode).toContain('current_user_admin_tenant_ids()')
+    expect(outfallCode).toContain('create policy stormwater_outfalls_read')
+    expect(outfallCode).toContain('create policy stormwater_outfalls_admin_write')
+    expect(outfallCode).toContain('current_user_admin_tenant_ids()')
   })
 
   it('a facility view hides other facilities but roll-up (no facility) sees all', () => {
     expect(profileCode).toContain('public.active_facility_id() is null or facility_id = public.active_facility_id()')
+    expect(outfallCode).toContain('public.active_facility_id() is null or facility_id = public.active_facility_id()')
   })
 })
 
-describe('301 — checklists on the inspection engine', () => {
+describe('314 — checklists on the inspection engine', () => {
   const sql = read(files.checklists)
   const code = strip(sql)
-  const rollback = strip(read('301_rollback.sql'))
+  const rollback = strip(read('314_rollback.sql'))
 
   it("marks inspections with a domain that defaults to 'safety', so injury-risk analytics never absorb environmental findings", () => {
     expect(code).toContain("add column if not exists domain text not null default 'safety'")
@@ -102,6 +116,12 @@ describe('301 — checklists on the inspection engine', () => {
 
   it('stops a retried submit raising the same finding twice, for environmental findings only', () => {
     expect(code).toContain("where source_reference like 'env-%'")
+  })
+
+  it("does not touch nonconformities.facility_id: that column and its policy belong to migration 300, so dropping it on rollback would break EMS", () => {
+    expect(code).not.toMatch(/alter table public\.nonconformities/)
+    expect(rollback).not.toMatch(/nonconformities drop column/)
+    expect(rollback).not.toContain('idx_nonconformities_facility')
   })
 
   it('links a calendar completion to at most one checklist', () => {
@@ -134,13 +154,21 @@ describe('301 — checklists on the inspection engine', () => {
   })
 })
 
-describe('302 — calendar v2', () => {
+describe('315 — calendar v2', () => {
   const code = strip(read(files.calendar))
-  const rollback = strip(read('302_rollback.sql'))
+  const rollback = strip(read('315_rollback.sql'))
 
-  it('replaces the tenant-only policy with one that also honours the active facility, keeping shared rows visible', () => {
-    expect(code).toContain('drop policy if exists ccal_obligations_tenant_scope')
-    expect(code).toContain('public.active_facility_id() is null or facility_id is null or facility_id = public.active_facility_id()')
+  it("changes no policy: access to the obligations register is migration 298's, and an earlier draft recreated the old member-writable policy", () => {
+    for (const [name, text] of [['315', code], ['315_rollback', rollback]] as const) {
+      expect(text, name).not.toMatch(/create policy/)
+      expect(text, name).not.toMatch(/drop policy/)
+      expect(text, name).not.toContain('ccal_obligations_tenant_scope')
+    }
+  })
+
+  it("does not add a jurisdiction column: the register's own (federal | state:XX) column is the only one", () => {
+    expect(code).not.toMatch(/add column[^,;]*jurisdiction/)
+    expect(rollback).not.toContain('drop column if exists jurisdiction')
   })
 
   it("widens the source check to library and ai without guessing the constraint's generated name", () => {
@@ -148,9 +176,8 @@ describe('302 — calendar v2', () => {
     expect(code).toContain('pg_get_constraintdef(oid) ilike')
   })
 
-  it('caps the reminder window and constrains jurisdiction and anchor', () => {
+  it('caps the reminder window and constrains the anchor', () => {
     expect(code).toContain('lead_days int not null default 30 check (lead_days between 0 and 365)')
-    expect(code).toContain("jurisdiction ~ '^(federal|[A-Z]{2})$'")
     expect(code).toContain("due_anchor in ('fixed', 'period_end')")
   })
 
@@ -162,9 +189,9 @@ describe('302 — calendar v2', () => {
   })
 })
 
-describe('303 — legal register convergence', () => {
+describe('316 — legal register convergence', () => {
   const code = strip(read(files.legal))
-  const rollback = strip(read('303_rollback.sql'))
+  const rollback = strip(read('316_rollback.sql'))
 
   it('replaces every existing policy, found dynamically, so production and a rebuild end identical', () => {
     expect(code).toContain("from pg_policies where schemaname = 'public' and tablename = 'legal_register'")

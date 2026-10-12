@@ -1,6 +1,5 @@
 import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
 import { sanitizeError } from '@/lib/security/sanitizeError'
-import { advanceDueDate, type ObligationCadence } from '@soteria/core/complianceCalendar'
 import { LIBRARY_CATEGORY } from '@soteria/core/environmental/calendarPlan'
 import { badId, invalid, notFound, readJson, refused, UUID_RE } from '@/lib/environmental/http'
 
@@ -8,17 +7,29 @@ import { badId, invalid, notFound, readJson, refused, UUID_RE } from '@/lib/envi
 // (a filed report, a paid fee). Tenant admins, or the person the deadline is
 // assigned to, may do it.
 //
-// The caller names the due date they are completing. If the deadline has moved
-// since they loaded the page, someone else completed it first, and completing
-// again would skip a period: the request is refused as stale instead. The
-// advance is also conditional on that date, so two simultaneous clicks cannot
-// both succeed.
+// The work is done by env_complete_obligation() (migration 315), in one database
+// transaction: it decides who may complete the deadline, refuses a stale due date
+// (so a second click cannot skip a period), records the completion and moves the
+// deadline on, keeping a period-end deadline on period ends. This route only
+// checks the shape of the request and translates the function's answers, so the
+// rules live in exactly one place, shared with the checklist path.
 
 export const runtime = 'nodejs'
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 const MAX_NOTE = 2000
-const ADMIN_ROLES = ['owner', 'admin', 'superadmin']
+
+const NO_DATA_FOUND = 'P0002'
+const CHECK_VIOLATION = '23514'
+
+/** The function's refusals that a person can act on, mapped to the codes the screens already understand. */
+function refusal(message: string) {
+  if (message.startsWith('The occurrence due on')) {
+    return Response.json({ error: 'stale', details: ['This deadline has already moved on. Refresh to see its current due date.'] }, { status: 409 })
+  }
+  if (message.startsWith('This deadline is')) return Response.json({ error: 'not_open' }, { status: 409 })
+  return Response.json({ error: 'cannot_complete', details: [message] }, { status: 409 })
+}
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const g = await requireTenantModuleMember(req, 'environmental')
@@ -41,45 +52,29 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }
   if (problems.length > 0) return invalid(problems)
 
+  const deadline = () => g.authedClient.from('compliance_calendar_obligations')
+    .select('*').eq('tenant_id', g.tenantId).eq('category', LIBRARY_CATEGORY).eq('id', id).maybeSingle()
+
   try {
-    const { data: ob, error: readError } = await g.authedClient.from('compliance_calendar_obligations')
-      .select('id, status, cadence, cadence_days, next_due_at, due_anchor, owner_user_id')
-      .eq('tenant_id', g.tenantId).eq('category', LIBRARY_CATEGORY).eq('id', id).maybeSingle()
+    // This route completes the suite's own deadlines; the function would complete any deadline the caller may.
+    const { data: before, error: readError } = await deadline()
     if (readError) return sanitizeError(readError, 'POST /api/environmental/calendar/[id]/complete')
-    if (!ob) return notFound()
+    if (!before) return notFound()
 
-    if (!ADMIN_ROLES.includes(g.role) && ob.owner_user_id !== g.userId) {
-      return Response.json({ error: 'owner_or_admin_required', details: ['Only an admin or the person this deadline is assigned to can complete it.'] }, { status: 403 })
-    }
-    if (ob.status !== 'open') return Response.json({ error: 'not_open' }, { status: 409 })
-    if (ob.next_due_at !== occurrenceAt) {
-      return Response.json({ error: 'stale', details: ['This deadline has already moved on. Refresh to see its current due date.'], next_due_at: ob.next_due_at }, { status: 409 })
-    }
-
-    const cadence = ob.cadence as ObligationCadence
-    const update = cadence === 'once'
-      ? { status: 'completed' }
-      : { next_due_at: advanceDueDate(ob.next_due_at as string, cadence, ob.cadence_days as number | null, { clampToMonthEnd: ob.due_anchor === 'period_end' }) }
-
-    // The conditional update is the lock: only one caller moves the deadline off this date.
-    const { data: moved, error: moveError } = await g.authedClient.from('compliance_calendar_obligations')
-      .update({ ...update, updated_at: new Date().toISOString() })
-      .eq('tenant_id', g.tenantId).eq('id', id).eq('next_due_at', occurrenceAt as string).eq('status', 'open')
-      .select('*')
-    if (moveError) return sanitizeError(moveError, 'POST /api/environmental/calendar/[id]/complete')
-    if (!moved || moved.length === 0) return Response.json({ error: 'stale', details: ['Someone else just completed this deadline.'] }, { status: 409 })
-
-    const { error: eventError } = await g.authedClient.from('compliance_calendar_events').insert({
-      tenant_id: g.tenantId, obligation_id: id, occurrence_at: occurrenceAt, completed_by: g.userId,
-      evidence_id: typeof evidence === 'string' ? evidence : null, note: typeof note === 'string' ? note.trim() || null : null,
+    const { error } = await g.authedClient.rpc('env_complete_obligation', {
+      p_obligation_id: id,
+      p_due_on:        occurrenceAt,
+      p_note:          typeof note === 'string' ? note : null,
+      p_evidence_id:   typeof evidence === 'string' ? evidence : null,
+      p_inspection_id: null,
     })
-    if (eventError) {
-      // A completion with no record is worse than none: put the deadline back.
-      await g.authedClient.from('compliance_calendar_obligations')
-        .update({ next_due_at: occurrenceAt, status: 'open', updated_at: new Date().toISOString() }).eq('tenant_id', g.tenantId).eq('id', id)
-      return sanitizeError(eventError, 'POST /api/environmental/calendar/[id]/complete')
-    }
-    return Response.json({ obligation: moved[0] })
+    if (error?.code === NO_DATA_FOUND) return notFound()
+    if (error?.code === CHECK_VIOLATION) return refusal(error.message)
+    if (error) return sanitizeError(error, 'POST /api/environmental/calendar/[id]/complete')
+
+    const { data: after, error: afterError } = await deadline()
+    if (afterError) return sanitizeError(afterError, 'POST /api/environmental/calendar/[id]/complete')
+    return Response.json({ obligation: after })
   } catch (e) {
     return sanitizeError(e, 'POST /api/environmental/calendar/[id]/complete')
   }

@@ -1,5 +1,5 @@
 import { StatusChip } from '@/components/environmental/badges'
-import type { Deadline } from '@/lib/environmental/client'
+import type { Deadline } from '@/lib/environmental/complianceClient'
 import {
   bucketOf, BUCKET_LABELS, formatDate, formatLocalDate, ownerLabel, relativeDueText, siteLabel, type DeadlineGroup,
 } from '@/lib/environmental/calendarView'

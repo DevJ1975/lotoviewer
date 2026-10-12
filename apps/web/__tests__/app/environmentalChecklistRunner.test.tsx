@@ -7,8 +7,8 @@ import userEvent from '@testing-library/user-event'
 
 const getRun = vi.fn()
 const submitRun = vi.fn()
-vi.mock('@/lib/environmental/client', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/environmental/client')>('@/lib/environmental/client')
+vi.mock('@/lib/environmental/complianceClient', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/environmental/complianceClient')>('@/lib/environmental/complianceClient')
   return { ...actual, getRun: (...a: unknown[]) => getRun(...a), submitRun: (...a: unknown[]) => submitRun(...a) }
 })
 // Stable objects, as the real hooks return (the scope is memoized there): a new object on
@@ -23,8 +23,8 @@ vi.mock('@/components/PageHeader', () => ({
   PageHeader: ({ title, description }: { title: string; description?: string }) => <header><h1>{title}</h1><p>{description}</p></header>,
 }))
 vi.mock('@/components/SignaturePad', () => ({ default: () => <canvas data-testid="pad" /> }))
-vi.mock('@/lib/environmental/evidence', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/environmental/evidence')>('@/lib/environmental/evidence')
+vi.mock('@/lib/environmental/complianceEvidence', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/environmental/complianceEvidence')>('@/lib/environmental/complianceEvidence')
   return { ...actual, uploadEvidence: vi.fn(), evidenceUrl: vi.fn().mockResolvedValue(null) }
 })
 
@@ -146,7 +146,7 @@ describe('running a checklist', () => {
 
   it('shows every problem the server reports and keeps the answers', async () => {
     const user = userEvent.setup()
-    const { ApiError } = await import('@/lib/environmental/client')
+    const { ApiError } = await import('@/lib/environmental/complianceClient')
     submitRun.mockRejectedValue(new ApiError('Some required questions are still unanswered.', 400, 'missing_required', ['Some required questions are still unanswered.']))
     await open()
     await user.click(screen.getByRole('button', { name: 'Pass' }))

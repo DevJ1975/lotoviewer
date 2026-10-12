@@ -1,4 +1,4 @@
-import { advanceDueDate, type ObligationCadence } from '@soteria/core/complianceCalendar'
+import type { ObligationCadence } from '@soteria/core/complianceCalendar'
 import { applies } from '@soteria/core/environmental/applicability'
 import {
   buildTemplateRows, failuresToNonconformities, missingRequiredItems,
@@ -15,11 +15,16 @@ import type { SiteContext } from './siteContext'
 // resumes an unfinished run rather than opening a duplicate, and refuses a
 // subject (an outfall, a permit) that is not this site's.
 //
-// Submit is ordered so that "submitted" means everything else already happened.
-// Responses, findings and the calendar completion are each idempotent, and the
-// status flip to submitted is the last step and the commit point: a failure
-// anywhere earlier leaves the run in progress and a retry redoes the lot
-// without raising a finding twice or advancing a deadline twice.
+// Submit is ordered so that "submitted" means the record is complete. Responses,
+// findings and the signature are each idempotent, and the status flip to submitted
+// is the commit point: a failure before it leaves the run in progress and a retry
+// redoes the lot without raising a finding twice.
+//
+// Completing the deadline comes AFTER the commit point, in one atomic database call,
+// because the database only trusts a checklist that is already submitted (a
+// completion has to be backed by a real, signed record). If that call fails the
+// checklist stays filed and the deadline stays open and visibly overdue; the person
+// is told, and an admin or the deadline's owner can complete it from the calendar.
 
 export interface ObligationRow {
   id:            string
@@ -85,6 +90,8 @@ export interface NewRun {
 }
 
 /** Every database operation the two flows need, so the rules above are testable without one. */
+export type CompletionOutcome = 'completed' | 'stale' | 'not_permitted'
+
 export interface RunStore {
   findSubject(type: ChecklistSubjectType, id: string, facilityId: string): Promise<{ label: string } | null>
   getObligation(id: string): Promise<ObligationRow | null>
@@ -97,8 +104,12 @@ export interface RunStore {
   saveResponses(inspectionId: string, responses: RunResponse[]): Promise<void>
   existingFindingRefs(inspectionId: string): Promise<Set<string>>
   insertFindings(findings: NonconformityInsert[]): Promise<void>
-  recordCompletion(args: { obligationId: string; occurrenceAt: string; inspectionId: string; userId: string; note: string }): Promise<void>
-  advanceObligation(id: string, update: { next_due_at: string } | { status: 'completed' }): Promise<void>
+  /**
+   * Complete the occurrence of a deadline that a submitted checklist satisfies, atomically.
+   * 'stale': the deadline had already moved on (or closed). 'not_permitted': the database
+   * does not let this person complete it with this checklist. Anything else is thrown.
+   */
+  completeOccurrence(args: { obligationId: string; occurrenceAt: string; inspectionId: string; note: string }): Promise<CompletionOutcome>
   saveSignature(inspectionId: string, signature: Record<string, unknown>): Promise<void>
   finalize(args: {
     inspectionId: string; score: number; maxScore: number; result: 'pass' | 'fail'; userId: string; submittedAt: string
@@ -276,10 +287,12 @@ export interface SubmitOutcome {
   pct:                 number
   findingsRaised:      number
   completedObligation: boolean
+  /** The checklist is filed but its deadline could not be completed just now; it stays open. */
+  completionPending?:  true
 }
 
 export async function submitChecklist(
-  store: RunStore, ctx: { userId: string; now: Date }, inspectionId: string, input: SubmitInput,
+  store: RunStore, ctx: { userId: string; now: Date; onCompletionError?: (error: unknown) => void }, inspectionId: string, input: SubmitInput,
 ): Promise<SubmitOutcome | Failure> {
   const snapshot = await store.loadRun(inspectionId)
   // An inspection that is not an environmental checklist is reported as absent, not forbidden.
@@ -328,24 +341,6 @@ export async function submitChecklist(
     if (fresh.length > 0) await store.insertFindings(fresh)
   }
 
-  // The duty is to inspect, not to pass: a failed run still completes the occurrence.
-  let completedObligation = false
-  if (obligation && obligation.status === 'open') {
-    const occurrenceAt = snapshot.run.occurrence_at ?? obligation.next_due_at
-    await store.recordCompletion({
-      obligationId: obligation.id, occurrenceAt, inspectionId, userId: ctx.userId,
-      note: `Checklist ${scored.result === 'pass' ? 'passed' : 'recorded failures'}`,
-    })
-    // Advance only while the deadline still sits on the occurrence this run satisfies, so a
-    // retry after a partial failure cannot push it a second period.
-    if (obligation.next_due_at === occurrenceAt) {
-      await store.advanceObligation(obligation.id, obligation.cadence === 'once'
-        ? { status: 'completed' }
-        : { next_due_at: advanceDueDate(obligation.next_due_at, obligation.cadence, obligation.cadence_days, { clampToMonthEnd: obligation.due_anchor === 'period_end' }) })
-    }
-    completedObligation = true
-  }
-
   await store.saveSignature(inspectionId, {
     name: input.signatureName, signed_at: ctx.now.toISOString(), ...(input.imagePath ? { image_path: input.imagePath } : {}),
   })
@@ -355,8 +350,24 @@ export async function submitChecklist(
   })
   if (!flipped) return { ok: false, status: 409, error: 'already_submitted' }
 
+  // The duty is to inspect, not to pass: a failed run still completes the occurrence.
+  let completedObligation = false
+  let completionPending = false
+  if (obligation && obligation.status === 'open') {
+    try {
+      const outcome = await store.completeOccurrence({
+        obligationId: obligation.id, occurrenceAt: snapshot.run.occurrence_at ?? obligation.next_due_at, inspectionId,
+        note: `Checklist ${scored.result === 'pass' ? 'passed' : 'recorded failures'}`,
+      })
+      completedObligation = outcome === 'completed'
+    } catch (error) {
+      ctx.onCompletionError?.(error)
+      completionPending = true
+    }
+  }
+
   return {
     ok: true, result: scored.result, score: scored.score, maxScore: scored.maxScore, pct: scored.pct,
-    findingsRaised: findings.length, completedObligation,
+    findingsRaised: findings.length, completedObligation, ...(completionPending ? { completionPending: true as const } : {}),
   }
 }

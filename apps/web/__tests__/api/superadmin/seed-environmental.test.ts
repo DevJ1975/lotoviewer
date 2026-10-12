@@ -41,8 +41,14 @@ describe('POST /api/superadmin/tenants/[number]/seed-environmental', () => {
     const body = await r.json()
     expect(r.status).toBe(200)
     expect(body).toMatchObject({ ok: true, summary: SUMMARY })
-    expect(body.message).toMatch(/environmental demo: 3 sites/)
+    expect(body.message).toBe('environmental demo: 3 sites, 5 permits, 5 outfalls, 14 requirements evaluated, 5 deadlines set, 4 checklist runs')
     expect(mockState.deletes).toHaveLength(0)
+  })
+
+  it('describes the seed without claiming anything about ISO clauses', async () => {
+    mockState.queue('tenants', { data: demo, error: null })
+    const body = await (await POST(emptyRequest('POST'), ctxFor({ number: '0002' }))).json()
+    expect(body.message).not.toMatch(/\bISO\b|\bclause/i)
   })
 
   it('reports why it could not seed', async () => {

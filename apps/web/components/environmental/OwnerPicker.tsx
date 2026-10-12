@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useState } from 'react'
 import { X } from 'lucide-react'
-import { searchOwners, type MemberOption, type Scope } from '@/lib/environmental/client'
+import { searchOwners, type MemberOption, type Scope } from '@/lib/environmental/complianceClient'
 import { inputCls } from './form'
 
 // Choose the person responsible for a record from the account's members. The API

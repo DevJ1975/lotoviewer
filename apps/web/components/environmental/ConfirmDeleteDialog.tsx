@@ -3,7 +3,7 @@
 import { useId, useState, type ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { errorList } from '@/lib/environmental/client'
+import { errorList } from '@/lib/environmental/complianceClient'
 import { dangerButtonCls, ErrorList, secondaryButtonCls } from './form'
 
 // Deleting a record cannot be undone, so it is asked twice. The dialog stays open

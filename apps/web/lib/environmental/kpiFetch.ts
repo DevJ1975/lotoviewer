@@ -17,7 +17,7 @@ export interface EnvironmentalPanelData {
 export async function fetchEnvironmentalKpis(): Promise<EnvironmentalPanelData> {
   const [obligations, permits, legal, findings] = await Promise.all([
     supabase.from('compliance_calendar_obligations').select('status, next_due_at, lead_days').eq('category', 'environmental').eq('status', 'open'),
-    supabase.from('environmental_permits').select('status, expiration_date, renewal_lead_days'),
+    supabase.from('environmental_permits').select('retired_at, expires_on, renewal_application_due_on, renewal_submitted_on'),
     supabase.from('legal_register').select('applicability, compliance_status, last_reviewed_at, next_review_due'),
     supabase.from('nonconformities').select('status').like('source_reference', 'env-%'),
   ])
@@ -29,7 +29,12 @@ export async function fetchEnvironmentalKpis(): Promise<EnvironmentalPanelData> 
     obligations: o.map(r => ({ status: r.status as string, nextDueAt: r.next_due_at as string, leadDays: r.lead_days as number })),
     checklistTemplates: [],
     findings: f.map(r => ({ status: r.status as string })),
-    permits: p.map(r => ({ status: r.status as string, expirationDate: r.expiration_date as string | null, renewalLeadDays: r.renewal_lead_days as number })),
+    permits: p.map(r => ({
+      retiredAt: r.retired_at as string | null,
+      expiresOn: r.expires_on as string | null,
+      renewalApplicationDueOn: r.renewal_application_due_on as string | null,
+      renewalSubmittedOn: r.renewal_submitted_on as string | null,
+    })),
     legal: l.map(r => ({ applicability: r.applicability as string, lastReviewedAt: r.last_reviewed_at as string | null, nextReviewDue: r.next_review_due as string | null })),
   })
   return {

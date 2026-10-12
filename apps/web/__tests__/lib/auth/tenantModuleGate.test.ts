@@ -1,14 +1,13 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 
-// The module variants layer the tenant's module toggle over the role gate. The
-// property that matters is that the admin variant needs BOTH: an admin of a
-// tenant that switched the module off, and a member of one that left it on,
-// are each refused.
+// requireTenantModuleAdmin guards every register write in /api/environmental.
+// It must agree with the RLS it fronts (owner / admin only, superadmins
+// pass) and still refuse when the module is off, whatever the role.
 
-const getUserMock           = vi.fn()
-const profileMaybeSingle    = vi.fn()
-const membershipMaybeSingle = vi.fn()
-const tenantMaybeSingle     = vi.fn()
+const getUserMock    = vi.fn()
+const profileResult  = vi.fn()
+const membershipResult = vi.fn()
+const tenantResult   = vi.fn()
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: vi.fn(() => ({ auth: { getUser: getUserMock } })),
@@ -17,91 +16,142 @@ vi.mock('@supabase/supabase-js', () => ({
 vi.mock('@/lib/supabaseAdmin', () => ({
   supabaseAdmin: vi.fn(() => ({
     from: vi.fn((table: string) => {
-      const terminal =
-        table === 'profiles' ? profileMaybeSingle
-        : table === 'tenants' ? tenantMaybeSingle
-        : membershipMaybeSingle
-      const eq2 = { maybeSingle: terminal }
-      const eq1 = { eq: vi.fn(() => eq2), maybeSingle: terminal }
-      return { select: vi.fn(() => ({ eq: vi.fn(() => eq1) })) }
+      const terminal = { profiles: profileResult, tenant_memberships: membershipResult, tenants: tenantResult }[table]
+      if (!terminal) throw new Error(`unexpected table ${table}`)
+      const chain = { select: () => chain, eq: () => chain, maybeSingle: terminal }
+      return chain
     }),
   })),
 }))
 
 import { requireTenantModuleAdmin, requireTenantModuleMember } from '@/lib/auth/tenantGate'
 
-const TENANT = '11111111-2222-3333-4444-555555555555'
+const TENANT = '11111111-2222-4333-8444-555555555555'
+const ORIG_ENV = process.env
 
-const request = () => new Request('https://app.test/api/anything', {
-  headers: { authorization: 'Bearer token-abc', 'x-active-tenant': TENANT },
-})
-
-const asRole = (role: string) =>
-  membershipMaybeSingle.mockResolvedValue({ data: { role, invite_cancelled_at: null, tenants: { disabled_at: null } } })
-
-const tenantRow = (over: Partial<{ modules: Record<string, boolean> | null; disabled_at: string | null }> = {}) =>
-  tenantMaybeSingle.mockResolvedValue({
-    data: { name: 'Acme', modules: { environmental: true }, settings: { tier: 'pro' }, disabled_at: null, ...over },
-    error: null,
+function req(): Request {
+  return new Request('https://app.test/api/environmental/policy', {
+    headers: { authorization: 'Bearer token-abc', 'x-active-tenant': TENANT },
   })
+}
 
-beforeEach(() => {
-  process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://x.supabase.co'
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon'
-  process.env.SUPERADMIN_EMAILS = 'root@example.com'
-  for (const m of [getUserMock, profileMaybeSingle, membershipMaybeSingle, tenantMaybeSingle]) m.mockReset()
-  getUserMock.mockResolvedValue({ data: { user: { id: 'user-1', email: 'worker@example.com' } }, error: null })
-  profileMaybeSingle.mockResolvedValue({ data: { is_superadmin: false } })
-})
+function memberWithRole(role: string) {
+  return { data: { role, invite_cancelled_at: null, tenants: { disabled_at: null } }, error: null }
+}
 
 describe('requireTenantModuleAdmin', () => {
-  it('admits an admin of a tenant with the module enabled, and returns the tenant context', async () => {
-    asRole('admin'); tenantRow()
-    const r = await requireTenantModuleAdmin(request(), 'environmental')
-    expect(r).toMatchObject({ ok: true, role: 'admin', tenantName: 'Acme', tenantModules: { environmental: true } })
+  beforeEach(() => {
+    process.env = { ...ORIG_ENV }
+    process.env.NEXT_PUBLIC_SUPABASE_URL      = 'https://x.supabase.co'
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon'
+    process.env.SUPERADMIN_EMAILS             = 'root@example.com'
+    getUserMock.mockReset()
+    profileResult.mockReset()
+    membershipResult.mockReset()
+    tenantResult.mockReset()
+
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1', email: 'worker@example.com' } }, error: null })
+    profileResult.mockResolvedValue({ data: { is_superadmin: false } })
+    tenantResult.mockResolvedValue({
+      data: { name: 'Northfield Forge & Finish', modules: { environmental: true }, settings: null, disabled_at: null },
+      error: null,
+    })
   })
 
-  it('refuses a plain member even when the module is enabled', async () => {
-    asRole('member'); tenantRow()
-    const r = await requireTenantModuleAdmin(request(), 'environmental')
-    expect(r).toMatchObject({ ok: false, status: 403, message: 'Tenant admin or owner required' })
+  afterEach(() => {
+    process.env = ORIG_ENV
   })
 
-  it('refuses an admin when the tenant switched the module off', async () => {
-    asRole('admin'); tenantRow({ modules: { environmental: false } })
-    const r = await requireTenantModuleAdmin(request(), 'environmental')
-    expect(r).toMatchObject({ ok: false, status: 403, message: 'Module is not enabled for this tenant' })
+  it.each(['owner', 'admin'])('admits a tenant %s', async role => {
+    membershipResult.mockResolvedValue(memberWithRole(role))
+    expect(await requireTenantModuleAdmin(req(), 'environmental')).toMatchObject({ ok: true, role, tenantId: TENANT })
+  })
+
+  it.each(['member', 'viewer'])('refuses a tenant %s with 403', async role => {
+    membershipResult.mockResolvedValue(memberWithRole(role))
+    expect(await requireTenantModuleAdmin(req(), 'environmental'))
+      .toEqual({ ok: false, status: 403, message: 'Tenant admin or owner required' })
+  })
+
+  it('admits a superadmin who holds no membership', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'root', email: 'root@example.com' } }, error: null })
+    profileResult.mockResolvedValue({ data: { is_superadmin: true } })
+    membershipResult.mockResolvedValue({ data: null, error: null })
+    expect(await requireTenantModuleAdmin(req(), 'environmental')).toMatchObject({ ok: true, role: 'superadmin' })
+  })
+
+  it('refuses an owner when the module is off for the tenant', async () => {
+    membershipResult.mockResolvedValue(memberWithRole('owner'))
+    tenantResult.mockResolvedValue({
+      data: { name: 'Northfield Forge & Finish', modules: {}, settings: null, disabled_at: null }, error: null,
+    })
+    expect(await requireTenantModuleAdmin(req(), 'environmental'))
+      .toEqual({ ok: false, status: 403, message: 'Module is not enabled for this tenant' })
+  })
+
+  it('passes a membership failure through unchanged', async () => {
+    membershipResult.mockResolvedValue({ data: null, error: null })
+    expect(await requireTenantModuleAdmin(req(), 'environmental'))
+      .toEqual({ ok: false, status: 403, message: 'Not a member of this tenant' })
   })
 
   it('refuses an admin of a disabled tenant', async () => {
-    asRole('admin'); tenantRow({ disabled_at: '2026-01-01T00:00:00Z' })
-    const r = await requireTenantModuleAdmin(request(), 'environmental')
-    expect(r).toMatchObject({ ok: false, status: 403 })
+    membershipResult.mockResolvedValue(memberWithRole('admin'))
+    tenantResult.mockResolvedValue({
+      data: { name: 'Northfield Forge & Finish', modules: { environmental: true }, settings: null, disabled_at: '2026-01-01T00:00:00Z' },
+      error: null,
+    })
+    expect(await requireTenantModuleAdmin(req(), 'environmental'))
+      .toEqual({ ok: false, status: 403, message: 'Module is not enabled for this tenant' })
   })
 
   it('passes a failed tenant lookup through as 500, not as a permission error', async () => {
-    asRole('admin')
-    tenantMaybeSingle.mockResolvedValue({ data: null, error: { message: 'connection reset' } })
-    const r = await requireTenantModuleAdmin(request(), 'environmental')
-    expect(r).toMatchObject({ ok: false, status: 500 })
+    membershipResult.mockResolvedValue(memberWithRole('admin'))
+    tenantResult.mockResolvedValue({ data: null, error: { message: 'connection reset' } })
+    expect(await requireTenantModuleAdmin(req(), 'environmental'))
+      .toMatchObject({ ok: false, status: 500 })
   })
 })
 
+// Reads share the same module toggle; the admin variant above adds the role on top.
 describe('requireTenantModuleMember', () => {
+  beforeEach(() => {
+    process.env = { ...ORIG_ENV }
+    process.env.NEXT_PUBLIC_SUPABASE_URL      = 'https://x.supabase.co'
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon'
+    process.env.SUPERADMIN_EMAILS             = 'root@example.com'
+    getUserMock.mockReset()
+    profileResult.mockReset()
+    membershipResult.mockReset()
+    tenantResult.mockReset()
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1', email: 'worker@example.com' } }, error: null })
+    profileResult.mockResolvedValue({ data: { is_superadmin: false } })
+    tenantResult.mockResolvedValue({
+      data: { name: 'Northfield Forge & Finish', modules: { environmental: true }, settings: null, disabled_at: null },
+      error: null,
+    })
+  })
+
+  afterEach(() => {
+    process.env = ORIG_ENV
+  })
+
   it('admits a member of a tenant with the module enabled', async () => {
-    asRole('member'); tenantRow()
-    expect(await requireTenantModuleMember(request(), 'environmental')).toMatchObject({ ok: true, role: 'member' })
+    membershipResult.mockResolvedValue(memberWithRole('member'))
+    expect(await requireTenantModuleMember(req(), 'environmental')).toMatchObject({ ok: true, role: 'member' })
   })
 
   it('refuses a member when the module is off', async () => {
-    asRole('member'); tenantRow({ modules: { environmental: false } })
-    expect(await requireTenantModuleMember(request(), 'environmental')).toMatchObject({ ok: false, status: 403 })
+    membershipResult.mockResolvedValue(memberWithRole('member'))
+    tenantResult.mockResolvedValue({
+      data: { name: 'Northfield Forge & Finish', modules: { environmental: false }, settings: null, disabled_at: null }, error: null,
+    })
+    expect(await requireTenantModuleMember(req(), 'environmental')).toMatchObject({ ok: false, status: 403 })
   })
 
   it('does not look up the tenant at all when the role gate already failed', async () => {
     getUserMock.mockResolvedValue({ data: { user: null }, error: { message: 'bad token' } })
-    const r = await requireTenantModuleMember(request(), 'environmental')
-    expect(r).toMatchObject({ ok: false, status: 401 })
-    expect(tenantMaybeSingle).not.toHaveBeenCalled()
+    expect(await requireTenantModuleMember(req(), 'environmental')).toMatchObject({ ok: false, status: 401 })
+    expect(tenantResult).not.toHaveBeenCalled()
   })
 })

@@ -6,9 +6,13 @@
 // - SYSTEM_OBLIGATIONS + planSystemSeeds: the well-known regulatory
 //   deadlines we seed per tenant (gated by which modules a tenant has).
 
-export type ObligationCadence =
-  | 'once' | 'monthly' | 'quarterly' | 'semiannual'
-  | 'annual' | 'biennial' | 'triennial' | 'quinquennial' | 'custom_days'
+/** Every deadline cadence the calendar stores (migration 192's check constraint). */
+export const OBLIGATION_CADENCES = [
+  'once', 'monthly', 'quarterly', 'semiannual',
+  'annual', 'biennial', 'triennial', 'quinquennial', 'custom_days',
+] as const
+
+export type ObligationCadence = typeof OBLIGATION_CADENCES[number]
 
 export type ObligationUrgency = 'overdue' | 'due_soon' | 'upcoming'
 

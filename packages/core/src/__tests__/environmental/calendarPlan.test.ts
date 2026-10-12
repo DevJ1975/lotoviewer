@@ -125,3 +125,53 @@ describe('applicableObligationKeys', () => {
     expect([...applicableObligationKeys(lib, ctx(), FACILITY)]).toEqual([`env:a:${FACILITY}`])
   })
 })
+
+// ── the ISO 14001 obligations register (migration 298) ─────────────────────
+
+describe('registerJurisdiction', () => {
+  it('writes the register\'s own grammar, which EMS\'s parser reads back', async () => {
+    const { registerJurisdiction } = await import('../../environmental/jurisdiction')
+    const { parseJurisdiction } = await import('../../complianceEvaluation')
+    expect(registerJurisdiction('federal')).toBe('federal')
+    expect(registerJurisdiction('CA')).toBe('state:CA')
+    expect(registerJurisdiction('TX')).toBe('state:TX')
+    for (const code of ['federal', 'CA', 'TX'] as const) {
+      expect(parseJurisdiction(registerJurisdiction(code)), code).not.toBeNull()
+    }
+  })
+})
+
+describe('registerColumns', () => {
+  const plan = {
+    system_key: 'env:sw-ca-qse:site', library_key: 'sw-ca-qse', facility_id: 'site', program: 'stormwater', title: 'QSE sampling',
+    description: '', regulatory_ref: 'CA IGP Section XI', category: 'environmental', cadence: 'quarterly', cadence_days: null,
+    next_due_at: '2026-12-31', lead_days: 14, due_anchor: 'period_end', jurisdiction: 'CA', legal_library_key: null, checklist_library_key: null,
+  } as unknown as Parameters<typeof import('../../environmental/calendarPlan').registerColumns>[0]
+
+  it('puts a library deadline in the ISO 14001 register as a legal requirement, in the register\'s jurisdiction grammar', async () => {
+    const { registerColumns } = await import('../../environmental/calendarPlan')
+    const { parseJurisdiction } = await import('../../complianceEvaluation')
+    const columns = registerColumns(plan)
+    expect(columns).toMatchObject({ discipline: 'ems', source_kind: 'law', jurisdiction: 'state:CA' })
+    expect(parseJurisdiction(columns.jurisdiction)).toEqual({ level: 'state', state: 'CA' })
+  })
+
+  it('says where the deadline came from and what to do about it, naming the program and the citation', async () => {
+    const { registerColumns } = await import('../../environmental/calendarPlan')
+    const text = registerColumns(plan).applicability_rationale
+    expect(text).toContain('California')
+    expect(text).toContain('Stormwater')
+    expect(text).toContain('CA IGP Section XI')
+    expect(text).toMatch(/Confirm it against your permits/)
+  })
+
+  it('names the federal baseline as federal', async () => {
+    const { registerColumns } = await import('../../environmental/calendarPlan')
+    expect(registerColumns({ ...plan, jurisdiction: 'federal' }).applicability_rationale).toContain('federal compliance library')
+  })
+
+  it('never sets an evaluation frequency: that is a person\'s decision, because it makes the register open and email an evaluation', async () => {
+    const { registerColumns } = await import('../../environmental/calendarPlan')
+    expect(Object.keys(registerColumns(plan))).not.toContain('evaluation_cadence_days')
+  })
+})

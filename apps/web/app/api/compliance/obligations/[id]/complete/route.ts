@@ -23,7 +23,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   try {
     const { data: ob, error: loadErr } = await g.authedClient
       .from('compliance_calendar_obligations')
-      .select('id, cadence, cadence_days, next_due_at, status')
+      .select('id, cadence, cadence_days, next_due_at, status, due_anchor')
       .eq('id', id)
       .maybeSingle()
     if (loadErr) return sanitizeError(loadErr, 'POST /api/compliance/obligations/[id]/complete')
@@ -43,7 +43,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const update = cadence === 'once'
       ? { status: 'completed', updated_at: new Date().toISOString() }
       : {
-          next_due_at: advanceDueDate(ob.next_due_at as string, cadence, ob.cadence_days as number | null),
+          // A deadline anchored to a period end (the environmental library's) stays on period ends.
+          next_due_at: advanceDueDate(ob.next_due_at as string, cadence, ob.cadence_days as number | null, { clampToMonthEnd: ob.due_anchor === 'period_end' }),
           status: 'open',
           updated_at: new Date().toISOString(),
         }

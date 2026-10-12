@@ -1,7 +1,7 @@
 import { AlertTriangle, CheckCircle2, FileWarning } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
-import type { PackStatus } from '@/lib/environmental/client'
+import type { PackStatus } from '@/lib/environmental/complianceClient'
 
 // The two honesty markers of the library. Its content is drafted, with citations,
 // and signed off by a Certified Safety Professional before it is treated as

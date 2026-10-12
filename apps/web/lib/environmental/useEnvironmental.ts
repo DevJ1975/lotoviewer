@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/components/AuthProvider'
 import { useFacility } from '@/components/FacilityProvider'
 import { useTenant } from '@/components/TenantProvider'
-import { errorMessage, getSite, type Scope, type SiteDetail } from './client'
+import { errorMessage, getSite, type Scope, type SiteDetail } from './complianceClient'
 
 // What every environmental screen needs from its surroundings: who is asking, for
 // which tenant and site, and whether they may change things.

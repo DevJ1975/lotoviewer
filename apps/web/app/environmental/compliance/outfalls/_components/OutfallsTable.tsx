@@ -4,19 +4,19 @@ import Link from 'next/link'
 import { Pencil, Trash2 } from 'lucide-react'
 import { StatusChip } from '@/components/environmental/badges'
 import { secondaryButtonCls } from '@/components/environmental/form'
-import type { Outfall, Permit } from '@/lib/environmental/client'
+import type { Outfall } from '@/lib/environmental/complianceClient'
 import { useEvidenceUrl } from '@/lib/environmental/useEvidenceUrl'
 import {
-  coordinatesLabel, inspectHref, OUTFALL_STATUS_META, OUTFALL_TYPE_LABELS, representativeOfLabel,
+  coordinatesLabel, inspectHref, OUTFALL_STATUS_META, OUTFALL_TYPE_LABELS, outfallPermitLabel, representativeOfLabel,
 } from '@/lib/environmental/outfallView'
-import { permitLabel } from '@/lib/environmental/permitView'
+import type { PermitRef } from '@/lib/environmental/permitRefs'
 
 // The site's outfalls, one row each. Everyone can inspect an outfall; only a tenant
 // admin, who is given `actions`, can change or delete one.
 
 interface Props {
   outfalls: Outfall[]
-  permits: Permit[]
+  permits: PermitRef[]
   actions?: { onEdit: (outfall: Outfall) => void; onDelete: (outfall: Outfall) => void }
 }
 
@@ -59,7 +59,7 @@ export function OutfallsTable({ outfalls, permits, actions }: Props) {
                 <td className={td}>{outfall.receiving_water ?? none}</td>
                 <td className={td}>{OUTFALL_TYPE_LABELS[outfall.outfall_type]}</td>
                 <td className={td}>{representativeOfLabel(outfall, outfalls) ?? none}</td>
-                <td className={td}>{permit ? permitLabel(permit) : none}</td>
+                <td className={td}>{permit ? outfallPermitLabel(permit) : none}</td>
                 <td className={td}><StatusChip tone={status.tone}>{status.label}</StatusChip></td>
                 <td className={`${td} font-mono text-xs`}>{coordinatesLabel(outfall) ?? none}</td>
                 <td className={td}><OutfallPhoto outfall={outfall} /></td>

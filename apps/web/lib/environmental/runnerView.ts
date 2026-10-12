@@ -1,6 +1,6 @@
 import { evaluateNumeric } from '@soteria/core/inspectionScoring'
 import { ENV_PROGRAMS, type EnvProgram } from '@soteria/core/environmental/siteProfile'
-import type { ChecklistTemplateRow, RunItemView, SubmitBody } from './client'
+import type { ChecklistTemplateRow, RunItemView, SubmitBody } from './complianceClient'
 
 // The checklist screens' logic without the screen: what counts as answered, what
 // blocks submitting, the request body, and the local draft. Mirrors the server's

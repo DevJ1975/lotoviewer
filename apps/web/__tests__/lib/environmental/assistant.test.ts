@@ -67,13 +67,39 @@ describe('standingOf', () => {
     expect(s).toMatchObject({ obligationsOverdue: 1, obligationsDueSoon: 1, nextDeadline: { dueOn: '2026-09-25', days: -12 } })
   })
 
-  it('counts permits in their renewal window and expired ones', () => {
-    const s = standingOf(rows({ permits: [
-      { status: 'active', expiration_date: '2026-12-01', renewal_lead_days: 90 },
-      { status: 'active', expiration_date: '2026-09-01', renewal_lead_days: 90 },
-      { status: 'active', expiration_date: '2030-01-01', renewal_lead_days: 90 },
-    ] }), NOW)
-    expect(s).toMatchObject({ permitsExpiring: 1, permitsExpired: 1 })
+  describe('permits, as the permit vault stores them', () => {
+    const permit = (over: Partial<SiteRows['permits'][number]> = {}): SiteRows['permits'][number] => ({
+      retired_at: null, expires_on: null, renewal_application_due_on: null, renewal_submitted_on: null, ...over,
+    })
+    const renewals = (...permits: SiteRows['permits'][number][]) => {
+      const { permitsRenewalSoon, permitsRenewalMissed } = standingOf(rows({ permits }), NOW)
+      return { permitsRenewalSoon, permitsRenewalMissed }
+    }
+
+    it('tells a renewal due within 90 days from a renewal deadline already missed', () => {
+      expect(renewals(
+        permit({ expires_on: '2026-12-01' }),
+        permit({ expires_on: '2026-09-01' }),
+        permit({ expires_on: '2030-01-01' }),
+      )).toEqual({ permitsRenewalSoon: 1, permitsRenewalMissed: 1 })
+    })
+
+    it('counts down to the renewal application date when the permit sets one, not to its expiry', () => {
+      expect(renewals(permit({ expires_on: '2027-03-01', renewal_application_due_on: '2026-09-15' })))
+        .toEqual({ permitsRenewalSoon: 0, permitsRenewalMissed: 1 })
+    })
+
+    it('stops counting once the renewal application is in', () => {
+      expect(renewals(permit({ expires_on: '2026-09-01', renewal_submitted_on: '2026-08-01' })))
+        .toEqual({ permitsRenewalSoon: 0, permitsRenewalMissed: 0 })
+    })
+
+    it('ignores a retired permit and one with no term to count down to', () => {
+      expect(renewals(
+        permit({ expires_on: '2026-09-01', retired_at: '2026-09-02T00:00:00Z' }),
+        permit(),
+      )).toEqual({ permitsRenewalSoon: 0, permitsRenewalMissed: 0 })
+    })
   })
 
   it('counts only requirements that apply when rating them, and reviews that are overdue', () => {

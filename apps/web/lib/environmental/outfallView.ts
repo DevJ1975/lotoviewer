@@ -1,6 +1,6 @@
 import type { OutfallStatus, OutfallType } from '@soteria/core/environmental/outfalls'
-import type { Outfall, Permit } from './client'
-import { permitLabel } from './permitView'
+import type { Outfall } from './complianceClient'
+import { permitLabel, permitsAtSite, type PermitRef } from './permitRefs'
 
 // What the outfalls screen shows and sends, as pure functions: how an outfall
 // reads in a table, which other records it may point to, and the form <->
@@ -45,9 +45,17 @@ export function otherOutfallsAtSite(outfalls: readonly Outfall[], siteId: string
   return outfalls.filter(o => o.facility_id === siteId && o.id !== selfId).sort(byCode)
 }
 
-/** The permits an outfall may be covered by: the ones at its own site. */
-export function permitsAtSite(permits: readonly Permit[], siteId: string): Permit[] {
-  return permits.filter(p => p.facility_id === siteId).sort((a, b) => permitLabel(a).localeCompare(permitLabel(b)))
+/** A permit as an outfall names it. A retired permit covers nothing now, and says so. */
+export const outfallPermitLabel = (permit: Pick<PermitRef, 'title' | 'permit_number' | 'retired_at'>): string =>
+  permit.retired_at === null ? permitLabel(permit) : `${permitLabel(permit)} (retired)`
+
+/**
+ * The permits to offer an outfall as its cover: those in force at its site, and the one it
+ * is linked to now even when retired, so saving other changes does not silently drop the
+ * link. No other retired permit is a new choice.
+ */
+export function permitChoicesForOutfall<T extends PermitRef>(permits: readonly T[], siteId: string, linkedPermitId: string | null): T[] {
+  return permitsAtSite(permits, siteId).filter(permit => permit.retired_at === null || permit.id === linkedPermitId)
 }
 
 export const coordinatesLabel = (outfall: Pick<Outfall, 'latitude' | 'longitude'>): string | null =>

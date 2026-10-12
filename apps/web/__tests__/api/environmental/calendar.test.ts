@@ -174,9 +174,14 @@ describe('PATCH /api/environmental/calendar/[id]', () => {
 describe('POST /api/environmental/calendar/[id]/complete', () => {
   const complete = (body: unknown, id = OB) => COMPLETE(jsonRequest(`/api/environmental/calendar/${id}/complete`, 'POST', body), params({ id }))
   const body = { occurrence_at: '2026-09-30' }
-  const script = (over: Record<string, unknown> = {}, moved: unknown[] = [row({ next_due_at: '2026-12-31' })]) => fakeSupabase({
-    compliance_calendar_obligations: [{ data: row(over) }, { data: moved }],
-    compliance_calendar_events: [{ data: null }],
+  const RPC = 'rpc:env_complete_obligation'
+  // The deadline is read before the function runs (is it one of ours?) and after (what it is now).
+  const script = (rpc: { data?: unknown; error?: { message: string; code?: string } } = { data: 'event-1' }, before: unknown = row(), after: unknown = row({ next_due_at: '2026-12-31' })) =>
+    fakeSupabase({ compliance_calendar_obligations: [{ data: before }, { data: after }], [RPC]: [rpc] })
+
+  it('passes a gate refusal through', async () => {
+    refuse(memberGate, 403, 'Module is not enabled for this tenant')
+    expect((await complete(body)).status).toBe(403)
   })
 
   it('needs the due date being completed', async () => {
@@ -186,95 +191,91 @@ describe('POST /api/environmental/calendar/[id]/complete', () => {
     expect(JSON.stringify(await res.json())).toMatch(/occurrence_at/)
   })
 
-  it('refuses evidence from another tenant\'s folder', async () => {
-    allow(memberGate, fakeSupabase().client, { role: 'admin' })
-    expect((await complete({ ...body, evidence_id: '22222222-2222-2222-2222-222222222222/x.pdf' })).status).toBe(400)
-  })
-
-  it('lets an admin complete it, logs the completion, and moves the deadline to the next quarter end', async () => {
+  it('refuses evidence from another tenant\'s folder, and a path that climbs out of its own', async () => {
     const db = script()
     allow(memberGate, db.client, { role: 'admin' })
-    const res = await complete({ ...body, note: ' filed ' })
+    expect((await complete({ ...body, evidence_id: '22222222-2222-2222-2222-222222222222/x.pdf' })).status).toBe(400)
+    expect((await complete({ ...body, evidence_id: `${TENANT}/../x.pdf` })).status).toBe(400)
+    expect(db.used(RPC, 'rpc')).toEqual([])
+  })
+
+  it('refuses a note that is too long, before asking the database', async () => {
+    const db = script()
+    allow(memberGate, db.client, { role: 'admin' })
+    expect((await complete({ ...body, note: 'x'.repeat(2001) })).status).toBe(400)
+    expect(db.used(RPC, 'rpc')).toEqual([])
+  })
+
+  it('hands the completion to the database function with exactly what the caller asked, and returns the deadline as it now stands', async () => {
+    const db = script()
+    allow(memberGate, db.client, { role: 'admin' })
+    const evidence = `${TENANT}/reports/q3.pdf`
+    const res = await complete({ ...body, note: ' filed ', evidence_id: evidence })
     expect(res.status).toBe(200)
-    expect(db.arg('compliance_calendar_obligations', 'update')).toMatchObject({ next_due_at: '2026-12-31' })
-    expect(db.arg('compliance_calendar_events', 'insert')).toMatchObject({ tenant_id: TENANT, obligation_id: OB, occurrence_at: '2026-09-30', completed_by: USER, note: 'filed' })
+    expect(db.arg(RPC, 'rpc')).toEqual({
+      p_obligation_id: OB, p_due_on: '2026-09-30', p_note: ' filed ', p_evidence_id: evidence, p_inspection_id: null,
+    })
+    expect(await res.json()).toMatchObject({ obligation: { id: OB, next_due_at: '2026-12-31' } })
   })
 
-  it('keeps a quarter-end deadline on quarter ends (Mar 31 -> Jun 30)', async () => {
-    const db = script({ next_due_at: '2026-03-31' })
+  it('does not move the deadline or log the completion itself: the function does both in one transaction', async () => {
+    const db = script()
     allow(memberGate, db.client, { role: 'admin' })
-    await complete({ occurrence_at: '2026-03-31' })
-    expect(db.arg('compliance_calendar_obligations', 'update')).toMatchObject({ next_due_at: '2026-06-30' })
-  })
-
-  it('lets the person it is assigned to complete it, but not another member', async () => {
-    const owned = script({ owner_user_id: OWNER })
-    allow(memberGate, owned.client, { role: 'member', userId: OWNER })
-    expect((await complete(body)).status).toBe(200)
-
-    const other = script({ owner_user_id: OWNER })
-    allow(memberGate, other.client, { role: 'member', userId: USER })
-    const res = await complete(body)
-    expect(res.status).toBe(403)
-    expect((await res.json()).error).toBe('owner_or_admin_required')
-    expect(other.used('compliance_calendar_events', 'insert')).toEqual([])
-  })
-
-  it('refuses a deadline that has already moved on, saying where it is now, and changes nothing', async () => {
-    const db = script({ next_due_at: '2026-12-31' })
-    allow(memberGate, db.client, { role: 'admin' })
-    const res = await complete(body)
-    expect(res.status).toBe(409)
-    expect(await res.json()).toMatchObject({ error: 'stale', next_due_at: '2026-12-31' })
+    await complete(body)
     expect(db.used('compliance_calendar_obligations', 'update')).toEqual([])
     expect(db.used('compliance_calendar_events', 'insert')).toEqual([])
   })
 
-  it('moves the deadline only if it still sits on that date, so two clicks cannot both win', async () => {
+  it('only reaches the suite\'s own deadlines: it looks the deadline up in this account\'s environmental category first', async () => {
     const db = script()
     allow(memberGate, db.client, { role: 'admin' })
     await complete(body)
-    const update = db.used('compliance_calendar_obligations', 'update')[0]!
-    expect(update.ops).toContainEqual({ method: 'eq', args: ['next_due_at', '2026-09-30'] })
-    expect(update.ops).toContainEqual({ method: 'eq', args: ['status', 'open'] })
+    const lookup = db.used('compliance_calendar_obligations', 'select')[0]!
+    expect(lookup.ops).toContainEqual({ method: 'eq', args: ['tenant_id', TENANT] })
+    expect(lookup.ops).toContainEqual({ method: 'eq', args: ['category', 'environmental'] })
+    expect(lookup.ops).toContainEqual({ method: 'eq', args: ['id', OB] })
   })
 
-  it('reports the loser of a race as stale and logs nothing', async () => {
-    const db = script({}, [])
+  it('answers 404 for a deadline that is not there or is not one of ours, without calling the function', async () => {
+    const db = script({ data: 'event-1' }, null)
     allow(memberGate, db.client, { role: 'admin' })
-    expect((await complete(body)).status).toBe(409)
-    expect(db.used('compliance_calendar_events', 'insert')).toEqual([])
+    expect((await complete(body)).status).toBe(404)
+    expect(db.used(RPC, 'rpc')).toEqual([])
   })
 
-  it('closes a once-only deadline instead of moving it', async () => {
-    const db = script({ cadence: 'once' }, [row({ status: 'completed' })])
-    allow(memberGate, db.client, { role: 'admin' })
-    await complete(body)
-    expect(db.arg('compliance_calendar_obligations', 'update')).toMatchObject({ status: 'completed' })
+  it('answers 404, never 403, when the function says the caller may not complete it, so a deadline\'s existence is not confirmed', async () => {
+    allow(memberGate, script({ error: { code: 'P0002', message: 'obligation x not found' } }).client, { role: 'member', userId: OWNER })
+    const res = await complete(body)
+    expect(res.status).toBe(404)
+    expect(JSON.stringify(await res.json())).not.toMatch(/owner|admin|forbidden/i)
   })
 
-  it('refuses a deadline that is not open', async () => {
-    allow(memberGate, script({ status: 'dismissed' }).client, { role: 'admin' })
+  it('reports a deadline that has already moved on as stale', async () => {
+    const stale = { code: '23514', message: 'The occurrence due on 2026-09-30 is already recorded; the next one is due on 2026-12-31.' }
+    allow(memberGate, script({ error: stale }).client, { role: 'admin' })
+    const res = await complete(body)
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe('stale')
+  })
+
+  it('reports a deadline that is not open', async () => {
+    allow(memberGate, script({ error: { code: '23514', message: 'This deadline is dismissed, so there is nothing due to record.' } }).client, { role: 'admin' })
     const res = await complete(body)
     expect(res.status).toBe(409)
     expect((await res.json()).error).toBe('not_open')
   })
 
-  it('puts the deadline back if the completion could not be recorded', async () => {
-    const db = fakeSupabase({
-      compliance_calendar_obligations: [{ data: row() }, { data: [row({ next_due_at: '2026-12-31' })] }, { data: null }],
-      compliance_calendar_events: [{ error: { message: 'disk full' } }],
-    })
-    allow(memberGate, db.client, { role: 'admin' })
+  it('shows any other refusal from the function as a conflict with its reason', async () => {
+    allow(memberGate, script({ error: { code: '23514', message: 'Evidence must be a file in this account.' } }).client, { role: 'admin' })
     const res = await complete(body)
-    expect(res.status).toBe(500)
-    const updates = db.used('compliance_calendar_obligations', 'update')
-    expect(updates).toHaveLength(2)
-    expect(updates[1]!.ops.find(o => o.method === 'update')!.args[0]).toMatchObject({ next_due_at: '2026-09-30', status: 'open' })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'cannot_complete', details: ['Evidence must be a file in this account.'] })
   })
 
-  it('answers 404 for a deadline that is not there', async () => {
-    allow(memberGate, fakeSupabase({ compliance_calendar_obligations: [{ data: null }] }).client, { role: 'admin' })
-    expect((await complete(body)).status).toBe(404)
+  it('does not leak an unexpected database error', async () => {
+    allow(memberGate, script({ error: { code: 'XX000', message: 'relation "secret_table" is broken' } }).client, { role: 'admin' })
+    const res = await complete(body)
+    expect(res.status).toBe(500)
+    expect(JSON.stringify(await res.json())).not.toContain('secret_table')
   })
 })

@@ -4,7 +4,7 @@ import { useRef, useState } from 'react'
 import { Loader2, PenLine } from 'lucide-react'
 import SignaturePad, { type SignaturePadRef } from '@/components/SignaturePad'
 import { ErrorList, Field, inputCls, primaryButtonCls, secondaryButtonCls } from '@/components/environmental/form'
-import type { RunItemView } from '@/lib/environmental/client'
+import type { RunItemView } from '@/lib/environmental/complianceClient'
 
 // The last step: confirm the answers are accurate and sign. Submitting is blocked
 // while required questions are open, and the panel lists them so each is a tap

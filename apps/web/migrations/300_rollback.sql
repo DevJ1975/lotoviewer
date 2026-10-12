@@ -1,15 +1,63 @@
--- Rollback for migration 300: environmental permits and outfalls.
+-- Rollback for migration 300 (facility scoping of the remaining EMS tables).
 --
--- DESTRUCTIVE: discards every recorded permit (dates, numbers, conditions) and
--- outfall. Export first if either has been filled in. Outfall checklist runs
--- keep their results (they reference outfalls only by a text subject id).
+-- Restores the 204-207 policies and drops the facility columns. Facility
+-- assignments made since 300 are lost; every row becomes visible from
+-- every facility again.
 --
--- Idempotent.
+-- Apply: paste into the SQL Editor, or run with psql.
+-- ────────────────────────────────────────────────────────────────────────────
 
 begin;
 
-drop table if exists public.stormwater_outfalls;
-drop table if exists public.environmental_permits;
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['environmental_objectives', 'nonconformities', 'management_reviews', 'iso14001_clause_evidence'] loop
+    execute format('drop policy if exists %I on public.%I', t || '_tenant_scope', t);
+    execute format($p$
+      create policy %I on public.%I
+        for all to authenticated
+        using (tenant_id in (select public.current_user_tenant_ids()) or public.is_superadmin())
+        with check (tenant_id in (select public.current_user_tenant_ids()) or public.is_superadmin())
+    $p$, t || '_tenant_scope', t);
+    execute format('alter table public.%I drop column if exists facility_id', t);
+  end loop;
+end $$;
+
+-- Restore the 032 / 209 header readers. They raise again when no request
+-- headers are set (SQL Editor, hand-run seeds); see migration 300.
+create or replace function public.active_tenant_id()
+returns uuid
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select nullif(
+    coalesce(
+      current_setting('request.headers', true),
+      ''
+    )::jsonb ->> 'x-active-tenant',
+    ''
+  )::uuid
+$$;
+
+create or replace function public.active_facility_id()
+returns uuid
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select nullif(
+    coalesce(
+      current_setting('request.headers', true),
+      ''
+    )::jsonb ->> 'x-active-facility',
+    ''
+  )::uuid
+$$;
 
 notify pgrst, 'reload schema';
 

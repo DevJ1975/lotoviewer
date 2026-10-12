@@ -1,6 +1,6 @@
 import { OwnerPicker } from '@/components/environmental/OwnerPicker'
 import { Field, inputCls } from '@/components/environmental/form'
-import type { Deadline, Scope } from '@/lib/environmental/client'
+import type { Deadline, Scope } from '@/lib/environmental/complianceClient'
 import { wholeNumberOrNull } from '@/lib/environmental/calendarView'
 import { DEFAULT_LEAD_DAYS } from '@soteria/core/environmental/deadlines'
 import { ENV_PROGRAMS, ENV_PROGRAM_LABELS } from '@soteria/core/environmental/siteProfile'

@@ -9,8 +9,8 @@ import OpsSpinner from '@/components/OpsSpinner'
 import { useAuth } from '@/components/AuthProvider'
 import { StatusChip } from '@/components/environmental/badges'
 import { ErrorList, primaryButtonCls, secondaryButtonCls } from '@/components/environmental/form'
-import { errorList, getRun, submitRun, type RunView } from '@/lib/environmental/client'
-import { dataUrlToFile, uploadEvidence } from '@/lib/environmental/evidence'
+import { errorList, getRun, submitRun, type RunView } from '@/lib/environmental/complianceClient'
+import { dataUrlToFile, uploadEvidence } from '@/lib/environmental/complianceEvidence'
 import {
   EMPTY_ANSWER, draftKey, groupBySection, parseDraft, progress, serializeDraft, toSubmitBody, type Answer, type Answers,
 } from '@/lib/environmental/runnerView'
@@ -119,6 +119,7 @@ export default function ChecklistRunPage() {
               <li>{outcome.findingsRaised} {outcome.findingsRaised === 1 ? 'finding was' : 'findings were'} raised for follow-up. <Link className="underline" href="/environmental/nonconformities">Open findings</Link></li>
             )}
             {outcome.completedObligation && <li>The calendar deadline this satisfies was completed and moved to its next date. <Link className="underline" href="/environmental/compliance/calendar">See the calendar</Link></li>}
+            {outcome.completionPending && <li className="text-amber-700 dark:text-amber-300">Your checklist is filed, but the calendar deadline it satisfies could not be marked done just now, so it still shows as open. An admin, or the person it is assigned to, can complete it from the calendar. <Link className="underline" href="/environmental/compliance/calendar">Open the calendar</Link></li>}
             <li>A failed checklist still counts as the inspection done: what matters is that it was done, and what you found is recorded.</li>
           </ul>
           <Link href="/environmental/compliance/checklists" className={primaryButtonCls}>Back to checklists</Link>

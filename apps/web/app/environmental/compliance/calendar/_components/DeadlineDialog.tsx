@@ -5,7 +5,7 @@ import { ErrorList, Field, inputCls, primaryButtonCls, secondaryButtonCls } from
 import { StatusChip } from '@/components/environmental/badges'
 import {
   ApiError, completeDeadline, errorList, updateDeadline, type Deadline, type Scope,
-} from '@/lib/environmental/client'
+} from '@/lib/environmental/complianceClient'
 import {
   bucketOf, BUCKET_LABELS, cadenceLabel, completionMessage, formatDate, formatLocalDate, ownerLabel, relativeDueText, siteLabel,
 } from '@/lib/environmental/calendarView'

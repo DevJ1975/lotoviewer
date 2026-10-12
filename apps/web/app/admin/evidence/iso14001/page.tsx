@@ -78,8 +78,9 @@ export default function Iso14001MapPage() {
           ISO 14001:2015 clause map
         </h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Every environmental-management clause we satisfy and which platform modules supply the evidence. Curated pins live in
-          iso14001_clause_evidence — click into a clause to pin specific rows.
+          Where the platform can hold evidence for each clause. A record is evidence only once you pin it here and it actually
+          addresses the clause: a lockout course is not environmental competence, a hazardous-waste course is. Click into a
+          clause to pin specific rows.
         </p>
       </div>
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildEvidencePath, dataUrlToFile, evidenceProblem, safeFileName } from '@/lib/environmental/evidence'
+import { buildEvidencePath, dataUrlToFile, evidenceProblem, safeFileName } from '@/lib/environmental/complianceEvidence'
 
 const TENANT = '11111111-1111-1111-1111-111111111111'
 

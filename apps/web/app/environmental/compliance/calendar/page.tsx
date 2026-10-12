@@ -10,7 +10,7 @@ import { useAuth } from '@/components/AuthProvider'
 import { useFacility } from '@/components/FacilityProvider'
 import { HowToPanel, JurisdictionBanner } from '@/components/environmental/context'
 import { ErrorList, Field, inputCls, primaryButtonCls, secondaryButtonCls } from '@/components/environmental/form'
-import { listDeadlines, errorList, searchOwners, type Deadline } from '@/lib/environmental/client'
+import { listDeadlines, errorList, searchOwners, type Deadline } from '@/lib/environmental/complianceClient'
 import { useEnvironmentalScope, useEnvironmentalSite } from '@/lib/environmental/useEnvironmental'
 import { checklistKeysFor, filterDeadlines, groupByUrgency, localToday } from '@/lib/environmental/calendarView'
 import { cn } from '@/lib/utils'
@@ -60,9 +60,9 @@ export default function EnvironmentalCalendarPage() {
     <>
       <PageHeader
         icon={CalendarDays}
-        eyebrow="ISO 14001 · 6.1.3 · 8.1 · 9.1.1"
+        eyebrow="Environmental compliance"
         title="Compliance calendar"
-        description="Every permit renewal, report and inspection that falls due, with who owns it."
+        description="Every report and inspection that falls due, with who owns it. Permit renewals are tracked with each permit."
       />
       <CalendarScreen />
     </>

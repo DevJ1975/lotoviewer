@@ -138,6 +138,8 @@ describe('reminding', () => {
     const read = db.calls.find(c => c.table === 'compliance_calendar_obligations')!
     expect(read.ops).toContainEqual({ method: 'eq', args: ['status', 'open'] })
     expect(read.ops).toContainEqual({ method: 'eq', args: ['category', 'environmental'] })
+    // The permit vault's cron owns the conditions attached to a permit; mine must leave them alone.
+    expect(read.ops).toContainEqual({ method: 'is', args: ['permit_id', null] })
     expect(read.ops).toContainEqual({ method: 'order', args: ['next_due_at', { ascending: true }] })
   })
 

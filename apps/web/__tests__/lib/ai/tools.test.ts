@@ -1,29 +1,33 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Records every filter applied to the query builder so we can assert the
 // handler scoped its read to the caller's tenant. The builder is a single
 // thenable object: every method returns `this`, and awaiting it resolves to
 // the preset result — which models the supabase-js chain
 // (.from().select().eq().order().limit() and Promise.all of two chains).
-interface Recorder { tables: string[]; eq: Array<[string, unknown]> }
+interface Recorder { tables: string[]; eq: Array<[string, unknown]>; selected: Record<string, string> }
+type Result = { data: unknown; error: { message: string } | null }
 
 let recorder: Recorder
-let nextResult: { data: unknown; error: { message: string } | null }
+let nextResult: Result
+// A table named here answers with its own result instead of nextResult.
+let tableResults: Record<string, Result>
 
-function makeBuilder() {
+function makeBuilder(table: string) {
   const b: Record<string, unknown> = {}
   const ret = () => b
-  for (const m of ['select', 'order', 'limit', 'ilike', 'like', 'in', 'lt', 'lte', 'gt', 'gte', 'not', 'is', 'maybeSingle']) {
+  for (const m of ['order', 'limit', 'ilike', 'like', 'in', 'lt', 'lte', 'gt', 'gte', 'not', 'is', 'maybeSingle']) {
     b[m] = ret
   }
+  b.select = (columns: string) => { recorder.selected[table] = columns; return b }
   b.eq = (col: string, val: unknown) => { recorder.eq.push([col, val]); return b }
-  b.then = (onF: (v: unknown) => unknown, onR?: (e: unknown) => unknown) => Promise.resolve(nextResult).then(onF, onR)
+  b.then = (onF: (v: unknown) => unknown, onR?: (e: unknown) => unknown) => Promise.resolve(tableResults[table] ?? nextResult).then(onF, onR)
   return b
 }
 
 vi.mock('@/lib/supabaseAdmin', () => ({
   supabaseAdmin: () => ({
-    from: (table: string) => { recorder.tables.push(table); return makeBuilder() },
+    from: (table: string) => { recorder.tables.push(table); return makeBuilder(table) },
   }),
 }))
 
@@ -32,9 +36,12 @@ import { runTool, getToolDefinitions, ASSISTANT_TOOLS } from '@/lib/ai/tools'
 const CTX = { tenantId: 'tenant-A', userId: 'user-1', role: 'member' as const, conversationId: 'conv-1' }
 
 beforeEach(() => {
-  recorder = { tables: [], eq: [] }
+  recorder = { tables: [], eq: [], selected: {} }
   nextResult = { data: [], error: null }
+  tableResults = {}
 })
+
+afterEach(() => vi.useRealTimers())
 
 describe('assistant tool registry', () => {
   it('exposes a definition for every registered tool', () => {
@@ -119,6 +126,63 @@ describe('environmental assistant tools', () => {
     expect(recorder.tables).toEqual(expect.arrayContaining(['facilities', 'compliance_calendar_obligations', 'environmental_permits', 'legal_register', 'nonconformities']))
     expect(recorder.eq).toContainEqual(['category', 'environmental'])
     expect(out.data.note).toMatch(/draft/)
+  })
+
+  it('environmental_compliance_status reads the permit vault\'s renewal columns', async () => {
+    await runTool('environmental_compliance_status', {}, CTX)
+    const columns = recorder.selected.environmental_permits!.split(',').map(c => c.trim())
+    expect(columns).toEqual(expect.arrayContaining(['facility_id', 'retired_at', 'expires_on', 'renewal_application_due_on', 'renewal_submitted_on']))
+    for (const retired of ['status', 'expiration_date', 'renewal_lead_days']) expect(columns).not.toContain(retired)
+  })
+
+  describe('environmental_compliance_status, permits', () => {
+    const permit = (over: Record<string, unknown>) => ({
+      facility_id: 'site-1', retired_at: null, expires_on: null, renewal_application_due_on: null, renewal_submitted_on: null, ...over,
+    })
+
+    async function standingOfHouston(permits: unknown[]) {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-10-07T12:00:00Z'))
+      tableResults = {
+        facilities: { data: [{ id: 'site-1', name: 'Houston', state: 'TX' }, { id: 'site-2', name: 'Anaheim', state: 'CA' }], error: null },
+        environmental_permits: { data: permits, error: null },
+      }
+      const out = JSON.parse(await runTool('environmental_compliance_status', {}, CTX))
+      return out.data.sites.find((s: { site: string }) => s.site === 'Houston')
+    }
+
+    it('counts renewals due soon and renewal deadlines missed under those names, with no expired count', async () => {
+      const houston = await standingOfHouston([
+        permit({ expires_on: '2026-09-01' }),
+        permit({ expires_on: '2026-12-01' }),
+      ])
+      expect(houston).toMatchObject({ permitsRenewalSoon: 1, permitsRenewalMissed: 1 })
+      expect(houston).not.toHaveProperty('permitsExpired')
+      expect(houston).not.toHaveProperty('permitsExpiring')
+    })
+
+    it('leaves out a retired permit, one whose renewal is already in, and another site\'s permit', async () => {
+      const houston = await standingOfHouston([
+        permit({ expires_on: '2026-09-01', retired_at: '2026-09-02T00:00:00Z' }),
+        permit({ expires_on: '2026-09-01', renewal_submitted_on: '2026-08-01' }),
+        permit({ expires_on: '2026-09-01', facility_id: 'site-2' }),
+      ])
+      expect(houston).toMatchObject({ permitsRenewalSoon: 0, permitsRenewalMissed: 0 })
+    })
+
+    it('reports a failed permit read instead of showing zero renewals', async () => {
+      tableResults = { environmental_permits: { data: null, error: { message: 'permission denied for table environmental_permits' } } }
+      const out = JSON.parse(await runTool('environmental_compliance_status', {}, CTX))
+      expect(out.ok).toBe(false)
+      expect(out.error).toBe('permission denied for table environmental_permits')
+    })
+
+    it('describes the two renewal figures so the model words them as renewals, not expiries', () => {
+      const description = getToolDefinitions().find(d => d.name === 'environmental_compliance_status')!.description
+      expect(description).toMatch(/permitsRenewalSoon/)
+      expect(description).toMatch(/permitsRenewalMissed/)
+      expect(description).toMatch(/renewal deadline missed/)
+    })
   })
 })
 

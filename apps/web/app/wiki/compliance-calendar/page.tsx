@@ -1,14 +1,21 @@
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.1'
-const LAST_UPDATED    = '2026-10-07'
+const CURRENT_VERSION = '1.2.0'
+const LAST_UPDATED    = '2026-10-12'
 
 const CHANGELOG: ChangelogEntry[] = [
   {
-    version: '1.0.1',
-    date:    '2026-10-07',
+    version: '1.2.0',
+    date:    '2026-10-12',
     changes: [
-      "Deadlines can now carry a program, owner, reminder window and library source. Quarterly and half-year deadlines stay on period ends (Mar 31 → Jun 30, not Jul 1), the page has a month grid, and open deadlines are emailed weekly to their owner (or to the account's admins when there is none). See the Environmental Compliance page for the environmental deadlines.",
+      "Environmental deadlines (from the Environmental Compliance suite) can carry a program, an owner, a reminder window and a library source. Those that fall on a period end (month, quarter, half-year) stay on period ends when completed through the suite (Mar 31 → Jun 30, not Jul 1), the page has a month grid, and open environmental deadlines are emailed weekly to their owner, or to the account's admins when there is none. Other deadlines behave as before. See the Environmental Compliance page.",
+    ],
+  },
+  {
+    version: '1.1.0',
+    date: '2026-10-02',
+    changes: [
+      'An obligation with compliance evaluations on record can no longer be deleted; dismiss it instead. Evaluations are compliance records and keep their obligation. Explained how obligations double as the ISO 14001 compliance obligations register.',
     ],
   },
   { version: '1.0.0', date: '2026-05-23', changes: ['Initial compliance calendar page.'] },
@@ -62,7 +69,16 @@ export default function WikiComplianceCalendarPage() {
           cadence (annual, quarterly, etc.). One-time obligations are closed
           instead of recurring. Tenant-defined obligations can be added with
           the <strong>Add obligation</strong> button and deleted when no longer
-          relevant.
+          relevant, unless a compliance evaluation has been recorded against
+          it: evaluations are compliance records, so an evaluated obligation is
+          dismissed instead of deleted.
+        </p>
+        <p>
+          With the Environmental module on, the same obligations form the ISO
+          14001 compliance obligations register. There each obligation also
+          records its source, jurisdiction, why it applies, and how often
+          compliance with it is evaluated; the deadline you see here stays the
+          calendar&apos;s.
         </p>
       </Section>
 

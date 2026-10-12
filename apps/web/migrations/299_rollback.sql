@@ -1,16 +1,20 @@
--- Rollback for migration 299: environmental site profiles.
+-- Rollback for migration 299 (evidence store).
 --
--- DESTRUCTIVE: dropping environmental_site_profiles discards every site's program
--- evaluation (what each facility said it is subject to). Export first if any
--- profile has been confirmed. The facilities.state check is dropped too; the
--- column and its values are untouched.
+-- Drops every evidence row. The files stay in the ms-evidence bucket, and
+-- the bucket itself stays: removing a bucket that holds objects fails in
+-- Supabase, and evidence files are worth keeping until someone decides
+-- otherwise. Export ms_evidence first if the rows matter.
 --
--- Idempotent.
+-- Apply: paste into the SQL Editor, or run with psql.
+-- ────────────────────────────────────────────────────────────────────────────
 
 begin;
 
-drop table if exists public.environmental_site_profiles;
-alter table public.facilities drop constraint if exists facilities_state_usps_check;
+drop trigger if exists trg_ms_compliance_evaluations_require_evidence on public.ms_compliance_evaluations;
+drop function if exists public.ms_compliance_evaluations_require_evidence();
+drop table if exists public.ms_evidence;
+drop function if exists public.ms_evidence_append_only();
+drop function if exists public.ms_evidence_subject_open();
 
 notify pgrst, 'reload schema';
 

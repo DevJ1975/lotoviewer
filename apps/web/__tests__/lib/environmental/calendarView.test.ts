@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { Deadline } from '@/lib/environmental/client'
+import type { Deadline } from '@/lib/environmental/complianceClient'
 import {
   buildDeadlineMonth, bucketOf, cadenceLabel, canCompleteDeadline, checklistHref, checklistKeysFor, chipsForDay,
   completionMessage, filterDeadlines, formatDate, formatLocalDate, groupByUrgency, isoDay, localToday, monthOf, monthTitle,
@@ -353,10 +353,14 @@ describe('ownerLabel and siteLabel', () => {
 })
 
 describe('originOf', () => {
-  it('calls a library deadline Library, a tenant one Custom, and a permit renewal Permit renewal', () => {
+  it('calls a library deadline Library and a tenant one Custom', () => {
     expect(originOf(deadline({ source: 'library', library_key: 'sw-fed-routine-inspection' }))).toBe('library')
     expect(originOf(deadline({ source: 'tenant', library_key: null }))).toBe('custom')
-    expect(originOf(deadline({ source: 'library', library_key: 'permit-renewal:abc' }))).toBe('permit_renewal')
+  })
+
+  it('goes by source alone: EMS registers permit renewals itself, so no key marks one here', () => {
+    expect(originOf(deadline({ source: 'library', library_key: 'permit-renewal:abc' }))).toBe('library')
+    expect(originOf(deadline({ source: 'tenant', library_key: 'permit-renewal:abc' }))).toBe('custom')
   })
 
   it('treats anything else as custom', () => {
@@ -415,7 +419,7 @@ describe('checklists', () => {
   it('has no link for a custom deadline, one the library gives no checklist, or one that is not open', () => {
     expect(checklistHref(deadline({ library_key: null }), keys)).toBeNull()
     expect(checklistHref(deadline({ library_key: 'ww-fed-ciu-report' }), keys)).toBeNull()
-    expect(checklistHref(deadline({ library_key: 'permit-renewal:abc' }), keys)).toBeNull()
+    expect(checklistHref(deadline({ library_key: 'no-such-library-key' }), keys)).toBeNull()
     expect(checklistHref(deadline({ library_key: 'sw-fed-routine-inspection', status: 'completed' }), keys)).toBeNull()
   })
 })

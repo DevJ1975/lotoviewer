@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import {
-  memberGate, allow, refuse, resetGates, fakeSupabase, jsonRequest, params, sanitized, type Call,
-  TENANT, FACILITY, USER,
+  memberGate, allow, refuse, resetGates, fakeSupabase, jsonRequest, params, sanitized, type Call, type Result,
+  TENANT, FACILITY, OTHER_FACILITY, USER,
 } from './_harness'
 import { applies } from '@soteria/core/environmental/applicability'
 import { buildTemplateRows } from '@soteria/core/environmental/checklists'
@@ -10,6 +11,7 @@ import { EMPTY_SITE_PROFILE } from '@soteria/core/environmental/siteProfile'
 import { GET as LIST, POST as START } from '@/app/api/environmental/checklists/route'
 import { GET as RUN } from '@/app/api/environmental/checklists/[id]/route'
 import { POST as SUBMIT } from '@/app/api/environmental/checklists/[id]/submit/route'
+import { supabaseRunStore } from '@/lib/environmental/checklistStore'
 
 const RUN_ID = '10000000-0000-0000-0000-00000000000b'
 const OB = 'c0000000-0000-0000-0000-000000000001'
@@ -286,5 +288,44 @@ describe('POST /api/environmental/checklists/[id]/submit', () => {
     const res = await submit(good)
     expect(res.status).toBe(500)
     expect(JSON.stringify(await res.json())).not.toContain('secret')
+  })
+})
+
+describe('naming a permit as the subject of a checklist', () => {
+  const PERMIT_ID = 'f0000000-0000-0000-0000-000000000001'
+
+  /**
+   * The EMS permit vault as the database answers it: a permit lives at one site, a column
+   * the table does not have is an error, and a retired permit is still a row (only a query
+   * that filters on retired_at would miss it).
+   */
+  const vault = (site: string, row: { title: string; permit_number: string | null }, { retired = false } = {}) => (call: Call): Result => {
+    const select = String(call.ops.find(o => o.method === 'select')?.args[0] ?? '*')
+    const missing = select.split(',').map(c => c.trim()).find(c => c !== '*' && !['id', 'facility_id', 'title', 'permit_number', 'retired_at'].includes(c))
+    if (missing) return { error: { message: `column environmental_permits.${missing} does not exist` } }
+    const filteredSite = call.ops.find(o => o.method === 'eq' && o.args[0] === 'facility_id')?.args[1]
+    const dropsRetired = retired && call.ops.some(o => o.args[0] === 'retired_at')
+    return filteredSite === site && !dropsRetired ? { data: row } : { data: null }
+  }
+  const subjectOf = (script: (call: Call) => Result, siteId = FACILITY) =>
+    supabaseRunStore(fakeSupabase({ environmental_permits: script }).client as unknown as SupabaseClient, { tenantId: TENANT, userId: USER })
+      .findSubject('permit', PERMIT_ID, siteId)
+
+  it('labels it with its title and number, as the vault holds them', async () => {
+    expect(await subjectOf(vault(FACILITY, { title: 'Industrial General Permit', permit_number: 'CAS000001' })))
+      .toEqual({ label: 'Industrial General Permit CAS000001' })
+  })
+
+  it('labels a permit that has no number by its title alone', async () => {
+    expect(await subjectOf(vault(FACILITY, { title: 'Air registration', permit_number: null }))).toEqual({ label: 'Air registration' })
+  })
+
+  it('still finds a permit that has been retired, so a run made while it was in force keeps its name', async () => {
+    expect(await subjectOf(vault(FACILITY, { title: 'Old stormwater permit', permit_number: 'W-0' }, { retired: true })))
+      .toEqual({ label: 'Old stormwater permit W-0' })
+  })
+
+  it('does not find a permit that belongs to another site', async () => {
+    expect(await subjectOf(vault(OTHER_FACILITY, { title: 'Other Plant Permit', permit_number: 'X-1' }))).toBeNull()
   })
 })

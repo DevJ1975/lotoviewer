@@ -42,7 +42,7 @@ export default function EnvironmentalKpiPanel() {
 
   return (
     <DashboardPanel
-      eyebrow="Environmental compliance · ISO 14001 6.1.3 · 9.1.2"
+      eyebrow="Environmental program"
       title="Environmental compliance"
       action={<PanelLink href="/environmental/compliance">Open</PanelLink>}
     >
@@ -68,7 +68,8 @@ function tone(count: number, level: 'warning' | 'critical'): InfographicTone {
 
 function Tiles({ data }: { data: EnvironmentalPanelData }) {
   const { kpis, legalNonCompliant } = data
-  const permitTrouble = kpis.permitsExpired + kpis.permitsExpiring
+  const { permitsRenewalSoon: renewalSoon, permitsRenewalMissed: renewalMissed } = kpis
+  const permitsToRenew = renewalSoon + renewalMissed
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -78,9 +79,9 @@ function Tiles({ data }: { data: EnvironmentalPanelData }) {
           percent={Math.min(100, kpis.obligationsOverdue * 20)}
         />
         <InfographicMetricCard
-          compact label="Permits to renew" value={permitTrouble} caption={kpis.permitsExpired > 0 ? `${kpis.permitsExpired} expired` : 'in the renewal window'}
-          href="/environmental/compliance/permits" tone={tone(kpis.permitsExpired, 'critical') === 'critical' ? 'critical' : tone(kpis.permitsExpiring, 'warning')} icon={<FileWarning className="h-3.5 w-3.5" />}
-          percent={Math.min(100, permitTrouble * 25)}
+          compact label="Permits to renew" value={permitsToRenew} caption={renewalMissed > 0 ? `${renewalMissed} past their renewal deadline` : 'renewal due within 90 days'}
+          href="/environmental/permits" tone={renewalMissed > 0 ? 'critical' : tone(renewalSoon, 'warning')} icon={<FileWarning className="h-3.5 w-3.5" />}
+          percent={Math.min(100, permitsToRenew * 25)}
         />
         <InfographicMetricCard
           compact label="Non-compliant" value={legalNonCompliant} caption={`${kpis.legalReviewsOverdue} reviews overdue`}

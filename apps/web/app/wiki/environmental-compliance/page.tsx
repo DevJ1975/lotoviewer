@@ -1,14 +1,14 @@
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
 const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-10-07'
+const LAST_UPDATED    = '2026-10-12'
 
 const CHANGELOG: ChangelogEntry[] = [
   {
     version: '1.0.0',
-    date: '2026-10-07',
+    date: '2026-10-12',
     changes: [
-      'Initial page for the Environmental compliance suite: per-site setup with a state dropdown (California and Texas rules layered on the federal baseline; other states show the federal baseline and say so), the compliance calendar with weekly email reminders, interactive checklists (stormwater, outfall inspections, wastewater pretreatment) that raise findings and complete their deadline, the legal register, permits with renewal deadlines, stormwater outfalls, a dashboard panel, and the assistant\'s environmental tools.',
+      'Initial page for the Environmental compliance suite: per-site setup with a state dropdown (California and Texas rules layered on the federal baseline; other states show the federal baseline and say so), the compliance calendar with weekly email reminders, interactive checklists (stormwater, outfall inspections, wastewater pretreatment) that raise findings and complete their deadline, the legal register, stormwater outfalls (each can name the permit that covers it in the Permits register), a dashboard panel, and the assistant\'s environmental tools.',
       'The jurisdiction library is a draft: written with citations and marked for review by a Certified Safety Professional before it is treated as reviewed. Anything specific that has not been confirmed against current regulation text carries a "Verify" note.',
     ],
   },
@@ -101,10 +101,10 @@ export default function WikiEnvironmentalCompliancePage() {
       <Section id="calendar" title="The calendar">
         <p>
           <strong>Compliance suite → Calendar</strong> lists every environmental deadline for the site as a
-          list grouped by Overdue, Due soon and Upcoming, or as a month grid. Deadlines come from three places:
-          the library (monthly inspections, semiannual and annual reports), your permits (a renewal deadline
-          is created for each active permit with an expiration date, ahead of expiry by the renewal lead time
-          you set), and ones you add yourself, for one site or for every site.
+          list grouped by Overdue, Due soon and Upcoming, or as a month grid. Deadlines come from two places:
+          the library (monthly inspections, semiannual and annual reports) and ones you add yourself, for one
+          site or for every site. A permit&apos;s own renewal countdown and its conditions are in the{' '}
+          <strong>Permits register</strong>, not here.
         </p>
         <ul className="list-disc space-y-1 pl-5">
           <li><strong>Completing a deadline</strong> records who and when and moves it to its next date. A deadline set to fall on a period end (month, quarter, half-year) stays on period ends instead of drifting.</li>
@@ -154,15 +154,15 @@ export default function WikiEnvironmentalCompliancePage() {
 
       <Section id="permits" title="Permits and outfalls">
         <p>
-          <strong>Permits</strong> hold the number, agency, dates, conditions, identifiers and the permit
-          document. Each shows its standing: active, expiring (inside its renewal window), expired, or not
-          tracked (a draft or terminated permit). An active permit with an expiration date puts its own renewal
-          deadline on the calendar and moves it if you change the date. Set the renewal lead time to your own
-          safety margin: the permit itself says what your agency requires.
+          <strong>Permits</strong> are kept in the <strong>Permits register</strong> (Environmental → Permits):
+          number, agency, term, holder of record, conditions, documents, and a renewal countdown that reminds
+          the right people. This suite does not keep a second list. For a general permit such as the California
+          Industrial General Permit, enter the site&apos;s coverage number (for example its WDID) as the permit
+          number.
         </p>
         <p>
           <strong>Outfalls</strong> record each discharge point: code, receiving water, coordinates, whether it
-          is a sampling point, the permit it falls under, and whether it is substantially identical to another
+          is a sampling point, the permit it falls under (chosen from that site&apos;s permits), and whether it is substantially identical to another
           outfall. An outfall&apos;s permit and its &quot;same as&quot; outfall must be at the same site.{' '}
           <strong>Inspect</strong> on an outfall opens the outfall checklists for it.
         </p>
@@ -171,7 +171,7 @@ export default function WikiEnvironmentalCompliancePage() {
       <Section id="elsewhere" title="Where it shows up">
         <ul className="list-disc space-y-1 pl-5">
           <li><strong>Home dashboard:</strong> an Environmental compliance panel with overdue deadlines, permits to renew, non-compliant requirements and open findings, each linking to where it is fixed.</li>
-          <li><strong>ISO 14001 audit readiness:</strong> nothing extra to set up. The deadlines count toward clause 6.1.3 (compliance obligations), completed checklists toward 8.1 (operational control), and completing a deadline is the recorded evaluation behind 9.1.2 (evaluation of compliance).</li>
+          <li><strong>ISO 14001:</strong> the suite&apos;s deadlines are obligations in the compliance obligations register (clause 6.1.3), and its checklists are inspection records you can pin to clause 8.1 in the evidence map. Completing a deadline records the work; it is not a compliance evaluation. Clause 9.1.2 reads the evaluations recorded on the Obligations page, and the audit-readiness report card does not grade 8.1.</li>
           <li><strong>The assistant</strong> can answer how-to questions with citations, list what is due, and summarize where each site stands.</li>
           <li><strong>Safety analytics:</strong> environmental checklists are kept out of the injury-risk model and the leading-indicator analysis, so an oil sheen at an outfall never raises an injury-risk score.</li>
         </ul>
@@ -180,8 +180,8 @@ export default function WikiEnvironmentalCompliancePage() {
       <Section id="roles" title="Who can do what">
         <ul className="list-disc space-y-1 pl-5">
           <li><strong>Anyone on the team</strong> can read everything and run and submit checklists.</li>
-          <li><strong>Tenant admins</strong> change the site profile, apply the library, add and edit permits, outfalls, requirements and deadlines, and rate and review requirements.</li>
-          <li><strong>A deadline&apos;s owner</strong>, or an admin, can complete it by hand. Owners must be members of the account.</li>
+          <li><strong>Tenant admins</strong> change the site profile, apply the library, add and edit outfalls, requirements and deadlines, and rate and review requirements. Permits are kept in the Permits register, where admins add and edit them.</li>
+          <li><strong>A deadline&apos;s owner</strong>, or an admin, can complete it by hand. So can the person who submits the checklist that satisfies it, even if they are not its owner. Owners must be members of the account.</li>
         </ul>
       </Section>
 
