@@ -1,9 +1,10 @@
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-06-19'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-10-08'
 
 const CHANGELOG: ChangelogEntry[] = [
+  { version: '1.1.0', date: '2026-10-08', changes: ['Fixed: scheduled hunts now actually generate. The daily generator was never registered with the scheduler, so no run was ever created automatically; it now fires every day at 11:10 UTC. Documented which facility an auto-generated run belongs to (see the FAQ).'] },
   { version: '1.0.0', date: '2026-06-19', changes: ['Initial Hazard Hunt module page.'] },
 ]
 
@@ -250,6 +251,15 @@ export default function WikiHazardHuntPage() {
               What it adds is the recurring cadence, the CSP-curated OSHA/Cal-OSHA
               starter content, hazard-categorized findings, and the escalation path
               into the risk register.</>,
+          },
+          {
+            q: 'Which facility does an automatically generated hunt belong to?',
+            a: <>None in particular — it is shared across all of your
+              organization&apos;s facilities. A schedule belongs to a template, and
+              templates are shared, so the generated run carries no facility. It
+              shows up for inspectors whether they are viewing all facilities or
+              one. Pinning it to a single facility would hide it from inspectors at
+              the others.</>,
           },
           {
             q: 'When does a failed item become a corrective action automatically?',

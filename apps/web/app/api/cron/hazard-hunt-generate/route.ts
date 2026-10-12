@@ -14,6 +14,14 @@ import { isHazardHuntDueOn, type HazardHuntCadence } from '@soteria/core/hazardH
 //
 // Schedule (vercel.json): daily. Auth: Bearer CRON_SECRET OR x-internal-secret
 // INTERNAL_PUSH_SECRET — the same pattern as the other crons.
+//
+// Facility: generated runs carry facility_id NULL, on purpose. Under the service
+// role there is no x-active-facility header, so active_facility_id() — the column
+// default — is NULL. A schedule is tenant-level (one per template, and templates
+// are shared catalog rows), and migration 211 shows a NULL-facility row in both
+// roll-up and per-facility mode. Stamping the primary facility instead would hide
+// the run from inspectors at every other facility. Revisit together with a facility
+// on hazard_hunt_schedules if inspections.facility_id is ever locked NOT NULL.
 
 export const runtime     = 'nodejs'
 export const maxDuration = 60
