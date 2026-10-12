@@ -993,6 +993,21 @@ describe('access', () => {
   })
 })
 
+describe('removing a person', () => {
+  it('leaves the manifests they drafted, even ones that have shipped, with no creator', async () => {
+    const leaver = '00000000-0000-4000-8000-0000000000f7'
+    await db.exec(`insert into auth.users (id, email) values ('${leaver}', 'leaver@example.test'); insert into public.profiles (id, email) values ('${leaver}', 'leaver@example.test');`)
+    const shipped = await insert(db, 'hazardous_waste_shipments', {
+      tenant_id: TA, facility_id: siteA, generator_category: 'lqg', status: 'shipped', shipped_on: day(-3), manifest_tracking_number: trackingNumber(), created_by: leaver,
+    })
+
+    await db.query('delete from public.profiles where id = $1', [leaver])
+
+    expect(await scalar(db, 'select created_by from public.hazardous_waste_shipments where id = $1', [shipped])).toBeNull()
+    expect((await shipment(shipped)).status).toBe('shipped')
+  })
+})
+
 describe('removing an account', () => {
   it('removes its manifests, their container lists and its containers, without a foreign key getting in the way', async () => {
     const tenant = await insert(db, 'tenants', { slug: 'throwaway', name: 'Throwaway' })
