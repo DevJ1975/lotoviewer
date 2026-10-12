@@ -71,7 +71,7 @@ create table if not exists public.monitoring_limits (
   unit           text not null check (length(btrim(unit)) between 1 and 20),
   limit_kind     text not null check (limit_kind in ('instantaneous_max','instantaneous_min','daily_max','monthly_average','annual_average')),
   value          numeric not null check (value >= 0),
-  basis          text not null check (true),
+  basis          text not null check (basis in ('permit_limit','benchmark','numeric_action_level','local_limit','self_imposed')),
   citation       text check (citation is null or length(citation) <= 300),
   -- What a reviewer must confirm before this number is relied on; shown wherever the limit is.
   verify         text check (verify is null or length(verify) <= 1000),
@@ -88,7 +88,7 @@ create table if not exists public.monitoring_limits (
   foreign key (tenant_id, facility_id) references public.facilities(tenant_id, id) on delete cascade,
   constraint monitoring_limits_outfall_fk
     foreign key (tenant_id, facility_id, outfall_id)
-    references public.stormwater_outfalls (tenant_id, facility_id, id),
+    references public.stormwater_outfalls (tenant_id, facility_id, id) on delete cascade,
   -- A permit is retired, never deleted (304); set null is only for completeness, as in 313.
   constraint monitoring_limits_permit_fk
     foreign key (tenant_id, facility_id, permit_id)
@@ -164,7 +164,7 @@ create table if not exists public.monitoring_results (
   foreign key (tenant_id, facility_id) references public.facilities(tenant_id, id) on delete cascade,
   constraint monitoring_results_outfall_fk
     foreign key (tenant_id, facility_id, outfall_id)
-    references public.stormwater_outfalls (tenant_id, facility_id, id),
+    references public.stormwater_outfalls (tenant_id, facility_id, id) on delete cascade,
   constraint monitoring_results_evidence_in_tenant_folder check (
     evidence_id is null or (
       length(evidence_id) <= 300
