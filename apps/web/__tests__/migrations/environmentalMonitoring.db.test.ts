@@ -376,6 +376,14 @@ describe('limits: who may read and write', () => {
     expect(await visible({ userId: IDS.adminB, tenantId: TB }, 'monitoring_limits', id)).toBe(0)
   })
 
+  it('shows nothing of this tenant to someone working in another tenant\'s context, even a member of both', async () => {
+    const id = await limit()
+    const sample = await result()
+    expect(await visible({ userId: IDS.ownerA, tenantId: TB }, 'monitoring_limits', id)).toBe(0)
+    expect(await visible({ userId: IDS.ownerA, tenantId: TB }, 'monitoring_results', sample)).toBe(0)
+    expect(await visible({ userId: IDS.ownerA, tenantId: TA }, 'monitoring_results', sample)).toBe(1)
+  })
+
   it('lets a tenant admin write limits, and a plain member neither add nor change nor remove one', async () => {
     const id = await asCaller(db, ownerA, () => limit({ parameter: 'Admin wrote this' }))
     expect(id).toBeTruthy()
@@ -473,10 +481,16 @@ describe('results: who may read, add, change and remove', () => {
     expect(removed.affectedRows).toBe(1)
   })
 
-  it('does not let an update move a result into another tenant or past the evidence rule', async () => {
+  it('does not let an update move a result into another tenant (site and all), another site, or past the evidence rule', async () => {
     const id = await result()
-    await expect(asCaller(db, ownerA, () => db.query(`update public.monitoring_results set tenant_id = $2 where id = $1`, [id, TB]))).rejects.toMatchObject({ code: expect.stringMatching(/^(23503|42501)$/) })
+    await expect(asCaller(db, ownerA, () => db.query(
+      `update public.monitoring_results set tenant_id = $2, facility_id = $3, outfall_id = null where id = $1`, [id, TB, siteOfTenantB],
+    ))).rejects.toMatchObject({ code: '42501' })
+    await expect(asCaller(db, { ...ownerA, facilityId: siteA }, () => db.query(
+      `update public.monitoring_results set facility_id = $2, outfall_id = null where id = $1`, [id, siteB],
+    ))).rejects.toMatchObject({ code: '42501' })
     await expect(asCaller(db, ownerA, () => db.query(`update public.monitoring_results set evidence_id = $2 where id = $1`, [id, `${TB}/x.pdf`]))).rejects.toMatchObject({ code: '23514' })
+    expect((await db.query('select tenant_id, facility_id from public.monitoring_results where id = $1', [id])).rows).toEqual([{ tenant_id: TA, facility_id: siteA }])
   })
 
   it('refuses an admin of another account: no read, no add, no change, no removal', async () => {
