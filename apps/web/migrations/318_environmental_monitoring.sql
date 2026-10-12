@@ -213,12 +213,12 @@ create policy monitoring_results_admin_update on public.monitoring_results
   using (
     (public.active_tenant_id() is null or tenant_id = public.active_tenant_id())
     and (public.active_facility_id() is null or facility_id = public.active_facility_id())
-    and (tenant_id in (select public.current_user_admin_tenant_ids()) or public.is_superadmin())
+    and (tenant_id in (select public.current_user_tenant_ids()) or public.is_superadmin())
   )
   with check (
     (public.active_tenant_id() is null or tenant_id = public.active_tenant_id())
     and (public.active_facility_id() is null or facility_id = public.active_facility_id())
-    and (tenant_id in (select public.current_user_admin_tenant_ids()) or public.is_superadmin())
+    and (tenant_id in (select public.current_user_tenant_ids()) or public.is_superadmin())
   );
 
 drop policy if exists monitoring_results_admin_delete on public.monitoring_results;
