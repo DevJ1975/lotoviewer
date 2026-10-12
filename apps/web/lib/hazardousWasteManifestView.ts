@@ -133,11 +133,15 @@ export function clockChipText(item: Pick<ManifestListItem, 'clock' | 'generator_
 
 /** Says, in the words a person would use, what an action will do to the manifest's containers. */
 export function containerEffectText(action: ManifestAction, containerCount: number): string {
-  const containers = `${containerCount} container${containerCount === 1 ? '' : 's'}`
+  const many = containerCount !== 1
+  const subject = `The ${containerCount} container${many ? 's' : ''}`
+  const stay = many ? 'stay' : 'stays'
+  const become = many ? 'become' : 'becomes'
+  const go = many ? 'go' : 'goes'
   const after = MANIFEST_TRANSITIONS[action].containersAfter
-  if (after === null) return `The ${containers} stay In shipment.`
-  if (after === 'disposed') return `The ${containers} become Disposed and leave the active container list.`
-  return `The ${containers} go back to ${CONTAINER_STATUS_LABEL[after]} and can go on another manifest.`
+  if (after === null) return `${subject} ${stay} In shipment.`
+  if (after === 'disposed') return `${subject} ${become} Disposed and leave${many ? '' : 's'} the active container list.`
+  return `${subject} ${go} back to ${CONTAINER_STATUS_LABEL[after]} and can go on another manifest.`
 }
 
 export interface TimelineEntry { key: string; label: string; date: string | null }
