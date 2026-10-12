@@ -394,6 +394,7 @@ describe('a container on two manifests', () => {
     const otherAccount = await insert(db, 'hazardous_waste_shipments', { tenant_id: TB, facility_id: siteOfB, generator_category: 'lqg' })
     const otherSite = await insert(db, 'hazardous_waste_shipments', { tenant_id: TA, facility_id: siteB, generator_category: 'lqg' })
     const sameSite = await insert(db, 'hazardous_waste_shipments', { tenant_id: TA, facility_id: siteA, generator_category: 'lqg' })
+    const leftDraft = await insert(db, 'hazardous_waste_shipments', { tenant_id: TA, facility_id: siteA, generator_category: 'lqg', status: 'cancelled' })
     const link = (shipmentId: string, containerId: string, tenantId: string) =>
       db.query('insert into public.hazardous_waste_shipment_containers (shipment_id, container_id, tenant_id) values ($1, $2, $3)', [shipmentId, containerId, tenantId])
 
@@ -402,8 +403,7 @@ describe('a container on two manifests', () => {
     await expect(link(sameSite, free!, TB)).rejects.toMatchObject({ code: '23514', message: expect.stringContaining('same account') })
     expect(containers.length).toBe(2)
 
-    await db.query(`update public.hazardous_waste_shipments set status = 'cancelled' where id = $1`, [sameSite])
-    await expect(link(sameSite, free!, TA)).rejects.toMatchObject({ code: '23514', message: expect.stringContaining('draft') })
+    await expect(link(leftDraft, free!, TA)).rejects.toMatchObject({ code: '23514', message: expect.stringContaining('draft') })
   })
 })
 
