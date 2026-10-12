@@ -91,7 +91,8 @@ create table if not exists public.monitoring_limits (
     references public.stormwater_outfalls (tenant_id, facility_id, id),
   -- A permit is retired, never deleted (304); set null is only for completeness, as in 313.
   constraint monitoring_limits_permit_fk
-    foreign key (permit_id) references public.environmental_permits (id) on delete set null,
+    foreign key (tenant_id, facility_id, permit_id)
+    references public.environmental_permits (tenant_id, facility_id, id) on delete set null (permit_id),
   constraint monitoring_limits_dates_ordered check (effective_from is null or effective_to is null or effective_from <= effective_to),
   constraint monitoring_limits_library_key_iff_library check ((source = 'library') = (library_key is not null)),
   constraint monitoring_limits_library_cites check (source <> 'library' or citation is not null)
@@ -167,7 +168,6 @@ create table if not exists public.monitoring_results (
   constraint monitoring_results_evidence_in_tenant_folder check (
     evidence_id is null or (
       length(evidence_id) <= 300
-      and position('..' in evidence_id) = 0
       and left(evidence_id, length(tenant_id::text) + 1) = tenant_id::text || '/'
     )
   )

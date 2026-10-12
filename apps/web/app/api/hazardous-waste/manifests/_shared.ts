@@ -159,10 +159,13 @@ function one<T>(value: T | T[] | null | undefined): T | null {
   return (Array.isArray(value) ? value[0] : value) ?? null
 }
 
-interface ContainerLinkRow {
-  shipment_id: string
-  container: { id: string; label: string; status: ManifestContainerRef['status']; stream?: unknown } | unknown[] | null
+interface ContainerEmbed {
+  id: string
+  label: string
+  status: ManifestContainerRef['status']
+  stream?: { name: string } | { name: string }[] | null
 }
+interface ContainerLinkRow { shipment_id: string; container: ContainerEmbed | ContainerEmbed[] | null }
 
 /** The containers on each of the given manifests, by manifest id. */
 async function containersOf(
@@ -179,9 +182,9 @@ async function containersOf(
   if (error) return { byShipment, error }
 
   for (const link of (data ?? []) as unknown as ContainerLinkRow[]) {
-    const container = one(link.container as { id: string; label: string; status: ManifestContainerRef['status']; stream?: unknown } | null)
+    const container = one(link.container)
     if (!container) continue
-    const stream = one(container.stream as { name: string } | { name: string }[] | null)
+    const stream = one(container.stream)
     const list = byShipment.get(link.shipment_id) ?? []
     list.push({ id: container.id, label: container.label, status: container.status, stream_name: stream?.name ?? null })
     byShipment.set(link.shipment_id, list)
