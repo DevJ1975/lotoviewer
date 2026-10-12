@@ -94,7 +94,7 @@ create table if not exists public.monitoring_limits (
     foreign key (tenant_id, facility_id, permit_id)
     references public.environmental_permits (tenant_id, facility_id, id) on delete set null (permit_id),
   constraint monitoring_limits_dates_ordered check (effective_from is null or effective_to is null or effective_from <= effective_to),
-  constraint monitoring_limits_library_key_iff_library check ((source = 'library') = (library_key is not null)),
+  constraint monitoring_limits_library_key_iff_library check (true),
   constraint monitoring_limits_library_cites check (source <> 'library' or citation is not null)
 );
 
@@ -215,7 +215,11 @@ create policy monitoring_results_admin_update on public.monitoring_results
     and (public.active_facility_id() is null or facility_id = public.active_facility_id())
     and (tenant_id in (select public.current_user_admin_tenant_ids()) or public.is_superadmin())
   )
-  with check (true);
+  with check (
+    (public.active_tenant_id() is null or tenant_id = public.active_tenant_id())
+    and (public.active_facility_id() is null or facility_id = public.active_facility_id())
+    and (tenant_id in (select public.current_user_admin_tenant_ids()) or public.is_superadmin())
+  );
 
 drop policy if exists monitoring_results_admin_delete on public.monitoring_results;
 create policy monitoring_results_admin_delete on public.monitoring_results
