@@ -544,7 +544,7 @@ describe('moving a manifest (hw_transition_shipment)', () => {
       for (const status of ['completed', 'exception_reported'] as const) {
         const { id, containers } = await shipmentIn(status)
         const containersBefore = await statusesOf(containers)
-        await expect(transition(ownerA, id, 'cancel'), status).rejects.toMatchObject({ code: '23514' })
+        await expect(transition(ownerA, id, 'cancel'), status).rejects.toMatchObject({ code: '23514', detail: 'hw_manifest', message: expect.stringContaining('cannot be cancelled') })
         expect((await shipment(id)).status).toBe(status)
         expect(await statusesOf(containers)).toEqual(containersBefore)
       }
@@ -574,7 +574,8 @@ describe('moving a manifest (hw_transition_shipment)', () => {
             await expect(attempt).resolves.toBeTruthy()
             expect((await shipment(id)).status).toBe(legal ? rule.to : status)
           } else {
-            await expect(attempt).rejects.toMatchObject({ code: '23514' })
+            // Said in words for a person, not left to a table constraint's own message.
+            await expect(attempt).rejects.toMatchObject({ code: '23514', detail: 'hw_manifest' })
             expect((await shipment(id)).status).toBe(status)
           }
         })
