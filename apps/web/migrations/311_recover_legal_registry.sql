@@ -1,4 +1,4 @@
--- Migration 298: RECOVERY (reconstructed) of out-of-band migration 20260513205353
+-- Migration 311: RECOVERY (reconstructed) of out-of-band migration 20260513205353
 -- ("compliance_calendar_and_legal_registry_139", applied to production 2026-05-13
 -- via MCP).
 --
@@ -24,8 +24,8 @@
 --   * Nothing is dropped or altered.
 --
 -- The next migration converges production and a fresh rebuild onto one known
--- column set and policy set. Numbered 298 to leave 294-297 for migrations
--- already in review on other branches.
+-- column set and policy set. Numbered 311: it follows the EMS stream's 294-306
+-- and the SDS/FastAPI stack's 307-310, all still in review on other branches.
 --
 -- Idempotent. No rollback: this only restores objects that already exist in
 -- production, and dropping them would destroy tenant data.

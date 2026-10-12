@@ -2,17 +2,17 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-// Migration 298 restores three tables that exist in production but in no
+// Migration 311 restores three tables that exist in production but in no
 // committed migration. The property that matters is that it is SAFE TO RUN IN
 // PRODUCTION: it may create what is missing and nothing else. Behaviour was run
 // against Postgres 16 both on a fresh database and on one where the tables
 // already existed with their own policy and data (recorded in the PR).
 
-const sql = readFileSync(resolve(__dirname, '../../migrations/298_recover_legal_registry.sql'), 'utf8')
+const sql = readFileSync(resolve(__dirname, '../../migrations/311_recover_legal_registry.sql'), 'utf8')
 const code = sql.replace(/--[^\n]*/g, '').replace(/\s+/g, ' ').trim()
 const baseline = JSON.parse(readFileSync(resolve(__dirname, '../../../../scripts/migration-drift-baseline.json'), 'utf8'))
 
-describe('Migration 298 — legal registry recovery', () => {
+describe('Migration 311 — legal registry recovery', () => {
   it('only ever creates what is missing: no drop, truncate, delete or alter-column', () => {
     expect(code).not.toMatch(/\bdrop\b/i)
     expect(code).not.toMatch(/\btruncate\b/i)
@@ -48,7 +48,7 @@ describe('Migration 298 — legal registry recovery', () => {
   })
 
   it('is recorded in the drift baseline as recovered, no longer out-of-band', () => {
-    expect(baseline.ledger_aliases.compliance_calendar_and_legal_registry_139).toBe('298_recover_legal_registry.sql')
+    expect(baseline.ledger_aliases.compliance_calendar_and_legal_registry_139).toBe('311_recover_legal_registry.sql')
     expect(baseline.db_out_of_band['20260513205353']).toBeUndefined()
   })
 })
