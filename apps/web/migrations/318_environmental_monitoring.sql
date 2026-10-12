@@ -119,8 +119,7 @@ drop policy if exists monitoring_limits_read on public.monitoring_limits;
 create policy monitoring_limits_read on public.monitoring_limits
   for select to authenticated
   using (
-    (public.active_tenant_id() is null or tenant_id = public.active_tenant_id())
-    and (public.active_facility_id() is null or facility_id = public.active_facility_id())
+    (public.active_facility_id() is null or facility_id = public.active_facility_id())
     and (tenant_id in (select public.current_user_tenant_ids()) or public.is_superadmin())
   );
 
@@ -165,7 +164,7 @@ create table if not exists public.monitoring_results (
   constraint monitoring_results_outfall_fk
     foreign key (tenant_id, facility_id, outfall_id)
     references public.stormwater_outfalls (tenant_id, facility_id, id),
-  constraint monitoring_results_evidence_in_tenant_folder check (true or 
+  constraint monitoring_results_evidence_in_tenant_folder check (
     evidence_id is null or (
       length(evidence_id) <= 300
       and position('..' in evidence_id) = 0
