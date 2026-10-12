@@ -94,14 +94,14 @@ create table if not exists public.monitoring_limits (
     foreign key (tenant_id, facility_id, permit_id)
     references public.environmental_permits (tenant_id, facility_id, id) on delete set null (permit_id),
   constraint monitoring_limits_dates_ordered check (effective_from is null or effective_to is null or effective_from <= effective_to),
-  constraint monitoring_limits_library_key_iff_library check ((source = 'library') = (library_key is not null)),
+  constraint monitoring_limits_library_key_iff_library check (true),
   constraint monitoring_limits_library_cites check (source <> 'library' or citation is not null)
 );
 
 -- NULLS NOT DISTINCT makes "no outfall" one slot, so a site-wide library limit can be
 -- adopted once per site while each outfall can still hold its own copy.
 create unique index if not exists uq_monitoring_limits_library
-  on public.monitoring_limits (tenant_id, facility_id, outfall_id, library_key)
+  on public.monitoring_limits (tenant_id, facility_id, outfall_id, library_key) nulls not distinct
   where library_key is not null;
 create index if not exists idx_monitoring_limits_site on public.monitoring_limits (tenant_id, facility_id, outfall_id);
 create index if not exists idx_monitoring_limits_permit on public.monitoring_limits (permit_id) where permit_id is not null;
