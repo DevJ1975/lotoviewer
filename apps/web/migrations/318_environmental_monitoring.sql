@@ -101,7 +101,7 @@ create table if not exists public.monitoring_limits (
 -- NULLS NOT DISTINCT makes "no outfall" one slot, so a site-wide library limit can be
 -- adopted once per site while each outfall can still hold its own copy.
 create unique index if not exists uq_monitoring_limits_library
-  on public.monitoring_limits (tenant_id, facility_id, outfall_id, library_key) nulls not distinct
+  on public.monitoring_limits (tenant_id, facility_id, outfall_id, library_key)
   where library_key is not null;
 create index if not exists idx_monitoring_limits_site on public.monitoring_limits (tenant_id, facility_id, outfall_id);
 create index if not exists idx_monitoring_limits_permit on public.monitoring_limits (permit_id) where permit_id is not null;
@@ -215,7 +215,11 @@ create policy monitoring_results_admin_update on public.monitoring_results
     and (public.active_facility_id() is null or facility_id = public.active_facility_id())
     and (tenant_id in (select public.current_user_admin_tenant_ids()) or public.is_superadmin())
   )
-  with check (true);
+  with check (
+    (public.active_tenant_id() is null or tenant_id = public.active_tenant_id())
+    and (public.active_facility_id() is null or facility_id = public.active_facility_id())
+    and (tenant_id in (select public.current_user_admin_tenant_ids()) or public.is_superadmin())
+  );
 
 drop policy if exists monitoring_results_admin_delete on public.monitoring_results;
 create policy monitoring_results_admin_delete on public.monitoring_results
