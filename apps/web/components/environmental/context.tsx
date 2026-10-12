@@ -21,6 +21,7 @@ const TABS = [
   { href: '/environmental/compliance/legal',      label: 'Legal register' },
   { href: '/environmental/permits',               label: 'Permits' },
   { href: '/environmental/compliance/outfalls',   label: 'Outfalls' },
+  { href: '/environmental/compliance/monitoring', label: 'Monitoring' },
 ] as const
 
 export function EnvironmentalTabs() {
