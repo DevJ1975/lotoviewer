@@ -94,7 +94,7 @@ create table if not exists public.monitoring_limits (
     foreign key (tenant_id, facility_id, permit_id)
     references public.environmental_permits (tenant_id, facility_id, id) on delete set null (permit_id),
   constraint monitoring_limits_dates_ordered check (effective_from is null or effective_to is null or effective_from <= effective_to),
-  constraint monitoring_limits_library_key_iff_library check (true),
+  constraint monitoring_limits_library_key_iff_library check ((source = 'library') = (library_key is not null)),
   constraint monitoring_limits_library_cites check (source <> 'library' or citation is not null)
 );
 
@@ -148,7 +148,7 @@ create table if not exists public.monitoring_results (
 
   parameter       text not null check (length(btrim(parameter)) between 1 and 80),
   unit            text not null check (length(btrim(unit)) between 1 and 20),
-  value           numeric not null check (value >= 0),
+  value           numeric not null,
   -- Not detected: value is then the laboratory's reporting limit, not a measurement.
   below_detection boolean not null default false,
   sampled_at      timestamptz not null,
