@@ -91,8 +91,7 @@ create table if not exists public.monitoring_limits (
     references public.stormwater_outfalls (tenant_id, facility_id, id),
   -- A permit is retired, never deleted (304); set null is only for completeness, as in 313.
   constraint monitoring_limits_permit_fk
-    foreign key (tenant_id, facility_id, permit_id)
-    references public.environmental_permits (tenant_id, facility_id, id) on delete set null (permit_id),
+    foreign key (permit_id) references public.environmental_permits (id) on delete set null,
   constraint monitoring_limits_dates_ordered check (effective_from is null or effective_to is null or effective_from <= effective_to),
   constraint monitoring_limits_library_key_iff_library check ((source = 'library') = (library_key is not null)),
   constraint monitoring_limits_library_cites check (source <> 'library' or citation is not null)
@@ -130,12 +129,12 @@ create policy monitoring_limits_admin_write on public.monitoring_limits
   using (
     (public.active_tenant_id() is null or tenant_id = public.active_tenant_id())
     and (public.active_facility_id() is null or facility_id = public.active_facility_id())
-    and (tenant_id in (select public.current_user_tenant_ids()) or public.is_superadmin())
+    and (tenant_id in (select public.current_user_admin_tenant_ids()) or public.is_superadmin())
   )
   with check (
     (public.active_tenant_id() is null or tenant_id = public.active_tenant_id())
     and (public.active_facility_id() is null or facility_id = public.active_facility_id())
-    and (tenant_id in (select public.current_user_tenant_ids()) or public.is_superadmin())
+    and (tenant_id in (select public.current_user_admin_tenant_ids()) or public.is_superadmin())
   );
 
 -- ── results ─────────────────────────────────────────────────────────────────
