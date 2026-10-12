@@ -244,14 +244,46 @@ describe('POST /api/environmental/checklists/[id]/submit', () => {
     const body = await res.json()
     expect(res.status, sanitized.map(String).join('; ')).toBe(200)
     expect(body).toEqual({ result: 'pass', score: 1, maxScore: 1, pct: 100, findingsRaised: 0, completedObligation: true })
-    expect(db.arg('compliance_calendar_events', 'insert')).toMatchObject({ obligation_id: OB, occurrence_at: '2026-09-30', inspection_id: RUN_ID, completed_by: USER })
-    const obligationUpdate = db.used('compliance_calendar_obligations', 'update')[0]!.ops.find(o => o.method === 'update')!.args[0]
-    expect(obligationUpdate).toMatchObject({ next_due_at: '2026-12-31' })
+    // The deadline is completed by the database function, which decides who may. The member's own
+    // client must not write the events table or the obligation: RLS would refuse a plain member.
+    expect(db.arg('rpc:env_complete_obligation', 'rpc')).toEqual({
+      p_obligation_id: OB, p_due_on: '2026-09-30', p_note: 'Checklist passed', p_evidence_id: null, p_inspection_id: RUN_ID,
+    })
+    expect(db.used('compliance_calendar_events', 'insert')).toEqual([])
+    expect(db.used('compliance_calendar_obligations', 'update')).toEqual([])
     const runUpdate = db.used('environmental_checklist_runs', 'update')[0]!.ops.find(o => o.method === 'update')!.args[0] as Record<string, unknown>
     expect(runUpdate).toMatchObject({ attested: true, signature: { name: 'Pat Inspector' } })
     const closed = db.used('inspections', 'update')[0]!
     expect(closed.ops.find(o => o.method === 'update')!.args[0]).toMatchObject({ status: 'submitted', result: 'pass', submitted_by: USER })
     expect(closed.ops).toContainEqual({ method: 'eq', args: ['status', 'in_progress'] })
+  })
+
+  describe('when the database function does not complete the deadline', () => {
+    const withCompletion = (rpc: Result) => {
+      const db = world()
+      const base = db.client.rpc.bind(db.client)
+      db.client.rpc = (name: string, args?: unknown) => (name === 'env_complete_obligation' ? { then: (resolve: (r: Result) => unknown) => Promise.resolve(rpc).then(resolve) } : base(name, args)) as never
+      allow(memberGate, db.client, { role: 'member' })
+      return db
+    }
+
+    it('files the checklist and reports the deadline as still open when the caller is not permitted', async () => {
+      const db = withCompletion({ error: { message: 'obligation not found', code: 'P0002' } })
+      const res = await submit(good)
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({ result: 'pass', completedObligation: false })
+      expect(db.used('inspections', 'update')).toHaveLength(1)
+    })
+
+    it('files the checklist, flags the pending completion and does not leak the error when the function fails', async () => {
+      const db = withCompletion({ error: { message: 'secret relation exploded', code: 'XX000' } })
+      const res = await submit(good)
+      const body = await res.json()
+      expect(res.status).toBe(200)
+      expect(body).toMatchObject({ result: 'pass', completedObligation: false, completionPending: true })
+      expect(JSON.stringify(body)).not.toContain('secret')
+      expect(db.used('inspections', 'update')).toHaveLength(1)
+    })
   })
 
   it('raises a finding for a failure, tagged with the site and a retry-safe reference', async () => {
