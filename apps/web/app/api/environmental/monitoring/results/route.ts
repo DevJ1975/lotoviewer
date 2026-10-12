@@ -1,8 +1,7 @@
 import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
 import { sanitizeError } from '@/lib/security/sanitizeError'
-import { isRealDate } from '@soteria/core/environmental/validation'
 import { toResultRow, validateMonitoringResult } from '@soteria/core/environmental/monitoring'
-import { badId, invalid, readJson, refused, UUID_RE } from '@/lib/environmental/http'
+import { invalid, readJson, refused } from '@/lib/environmental/http'
 import { databaseFailure } from '@/lib/environmental/monitoringHttp'
 import { offSiteMonitoringReferences } from '@/lib/environmental/monitoringReferences'
 import { parseResultsQuery } from '@/lib/environmental/monitoringResultsQuery'
@@ -78,8 +77,3 @@ export async function POST(req: Request) {
     return databaseFailure(e, 'POST /api/environmental/monitoring/results')
   }
 }
-
-// Kept for the shape checks the list shares with the other routes.
-void badId
-void isRealDate
-void UUID_RE
