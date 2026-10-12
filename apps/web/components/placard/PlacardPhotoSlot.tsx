@@ -7,6 +7,8 @@ import { useNetworkStatus } from '@/hooks/useNetworkStatus'
 import { useUploadQueue } from '@/components/UploadQueueProvider'
 import { useTenant } from '@/components/TenantProvider'
 import { compressImage, heicToJpeg, isHeic } from '@/lib/imageUtils'
+import { measurePhotoQuality } from '@/lib/photoQuality'
+import type { PhotoQualityIssue } from '@soteria/core/photoQuality'
 import { haptic } from '@/lib/platform'
 import { AnnotationLayer } from '@/components/AnnotatedPhoto'
 import type { Annotation } from '@/lib/photoAnnotations'
@@ -29,6 +31,11 @@ interface Props {
 
 const MAX_FILE_BYTES = 10_000_000
 
+const QUALITY_WARNINGS: Record<PhotoQualityIssue, string> = {
+  too_dark: 'Photo looks too dark. Retake with more light if the isolation point is hard to see.',
+  blurry:   'Photo looks blurry. Hold steady and retake if labels are hard to read.',
+}
+
 export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl, onSuccess, onError, annotations, color }: Props) {
   const { upload, status, url, reset } = usePhotoUpload(equipmentId, type)
   const { online } = useNetworkStatus()
@@ -39,6 +46,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
   const [queueing, setQueueing]     = useState(false)
   const [compressing, setCompressing] = useState(false)
   const [localPreview, setLocalPreview] = useState<string | null>(null)
+  const [qualityIssue, setQualityIssue] = useState<PhotoQualityIssue | null>(null)
 
   // Keep latest callback refs so the success effect doesn't re-fire when the
   // parent passes new inline closures — would cause an infinite re-render loop.
@@ -100,6 +108,7 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
   }
 
   async function handleFile(originalFile: File) {
+    setQualityIssue(null)
     // Accept JPEG/PNG for all platforms plus HEIC/HEIF for iOS devices.
     // iOS photo-library picks default to HEIC; the camera capture path
     // usually delivers JPEG. HEIC is pre-converted below before the rest
@@ -153,6 +162,13 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
     // + storage. Per the operator's call: every photo gets reviewed by a
     // human before sign-off anyway, so an AI gate adds latency + cost
     // without preventing any work that the supervisor wouldn't catch.
+
+    // An on-device darkness / blur check is different: no network, no cost,
+    // and it warns rather than blocks — the photo uploads regardless, but a
+    // worker still standing at the machine can retake it now instead of
+    // after a reviewer rejects it. Measured on the pre-compression file so
+    // the warning reflects the capture, not compression artifacts.
+    setQualityIssue((await measurePhotoQuality(file))?.issue ?? null)
 
     // Compress locally so we have a bounded Blob for both upload and queue.
     // The upload hook does NOT re-compress — we own compression here so it
@@ -286,6 +302,12 @@ export default function PlacardPhotoSlot({ equipmentId, type, label, existingUrl
           </div>
         )}
       </button>
+
+      {qualityIssue && (
+        <p role="status" className="px-2 py-1 text-[11px] font-medium text-amber-900 bg-amber-50 border-2 border-t-0 border-amber-200 dark:text-amber-200 dark:bg-amber-950/40 dark:border-amber-800">
+          {QUALITY_WARNINGS[qualityIssue]}
+        </p>
+      )}
 
       <input
         ref={fileRef}

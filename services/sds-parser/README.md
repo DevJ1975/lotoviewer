@@ -30,9 +30,19 @@ aid, firefighting, spill cleanup, storage, incompatibilities, DOT transport,
 NFPA 704 ratings, and the revision date. Anything not found is `null`/`[]` —
 it never guesses.
 
-> **Limitation:** it reads the PDF *text layer*. A scanned / image-only SDS with
-> no text (and image-only GHS pictograms) can't be read without OCR, which is
-> out of scope. Those return a clear 422.
+### Scanned SDSs (OCR)
+
+Most SDS PDFs carry a *text layer*, which is read directly. A scanned /
+image-only SDS has none, so the service renders each page (PDFium, via
+`pypdfium2`) and reads it with **Tesseract** OCR — up to the first 30 pages.
+Because OCR can misread digits (flash points, exposure limits, UN numbers), an
+OCR'd parse is marked **`overall: "low"`** confidence and its `parser_notes`
+tell the reviewer to check every number against the original. A scan that
+yields too little text to be an SDS (blank, faint, or not an SDS) returns a
+clear 422.
+
+> **Limitation:** GHS pictograms that exist only as images are not captured,
+> and OCR is English-only.
 
 ## Endpoints
 
@@ -43,6 +53,7 @@ it never guesses.
 | POST | `/parse/file` | multipart `file=@sds.pdf` | `ParsedSdsPayload` |
 | POST | `/parse/url` | `{"url": "https://.../sds.pdf"}` | `ParsedSdsPayload` |
 | POST | `/parse/stage` | `{"sds_id","tenant_id","product_id?"}` | `{staged, parsed}` |
+| POST | `/jobs/parse-sds` | `{"sds_id","tenant_id","requested_by?"}` | `202 {job_id, status}` |
 
 `/parse/stage` downloads the SDS from the Supabase `chemical-sds` bucket and
 writes the parse back to `chemical_sds_documents` (`parsed_payload`,
@@ -50,12 +61,35 @@ writes the parse back to `chemical_sds_documents` (`parsed_payload`,
 `parse_review_status='pending'`) — exactly like the AI route — so it appears in
 **SDS Review Queue** (`/chemicals/review`) for approval.
 
+### Background jobs
+
+OCR of a long scanned SDS can take minutes — longer than the web app's
+serverless routes can wait. So when background jobs are on, the web app queues
+the parse with `POST /jobs/parse-sds` and answers the user at once; a worker
+thread in this service claims the job, parses the PDF (OCR if needed) and
+stages it into the review queue exactly like `/parse/stage`.
+
+* **Durable.** The queue is the `sds_parse_jobs` table (migration 294), not
+  memory. A job whose worker dies is taken over once its lease lapses.
+* **Safe to scale.** Claims go through `claim_sds_parse_job()`, which uses
+  `FOR UPDATE SKIP LOCKED`, so extra replicas add throughput and never
+  double-process. A worker that lost its lease cannot overwrite the result of
+  the worker that took over.
+* **Bounded retries.** An unreadable PDF fails at once; a transient error
+  (storage, network) retries with backoff, up to 3 attempts.
+* **Idempotent.** Re-queuing an SDS that already has a live job returns that job.
+
+To turn it on: apply migration 294, set the Supabase vars, and set
+`SDS_PARSE_JOBS_ENABLED=true`. With it off, `/jobs/parse-sds` answers 503 and
+the web app falls back to parsing synchronously.
+
 ## Run it
 
 ```bash
 cd services/sds-parser
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+sudo apt-get install tesseract-ocr   # macOS: brew install tesseract — only needed for scanned PDFs
 cp .env.example .env            # set SDS_PARSER_API_KEY (and Supabase vars for /stage)
 uvicorn app.main:app --reload   # http://localhost:8000/docs
 ```
@@ -86,12 +120,15 @@ docker run -p 8000:8000 --env-file services/sds-parser/.env sds-parser
 | Var | Required | Purpose |
 | --- | --- | --- |
 | `SDS_PARSER_API_KEY` | recommended | If set, requests must send a matching `X-API-Key`. |
-| `SUPABASE_URL` | for `/parse/stage` | Project URL. |
-| `SUPABASE_SERVICE_ROLE_KEY` | for `/parse/stage` | Server-side only; bypasses RLS, so every query is tenant-scoped. |
+| `SUPABASE_URL` | for `/parse/stage` and jobs | Project URL. |
+| `SUPABASE_SERVICE_ROLE_KEY` | for `/parse/stage` and jobs | Server-side only; bypasses RLS, so every query is tenant-scoped. |
+| `SDS_PARSE_JOBS_ENABLED` | optional | `true` starts the background worker and enables `/jobs/parse-sds`. Needs migration 294. |
 
 ## Tests
 
-The parser is stdlib-only and tested without any installs:
+The parser is stdlib-only, so its tests run without any installs. The PDF /
+OCR tests (`tests/test_pdf_text.py`) build their PDFs in memory and skip
+themselves unless `requirements.txt` and the `tesseract` binary are installed:
 
 ```bash
 cd services/sds-parser
@@ -103,8 +140,9 @@ python -m unittest discover -s tests -v
 `/parse/stage` writes the identical columns the AI route writes, so the
 existing **SDS Review Queue** and the `/apply` approval flow work unchanged — a
 reviewer sees the proposed fields (flagged by the capped confidence + the
-`parser_notes`), edits as needed, and approves. No web-app code change is
-required to use this; point it at an `sds_id` and the row shows up pending.
-Optionally, the in-app parse route can be wired to call `/parse/stage` as an
-automatic fallback when Anthropic returns a usage-limit error — see the PR
-description for that follow-up.
+`parser_notes`), edits as needed, and approves.
+
+The web app's SDS parse route uses this service automatically when Claude is
+unavailable (no key, usage cap, rate limit, 5xx) and `SDS_PARSER_URL` is set
+(`apps/web/lib/ai/sdsFallback.ts`): it queues a background job and answers 202,
+or — when jobs are off here — calls `/parse/file` and saves the result itself.

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { sdsFallbackConfigured, isAiUnavailable, parseSdsViaFallback } from '@/lib/ai/sdsFallback'
+import { sdsFallbackConfigured, isAiUnavailable, parseSdsViaFallback, enqueueSdsParseJob } from '@/lib/ai/sdsFallback'
 
 const ORIG_ENV = { ...process.env }
 
@@ -82,5 +82,57 @@ describe('parseSdsViaFallback', () => {
     process.env.SDS_PARSER_URL = 'http://svc'
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
     expect(await parseSdsViaFallback(pdf)).toBeNull()
+  })
+})
+
+describe('enqueueSdsParseJob', () => {
+  const ids = { sdsId: 'sds-1', tenantId: 'tenant-1', userId: 'user-1' }
+
+  it('returns null when not configured (no network call)', async () => {
+    delete process.env.SDS_PARSER_URL
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await enqueueSdsParseJob(ids)).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('POSTs the ids as JSON to /jobs/parse-sds and returns the job id on 202', async () => {
+    process.env.SDS_PARSER_URL = 'http://svc/'
+    process.env.SDS_PARSER_API_KEY = 'secret'
+    const fetchMock = vi.fn().mockResolvedValue({ status: 202, json: async () => ({ job_id: 'job-9', status: 'queued' }) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    expect(await enqueueSdsParseJob(ids)).toEqual({ jobId: 'job-9' })
+    const [url, opts] = fetchMock.mock.calls[0] as [string, { body: string; headers: Record<string, string> }]
+    expect(url).toBe('http://svc/jobs/parse-sds')
+    expect(JSON.parse(opts.body)).toEqual({ sds_id: 'sds-1', tenant_id: 'tenant-1', requested_by: 'user-1' })
+    expect(opts.headers['x-api-key']).toBe('secret')
+    expect(opts.headers['content-type']).toBe('application/json')
+  })
+
+  it('returns null when the service has background jobs off (503)', async () => {
+    process.env.SDS_PARSER_URL = 'http://svc'
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 503, json: async () => ({ detail: 'disabled' }) }))
+    expect(await enqueueSdsParseJob(ids)).toBeNull()
+  })
+
+  it('returns null on a 2xx that is not an accepted job', async () => {
+    // A 200 would mean something other than "queued" answered; do not
+    // tell the user a parse is running when nothing confirmed it.
+    process.env.SDS_PARSER_URL = 'http://svc'
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 200, json: async () => ({ job_id: 'job-9' }) }))
+    expect(await enqueueSdsParseJob(ids)).toBeNull()
+  })
+
+  it('returns null when the 202 body has no job id', async () => {
+    process.env.SDS_PARSER_URL = 'http://svc'
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 202, json: async () => ({}) }))
+    expect(await enqueueSdsParseJob(ids)).toBeNull()
+  })
+
+  it('returns null (never throws) when the request fails', async () => {
+    process.env.SDS_PARSER_URL = 'http://svc'
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
+    expect(await enqueueSdsParseJob(ids)).toBeNull()
   })
 })

@@ -604,3 +604,25 @@ def _build_notes(sections: dict[int, str]) -> str:
     if missing:
         note += f" Sections not detected in the document: {', '.join(missing)}."
     return note
+
+
+def apply_ocr_caveats(payload: dict, pages_skipped: int = 0) -> dict:
+    """Mark a payload whose text came from OCR of a scanned PDF.
+
+    OCR misreads are concentrated exactly where an SDS is most safety-critical:
+    digits (flash points, exposure limits, UN numbers) and look-alike glyphs
+    (0/O, 1/l, 5/S). So the overall confidence drops to ``low`` — putting the
+    parse at the top of the reviewer's attention — and the notes say why.
+    Returns a new dict; the input is not mutated.
+    """
+    note = (
+        " Text was read by OCR from a scanned PDF: numbers and codes can be "
+        "misread, so compare every numeric field against the original document."
+    )
+    if pages_skipped:
+        note += f" The last {pages_skipped} page(s) were not read (OCR page limit)."
+    return {
+        **payload,
+        "confidence": {**payload["confidence"], "overall": "low"},
+        "parser_notes": (payload.get("parser_notes") or "") + note,
+    }

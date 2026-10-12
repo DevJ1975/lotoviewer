@@ -29,14 +29,17 @@ const quiet: PrecursorConditions = {
 const withConditions = (over: Partial<PrecursorConditions>): PrecursorConditions =>
   ({ ...quiet, ...over })
 
-/** 18 months where the indicator and recordables rise together, 1 month apart. */
-const correlatedHistory = (condition: keyof PrecursorConditions): PrecursorHistory => {
-  const indicator = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
-  return {
-    recordablesMonthly: indicator.map((v, i) => (i === 0 ? 0 : indicator[i - 1])),
-    seriesByCondition: { [condition]: indicator },
-  }
-}
+/** 18 months of an indicator's ups and downs. Not a straight rise: two series
+ *  that merely trend together are exactly what lead/lag discovery discounts. */
+const SWINGS = [2, 5, 1, 8, 3, 7, 2, 9, 4, 6, 1, 8, 5, 3, 7, 2, 6, 4]
+/** Recordables that echo SWINGS one month later. */
+const ECHO_1_MONTH_LATER = SWINGS.map((_, i) => (i === 0 ? 0 : SWINGS[i - 1]))
+
+/** 18 months where recordables echo the indicator's swings 1 month later. */
+const correlatedHistory = (condition: keyof PrecursorConditions): PrecursorHistory => ({
+  recordablesMonthly: ECHO_1_MONTH_LATER,
+  seriesByCondition: { [condition]: SWINGS },
+})
 
 describe('rule catalog', () => {
   it('states a premise for every rule', () => {
@@ -140,10 +143,9 @@ describe('validation label', () => {
     // The indicator reliably moves the OPPOSITE way from the rule's premise.
     // That is a finding about the rule; burying it repeats the mistake of
     // burying a false positive.
-    const rising = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
     const { patterns } = detectPrecursors(firing, {
-      recordablesMonthly: rising,
-      seriesByCondition:  { capasOverdue: rising.map(v => 20 - v) },
+      recordablesMonthly: ECHO_1_MONTH_LATER,
+      seriesByCondition:  { capasOverdue: SWINGS.map(v => 10 - v) },
     })
     expect(patterns[0].validation).toBe('contradicted')
     expect(patterns[0].leadMonths).toBeNull()

@@ -293,3 +293,50 @@ export function laggedCorrelation(x: readonly number[], y: readonly number[], la
   if (overlap < 3) return null
   return pearson(x.slice(m, m + overlap), y.slice(0, overlap))
 }
+
+// ── Resampling & multiple comparisons ───────────────────────────────────────
+
+/**
+ * Seeded pseudo-random numbers in [0, 1) (mulberry32). For resampling that
+ * must give the same answer for the same input on every load — a dashboard
+ * whose verdict flickers between refreshes cannot be trusted.
+ */
+export function seededRandom(seed: number): () => number {
+  let state = seed >>> 0
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0
+    let t = state
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/** A Fisher–Yates shuffled copy of xs. */
+export function shuffled<T>(xs: readonly T[], random: () => number): T[] {
+  const out = [...xs]
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1))
+    ;[out[i], out[j]] = [out[j]!, out[i]!]
+  }
+  return out
+}
+
+/**
+ * Benjamini–Hochberg adjusted p-values (q-values), in input order. Flagging
+ * every test with q ≤ α keeps the expected share of false discoveries among
+ * the flagged at or below α — the guard against "test enough indicators and
+ * one will look predictive by luck".
+ */
+export function benjaminiHochberg(pValues: readonly number[]): number[] {
+  const m = pValues.length
+  const ascending = pValues.map((_, i) => i).sort((a, b) => pValues[a]! - pValues[b]!)
+  const q = new Array<number>(m)
+  let running = 1
+  for (let rank = m; rank >= 1; rank--) {
+    const i = ascending[rank - 1]!
+    running = Math.min(running, (pValues[i]! * m) / rank)
+    q[i] = running
+  }
+  return q
+}

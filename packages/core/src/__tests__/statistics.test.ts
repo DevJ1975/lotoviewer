@@ -4,6 +4,7 @@ import {
   coefficientOfVariation, skewness, histogram, normalPdf, zScore,
   poissonPmf, wilsonInterval, poissonCountInterval, rateInterval,
   ewma, linearRegression, pearson, laggedCorrelation,
+  seededRandom, shuffled, benjaminiHochberg,
 } from '../statistics'
 
 describe('central tendency & spread', () => {
@@ -139,5 +140,33 @@ describe('correlation', () => {
     const y = [0, 1, 2, 3, 4] // y[i] = x[i-1] → x leads y by 1
     expect(laggedCorrelation(x, y, 1)!).toBeCloseTo(1, 10)
     expect(laggedCorrelation(x, y, 9)).toBeNull()
+  })
+})
+
+describe('resampling & multiple comparisons', () => {
+  it('seededRandom: same seed, same stream; values in [0, 1)', () => {
+    const a = seededRandom(42), b = seededRandom(42), c = seededRandom(43)
+    const streamA = Array.from({ length: 1000 }, a)
+    expect(Array.from({ length: 1000 }, b)).toEqual(streamA)
+    expect(Array.from({ length: 1000 }, c)).not.toEqual(streamA)
+    expect(streamA.every(v => v >= 0 && v < 1)).toBe(true)
+    expect(mean(streamA)!).toBeCloseTo(0.5, 1)
+  })
+
+  it('shuffled: a reordering of the same values, input untouched', () => {
+    const input = [1, 2, 3, 4, 5, 6, 7, 8]
+    const out = shuffled(input, seededRandom(7))
+    expect([...out].sort((x, y) => x - y)).toEqual(input)
+    expect(out).not.toEqual(input)
+    expect(input).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+  })
+
+  it('benjaminiHochberg: matches scipy.stats.false_discovery_control, in input order', () => {
+    // Reference values from SciPy 1.17 (method='bh').
+    expect(benjaminiHochberg([0.01, 0.04, 0.03, 0.005])).toEqual([0.02, 0.04, 0.04, 0.02])
+    const q = benjaminiHochberg([0.2, 0.001, 0.5, 0.04, 0.03])
+    ;[0.25, 0.005, 0.5, 0.2 / 3, 0.2 / 3].forEach((want, i) => expect(q[i]).toBeCloseTo(want, 12))
+    expect(benjaminiHochberg([1, 1])).toEqual([1, 1])
+    expect(benjaminiHochberg([])).toEqual([])
   })
 })

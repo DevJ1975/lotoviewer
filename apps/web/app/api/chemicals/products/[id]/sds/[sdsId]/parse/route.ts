@@ -7,7 +7,7 @@ import { checkAiRateLimit, logAiInvocation } from '@/lib/ai/rateLimit'
 import { getAnthropic, aiErrorToResponse } from '@/lib/ai/client'
 import { parseSdsDocument, parsedConfidenceToNumeric, nullifyEmptyStrings, PARSE_SDS_MODEL } from '@/lib/ai/parseSdsPdf'
 import { type ParsedSdsPayload } from '@soteria/core/chemicals'
-import { parseSdsViaFallback, sdsFallbackConfigured, isAiUnavailable } from '@/lib/ai/sdsFallback'
+import { enqueueSdsParseJob, parseSdsViaFallback, sdsFallbackConfigured, isAiUnavailable } from '@/lib/ai/sdsFallback'
 
 // POST /api/chemicals/products/[id]/sds/[sdsId]/parse
 //
@@ -16,7 +16,9 @@ import { parseSdsViaFallback, sdsFallbackConfigured, isAiUnavailable } from '@/l
 // the parsed payload back to chemical_sds_documents.parsed_payload (along
 // with model, confidence, and parse_review_status='pending'). When Claude
 // is unavailable (no key / usage cap / 5xx) a deterministic fallback parser
-// stands in if it's configured.
+// stands in if it's configured — in the background when the parser service
+// runs jobs (202: the result reaches the review queue when the worker is done,
+// which for a scanned SDS needing OCR can be minutes), otherwise inline.
 //
 // The endpoint never modifies the chemical_products row directly — that
 // happens via the sibling /apply endpoint after a human approves the
@@ -78,6 +80,20 @@ async function persistParse(
   return NextResponse.json({ sds: updated, parsed, fallback: model === SDS_FALLBACK_MODEL }, { status: 200 })
 }
 
+// The deterministic fallback for when Claude is unavailable. Returns null when
+// the parser service can do neither, so the caller surfaces the AI error.
+async function runFallback(
+  admin: ReturnType<typeof supabaseAdmin>,
+  ids: { sdsId: string; tenantId: string; userId: string },
+  pdf: Buffer,
+): Promise<NextResponse | null> {
+  const job = await enqueueSdsParseJob(ids)
+  if (job) return NextResponse.json({ queued: true, job_id: job.jobId }, { status: 202 })
+  const parsed = await parseSdsViaFallback(pdf)
+  if (parsed) return persistParse(admin, ids, nullifyEmptyStrings(parsed), SDS_FALLBACK_MODEL, null)
+  return null
+}
+
 export async function POST(req: NextRequest, ctx: Ctx) {
   const gate = await requireTenantMember(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
@@ -134,8 +150,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       client = await getAnthropic(tenantId)
     } catch (err) {
       // No / malformed AI key — use the deterministic parser if it's wired up.
-      const fb = sdsFallbackConfigured() ? await parseSdsViaFallback(buf) : null
-      if (fb) return await persistParse(admin, { sdsId, tenantId, userId }, nullifyEmptyStrings(fb), SDS_FALLBACK_MODEL, null)
+      const fb = sdsFallbackConfigured() ? await runFallback(admin, { sdsId, tenantId, userId }, buf) : null
+      if (fb) return fb
       const mapped = aiErrorToResponse(err, 'parse-sds')
       Sentry.captureException(err, { tags: { ...mapped.tags, route: '/api/chemicals/products/sds/parse' } })
       return NextResponse.json(mapped.body, { status: mapped.status })
@@ -149,8 +165,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       // parser before surfacing the error. Other errors fall through to the
       // outer handler unchanged.
       if (isAiUnavailable(err) && sdsFallbackConfigured()) {
-        const fb = await parseSdsViaFallback(buf)
-        if (fb) return await persistParse(admin, { sdsId, tenantId, userId }, nullifyEmptyStrings(fb), SDS_FALLBACK_MODEL, null)
+        const fb = await runFallback(admin, { sdsId, tenantId, userId }, buf)
+        if (fb) return fb
       }
       throw err
     }
