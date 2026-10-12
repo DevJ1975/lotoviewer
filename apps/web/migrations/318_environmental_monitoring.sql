@@ -156,12 +156,12 @@ create table if not exists public.monitoring_results (
   lab             text check (lab is null or length(lab) <= 120),
   evidence_id     text,
   note            text check (note is null or length(note) <= 2000),
-  sampled_by      uuid references auth.users(id) on delete cascade,
+  sampled_by      uuid references auth.users(id) on delete set null,
 
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now(),
 
-  foreign key (tenant_id, facility_id) references public.facilities(tenant_id, id) on delete cascade,
+  foreign key (tenant_id, facility_id) references public.facilities(tenant_id, id),
   constraint monitoring_results_outfall_fk
     foreign key (tenant_id, facility_id, outfall_id)
     references public.stormwater_outfalls (tenant_id, facility_id, id),
