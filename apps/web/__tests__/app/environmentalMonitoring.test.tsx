@@ -157,18 +157,18 @@ describe('the summary strip', () => {
     const summary = within(screen.getByRole('region', { name: 'Exceedances this reporting year' }))
 
     // R1 passes 150 (1); R1, R2 pass the benchmark and R4 the pH action level (3).
-    const permitCard = summary.getByText('Permit and local limit exceedances').closest('div')!
-    const actionCard = summary.getByText('Benchmark and action level exceedances').closest('div')!
-    expect(within(permitCard).getByText('1')).toBeInTheDocument()
-    expect(within(actionCard).getByText('3')).toBeInTheDocument()
-    expect(within(permitCard).getByText('Results above a limit that binds the site.')).toBeInTheDocument()
-    expect(within(actionCard).getByText(/not violations of the permit/)).toBeInTheDocument()
+    const permitCard = within(summary.getByRole('group', { name: 'Permit and local limit exceedances' }))
+    const actionCard = within(summary.getByRole('group', { name: 'Benchmark and action level exceedances' }))
+    expect(permitCard.getByText('1')).toBeInTheDocument()
+    expect(actionCard.getByText('3')).toBeInTheDocument()
+    expect(permitCard.getByText('Results above a limit that binds the site.')).toBeInTheDocument()
+    expect(actionCard.getByText(/not violations of the permit/)).toBeInTheDocument()
   })
 
   it('does not show a card for internal targets unless one was missed', async () => {
     render(<EnvironmentalMonitoring />)
     await screenLoaded()
-    expect(screen.queryByText('Internal target exceedances')).toBeNull()
+    expect(screen.queryByRole('group', { name: 'Internal target exceedances' })).toBeNull()
   })
 
   it('shows an internal-target card, still separate, when one was missed', async () => {
@@ -177,8 +177,8 @@ describe('the summary strip', () => {
     getMonitoringSummary.mockResolvedValue(summaryResponse([...LIMITS, internal]))
     render(<EnvironmentalMonitoring />)
     await screenLoaded()
-    const card = screen.getByText('Internal target exceedances').closest('div')!
-    expect(within(card).getByText('3')).toBeInTheDocument()
+    const card = within(screen.getByRole('group', { name: 'Internal target exceedances' }))
+    expect(card.getByText('3')).toBeInTheDocument()
   })
 
   it('names the reporting year and carries the note to confirm its basis', async () => {
@@ -202,7 +202,7 @@ describe('the summary strip', () => {
   it('says when the year held more results than could be read', async () => {
     getMonitoringSummary.mockResolvedValue(summaryResponse(LIMITS, RESULTS, { truncated: true }))
     render(<EnvironmentalMonitoring />)
-    expect(await screen.findByRole('status')).toHaveTextContent(/counts may be low/)
+    expect(await screen.findByText(/counts may be low/)).toBeInTheDocument()
   })
 })
 
@@ -409,7 +409,7 @@ describe('loading and failing', () => {
     getMonitoringSummary.mockRejectedValue(new ApiError('Request failed (500)', 500, null, []))
     render(<EnvironmentalMonitoring />)
     expect(await screen.findByRole('alert')).toHaveTextContent('Request failed (500)')
-    expect(screen.queryByText('Permit and local limit exceedances')).toBeNull()
+    expect(screen.queryByRole('group', { name: 'Permit and local limit exceedances' })).toBeNull()
   })
 
   it('asks for one site in the all-sites roll-up, and loads nothing', async () => {
@@ -491,7 +491,8 @@ describe('recording a result', () => {
     await userEvent.selectOptions(form.getByLabelText(/^Outfall/), 'o-2')
     await userEvent.type(form.getByLabelText(/^Parameter/), 'TSS')
     await userEvent.type(form.getByLabelText(/^Result/), '42.5')
-    await userEvent.type(form.getByLabelText(/^Unit/), 'mg/L')
+    // the unit follows the TSS limit's, once the parameter is left
+    expect(form.getByLabelText(/^Unit/)).toHaveValue('mg/L')
     setTime(form, '2026-02-03T10:30')
     await userEvent.type(form.getByLabelText(/^Storm event or sample ID/), ' QSE 2026-02-03 ')
     await userEvent.type(form.getByLabelText(/^Laboratory/), 'Acme Labs')
@@ -552,7 +553,7 @@ describe('recording a result', () => {
     expect(form.getByLabelText(/^Reporting limit/)).toBeInTheDocument()
     expect(form.queryByLabelText(/^Result/)).toBeNull()
 
-    await userEvent.type(form.getByLabelText(/^Parameter/), 'TSS')
+    await userEvent.type(form.getByLabelText(/^Parameter/), 'Copper')
     await userEvent.type(form.getByLabelText(/^Reporting limit/), '5')
     await userEvent.type(form.getByLabelText(/^Unit/), 'mg/L')
     await userEvent.click(form.getByRole('button', { name: 'Add result' }))
@@ -575,7 +576,7 @@ describe('recording a result', () => {
 
   it('refuses a result that is not a number before sending anything', async () => {
     const form = await openForm()
-    await userEvent.type(form.getByLabelText(/^Parameter/), 'TSS')
+    await userEvent.type(form.getByLabelText(/^Parameter/), 'Copper')
     await userEvent.type(form.getByLabelText(/^Unit/), 'mg/L')
     fireEvent.change(form.getByLabelText(/^Result/), { target: { value: '' } })
     // the browser's own required check stands in front of an empty field, so submit the form directly
@@ -587,7 +588,7 @@ describe('recording a result', () => {
   it('shows the API\'s own words when it refuses a result, and keeps the form open', async () => {
     createResult.mockRejectedValue(new ApiError('bad', 400, 'invalid', ['sampled_at cannot be more than a day in the future.']))
     const form = await openForm()
-    await userEvent.type(form.getByLabelText(/^Parameter/), 'TSS')
+    await userEvent.type(form.getByLabelText(/^Parameter/), 'Copper')
     await userEvent.type(form.getByLabelText(/^Result/), '1')
     await userEvent.type(form.getByLabelText(/^Unit/), 'mg/L')
     await userEvent.click(form.getByRole('button', { name: 'Add result' }))
@@ -620,7 +621,7 @@ describe('recording a result', () => {
     env = memberAtSite()
     createResult.mockResolvedValue({ result: R_BOTH })
     const form = await openForm()
-    await userEvent.type(form.getByLabelText(/^Parameter/), 'TSS')
+    await userEvent.type(form.getByLabelText(/^Parameter/), 'Copper')
     await userEvent.type(form.getByLabelText(/^Result/), '1')
     await userEvent.type(form.getByLabelText(/^Unit/), 'mg/L')
     await userEvent.click(form.getByRole('button', { name: 'Add result' }))
@@ -629,13 +630,13 @@ describe('recording a result', () => {
 })
 
 describe('correcting and deleting a result (admins)', () => {
-  const labelOf = (at: string) => new RegExp(`^(Edit|Delete) result: .*${at}`)
+  const action = (verb: 'Edit' | 'Delete', at: string) => resultRow(at).getByRole('button', { name: new RegExp(`^${verb} result: .*${at}`) })
 
   it('opens the stored result to correct, and sends the whole result back with the change', async () => {
     updateResult.mockResolvedValue({ result: R_BENCH })
     render(<EnvironmentalMonitoring />)
     await screenLoaded()
-    await userEvent.click(resultRow('2026-02-09 10:00 UTC').getByRole('button', { name: labelOf('2026-02-09 10:00 UTC') }))
+    await userEvent.click(action('Edit', '2026-02-09 10:00 UTC'))
     const form = within(await screen.findByRole('dialog', { name: 'Correct a result' }))
 
     expect(form.getByLabelText(/^Result/)).toHaveValue(120)
@@ -657,7 +658,7 @@ describe('correcting and deleting a result (admins)', () => {
     deleteResult.mockResolvedValue({ ok: true })
     render(<EnvironmentalMonitoring />)
     await screenLoaded()
-    await userEvent.click(resultRow('2026-02-10 10:00 UTC').getByRole('button', { name: labelOf('2026-02-10 10:00 UTC') }))
+    await userEvent.click(action('Delete', '2026-02-10 10:00 UTC'))
     const dialog = within(await screen.findByRole('dialog', { name: 'Delete the TSS result?' }))
     expect(dialog.getByText(/from the exceedance counts/)).toBeInTheDocument()
     expect(deleteResult).not.toHaveBeenCalled()
@@ -671,7 +672,7 @@ describe('correcting and deleting a result (admins)', () => {
   it('deletes nothing when the question is answered with Cancel', async () => {
     render(<EnvironmentalMonitoring />)
     await screenLoaded()
-    await userEvent.click(resultRow('2026-02-10 10:00 UTC').getByRole('button', { name: labelOf('2026-02-10 10:00 UTC') }))
+    await userEvent.click(action('Delete', '2026-02-10 10:00 UTC'))
     const dialog = within(await screen.findByRole('dialog', { name: 'Delete the TSS result?' }))
     await userEvent.click(dialog.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
@@ -682,7 +683,7 @@ describe('correcting and deleting a result (admins)', () => {
     deleteResult.mockRejectedValue(new ApiError('That record no longer exists.', 404, 'not_found', []))
     render(<EnvironmentalMonitoring />)
     await screenLoaded()
-    await userEvent.click(resultRow('2026-02-10 10:00 UTC').getByRole('button', { name: labelOf('2026-02-10 10:00 UTC') }))
+    await userEvent.click(action('Delete', '2026-02-10 10:00 UTC'))
     const dialog = within(await screen.findByRole('dialog', { name: 'Delete the TSS result?' }))
     await userEvent.click(dialog.getByRole('button', { name: 'Delete result' }))
     expect(await dialog.findByRole('alert')).toHaveTextContent('That record no longer exists.')
@@ -790,7 +791,7 @@ describe('managing limits (admins)', () => {
 describe('adopting the draft defaults (admins)', () => {
   async function openDialog() {
     render(<EnvironmentalMonitoring />)
-    await screenLoaded()
+    await screen.findByRole('table', { name: 'Limits at this site' })
     await userEvent.click(screen.getByRole('button', { name: 'Adopt draft defaults' }))
     return within(await screen.findByRole('dialog', { name: 'Adopt draft default limits' }))
   }
@@ -879,7 +880,7 @@ describe('adopting the draft defaults (admins)', () => {
   it('is not offered for a site whose profile names no general permit, and says why', async () => {
     site = siteWith({ stormwater_coverage: 'not_evaluated', stormwater_general_permit: null })
     render(<EnvironmentalMonitoring />)
-    await screenLoaded()
+    await screen.findByRole('table', { name: 'Limits at this site' })
     expect(screen.queryByRole('button', { name: 'Adopt draft defaults' })).toBeNull()
     expect(screen.getByText(/No draft default limits are offered for this site/)).toBeInTheDocument()
   })
