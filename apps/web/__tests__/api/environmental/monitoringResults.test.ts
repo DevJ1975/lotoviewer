@@ -337,7 +337,7 @@ describe('PATCH /api/environmental/monitoring/results/[id]', () => {
     const sent = db.arg('monitoring_results', 'update') as Record<string, unknown>
     expect(sent).toEqual({
       facility_id: FACILITY, outfall_id: OUTFALL_ID, parameter: 'TSS', unit: 'mg/L', value: 43, below_detection: false,
-      sampled_at: '2026-02-03T10:00:00.000Z', event_label: null, lab: null, evidence_id: null, note: 'Corrected from the lab report',
+      sampled_at: '2026-02-03T10:00:00+00:00', event_label: null, lab: null, evidence_id: null, note: 'Corrected from the lab report',
     })
     expect(sent).not.toHaveProperty('sampled_by')
     expect(sent).not.toHaveProperty('tenant_id')
