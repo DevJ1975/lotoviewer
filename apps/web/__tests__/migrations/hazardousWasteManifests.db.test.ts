@@ -507,6 +507,14 @@ describe('moving a manifest (hw_transition_shipment)', () => {
       expect(await statusesOf(shipped.containers)).toEqual(['in_shipment', 'in_shipment'])
     })
 
+    it('leaves a container that someone changed by hand as they set it, as cancelling does', async () => {
+      const { id, containers } = await shipmentIn('shipped')
+      await db.query(`update public.hazardous_waste_containers set status = 'open' where id = $1`, [containers[0]])
+      await transition(ownerA, id, 'receive', day(-2))
+      expect(await statusesOf(containers)).toEqual(expect.arrayContaining(['open', 'disposed']))
+      expect(await scalar(db, 'select archived_at is null from public.hazardous_waste_containers where id = $1', [containers[0]])).toBe(true)
+    })
+
     it('accepts the signed copy on the day of shipping', async () => {
       const { id } = await shipmentIn('shipped')
       await expect(transition(ownerA, id, 'receive', day(-10))).resolves.toBeTruthy()
