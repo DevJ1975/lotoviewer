@@ -119,7 +119,8 @@ drop policy if exists monitoring_limits_read on public.monitoring_limits;
 create policy monitoring_limits_read on public.monitoring_limits
   for select to authenticated
   using (
-    (public.active_facility_id() is null or facility_id = public.active_facility_id())
+    (public.active_tenant_id() is null or tenant_id = public.active_tenant_id())
+    and (public.active_facility_id() is null or facility_id = public.active_facility_id())
     and (tenant_id in (select public.current_user_tenant_ids()) or public.is_superadmin())
   );
 
@@ -202,7 +203,6 @@ create policy monitoring_results_member_insert on public.monitoring_results
     (public.active_tenant_id() is null or tenant_id = public.active_tenant_id())
     and (public.active_facility_id() is null or facility_id = public.active_facility_id())
     and (tenant_id in (select public.current_user_tenant_ids()) or public.is_superadmin())
-    and sampled_by = auth.uid()
   );
 
 -- A recorded result is changed or removed only by a tenant admin.
