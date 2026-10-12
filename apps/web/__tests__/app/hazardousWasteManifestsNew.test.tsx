@@ -208,6 +208,23 @@ describe('creating the draft', () => {
     expect(screen.getByRole('button', { name: 'Create draft manifest' })).toBeEnabled()
   })
 
+  it('puts a refused state code under the state field, once', async () => {
+    const user = userEvent.setup()
+    createManifest.mockRejectedValue(new ManifestApiError('jurisdiction: Jurisdiction must be federal or a state such as state:CA', 400, [
+      { field: 'jurisdiction', message: 'Jurisdiction must be federal or a state such as state:CA' },
+    ]))
+    render(<NewHazardousWasteManifestPage />)
+    await formLoaded()
+    await user.clear(screen.getByLabelText('State (two letters)'))
+    await user.click(screen.getByRole('checkbox', { name: /Drum 1/ }))
+    await user.click(screen.getByRole('button', { name: 'Create draft manifest' }))
+
+    await screen.findByRole('alert')
+    expect(screen.getByLabelText('State (two letters)')).toHaveAccessibleDescription(/Jurisdiction must be federal or a state/)
+    expect(screen.getByLabelText('Rules that apply')).not.toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getAllByText(/Jurisdiction must be federal or a state such as state:CA/)).toHaveLength(2)   // the alert and the field
+  })
+
   it('shows what the database said when a container turned out not to be ready', async () => {
     const user = userEvent.setup()
     createManifest.mockRejectedValue(new ManifestApiError('Only closed containers can go on a manifest. Not ready: Drum 1 (in shipment).', 409))

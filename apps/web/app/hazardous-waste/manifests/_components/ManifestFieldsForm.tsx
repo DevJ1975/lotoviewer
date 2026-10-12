@@ -23,7 +23,9 @@ interface Props {
 
 export function ManifestFieldsForm({ idPrefix, values, onChange, fieldErrors, disabled = false }: Props) {
   const set = <K extends keyof ManifestFormValues>(key: K, value: ManifestFormValues[K]) => onChange({ ...values, [key]: value })
-  const errorsFor = (key: keyof ManifestFormValues) => fieldErrors.filter(e => e.field === MANIFEST_FORM_API_FIELD[key])
+  // The rules and the state code both report as `jurisdiction`; with a state chosen the error belongs under the code.
+  const errorsFor = (key: keyof ManifestFormValues) =>
+    key === 'jurisdictionKind' && values.jurisdictionKind === 'state' ? [] : fieldErrors.filter(e => e.field === MANIFEST_FORM_API_FIELD[key])
   const codeCount = splitWasteCodes(values.wasteCodes).length
 
   const field = (key: keyof ManifestFormValues, label: string, control: (props: ControlProps) => ReactNode, hint?: string) => {
