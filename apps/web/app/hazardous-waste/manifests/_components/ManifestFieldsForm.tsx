@@ -42,13 +42,17 @@ export function ManifestFieldsForm({ idPrefix, values, onChange, fieldErrors, di
     )
   }
 
-  const text = (key: 'trackingNumber' | 'generatorEpaId' | 'transporterName' | 'transporterEpaId' | 'tsdfName' | 'tsdfEpaId' | 'wasteCodes', maxLength: number, placeholder?: string) =>
-    ({ id, describedBy, invalid, disabled: off }: ControlProps) => (
-      <input
-        id={id} value={values[key]} onChange={e => set(key, e.target.value)} maxLength={maxLength} placeholder={placeholder}
-        aria-describedby={describedBy} aria-invalid={invalid} disabled={off} className={inputCls} autoComplete="off"
-      />
-    )
+  const textInput = (
+    { id, describedBy, invalid, disabled: off }: ControlProps,
+    key: 'trackingNumber' | 'generatorEpaId' | 'transporterName' | 'transporterEpaId' | 'tsdfName' | 'tsdfEpaId' | 'wasteCodes',
+    maxLength: number,
+    placeholder?: string,
+  ) => (
+    <input
+      id={id} value={values[key]} onChange={e => set(key, e.target.value)} maxLength={maxLength} placeholder={placeholder}
+      aria-describedby={describedBy} aria-invalid={invalid} disabled={off} className={inputCls} autoComplete="off"
+    />
+  )
 
   return (
     <div className="space-y-4">
@@ -88,21 +92,21 @@ export function ManifestFieldsForm({ idPrefix, values, onChange, fieldErrors, di
         </div>
       )}
 
-      {field('trackingNumber', 'Manifest tracking number', text('trackingNumber', 12, '123456789ELC'),
+      {field('trackingNumber', 'Manifest tracking number', control => textInput(control, 'trackingNumber', 12, '123456789ELC'),
         'Nine digits and three letters, from the paper form or e-Manifest. It is needed before the manifest can ship.')}
 
       <div className="max-w-sm">
-        {field('generatorEpaId', 'Generator EPA ID', text('generatorEpaId', 12, 'CAL000123456'), 'Three letters and nine digits.')}
+        {field('generatorEpaId', 'Generator EPA ID', control => textInput(control, 'generatorEpaId', 12, 'CAL000123456'), 'Three letters and nine digits.')}
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {field('transporterName', 'Transporter name', text('transporterName', 200))}
-        {field('transporterEpaId', 'Transporter EPA ID', text('transporterEpaId', 12))}
-        {field('tsdfName', 'Receiving facility name', text('tsdfName', 200))}
-        {field('tsdfEpaId', 'Receiving facility EPA ID', text('tsdfEpaId', 12))}
+        {field('transporterName', 'Transporter name', control => textInput(control, 'transporterName', 200))}
+        {field('transporterEpaId', 'Transporter EPA ID', control => textInput(control, 'transporterEpaId', 12))}
+        {field('tsdfName', 'Receiving facility name', control => textInput(control, 'tsdfName', 200))}
+        {field('tsdfEpaId', 'Receiving facility EPA ID', control => textInput(control, 'tsdfEpaId', 12))}
       </div>
 
-      {field('wasteCodes', 'Waste codes', text('wasteCodes', 1000, 'D001, F003, 134'),
+      {field('wasteCodes', 'Waste codes', control => textInput(control, 'wasteCodes', 1000, 'D001, F003, 134'),
         `Separate with commas. Federal (D001), California (134) or Texas (0001101H). ${codeCount} listed.`)}
 
       {field('dotDescription', 'Shipping description', ({ id, describedBy, invalid, disabled: off }) => (
