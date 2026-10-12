@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import type { FieldError } from '@soteria/core/hazardousWaste'
-import type { ManifestAction } from '@soteria/core/hazardousWasteManifest'
+import { manifestClockRule, type ManifestAction } from '@soteria/core/hazardousWasteManifest'
 import {
   CONTAINER_STATUS_LABEL, GENERATOR_CATEGORY_LABEL, MANIFEST_ACTION_LABEL, MANIFEST_STATUS_LABEL, formatDay, jurisdictionLabel,
   manifestFormFromRow, manifestFormToBody, type ManifestDetail, type ManifestFormValues,
@@ -102,6 +102,9 @@ export default function HazardousWasteManifestDetailPage() {
 
   const canEditDetails = manifest.status === 'draft' && manifest.can_modify
   const clock = manifest.clock
+  // "Not required" is the rule's answer (a small quantity generator has no 35-day step), not just a clock that has not started.
+  const followUpRequired = manifestClockRule(manifest.generator_category, manifest.jurisdiction)?.followUpDay != null
+  const followUpValue = clock.followUpOn ? formatDay(clock.followUpOn) : clock.applicable && !followUpRequired ? 'Not required' : '—'
 
   return (
     <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -140,7 +143,7 @@ export default function HazardousWasteManifestDetailPage() {
       <Section title="Return clock">
         <p className="text-sm text-slate-700 dark:text-slate-200">{clock.note}</p>
         <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
-          <Fact label="Follow-up due" value={clock.followUpOn ? formatDay(clock.followUpOn) : clock.applicable ? 'Not required' : '—'} />
+          <Fact label="Follow-up due" value={followUpValue} />
           <Fact label="Exception report due" value={formatDay(clock.exceptionReportDueOn)} />
           <Fact label="Keep the signed copy until" value={formatDay(manifest.retention_end)} hint="Three years from shipping; your state may require longer." />
         </dl>

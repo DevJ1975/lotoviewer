@@ -85,6 +85,20 @@ describe('what the page shows', () => {
     expect(within(clock).getByText('Mar 1, 2029')).toBeInTheDocument()       // keep until
   })
 
+  it('does not call a follow-up "not required" for an LQG whose clock has not started, but does for a small quantity generator', async () => {
+    await show(manifest())
+    const followUp = () => screen.getByText('Follow-up due').parentElement!
+    expect(followUp()).toHaveTextContent('—')
+    expect(followUp()).not.toHaveTextContent('Not required')
+  })
+
+  it('says no follow-up is required of a small quantity generator, who has only the 60-day report', async () => {
+    await show(manifest({ status: 'shipped', shipped_on: '2026-03-01', generator_category: 'sqg' }))
+    expect(screen.getByText('Follow-up due').parentElement!).toHaveTextContent('Not required')
+    expect(screen.getByText('Day 36 of 60 · On track')).toBeInTheDocument()
+    expect(screen.getByText('Apr 30, 2026')).toBeInTheDocument()
+  })
+
   it('shows the timeline with the steps not yet taken marked as such', async () => {
     await show(SHIPPED())
     const timeline = within(screen.getByRole('list', { name: 'Manifest timeline' }))
@@ -316,7 +330,7 @@ describe('editing a draft', () => {
     }))
     expect(await screen.findByText('Details saved.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save details' })).not.toBeInTheDocument()
-    expect(screen.getByText('New Haul Co · ')).toBeInTheDocument
+    expect(within(screen.getByRole('heading', { name: 'Details' }).closest('section')!).getByText('New Haul Co')).toBeInTheDocument()
   })
 
   it('shows the refusal beside the field it is about and stays in the form', async () => {
