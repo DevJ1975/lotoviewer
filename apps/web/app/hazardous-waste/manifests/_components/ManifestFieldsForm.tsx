@@ -91,9 +91,11 @@ export function ManifestFieldsForm({ idPrefix, values, onChange, fieldErrors, di
       {field('trackingNumber', 'Manifest tracking number', text('trackingNumber', 12, '123456789ELC'),
         'Nine digits and three letters, from the paper form or e-Manifest. It is needed before the manifest can ship.')}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="max-w-sm">
         {field('generatorEpaId', 'Generator EPA ID', text('generatorEpaId', 12, 'CAL000123456'), 'Three letters and nine digits.')}
-        <div className="hidden sm:block" aria-hidden="true" />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {field('transporterName', 'Transporter name', text('transporterName', 200))}
         {field('transporterEpaId', 'Transporter EPA ID', text('transporterEpaId', 12))}
         {field('tsdfName', 'Receiving facility name', text('tsdfName', 200))}

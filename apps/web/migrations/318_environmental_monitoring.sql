@@ -113,7 +113,7 @@ drop trigger if exists trg_audit_monitoring_limits on public.monitoring_limits;
 create trigger trg_audit_monitoring_limits after insert or update or delete on public.monitoring_limits
   for each row execute function public.log_audit('id');
 
-
+alter table public.monitoring_limits enable row level security;
 
 drop policy if exists monitoring_limits_read on public.monitoring_limits;
 create policy monitoring_limits_read on public.monitoring_limits
