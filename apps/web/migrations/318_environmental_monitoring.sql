@@ -156,7 +156,7 @@ create table if not exists public.monitoring_results (
   lab             text check (lab is null or length(lab) <= 120),
   evidence_id     text,
   note            text check (note is null or length(note) <= 2000),
-  sampled_by      uuid references auth.users(id) on delete set null,
+  sampled_by      uuid references auth.users(id) on delete cascade,
 
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now(),
@@ -181,7 +181,7 @@ drop trigger if exists trg_monitoring_results_touch on public.monitoring_results
 create trigger trg_monitoring_results_touch before update on public.monitoring_results
   for each row execute function public.touch_updated_at();
 drop trigger if exists trg_audit_monitoring_results on public.monitoring_results;
-create trigger trg_audit_monitoring_results after insert on public.monitoring_results
+create trigger trg_audit_monitoring_results after insert or update or delete on public.monitoring_results
   for each row execute function public.log_audit('id');
 
 alter table public.monitoring_results enable row level security;
