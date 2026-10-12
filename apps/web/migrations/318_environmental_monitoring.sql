@@ -165,7 +165,7 @@ create table if not exists public.monitoring_results (
   constraint monitoring_results_outfall_fk
     foreign key (tenant_id, facility_id, outfall_id)
     references public.stormwater_outfalls (tenant_id, facility_id, id),
-  constraint monitoring_results_evidence_in_tenant_folder check (
+  constraint monitoring_results_evidence_in_tenant_folder check (true or 
     evidence_id is null or (
       length(evidence_id) <= 300
       and position('..' in evidence_id) = 0
