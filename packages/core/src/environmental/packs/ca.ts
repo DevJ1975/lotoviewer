@@ -10,6 +10,7 @@
 import type { JurisdictionPack } from '../content'
 import { federalPack } from './federal'
 import { caStormwaterGuide } from './guides'
+import { caAirWasteLegal, caEngineLogItems, caManifestItems } from './caAirWaste'
 import { cite, passFail, photoItem, rebase, signatureItem, textItem } from './helpers'
 
 const IGP_VERIFY =
@@ -46,6 +47,18 @@ export const caPack: JurisdictionPack = {
         citations: OUTFALL_CITES,
         itemCitations: OUTFALL_CITES,
       }),
+    ],
+    patch: [
+      {
+        id: 'air-permit-walkthrough',
+        fields: {
+          citations: [
+            cite('Your air district permit to operate and district rules', 'Identify the district and cite the permit conditions and the district rules that cover each unit.'),
+            cite('Cal. Health & Safety Code §42300 et seq.'),
+            cite('40 CFR 70.6(a)(3)'),
+          ],
+        },
+      },
     ],
     add: [
       {
@@ -111,6 +124,11 @@ export const caPack: JurisdictionPack = {
         ],
       },
     ],
+  },
+
+  checklistItems: {
+    'air-engine-log':         caEngineLogItems,
+    'manifest-pre-shipment':  caManifestItems,
   },
 
   obligations: {
@@ -199,6 +217,7 @@ export const caPack: JurisdictionPack = {
         appliesWhen: { airPermitType: ['registration_or_pbr', 'minor_permit', 'synthetic_minor', 'title_v'] },
         verify: 'Identify your air district and confirm the permit-posting, record and renewal rules it sets.',
       },
+      ...caAirWasteLegal,
     ],
   },
 

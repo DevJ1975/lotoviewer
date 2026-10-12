@@ -223,10 +223,10 @@ describe('unconfirmed claims, counted so any new uncertainty is visible in revie
     // When content changes, update these in the same change so the reviewer sees the delta.
     expect(counts).toMatchInlineSnapshot(`
       {
-        "CA": 69,
-        "OR": 61,
-        "TX": 64,
-        "null": 61,
+        "CA": 132,
+        "OR": 118,
+        "TX": 130,
+        "null": 118,
       }
     `)
   })

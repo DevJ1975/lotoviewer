@@ -18,6 +18,7 @@ const base = (id: string, section: string, prompt: string, itemType: ChecklistIt
   ...(o.numeric ? { numeric: o.numeric } : {}),
   ...(o.guidance ? { guidance: o.guidance } : {}),
   ...(o.appliesWhen ? { appliesWhen: o.appliesWhen } : {}),
+  ...(o.placeAfter ? { placeAfter: o.placeAfter } : {}),
   citations: o.cite,
 })
 

@@ -127,6 +127,22 @@ describe('resolveLibrary — checklist items', () => {
     expect(t.overrides).toBe('federal')
   })
 
+  it('an added item can be placed after a named item, several to one anchor keeping their authored order', () => {
+    const ca: JurisdictionPack = {
+      meta: meta('CA'),
+      checklistItems: {
+        'sw-inspect': { add: [item('first-extra', { placeAfter: 'a' }), item('second-extra', { placeAfter: 'a' }), item('at-the-end')] },
+      },
+    }
+    const t = resolve(['federal', 'CA'], { federal: federal(), CA: ca }).checklists.find(x => x.id === 'sw-inspect')!
+    expect(t.items.map(i => i.id)).toEqual(['a', 'first-extra', 'second-extra', 'b', 'at-the-end'])
+  })
+
+  it('refuses to place an item after one that is not in the checklist', () => {
+    const ca: JurisdictionPack = { meta: meta('CA'), checklistItems: { 'sw-inspect': { add: [item('lost', { placeAfter: 'nope' })] } } }
+    expect(() => resolve(['federal', 'CA'], { federal: federal(), CA: ca })).toThrow(/'lost' of 'sw-inspect' is placed after 'nope'/)
+  })
+
   it('a patched template keeps its items unless the patch supplies new ones', () => {
     const tx: JurisdictionPack = { meta: meta('TX'), checklists: { patch: [{ id: 'sw-inspect', fields: { cadence: 'monthly' } }] } }
     const t = resolve(['federal', 'TX'], { federal: federal(), TX: tx }).checklists.find(x => x.id === 'sw-inspect')!

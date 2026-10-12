@@ -4,7 +4,7 @@ import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
   HAZARDOUS_WASTE_AREA_TYPES,
-  HAZARDOUS_WASTE_FIELD_CHECKS,
+  ALL_HAZARDOUS_WASTE_CHECKS,
   type HazardousWasteAreaType,
   type HazardousWasteFindingStatus,
   type HazardousWasteInspectionFinding,
@@ -25,9 +25,12 @@ const VALID_AREA_TYPES = HAZARDOUS_WASTE_AREA_TYPES
 
 // Lookup table built once: check_id → { critical }. Used to coerce the
 // client-supplied `flagged_critical` to the catalog truth so a client
-// can't lie about which findings count as critical for the binder.
+// can't lie about which findings count as critical for the binder. It holds
+// the federal checks and every state's additions: which of them a given site
+// is shown is the form's job, and a state's extra check is no less a real
+// check for being submitted from another site.
 const CHECK_CATALOG = new Map<string, { critical: boolean; areaTypes: ReadonlyArray<HazardousWasteAreaType> }>(
-  HAZARDOUS_WASTE_FIELD_CHECKS.map(c => [c.id, { critical: c.critical, areaTypes: c.areaTypes }]),
+  ALL_HAZARDOUS_WASTE_CHECKS.map(c => [c.id, { critical: c.critical, areaTypes: c.areaTypes }]),
 )
 
 const MAX_PHOTOS = 12

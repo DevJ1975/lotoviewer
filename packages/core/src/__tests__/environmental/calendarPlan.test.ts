@@ -16,6 +16,22 @@ describe('firstDueDate', () => {
     expect(firstDueDate({ kind: 'annual', month: 10, day: 7 }, 'annual', undefined, at('2026-10-07'))).toBe('2026-10-07')
   })
 
+  it('annual with an even-year parity: the next March 1 that falls in an even year (the RCRA biennial report)', () => {
+    const biennial = { kind: 'annual', month: 3, day: 1, yearParity: 'even' } as const
+    const first = (today: string) => firstDueDate(biennial, 'biennial', undefined, at(today))
+    expect(first('2026-10-07')).toBe('2028-03-01')   // 2027-03-01 is an odd year, so skip it
+    expect(first('2027-03-01')).toBe('2028-03-01')
+    expect(first('2028-02-29')).toBe('2028-03-01')   // before the date in an even year: this year
+    expect(first('2028-03-01')).toBe('2028-03-01')   // the day itself still counts
+    expect(first('2028-03-02')).toBe('2030-03-01')
+  })
+
+  it('annual with an odd-year parity mirrors it', () => {
+    const odd = { kind: 'annual', month: 3, day: 1, yearParity: 'odd' } as const
+    expect(firstDueDate(odd, 'biennial', undefined, at('2026-10-07'))).toBe('2027-03-01')
+    expect(firstDueDate(odd, 'biennial', undefined, at('2027-03-02'))).toBe('2029-03-01')
+  })
+
   it('period_end month: the last day of this month, leap February included', () => {
     expect(firstDueDate({ kind: 'period_end', period: 'month' }, 'monthly', undefined, at('2026-10-07'))).toBe('2026-10-31')
     expect(firstDueDate({ kind: 'period_end', period: 'month' }, 'monthly', undefined, at('2028-02-10'))).toBe('2028-02-29')
