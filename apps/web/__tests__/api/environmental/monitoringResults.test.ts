@@ -330,7 +330,7 @@ describe('PATCH /api/environmental/monitoring/results/[id]', () => {
   })
 
   it('changes only what was sent, keeps the site and the sampler, and ignores a site in the body', async () => {
-    const db = fakeSupabase({ monitoring_results: resultsTable({ saved: { data: resultRow({ value: 43 }) } }) })
+    const db = fakeSupabase({ stormwater_outfalls: rowAt(FACILITY, { id: OUTFALL_ID }), monitoring_results: resultsTable({ saved: { data: resultRow({ value: 43 }) } }) })
     allow(adminGate, db.client)
     const res = await patch({ value: 43, facility_id: OTHER_FACILITY, sampled_by: 'someone-else', note: 'Corrected from the lab report' })
     expect(res.status).toBe(200)
@@ -344,18 +344,19 @@ describe('PATCH /api/environmental/monitoring/results/[id]', () => {
   })
 
   it('scopes the read and the write to the tenant and the result', async () => {
-    const db = fakeSupabase({ monitoring_results: resultsTable() })
+    const db = fakeSupabase({ stormwater_outfalls: rowAt(FACILITY, { id: OUTFALL_ID }), monitoring_results: resultsTable() })
     allow(adminGate, db.client)
     await patch({ value: 1 })
-    expect(db.calls).toHaveLength(2)
-    for (const call of db.calls) {
+    const own = db.calls.filter(c => c.table === 'monitoring_results')
+    expect(own).toHaveLength(2)
+    for (const call of own) {
       expect(eqValue(call, 'tenant_id')).toBe(TENANT)
       expect(eqValue(call, 'id')).toBe(RESULT_ID)
     }
   })
 
   it('refuses an edit that makes the result invalid or points its evidence at another tenant, and updates nothing', async () => {
-    const db = fakeSupabase({ monitoring_results: resultsTable() })
+    const db = fakeSupabase({ stormwater_outfalls: rowAt(FACILITY, { id: OUTFALL_ID }), monitoring_results: resultsTable() })
     allow(adminGate, db.client)
     const res = await patch({ value: -1, evidence_id: `${OTHER_TENANT}/lab.pdf`, sampled_at: new Date(Date.now() + 5 * DAY_MS).toISOString() })
     expect(res.status).toBe(400)
@@ -372,7 +373,7 @@ describe('PATCH /api/environmental/monitoring/results/[id]', () => {
   })
 
   it('answers 500 without leaking the database error', async () => {
-    allow(adminGate, fakeSupabase({ monitoring_results: resultsTable({ saved: { error: { code: 'XX000', message: 'relation exploded' } } }) }).client)
+    allow(adminGate, fakeSupabase({ stormwater_outfalls: rowAt(FACILITY, { id: OUTFALL_ID }), monitoring_results: resultsTable({ saved: { error: { code: 'XX000', message: 'relation exploded' } } }) }).client)
     const res = await patch({ value: 1 })
     expect(res.status).toBe(500)
     expect(JSON.stringify(await res.json())).not.toContain('exploded')
