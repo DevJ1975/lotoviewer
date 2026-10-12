@@ -49,7 +49,7 @@ export function SummaryStrip({ view, outfalls }: Props) {
             key={card.exceedanceClass}
             className={cn('rounded-lg border border-l-4 border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950', CARD_ACCENT[card.exceedanceClass])}
           >
-            <p className="text-3xl font-semibold tabular-nums text-slate-900 dark:text-slate-100" aria-label={`${card.count} ${card.label}`}>{card.count}</p>
+            <p className="text-3xl font-semibold tabular-nums text-slate-900 dark:text-slate-100">{card.count}</p>
             <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{card.label}</p>
             <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">{card.explanation}</p>
           </div>
