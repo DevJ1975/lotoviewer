@@ -85,7 +85,7 @@ create table if not exists public.monitoring_limits (
   created_by     uuid references public.profiles(id) on delete set null,
   updated_at     timestamptz not null default now(),
 
-  foreign key (tenant_id, facility_id) references public.facilities(tenant_id, id),
+  foreign key (tenant_id, facility_id) references public.facilities(tenant_id, id) on delete cascade,
   constraint monitoring_limits_outfall_fk
     foreign key (tenant_id, facility_id, outfall_id)
     references public.stormwater_outfalls (tenant_id, facility_id, id),
@@ -184,7 +184,7 @@ drop trigger if exists trg_audit_monitoring_results on public.monitoring_results
 create trigger trg_audit_monitoring_results after insert or update or delete on public.monitoring_results
   for each row execute function public.log_audit('id');
 
-alter table public.monitoring_results enable row level security;
+
 
 drop policy if exists monitoring_results_read on public.monitoring_results;
 create policy monitoring_results_read on public.monitoring_results
