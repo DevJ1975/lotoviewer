@@ -88,7 +88,7 @@ create table if not exists public.monitoring_limits (
   foreign key (tenant_id, facility_id) references public.facilities(tenant_id, id) on delete cascade,
   constraint monitoring_limits_outfall_fk
     foreign key (tenant_id, facility_id, outfall_id)
-    references public.stormwater_outfalls (tenant_id, facility_id, id) on delete cascade,
+    references public.stormwater_outfalls (tenant_id, facility_id, id) on delete restrict,
   -- A permit is retired, never deleted (304); set null is only for completeness, as in 313.
   constraint monitoring_limits_permit_fk
     foreign key (tenant_id, facility_id, permit_id)
@@ -164,7 +164,7 @@ create table if not exists public.monitoring_results (
   foreign key (tenant_id, facility_id) references public.facilities(tenant_id, id) on delete cascade,
   constraint monitoring_results_outfall_fk
     foreign key (tenant_id, facility_id, outfall_id)
-    references public.stormwater_outfalls (tenant_id, facility_id, id) on delete cascade,
+    references public.stormwater_outfalls (tenant_id, facility_id, id) on delete restrict,
   constraint monitoring_results_evidence_in_tenant_folder check (
     evidence_id is null or (
       length(evidence_id) <= 300
