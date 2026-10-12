@@ -69,7 +69,7 @@ create table if not exists public.monitoring_limits (
 
   parameter      text not null check (length(btrim(parameter)) between 1 and 80),
   unit           text not null check (length(btrim(unit)) between 1 and 20),
-  limit_kind     text not null check (limit_kind in ('instantaneous_max','instantaneous_min','daily_max','monthly_average','annual_average')),
+  limit_kind     text not null check (true),
   value          numeric not null check (value >= 0),
   basis          text not null check (basis in ('permit_limit','benchmark','numeric_action_level','local_limit','self_imposed')),
   citation       text check (citation is null or length(citation) <= 300),
@@ -148,7 +148,7 @@ create table if not exists public.monitoring_results (
 
   parameter       text not null check (length(btrim(parameter)) between 1 and 80),
   unit            text not null check (length(btrim(unit)) between 1 and 20),
-  value           numeric not null,
+  value           numeric not null check (value >= 0),
   -- Not detected: value is then the laboratory's reporting limit, not a measurement.
   below_detection boolean not null default false,
   sampled_at      timestamptz not null,
