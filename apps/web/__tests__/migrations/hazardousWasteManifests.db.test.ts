@@ -15,7 +15,7 @@
 // SQLSTATEs: 23505 unique_violation  23514 check_violation  42501 insufficient_privilege
 //            P0002 no_data_found
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { PGlite } from '@electric-sql/pglite'
 import { MANIFEST_ACTIONS, MANIFEST_STATUSES, MANIFEST_TRANSITIONS, type ManifestAction, type ManifestStatus } from '@soteria/core/hazardousWasteManifest'
 import { IDS, asCaller, migrationSql, scalar, type Caller } from './_emsTestDatabase'
@@ -477,13 +477,21 @@ describe('moving a manifest (hw_transition_shipment)', () => {
       await expect(transition(ownerA, id, 'ship', day(0))).resolves.toBeTruthy()
     })
 
-    it('accepts a date up to UTC+14 ahead, the latest "today" anywhere, and no further', async () => {
-      const ahead = new Date(Date.now() + 14 * 3_600_000).toISOString().slice(0, 10)
-      const first = await draft()
-      await expect(transition(ownerA, first.id, 'ship', ahead)).resolves.toBeTruthy()
-      const second = await draft()
-      await expect(transition(ownerA, second.id, 'ship', new Date(Date.parse(ahead) + DAY_MS).toISOString().slice(0, 10)))
-        .rejects.toMatchObject({ code: '23514' })
+    // PGlite reads the JS clock, so the database's "now" can be set: the allowance is checked at its edge, not just on whatever day this runs.
+    it.each([
+      ['09:59:59', '2026-06-15', '2026-06-16'],   // UTC+14 is still the 15th
+      ['10:00:00', '2026-06-16', '2026-06-17'],   // UTC+14 has reached the 16th
+    ])('accepts a date up to UTC+14 ahead, the latest "today" anywhere, and no further: at %s UTC the latest is %s', async (time, latest, tooLate) => {
+      const accepted = await draft()
+      const refused = await draft()
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date(`2026-06-15T${time}Z`))
+      try {
+        await expect(transition(ownerA, accepted.id, 'ship', latest)).resolves.toBeTruthy()
+        await expect(transition(ownerA, refused.id, 'ship', tooLate)).rejects.toMatchObject({ code: '23514', message: expect.stringContaining('future') })
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 
