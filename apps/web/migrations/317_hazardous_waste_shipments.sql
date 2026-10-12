@@ -557,7 +557,7 @@ begin
   if p_action = 'ship' then
     if v_ship.status = 'shipped' and v_ship.shipped_on is not distinct from p_on then return; end if;
     if v_ship.status <> 'draft' then
-      perform public.hw_manifest_refuse(format('This manifest is already %s; only a draft can be shipped.', replace(v_ship.status, '_', ' ')));
+      perform public.hw_manifest_refuse(format('Only a draft can be shipped (status: %s).', replace(v_ship.status, '_', ' ')));
     end if;
     if v_ship.manifest_tracking_number is null then
       perform public.hw_manifest_refuse('Add the manifest tracking number before shipping.');
@@ -574,7 +574,7 @@ begin
   elsif p_action = 'receive' then
     if v_ship.status = 'completed' and v_ship.completed_on is not distinct from p_on then return; end if;
     if v_ship.status <> 'shipped' then
-      perform public.hw_manifest_refuse(format('This manifest is %s; only a shipped manifest can be completed.', replace(v_ship.status, '_', ' ')));
+      perform public.hw_manifest_refuse(format('Only a shipped manifest can be completed (status: %s).', replace(v_ship.status, '_', ' ')));
     end if;
     if p_on is null then
       perform public.hw_manifest_refuse('Enter the date the signed copy was received.');
@@ -591,7 +591,7 @@ begin
   elsif p_action = 'file_exception' then
     if v_ship.status = 'exception_reported' and v_ship.exception_reported_on is not distinct from p_on then return; end if;
     if v_ship.status <> 'shipped' then
-      perform public.hw_manifest_refuse(format('This manifest is %s; an exception report applies only to a shipped manifest.', replace(v_ship.status, '_', ' ')));
+      perform public.hw_manifest_refuse(format('An exception report applies only to a shipped manifest (status: %s).', replace(v_ship.status, '_', ' ')));
     end if;
     if p_on is null then
       perform public.hw_manifest_refuse('Enter the date the exception report was filed.');
@@ -608,7 +608,7 @@ begin
   else
     if v_ship.status = 'cancelled' then return; end if;
     if v_ship.status not in ('draft', 'shipped') then
-      perform public.hw_manifest_refuse(format('A %s manifest cannot be cancelled.', replace(v_ship.status, '_', ' ')));
+      perform public.hw_manifest_refuse(format('A manifest cannot be cancelled once it is completed or an exception has been reported (status: %s).', replace(v_ship.status, '_', ' ')));
     end if;
     v_status := 'cancelled';
   end if;
