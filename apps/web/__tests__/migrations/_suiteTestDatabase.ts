@@ -2,9 +2,10 @@
 // on top, in the order they ship: EMS 294-306, then the suite's 311-316. A real Postgres (PGlite),
 // so the suite's constraints, policies and functions run as they do in production.
 //
-// Two things the EMS database does not have and the suite needs: the inspection engine (193, applied
-// where production applied it, before the facility migrations that give its tables a site) and the
-// storage objects table that the checklist evidence policies attach to.
+// Three things the EMS database does not have and the suite needs: the inspection engine (193) and the
+// hazardous-waste tables (140, 142, 272), each applied where production applied it, before the facility
+// migrations that give their tables a site; and the storage objects table that the checklist evidence
+// policies attach to.
 
 import { PGlite } from '@electric-sql/pglite'
 import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto'
@@ -30,16 +31,27 @@ create function public.storage_path_tenant(name text) returns uuid language sql 
 grant all on all tables in schema storage to authenticated;
 `
 
-/** A fresh database: the platform, EMS through its permit vault, then the suite. */
-export async function createSuiteDatabase(): Promise<PGlite> {
+/** The hazardous-waste module's tables, which the manifest tracker builds on. */
+export const HAZARDOUS_WASTE_MIGRATIONS = [
+  '140_hazardous_waste_streams_and_containers.sql',
+  '142_hazardous_waste_areas_inspections.sql',
+  '272_hazardous_waste_stream_jurisdiction_acute_ldr.sql',
+] as const
+
+/**
+ * A fresh database: the platform, EMS through its permit vault, then the suite. `extra` appends
+ * migrations that are not in SUITE_MIGRATIONS yet (a branch of work adding its own), in order.
+ */
+export async function createSuiteDatabase(options: { extra?: readonly string[] } = {}): Promise<PGlite> {
   const db = new PGlite({ extensions: { pgcrypto } })
   await db.exec(PLATFORM_SQL)
   await db.exec(STORAGE_STANDINS)
   const [first, ...rest] = BASE_MIGRATIONS
-  for (const file of [first, '193_inspection_templates.sql', ...rest]) await db.exec(migrationSql(file))
+  for (const file of [first, '193_inspection_templates.sql', ...rest, ...HAZARDOUS_WASTE_MIGRATIONS]) await db.exec(migrationSql(file))
   await db.exec(FIXTURE_SQL)
   for (const file of [
     ...FACILITY_MIGRATIONS, ...PRE_PHASE1_MIGRATIONS, ...PHASE1_MIGRATIONS, ...PHASE1_1_MIGRATIONS, ...PHASE2_MIGRATIONS, ...SUITE_MIGRATIONS,
+    ...(options.extra ?? []),
   ]) await db.exec(migrationSql(file))
   return db
 }
