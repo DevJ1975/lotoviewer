@@ -93,6 +93,14 @@ export const MANIFEST_ACTION_LABEL: Record<ManifestAction, string> = {
   cancel:         'Cancel manifest',
 }
 
+/** The button that carries an action out, once its effect has been read. Not the same words as the one that opens it. */
+export const MANIFEST_ACTION_CONFIRM_LABEL: Record<ManifestAction, string> = {
+  ship:           'Confirm shipment',
+  receive:        'Confirm signed copy received',
+  file_exception: 'Confirm exception report',
+  cancel:         'Confirm cancellation',
+}
+
 /** What the date an action asks for is called. Null where it asks for none. */
 export const MANIFEST_ACTION_DATE_LABEL: Record<ManifestAction, string | null> = {
   ship:           'Date the transporter accepted the waste',
