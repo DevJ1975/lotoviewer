@@ -55,7 +55,10 @@ describe('convertValue', () => {
   })
 
   it('does not let floating point turn an exact value into one just past it', () => {
-    expect(convertValue(1.1, 'mg/L', 'ug/L')).toBe(1100)
+    // 2.007 * 1000 is 2007.0000000000002 and 1.005 * 1000 is 1004.9999999999999 before tidying.
+    expect(convertValue(2.007, 'mg/L', 'ug/L')).toBe(2007)
+    expect(convertValue(1.005, 'mg/L', 'ug/L')).toBe(1005)
+    expect(convertValue(4.03, 'mg/L', 'ug/L')).toBe(4030)
     expect(convertValue(1100, 'ug/L', 'mg/L')).toBe(1.1)
     expect(convertValue(0.3, 'mg/L', 'ug/L')).toBe(300)
   })
@@ -133,6 +136,9 @@ describe('evaluateResult: units', () => {
 
   it('judges a result in mg/L against a limit in ug/L at its boundary without noise', () => {
     expect(evaluateResult(limit({ value: 1100, unit: 'ug/L' }), result({ value: 1.1, unit: 'mg/L' }))).toMatchObject({ status: 'within', margin: 0 })
+    // 2.007 mg/L is 2007.0000000000002 ug/L before tidying: just over a limit of 2007 that it equals.
+    expect(evaluateResult(limit({ value: 2007, unit: 'ug/L' }), result({ value: 2.007, unit: 'mg/L' }))).toMatchObject({ status: 'within', margin: 0 })
+    expect(evaluateResult(limit({ value: 2007, unit: 'ug/L' }), result({ value: 2.0071, unit: 'mg/L' }))).toMatchObject({ status: 'exceeds', margin: -0.1 })
   })
 })
 
@@ -749,9 +755,10 @@ describe('validateMonitoringResult', () => {
     })
 
     it('may be up to a day ahead of now, to allow for time zones and a fast clock, and not a moment more', () => {
-      const edge = new Date(NOW + FUTURE_ALLOWANCE_MS).toISOString()
+      expect(FUTURE_ALLOWANCE_MS).toBe(86_400_000)
+      const edge = new Date(NOW + 86_400_000).toISOString()
       expect(ok({ ...body, sampled_at: edge }).sampledAt).toBe(edge)
-      expect(errors({ ...body, sampled_at: new Date(NOW + FUTURE_ALLOWANCE_MS + 1).toISOString() })).toEqual(['sampled_at cannot be more than a day in the future.'])
+      expect(errors({ ...body, sampled_at: new Date(NOW + 86_400_001).toISOString() })).toEqual(['sampled_at cannot be more than a day in the future.'])
       expect(errors({ ...body, sampled_at: '2027-01-01T00:00:00Z' })).toEqual(['sampled_at cannot be more than a day in the future.'])
     })
 
@@ -784,6 +791,11 @@ describe('validateMonitoringResult', () => {
       expect(ok({ ...body, evidence_id: `${TENANT}/a.pdf` }).evidenceId).toBe(`${TENANT}/a.pdf`)
       expect(errors({ ...body, evidence_id: '22222222-2222-2222-2222-222222222222/a.pdf' })).toEqual([bad])
       expect(errors({ ...body, evidence_id: 'a.pdf' })).toEqual([bad])
+    })
+
+    it('must be inside the folder: sharing the first characters of its name is not enough', () => {
+      expect(errors({ ...body, evidence_id: `${TENANT}x/a.pdf` })).toEqual([bad])
+      expect(errors({ ...body, evidence_id: TENANT })).toEqual([bad])
     })
 
     it('may not climb out of the folder or run past 300 characters', () => {

@@ -693,7 +693,7 @@ export function validateMonitoringResult(
     const v = body.evidence_id
     const prefix = options.evidencePathPrefix
     if (v === null || v === '') evidenceId = null
-    else if (typeof v === 'string' && v.length <= 300 && !!prefix && v.startsWith(prefix) && !v.includes('..')) evidenceId = v
+    else if (typeof v === 'string' && v.length <= 300 && !!prefix && v.startsWith(prefix.slice(0, -1)) && !v.includes('..')) evidenceId = v
     else errors.push('evidence_id must be a file you uploaded to this account.')
   }
 
