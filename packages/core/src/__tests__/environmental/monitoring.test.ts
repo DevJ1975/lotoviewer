@@ -86,8 +86,16 @@ describe('evaluateResult: a maximum', () => {
     expect(evaluateResult(max, result({ value: 100.5 }))).toEqual({ status: 'exceeds', margin: -0.5, reason: null })
   })
 
-  it('does not report floating point noise as a margin', () => {
+  it('does not report floating point noise as a margin, at any scale', () => {
     expect(evaluateResult(limit({ value: 0.3 }), result({ value: 0.1 })).margin).toBe(0.2)
+    expect(evaluateResult(limit({ value: 1e-9 }), result({ value: 3e-10 })).margin).toBe(7e-10)
+    expect(evaluateResult(limit({ value: 1e9 }), result({ value: 1e9 - 0.5 })).margin).toBe(0.5)
+    expect(evaluateResult(limit({ value: 2007, unit: 'ug/L' }), result({ value: 2.0071, unit: 'mg/L' })).margin).toBe(-0.1)
+  })
+
+  it('reports exactly zero, never negative zero, at the limit', () => {
+    expect(Object.is(evaluateResult(limit({ value: 0.3 }), result({ value: 0.1 + 0.2 })).margin, 0)).toBe(true)
+    expect(evaluateResult(limit({ value: 0.3 }), result({ value: 0.1 + 0.2 })).status).toBe('within')
   })
 })
 

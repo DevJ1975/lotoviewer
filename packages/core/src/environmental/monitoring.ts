@@ -135,9 +135,19 @@ const unitKey = (unit: string): string => {
   return UNIT_SPELLINGS[key] ?? key
 }
 
-// Multiplying by 1000 turns 1.1 into 1100.0000000000002; twelve significant digits is far
+// Multiplying by 1000 turns 2.007 into 2007.0000000000002; twelve significant digits is far
 // beyond a laboratory's precision and enough to make "equal to the limit" compare as equal.
 const tidy = (value: number): number => Number(value.toPrecision(12))
+
+// The same tidying for a difference, which is small beside what was subtracted: 2007 - 2007.1
+// carries noise from the thirteenth digit of the operands, so it is rounded to the decimals
+// that twelve significant digits of the larger operand allow, not of the difference itself.
+function difference(a: number, b: number): number {
+  const scale = Math.max(Math.abs(a), Math.abs(b))
+  if (scale === 0) return 0
+  const decimals = Math.min(100, Math.max(0, 11 - Math.floor(Math.log10(scale))))
+  return Number((a - b).toFixed(decimals)) || 0
+}
 
 /** `value` expressed in `toUnit`, or null when the two units cannot be compared. */
 export function convertValue(value: number, fromUnit: string, toUnit: string): number | null {
@@ -267,10 +277,10 @@ export function evaluateResult(limit: JudgedLimit, result: JudgedResult): Evalua
     if (value > limit.value) {
       return notEvaluable(`Not detected, but the reporting limit (${value} ${limit.unit.trim()}) is above the limit, so this method could not show compliance.`)
     }
-    return { status: 'within', margin: tidy(limit.value - value), reason: `Not detected; the reporting limit (${value} ${limit.unit.trim()}) is within the limit.` }
+    return { status: 'within', margin: difference(limit.value, value), reason: `Not detected; the reporting limit (${value} ${limit.unit.trim()}) is within the limit.` }
   }
 
-  const margin = tidy(meta.direction === 'max' ? limit.value - value : value - limit.value)
+  const margin = meta.direction === 'max' ? difference(limit.value, value) : difference(value, limit.value)
   return { status: margin < 0 ? 'exceeds' : 'within', margin, reason: null }
 }
 
@@ -353,7 +363,7 @@ export function evaluateAnnualAverage(limit: AveragedLimit, results: readonly Sc
 
   const detail = `Average of ${plural(average.sampleCount, 'sample')}`
     + (average.includesNonDetects ? `, ${average.nonDetectCount} of them not detected and counted at their reporting limit` : '')
-  const margin = tidy(limit.value - average.mean)
+  const margin = difference(limit.value, average.mean)
   return { status: margin < 0 ? 'exceeds' : 'within', margin, reason: detail, average }
 }
 
