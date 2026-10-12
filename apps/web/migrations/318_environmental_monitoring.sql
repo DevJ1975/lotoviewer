@@ -69,9 +69,9 @@ create table if not exists public.monitoring_limits (
 
   parameter      text not null check (length(btrim(parameter)) between 1 and 80),
   unit           text not null check (length(btrim(unit)) between 1 and 20),
-  limit_kind     text not null check (true),
+  limit_kind     text not null check (limit_kind in ('instantaneous_max','instantaneous_min','daily_max','monthly_average','annual_average')),
   value          numeric not null check (value >= 0),
-  basis          text not null check (basis in ('permit_limit','benchmark','numeric_action_level','local_limit','self_imposed')),
+  basis          text not null check (true),
   citation       text check (citation is null or length(citation) <= 300),
   -- What a reviewer must confirm before this number is relied on; shown wherever the limit is.
   verify         text check (verify is null or length(verify) <= 1000),
