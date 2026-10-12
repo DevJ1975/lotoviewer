@@ -32,7 +32,7 @@
 -- older hazardous_waste_* tables (140, 142), which are not facility-scoped, these
 -- follow migration 211: a request scoped to one site sees only that site's
 -- manifests, and no site header is the roll-up. The (tenant_id, facility_id) pair
--- is a composite foreign key (uq_facilities_tenant_id_pair, migration 284).
+-- is a composite foreign key (uq_facilities_tenant_id_pair, migrations 284 and 295).
 --
 -- VERIFY (no regulatory text here has been confirmed against the current CFR; each
 -- needs confirmation by a CSP or the state agency before it is relied on):
@@ -41,7 +41,7 @@
 --     does not fit would be refused; confirm with the agency.
 --   * the return clock itself (40 CFR 262.42) lives in packages/core, not here.
 --
--- Depends on 140 (containers), 209-211 (facilities) and 284 (facility pair key).
+-- Depends on 140 (containers), 209-211 (facilities) and 284 or 295 (facility pair key).
 -- Idempotent. Rollback: 317_rollback.sql (restores containers: see its header).
 
 begin;
