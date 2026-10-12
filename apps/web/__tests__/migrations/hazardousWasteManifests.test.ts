@@ -55,11 +55,12 @@ describe('migration 317: structure', () => {
     }
   })
 
-  it('never alters, and never drops, a table another migration owns', () => {
+  it('never creates, alters or drops anything on a table another migration owns', () => {
+    const onOlderTable = (table: string) => new RegExp(
+      `(alter table (if exists )?public\\.${table}\\b|(create|drop) table (if not exists |if exists )?public\\.${table}\\b|(create|drop) (policy|trigger) (if exists )?\\w+ on public\\.${table}\\b)`, 'g')
     for (const table of OLDER_TABLES) {
-      expect(forward, table).not.toMatch(new RegExp(`alter table (if exists )?public\\.${table}\\b`))
-      expect(forward, table).not.toMatch(new RegExp(`(create|drop) (table|policy|trigger)[^;]*\\b${table}\\b`))
-      expect(rollback, table).not.toMatch(new RegExp(`(drop|alter) (table|policy|trigger)[^;]*\\b${table}\\b`))
+      expect(forward.match(onOlderTable(table)) ?? [], `${table} in ${FORWARD}`).toEqual([])
+      expect(rollback.match(onOlderTable(table)) ?? [], `${table} in ${ROLLBACK}`).toEqual([])
     }
   })
 })
