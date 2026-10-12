@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
-import { MANIFEST_STATUSES, validateManifestCreateInput, type ManifestCreateInput, type ManifestStatus } from '@soteria/core/hazardousWasteManifest'
-import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
-import type { HazardousWasteShipmentRow } from '@soteria/core/hazardousWasteManifest'
+import type { FieldError } from '@soteria/core/hazardousWaste'
 import {
-  HAZARDOUS_WASTE_MODULE, SHIPMENT_COLUMNS, gateFailure, invalidInput, invalidJson, loadManifest, manifestDbError, notFound,
+  MANIFEST_STATUSES, validateManifestCreateInput,
+  type HazardousWasteShipmentRow, type ManifestCreateInput, type ManifestStatus,
+} from '@soteria/core/hazardousWasteManifest'
+import { requireTenantModuleMember } from '@/lib/auth/tenantGate'
+import {
+  HAZARDOUS_WASTE_MODULE, SHIPMENT_COLUMNS, gateFailure, invalidInput, invalidJson, loadManifest, manifestDbError,
   presentManifests, readJsonObject, readManifestFields,
 } from './_shared'
 
@@ -35,12 +38,13 @@ export async function GET(req: Request) {
   const includeCancelled = params.get('include_cancelled') === 'true'
   const limit = wholeNumber(params.get('limit'), DEFAULT_PAGE, MAX_PAGE)
   const offset = wholeNumber(params.get('offset'), 0, MAX_OFFSET)
+  const queryErrors: FieldError[] = []
   if (status && !(MANIFEST_STATUSES as readonly string[]).includes(status)) {
-    return invalidInput([{ field: 'status', message: `Must be one of ${MANIFEST_STATUSES.join(', ')}` }])
+    queryErrors.push({ field: 'status', message: `Must be one of ${MANIFEST_STATUSES.join(', ')}` })
   }
-  if (limit === null || limit < 1 || offset === null) {
-    return invalidInput([{ field: limit === null || limit < 1 ? 'limit' : 'offset', message: 'Must be a whole number in range' }])
-  }
+  if (limit === null || limit < 1) queryErrors.push({ field: 'limit', message: `Must be a whole number from 1 to ${MAX_PAGE}` })
+  if (offset === null) queryErrors.push({ field: 'offset', message: `Must be a whole number from 0 to ${MAX_OFFSET}` })
+  if (queryErrors.length > 0 || limit === null || offset === null) return invalidInput(queryErrors)
 
   let query = gate.authedClient
     .from('hazardous_waste_shipments')
@@ -96,6 +100,6 @@ export async function POST(req: Request) {
 
   // Read it back through the same scoping as every other read: the answer is what the caller can see.
   const created = await loadManifest(gate, id as string, 'hazardous-waste/manifests/POST read')
-  if (!created.ok) return created.response ?? notFound()
+  if (!created.ok) return created.response
   return NextResponse.json({ manifest: created.manifest }, { status: 201 })
 }
