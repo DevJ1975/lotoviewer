@@ -419,8 +419,22 @@ describe('a container on two manifests', () => {
   })
 })
 
-describe('the composite keys, with the guard trigger out of the way', () => {
-  it('refuses a container list under another account than its manifest\'s, and a manifest at a site that is not its account\'s', async () => {
+describe('each layer holds with the other out of the way', () => {
+  it('the container list is still scoped to the active site and account when the manifests\' own policies are not applied', async () => {
+    const { id } = await draft()
+    const links = (caller: Caller) => asCaller(db, caller, async () => Number((await db.query<{ n: string }>(
+      'select count(*) as n from public.hazardous_waste_shipment_containers where shipment_id = $1', [id])).rows[0]!.n))
+    await db.exec('alter table public.hazardous_waste_shipments no force row level security; alter table public.hazardous_waste_shipments disable row level security')
+    try {
+      expect(await links({ ...memberC, facilityId: siteA })).toBe(2)
+      expect(await links({ ...memberC, facilityId: siteB })).toBe(0)
+      expect(await links(adminBInA)).toBe(0)
+    } finally {
+      await db.exec('alter table public.hazardous_waste_shipments enable row level security')
+    }
+  })
+
+  it('refuses a container list under another account than its manifest\'s, with the guard trigger off', async () => {
     const [free] = await closedContainers(1)
     const manifest = await insert(db, 'hazardous_waste_shipments', { tenant_id: TA, facility_id: siteA, generator_category: 'lqg' })
     await db.exec('alter table public.hazardous_waste_shipment_containers disable trigger trg_hw_shipment_containers_guard')
