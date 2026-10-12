@@ -1,8 +1,9 @@
 import {
-  MANIFEST_TRANSITIONS, manifestClockRule,
-  type HazardousWasteShipmentRow, type ManifestAction, type ManifestClockStage, type ManifestReturnClock, type ManifestStatus,
+  MANIFEST_TRANSITIONS, isValidEpaId, manifestClockRule, manifestJurisdictionFor,
+  type HazardousWasteShipmentRow, type ManifestAction, type ManifestClockStage, type ManifestDraftFields, type ManifestReturnClock,
+  type ManifestStatus,
 } from '@soteria/core/hazardousWasteManifest'
-import type { HazardousWasteContainerStatus } from '@soteria/core/hazardousWaste'
+import type { HazardousWasteContainerStatus, HazardousWasteFacilityProfile, RcraGeneratorCategory } from '@soteria/core/hazardousWaste'
 
 // What the manifest screens and the /api/hazardous-waste/manifests routes share: the shapes
 // the routes answer with, and the words and colours the screens put on them. The rules
@@ -149,4 +150,97 @@ export function formatDay(day: string | null): string {
 export function todayLocal(now: Date = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
+// ── The details form ────────────────────────────────────────────────────────
+
+/** The manifest form as people type it: everything text, so a half-finished entry is not rejected as they go. */
+export interface ManifestFormValues {
+  generatorCategory: RcraGeneratorCategory | ''
+  jurisdictionKind:  'federal' | 'state'
+  /** Two letters, when the rules are a state's. */
+  stateCode:         string
+  trackingNumber:    string
+  generatorEpaId:    string
+  transporterName:   string
+  transporterEpaId:  string
+  tsdfName:          string
+  tsdfEpaId:         string
+  /** Separated by commas or spaces. */
+  wasteCodes:        string
+  dotDescription:    string
+  electronic:        boolean
+  notes:             string
+}
+
+export const EMPTY_MANIFEST_FORM: ManifestFormValues = {
+  generatorCategory: '', jurisdictionKind: 'federal', stateCode: '', trackingNumber: '', generatorEpaId: '',
+  transporterName: '', transporterEpaId: '', tsdfName: '', tsdfEpaId: '', wasteCodes: '', dotDescription: '',
+  electronic: false, notes: '',
+}
+
+/** The API field each form field reports its errors under. */
+export const MANIFEST_FORM_API_FIELD: Record<keyof ManifestFormValues, string> = {
+  generatorCategory: 'generator_category', jurisdictionKind: 'jurisdiction', stateCode: 'jurisdiction',
+  trackingNumber: 'manifest_tracking_number', generatorEpaId: 'generator_epa_id', transporterName: 'transporter_name',
+  transporterEpaId: 'transporter_epa_id', tsdfName: 'tsdf_name', tsdfEpaId: 'tsdf_epa_id', wasteCodes: 'waste_codes',
+  dotDescription: 'dot_description', electronic: 'electronic', notes: 'notes',
+}
+
+export function splitWasteCodes(text: string): string[] {
+  return text.split(/[\s,;]+/).filter(code => code !== '')
+}
+
+/** The request body for a create or an edit. Blank text is sent blank; the route reads it as "none". */
+export function manifestFormToBody(values: ManifestFormValues): Record<string, unknown> {
+  return {
+    generator_category:       values.generatorCategory,
+    jurisdiction:             values.jurisdictionKind === 'federal' ? 'federal' : `state:${values.stateCode.trim().toUpperCase()}`,
+    manifest_tracking_number: values.trackingNumber.trim(),
+    generator_epa_id:         values.generatorEpaId.trim(),
+    transporter_name:         values.transporterName.trim(),
+    transporter_epa_id:       values.transporterEpaId.trim(),
+    tsdf_name:                values.tsdfName.trim(),
+    tsdf_epa_id:              values.tsdfEpaId.trim(),
+    waste_codes:              splitWasteCodes(values.wasteCodes),
+    dot_description:          values.dotDescription.trim(),
+    electronic:               values.electronic,
+    notes:                    values.notes.trim(),
+  }
+}
+
+export function manifestFormFromRow(row: ManifestDraftFields): ManifestFormValues {
+  const isState = row.jurisdiction !== 'federal'
+  return {
+    generatorCategory: row.generator_category,
+    jurisdictionKind:  isState ? 'state' : 'federal',
+    stateCode:         isState ? row.jurisdiction.slice('state:'.length) : '',
+    trackingNumber:    row.manifest_tracking_number ?? '',
+    generatorEpaId:    row.generator_epa_id ?? '',
+    transporterName:   row.transporter_name ?? '',
+    transporterEpaId:  row.transporter_epa_id ?? '',
+    tsdfName:          row.tsdf_name ?? '',
+    tsdfEpaId:         row.tsdf_epa_id ?? '',
+    wasteCodes:        row.waste_codes.join(', '),
+    dotDescription:    row.dot_description ?? '',
+    electronic:        row.electronic,
+    notes:             row.notes ?? '',
+  }
+}
+
+/**
+ * A new manifest starts from the site's own generator profile, when it has one. Nothing is
+ * guessed past that: with no profile the category is left for the person to choose, because
+ * it sets the return clock.
+ */
+export function manifestFormDefaults(profile: HazardousWasteFacilityProfile | null): ManifestFormValues {
+  if (!profile) return { ...EMPTY_MANIFEST_FORM }
+  const jurisdiction = profile.jurisdiction ? manifestJurisdictionFor(profile.jurisdiction) : 'federal'
+  return {
+    ...EMPTY_MANIFEST_FORM,
+    generatorCategory: profile.generator_category ?? '',
+    jurisdictionKind:  jurisdiction === 'federal' ? 'federal' : 'state',
+    stateCode:         jurisdiction === 'federal' ? '' : jurisdiction.slice('state:'.length),
+    generatorEpaId:    profile.epa_id_number && isValidEpaId(profile.epa_id_number) ? profile.epa_id_number.trim().toUpperCase() : '',
+  }
 }
