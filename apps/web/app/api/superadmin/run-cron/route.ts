@@ -29,8 +29,12 @@ const ALLOWED_PATHS = new Set<string>([
   '/api/cron/webhook-reconcile',
   '/api/cron/superadmin-daily-report',
   '/api/cron/check-regulation-updates',
+  '/api/cron/hazard-hunt-generate',
   '/api/cron/sds-library-seed-drip',
   '/api/cron/sds-library-verify',
+  '/api/cron/compliance-evaluations',
+  '/api/cron/environmental-permits',
+  '/api/cron/compliance-calendar-reminders',
 ])
 
 function publicAppUrl(req: Request): string {

@@ -178,7 +178,13 @@
       "wikiPage": "apps/web/app/wiki/iso-14001/page.tsx",
       "sources":  [
         "apps/web/app/wiki/iso-14001/**",
-        "apps/web/app/environmental/**",
+        "apps/web/app/environmental/page.tsx",
+        "apps/web/app/environmental/layout.tsx",
+        "apps/web/app/environmental/aspects/**",
+        "apps/web/app/environmental/objectives/**",
+        "apps/web/app/environmental/management-review/**",
+        "apps/web/app/environmental/nonconformities/**",
+        "apps/web/app/environmental/report-card/**",
         "apps/web/app/admin/evidence/iso14001/**",
         "apps/web/lib/iso14001Signals.ts",
         "apps/web/lib/pdfIso14001ReportCard.ts",
@@ -188,6 +194,29 @@
         "packages/core/src/environmentalObjective.ts",
         "packages/core/src/managementReview.ts",
         "packages/core/src/nonconformity.ts"
+      ]
+    },
+    {
+      "slug":     "environmental-compliance",
+      "module":   "Environmental Compliance",
+      "tagline":  "Permits, inspections, deadlines and the legal register for each site, with state rules layered on the federal baseline.",
+      "category": "safety",
+      "href":     "/environmental/compliance",
+      "wikiPage": "apps/web/app/wiki/environmental-compliance/page.tsx",
+      "sources":  [
+        "apps/web/app/wiki/environmental-compliance/**",
+        "apps/web/app/environmental/compliance/**",
+        "apps/web/app/api/environmental/**",
+        "apps/web/app/api/cron/compliance-calendar-reminders/**",
+        "apps/web/app/_components/EnvironmentalKpiPanel.tsx",
+        "apps/web/lib/environmental/**",
+        "apps/web/lib/email/sendComplianceReminder.ts",
+        "packages/core/src/environmental/**",
+        "apps/web/migrations/299_environmental_site_profiles.sql",
+        "apps/web/migrations/300_environmental_permits_outfalls.sql",
+        "apps/web/migrations/301_environmental_checklists.sql",
+        "apps/web/migrations/302_compliance_calendar_v2.sql",
+        "apps/web/migrations/303_legal_register_environmental.sql"
       ]
     },
     {

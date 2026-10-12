@@ -6,13 +6,23 @@
 //   1. Static `enabled = false` in lib/features.ts  → hidden everywhere,
 //      no tenant can turn it back on (graveyarded features).
 //   2. tenants.modules has an explicit boolean for this id → wins.
-//   3. No override key → fall back to the static `enabled`.
+//   3. No override key → the module's default: visible, unless it is an
+//      opt-in module (`defaultEnabled: false`).
 //
 // Children inherit their parent's resolution. Toggling the parent's
 // row in `tenants.modules` flips the entire group on or off without
 // the admin needing to touch every child.
 
-import { getFeature } from './features'
+import { getFeature, type FeatureDef } from './features'
+
+/**
+ * Whether a module is visible to a tenant that has no override key for it.
+ * Shared by the resolver and the superadmin module form, so a form that
+ * seeds its checkboxes shows exactly what the tenant currently sees.
+ */
+export function isVisibleByDefault(def: FeatureDef): boolean {
+  return def.enabled && def.defaultEnabled !== false
+}
 
 export function isModuleVisible(
   featureId: string,
@@ -25,9 +35,9 @@ export function isModuleVisible(
   // Walk up to the top-level parent — children always inherit.
   if (def.parent) return isModuleVisible(def.parent, tenantModules)
 
-  // Top-level: tenant override wins, else static enabled (= true here).
+  // Top-level: tenant override wins, else the module's default.
   if (tenantModules && featureId in tenantModules) {
     return tenantModules[featureId] === true
   }
-  return true
+  return isVisibleByDefault(def)
 }

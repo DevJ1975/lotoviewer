@@ -104,6 +104,8 @@ export const OPERATOR_TOOLS: Record<OperatorAgentId, Record<string, OperatorTool
   ]),
   knowledge: byName([
     sharedRead('compliance_obligations_due', 'knowledge', 'viewer'),
+    sharedRead('environmental_guidance', 'knowledge', 'viewer'),
+    sharedRead('environmental_compliance_status', 'knowledge', 'member'),
     sharedRead('navigate_to', 'knowledge', 'viewer'),
   ]),
 }

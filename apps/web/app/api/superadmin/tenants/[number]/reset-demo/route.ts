@@ -3,6 +3,9 @@ import * as Sentry from '@sentry/nextjs'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { isValidTenantNumber } from '@/lib/validation/tenants'
+import { DELETE_ORDER, SEED_FUNCTIONS } from '@/lib/demoReset'
+import { describeSummary, seedEnvironmentalDemo } from '@/lib/environmental/demoSeed'
+import { supabaseDemoStore } from '@/lib/environmental/demoStore'
 
 // POST /api/superadmin/tenants/[number]/reset-demo
 //
@@ -16,102 +19,18 @@ import { isValidTenantNumber } from '@/lib/validation/tenants'
 //      destroy real production data; this check is the last line of defense
 //      and runs even after the route guard.
 //
-// FK ORDER:
-//   Children (loto_energy_steps, loto_atmospheric_tests, …) before parents
-//   (loto_equipment, loto_confined_space_permits, …). Order matters because
-//   we use plain DELETE — no CASCADE — so a child row would block the
-//   parent's delete.
-//
-// SEEDING:
-//   Every seed function in SEED_FUNCTIONS runs, in order, against any tenant
-//   with is_demo = true. A function missing from the database (42883 /
-//   PGRST202) is skipped so a partially-migrated DB still resets.
-//
-//   This used to be gated on `tenant_number === '0002'`, which meant a second
-//   demo tenant was wiped and never re-seeded — audit item A10 in
-//   apps/web/docs/multi-tenancy-audit-plan.md. The seeds resolve their own
-//   tenant by `is_demo`, so the tenant-number check was both wrong and
-//   redundant.
-//
-// WIPED BUT DELIBERATELY NOT SEEDED:
-//   Three tables in DELETE_ORDER have no seed and should not get one. They
-//   are registrations and audit trails, not demo content, and an empty table
-//   after a reset is the correct outcome:
-//     - loto_hygiene_log         written only by hand-run hygiene SQL
-//     - loto_push_subscriptions  per-browser Web Push registrations
-//     - loto_webhook_subscriptions  per-integration endpoints
-//
-//   Anything else added to DELETE_ORDER needs a matching seed, or the module
-//   it belongs to silently empties on every reset and never comes back. That
-//   is exactly how Equipment Readiness was lost.
+// FK ORDER, SEEDING, and the tables wiped but deliberately not seeded:
+//   see lib/demoReset.ts, which holds both lists.
 
-const DELETE_ORDER: readonly string[] = [
-  // Children (FK to a parent in this list).
-  'loto_energy_steps',
-  'loto_atmospheric_tests',
-  'loto_confined_space_entries',
-  'loto_device_checkouts',
-  'loto_meter_alerts',
-  'equipment_inspection_responses',
-  'equipment_evidence',
-  'equipment_repairs',
-  'equipment_defects',
-  'equipment_inspections',
-  'equipment_operator_authorizations',
-  'bbs_observation_photos',
-  'bbs_observation_actions',
-  'bbs_observations',
-  'position_training_requirements',
-  'position_equipment_requirements',
-  'worker_position_assignments',
-  // ISO 14001 EMS registers (migrations 204-207), children first.
-  // seed_wls_iso14001_demo() re-creates these with deterministic ids and
-  // ON CONFLICT DO NOTHING, so without the wipe an edited demo row would
-  // survive a "reset" forever. compliance_calendar_obligations is
-  // deliberately NOT wiped — it also holds system-seeded rows this route
-  // cannot restore.
-  'iso14001_clause_evidence',
-  'environmental_objective_readings',
-  'nonconformity_actions',
-  'nonconformities',
-  'environmental_objectives',
-  'environmental_aspects',
-  'management_reviews',
-  // Parents.
-  'loto_equipment',
-  'loto_confined_space_permits',
-  'loto_confined_spaces',
-  'loto_hot_work_permits',
-  'loto_devices',
-  'loto_gas_meters',
-  'loto_reviews',
-  'loto_training_records',
-  'loto_webhook_subscriptions',
-  'loto_push_subscriptions',
-  'loto_hygiene_log',
-  'worker_positions',
-  'bbs_qr_locations',
-  // Audit log goes last so the wipe itself is captured (the rows being
-  // deleted include rows that recorded the deletes — the row counts in
-  // the response are correct as of the start-of-request snapshot).
-  'audit_log',
+// Environmental rows that share a table with other modules' data, so a plain tenant wipe
+// would take too much (or, for the calendar, the system-seeded rows this route cannot
+// restore). Checklist runs go with their inspection (responses and the companion row
+// cascade); completion events go with their deadline. The template instances are
+// configuration and are kept: the seed reuses them.
+const ENVIRONMENTAL_WIPES: ReadonlyArray<{ table: string; column: string; value: string }> = [
+  { table: 'inspections',                    column: 'domain',   value: 'environmental' },
+  { table: 'compliance_calendar_obligations', column: 'category', value: 'environmental' },
 ]
-
-// Seed functions, in dependency order. seed_wls_demo() lays down the
-// equipment, spaces and permits every later seed references, so it is first.
-//
-// Adding a seed migration means adding it here. A function that exists in the
-// database but is not listed never runs on reset, so its module stays empty
-// until someone calls it by hand.
-const SEED_FUNCTIONS = [
-  'seed_wls_demo',
-  'seed_wls_worker_readiness_demo',
-  'seed_wls_incidents_demo',
-  'seed_wls_near_miss_demo',
-  'seed_wls_bbs_demo',
-  'seed_wls_iso14001_demo',
-  'seed_wls_equipment_readiness_demo',
-] as const
 
 /** Postgres/PostgREST codes meaning "this function is not in the database". */
 const MISSING_FUNCTION_CODES = new Set(['42883', 'PGRST202'])
@@ -182,6 +101,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     }
   }
 
+  for (const w of ENVIRONMENTAL_WIPES) {
+    const { error: delErr, count } = await admin
+      .from(w.table)
+      .delete({ count: 'exact' })
+      .eq('tenant_id', tenant.id)
+      .eq(w.column, w.value)
+    if (delErr) {
+      if ((delErr as { code?: string }).code === '42P01') { skipped.push(w.table); continue }
+      // The domain/category columns arrive with migrations 314/315; before them there is nothing environmental to wipe.
+      if ((delErr as { code?: string }).code === '42703') { skipped.push(`${w.table}.${w.column}`); continue }
+      Sentry.captureException(delErr, { tags: { route: '/api/superadmin/tenants/[number]/reset-demo', stage: 'wipe-environmental' } })
+      return NextResponse.json({ error: `Wipe failed at ${w.table}: ${delErr.message}`, wiped }, { status: 500 })
+    }
+    wiped[`${w.table} (environmental)`] = count ?? 0
+  }
+
   // Re-seed. Every function runs against any demo tenant; each resolves the
   // demo tenant itself by is_demo. A function absent from this database is
   // skipped so older/partial schemas still reset cleanly.
@@ -205,6 +140,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     if (typeof data === 'string') seedMessages.push(data)
   }
 
+  // The environmental suite is seeded through the product's own code, after the SQL seeds
+  // (it needs the demo account's members). A failure is reported, not fatal: a database
+  // without migrations 312-316, or an account with no members, must still reset.
+  let environmentalSeed: { ok: true; summary: string } | { ok: false; error: string }
+  try {
+    environmentalSeed = { ok: true, summary: describeSummary(await seedEnvironmentalDemo(supabaseDemoStore(admin, tenant.id), new Date())) }
+    seedMessages.push(environmentalSeed.summary)
+  } catch (err) {
+    Sentry.captureException(err, { tags: { route: '/api/superadmin/tenants/[number]/reset-demo', stage: 'seed-environmental' } })
+    environmentalSeed = { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+
   const seedResult = seedMessages.length > 0 ? seedMessages.join('; ') : null
   // Only true when the database has none of the seed functions at all — not
   // when a single optional one is missing.
@@ -220,7 +167,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ number: string
     // Surfaced so a partially-migrated database is visible rather than
     // silently under-seeded — the failure mode this route already had.
     seedsMissing,
-    note: seedSkipped
+    environmentalSeed,
+    note: !environmentalSeed.ok
+      ? `Wiped and re-seeded, but the environmental demo was NOT seeded: ${environmentalSeed.error}`
+      : seedSkipped
       ? 'No seed functions found in this database — only the wipe ran. Apply the seed migrations to re-seed.'
       : seedsMissing.length > 0
         ? `Wiped and re-seeded. ${seedsMissing.length} seed function(s) not present in this database: ${seedsMissing.join(', ')}.`

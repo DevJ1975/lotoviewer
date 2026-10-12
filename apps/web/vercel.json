@@ -30,6 +30,10 @@
       "schedule": "0 12 * * *"
     },
     {
+      "path": "/api/cron/compliance-calendar-reminders",
+      "schedule": "20 13 * * *"
+    },
+    {
       "path": "/api/cron/incident-investigation-sla",
       "schedule": "0 * * * *"
     },
@@ -44,6 +48,14 @@
     {
       "path": "/api/cron/incident-care-followup",
       "schedule": "30 13 * * *"
+    },
+    {
+      "path": "/api/cron/compliance-evaluations",
+      "schedule": "45 13 * * *"
+    },
+    {
+      "path": "/api/cron/environmental-permits",
+      "schedule": "15 14 * * *"
     },
     {
       "path": "/api/cron/incident-trends-weekly",
@@ -100,6 +112,22 @@
     {
       "path": "/api/cron/vision-sweep-resume",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/hazard-hunt-generate",
+      "schedule": "10 11 * * *"
+    },
+    {
+      "path": "/api/cron/webhook-reconcile",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/superadmin-daily-report",
+      "schedule": "5 12 * * *"
+    },
+    {
+      "path": "/api/cron/safety-board-digests",
+      "schedule": "20 * * * *"
     }
   ]
 }

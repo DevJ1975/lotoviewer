@@ -50,6 +50,12 @@ describe('role-gated tool visibility', () => {
     const names = getOperatorToolDefinitions('knowledge', 'viewer').map(d => d.name)
     expect(names).toContain('navigate_to')
     expect(names).toContain('compliance_obligations_due')
+    expect(names).toContain('environmental_guidance')
+  })
+
+  it('keeps the compliance status figures for members, since they cover every site', () => {
+    expect(getOperatorToolDefinitions('knowledge', 'viewer').map(d => d.name)).not.toContain('environmental_compliance_status')
+    expect(getOperatorToolDefinitions('knowledge', 'member').map(d => d.name)).toContain('environmental_compliance_status')
   })
 
   it('gates every osha tool at admin — the read KPI tool and the regulated carve-outs', () => {

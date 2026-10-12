@@ -87,7 +87,8 @@ export async function gatherIncidentRiskFeatures(admin: SupabaseClient, tenantId
   // A tenant without a given module (or a schema drift) must not break the
   // core score — each query degrades to an empty set, contributing 0 pressure.
   const [inspRows, bbsV2Rows, jhaRows, csRows, hwRows, matrixRows, ecfaRows] = await Promise.all([
-    safeSelect(admin.from('inspections').select('result').eq('tenant_id', tenantId).gte('created_at', recentIso)),
+    // Safety inspections only: an oil sheen at an outfall is an environmental finding and must not raise injury risk.
+    safeSelect(admin.from('inspections').select('result').eq('tenant_id', tenantId).eq('domain', 'safety').gte('created_at', recentIso)),
     safeSelect(admin.from('bbs_observations_v2').select('follow_up_required, follow_up_completed_at').eq('tenant_id', tenantId).gte('created_at', recentIso)),
     safeSelect(admin.from('jhas').select('status, next_review_date').eq('tenant_id', tenantId)),
     safeSelect(admin.from('loto_confined_space_permits').select('expires_at, canceled_at').eq('tenant_id', tenantId).gte('started_at', recentIso)),

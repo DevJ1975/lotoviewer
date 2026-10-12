@@ -22,6 +22,7 @@ import { ModulesGrid }          from './ModulesGrid'
 import RiskKpiPanel             from './RiskKpiPanel'
 import NearMissKpiPanel         from './NearMissKpiPanel'
 import JhaKpiPanel              from './JhaKpiPanel'
+import EnvironmentalKpiPanel    from './EnvironmentalKpiPanel'
 import IncidentKpiPanel         from './IncidentKpiPanel'
 import BBSKpiPanel              from './BBSKpiPanel'
 import OpenActionsPanel         from './OpenActionsPanel'
@@ -162,6 +163,10 @@ export default function MultiModuleDashboard({ embedded = false }: { embedded?: 
       {/* JHA Intelligence — same gating pattern, mounts only when
           the tenant has jha visible. */}
       <JhaKpiPanel />
+
+      {/* Environmental compliance — deadlines, permits, requirements and findings.
+          Self-gates via isModuleVisible('environmental'). */}
+      <EnvironmentalKpiPanel />
 
       {/* Incident program scorecard + per-user CAPA list — both
           gated by isModuleVisible('incidents'). The CAPA panel
