@@ -92,7 +92,7 @@ create table if not exists public.monitoring_limits (
   -- A permit is retired, never deleted (304); set null is only for completeness, as in 313.
   constraint monitoring_limits_permit_fk
     foreign key (tenant_id, facility_id, permit_id)
-    references public.environmental_permits (tenant_id, facility_id, id),
+    references public.environmental_permits (tenant_id, facility_id, id) on delete set null (permit_id),
   constraint monitoring_limits_dates_ordered check (effective_from is null or effective_to is null or effective_from <= effective_to),
   constraint monitoring_limits_library_key_iff_library check ((source = 'library') = (library_key is not null)),
   constraint monitoring_limits_library_cites check (source <> 'library' or citation is not null)
