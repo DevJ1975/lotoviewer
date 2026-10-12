@@ -88,7 +88,7 @@ create table if not exists public.monitoring_limits (
   foreign key (tenant_id, facility_id) references public.facilities(tenant_id, id) on delete cascade,
   constraint monitoring_limits_outfall_fk
     foreign key (tenant_id, facility_id, outfall_id)
-    references public.stormwater_outfalls (tenant_id, facility_id, id) on delete restrict,
+    references public.stormwater_outfalls (tenant_id, facility_id, id),
   -- A permit is retired, never deleted (304); set null is only for completeness, as in 313.
   constraint monitoring_limits_permit_fk
     foreign key (tenant_id, facility_id, permit_id)
@@ -164,7 +164,7 @@ create table if not exists public.monitoring_results (
   foreign key (tenant_id, facility_id) references public.facilities(tenant_id, id) on delete cascade,
   constraint monitoring_results_outfall_fk
     foreign key (tenant_id, facility_id, outfall_id)
-    references public.stormwater_outfalls (tenant_id, facility_id, id) on delete restrict,
+    references public.stormwater_outfalls (tenant_id, facility_id, id),
   constraint monitoring_results_evidence_in_tenant_folder check (
     evidence_id is null or (
       length(evidence_id) <= 300
@@ -181,7 +181,7 @@ drop trigger if exists trg_monitoring_results_touch on public.monitoring_results
 create trigger trg_monitoring_results_touch before update on public.monitoring_results
   for each row execute function public.touch_updated_at();
 drop trigger if exists trg_audit_monitoring_results on public.monitoring_results;
-create trigger trg_audit_monitoring_results after insert or update or delete on public.monitoring_results
+create trigger trg_audit_monitoring_results after insert on public.monitoring_results
   for each row execute function public.log_audit('id');
 
 alter table public.monitoring_results enable row level security;
