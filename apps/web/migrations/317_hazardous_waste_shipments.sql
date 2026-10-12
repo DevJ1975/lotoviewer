@@ -20,6 +20,13 @@
 -- so a direct update cannot mark a manifest completed while its containers still
 -- say "in shipment".
 --
+-- A seed or a repair runs as the table owner with no signed-in user, so it cannot call
+-- the functions. To put a manifest in a later status, insert it as a draft with its
+-- containers, then name it to the guard and update it in the same transaction:
+--   select set_config('soteria.hw_shipment_transition', '<manifest id>', true);
+--   update public.hazardous_waste_shipments set status = 'shipped', shipped_on = '<date>' where id = '<manifest id>';
+-- The containers' own status is then the seed's to set.
+--
 -- Access: any member of the account reads and creates; the creator or a tenant
 -- admin edits a draft and moves it along; only a tenant admin deletes. Unlike the
 -- older hazardous_waste_* tables (140, 142), which are not facility-scoped, these

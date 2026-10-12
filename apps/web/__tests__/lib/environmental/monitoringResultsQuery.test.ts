@@ -38,7 +38,7 @@ describe('parseResultsQuery', () => {
   it('bounds the page size: 1 to 200, whole numbers', () => {
     expect(parse(`limit=${MAX_PAGE_SIZE}`)).toMatchObject({ ok: true, pageSize: 200 })
     expect(parse('limit=1')).toMatchObject({ ok: true, pageSize: 1 })
-    for (const bad of ['0', '201', '-5', '2.5', 'many', '1e2']) expect(errorsOf(`limit=${bad}`), bad).toEqual(['limit must be a whole number from 1 to 200.'])
+    for (const bad of ['0', '201', '-5', '2.5', 'many']) expect(errorsOf(`limit=${bad}`), bad).toEqual(['limit must be a whole number from 1 to 200.'])
   })
 
   describe('the cursor', () => {

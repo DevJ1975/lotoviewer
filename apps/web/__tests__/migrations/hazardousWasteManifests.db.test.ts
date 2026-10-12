@@ -780,6 +780,24 @@ describe('the database\'s own rules on a manifest, whoever writes it', () => {
         .rejects.toMatchObject({ code: '23514' })
     })
 
+    it('lets a seed put a manifest in a later status by naming it to the guard in the same transaction, and no other manifest', async () => {
+      const first = await insert(db, 'hazardous_waste_shipments', { tenant_id: TA, facility_id: siteA, generator_category: 'lqg', manifest_tracking_number: trackingNumber() })
+      const second = await insert(db, 'hazardous_waste_shipments', { tenant_id: TA, facility_id: siteA, generator_category: 'lqg', manifest_tracking_number: trackingNumber() })
+      const [one] = await closedContainers(1)
+      const ship = (named: string, target: string) => db.transaction(async tx => {
+        await tx.query(`select set_config('soteria.hw_shipment_transition', $1, true)`, [named])
+        await tx.query(`update public.hazardous_waste_shipments set status = 'shipped', shipped_on = $2 where id = $1`, [target, day(-3)])
+      })
+      await db.query('insert into public.hazardous_waste_shipment_containers (shipment_id, container_id, tenant_id) values ($1, $2, $3)', [first, one, TA])
+
+      await expect(ship(second, first)).rejects.toMatchObject({ code: '23514' })
+      expect((await shipment(first)).status).toBe('draft')
+      await ship(first, first)
+      expect(await shipment(first)).toMatchObject({ status: 'shipped', shipped_on: day(-3) })
+      // The name lasted one transaction: the next direct update is refused again.
+      await expect(db.query(`update public.hazardous_waste_shipments set status = 'cancelled' where id = $1`, [first])).rejects.toMatchObject({ code: '23514' })
+    })
+
     it('does not let a manifest move to another account or site', async () => {
       const { id } = await draft()
       await expect(db.query('update public.hazardous_waste_shipments set facility_id = $2 where id = $1', [id, siteB])).rejects.toMatchObject({ code: '23514' })
