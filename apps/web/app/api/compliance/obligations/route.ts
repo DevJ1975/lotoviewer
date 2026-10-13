@@ -1,17 +1,12 @@
 import { requireTenantAdmin } from '@/lib/auth/tenantGate'
 import { sanitizeError } from '@/lib/security/sanitizeError'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
-import { planSystemSeeds } from '@soteria/core/complianceCalendar'
+import { OBLIGATION_CADENCES, planSystemSeeds } from '@soteria/core/complianceCalendar'
 
 // Compliance obligations: list (with lazy system-seed) + create.
 // Admin-only; tenant-scoped by RLS via the gate's authed client.
 
 export const runtime = 'nodejs'
-
-const CADENCES = [
-  'once', 'monthly', 'quarterly', 'semiannual',
-  'annual', 'biennial', 'triennial', 'quinquennial', 'custom_days',
-] as const
 
 export async function GET(req: Request) {
   const g = await requireTenantAdmin(req)
@@ -68,7 +63,7 @@ export async function POST(req: Request) {
 
   if (!title) return Response.json({ error: 'title_required' }, { status: 400 })
   if (!/^\d{4}-\d{2}-\d{2}$/.test(nextDueAt)) return Response.json({ error: 'next_due_at_required' }, { status: 400 })
-  if (!CADENCES.includes(cadence as (typeof CADENCES)[number])) return Response.json({ error: 'invalid_cadence' }, { status: 400 })
+  if (!OBLIGATION_CADENCES.includes(cadence as (typeof OBLIGATION_CADENCES)[number])) return Response.json({ error: 'invalid_cadence' }, { status: 400 })
 
   const cadenceDays = typeof body.cadence_days === 'number' ? Math.floor(body.cadence_days) : null
   if (cadence === 'custom_days' && (!cadenceDays || cadenceDays <= 0)) {
