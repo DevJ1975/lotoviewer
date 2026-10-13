@@ -3,13 +3,17 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
-  AlertTriangle, BarChart3, ClipboardCheck, Gauge, Mountain, ScrollText,
+  AlertTriangle, BarChart3, ClipboardCheck, Compass, FileBadge, Gauge, GitPullRequestArrow, Mountain, Scale, ScrollText, Workflow,
 } from 'lucide-react'
+import type { RegisterHealth } from '@soteria/core/managementSystem'
+import { EMS_RESPONSIBILITIES } from '@soteria/core/emsProcesses'
 import { useTenant } from '@/components/TenantProvider'
 import { PageHeader } from '@/components/PageHeader'
 import OpsSpinner from '@/components/OpsSpinner'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
+import { getRegistersHealth, type RegistersHealth } from '@/lib/environmental/client'
+import { PERMIT_LIGHT_LABELS, RegisterHealthBadge } from './_components/RegisterHealthBadge'
 
 // /environmental — EMS module home.
 //
@@ -26,6 +30,7 @@ interface RegisterCounts {
   reviews:        number
   nonconformities: number
   openFindings:   number
+  openChanges:    number
 }
 
 const CARDS = [
@@ -37,11 +42,46 @@ const CARDS = [
     clause: 'Report card',
   },
   {
+    href:  '/environmental/context',
+    Icon:  Compass,
+    title: 'Context, scope & policy',
+    desc:  'Issues (climate included), interested parties, the EMS scope, and the signed policy.',
+    clause: 'Clauses 4.1-4.3 & 5.2',
+  },
+  {
+    href:  '/environmental/processes',
+    Icon:  Workflow,
+    title: 'Processes & responsibilities',
+    desc:  'The EMS processes and how they feed each other, an owner for each, and the roles clause 5.3 assigns.',
+    clause: 'Clauses 4.4 & 5.3',
+  },
+  {
     href:  '/environmental/aspects',
     Icon:  Mountain,
     title: 'Aspects & impacts',
-    desc:  'Activities, their environmental aspects, and significance scoring.',
+    desc:  'Activities and their aspects, scored under normal, abnormal and emergency conditions.',
     clause: 'Clause 6.1.2',
+  },
+  {
+    href:  '/environmental/obligations',
+    Icon:  Scale,
+    title: 'Compliance obligations',
+    desc:  'The legal register, and evidence-backed evaluations of compliance with it.',
+    clause: 'Clauses 6.1.3 & 9.1.2',
+  },
+  {
+    href:  '/environmental/permits',
+    Icon:  FileBadge,
+    title: 'Permits',
+    desc:  'Each permit, registration and plan: when it renews, who holds it of record, its conditions and documents.',
+    clause: 'Clause 6.1.3',
+  },
+  {
+    href:  '/environmental/changes',
+    Icon:  GitPullRequestArrow,
+    title: 'Management of change',
+    desc:  'A change to equipment, a chemical, a process or the owner, and the records it touches.',
+    clause: 'Clauses 6.1.4 & 8.1',
   },
   {
     href:  '/environmental/objectives',
@@ -66,9 +106,19 @@ const CARDS = [
   },
 ] as const
 
+const HEALTH_RANK: Record<RegisterHealth, number> = { red: 0, amber: 1, green: 2 }
+
+const ROLE_COUNT = EMS_RESPONSIBILITIES.filter(r => r.kind === 'role').length
+
+/** The context card covers two registers; it shows the worse of the two. */
+function worst(a: RegisterHealth, b: RegisterHealth): RegisterHealth {
+  return HEALTH_RANK[a] <= HEALTH_RANK[b] ? a : b
+}
+
 export default function EnvironmentalHomePage() {
   const { tenantId } = useTenant()
   const [counts, setCounts]       = useState<RegisterCounts | null>(null)
+  const [health, setHealth]       = useState<RegistersHealth | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -78,19 +128,22 @@ export default function EnvironmentalHomePage() {
       const head = (table: string) =>
         supabase.from(table).select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId)
 
-      const [aspects, significant, objectives, reviews, ncs, openNcs] = await Promise.all([
-        head('environmental_aspects'),
-        head('environmental_aspects').eq('is_significant', true),
+      const [registers, aspects, significant, objectives, reviews, ncs, openNcs, openChanges] = await Promise.all([
+        getRegistersHealth(tenantId),
+        head('environmental_aspect_register').is('obsolete_at', null),
+        head('environmental_aspect_register').is('obsolete_at', null).eq('significant', true),
         head('environmental_objectives'),
         head('management_reviews'),
         head('nonconformities'),
         head('nonconformities').in('status', ['open', 'in_progress']),
+        head('ms_changes').eq('status', 'open').in('discipline', ['ems', 'integrated']),
       ])
 
-      const firstError = [aspects, significant, objectives, reviews, ncs, openNcs]
+      const firstError = [aspects, significant, objectives, reviews, ncs, openNcs, openChanges]
         .find(r => r.error)?.error
       if (firstError) throw new Error(formatSupabaseError(firstError, 'load EMS registers'))
 
+      setHealth(registers)
       setCounts({
         aspects:         aspects.count ?? 0,
         significant:     significant.count ?? 0,
@@ -98,6 +151,7 @@ export default function EnvironmentalHomePage() {
         reviews:         reviews.count ?? 0,
         nonconformities: ncs.count ?? 0,
         openFindings:    openNcs.count ?? 0,
+        openChanges:     openChanges.count ?? 0,
       })
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Could not load the EMS registers.')
@@ -106,11 +160,48 @@ export default function EnvironmentalHomePage() {
 
   useEffect(() => { void load() }, [load])
 
-  const countFor = (href: string): string | null => {
-    if (!counts) return null
+  const healthFor = (href: string): RegisterHealth | null => {
+    if (!health) return null
     switch (href) {
+      case '/environmental/context':
+        return worst(health.context.health, health.scopeAndPolicy.health)
+      case '/environmental/aspects':     return health.aspects.health
+      case '/environmental/obligations': return health.obligations.health
+      case '/environmental/processes':   return health.responsibilities.health
+      case '/environmental/permits':     return health.permits.health
+      default:                           return null
+    }
+  }
+
+  const countFor = (href: string): string | null => {
+    if (!counts || !health) return null
+    switch (href) {
+      case '/environmental/context':
+        return `${health.context.active} issues · ${health.scopeAndPolicy.policyVersion ? `policy v${health.scopeAndPolicy.policyVersion}` : 'no policy yet'}`
       case '/environmental/aspects':
-        return `${counts.aspects} recorded · ${counts.significant} significant`
+        return `${counts.aspects} active · ${counts.significant} significant`
+      case '/environmental/obligations':
+        return [
+          `${health.obligations.active} obligations`,
+          health.obligations.deadlinesMissed > 0 && `${health.obligations.deadlinesMissed} deadlines missed`,
+          `${health.obligations.evaluationsOverdue} evaluations overdue`,
+        ].filter(Boolean).join(' · ')
+      case '/environmental/processes':
+        return [
+          health.responsibilities.rolesUnassigned > 0 ? `${health.responsibilities.rolesUnassigned} of ${ROLE_COUNT} roles unassigned` : 'roles assigned',
+          `${health.responsibilities.processesUnassigned} processes without an owner`,
+        ].join(' · ')
+      case '/environmental/permits':
+        return [
+          `${health.permits.active} on file`,
+          health.permits.deadlineMissed > 0 && `${health.permits.deadlineMissed} renewal deadlines missed`,
+          health.permits.holderMismatch > 0 && `${health.permits.holderMismatch} holder mismatch`,
+          health.permits.renewalSoon > 0 && `${health.permits.renewalSoon} renewals due within 90 days`,
+          health.permits.conditionsOverdue > 0 && `${health.permits.conditionsOverdue} conditions overdue`,
+          health.permits.reviewOverdue > 0 && `${health.permits.reviewOverdue} reviews overdue`,
+        ].filter(Boolean).join(' · ')
+      case '/environmental/changes':
+        return `${counts.openChanges} open`
       case '/environmental/objectives':
         return `${counts.objectives} objectives`
       case '/environmental/management-review':
@@ -152,6 +243,11 @@ export default function EnvironmentalHomePage() {
                   <Icon className="h-4 w-4" />
                 </span>
                 <span className="placard-label text-slate-500 dark:text-slate-400">{clause}</span>
+                {healthFor(href) && (
+                  <span className="ml-auto">
+                    <RegisterHealthBadge health={healthFor(href)!} labels={href === '/environmental/permits' ? PERMIT_LIGHT_LABELS : undefined} />
+                  </span>
+                )}
               </span>
               <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</span>
               <span className="text-xs text-slate-500 dark:text-slate-400">{desc}</span>

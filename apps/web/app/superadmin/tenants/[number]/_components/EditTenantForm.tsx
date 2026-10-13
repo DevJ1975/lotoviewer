@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { superadminJson } from '@/lib/superadminFetch'
 import { getModules, type FeatureCategory, type FeatureDef } from '@soteria/core/features'
+import { isVisibleByDefault } from '@soteria/core/moduleVisibility'
 import type { Tenant, TenantStatus } from '@soteria/core/types'
 import {
   TOOLBOX_TALK_INDUSTRY_OPTIONS,
@@ -31,18 +32,20 @@ interface Props {
 // (e.g. parent re-fetched after a logo upload).
 //
 // Module-state seeding is deliberate: the drawer's visibility resolver
-// treats a MISSING key as "use static `enabled`" (defaults to visible
-// for top-level admin entries). If we initialised the form purely from
+// treats a MISSING key as "use the module's default" (visible, unless
+// the module is opt-in). If we initialised the form purely from
 // tenant.modules, those defaulted-true entries would show as unchecked
 // and a save would persist them as false, silently hiding modules
-// that were visible. Seed every catalog feature from its static
-// enabled value, then overlay the tenant's explicit overrides.
+// that were visible. Seeding from `enabled` alone has the mirror bug:
+// an opt-in module would show as checked and a save would switch it
+// on. Seed every catalog feature from the resolver's default, then
+// overlay the tenant's explicit overrides.
 function seedModulesFromTenant(tenant: Tenant): Record<string, boolean> {
   const seeded: Record<string, boolean> = {}
   const allFeatures: FeatureDef[] = (['safety', 'reports', 'admin'] as const)
     .flatMap(cat => getModules(cat))
     .filter(m => !m.comingSoon)
-  for (const f of allFeatures) seeded[f.id] = f.enabled
+  for (const f of allFeatures) seeded[f.id] = isVisibleByDefault(f)
   for (const [k, v] of Object.entries(tenant.modules ?? {})) seeded[k] = v === true
   return seeded
 }

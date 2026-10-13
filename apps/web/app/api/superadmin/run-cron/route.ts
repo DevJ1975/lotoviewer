@@ -32,6 +32,8 @@ const ALLOWED_PATHS = new Set<string>([
   '/api/cron/hazard-hunt-generate',
   '/api/cron/sds-library-seed-drip',
   '/api/cron/sds-library-verify',
+  '/api/cron/compliance-evaluations',
+  '/api/cron/environmental-permits',
 ])
 
 function publicAppUrl(req: Request): string {

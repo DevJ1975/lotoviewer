@@ -12,6 +12,63 @@ app at `/superadmin/release-notes`.
 
 _Nothing pending._
 
+## [1.20.0] — 2026-10-02
+
+The Environmental (ISO 14001) module: the registers an environmental
+management system is built on, and a report card that grades only what the
+platform can evidence. The module is off by default; an administrator
+switches it on for each organization. This release also carries the security
+and correctness fixes from the bug hunt (#309).
+
+### Added
+- **Environmental registers.** Context, interested parties, the scope and the
+  policy (4.1–4.3, 5.2), with the scope and the policy kept as numbered
+  versions that are never edited. Environmental aspects scored separately under
+  normal, abnormal and emergency conditions, each score with a written
+  rationale (6.1.2). Compliance obligations with scheduled, evidence-backed
+  evaluations (6.1.3, 9.1.2). Evidence files are hashed when filed, checked on
+  every download, and superseded rather than deleted. Each register carries a
+  red, amber or green light.
+- **Processes and responsibilities** (4.4, 5.3): a map of the EMS processes and
+  how each feeds the others, an owner for each, and the two roles clause 5.3
+  names.
+- **The policy and the scope as one PDF** for interested parties, and a record
+  of each time the policy is communicated.
+- **A fictional demo site**, Northfield Forge & Finish, for showing the module.
+
+### Changed
+- **The ISO 14001 report card grades only from environmental records.** Seven
+  clauses the platform holds no environmental record for yet (7.2 competence,
+  7.3 awareness, 7.4 communication, 7.5 documented information, 8.1 operational
+  control, 8.2 emergency preparedness and 9.2 internal audit) read "not
+  assessed". They used to be graded from safety records, or counted as gaps
+  because a register had not shipped. A clause that is not assessed never
+  blocks and never counts as evidence, and the card will not say "Ready" while
+  any clause is unassessed. A card from before this release and one from after
+  are not comparable.
+
+### Fixed
+- **Support chat trusted the organization named in a request header** without
+  checking membership, so it could read another organization's data and spend
+  its AI key. It now checks first.
+- **A corrective action could be assigned to a user in another organization**,
+  emailing them the incident's details. The owner must now be a member.
+- **The anonymous-report endpoints returned raw database errors** to the
+  public. They now return a generic message and log the detail.
+- **OSHA ITA coverage dropped Appendix A for industries listed in both
+  appendices**, so some establishments with 20–99 employees were told they need
+  not file their 300A.
+- **Mean-time KPIs divided by every row**, not only the rows that contributed a
+  time.
+- **Inspection items that cannot be scored could fail an inspection.**
+- **SDS comparison reported a change** when a value was simply missing.
+
+### Internal
+- Migrations 295–302 add the environmental tables, all under row-level
+  security, each with a rollback. Apply them in the order the EMS pull requests
+  (#313, #314, #315) describe, before deploying.
+- Migration 303 publishes the in-app release note.
+
 ## [1.19.0] — 2026-08-29
 
 Cut the same day as 1.18.0. That release went out mid-way through clearing
@@ -466,10 +523,12 @@ Baseline release. Earlier history is tracked in git and in the in-app release
 notes (`/superadmin/release-notes`); this changelog starts the forward record
 from 1.9.0.
 
-[Unreleased]: https://github.com/devj1975/lotoviewer/compare/v1.17.1...HEAD
+[Unreleased]: https://github.com/devj1975/lotoviewer/compare/v1.20.0...HEAD
+[1.20.0]: https://github.com/devj1975/lotoviewer/compare/v1.19.0...v1.20.0
+[1.19.0]: https://github.com/devj1975/lotoviewer/compare/v1.18.0...v1.19.0
+[1.18.0]: https://github.com/devj1975/lotoviewer/compare/v1.17.1...v1.18.0
 [1.17.1]: https://github.com/devj1975/lotoviewer/compare/v1.17.0...v1.17.1
 [1.17.0]: https://github.com/devj1975/lotoviewer/compare/v1.16.0...v1.17.0
 [1.10.0 – 1.16.0]: https://github.com/devj1975/lotoviewer/compare/v1.9.0...v1.16.0
-[Unreleased]: https://github.com/devj1975/lotoviewer/compare/v1.10.0...HEAD
 [1.10.0]: https://github.com/devj1975/lotoviewer/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/devj1975/lotoviewer/releases/tag/v1.9.0
