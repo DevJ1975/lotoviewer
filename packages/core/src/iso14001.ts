@@ -8,12 +8,13 @@
 // Tenant-specific pinning of evidence to clauses lives in
 // iso14001_clause_evidence; this module is the canonical default.
 //
-// Conservative scope: every clause listed here is one we can genuinely
-// produce environmental evidence for from existing modules (incidents,
-// chemicals, hazardous waste, Prop 65, compliance calendar, inspections,
-// risk register, plus the environmental_aspects register added alongside
-// this map). Clauses with no real evidence home yet (e.g. 9.3 management
-// review) are deliberately omitted rather than mapped to a slogan.
+// Conservative scope: every clause listed here has somewhere in the platform
+// that can hold environmental evidence for it (incidents, chemicals,
+// hazardous waste, Prop 65, compliance calendar, inspections, risk register,
+// and the EMS registers). A source table is where to look, not proof: a
+// training record evidences 7.2 only if it covers environmental work, which
+// is why the report card does not grade 7.2 to 8.2 from these sources and a
+// person pins the records that count.
 
 export interface Iso14001ClauseEntry {
   /** Canonical clause code, e.g. "6.1.2". */
@@ -32,12 +33,27 @@ export const ISO14001_CLAUSE_MAP: readonly Iso14001ClauseEntry[] = [
   {
     code:    '4.1',
     title:   'Understanding the organization and its context',
-    sources: ['tenants', 'risks'],
+    sources: ['ms_context_issues', 'tenants'],
+  },
+  {
+    code:    '4.2',
+    title:   'Understanding the needs and expectations of interested parties',
+    sources: ['ms_interested_parties'],
+  },
+  {
+    code:    '4.3',
+    title:   'Determining the scope of the environmental management system',
+    sources: ['ms_scope_statements'],
   },
   {
     code:    '5.2',
     title:   'Environmental policy',
-    sources: ['audit_log'],
+    sources: ['ms_policies', 'ms_policy_communications'],
+  },
+  {
+    code:    '5.3',
+    title:   'Organizational roles, responsibilities and authorities',
+    sources: ['ms_responsibilities'],
   },
   {
     code:    '6.1.1',
@@ -47,7 +63,7 @@ export const ISO14001_CLAUSE_MAP: readonly Iso14001ClauseEntry[] = [
   {
     code:    '6.1.2',
     title:   'Environmental aspects',
-    sources: ['environmental_aspects', 'chemical_inventory_items', 'hazardous_waste_streams'],
+    sources: ['environmental_aspects', 'environmental_aspect_scores', 'chemical_inventory_items', 'hazardous_waste_streams'],
   },
   {
     code:    '6.1.3',
@@ -102,7 +118,7 @@ export const ISO14001_CLAUSE_MAP: readonly Iso14001ClauseEntry[] = [
   {
     code:    '9.1.2',
     title:   'Evaluation of compliance',
-    sources: ['compliance_calendar_obligations', 'prop65_exposure_assessments', 'prop65_annual_reviews'],
+    sources: ['ms_compliance_evaluations', 'ms_evidence', 'prop65_exposure_assessments', 'prop65_annual_reviews'],
   },
   {
     code:    '9.2',
