@@ -1,382 +1,259 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Mountain, Loader2, Trash2 } from 'lucide-react'
-import { useAuth } from '@/components/AuthProvider'
+import { AlertTriangle, ArrowLeft, Loader2, Mountain } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
-import { supabase } from '@/lib/supabase'
-import { formatSupabaseError } from '@/lib/supabaseError'
+import { useFacility } from '@/components/FacilityProvider'
 import {
-  aspectSignificanceBand,
-  ASPECT_LIFE_CYCLE_STAGES,
-  ASPECT_OPERATING_CONDITIONS,
-  ASPECT_STATUSES,
-  type AspectLifeCycleStage,
-  type AspectOperatingCondition,
-  type AspectFlow,
-  type AspectStatus,
-  type AspectSignificanceBand,
-} from '@soteria/core/environmentalAspect'
+  getRegistersHealth,
+  listAspects,
+  type AspectFilters,
+  type AspectRow,
+  type RegistersHealth,
+} from '@/lib/environmental/client'
+import { useCanEditRegisters } from '../_components/access'
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, INPUT, LABEL, LABEL_TEXT } from '../_components/formStyles'
+import { RegisterHealthStrip } from '../_components/RegisterHealthStrip'
+import { TermTooltip } from '../_components/TermTooltip'
+import { AspectForm } from './_components/AspectForm'
+import { AspectImport } from './_components/AspectImport'
+import { AspectSheet } from './_components/AspectSheet'
+import { ConditionChips } from './_components/ConditionChips'
 
-// /environmental/aspects — ISO 14001:2015 clause 6.1.2 register.
+// /environmental/aspects — the ISO 14001 clause 6.1.2 register.
 //
-// Lists the environmental aspects & impacts with their significance
-// rating (severity × likelihood; significant at ≥ 12). Admins add rows
-// and the DB derives significance_score / is_significant.
+// Each aspect is scored separately under normal, abnormal and emergency
+// conditions, and its significance comes from the database's view of those
+// scores, never from this page. Filtering and paging happen on the server
+// (200 rows at a time). Members read; tenant owners and admins edit.
 
-interface AspectRow {
-  id:                  string
-  activity:            string
-  aspect:              string
-  impact:              string
-  life_cycle_stage:    AspectLifeCycleStage
-  operating_condition: AspectOperatingCondition
-  flow:                AspectFlow | null
-  severity:            number
-  likelihood:          number
-  significance_score:  number
-  is_significant:      boolean
-  controls:            string | null
-  status:              AspectStatus
-  source_reference:    string | null
-  notes:               string | null
-  created_at:          string
-}
-
-const BAND_BADGE: Record<AspectSignificanceBand, string> = {
-  low:      'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200',
-  moderate: 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200',
-  high:     'bg-orange-100 text-orange-800 dark:bg-orange-950/50 dark:text-orange-200',
-  extreme:  'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-200',
-}
-
-const RATING_SCALE = [1, 2, 3, 4, 5] as const
+type SignificanceFilter = 'all' | 'yes' | 'no'
 
 export default function EnvironmentalAspectsPage() {
-  const { profile, loading: authLoading } = useAuth()
   const { tenantId } = useTenant()
+  const { facilityId } = useFacility()
+  const canEdit = useCanEditRegisters()
 
-  const [rows, setRows]           = useState<AspectRow[] | null>(null)
+  const [status, setStatus] = useState<NonNullable<AspectFilters['status']>>('active')
+  const [processArea, setProcessArea] = useState('')
+  const [significance, setSignificance] = useState<SignificanceFilter>('all')
+  const [overdueOnly, setOverdueOnly] = useState(false)
+
+  const [rows, setRows] = useState<AspectRow[] | null>(null)
+  const [nextOffset, setNextOffset] = useState<number | null>(null)
+  const [health, setHealth] = useState<RegistersHealth['aspects'] | null>(null)
+  const [knownAreas, setKnownAreas] = useState<string[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [significantOnly, setSignificantOnly] = useState(false)
-  const [saving, setSaving]       = useState(false)
-  const [showForm, setShowForm]   = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [selected, setSelected] = useState<string | null>(null)
+  const [panel, setPanel] = useState<'none' | 'new' | 'import'>('none')
 
-  // New-aspect form.
-  const [activity, setActivity]               = useState('')
-  const [aspect, setAspect]                   = useState('')
-  const [impact, setImpact]                   = useState('')
-  const [lifeCycleStage, setLifeCycleStage]   = useState<AspectLifeCycleStage>('operation')
-  const [operatingCondition, setOperatingCondition] = useState<AspectOperatingCondition>('normal')
-  const [flow, setFlow]                       = useState<'' | AspectFlow>('')
-  const [severity, setSeverity]               = useState(1)
-  const [likelihood, setLikelihood]           = useState(1)
-  const [controls, setControls]               = useState('')
-  const [status, setStatus]                   = useState<AspectStatus>('identified')
+  const filters = useCallback((offset?: number): AspectFilters => ({
+    status,
+    process_area: processArea || undefined,
+    significant:  significance === 'all' ? undefined : significance === 'yes',
+    review_due:   overdueOnly ? 'overdue' : undefined,
+    offset,
+  }), [status, processArea, significance, overdueOnly])
+
+  const remember = (found: readonly AspectRow[]) => setKnownAreas(previous => {
+    const areas = new Set(previous)
+    for (const row of found) if (row.process_area) areas.add(row.process_area)
+    return [...areas].sort((a, b) => a.localeCompare(b))
+  })
+
+  // Every reload starts a new generation; a response (or a "Load more" page)
+  // from an older generation arrives too late to count and is dropped, so a
+  // quick filter change can never show the other filter's rows.
+  const generation = useRef(0)
 
   const load = useCallback(async () => {
     if (!tenantId) return
+    const current = ++generation.current
     setLoadError(null)
+    setNextOffset(null)   // the previous filters' paging no longer applies
+    void getRegistersHealth(tenantId)
+      .then(registers => { if (current === generation.current) setHealth(registers.aspects) })
+      .catch(() => { if (current === generation.current) setHealth(null) })   // the list reports its own errors; the strip stays empty
     try {
-      const { data, error } = await supabase
-        .from('environmental_aspects')
-        .select('id, activity, aspect, impact, life_cycle_stage, operating_condition, flow, severity, likelihood, significance_score, is_significant, controls, status, source_reference, notes, created_at')
-        .eq('tenant_id', tenantId)
-        .order('significance_score', { ascending: false })
-        .limit(1000)
-      if (error) throw new Error(formatSupabaseError(error, 'load aspects'))
-      setRows((data ?? []) as AspectRow[])
+      const page = await listAspects(tenantId, filters())
+      if (current !== generation.current) return
+      setRows(page.aspects)
+      setNextOffset(page.nextOffset)
+      remember(page.aspects)
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Could not load the aspects register.')
+      if (current === generation.current) setLoadError(err instanceof Error ? err.message : 'Could not load the aspects register.')
     }
-  }, [tenantId])
+  }, [tenantId, filters])
 
-  useEffect(() => {
-    if (!authLoading && profile?.is_admin) void load()
-  }, [authLoading, profile, load])
+  useEffect(() => { void load() }, [load])
 
-  const visible = useMemo(
-    () => (rows ?? []).filter(r => !significantOnly || r.is_significant),
-    [rows, significantOnly],
-  )
-  const significantCount = useMemo(() => (rows ?? []).filter(r => r.is_significant).length, [rows])
-
-  function resetForm() {
-    setActivity(''); setAspect(''); setImpact('')
-    setLifeCycleStage('operation'); setOperatingCondition('normal'); setFlow('')
-    setSeverity(1); setLikelihood(1); setControls(''); setStatus('identified')
-  }
-
-  async function addAspect() {
-    if (!tenantId || !activity.trim() || !aspect.trim() || !impact.trim()) return
-    setSaving(true)
-    setLoadError(null)
+  async function loadMore() {
+    if (!tenantId || nextOffset === null || loadingMore) return
+    const current = generation.current
+    setLoadingMore(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      const { error } = await supabase.from('environmental_aspects').insert({
-        tenant_id:           tenantId,
-        activity:            activity.trim(),
-        aspect:              aspect.trim(),
-        impact:              impact.trim(),
-        life_cycle_stage:    lifeCycleStage,
-        operating_condition: operatingCondition,
-        flow:                flow || null,
-        severity,
-        likelihood,
-        controls:            controls.trim() || null,
-        status,
-        created_by:          user?.id ?? null,
-        updated_by:          user?.id ?? null,
-      })
-      if (error) throw new Error(formatSupabaseError(error, 'add aspect'))
-      resetForm(); setShowForm(false)
-      await load()
+      const page = await listAspects(tenantId, filters(nextOffset))
+      if (current !== generation.current) return
+      setRows(previous => [...(previous ?? []), ...page.aspects])
+      setNextOffset(page.nextOffset)
+      remember(page.aspects)
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Could not add the aspect.')
+      if (current === generation.current) setLoadError(err instanceof Error ? err.message : 'Could not load more aspects.')
     } finally {
-      setSaving(false)
+      setLoadingMore(false)
     }
   }
 
-  async function remove(id: string) {
-    if (!tenantId) return
-    if (!confirm('Delete this environmental aspect?')) return
-    setSaving(true)
-    setLoadError(null)
-    try {
-      const { error } = await supabase
-        .from('environmental_aspects')
-        .delete()
-        .eq('id', id)
-        .eq('tenant_id', tenantId)
-      if (error) throw new Error(formatSupabaseError(error, 'delete aspect'))
-      await load()
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Could not delete the aspect.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const previewBand = aspectSignificanceBand(severity * likelihood)
-
-  if (authLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" />
-      </div>
-    )
-  }
-  if (!profile?.is_admin) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">
-        Admins only.
-      </div>
-    )
-  }
+  const today = new Date().toISOString().slice(0, 10)
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+    <div className="mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6">
       <div>
-        <Link href="/environmental" className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300">
-          <ArrowLeft className="h-3 w-3" /> Back
+        <Link href="/environmental" className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300">
+          <ArrowLeft className="h-3 w-3" /> Environmental
         </Link>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+        <h1 className="mt-2 flex items-center gap-2 text-2xl font-bold text-slate-900 dark:text-slate-100">
           <Mountain className="h-6 w-6 text-brand-navy" />
           Environmental aspects &amp; impacts
         </h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          ISO 14001:2015 clause 6.1.2. Significance = severity × likelihood (1-5 each); an aspect is
-          <span className="font-semibold"> significant</span> at a score of 12 or higher.
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          ISO 14001:2015 clause 6.1.2. Each <TermTooltip term="aspect" /> is scored under every{' '}
+          <TermTooltip term="operating condition" /> that applies: severity × likelihood, 1-5 each, and{' '}
+          <TermTooltip term="significant" /> at 12 or higher.
         </p>
       </div>
 
+      <RegisterHealthStrip title="Aspects" health={health?.health ?? null} facts={health ? [
+        { label: 'active', value: health.active },
+        { label: 'not scored', value: health.unscored, warn: health.unscored > 0 },
+        { label: 'review overdue', value: health.reviewOverdue, warn: health.reviewOverdue > 0 },
+      ] : []} />
+
       {loadError && (
-        <div className="rounded-md border border-rose-200 bg-rose-50 dark:bg-rose-950/40 px-3 py-2 text-xs text-rose-900 dark:text-rose-100">
-          {loadError}
+        <div role="alert" className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>{loadError}</span>
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-          <input
-            type="checkbox"
-            checked={significantOnly}
-            onChange={e => setSignificantOnly(e.target.checked)}
-            className="rounded border-slate-300 dark:border-slate-600"
-          />
-          Significant only ({significantCount})
-        </label>
-        <button
-          type="button"
-          onClick={() => setShowForm(v => !v)}
-          className="px-3 py-1.5 rounded-md bg-brand-navy text-white text-xs font-semibold hover:bg-brand-navy/90"
-        >
-          {showForm ? 'Cancel' : 'New aspect'}
-        </button>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className={LABEL}>
+            <span className={LABEL_TEXT}>Show</span>
+            <select className={INPUT} value={status} onChange={e => setStatus(e.target.value as typeof status)}>
+              <option value="active">Active</option>
+              <option value="obsolete">Obsolete</option>
+              <option value="all">All</option>
+            </select>
+          </label>
+          <label className={LABEL}>
+            <span className={LABEL_TEXT}>Process area</span>
+            <select className={INPUT} value={processArea} onChange={e => setProcessArea(e.target.value)}>
+              <option value="">All areas</option>
+              {knownAreas.map(area => <option key={area} value={area}>{area}</option>)}
+            </select>
+          </label>
+          <label className={LABEL}>
+            <span className={LABEL_TEXT}>Significance</span>
+            <select className={INPUT} value={significance} onChange={e => setSignificance(e.target.value as SignificanceFilter)}>
+              <option value="all">All</option>
+              <option value="yes">Significant</option>
+              <option value="no">Not significant</option>
+            </select>
+          </label>
+          <label className="inline-flex items-center gap-2 pb-2 text-xs text-slate-600 dark:text-slate-300">
+            <input type="checkbox" checked={overdueOnly} onChange={e => setOverdueOnly(e.target.checked)} />
+            Review overdue
+          </label>
+        </div>
+        {canEdit && (
+          <div className="flex gap-2">
+            <button type="button" className={BUTTON_SECONDARY} disabled={!facilityId}
+              onClick={() => setPanel(panel === 'import' ? 'none' : 'import')}>Import CSV</button>
+            <button type="button" className={BUTTON_PRIMARY} disabled={!facilityId}
+              onClick={() => setPanel(panel === 'new' ? 'none' : 'new')}>Record aspect</button>
+          </div>
+        )}
       </div>
-
-      {showForm && (
-        <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <label className="block sm:col-span-1">
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Activity / product / service</span>
-              <input type="text" value={activity} onChange={e => setActivity(e.target.value)}
-                placeholder="e.g. Parts-washer solvent use"
-                className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm" />
-            </label>
-            <label className="block sm:col-span-1">
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Environmental aspect</span>
-              <input type="text" value={aspect} onChange={e => setAspect(e.target.value)}
-                placeholder="e.g. VOC emission to air"
-                className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm" />
-            </label>
-            <label className="block sm:col-span-1">
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Environmental impact</span>
-              <input type="text" value={impact} onChange={e => setImpact(e.target.value)}
-                placeholder="e.g. Air-quality degradation"
-                className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm" />
-            </label>
-
-            <label className="block">
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Life-cycle stage</span>
-              <select value={lifeCycleStage} onChange={e => setLifeCycleStage(e.target.value as AspectLifeCycleStage)}
-                className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm">
-                {ASPECT_LIFE_CYCLE_STAGES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Operating condition</span>
-              <select value={operatingCondition} onChange={e => setOperatingCondition(e.target.value as AspectOperatingCondition)}
-                className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm">
-                {ASPECT_OPERATING_CONDITIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Flow (optional)</span>
-              <select value={flow} onChange={e => setFlow(e.target.value as '' | AspectFlow)}
-                className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm">
-                <option value="">—</option>
-                <option value="input">Input (resource use)</option>
-                <option value="output">Output (emission / discharge / waste)</option>
-              </select>
-            </label>
-
-            <label className="block">
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Severity (1-5)</span>
-              <select value={severity} onChange={e => setSeverity(Number(e.target.value))}
-                className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm">
-                {RATING_SCALE.map(n => <option key={n} value={n}>{n}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Likelihood (1-5)</span>
-              <select value={likelihood} onChange={e => setLikelihood(Number(e.target.value))}
-                className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm">
-                {RATING_SCALE.map(n => <option key={n} value={n}>{n}</option>)}
-              </select>
-            </label>
-            <div className="flex items-end">
-              <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${BAND_BADGE[previewBand]}`}>
-                Score {severity * likelihood} · {previewBand}
-              </span>
-            </div>
-
-            <label className="block sm:col-span-2">
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Existing / planned controls (optional)</span>
-              <input type="text" value={controls} onChange={e => setControls(e.target.value)}
-                placeholder="e.g. Closed-loop solvent recovery; secondary containment"
-                className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm" />
-            </label>
-            <label className="block">
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Status</span>
-              <select value={status} onChange={e => setStatus(e.target.value as AspectStatus)}
-                className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm">
-                {ASPECT_STATUSES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </label>
-          </div>
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => void addAspect()}
-              disabled={saving || !activity.trim() || !aspect.trim() || !impact.trim()}
-              className="px-3 py-1.5 rounded-md bg-brand-navy text-white text-xs font-semibold disabled:opacity-40 hover:bg-brand-navy/90"
-            >
-              {saving ? 'Saving…' : 'Add aspect'}
-            </button>
-          </div>
-        </section>
+      {canEdit && !facilityId && (
+        <p className="text-xs text-slate-500">Choose a facility in the header to record aspects: an aspect belongs to a site.</p>
       )}
 
-      <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-x-auto">
+      {tenantId && panel === 'new' && (
+        <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+          <AspectForm tenantId={tenantId} initial={null} processAreas={knownAreas}
+            onCancel={() => setPanel('none')}
+            onSaved={aspect => { setPanel('none'); void load(); setSelected(aspect.id) }} />
+        </section>
+      )}
+      {tenantId && panel === 'import' && (
+        <AspectImport tenantId={tenantId} onImported={() => void load()} onClose={() => setPanel('none')} />
+      )}
+
+      <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
         {rows === null ? (
-          <div className="flex items-center justify-center py-10">
-            <Loader2 className="h-5 w-5 animate-spin text-slate-400 dark:text-slate-500" />
-          </div>
-        ) : visible.length === 0 ? (
-          <p className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400 italic">
-            {significantOnly ? 'No significant aspects.' : 'No aspects yet — add the first one above.'}
+          !loadError && <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
+        ) : rows.length === 0 ? (
+          <p className="px-4 py-10 text-center text-sm italic text-slate-500 dark:text-slate-400">
+            No aspects match. {canEdit ? 'Record the first one, or import a CSV.' : ''}
           </p>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-950/40 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-950/40 dark:text-slate-400">
               <tr>
-                <th className="text-left px-4 py-2">Activity</th>
-                <th className="text-left px-4 py-2">Aspect → impact</th>
-                <th className="text-left px-4 py-2 w-28">Life cycle</th>
-                <th className="text-left px-4 py-2 w-24">Condition</th>
-                <th className="text-left px-4 py-2 w-32">Significance</th>
-                <th className="text-left px-4 py-2 w-24">Status</th>
-                <th className="px-4 py-2 w-10" />
+                <th className="px-4 py-2 text-left">Activity · aspect → impact</th>
+                <th className="px-4 py-2 text-left">Process area</th>
+                <th className="px-4 py-2 text-left">Conditions</th>
+                <th className="px-4 py-2 text-right">Highest</th>
+                <th className="px-4 py-2 text-left">Last reviewed</th>
+                <th className="px-4 py-2 text-left">Next review</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {visible.map(row => {
-                const band = aspectSignificanceBand(row.significance_score)
-                return (
-                  <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/40 align-top">
-                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.activity}</td>
-                    <td className="px-4 py-2 text-slate-700 dark:text-slate-300">
-                      <span className="font-medium">{row.aspect}</span>
-                      <span className="text-slate-400"> → </span>
-                      <span>{row.impact}</span>
-                      {row.controls && (
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 italic">Controls: {row.controls}</p>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-[11px] text-slate-500 dark:text-slate-400">
-                      {row.life_cycle_stage.replace(/_/g, ' ')}
-                      {row.flow ? ` · ${row.flow}` : ''}
-                    </td>
-                    <td className="px-4 py-2 text-[11px] text-slate-500 dark:text-slate-400">{row.operating_condition}</td>
-                    <td className="px-4 py-2">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${BAND_BADGE[band]}`}>
-                        {row.significance_score} · {band}
-                      </span>
-                      {row.is_significant && (
-                        <span className="ml-1 text-[10px] font-bold uppercase text-rose-600 dark:text-rose-300">significant</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-[11px] text-slate-500 dark:text-slate-400">{row.status}</td>
-                    <td className="px-4 py-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => void remove(row.id)}
-                        disabled={saving}
-                        className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-md p-1"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
+              {rows.map(row => (
+                <tr key={row.id} className="align-top hover:bg-slate-50 dark:hover:bg-slate-900/40">
+                  <td className="px-4 py-2">
+                    <button type="button" onClick={() => setSelected(row.id)}
+                      className="text-left font-medium text-slate-900 hover:underline dark:text-slate-100">
+                      {row.activity}
+                    </button>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{row.aspect} → {row.impact}</p>
+                    {row.control_level === 'influence' && (
+                      <p className="text-[11px] font-semibold text-sky-700 dark:text-sky-300">Influence only</p>
+                    )}
+                    {row.obsolete_at && <p className="text-[11px] italic text-slate-400">Obsolete: {row.obsolete_reason}</p>}
+                  </td>
+                  <td className="px-4 py-2 text-xs text-slate-600 dark:text-slate-300">{row.process_area ?? '—'}</td>
+                  <td className="px-4 py-2"><ConditionChips scores={row.current_scores} /></td>
+                  <td className="px-4 py-2 text-right">
+                    <span className="placard-numeric font-semibold">{row.max_score ?? '—'}</span>
+                    {row.significant && (
+                      <span className="ml-1 text-[10px] font-bold uppercase text-rose-600 dark:text-rose-300">significant</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-xs text-slate-500">{row.last_reviewed_at?.slice(0, 10) ?? 'Never'}</td>
+                  <td className={`px-4 py-2 text-xs ${row.next_review_due < today ? 'font-semibold text-amber-700 dark:text-amber-300' : 'text-slate-500'}`}>
+                    {row.next_review_due}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}
       </div>
+      {nextOffset !== null && (
+        <div className="flex justify-center">
+          <button type="button" className={BUTTON_SECONDARY} disabled={loadingMore} onClick={() => void loadMore()}>
+            {loadingMore ? 'Loading…' : 'Load more'}
+          </button>
+        </div>
+      )}
+
+      {tenantId && (
+        <AspectSheet tenantId={tenantId} aspectId={selected} canEdit={canEdit} processAreas={knownAreas}
+          onChanged={() => void load()} onClose={() => setSelected(null)} />
+      )}
     </div>
   )
 }
