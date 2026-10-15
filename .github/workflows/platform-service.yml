@@ -1,0 +1,78 @@
+name: Platform service
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/platform/**'
+      - 'apps/web/migrations/294_platform_service_role.sql'
+      - '.github/workflows/platform-service.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'services/platform/**'
+      - 'apps/web/migrations/294_platform_service_role.sql'
+      - '.github/workflows/platform-service.yml'
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Deploy to Fly.io after checks pass'
+        type: boolean
+        default: false
+
+defaults:
+  run:
+    working-directory: services/platform
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DJANGO_SECRET_KEY: ci-only-not-secret
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/platform_ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: services/platform/uv.lock
+
+      - name: Install
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check . && uv run ruff format --check .
+
+      - name: Type-check
+        run: uv run mypy .
+
+      - name: Migrations are committed
+        run: uv run python manage.py makemigrations --check --dry-run
+
+      - name: Test (real Postgres, real migration 294)
+        run: uv run pytest -q
+
+  # Manual until the platform_svc role has LOGIN and Fly secrets are set —
+  # see services/platform/README.md → "Deploy". Flip to `on: push` afterwards.
+  deploy:
+    needs: verify
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency: platform-deploy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

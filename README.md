@@ -12,6 +12,9 @@ lotoviewer/
 ├── apps/
 │   └── web/      ← Next.js 16 app (Vercel)
 ├── packages/     ← shared TS modules (Phase 1+)
+├── services/
+│   ├── platform/   ← Django service alongside Supabase (Fly.io) — see its README
+│   └── sds-parser/ ← FastAPI SDS fallback parser (to be absorbed by platform)
 └── package.json  ← npm workspaces root
 ```
 
@@ -40,3 +43,6 @@ The web app deploys to Vercel from `apps/web`. After the monorepo
 migration, set the Vercel project's **Root Directory** to `apps/web`
 (Project Settings → General → Root Directory). The `vercel.json`
 inside `apps/web` continues to define the cron schedules.
+
+The Django platform service (`services/platform`) deploys separately to
+Fly.io; see [services/platform/README.md](services/platform/README.md).

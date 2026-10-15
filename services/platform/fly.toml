@@ -1,0 +1,36 @@
+# Fly.io config for the Soteria platform service.
+# Secrets (DATABASE_URL, DJANGO_SECRET_KEY, SUPABASE_*, SENTRY_DSN) are set
+# with `fly secrets set`, never here. See README.md → "Deploy".
+
+app = "soteria-platform"
+primary_region = "lax"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[deploy]
+  # Only touches the `platform` schema; Supabase migrations own `public`.
+  release_command = "python manage.py migrate --noinput"
+
+[env]
+  DJANGO_ALLOWED_HOSTS = "soteria-platform.fly.dev,ops.soteriafield.app"
+  DJANGO_CSRF_TRUSTED_ORIGINS = "https://ops.soteriafield.app"
+  SENTRY_ENVIRONMENT = "production"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/healthz"
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "20s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
