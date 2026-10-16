@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import math
 import os
 import re
 import sys
@@ -445,7 +446,7 @@ EQUIPMENT_COLUMNS = (
     "cad_drawing_tag,cad_sheet_ref,cad_grid_ref,facility_floor,flagged_for_review_at,"
     "flagged_for_review_by,flagged_for_review_via,flagged_for_review_note,"
     "equip_photo_provenance,iso_photo_provenance,iso_photo_is_placeholder,"
-    "last_audit_verdict,last_audit_at,created_at,updated_at"
+    "annotations,iso_annotations,last_audit_verdict,last_audit_at,created_at,updated_at"
 )
 STEP_COLUMNS = (
     "equipment_id,step_number,sequence_order,step_type,energy_type,tryout_required,"
@@ -875,7 +876,9 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
                 _embed(ws, path, start, span[0], photo_rows,
                        label=clean(equipment["equipment_id"]),
                        warning=(photo_warning(photo_verdicts.get(kind))
-                                if photo_verdicts is not None else None))
+                                if photo_verdicts is not None else None),
+                       arrows=valid_arrows(equipment.get(
+                           "iso_annotations" if kind == "iso" else "annotations")))
                 embedded = True
             except Exception as error:
                 # An unreadable photo costs one slot, not the whole export.
@@ -996,7 +999,63 @@ def photo_warning(verdict: str | None) -> str | None:
     return "mismatch" if verdict == "mismatch" else "unverified"
 
 
-def _stamp_label(path: Path, label: str, warning: str | None = None):
+_ARROW_RED = (191, 20, 20)
+
+
+def valid_arrows(raw) -> list[dict]:
+    """The arrows the platform would draw: type "arrow", coordinates 0-1.
+
+    Mirrors parseAnnotations in apps/web/lib/photoAnnotations.ts, which
+    drops anything malformed rather than failing the page.
+    """
+    arrows = []
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict) or item.get("type") != "arrow":
+            continue
+        points = [item.get(key) for key in ("x1", "y1", "x2", "y2")]
+        if all(isinstance(p, (int, float)) and not isinstance(p, bool) and 0 <= p <= 1
+               for p in points):
+            label = item.get("label")
+            arrows.append({"x1": points[0], "y1": points[1], "x2": points[2], "y2": points[3],
+                           "label": label if isinstance(label, str) and label.strip() else None})
+    return arrows
+
+
+def _arrow_wing(x: float, y: float, angle: float, head: float, turn: float) -> tuple[float, float]:
+    return (x - math.cos(angle + turn) * head, y - math.sin(angle + turn) * head)
+
+
+def _draw_arrows(draw, width: int, height: int, arrows: list[dict], font) -> None:
+    """Red arrows with an optional white-outlined label, sized against the
+    photo like the app's overlay so they read the same on screen and paper."""
+    unit = max(width, height)
+    head = unit * 0.05
+    stroke = max(2, round(unit * 0.012))
+    for arrow in arrows:
+        x1, y1 = arrow["x1"] * width, arrow["y1"] * height
+        x2, y2 = arrow["x2"] * width, arrow["y2"] * height
+        angle = math.atan2(y2 - y1, x2 - x1)
+        draw.line([(x1, y1), (x2 - math.cos(angle) * head * 0.6,
+                              y2 - math.sin(angle) * head * 0.6)], fill=_ARROW_RED, width=stroke)
+
+        draw.polygon([(x2, y2), _arrow_wing(x2, y2, angle, head, 0.45),
+                      _arrow_wing(x2, y2, angle, head, -0.45)], fill=_ARROW_RED)
+        if arrow["label"]:
+            text_width = draw.textlength(arrow["label"], font=font)
+            if x1 > width * 0.7:
+                x = x1 - text_width
+            elif x1 < width * 0.3:
+                x = x1
+            else:
+                x = x1 - text_width / 2
+            x = min(max(x, 2), max(2, width - text_width - 2))
+            y = y1 - font.size - stroke * 2 if y1 < height / 2 else y1 + stroke * 2
+            draw.text((x, y), arrow["label"], font=font, fill=_ARROW_RED,
+                      stroke_width=max(1, stroke // 2), stroke_fill=(255, 255, 255))
+
+
+def _stamp_label(path: Path, label: str, warning: str | None = None,
+                 arrows: list[dict] | None = None):
     """Burn the equipment name onto a copy of the photo, bottom-left.
 
     A placard photo travels: it gets cropped into a work pack, pasted into a
@@ -1033,6 +1092,13 @@ def _stamp_label(path: Path, label: str, warning: str | None = None):
             font = ImageFont.load_default()
 
         draw = ImageDraw.Draw(image, "RGBA")
+        if arrows:
+            arrow_font = font
+            for candidate in _ARIAL_BOLD_PATHS:
+                if os.path.exists(candidate):
+                    arrow_font = ImageFont.truetype(candidate, max(11, int(max(width, height) * 0.04)))
+                    break
+            _draw_arrows(draw, width, height, arrows, arrow_font)
         pad = max(4, bar_height // 5)
         text_width = int(draw.textlength(label, font=font))
         draw.rectangle(
@@ -1069,7 +1135,8 @@ def _stamp_label(path: Path, label: str, warning: str | None = None):
 
 
 def _embed(ws, path: Path, row: int, column: int, rows: int,
-           label: str | None = None, warning: str | None = None) -> None:
+           label: str | None = None, warning: str | None = None,
+           arrows: list[dict] | None = None) -> None:
     """Place a cached photo inside its slot, scaled to fit and centred."""
     from PIL import Image
 
@@ -1080,7 +1147,7 @@ def _embed(ws, path: Path, row: int, column: int, rows: int,
     scale = min(slot_width / width, slot_height / height, 1.0)
     drawn_width, drawn_height = int(width * scale), int(height * scale)
 
-    stamped = _stamp_label(path, label, warning) if label else None
+    stamped = _stamp_label(path, label, warning, arrows) if label else None
     image = XLImage(stamped if stamped is not None else str(path))
     image.width, image.height = drawn_width, drawn_height
     # A plain cell anchor pins the image to the slot's top-left corner; the

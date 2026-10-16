@@ -507,8 +507,10 @@ def _photo_audit_sheet(ws, audit: list[dict], link_for: dict) -> int:
                    "Yes" if item["iso_photo"]["consistent_with_energy_steps"] else "No",
                    PHOTO_VERDICT_LABEL[item["equip_photo"]["verdict"]],
                    item["equip_photo"]["notes"], item["recommended_fix"], None,
+                   PHOTO_FIXED if item.get("reshot_on") else
                    "Open" if item["merged_iso_verdict"] != "match" else "Not needed",
-                   None, None])
+                   date.fromisoformat(item["reshot_on"]) if item.get("reshot_on") else None,
+                   None])
         row = ws.max_row
         for column in range(1, len(labels) + 1):
             _body(ws.cell(row=row, column=column), wrap=column in (2, 5, 8, 9, 13))
