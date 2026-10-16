@@ -34,7 +34,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from export_placards_xlsx import (  # noqa: E402
     _download_photos,
-    build_workbook,
     cmd_build,
 )
 
@@ -49,6 +48,13 @@ def main() -> int:
     parser.add_argument("--skip-photos", action="store_true")
     parser.add_argument("--language", choices=("en", "es", "both"), default="both")
     parser.add_argument("--date", default="")
+    parser.add_argument("--findings", default="",
+                        help="audit findings JSON to carry into the register")
+    parser.add_argument("--register", default="", help="register workbook path")
+    parser.add_argument("--proposed", default="",
+                        help="drafted replacement steps JSON for the register")
+    parser.add_argument("--no-app-links", action="store_true",
+                        help="omit Soteria Field links (for a closed account)")
     args = parser.parse_args()
 
     if not args.date:
@@ -82,7 +88,8 @@ def main() -> int:
     build_args = argparse.Namespace(
         data=str(data), out=args.single or "loto-placards.xlsx",
         by_department=args.single is None, out_dir=args.out_dir,
-        language=args.language, date=args.date,
+        language=args.language, date=args.date, findings=args.findings, proposed=args.proposed,
+        register=args.register, no_app_links=args.no_app_links,
     )
     result = cmd_build(build_args)
 
@@ -91,8 +98,8 @@ def main() -> int:
               f"'-- No photo --' placeholder. Re-run to retry just those.",
               file=sys.stderr)
     else:
-        print("\nEvery referenced photo is embedded. The workbooks open on the "
-              "Placards sheet — landscape, fit to width, one placard per page.")
+        print("\nEvery referenced photo is embedded. Each placard page is its own tab, "
+              "fit to one Letter page: print double-sided for English front, Spanish back.")
     return result
 
 

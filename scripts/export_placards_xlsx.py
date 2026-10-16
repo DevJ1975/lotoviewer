@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 """Export LOTO placards to an Excel workbook that mirrors the printed PDF.
 
-The workbook renders one page per placard per language, laid out band for
-band against `apps/web/lib/pdfPlacard.ts` — yellow title band, blue
-equipment bar, red warning block, purpose + application columns, colour
-codes grid, photo slots, energy-steps table, removal process, signature
-bar. Alongside those pages it carries flat Equipment and Energy Steps
-sheets for filtering, and a Summary sheet of per-department counts.
+Each placard page is its own worksheet — English, then Spanish, per
+machine — laid out band for band against `apps/web/lib/pdfPlacard.ts`:
+yellow title band, blue equipment bar, red warning block, purpose +
+application columns, colour codes grid, photo slots, energy-steps table,
+removal process, signature bar. Every page is scaled to exactly one sheet
+of paper, so printing the workbook double-sided puts each machine's
+English placard on the front and its Spanish placard on the back.
+
+The placard workbooks hold nothing but placards, so "Print Entire
+Workbook" cannot slip a stray page in and flip every back side after it.
+The filterable data, per-department counts and inspection tracking live in
+a separate register workbook (placard_register.py), written alongside.
 
 Two subcommands, because fetching and rendering fail for different
 reasons and are usefully retried apart:
@@ -43,11 +49,10 @@ from openpyxl import Workbook
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
 from openpyxl.drawing.xdr import XDRPositiveSize2D
-from openpyxl.utils.units import pixels_to_EMU
-from openpyxl.worksheet.cell_range import CellRange
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
-from openpyxl.worksheet.pagebreak import Break
+from openpyxl.utils.units import pixels_to_EMU
+from openpyxl.worksheet.cell_range import CellRange
 from openpyxl.worksheet.page import PageMargins
 
 # ── Placard constants, mirrored from the TypeScript sources ─────────────────
@@ -72,13 +77,16 @@ ENERGY_CODES: list[tuple[str, str, str, str, str]] = [
 ENERGY_ALIASES = {"O": "M", "OG": "CG"}
 _BY_CODE = {c[0]: c for c in ENERGY_CODES}
 
-# lotoProcedureValidation.ts — OSHA documentation order. The placard groups
-# steps by phase in this order, then by sequence_order within each phase.
+# The placard groups steps by phase in this order, then by sequence_order
+# within each phase. This deliberately differs from LOTO_STEP_ORDER in
+# lotoProcedureValidation.ts, which puts release before lockout: 1910.147
+# (d)(4)–(d)(5)(i) relieves stored energy only after the locks are applied,
+# and the placard's own printed application box says the same.
 STEP_PHASE_ORDER = [
     "shutdown",
     "isolate",
-    "release_stored_energy",
     "lockout",
+    "release_stored_energy",
     "verify_zero_energy",
 ]
 PHASE_LABELS = {
@@ -226,8 +234,12 @@ LINK_BLUE = "1155CC"
 
 FONT_NAME = "Arial"
 GRID_COLS = 12  # the placard's band grid; every band divides into these
-MAX_ROW_BREAKS = 1026  # Excel's per-sheet ceiling on manual page breaks
-COLUMN_WIDTH = 13      # character units; 12 of these span a landscape page
+# Character units. Each page is scaled to fit one portrait Letter sheet, so
+# the column width sets the printed text size: wider columns are throttled
+# by the paper's width, narrower ones wrap into pages throttled by its
+# height. Measured across all 998 Snak King pages, 11 maximises the scale
+# (median 0.81, i.e. 7.5pt step text prints at ~6pt) — 13 managed 0.70.
+COLUMN_WIDTH = 11
 PHOTO_ROWS = 7            # rows an empty photo slot occupies
 PHOTO_ROWS_WITH_IMAGE = 14  # rows when a photo is actually embedded
 PHOTO_ROW_POINTS = 14  # height of each of those rows
@@ -387,14 +399,33 @@ def placard_text(value) -> str:
     return _BLANK_LINES.sub("\n", clean(value)).strip()
 
 
-def cell_value(value):
-    """Native type where Excel has one, so the data sheets stay sortable
-    and filterable — a boolean written as the text "True" is neither."""
-    if value is None:
-        return None
-    if isinstance(value, (bool, int, float)):
-        return value
-    return clean(value)
+# The notes column doubles as a data-maintenance log: alongside real hazard
+# warnings ("all 3 boilers share a common steam header") it carries entries
+# like "PHOTO_FIX 2026-05-13: Repointed from SKAP-1501 …". Those are
+# segments tagged by the cleanup that wrote them, and they must not print in
+# a placard's red KEEP OUT block. Only these known tags are dropped — an
+# untagged or unfamiliar note still prints, because silently losing a real
+# warning costs far more than printing an odd one.
+_HOUSEKEEPING_NOTE = re.compile(
+    r"^(Source sheet|Asset#|PHOTO_FIX|PHOTO_UPGRADE|DATA_FIX|DESC_NORMALIZED|DESC_FIX|"
+    r"DESC_REPAIRED|ID_REPAIRED|CORRECTED|Added \d{4}-\d{2}-\d{2}|PLACARD-OWNER|"
+    r"CORD-AND-PLUG-REVIEW|From Master Inventory)(?![A-Za-z])", re.IGNORECASE)
+_NOTE_DATE = re.compile(r"^([A-Z][A-Z -]+?)\s+\d{4}-\d{2}-\d{2}(?:\s*\([^)]*\))?:")
+
+
+def placard_warning(notes) -> str:
+    """The hazard notes from `notes`, minus data-maintenance log entries.
+
+    Segments are separated by " | " or line breaks. A kept segment loses its
+    log date ("CROSS-REF LOTO 2026-04-27:" → "CROSS-REF LOTO:"), which says
+    when the note was written, not anything a worker needs.
+    """
+    kept = []
+    for segment in re.split(r"\s*\|\s*|\n+", placard_text(notes)):
+        segment = segment.strip()
+        if segment and not _HOUSEKEEPING_NOTE.match(segment):
+            kept.append(_NOTE_DATE.sub(r"\1:", segment))
+    return "\n".join(kept)
 
 
 def energy_code(code: str | None) -> tuple[str, str, str, str, str]:
@@ -422,6 +453,7 @@ STEP_COLUMNS = (
     "isolation_procedure_es,method_of_verification_es,confidence"
 )
 PHOTO_MAX_PX = 900  # placard slots print ~370pt wide; 900px is generous at 300dpi
+EMBED_MAX_PX = 720  # the slot prints at most ~4.8in wide; 720px is ~150 dpi there
 
 
 def _rest(base: str, key: str, path: str, params: dict) -> list[dict]:
@@ -630,17 +662,55 @@ class PlacardSheet:
         return cell
 
 
+_PREREQUISITE = re.compile(r"\bAfter ([A-Za-z ,&/]+?) isolation", re.IGNORECASE)
+
+
+def _prerequisite_count(step: dict) -> int:
+    """How many other isolations this step says must already be done.
+
+    Most placards number every step 1, so sequence alone leaves their order
+    to chance — and 170 printed "After electrical isolation per the E
+    procedure" above the E step itself. The steps state their own
+    dependencies in that opening clause; counting them orders a tie so each
+    step follows the ones it names.
+    """
+    match = _PREREQUISITE.search(step.get("isolation_procedure") or "")
+    if not match:
+        return 0
+    return len([name for name in re.split(r",|\band\b|&|/", match.group(1)) if name.strip()])
+
+
+def _step_order(step: dict) -> tuple[int, int, int]:
+    return (step.get("sequence_order") or 0, step.get("step_number") or 0,
+            _prerequisite_count(step))
+
+
 def _grouped_steps(steps: list[dict]) -> list[dict]:
-    """Steps in the order the placard prints them: OSHA phase, then sequence."""
+    """Steps in the order the placard prints them: OSHA phase, then sequence,
+    then — where sequence ties — after the isolations each step depends on."""
     ordered: list[dict] = []
     for phase in STEP_PHASE_ORDER:
-        in_phase = [s for s in steps if s.get("step_type") == phase]
-        in_phase.sort(key=lambda s: (s.get("sequence_order") or 0, s.get("step_number") or 0))
-        ordered.extend(in_phase)
+        ordered.extend(sorted((s for s in steps if s.get("step_type") == phase),
+                              key=_step_order))
     known = set(STEP_PHASE_ORDER)
-    leftover = [s for s in steps if s.get("step_type") not in known]
-    leftover.sort(key=lambda s: (s.get("sequence_order") or 0, s.get("step_number") or 0))
-    return ordered + leftover
+    return ordered + sorted((s for s in steps if s.get("step_type") not in known),
+                            key=_step_order)
+
+
+# Every procedure, verification and tag opens with a line restating its own
+# column header — "ISOLATION PROCEDURE — PNEUMATIC:", "ENERGY TAG &
+# DESCRIPTION — P:" — directly under that header and beside a badge naming
+# the energy. In the narrow tag column that repetition decides the page's
+# height, and so the size of every word on it.
+_STEP_HEADING = re.compile(
+    r"^\s*(ENERGY TAG & DESCRIPTION|ETIQUETA DE ENERG[IÍ]A Y DESCRIPCI[OÓ]N|"
+    r"ISOLATION PROCEDURE(?: & LOCKOUT DEVICES)?|PROCEDIMIENTO DE AISLAMIENTO"
+    r"(?: Y DISPOSITIVOS DE BLOQUEO)?|METHOD OF VERIFICATION|M[EÉ]TODO DE VERIFICACI[OÓ]N)"
+    r"\s*[—–-]\s*[^:\n]{1,40}:[ \t]*\n?", re.IGNORECASE)
+
+
+def _without_heading(text: str) -> str:
+    return _STEP_HEADING.sub("", text, count=1).strip()
 
 
 def _pick(step: dict, field: str, language: str) -> str:
@@ -652,14 +722,18 @@ def _pick(step: dict, field: str, language: str) -> str:
 
 
 def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
-                 language: str, generated: str) -> None:
-    """One placard page: the same bands, in the same order, as the PDF."""
+                 language: str, generated: str, app_links: bool = True) -> None:
+    """One placard page: the same bands, in the same order, as the PDF.
+
+    `app_links=False` drops every link into Soteria Field — the digital
+    placard QR and the photo-storage URLs — for a client whose account is
+    closing, where each one would dead-end on a posted placard.
+    """
     ws, is_en = sheet.ws, language == "en"
     half = GRID_COLS // 2
 
     # 1. Yellow title band. The QR caption shares the date line rather than
     # taking a row of its own — vertical space is the scarce resource here.
-    top = sheet.row
     sheet.band(TEXT["title"][language],
                Style(fill=YELLOW_BAND, color="000000", size=14, bold=True, align="center"),
                height=24)
@@ -668,7 +742,7 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
     subtitle = sheet.cell(row, (1, GRID_COLS),
                           f"[{'EN' if is_en else 'ES'}]   {date_label}",
                           Style(fill=YELLOW_BAND, color="000000", size=8, align="center"))
-    if equipment.get("qr_token"):
+    if app_links and equipment.get("qr_token"):
         target = f"https://soteriafield.app/qr/{equipment['qr_token']}"
         subtitle.value = (f"[{'EN' if is_en else 'ES'}]   {date_label}   ·   "
                           f"{'Scan for digital placard' if is_en else 'Escanee para placa digital'}")
@@ -686,14 +760,24 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
                    Style(fill=DRAFT_FILL, color=DRAFT_RED, size=9, bold=True,
                          align="center"), height=13)
 
-    # 2. Blue equipment bar — description left, department right.
-    row = sheet.row
-    sheet.cell(row, (1, 8), f"{TEXT['equipment_label'][language]} {clean(equipment.get('description'))}",
-               Style(fill=BLUE_BAR, color=NAVY_HEADER, size=10, bold=True))
-    sheet.cell(row, (9, GRID_COLS), clean(equipment.get("department")),
-               Style(fill=BLUE_BAR, color=NAVY_HEADER, size=10, bold=True, align="right"))
-    ws.row_dimensions[row].height = 16
-    sheet.row += 1
+    # 2. Blue equipment bar — description left, department right. A long
+    # description wraps onto a second line rather than being cut at the
+    # department column: the machine name is how a worker confirms they are
+    # standing at the right placard.
+    label = f"{TEXT['equipment_label'][language]} {clean(equipment.get('description'))}"
+    department = clean(equipment.get("department"))
+    bar_rows = max(rows_for(label, 10, 1, 8, row_points=16, maximum=3, bold=True),
+                   rows_for(department, 10, 9, GRID_COLS, row_points=16, maximum=3, bold=True))
+    start = sheet.row
+    sheet.block(bar_rows, (1, 8), label,
+                Style(fill=BLUE_BAR, color=NAVY_HEADER, size=10, bold=True, wrap=True),
+                start=start)
+    sheet.block(bar_rows, (9, GRID_COLS), department,
+                Style(fill=BLUE_BAR, color=NAVY_HEADER, size=10, bold=True, align="right",
+                      wrap=True), start=start)
+    for r in range(start, start + bar_rows):
+        ws.row_dimensions[r].height = 16
+    sheet.row = start + bar_rows
 
     # 3. Red warning block. The PDF prints only the first wrapped line of the
     # note; here the whole note is shown, because the band is the one place a
@@ -709,8 +793,8 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
     # the English placard warns about a specific hazard. An untranslated
     # warning is worth more than none, and the step text already falls back
     # this way.
-    notes = placard_text(equipment.get("notes")) if is_en else (
-        placard_text(equipment.get("notes_es")) or placard_text(equipment.get("notes")))
+    notes = placard_warning(equipment.get("notes")) if is_en else (
+        placard_warning(equipment.get("notes_es")) or placard_warning(equipment.get("notes")))
     warning = notes or TEXT["warning_fallback"][language]
     warning_rows = rows_for(warning, 8, 1, GRID_COLS, minimum=1, maximum=4)
     sheet.block(warning_rows, (1, GRID_COLS), warning,
@@ -777,7 +861,7 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
     for index, (kind, caption) in enumerate((("equip", caption_en), ("iso", caption_es))):
         span = (1, half) if index == 0 else (half + 1, GRID_COLS)
         path = photo_paths[kind]
-        url = equipment.get(f"{kind}_photo_url")
+        url = equipment.get(f"{kind}_photo_url") if app_links else None
         embedded = False
         if path.exists():
             sheet.block(photo_rows, span, "", Style(fill=PHOTO_SLOT, border=True), start=start)
@@ -826,9 +910,9 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
                    Style(color=GREY_TEXT, size=9, align="center", border=True), height=20)
     for index, step in enumerate(ordered):
         code, label_en, label_es, fill, text_color = energy_code(step.get("energy_type"))
-        tag = _pick(step, "tag_description", language)
-        procedure = _pick(step, "isolation_procedure", language)
-        verification = _pick(step, "method_of_verification", language)
+        tag = _without_heading(_pick(step, "tag_description", language))
+        procedure = _without_heading(_pick(step, "isolation_procedure", language))
+        verification = _without_heading(_pick(step, "method_of_verification", language))
         phase = PHASE_LABELS[language].get(step.get("step_type"), clean(step.get("step_type")))
         alt = ROW_ALT if index % 2 else None
 
@@ -883,17 +967,6 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
     ws.row_dimensions[row].height = 18
     sheet.row += 1
 
-    # A blank spacer separates placards on screen. It has to be added before
-    # the break, or it lands after it and every printed page opens with an
-    # empty row.
-    sheet.row += 1
-    # One placard per printed page. Excel stores at most 1026 manual row
-    # breaks per sheet and repairs the file if it finds more; past that the
-    # pages flow together, which cmd_build reports rather than hiding.
-    if len(ws.row_breaks.brk) < MAX_ROW_BREAKS:
-        ws.row_breaks.append(Break(id=sheet.row - 1))
-    return top
-
 
 def _stamp_label(path: Path, label: str):
     """Burn the equipment name onto a copy of the photo, bottom-left.
@@ -911,6 +984,10 @@ def _stamp_label(path: Path, label: str):
     try:
         with Image.open(path) as source:
             image = source.convert("RGB")
+        # Each photo is embedded twice (English and Spanish page), so its
+        # size counts double toward whether a department's file can be
+        # emailed. EMBED_MAX_PX still prints the slot at ~150 dpi.
+        image.thumbnail((EMBED_MAX_PX, EMBED_MAX_PX), Image.LANCZOS)
         width, height = image.size
         # Sized against the image, so the label survives being scaled into the
         # placard slot and stays proportionate on any source resolution.
@@ -970,26 +1047,6 @@ def _embed(ws, path: Path, row: int, column: int, rows: int,
         ext=XDRPositiveSize2D(pixels_to_EMU(drawn_width), pixels_to_EMU(drawn_height)),
     )
     ws.add_image(image)
-
-
-def _flat_sheet(ws, rows: list[dict], columns: list[str]) -> None:
-    """A plain filterable table — the data behind the placard pages."""
-    ws.append(columns)
-    for cell in ws[1]:
-        cell.font = Font(name=FONT_NAME, size=10, bold=True, color=WHITE)
-        cell.fill = PatternFill("solid", fgColor=NAVY_HEADER)
-        cell.alignment = Alignment(vertical="center", wrap_text=True)
-    ws.row_dimensions[1].height = 30
-    for row in rows:
-        ws.append([cell_value(row.get(column)) for column in columns])
-    if not columns:
-        return
-    ws.freeze_panes = "A2"
-    ws.auto_filter.ref = f"A1:{get_column_letter(len(columns))}{len(rows) + 1}"
-    for index, column in enumerate(columns, 1):
-        ws.column_dimensions[get_column_letter(index)].width = min(
-            max(12, len(column) + 2), 46
-        )
 
 
 _UNSAFE_FILENAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -1052,10 +1109,71 @@ def group_by_department(equipment: list[dict]) -> list[tuple[str, list[dict]]]:
     return sorted(labelled, key=lambda pair: pair[0].casefold())
 
 
+@dataclass(frozen=True)
+class PlacardPage:
+    """Where one placard page landed, so the register can link to it."""
+    equipment_id: str
+    language: str
+    workbook: str
+    sheet: str
+
+
+_SHEET_TITLE_UNSAFE = re.compile(r"[\\/?*\[\]:]")
+SHEET_TITLE_MAX = 31  # Excel's hard limit on a worksheet name
+
+
+def sheet_title(equipment_id: str, language: str, taken: set[str]) -> str:
+    """A worksheet name naming the machine and the side of the sheet.
+
+    The language suffix is what an operator matches against the printout,
+    so it is kept whole and the equipment ID is the part shortened when the
+    pair would pass Excel's 31-character limit. Excel compares sheet names
+    case-insensitively, so collisions are checked the same way.
+    """
+    suffix = f" {language.upper()}"
+    stem = _SHEET_TITLE_UNSAFE.sub("-", equipment_id).strip("' ") or "Placard"
+    stem = stem[:SHEET_TITLE_MAX - len(suffix)]
+    title, counter = f"{stem}{suffix}", 2
+    while title.casefold() in taken:
+        tag = f"~{counter}"
+        title = f"{stem[:SHEET_TITLE_MAX - len(suffix) - len(tag)]}{tag}{suffix}"
+        counter += 1
+    taken.add(title.casefold())
+    return title
+
+
+def _placard_page_setup(ws, equipment_id: str, language: str) -> None:
+    """One placard, one side of one sheet of paper.
+
+    Fit-to-one-page is set per worksheet, so each placard is scaled on its
+    own and a machine with fourteen energy steps shrinks only itself. That
+    is the guarantee double-sided printing depends on: if any page spilled
+    onto a second sheet, every back side after it would show the wrong
+    placard. Excel ignores manual page breaks under fit-to-page, which is
+    why each page is a worksheet rather than a break in a long sheet.
+    """
+    for column in range(1, GRID_COLS + 1):
+        ws.column_dimensions[get_column_letter(column)].width = COLUMN_WIDTH
+    ws.page_setup.orientation = "portrait"
+    ws.page_setup.paperSize = ws.PAPERSIZE_LETTER
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 1
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.print_options.horizontalCentered = True
+    ws.page_margins = PageMargins(left=0.25, right=0.25, top=0.25, bottom=0.35,
+                                  header=0.1, footer=0.12)
+    side = "English — front" if language == "en" else "Español — reverso"
+    ws.oddFooter.center.text = f"{equipment_id}   ·   {side}"
+    ws.oddFooter.center.size = 7
+    ws.oddFooter.center.font = FONT_NAME
+    ws.sheet_view.showGridLines = False
+
+
 def build_workbook(equipment: list[dict], steps: list[dict], photos: Path,
                    languages: list[str], date: str, out_path: Path,
-                   rebuild_hint: str | None = None) -> int:
-    """Write one placard workbook. Returns the number of placard pages."""
+                   app_links: bool = True) -> list[PlacardPage]:
+    """Write one placard workbook: a worksheet per placard page, each
+    machine's languages adjacent, in equipment-ID order. Returns the pages."""
     by_equipment: dict[str, list[dict]] = {}
     for step in steps:
         by_equipment.setdefault(step["equipment_id"], []).append(step)
@@ -1063,74 +1181,95 @@ def build_workbook(equipment: list[dict], steps: list[dict], photos: Path,
 
     workbook = Workbook()
     workbook.remove(workbook.active)
-    # Created in reading order up front, then filled — the reader meets the
-    # Read Me and Index before the placards themselves.
-    readme, index_sheet, placards, equipment_sheet, steps_sheet, summary = (
-        workbook.create_sheet(name) for name in
-        ("Read Me", "Index", "Placards", "Equipment", "Energy Steps", "Summary")
-    )
-
-    for column in range(1, GRID_COLS + 1):
-        placards.column_dimensions[get_column_letter(column)].width = COLUMN_WIDTH
-    placards.page_setup.orientation = "landscape"
-    placards.page_setup.paperSize = placards.PAPERSIZE_LETTER
-    placards.page_setup.fitToWidth = 1
-    placards.page_setup.fitToHeight = 0
-    placards.sheet_properties.pageSetUpPr.fitToPage = True
-    placards.print_options.horizontalCentered = True
-    # Narrow margins. openpyxl defaults to an inch top and bottom, which costs
-    # 144pt of a 612pt page — more than the photo band and the steps table
-    # header put together, and the difference between one page and two.
-    placards.page_margins = PageMargins(left=0.3, right=0.3, top=0.3, bottom=0.3,
-                                        header=0.15, footer=0.15)
-
-    sheet = PlacardSheet(placards, photos)
-    index: list[tuple[str, str, str, int]] = []
+    taken: set[str] = set()
+    pages: list[PlacardPage] = []
     for row in equipment:
         for language in languages:
-            top = draw_placard(sheet, row, by_equipment.get(row["equipment_id"], []),
-                               language, date)
-            index.append((row["equipment_id"], clean(row.get("department")), language, top))
+            title = sheet_title(clean(row["equipment_id"]), language, taken)
+            ws = workbook.create_sheet(title)
+            _placard_page_setup(ws, clean(row["equipment_id"]), language)
+            draw_placard(PlacardSheet(ws, photos), row,
+                         by_equipment.get(row["equipment_id"], []), language, date,
+                         app_links=app_links)
+            pages.append(PlacardPage(row["equipment_id"], language, out_path.name, title))
 
-    _flat_sheet(equipment_sheet, equipment,
-                list(equipment[0].keys()) if equipment else [])
-    _flat_sheet(steps_sheet, steps, list(steps[0].keys()) if steps else [])
-    _index_sheet(index_sheet, index)
-    _summary_sheet(summary, equipment, len(steps), len(index))
-    _readme_sheet(readme, equipment, steps, photos, date,
-                  fit=_page_fit(placards, sorted(b.id for b in placards.row_breaks.brk)),
-                  pages=len(index), rebuild_hint=rebuild_hint)
-
-    # Open on the placards, scrolled to the first one. The person receiving
-    # this file is meant to press Print, not go looking for the right tab —
-    # Excel prints the active sheet, and a workbook that opens on Read Me
-    # prints one page of prose instead of the placards.
-    workbook.active = workbook.index(placards)
-    placards.sheet_view.selection[0].activeCell = "A1"
-    placards.sheet_view.selection[0].sqref = "A1"
-
+    if pages:
+        workbook.active = 0
     workbook.save(out_path)
-    if len(index) > MAX_ROW_BREAKS:
-        print(f"  note: Excel caps a sheet at {MAX_ROW_BREAKS} manual page breaks, so the "
-              f"last {len(index) - MAX_ROW_BREAKS} placard(s) in {out_path.name} share a "
-              f"page with the one before. Export a single language, or split by "
-              f"department, to page them all.", file=sys.stderr)
-    return len(index)
+    _share_duplicate_media(out_path)
+    return pages
+
+
+_MEDIA_TARGET = re.compile(r'Target="/?(xl/media/[^"]+)"')
+
+
+def _share_duplicate_media(path: Path) -> None:
+    """Store each photo once, however many placard pages show it.
+
+    openpyxl writes a separate copy of an image for every sheet it is placed
+    on, so a machine's two photos are stored twice — once for the English
+    page, once for the Spanish. OOXML lets any number of drawings point at
+    one media part, which is what Excel itself does for a copied sheet, so
+    duplicates are folded onto the first copy. That halves the file, and it
+    is the difference between a department's placards fitting in an email
+    attachment or not.
+    """
+    import hashlib
+    import zipfile
+
+    with zipfile.ZipFile(path) as source:
+        entries = [(info, source.read(info.filename)) for info in source.infolist()]
+
+    canonical: dict[str, str] = {}
+    replace: dict[str, str] = {}
+    for info, data in entries:
+        if info.filename.startswith("xl/media/"):
+            digest = hashlib.sha256(data).hexdigest()
+            first = canonical.setdefault(digest, info.filename)
+            if first != info.filename:
+                replace[info.filename] = first
+    if not replace:
+        return
+
+    def retarget(match: re.Match) -> str:
+        return f'Target="/{replace.get(match.group(1), match.group(1))}"'
+
+    scratch = path.with_suffix(".tmp")
+    with zipfile.ZipFile(scratch, "w", zipfile.ZIP_DEFLATED) as target:
+        for info, data in entries:
+            if info.filename in replace:
+                continue
+            if info.filename.startswith("xl/drawings/_rels/"):
+                data = _MEDIA_TARGET.sub(retarget, data.decode("utf-8")).encode("utf-8")
+            target.writestr(info, data)
+    scratch.replace(path)
 
 
 def cmd_build(args: argparse.Namespace) -> int:
+    from placard_readme import readme_lines
+    from placard_register import build_register  # imports this module; avoid a cycle
+
     data = Path(args.data)
     equipment = json.loads((data / "equipment.json").read_text("utf-8"))
     steps = json.loads((data / "steps.json").read_text("utf-8"))
+    findings = json.loads(Path(args.findings).read_text("utf-8")) if args.findings else []
+    proposed = json.loads(Path(args.proposed).read_text("utf-8")) if args.proposed else []
     photos = data / "photos"
     languages = ["en", "es"] if args.language == "both" else [args.language]
+    app_links = not args.no_app_links
     steps_for = _steps_index(steps)
 
     if not args.by_department:
-        pages = build_workbook(equipment, steps, photos, languages, args.date,
-                               Path(args.out),
-                               rebuild_hint=f"--single {args.out}")
-        print(f"{len(equipment)} placards, {pages} pages -> {args.out}")
+        out = Path(args.out)
+        pages = build_workbook(equipment, steps, photos, languages, args.date, out, app_links)
+        register = Path(args.register) if args.register else out.with_name(
+            f"{out.stem} - Register.xlsx")
+        embedded, referenced = _photo_counts(equipment, photos)
+        build_register(equipment, steps, pages, findings, photos, args.date, register,
+                       out.parent, readme_lines(equipment, steps, findings, args.date,
+                                                embedded, referenced, [out.name]),
+                       proposed)
+        print(f"{len(equipment)} placards, {len(pages)} pages -> {out}; register -> {register}")
         return 0
 
     out_dir = Path(args.out_dir)
@@ -1139,21 +1278,22 @@ def cmd_build(args: argparse.Namespace) -> int:
     names = unique_filenames([label for label, _ in groups])
     expected_files = {f"{name}.xlsx" for name in names.values()}
 
+    pages: list[PlacardPage] = []
     written, failed = 0, []
     for label, rows in groups:
         target = out_dir / f"{names[label]}.xlsx"
         try:
-            pages = build_workbook(rows, steps_for(rows), photos, languages,
-                                   args.date, target,
-                                   rebuild_hint=f"--by-department --out-dir {out_dir}")
+            department_pages = build_workbook(rows, steps_for(rows), photos, languages,
+                                              args.date, target, app_links)
         except Exception as error:
             # One department must not cost the other twenty-eight, and the
-            # folder must still get its index saying which one is missing.
+            # folder must still get its register saying which one is missing.
             failed.append((names[label], error))
             print(f"  FAILED {target.name}: {error}", file=sys.stderr)
             continue
+        pages.extend(department_pages)
         written += len(rows)
-        print(f"  {len(rows):4d} placards, {pages:4d} pages -> {target.name}")
+        print(f"  {len(rows):4d} placards, {len(department_pages):4d} pages -> {target.name}")
 
     # A department renamed or emptied since the last run leaves its old
     # workbook behind. Handing a client a folder containing a stale placard
@@ -1165,8 +1305,14 @@ def cmd_build(args: argparse.Namespace) -> int:
               file=sys.stderr)
         path.unlink()
 
-    _folder_readme(out_dir, groups, names, equipment, photos, args.date, languages)
+    register = Path(args.register) if args.register else out_dir.parent / "LOTO Register.xlsx"
+    embedded, referenced = _photo_counts(equipment, photos)
+    build_register(equipment, steps, pages, findings, photos, args.date, register, out_dir,
+                   readme_lines(equipment, steps, findings, args.date, embedded, referenced,
+                                [f"{names[label]}.xlsx" for label, _ in groups]),
+                   proposed)
     print(f"{written} placards across {len(groups) - len(failed)} departments -> {out_dir}/")
+    print(f"register -> {register}")
     if failed:
         print(f"  {len(failed)} department(s) failed to build: "
               f"{', '.join(name for name, _ in failed)}", file=sys.stderr)
@@ -1208,201 +1354,6 @@ def _photo_counts(equipment: list[dict], photos: Path) -> tuple[int, int]:
     return embedded, referenced
 
 
-def _folder_readme(out_dir: Path, groups, names: dict[str, str],
-                   equipment: list[dict], photos: Path, date: str,
-                   languages: list[str] | None = None) -> None:
-    """A plain-text index so the folder explains itself without Excel."""
-    cached, expected = _photo_counts(equipment, photos)
-    languages = languages or ["en", "es"]
-    per_machine = ("an English and a Spanish page per machine"
-                   if len(languages) > 1 else
-                   f"one {'English' if languages[0] == 'en' else 'Spanish'} page per machine")
-    lines = [
-        "LOTO placards by department",
-        f"Generated {date}",
-        "",
-        f"{len(equipment)} placards across {len(groups)} departments.",
-        f"Photos embedded: {cached} of {expected} referenced.",
-        "",
-        "One workbook per department. Each contains that department's placards",
-        f"laid out like the printed PDF, {per_machine}, plus filterable",
-        "Equipment and Energy Steps sheets and a Summary.",
-        "",
-        "Departments:",
-    ]
-    for label, rows in groups:
-        lines.append(f"  {len(rows):4d}  {names[label]}.xlsx")
-    if cached < expected:
-        lines += [
-            "",
-            "To embed the photos, from the repo root:",
-            "  python scripts/export_placards_xlsx.py fetch --photos-only --out <data-dir>",
-            "  python scripts/export_placards_xlsx.py build --data <data-dir> "
-            "--by-department --out-dir <this-folder>",
-            "",
-            "The photo step needs no credentials: placard photos are public storage",
-            "objects and their URLs are already in the cached equipment.json.",
-        ]
-    (out_dir / "README.txt").write_text("\n".join(lines) + "\n", "utf-8")
-
-
-def _index_sheet(ws, index: list[tuple[str, str, str, int]]) -> None:
-    ws.append(["Equipment ID", "Department", "Language", "Go to placard"])
-    for cell in ws[1]:
-        cell.font = Font(name=FONT_NAME, size=10, bold=True, color=WHITE)
-        cell.fill = PatternFill("solid", fgColor=NAVY_HEADER)
-    for equipment_id, department, language, row in index:
-        ws.append([equipment_id, department, language.upper(), None])
-        link = ws.cell(row=ws.max_row, column=4)
-        link.value = "Open"
-        link.hyperlink = f"#'Placards'!A{row}"
-        link.font = Font(name=FONT_NAME, size=10, color="1155CC", underline="single")
-    ws.freeze_panes = "A2"
-    ws.auto_filter.ref = f"A1:D{ws.max_row}"
-    for column, width in zip("ABCD", (22, 28, 10, 14)):
-        ws.column_dimensions[column].width = width
-
-
-def _summary_sheet(ws, equipment: list[dict], step_count: int, page_count: int) -> None:
-    """Per-department counts, computed by formula against the Equipment sheet."""
-    ws["A1"] = "Placard export summary"
-    ws["A1"].font = Font(name=FONT_NAME, size=13, bold=True, color=NAVY_HEADER)
-
-    last = len(equipment) + 1
-    department_column = (list(equipment[0].keys()).index("department") + 1) if equipment else 3
-    status_column = (list(equipment[0].keys()).index("photo_status") + 1) if equipment else 8
-    verified_column = (list(equipment[0].keys()).index("verified") + 1) if equipment else 14
-    dept_range = f"Equipment!${get_column_letter(department_column)}$2:${get_column_letter(department_column)}${last}"
-    status_range = f"Equipment!${get_column_letter(status_column)}$2:${get_column_letter(status_column)}${last}"
-    verified_range = f"Equipment!${get_column_letter(verified_column)}$2:${get_column_letter(verified_column)}${last}"
-
-    ws["A3"], ws["B3"] = "Placards (active equipment)", len(equipment)
-    ws["A4"], ws["B4"] = "Energy isolation steps", step_count
-    ws["A5"], ws["B5"] = "Rendered placard pages", page_count
-    for row in (3, 4, 5):
-        ws[f"A{row}"].font = Font(name=FONT_NAME, size=10)
-        ws[f"B{row}"].font = Font(name=FONT_NAME, size=10, bold=True)
-
-    headers = ["Department", "Placards", "Photos complete", "Photos partial",
-               "Photos missing", "Verified"]
-    ws.append([])
-    ws.append(headers)
-    header_row = ws.max_row
-    for cell in ws[header_row]:
-        cell.font = Font(name=FONT_NAME, size=10, bold=True, color=WHITE)
-        cell.fill = PatternFill("solid", fgColor=NAVY_HEADER)
-
-    # One row per department as COUNTIF sees it. COUNTIF matches text
-    # case-insensitively, so listing "Shipping" and "SHIPPING" separately
-    # would report the combined count against each and double them again in
-    # the Total. Group the way the formula counts, and label each row with
-    # the spelling most of its rows actually use.
-    spellings: dict[str, Counter] = {}
-    for row in equipment:
-        name = clean(row.get("department"))
-        spellings.setdefault(name.casefold(), Counter())[name] += 1
-    labels = sorted(counts.most_common(1)[0][0] for counts in spellings.values())
-
-    for department in labels:
-        ws.append([department])
-        row = ws.max_row
-        ws.cell(row=row, column=2).value = f'=COUNTIF({dept_range},$A{row})'
-        for column, status in ((3, "complete"), (4, "partial"), (5, "missing")):
-            ws.cell(row=row, column=column).value = (
-                f'=COUNTIFS({dept_range},$A{row},{status_range},"{status}")'
-            )
-        ws.cell(row=row, column=6).value = (
-            f"=COUNTIFS({dept_range},$A{row},{verified_range},TRUE)"
-        )
-        for column in range(1, 7):
-            ws.cell(row=row, column=column).font = Font(name=FONT_NAME, size=10)
-
-    total = ws.max_row + 1
-    ws.cell(row=total, column=1).value = "Total"
-    for column in range(2, 7):
-        letter = get_column_letter(column)
-        ws.cell(row=total, column=column).value = f"=SUM({letter}{header_row + 1}:{letter}{total - 1})"
-    for column in range(1, 7):
-        ws.cell(row=total, column=column).font = Font(name=FONT_NAME, size=10, bold=True)
-
-    ws.column_dimensions["A"].width = 30
-    for column in "BCDEF":
-        ws.column_dimensions[column].width = 16
-    ws.freeze_panes = f"A{header_row + 1}"
-
-
-def _page_fit(ws, breaks: list[int]) -> tuple[int, int]:
-    """How many placards print on one page, and how many pages the rest take.
-
-    Fit-to-width scales the sheet down by the ratio of printable width to
-    sheet width, and that same factor shrinks the rows, so the comparison
-    has to be made after scaling.
-    """
-    margins = ws.page_margins
-    printable_w = 792 - (margins.left + margins.right) * 72
-    printable_h = 612 - (margins.top + margins.bottom) * 72
-    sheet_w = GRID_COLS * COLUMN_POINTS
-    scale = min(1.0, printable_w / sheet_w)
-
-    starts = [1] + [b + 1 for b in breaks[:-1]]
-    on_one_page, most_pages = 0, 1
-    for start, end in zip(starts, breaks):
-        height = sum(ws.row_dimensions[r].height or 15.0 for r in range(start, end + 1))
-        pages = max(1, -(-int(height * scale) // int(printable_h)))
-        on_one_page += pages == 1
-        most_pages = max(most_pages, pages)
-    return on_one_page, most_pages
-
-
-def _readme_sheet(ws, equipment: list[dict], steps: list[dict], photos: Path,
-                  date: str, fit: tuple[int, int] = (0, 1),
-                  pages: int = 0, rebuild_hint: str | None = None) -> None:
-    cached, expected = _photo_counts(equipment, photos)
-    on_one_page, most_pages = fit
-    lines = [
-        ("Soteria Field — LOTO placard export", 15, True, NAVY_HEADER),
-        ("", 10, False, SLATE_TEXT),
-        (f"Generated: {date}", 10, False, SLATE_TEXT),
-        (f"Placards (active, non-decommissioned equipment): {len(equipment)}", 10, False, SLATE_TEXT),
-        (f"Energy isolation steps: {len(steps)}", 10, False, SLATE_TEXT),
-        (f"Photos embedded: {cached} of {expected} referenced", 10, False, SLATE_TEXT),
-        ("", 10, False, SLATE_TEXT),
-        ("Sheets", 12, True, NAVY_HEADER),
-        ("Index — every placard page, with a link into the Placards sheet.", 10, False, SLATE_TEXT),
-        ("Placards — one printable page per placard per language, laid out to "
-         "match the PDF: title band, equipment bar, warning block, purpose and "
-         "application process, colour codes, photos, energy-steps table, removal "
-         "process, signature bar.", 10, False, SLATE_TEXT),
-        ("Equipment — the loto_equipment row behind each placard, filterable.", 10, False, SLATE_TEXT),
-        ("Energy Steps — every loto_energy_steps row, filterable.", 10, False, SLATE_TEXT),
-        ("Summary — per-department counts, computed by formula.", 10, False, SLATE_TEXT),
-        ("", 10, False, SLATE_TEXT),
-        ("Printing", 12, True, NAVY_HEADER),
-        ("The Placards sheet is landscape, fit-to-width, with a page break after "
-         "each placard, so no placard ever shares a sheet with another.", 10, False, SLATE_TEXT),
-        (f"{on_one_page} of {pages} placard pages fit a single Letter sheet; the rest "
-         f"run to {most_pages if most_pages > 1 else 2} sheets. That is the deliberate "
-         "difference from the PDF: the PDF fits every placard on one page by dropping "
-         "the isolation-step rows that overflow, and a silently shortened isolation "
-         "procedure is a safety defect, so this export keeps the full text and takes "
-         "the extra sheet instead. Machines with the most energy sources are the ones "
-         "that run long.", 10, False, SLATE_TEXT),
-        ("", 10, False, SLATE_TEXT),
-        ("Regenerating", 12, True, NAVY_HEADER),
-        ("  python scripts/make_placards.py --data data/ "
-         + (rebuild_hint or "--single placards.xlsx"), 10, False, SLATE_TEXT),
-        ("That downloads any missing photos and rebuilds this workbook. It needs no "
-         "credentials — placard photos are public objects and their URLs are already "
-         "in the cached equipment.json.", 10, False, SLATE_TEXT),
-    ]
-    for text, size, bold, color in lines:
-        ws.append([text])
-        cell = ws.cell(row=ws.max_row, column=1)
-        cell.font = Font(name=FONT_NAME, size=size, bold=bold, color=color)
-        cell.alignment = Alignment(vertical="top", wrap_text=True)
-    ws.column_dimensions["A"].width = 118
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1425,6 +1376,14 @@ def main() -> int:
                        help="folder for --by-department")
     build.add_argument("--language", choices=("en", "es", "both"), default="both")
     build.add_argument("--date", default="", help="date printed on each placard")
+    build.add_argument("--register", default="",
+                       help="register workbook path (default: beside the placard folder)")
+    build.add_argument("--findings", default="",
+                       help="audit findings JSON to carry into the register")
+    build.add_argument("--proposed", default="",
+                       help="drafted replacement steps JSON, carried as Draft Corrections")
+    build.add_argument("--no-app-links", action="store_true",
+                       help="omit Soteria Field links (QR, photo URLs) — for a closed account")
     build.set_defaults(func=cmd_build)
 
     args = parser.parse_args()
