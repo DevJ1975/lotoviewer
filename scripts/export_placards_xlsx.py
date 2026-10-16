@@ -77,11 +77,9 @@ ENERGY_CODES: list[tuple[str, str, str, str, str]] = [
 ENERGY_ALIASES = {"O": "M", "OG": "CG"}
 _BY_CODE = {c[0]: c for c in ENERGY_CODES}
 
-# The placard groups steps by phase in this order, then by sequence_order
-# within each phase. This deliberately differs from LOTO_STEP_ORDER in
-# lotoProcedureValidation.ts, which puts release before lockout: 1910.147
-# (d)(4)–(d)(5)(i) relieves stored energy only after the locks are applied,
-# and the placard's own printed application box says the same.
+# lotoProcedureValidation.ts LOTO_STEP_ORDER — the 1910.147(d) application
+# order. The placard groups steps by phase in this order, then by
+# sequence_order within each phase.
 STEP_PHASE_ORDER = [
     "shutdown",
     "isolate",

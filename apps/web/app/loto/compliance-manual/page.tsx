@@ -105,7 +105,7 @@ export default function LotoComplianceManualPage() {
       <Section id="phases" title="§(c)(4)(ii) — Structured procedure phases">
         <p>
           OSHA requires the documented procedure to spell out:
-          shutdown, isolation, release of stored energy, lockout, and
+          shutdown, isolation, lockout, release of stored energy, and
           verification of de-energization (the &quot;tryout&quot;). Each
           energy step on each piece of equipment now carries a phase
           tag (<code>step_type</code>) and a sequence order.

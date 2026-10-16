@@ -177,8 +177,8 @@ export default function PlacardView({ equipment, steps, onPhotoSuccess, onPhotoE
               </tr>
             ) : (
               // Group by §147(c)(4)(ii) phase so the auditor reads the
-              // procedure in OSHA's documentation order — shutdown,
-              // isolate, release stored energy, lockout, verify zero.
+              // procedure in §147(d)'s application order — shutdown,
+              // isolate, lockout, release stored energy, verify zero.
               groupStepsByPhase(steps).flatMap((group, gi) => [
                 <tr key={`phase-${group.phase}`} className="bg-[#214487]/95 text-white">
                   <td colSpan={3} className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider">

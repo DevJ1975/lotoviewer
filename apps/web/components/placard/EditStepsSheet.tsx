@@ -358,7 +358,7 @@ export default function EditStepsSheet({ open, onClose, equipment, steps, onSave
           </p>
           <p className="text-[11px] text-amber-900/85 dark:text-amber-100/85 mt-0.5">
             OSHA requires every documented procedure to cover: isolate,
-            release stored energy, lockout, and verify zero energy.
+            lockout, release stored energy, and verify zero energy.
             Missing phase{procedureCheck.missing.length === 1 ? '' : 's'}:{' '}
             <span className="font-semibold">
               {procedureCheck.missing.map(p => LOTO_STEP_TYPE_LABELS[p]).join(', ')}
