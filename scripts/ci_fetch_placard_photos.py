@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 from urllib.request import urlopen
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 ALLOWED_PREFIX = ("https://zwtnpyjifbdytlektxlc.supabase.co"
                   "/storage/v1/object/public/loto-photos/")
@@ -54,7 +54,10 @@ def main() -> int:
             with urlopen(url, timeout=60) as response:
                 partial.write_bytes(response.read())
             with Image.open(partial) as image:
-                image = image.convert("RGB")
+                # Phones store portrait shots sideways plus an EXIF
+                # orientation tag. Re-encoding drops the tag, so it must be
+                # applied first or the photo lands on the placard rotated.
+                image = ImageOps.exif_transpose(image).convert("RGB")
                 image.thumbnail((PHOTO_MAX_PX, PHOTO_MAX_PX), Image.LANCZOS)
                 image.save(partial, "JPEG", quality=82, optimize=True)
             partial.replace(target)
