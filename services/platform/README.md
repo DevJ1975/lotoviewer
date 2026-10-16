@@ -32,6 +32,18 @@ Browser / mobile ──► Next.js (Vercel) ──► Supabase Postgres ◄─�
   Supabase tables are read through **unmanaged models** (`tenancy/models.py`)
   that Django never migrates or writes.
 
+## API
+
+Django Ninja serves the versioned platform API at `/api/v1/`; its OpenAPI
+schema and interactive docs are at `/api/v1/openapi.json` and
+`/api/v1/docs`. API operations require a Supabase bearer token by default,
+verified with `tenancy.auth.verify_supabase_jwt`. A route must explicitly
+opt out of authentication to be public.
+
+`GET /api/v1/health` returns database reachability. The existing `/healthz`
+endpoint remains available for Fly's unauthenticated infrastructure probe.
+The standalone FastAPI SDS parser remains a separate service.
+
 ## Tenant isolation — read this before writing a query
 
 There are exactly two ways to touch tenant-owned data:

@@ -1,17 +1,9 @@
-import logging
-
-from django.db import DatabaseError, connection
 from django.http import HttpRequest, JsonResponse
 
-logger = logging.getLogger(__name__)
+from config.health import database_health
 
 
 def healthz(_request: HttpRequest) -> JsonResponse:
     """Liveness + DB reachability probe for Fly health checks."""
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute("select 1")
-    except DatabaseError:
-        logger.exception("healthz: database unreachable")
-        return JsonResponse({"status": "degraded", "database": "unreachable"}, status=503)
-    return JsonResponse({"status": "ok"})
+    status_code, payload = database_health()
+    return JsonResponse(payload, status=status_code)

@@ -11,6 +11,7 @@ dependencies = [
     "sentry-sdk[django]>=2.20,<3",
     "pyjwt[crypto]>=2.10,<3",
     "uvicorn[standard]>=0.34,<1",
+    "django-ninja>=1.4,<2",
 ]
 
 [dependency-groups]
