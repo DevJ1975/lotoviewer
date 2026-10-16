@@ -146,7 +146,7 @@ def _audit_sheet(ws, findings: list[dict], equipment_by_id: dict, department_of:
                    finding.get("energy_type") or "", phase.title(),
                    finding.get("field") or "", finding["check"], finding["detail"],
                    finding["action"], finding.get("source") or "Automated rule check",
-                   None, "Open", None, None, None])
+                   None, finding.get("status") or "Open", None, None, finding.get("notes")])
         row = ws.max_row
         for column in range(1, len(labels) + 1):
             _body(ws.cell(row=row, column=column), wrap=column in (4, 9, 10, 11, 17))
@@ -287,13 +287,16 @@ def _inspection_log_sheet(ws, register_rows: int) -> None:
 
 
 def _register_sheet(ws, equipment: list[dict], steps_by_id: dict, department_of: dict,
-                    photos: Path, link_for: dict) -> int:
+                    photos: Path, link_for: dict, photo_rows: int = 0) -> int:
     labels = ["Equipment ID", "Description", "Department", "Energy sources",
               "Energy steps", "Photos on placard (of 2)", "Procedure verified",
               "Verified on", "Spanish reviewed", "Last periodic inspection",
               "Next inspection due", "Inspection status",
               "Open CRITICAL findings", "Open HIGH findings", "Placard (EN / ES)", "Notes"]
     widths = [16, 40, 20, 14, 9, 11, 11, 12, 10, 14, 14, 18, 11, 11, 16, 30]
+    if photo_rows:
+        labels.append("Isolation photo check")
+        widths.append(20)
     _header(ws, 1, labels, widths)
 
     log = "'Inspection Log'"
@@ -332,6 +335,16 @@ def _register_sheet(ws, equipment: list[dict], steps_by_id: dict, department_of:
         if equipment_id in link_for:
             _link_to(ws.cell(row=row, column=15), *link_for[equipment_id],
                      label="Open placard")
+        if photo_rows:
+            # The client's own re-shoot status overrides the audit verdict, so
+            # the column tracks the fix rather than freezing the finding.
+            span = photo_rows + 1
+            lookup = (f"MATCH($A{row},'Photo Audit'!$A$2:$A${span},0)")
+            ws.cell(row=row, column=17).value = (
+                f"=IFERROR(IF(INDEX('Photo Audit'!$K$2:$K${span},{lookup})="
+                f"\"{PHOTO_FIXED}\",\"{PHOTO_FIXED}\","
+                f"INDEX('Photo Audit'!$D$2:$D${span},{lookup})),\"Not audited\")")
+            _body(ws.cell(row=row, column=17))
 
     last = max(ws.max_row, 2)
     status_range = f"L2:L{last}"
@@ -348,12 +361,15 @@ def _register_sheet(ws, equipment: list[dict], steps_by_id: dict, department_of:
             fill=PatternFill("solid", fgColor=fill), font=Font(color=WHITE, bold=True)))
     ws.conditional_formatting.add(f"F2:F{last}", CellIsRule(
         operator="lessThan", formula=["2"], font=Font(color="BF1414", bold=True)))
+    if photo_rows:
+        _photo_verdict_colours(ws, f"Q2:Q{last}")
     ws.freeze_panes = "B2"
-    ws.auto_filter.ref = f"A1:P{last}"
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(labels))}{last}"
     return len(equipment)
 
 
-def _dashboard_sheet(ws, departments: list[str], machines: int, generated: str) -> None:
+def _dashboard_sheet(ws, departments: list[str], machines: int, generated: str,
+                     photo_check: bool = False) -> None:
     ws["A1"] = "LOTO Program Dashboard — Tablero del Programa LOTO"
     ws["A1"].font = _font(15, bold=True, color=NAVY_HEADER)
     ws["A2"] = (f"Placards generated {generated}. Every figure below is a live formula over the "
@@ -377,6 +393,16 @@ def _dashboard_sheet(ws, departments: list[str], machines: int, generated: str) 
         ("Periodic inspections not yet recorded",
          f"=COUNTIF({col('L')},\"Not yet recorded\")", "0"),
     ]
+    if photo_check:
+        kpis += [
+            ("Isolation photos confirmed for their machine",
+             f"=COUNTIF({col('Q')},\"Confirmed\")+COUNTIF({col('Q')},\"{PHOTO_FIXED}\")", "0"),
+            ("Isolation photos WRONG (replace)", f"=COUNTIF({col('Q')},\"WRONG — replace\")",
+             "0"),
+            ("Isolation photos unverified or missing",
+             f"=COUNTIF({col('Q')},\"Unverified — re-shoot\")+COUNTIF({col('Q')},\"Missing\")",
+             "0"),
+        ]
     for offset, (label, formula, fmt) in enumerate(kpis, 4):
         ws.cell(row=offset, column=1, value=label).font = _font(10)
         value = ws.cell(row=offset, column=2, value=formula)
@@ -391,7 +417,11 @@ def _dashboard_sheet(ws, departments: list[str], machines: int, generated: str) 
     labels = ["Department", "Placards", "Energy steps", "Photos missing",
               "Procedures verified", "Open CRITICAL", "Open HIGH",
               "Inspections OVERDUE", "Inspections not recorded"]
-    _header(ws, header_row, labels, [46, 11, 11, 11, 12, 11, 11, 13, 14])
+    widths = [46, 11, 11, 11, 12, 11, 11, 13, 14]
+    if photo_check:
+        labels.append("Isolation photos to fix")
+        widths.append(13)
+    _header(ws, header_row, labels, widths)
     first = header_row + 1
     for department in departments:
         ws.append([department])
@@ -407,6 +437,9 @@ def _dashboard_sheet(ws, departments: list[str], machines: int, generated: str) 
             f"=COUNTIFS({dept},{col('L')},\"OVERDUE\")",
             f"=COUNTIFS({dept},{col('L')},\"Not yet recorded\")",
         ]
+        if photo_check:
+            formulas.append(f"=COUNTIF({dept})-COUNTIFS({dept},{col('Q')},\"Confirmed\")"
+                            f"-COUNTIFS({dept},{col('Q')},\"{PHOTO_FIXED}\")")
         for column, formula in enumerate(formulas, 2):
             ws.cell(row=row, column=column, value=formula)
         for column in range(1, len(labels) + 1):
@@ -422,11 +455,79 @@ def _dashboard_sheet(ws, departments: list[str], machines: int, generated: str) 
         "Department rows count findings on that department's machines. Site-wide findings "
         "(Equipment ID 'SITE-WIDE' on the Audit Findings sheet) are in the totals above only."))
     note.font = _font(9, italic=True, color=EXAMPLE_GREY)
-    for letter, fill in (("F", "8B0A1A"), ("G", "E07B00"), ("H", "8B0A1A")):
+    flagged = [("F", "8B0A1A"), ("G", "E07B00"), ("H", "8B0A1A")]
+    if photo_check:
+        flagged.append(("J", "E07B00"))
+    for letter, fill in flagged:
         ws.conditional_formatting.add(f"{letter}{first}:{letter}{total - 1}", CellIsRule(
             operator="greaterThan", formula=["0"],
             fill=PatternFill("solid", fgColor=fill), font=Font(color=WHITE, bold=True)))
     ws.freeze_panes = f"A{first}"
+
+
+PHOTO_VERDICT_LABEL = {
+    "match": "Confirmed",
+    "low_confidence": "Unverified — re-shoot",
+    "mismatch": "WRONG — replace",
+    "missing": "Missing",
+}
+PHOTO_FIXED = "Re-shot & verified"
+PHOTO_STATUSES = ("Open", PHOTO_FIXED, "Not needed")
+PHOTO_STYLE = {  # label: fill, text
+    "Confirmed": ("D9F2DC", "1A5C24"), PHOTO_FIXED: ("D9F2DC", "1A5C24"),
+    "Unverified — re-shoot": ("FFD900", "1A1A1A"),
+    "WRONG — replace": ("8B0A1A", WHITE), "Missing": ("8B0A1A", WHITE),
+}
+
+
+def _photo_verdict_colours(ws, cells: str) -> None:
+    for label, (fill, text) in PHOTO_STYLE.items():
+        ws.conditional_formatting.add(cells, CellIsRule(
+            operator="equal", formula=[f'"{label}"'],
+            fill=PatternFill("solid", fgColor=fill), font=Font(color=text, bold=True)))
+
+
+def _photo_audit_sheet(ws, audit: list[dict], link_for: dict) -> int:
+    """The consensus computer-vision audit of every placard photo.
+
+    A wrong isolation photo is worse than none — it can send a worker to
+    another machine's disconnect — so each row carries what the photo
+    actually shows and the re-shoot needed, and a status the client closes.
+    """
+    labels = ["Equipment ID", "Description", "Department", "Isolation photo",
+              "What the isolation photo actually shows",
+              "Covers this machine's energy sources", "Equipment photo",
+              "What the equipment photo actually shows", "Re-shoot instruction",
+              "Placard", "Status", "Date re-shot", "Notes"]
+    widths = [16, 34, 20, 20, 56, 12, 20, 48, 60, 14, 18, 12, 28]
+    _header(ws, 1, labels, widths)
+    for item in audit:
+        ws.append([item["equipment_id"], item["description"], item["department"],
+                   PHOTO_VERDICT_LABEL[item["merged_iso_verdict"]], item["iso_photo"]["notes"],
+                   "Yes" if item["iso_photo"]["consistent_with_energy_steps"] else "No",
+                   PHOTO_VERDICT_LABEL[item["equip_photo"]["verdict"]],
+                   item["equip_photo"]["notes"], item["recommended_fix"], None,
+                   "Open" if item["merged_iso_verdict"] != "match" else "Not needed",
+                   None, None])
+        row = ws.max_row
+        for column in range(1, len(labels) + 1):
+            _body(ws.cell(row=row, column=column), wrap=column in (2, 5, 8, 9, 13))
+        for column in (11, 12, 13):
+            ws.cell(row=row, column=column).fill = PatternFill("solid", fgColor=INPUT_FILL)
+        ws.cell(row=row, column=12).number_format = "yyyy-mm-dd"
+        if item["equipment_id"] in link_for:
+            _link_to(ws.cell(row=row, column=10), *link_for[item["equipment_id"]],
+                     label="Open placard")
+    last = max(ws.max_row, 2)
+    _photo_verdict_colours(ws, f"D2:D{last}")
+    _photo_verdict_colours(ws, f"G2:G{last}")
+    status = DataValidation(type="list", formula1='"{}"'.format(",".join(PHOTO_STATUSES)),
+                            showErrorMessage=True, error="Pick a status from the list.")
+    ws.add_data_validation(status)
+    status.add(f"K2:K{last}")
+    ws.freeze_panes = "B2"
+    ws.auto_filter.ref = f"A1:M{last}"
+    return len(audit)
 
 
 DRAFT_STATUSES = ("Draft — verify on site", "Field-verified", "Applied to placard", "Rejected")
@@ -479,6 +580,30 @@ def _draft_corrections_sheet(ws, proposed: list[dict], department_of: dict,
     ws.auto_filter.ref = f"A3:M{last}"
 
 
+def _corrections_sheet(ws, corrections: list[dict], department_of: dict,
+                       link_for: dict) -> None:
+    """Every change made to the placard data before delivery, so the client
+    can see exactly where these placards differ from the source records."""
+    labels = ["Equipment ID", "Department", "Energy code", "Change", "Detail",
+              "Verification still needed", "Placard"]
+    widths = [16, 20, 9, 26, 70, 26, 14]
+    _header(ws, 1, labels, widths)
+    for item in sorted(corrections, key=lambda c: (c["equipment_id"], c["change"])):
+        verified = item["change"].startswith("Re-coded")
+        ws.append([item["equipment_id"], department_of.get(item["equipment_id"], ""),
+                   item["energy_type"], item["change"], item["detail"],
+                   "None — mechanical correction" if verified else
+                   "Yes — verify at the machine / bilingual review", None])
+        row = ws.max_row
+        for column in range(1, len(labels) + 1):
+            _body(ws.cell(row=row, column=column), wrap=column == 5)
+        if item["equipment_id"] in link_for:
+            _link_to(ws.cell(row=row, column=7), *link_for[item["equipment_id"]],
+                     label="Open placard")
+    ws.freeze_panes = "B2"
+    ws.auto_filter.ref = f"A1:G{max(ws.max_row, 2)}"
+
+
 def _readme_sheet(ws, lines: list[tuple[str, str]]) -> None:
     """`lines` is (style, text); style is title, heading, body, note or blank."""
     styles = {"title": _font(16, bold=True, color=NAVY_HEADER),
@@ -497,7 +622,9 @@ def _readme_sheet(ws, lines: list[tuple[str, str]]) -> None:
 def build_register(equipment: list[dict], steps: list[dict], pages: list[PlacardPage],
                    findings: list[dict], photos: Path, generated: str, out_path: Path,
                    placard_dir: Path, readme: list[tuple[str, str]],
-                   proposed: list[dict] | None = None) -> None:
+                   proposed: list[dict] | None = None,
+                   photo_audit: list[dict] | None = None,
+                   corrections: list[dict] | None = None) -> None:
     """Write the register. `placard_dir` is where the placard workbooks sit,
     so links can be made relative to the register's own folder."""
     steps_by_id: dict[str, list[dict]] = {}
@@ -523,12 +650,20 @@ def build_register(equipment: list[dict], steps: list[dict], pages: list[Placard
          "Energy Codes"))
 
     _readme_sheet(readme_ws, readme)
-    rows = _register_sheet(register, equipment, steps_by_id, department_of, photos, link_for)
-    _dashboard_sheet(dashboard, [label for label, _ in groups], rows, generated)
+    rows = _register_sheet(register, equipment, steps_by_id, department_of, photos, link_for,
+                           photo_rows=len(photo_audit or []))
+    _dashboard_sheet(dashboard, [label for label, _ in groups], rows, generated,
+                     photo_check=bool(photo_audit))
     _inspection_log_sheet(log, rows)
     _audit_sheet(audit, findings, equipment_by_id, department_of, link_for)
     _steps_sheet(steps_ws, equipment, steps_by_id, department_of)
     _energy_codes_sheet(codes)
+    if photo_audit:
+        _photo_audit_sheet(workbook.create_sheet("Photo Audit", workbook.index(steps_ws)),
+                           photo_audit, link_for)
+    if corrections:
+        _corrections_sheet(workbook.create_sheet("Corrections Log", workbook.index(steps_ws)),
+                           corrections, department_of, link_for)
     if proposed:
         drafts = workbook.create_sheet("Draft Corrections", workbook.index(steps_ws))
         _draft_corrections_sheet(drafts, proposed, department_of, link_for)

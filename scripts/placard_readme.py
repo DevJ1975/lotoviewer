@@ -14,7 +14,7 @@ Line = tuple[str, str]  # (style, text) — styles: title, heading, body, note, 
 
 def readme_lines(equipment: list[dict], steps: list[dict], findings: list[dict],
                  generated: str, photos_embedded: int, photos_referenced: int,
-                 workbooks: list[str]) -> list[Line]:
+                 workbooks: list[str], photo_audit: list[dict] | None = None) -> list[Line]:
     severity = Counter(f["severity"] for f in findings)
     flagged = {sev: len({f["equipment_id"] for f in findings if f["severity"] == sev})
                for sev in ("CRITICAL", "HIGH")}
@@ -81,6 +81,7 @@ def readme_lines(equipment: list[dict], steps: list[dict], findings: list[dict],
                  "REVISADO' banner. Where a Spanish field is blank the English text is printed in "
                  "its place. Have the translations reviewed before relying on them for "
                  "Spanish-speaking authorized employees."),
+        *_photo_audit_lines(photo_audit, len(equipment)),
         ("body", f"Field verification: {verified} of {len(equipment)} procedures are marked "
                  "verified against the machine. Text in [VERIFY ON SITE: …] brackets is a value "
                  "that still has to be confirmed at the machine."),
@@ -110,8 +111,25 @@ def readme_lines(equipment: list[dict], steps: list[dict], findings: list[dict],
                  "hallazgos CRÍTICOS antes de usar la placa de esa máquina. Las traducciones al "
                  "español llevan la marca 'BORRADOR — NO REVISADO' hasta que un revisor bilingüe "
                  "calificado las apruebe."),
+        ("body", "• Fotos: la hoja 'Photo Audit' indica qué fotos de aislamiento no muestran el "
+                 "punto de aislamiento de esa máquina. Hasta que se vuelvan a tomar, siga el "
+                 "procedimiento escrito, no la foto."),
         ("body", "• Inspección periódica anual: registre cada inspección en la hoja 'Inspection "
                  "Log'. El Registro y el Tablero muestran la próxima fecha y las inspecciones "
                  "VENCIDAS (OVERDUE)."),
     ]
     return lines
+
+
+def _photo_audit_lines(photo_audit: list[dict] | None, machines: int) -> list[Line]:
+    if not photo_audit:
+        return []
+    verdicts = Counter(item["merged_iso_verdict"] for item in photo_audit)
+    return [("body", f"Photos: every placard photo was inspected by computer vision and checked "
+                     f"by two reviewers. Only {verdicts['match']} of {machines} isolation photos "
+                     f"are confirmed to show that machine's own isolation point; "
+                     f"{verdicts['mismatch']} show the wrong device or another machine's, and "
+                     f"{verdicts['low_confidence'] + verdicts['missing']} are unverified or "
+                     "missing. Many are shared, representative images. Until a photo is re-shot "
+                     "and marked 'Re-shot & verified' on the Photo Audit sheet, the written "
+                     "procedure — not the photo — identifies the isolation point.")]

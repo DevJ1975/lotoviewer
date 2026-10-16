@@ -29,7 +29,7 @@ RELEASE_WORDS = re.compile(
 VERIFY_WORDS = re.compile(
     r"\b(try-?out|attempt to (re)?start|verify|confirm|test|gauge|meter|reads? 0|"
     r"zero|no response|absence of voltage)", re.IGNORECASE)
-PLACEHOLDER = re.compile(r"\[VERIFY ON SITE[^\]]*\]|\bTBD\b|\bTODO\b|\?\?\?|\bXXX\b", re.IGNORECASE)
+PLACEHOLDER = re.compile(r"\[(?:VERIFY ON SITE|VERIFICAR EN SITIO)[^\]]*\]|\bTBD\b|\bTODO\b|\?\?\?|\bXXX\b", re.IGNORECASE)
 NOT_IMPLEMENTED = re.compile(r"not yet implemented|no implementad|sin implementar", re.IGNORECASE)
 TEMPLATE_ARTIFACT = re.compile(
     r"detail pending|detalle pendiente|TAG_BODY(_ES)?|loto_templates(_es)?|"

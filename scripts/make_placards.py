@@ -53,6 +53,10 @@ def main() -> int:
     parser.add_argument("--register", default="", help="register workbook path")
     parser.add_argument("--proposed", default="",
                         help="drafted replacement steps JSON for the register")
+    parser.add_argument("--photo-audit", default="",
+                        help="merged lotoauditors photo verdicts JSON for the register")
+    parser.add_argument("--corrections", default="",
+                        help="log of corrections applied to the data, for the register")
     parser.add_argument("--no-app-links", action="store_true",
                         help="omit Soteria Field links (for a closed account)")
     args = parser.parse_args()
@@ -89,6 +93,7 @@ def main() -> int:
         data=str(data), out=args.single or "loto-placards.xlsx",
         by_department=args.single is None, out_dir=args.out_dir,
         language=args.language, date=args.date, findings=args.findings, proposed=args.proposed,
+        photo_audit=args.photo_audit, corrections=args.corrections,
         register=args.register, no_app_links=args.no_app_links,
     )
     result = cmd_build(build_args)

@@ -533,7 +533,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
 
 
 def _download_photos(equipment: list[dict], into: Path) -> int:
-    from PIL import Image
+    from PIL import Image, ImageOps
 
     count = 0
     for row in equipment:
@@ -557,7 +557,9 @@ def _download_photos(equipment: list[dict], into: Path) -> int:
                 # Downscale: 996 full-resolution photos would push the workbook
                 # past 300 MB, and the placard slot is ~370pt wide.
                 with Image.open(partial) as image:
-                    image = image.convert("RGB")
+                    # Apply the EXIF orientation before re-encoding drops it,
+                    # or portrait phone photos land on the placard sideways.
+                    image = ImageOps.exif_transpose(image).convert("RGB")
                     image.thumbnail((PHOTO_MAX_PX, PHOTO_MAX_PX), Image.LANCZOS)
                     image.save(partial, "JPEG", quality=82, optimize=True)
                 partial.replace(target)
@@ -722,12 +724,16 @@ def _pick(step: dict, field: str, language: str) -> str:
 
 
 def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
-                 language: str, generated: str, app_links: bool = True) -> None:
+                 language: str, generated: str, app_links: bool = True,
+                 photo_verdicts: dict[str, str] | None = None) -> None:
     """One placard page: the same bands, in the same order, as the PDF.
 
     `app_links=False` drops every link into Soteria Field — the digital
     placard QR and the photo-storage URLs — for a client whose account is
     closing, where each one would dead-end on a posted placard.
+
+    `photo_verdicts` maps "equip"/"iso" to the photo audit's verdict; when
+    given, every photo not confirmed for this machine is stamped a warning.
     """
     ws, is_en = sheet.ws, language == "en"
     half = GRID_COLS // 2
@@ -867,7 +873,9 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
             sheet.block(photo_rows, span, "", Style(fill=PHOTO_SLOT, border=True), start=start)
             try:
                 _embed(ws, path, start, span[0], photo_rows,
-                       label=clean(equipment["equipment_id"]))
+                       label=clean(equipment["equipment_id"]),
+                       warning=(photo_warning(photo_verdicts.get(kind))
+                                if photo_verdicts is not None else None))
                 embedded = True
             except Exception as error:
                 # An unreadable photo costs one slot, not the whole export.
@@ -968,7 +976,27 @@ def draw_placard(sheet: PlacardSheet, equipment: dict, steps: list[dict],
     sheet.row += 1
 
 
-def _stamp_label(path: Path, label: str):
+# The photo audit's verdict on a placard photo, burned into the photo itself
+# so the warning travels with it — onto the posted placard, and into any
+# work pack the photo is cropped into. One bilingual band, because the
+# English and Spanish pages share a single stored copy of each photo.
+PHOTO_WARNINGS = {
+    "mismatch": (("NOT THIS MACHINE — REFERENCE ONLY", "NO ES ESTA MÁQUINA — SOLO REFERENCIA"),
+                 (191, 20, 20), (255, 255, 255)),
+    "unverified": (("VERIFY AT MACHINE — NOT CONFIRMED", "VERIFICAR EN LA MÁQUINA — SIN CONFIRMAR"),
+                   (255, 217, 0), (26, 26, 26)),
+}
+
+
+def photo_warning(verdict: str | None) -> str | None:
+    """Which band a photo carries. Only a photo both auditors confirmed for
+    this machine prints clean; a photo nobody has audited yet is unverified."""
+    if verdict == "match":
+        return None
+    return "mismatch" if verdict == "mismatch" else "unverified"
+
+
+def _stamp_label(path: Path, label: str, warning: str | None = None):
     """Burn the equipment name onto a copy of the photo, bottom-left.
 
     A placard photo travels: it gets cropped into a work pack, pasted into a
@@ -1014,6 +1042,24 @@ def _stamp_label(path: Path, label: str):
         draw.text((pad, height - bar_height + (bar_height - text_size) // 2),
                   label, font=font, fill=(255, 255, 255))
 
+        if warning:
+            lines, fill, ink = PHOTO_WARNINGS[warning]
+            line_height = max(14, int(height * 0.06))
+            band_font = font
+            for candidate in _ARIAL_BOLD_PATHS:
+                if os.path.exists(candidate):
+                    band_font = ImageFont.truetype(candidate, int(line_height * 0.72))
+                    # Shrink until the longer line fits across the photo.
+                    while (max(draw.textlength(line, font=band_font) for line in lines)
+                           > width - 2 * pad and band_font.size > 8):
+                        band_font = ImageFont.truetype(candidate, band_font.size - 1)
+                    break
+            draw.rectangle([0, 0, width, line_height * len(lines) + pad], fill=fill + (235,))
+            for index, line in enumerate(lines):
+                line_width = draw.textlength(line, font=band_font)
+                draw.text(((width - line_width) / 2, pad // 2 + index * line_height),
+                          line, font=band_font, fill=ink)
+
         stamped = io.BytesIO()
         image.save(stamped, "JPEG", quality=82, optimize=True)
         stamped.seek(0)
@@ -1023,7 +1069,7 @@ def _stamp_label(path: Path, label: str):
 
 
 def _embed(ws, path: Path, row: int, column: int, rows: int,
-           label: str | None = None) -> None:
+           label: str | None = None, warning: str | None = None) -> None:
     """Place a cached photo inside its slot, scaled to fit and centred."""
     from PIL import Image
 
@@ -1034,7 +1080,7 @@ def _embed(ws, path: Path, row: int, column: int, rows: int,
     scale = min(slot_width / width, slot_height / height, 1.0)
     drawn_width, drawn_height = int(width * scale), int(height * scale)
 
-    stamped = _stamp_label(path, label) if label else None
+    stamped = _stamp_label(path, label, warning) if label else None
     image = XLImage(stamped if stamped is not None else str(path))
     image.width, image.height = drawn_width, drawn_height
     # A plain cell anchor pins the image to the slot's top-left corner; the
@@ -1171,7 +1217,9 @@ def _placard_page_setup(ws, equipment_id: str, language: str) -> None:
 
 def build_workbook(equipment: list[dict], steps: list[dict], photos: Path,
                    languages: list[str], date: str, out_path: Path,
-                   app_links: bool = True) -> list[PlacardPage]:
+                   app_links: bool = True,
+                   photo_verdicts: dict[str, dict[str, str]] | None = None
+                   ) -> list[PlacardPage]:
     """Write one placard workbook: a worksheet per placard page, each
     machine's languages adjacent, in equipment-ID order. Returns the pages."""
     by_equipment: dict[str, list[dict]] = {}
@@ -1190,7 +1238,9 @@ def build_workbook(equipment: list[dict], steps: list[dict], photos: Path,
             _placard_page_setup(ws, clean(row["equipment_id"]), language)
             draw_placard(PlacardSheet(ws, photos), row,
                          by_equipment.get(row["equipment_id"], []), language, date,
-                         app_links=app_links)
+                         app_links=app_links,
+                         photo_verdicts=(photo_verdicts.get(row["equipment_id"], {})
+                                         if photo_verdicts is not None else None))
             pages.append(PlacardPage(row["equipment_id"], language, out_path.name, title))
 
     if pages:
@@ -1254,6 +1304,13 @@ def cmd_build(args: argparse.Namespace) -> int:
     steps = json.loads((data / "steps.json").read_text("utf-8"))
     findings = json.loads(Path(args.findings).read_text("utf-8")) if args.findings else []
     proposed = json.loads(Path(args.proposed).read_text("utf-8")) if args.proposed else []
+    photo_audit = (json.loads(Path(args.photo_audit).read_text("utf-8"))
+                   if args.photo_audit else [])
+    corrections = (json.loads(Path(args.corrections).read_text("utf-8"))
+                   if args.corrections else [])
+    photo_verdicts = ({item["equipment_id"]: {"equip": item["equip_photo"]["verdict"],
+                                              "iso": item["merged_iso_verdict"]}
+                       for item in photo_audit} if photo_audit else None)
     photos = data / "photos"
     languages = ["en", "es"] if args.language == "both" else [args.language]
     app_links = not args.no_app_links
@@ -1261,14 +1318,16 @@ def cmd_build(args: argparse.Namespace) -> int:
 
     if not args.by_department:
         out = Path(args.out)
-        pages = build_workbook(equipment, steps, photos, languages, args.date, out, app_links)
+        pages = build_workbook(equipment, steps, photos, languages, args.date, out, app_links,
+                               photo_verdicts)
         register = Path(args.register) if args.register else out.with_name(
             f"{out.stem} - Register.xlsx")
         embedded, referenced = _photo_counts(equipment, photos)
         build_register(equipment, steps, pages, findings, photos, args.date, register,
                        out.parent, readme_lines(equipment, steps, findings, args.date,
-                                                embedded, referenced, [out.name]),
-                       proposed)
+                                                embedded, referenced, [out.name],
+                                                photo_audit),
+                       proposed, photo_audit, corrections)
         print(f"{len(equipment)} placards, {len(pages)} pages -> {out}; register -> {register}")
         return 0
 
@@ -1284,7 +1343,7 @@ def cmd_build(args: argparse.Namespace) -> int:
         target = out_dir / f"{names[label]}.xlsx"
         try:
             department_pages = build_workbook(rows, steps_for(rows), photos, languages,
-                                              args.date, target, app_links)
+                                              args.date, target, app_links, photo_verdicts)
         except Exception as error:
             # One department must not cost the other twenty-eight, and the
             # folder must still get its register saying which one is missing.
@@ -1309,8 +1368,9 @@ def cmd_build(args: argparse.Namespace) -> int:
     embedded, referenced = _photo_counts(equipment, photos)
     build_register(equipment, steps, pages, findings, photos, args.date, register, out_dir,
                    readme_lines(equipment, steps, findings, args.date, embedded, referenced,
-                                [f"{names[label]}.xlsx" for label, _ in groups]),
-                   proposed)
+                                [f"{names[label]}.xlsx" for label, _ in groups],
+                                photo_audit),
+                   proposed, photo_audit, corrections)
     print(f"{written} placards across {len(groups) - len(failed)} departments -> {out_dir}/")
     print(f"register -> {register}")
     if failed:
@@ -1382,6 +1442,10 @@ def main() -> int:
                        help="audit findings JSON to carry into the register")
     build.add_argument("--proposed", default="",
                        help="drafted replacement steps JSON, carried as Draft Corrections")
+    build.add_argument("--photo-audit", default="",
+                       help="merged lotoauditors photo verdicts JSON, carried as Photo Audit")
+    build.add_argument("--corrections", default="",
+                       help="log of corrections applied to the data, carried as Corrections Log")
     build.add_argument("--no-app-links", action="store_true",
                        help="omit Soteria Field links (QR, photo URLs) — for a closed account")
     build.set_defaults(func=cmd_build)
