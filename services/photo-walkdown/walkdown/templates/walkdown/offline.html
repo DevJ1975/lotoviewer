@@ -1,0 +1,10 @@
+{% extends "walkdown/base.html" %}
+{% block title %}Offline{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>You're offline</h1>
+  <p>This page hasn't been saved to the phone yet. Open a department with signal and tap
+    <strong>Download for offline</strong>, then you can keep working anywhere in the plant.</p>
+  <a class="btn primary block" href="{% url 'departments' %}">Back to departments</a>
+</section>
+{% endblock %}

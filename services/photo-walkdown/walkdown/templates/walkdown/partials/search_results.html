@@ -1,0 +1,12 @@
+{% if query|length >= 2 %}
+  {% if results %}
+  <ul class="list">
+    {% for m in results %}
+    <li><a class="row" href="{% url 'machine' m.pk %}">
+      <span class="grow"><strong>{{ m.equipment_id }}</strong>
+        <span class="muted small">{{ m.description }}</span></span>
+      <span class="count">{{ m.department }}</span></a></li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">No machine matches "{{ query }}".</p>{% endif %}
+{% endif %}

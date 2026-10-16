@@ -1,0 +1,24 @@
+{% extends "walkdown/base.html" %}
+{% block title %}Sync{% endblock %}
+{% block content %}
+<h1>Sync</h1>
+<section class="card">
+  <p><strong id="queue-total">0</strong> waiting to upload.</p>
+  <button type="button" class="btn primary block" id="sync-now">Sync now</button>
+  <p id="sync-message" class="muted" role="status"></p>
+  <ul class="list" id="queue-list"></ul>
+</section>
+
+<h2>Recently uploaded</h2>
+<ul class="list">
+  {% for c in recent %}
+  <li class="row">
+    <span class="grow"><strong>{{ c.machine.equipment_id }}</strong>
+      <span class="muted small">{{ c.get_slot_display }} · {{ c.get_kind_display }}
+        {% if c.reverted_at %}· reverted{% endif %}</span></span>
+    <span class="muted small">{{ c.synced_at|date:"M j, g:i a" }}</span>
+  </li>
+  {% empty %}<li class="muted">Nothing uploaded yet.</li>{% endfor %}
+</ul>
+{% endblock %}
+{% block scripts %}{% load static %}<script src="{% static 'walkdown/sync-page.js' %}"></script>{% endblock %}

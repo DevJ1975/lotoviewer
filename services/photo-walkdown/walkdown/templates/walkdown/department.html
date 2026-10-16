@@ -1,0 +1,36 @@
+{% extends "walkdown/base.html" %}
+{% block title %}{{ department }}{% endblock %}
+{% block back %}<a class="bar-title" href="{% url 'departments' %}">&larr; Departments</a>{% endblock %}
+{% block content %}
+<h1>{{ department }}</h1>
+<p class="muted">{{ done }} of {{ machines|length }} done</p>
+
+<button type="button" class="btn block" id="download-offline"
+        data-manifest="{% url 'precache' slug %}">Download for offline</button>
+<p id="download-status" class="muted" role="status"></p>
+
+<div class="filters" role="group" aria-label="Filter machines">
+  <button type="button" class="chip active" data-filter="all">All</button>
+  <button type="button" class="chip" data-filter="todo">Remaining</button>
+  <button type="button" class="chip" data-filter="done">Done</button>
+  <input type="search" id="filter-text" placeholder="Filter by ID or name" autocomplete="off">
+</div>
+
+<ul class="list" id="machine-list">
+  {% for m in machines %}
+  <li data-state="{% if m.is_done %}done{% else %}todo{% endif %}"
+      data-text="{{ m.equipment_id|lower }} {{ m.description|lower }}" data-machine="{{ m.pk }}">
+    <a class="row" href="{% url 'machine' m.pk %}">
+      <span class="grow"><strong>{{ m.equipment_id }}</strong>
+        <span class="muted small">{{ m.description }}</span></span>
+      <span class="chips">
+        <span class="chip tiny {{ m.equip_state.tone }}">Equip {{ m.equip_state.label }}</span>
+        <span class="chip tiny {{ m.iso_state.tone }}">Isolation {{ m.iso_state.label }}</span>
+        <span class="chip tiny queued" data-queued-for="{{ m.pk }}" hidden>Queued</span>
+      </span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% endblock %}
+{% block scripts %}{% load static %}<script src="{% static 'walkdown/department.js' %}"></script>{% endblock %}

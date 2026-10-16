@@ -1,0 +1,50 @@
+{% extends "walkdown/base.html" %}
+{% block title %}{{ machine.equipment_id }}{% endblock %}
+{% block back %}<a class="bar-title" href="{% url 'department' department_slug %}">&larr; {{ machine.department }}</a>{% endblock %}
+{% block content %}
+<h1>{{ machine.equipment_id }}</h1>
+<p>{{ machine.description }}</p>
+<p class="muted small">Machine {{ position }} of {{ department_total }} · energy sources:
+  {% for code in machine.energy_codes %}<span class="code">{{ code }}</span>{% endfor %}</p>
+
+<section class="card">
+  <h2>What to photograph</h2>
+  <ul class="points">{% for point in points %}<li>{{ point }}</li>{% endfor %}</ul>
+  {% if note %}<p class="note"><strong>Auditors:</strong> {{ note }}</p>{% endif %}
+  <p class="muted small">An E-stop, push button or HMI screen is not an isolation point.
+    Photograph the disconnect or valve that feeds the machine, with the lock point and ID tag in frame.</p>
+</section>
+
+<div id="slots" data-machine="{{ machine.pk }}" data-label-options="{{ label_options_json }}"
+     hx-get="{% url 'machine_status' machine.pk %}" hx-trigger="walkdown:synced from:body"
+     hx-swap="innerHTML">
+  {% include "walkdown/partials/slots.html" %}
+</div>
+
+<nav class="pager">
+  {% if previous %}<a class="btn" href="{% url 'machine' previous.pk %}">&larr; {{ previous.equipment_id }}</a>{% else %}<span></span>{% endif %}
+  {% if next %}<a class="btn primary" href="{% url 'machine' next.pk %}">{{ next.equipment_id }} &rarr;</a>{% endif %}
+</nav>
+{% endblock %}
+{% block scripts %}{% load static %}
+<dialog id="annotator" class="annotator" aria-label="Mark the isolation point">
+  <p class="annotator-help"><strong>Mark the isolation point.</strong> Drag from open space to the
+    switch or valve, or just tap it. Add one arrow for each isolation point.</p>
+  <div class="annotator-stage">
+    <div class="annotator-wrap">
+      <img id="annotator-image" alt="Photo to mark" draggable="false">
+      <svg id="annotator-overlay" class="overlay" aria-hidden="true"></svg>
+    </div>
+  </div>
+  <div id="annotator-labels" class="chips"></div>
+  <input id="annotator-label" type="text" maxlength="40" placeholder="Label for the last arrow (optional)" autocomplete="off">
+  <p id="annotator-message" class="muted small" role="status"></p>
+  <div class="annotator-actions">
+    <button type="button" class="btn" id="annotator-undo">Undo</button>
+    <button type="button" class="btn" id="annotator-clear">Clear all</button>
+    <button type="button" class="btn" id="annotator-cancel">Cancel</button>
+    <button type="button" class="btn primary" id="annotator-save">Save arrows</button>
+  </div>
+</dialog>
+<script src="{% static 'walkdown/arrows.js' %}"></script>
+<script src="{% static 'walkdown/capture.js' %}"></script>{% endblock %}

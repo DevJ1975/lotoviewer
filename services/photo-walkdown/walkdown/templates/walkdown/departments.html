@@ -1,0 +1,29 @@
+{% extends "walkdown/base.html" %}
+{% block content %}
+<section class="summary card">
+  <div class="big">{{ done }} <span class="muted">of {{ total }} machines done</span></div>
+  <progress max="{{ total }}" value="{{ done }}"></progress>
+</section>
+
+<input type="search" name="q" class="search" placeholder="Find a machine (ID or name)"
+       hx-get="{% url 'search' %}" hx-trigger="input changed delay:300ms, search"
+       hx-target="#search-results" hx-indicator="#search-results" autocomplete="off">
+<div id="search-results" aria-live="polite"></div>
+
+<h2>Departments</h2>
+<ul class="list">
+  {% for dept in departments %}
+  <li>
+    <a class="row" href="{% url 'department' dept.slug %}">
+      <span class="grow"><strong>{{ dept.name }}</strong>
+        <progress max="{{ dept.total }}" value="{{ dept.done }}"></progress></span>
+      <span class="count">{{ dept.done }}/{{ dept.total }}</span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+<p class="center"><a class="btn" href="{% url 'report' %}">Progress report for the client</a></p>
+<form method="post" action="{% url 'logout' %}" class="center">{% csrf_token %}
+  <button class="btn link" type="submit">Sign out</button>
+</form>
+{% endblock %}
