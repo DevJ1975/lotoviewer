@@ -22,12 +22,14 @@ RUN DJANGO_SECRET_KEY=build SUPABASE_URL=https://build.invalid SUPABASE_ANON_KEY
 # SQLite, the thumbnail cache and the upload log live on the /data volume.
 RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin walkdown \
  && mkdir -p /data && chown walkdown /data
-USER walkdown
 VOLUME /data
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
   CMD python -c "import urllib.request,sys; sys.exit(urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4).status != 200)"
+
+# Starts as root only long enough to fix the volume's ownership (entrypoint.sh).
+ENTRYPOINT ["/srv/entrypoint.sh"]
 
 # One worker with threads: SQLite allows a single writer, and the work is
 # waiting on Supabase, which threads handle fine.

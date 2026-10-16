@@ -57,6 +57,7 @@ jobs:
             sleep 2
           done
           docker inspect -f '{{.State.Health.Status}}' walkdown | grep -x healthy
-          test "$(docker exec walkdown id -u)" != 0
+          # the app itself (PID 1 after the entrypoint drops privileges) must not be root
+          test "$(docker exec walkdown awk '/^Uid:/{print $2}' /proc/1/status)" = 10001
           curl -fsS http://127.0.0.1:8000/healthz
           docker logs walkdown
