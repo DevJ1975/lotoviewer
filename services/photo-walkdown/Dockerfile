@@ -19,10 +19,10 @@ RUN DJANGO_SECRET_KEY=build SUPABASE_URL=https://build.invalid SUPABASE_ANON_KEY
     SUPABASE_SERVICE_ROLE_KEY=build WALKDOWN_TENANT_ID=build \
     python manage.py collectstatic --noinput
 
-# SQLite, the thumbnail cache and the upload log live on the /data volume.
+# SQLite and the thumbnail cache live in /data; mount a volume there (compose and
+# Railway both do; Railway forbids a VOLUME instruction in the Dockerfile).
 RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin walkdown \
  && mkdir -p /data && chown walkdown /data
-VOLUME /data
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
