@@ -71,14 +71,14 @@ function makeStep(partial: Partial<LotoEnergyStep> = {}): LotoEnergyStep {
   }
 }
 
-// Realistic four-phase procedure (isolate → release → lockout → verify)
+// Realistic four-phase procedure (isolate → lockout → release → verify)
 // used by rendering tests that want a representative table to draw,
 // not the empty "no steps yet" placeholder.
 function makeValidProcedure(extra: Partial<LotoEnergyStep> = {}): LotoEnergyStep[] {
   return [
     makeStep({ ...extra, id: 's-iso', step_type: 'isolate',              sequence_order: 1 }),
-    makeStep({ id: 's-rel', step_type: 'release_stored_energy',          sequence_order: 2 }),
-    makeStep({ id: 's-loc', step_type: 'lockout',                        sequence_order: 3 }),
+    makeStep({ id: 's-loc', step_type: 'lockout',                        sequence_order: 2 }),
+    makeStep({ id: 's-rel', step_type: 'release_stored_energy',          sequence_order: 3 }),
     makeStep({ id: 's-ver', step_type: 'verify_zero_energy',             sequence_order: 4, tryout_required: true }),
   ]
 }

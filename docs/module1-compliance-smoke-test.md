@@ -10,7 +10,7 @@ running Module 2. Run as a tenant admin in a non-production environment.
    energy steps.
 2. Click "Edit steps".
 3. For each step, verify the **phase dropdown** offers: shutdown,
-   isolate, release stored energy, lockout, verify zero energy.
+   isolate, lockout, release stored energy, verify zero energy.
 4. Delete the `verify_zero_energy` step and click Generate placard.
    Expected: the placard generator **refuses** with a banner explaining
    the missing phase.

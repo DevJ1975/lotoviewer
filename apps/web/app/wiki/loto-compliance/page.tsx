@@ -63,7 +63,7 @@ export default function WikiLotoCompliancePage() {
       <Section id="phases" title="§(c)(4)(ii) — Structured procedure phases">
         <p>
           The standard requires a documented sequence: shutdown, isolate,
-          release stored energy, lockout, verify zero energy (the
+          lockout, release stored energy, verify zero energy (the
           &quot;tryout&quot;). Every energy step on every equipment now
           carries a phase tag and an explicit sequence order. The placard
           generator refuses to publish a placard that&apos;s missing a required
@@ -218,7 +218,7 @@ export default function WikiLotoCompliancePage() {
           {
             q: 'My placard generator refused — what does that mean?',
             a: <>The procedure is missing at least one of the four
-              required phases (isolate, release stored energy, lockout,
+              required phases (isolate, lockout, release stored energy,
               verify zero energy). Open the equipment detail page, click
               <strong> Edit steps</strong>, add the missing phase, save,
               and regenerate. The shutdown phase is optional — the

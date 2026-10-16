@@ -81,8 +81,8 @@ ${ENERGY_CODE_TABLE}
 REQUIRED PHASES (each step is tagged with one; the procedure must cover every required phase):
 - shutdown               Notify affected employees and bring the machine to a normal stop.
 - isolate                Operate each disconnect/valve/breaker that cuts an energy source.
-- release_stored_energy  Bleed, block, or drain residual energy (see stored-energy list).
 - lockout                Apply lock + tag at the specific isolation device.
+- release_stored_energy  After lockout, bleed, block, or drain residual energy (see stored-energy list).
 - verify_zero_energy     Test for zero energy ("tryout") BEFORE work begins.
 
 RULES
