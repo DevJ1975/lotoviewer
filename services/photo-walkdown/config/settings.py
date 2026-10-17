@@ -39,6 +39,12 @@ WALKDOWN_TENANT_ID = _required("WALKDOWN_TENANT_ID")
 SUPERADMIN_EMAILS = {email.lower() for email in _csv("SUPERADMIN_EMAILS")}
 # Where the placards live; the client report links to <this>/qr/<token>.
 PLATFORM_URL = os.environ.get("PLATFORM_URL", "https://soteriafield.app").rstrip("/")
+# Email to maintenance supervisors goes out through Resend, as the platform's own
+# mail does. Without a key the request screen hands the user a pre-filled
+# mailto: link instead, so the feature never depends on a secret being set.
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
+WALKDOWN_FROM_EMAIL = os.environ.get("WALKDOWN_FROM_EMAIL", "Soteria Field <onboarding@resend.dev>")
+CONFIRM_LINK_DAYS = 14
 PHOTO_BUCKET = "loto-photos"
 # Same ceiling as the platform's review-portal upload route; the phone
 # compresses to under 1 MB, so 2 MB only rejects something malformed.
@@ -63,6 +69,8 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "walkdown.middleware.ContentSecurityPolicyMiddleware",
     "walkdown.middleware.LoginRequiredMiddleware",
+    "walkdown.middleware.MembershipRecheckMiddleware",
+    "walkdown.middleware.RequestLimitsMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -86,7 +94,14 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": DATA_DIR / "walkdown.sqlite3",
-        "OPTIONS": {"timeout": 20},
+        "OPTIONS": {
+            "timeout": 20,
+            # WAL lets readers and the one writer proceed together, and IMMEDIATE
+            # takes the write lock up front so concurrent requests queue instead of
+            # failing half-way. Eight threads share this file.
+            "transaction_mode": "IMMEDIATE",
+            "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
+        },
     }
 }
 
@@ -95,11 +110,15 @@ THUMBNAIL_DIR = DATA_DIR / "thumbnails"
 
 LOGIN_URL = "/login/"
 # Days can pass in the plant without signal; a short session would strand
-# queued photos behind a login screen that cannot load offline.
+# queued photos behind a login screen that cannot load offline. The session is
+# only written when it changes: rewriting it on every request (thumbnails, sync
+# polls) made every request a database write.
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 30
-SESSION_SAVE_EVERY_REQUEST = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
+# Bounded request bodies: nothing here posts more than a ~1 MB photo.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 128 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
 CSRF_COOKIE_SAMESITE = "Lax"
 
 if not DEBUG:
@@ -112,6 +131,12 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_REFERRER_POLICY = "same-origin"
 X_FRAME_OPTIONS = "DENY"
+
+# HSTS is on for this host. includeSubDomains and preload are deliberately left
+# off: they would bind every soteriafield.app subdomain (the main platform, mail)
+# to HTTPS-only indefinitely, which is the platform owner's decision, not this
+# tool's.
+SILENCED_SYSTEM_CHECKS = ["security.W005", "security.W021"]
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
@@ -129,4 +154,7 @@ LOGGING = {
     "disable_existing_loggers": False,
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "root": {"handlers": ["console"], "level": "INFO"},
+    # httpx logs every Supabase URL (machine ids, filters) at INFO: noise, and
+    # not something to keep in a log stream.
+    "loggers": {"httpx": {"level": "WARNING"}, "httpcore": {"level": "WARNING"}},
 }

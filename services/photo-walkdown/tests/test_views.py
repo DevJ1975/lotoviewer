@@ -10,7 +10,8 @@ def test_departments_and_machine_pages_render(logged_in, machine, fake):
     assert "Fryers" in home and "of 1 machines done" in home
     page = logged_in.get(reverse("machine", args=[machine.pk])).content.decode()
     assert "SK-001" in page and "Electrical disconnect" in page and "Air lockout valve" in page
-    assert "Mark isolation point" in page
+    assert "Take photo, then mark arrow" in page    # this machine's photo was flagged wrong
+    assert "mark-rules.js" in page
     assert 'data-label-options="[&quot;Electrical disconnect&quot;' in page
 
 

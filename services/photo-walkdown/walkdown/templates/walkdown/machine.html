@@ -21,12 +21,29 @@
   {% include "walkdown/partials/slots.html" %}
 </div>
 
+<section class="card">
+  <h2>Maintenance confirmation</h2>
+  {% for r in confirmations %}
+  <p class="small"><strong>{{ r.to_name|default:r.to_email }}</strong>
+    <span class="muted">{{ r.created_at|date:"M j" }}</span><br>{{ r.summary }}</p>
+  {% empty %}<p class="muted small">Nobody has been asked to confirm this machine yet.</p>{% endfor %}
+  <a class="btn block" href="{% url 'request_confirmation' machine.pk %}">Ask a maintenance supervisor to confirm</a>
+</section>
+
 <nav class="pager">
   {% if previous %}<a class="btn" href="{% url 'machine' previous.pk %}">&larr; {{ previous.equipment_id }}</a>{% else %}<span></span>{% endif %}
   {% if next %}<a class="btn primary" href="{% url 'machine' next.pk %}">{{ next.equipment_id }} &rarr;</a>{% endif %}
 </nav>
 {% endblock %}
 {% block scripts %}{% load static %}
+<dialog id="camera" class="camera" aria-label="Take photo">
+  <video id="camera-video" playsinline muted autoplay></video>
+  <p id="camera-message" class="camera-message" role="status"></p>
+  <div class="camera-actions">
+    <button type="button" class="btn" id="camera-cancel">Cancel</button>
+    <button type="button" class="btn primary" id="camera-shutter">Take photo</button>
+  </div>
+</dialog>
 <dialog id="annotator" class="annotator" aria-label="Mark the isolation point">
   <p class="annotator-help"><strong>Mark the isolation point.</strong> Drag from open space to the
     switch or valve, or just tap it. Add one arrow for each isolation point.</p>
@@ -46,5 +63,7 @@
     <button type="button" class="btn primary" id="annotator-save">Save arrows</button>
   </div>
 </dialog>
+<script src="{% static 'walkdown/camera.js' %}"></script>
+<script src="{% static 'walkdown/mark-rules.js' %}"></script>
 <script src="{% static 'walkdown/arrows.js' %}"></script>
 <script src="{% static 'walkdown/capture.js' %}"></script>{% endblock %}

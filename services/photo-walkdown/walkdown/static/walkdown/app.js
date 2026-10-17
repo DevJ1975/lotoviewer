@@ -25,6 +25,14 @@
     if (queue && document.visibilityState === 'visible') queue.drain();
   }
 
+  // The session ended (or access was removed): keep the photos, ask for a sign-in.
+  const authBanner = document.getElementById('auth-banner');
+  document.addEventListener('walkdown:auth-needed', () => {
+    if (!authBanner) return;
+    authBanner.querySelector('a').href = `/login/?next=${encodeURIComponent(window.location.pathname)}`;
+    authBanner.hidden = false;
+  });
+
   window.addEventListener('online', () => { showNetwork(); sync(); });
   window.addEventListener('offline', showNetwork);
   document.addEventListener('visibilitychange', sync);

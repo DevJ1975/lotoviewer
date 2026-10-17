@@ -122,8 +122,12 @@ def patch_equipment(tenant_id: str, equipment_id: str, changes: dict) -> dict:
 def log_hygiene(equipment_id: str, action: str, reason: str, detail: dict) -> None:
     response = httpx.post(
         f"{settings.SUPABASE_URL}/rest/v1/loto_hygiene_log",
+        # tenant_id must be explicit: its column default (active_tenant_id())
+        # reads the signed-in user's request header, which a service-role call
+        # does not have, so the insert would otherwise violate NOT NULL.
         json={"section": "photo_walkdown_2026", "equipment_id": equipment_id,
-              "action": action, "reason": reason, "detail": detail},
+              "action": action, "reason": reason, "detail": detail,
+              "tenant_id": settings.WALKDOWN_TENANT_ID},
         headers=_service_headers(Prefer="return=minimal"),
         timeout=TIMEOUT,
     )

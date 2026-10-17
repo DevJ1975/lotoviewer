@@ -8,25 +8,24 @@
     <span class="chip {{ s.state.tone }}">{{ s.state.label }}</span>
     <span class="chip queued" data-queued-slot="{{ s.slot }}" hidden>Queued</span>
   </div>
-  <div class="thumb-wrap">
+  <div class="thumb-wrap"><div class="thumb-frame">
     <img class="thumb" alt="Current {{ s.title|lower }} for {{ machine.equipment_id }}"
          src="{% url 'thumb' machine.pk s.slot %}?v={{ s.version }}" width="480" height="360">
     <svg class="overlay" aria-hidden="true"></svg>
-  </div>
+  </div></div>
   {% if s.audit_note %}<p class="note">{{ s.audit_note }}</p>{% endif %}
 
   <label class="check">
     <input type="checkbox" data-confirmed checked>
     I am at {{ machine.equipment_id }} and this photo shows it
   </label>
-  <label class="btn primary block file-btn">Take photo
-    <input type="file" accept="image/*" capture="environment" data-capture-input hidden>
-  </label>
+  <button type="button" class="btn primary block" data-take-photo>Take photo</button>
+  <input type="file" accept="image/*" capture="environment" data-capture-input hidden>
   {% if s.can_confirm %}
   <button type="button" class="btn block" data-confirm-existing>The photo above is correct</button>
   {% endif %}
   {% if s.is_iso %}
-  <button type="button" class="btn block" data-mark-isolation>Mark isolation point (arrow)</button>
+  <button type="button" class="btn block" data-mark-isolation>{% if s.can_mark %}Mark isolation point (arrow){% else %}Take photo, then mark arrow{% endif %}</button>
   {% endif %}
   <p class="muted small" data-capture-message role="status"></p>
 </section>

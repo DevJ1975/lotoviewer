@@ -8,6 +8,7 @@ import respx
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.utils import timezone
 from PIL import Image
 
 from walkdown.models import Machine
@@ -68,7 +69,13 @@ class FakeSupabase:
         return httpx.Response(200, json={"Key": "ok"})
 
     def _log(self, request):
-        self.hygiene.append(json.loads(request.content))
+        body = json.loads(request.content)
+        # Production: loto_hygiene_log.tenant_id is NOT NULL and its default
+        # (active_tenant_id()) is empty for a service-role request.
+        if not body.get("tenant_id"):
+            return httpx.Response(400, json={"code": "23502",
+                                             "message": 'null value in column "tenant_id"'})
+        self.hygiene.append(body)
         return httpx.Response(201)
 
 
@@ -111,5 +118,11 @@ def user(db):
 
 @pytest.fixture
 def logged_in(client, user):
+    """A signed-in browser whose tenant access was verified a moment ago, as it is
+    right after a real login (the periodic re-check is tested separately)."""
     client.force_login(user)
+    session = client.session
+    session["supabase_user_id"] = "user-1"
+    session["membership_checked_at"] = timezone.now().timestamp()
+    session.save()
     return client

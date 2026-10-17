@@ -33,4 +33,4 @@ ENTRYPOINT ["/srv/entrypoint.sh"]
 
 # One worker with threads: SQLite allows a single writer, and the work is
 # waiting on Supabase, which threads handle fine.
-CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py load_deltas --no-refresh && exec gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 8 --timeout 60 --no-control-socket --access-logfile -"]
+CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py load_deltas --no-refresh && exec gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 16 --timeout 60 --no-control-socket --access-logfile -"]

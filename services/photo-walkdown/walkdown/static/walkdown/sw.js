@@ -93,7 +93,7 @@ async function navigation(request) {
 
 // Fetch fresh from the network and keep the copy for offline use.
 async function precache(request) {
-  const response = await fetch(request, { cache: 'reload' });
+  const response = await fetch(request, { cache: 'reload', signal: AbortSignal.timeout(30000) });
   if (response.ok && !response.redirected) {
     const name = new URL(request.url).pathname.startsWith('/thumb/') ? THUMB_CACHE : PAGE_CACHE;
     (await caches.open(name)).put(request, response.clone());
@@ -112,7 +112,8 @@ self.addEventListener('fetch', (event) => {
   }
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/login/')
       || url.pathname.startsWith('/logout/') || url.pathname === '/sw.js'
-      || url.pathname.startsWith('/r/') || url.pathname.startsWith('/report/')) return;
+      || url.pathname.startsWith('/r/') || url.pathname.startsWith('/c/')
+      || url.pathname.startsWith('/report/')) return;
 
   if (url.pathname.startsWith('/static/')) {
     event.respondWith(staleWhileRevalidate(request));

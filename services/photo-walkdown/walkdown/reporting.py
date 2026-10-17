@@ -25,6 +25,7 @@ class UpdatedMachine:
     actions: list[str]
     last_date: date
     placard_url: str
+    confirmation: str = ""
 
 
 @dataclass
@@ -50,6 +51,7 @@ class Report:
     new_photos: int = 0
     confirmations: int = 0
     arrows_marked: int = 0
+    confirmed_by_maintenance: int = 0
     departments: list[DepartmentProgress] = field(default_factory=list)
     updated: list[UpdatedMachine] = field(default_factory=list)
 
@@ -89,7 +91,7 @@ def _actions(captures: list[Capture]) -> list[str]:
 
 
 def build_report(since: date | None = None, until: date | None = None) -> Report:
-    machines = list(Machine.objects.prefetch_related("captures"))
+    machines = list(Machine.objects.prefetch_related("captures", "confirmation_requests"))
     report = Report(since=since, until=until, generated=timezone.now(),
                     machines_total=len(machines), machines_done=sum(m.is_done for m in machines))
     start, end = _window(since, until)
@@ -104,18 +106,24 @@ def build_report(since: date | None = None, until: date | None = None) -> Report
         captures = [c for c in machine.captures.all() if c.reverted_at is None
                     and (start is None or c.synced_at >= start)
                     and (end is None or c.synced_at <= end)]
-        if not captures:
+        answered = [r for r in machine.confirmation_requests.all() if r.is_answered
+                    and (start is None or r.responded_at >= start)
+                    and (end is None or r.responded_at <= end)]
+        if not captures and not answered:
             continue
         progress.updated += 1
+        report.confirmed_by_maintenance += bool(answered and answered[0].all_confirmed)
         report.new_photos += sum(c.kind == CaptureKind.PHOTO for c in captures)
         report.confirmations += sum(c.kind == CaptureKind.CONFIRM for c in captures)
         iso = [c for c in captures if c.slot == Slot.ISO]
         report.arrows_marked += bool(iso) and bool(max(iso, key=lambda c: c.synced_at).new_annotations)
+        moments = [c.synced_at for c in captures] + [r.responded_at for r in answered]
         report.updated.append(UpdatedMachine(
             equipment_id=machine.equipment_id, description=machine.description,
             department=machine.department, actions=_actions(captures),
-            last_date=timezone.localtime(max(c.synced_at for c in captures)).date(),
-            placard_url=placard_link(machine.qr_token)))
+            last_date=timezone.localtime(max(moments)).date(),
+            placard_url=placard_link(machine.qr_token),
+            confirmation="; ".join(r.summary for r in answered)))
     report.machines_updated = len(report.updated)
     report.departments = list(by_department.values())
     return report
@@ -125,8 +133,9 @@ def report_csv(report: Report) -> str:
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(["Equipment ID", "Description", "Department", "What was done", "Date",
-                     "Placard link"])
+                     "Maintenance confirmation", "Placard link"])
     for item in report.updated:
         writer.writerow([item.equipment_id, item.description, item.department,
-                         "; ".join(item.actions), item.last_date.isoformat(), item.placard_url])
+                         "; ".join(item.actions), item.last_date.isoformat(), item.confirmation,
+                         item.placard_url])
     return buffer.getvalue()

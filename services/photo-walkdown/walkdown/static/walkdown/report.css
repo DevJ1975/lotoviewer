@@ -1,6 +1,6 @@
 :root { --ink: #262e3b; --muted: #6b7385; --navy: #214488; --line: #d5dce8; --soft: #eef2f8; }
 * { box-sizing: border-box; }
-body { margin: 0; background: #fff; color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+body { margin: 0; overflow-wrap: anywhere; background: #fff; color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
 .report { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
 h1 { margin: 0; font-size: 26px; color: var(--navy); }
 h2 { margin: 32px 0 8px; font-size: 18px; color: var(--navy); }
@@ -10,17 +10,20 @@ h2 { margin: 32px 0 8px; font-size: 18px; color: var(--navy); }
 .card { background: var(--soft); border-radius: 10px; padding: 14px; font-size: 13px; color: var(--muted); }
 .card .n { display: block; font-size: 30px; font-weight: 700; color: var(--navy); line-height: 1.1; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-wrap table { min-width: 560px; }
 th, td { padding: 8px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
 th { background: var(--soft); font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 .nowrap { white-space: nowrap; }
 a { color: var(--navy); }
+.toolbar a:not(.button) { display: inline-flex; align-items: center; min-height: 44px; }
 .toolbar { background: var(--soft); border-radius: 10px; padding: 14px; margin-bottom: 24px; }
 .toolbar .range { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin: 10px 0; }
-.toolbar input[type=date], .toolbar input[type=text] { padding: 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+.toolbar input[type=date], .toolbar input[type=text] { min-height: 44px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 16px; }
 .link-box { display: block; font-weight: 600; font-size: 13px; }
 .link-box input { display: block; width: 100%; margin-top: 4px; font-weight: 400; }
-button, .button { display: inline-block; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--navy); background: #fff; color: var(--navy); font: inherit; text-decoration: none; cursor: pointer; }
+button, .button { display: inline-flex; align-items: center; min-height: 44px; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--navy); background: #fff; color: var(--navy); font: inherit; text-decoration: none; cursor: pointer; }
 .hint { font-size: 13px; margin: 6px 0 0; }
 @media (max-width: 640px) { table { font-size: 13px; } th, td { padding: 6px; } }
 @media print { .no-print { display: none; } .report { padding: 0; } tr { break-inside: avoid; } }

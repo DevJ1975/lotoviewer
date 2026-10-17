@@ -164,9 +164,33 @@ def apply_confirmation(*, machine: Machine, slot: Slot, annotations: list[dict] 
     return capture
 
 
+def _arrow_target_url(machine: Machine, slot: Slot, current_url: str,
+                      expect_version: str, for_capture: uuid.UUID | None) -> None:
+    """Refuse arrows that would land on a different picture than the one drawn on.
+
+    An arrow is a position on one specific photo. It is tied either to a photo
+    this tool just uploaded (`for_capture`, used when the arrow was drawn on a
+    new photo, which may have uploaded while the editor was open) or to the
+    version the phone saw on the placard (`expect_version`).
+    """
+    if for_capture is not None:
+        photo = Capture.objects.filter(client_capture_id=for_capture, machine=machine,
+                                       slot=slot, kind=CaptureKind.PHOTO,
+                                       reverted_at__isnull=True).first()
+        if photo is None:
+            raise CaptureRejected("The photo this arrow was drawn on did not upload. "
+                                  "Take the photo again and mark the arrow.")
+        if photo.new_url != current_url:
+            raise CaptureRejected("The photo changed after you marked it. Open the machine "
+                                  "and mark the arrow again.")
+    elif photo_version(current_url) != expect_version:
+        raise CaptureRejected("The photo changed after you marked it. Open the machine and "
+                              "mark the arrow again.")
+
+
 def apply_annotation(*, machine: Machine, slot: Slot, annotations: list[dict],
-                     expect_version: str, client_capture_id: uuid.UUID,
-                     captured_at: datetime, user) -> Capture:
+                     expect_version: str, for_capture: uuid.UUID | None,
+                     client_capture_id: uuid.UUID, captured_at: datetime, user) -> Capture:
     """Arrows drawn on the photo that is already on the placard."""
     if existing := _existing(client_capture_id):
         return existing
@@ -175,11 +199,7 @@ def apply_annotation(*, machine: Machine, slot: Slot, annotations: list[dict],
                               "photo first, then mark the arrow on it.")
     current = _current_row(machine)
     url = _usable_photo_url(slot, current)
-    # Arrows are positions on one picture; if someone replaced it since this
-    # phone drew them, they would point at the wrong thing.
-    if photo_version(url) != expect_version:
-        raise CaptureRejected("The photo changed after you marked it. Open the machine and "
-                              "mark the arrow again.")
+    _arrow_target_url(machine, slot, url, expect_version, for_capture)
     old_annotations = current.get(ANNOTATION_COLUMN[slot]) or []
     row = supabase.patch_equipment(settings.WALKDOWN_TENANT_ID, machine.equipment_id,
                                    _annotation_changes(slot, annotations))

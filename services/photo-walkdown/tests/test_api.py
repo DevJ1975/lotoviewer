@@ -7,7 +7,7 @@ from django.urls import reverse
 
 from tests.conftest import BASE, TENANT, jpeg_bytes, live_row
 from walkdown import sync
-from walkdown.models import Capture
+from walkdown.models import Capture, photo_version
 
 ARROWS = [{"type": "arrow", "x1": 0.1, "y1": 0.1, "x2": 0.6, "y2": 0.5, "label": "Electrical disconnect"}]
 
@@ -63,6 +63,7 @@ def test_audit_row_names_who_and_what(logged_in, machine, fake, user):
     post(logged_in, machine, annotations=json.dumps(ARROWS))
     [row] = fake.hygiene
     assert row["section"] == "photo_walkdown_2026" and row["action"] == "photo_reshoot"
+    assert row["tenant_id"] == TENANT                          # NOT NULL in production
     assert user.email in row["reason"]
     assert row["detail"]["old_url"].endswith("old_iso.jpg")
     assert row["detail"]["new_annotations"] == ARROWS
@@ -214,3 +215,46 @@ def test_an_unconfirmed_reshot_can_be_confirmed_later(logged_in, machine, fake):
     from walkdown.models import Slot
     machine.refresh_from_db()
     assert machine.slot_state(Slot.ISO).tone == "done"
+
+
+def test_audit_row_is_written_for_every_kind_of_change(logged_in, machine, fake):
+    """The audit trail silently went missing once; assert it is always flagged written."""
+    post(logged_in, machine, confirmed="0")                         # re-shot, to be confirmed
+    post(logged_in, machine, kind="confirm")                        # confirmed at the machine
+    post(logged_in, machine, kind="annotate", annotations=json.dumps(ARROWS),
+         expect_version=photo_version(fake.rows["SK-001"]["iso_photo_url"]))
+    assert len(fake.hygiene) == 3
+    assert not Capture.objects.filter(hygiene_logged=False).exists()
+
+
+# ── arrows tied to the photo they were drawn on ───────────────────────────
+
+def test_arrow_follows_a_photo_that_uploaded_while_the_editor_was_open(logged_in, machine, fake):
+    photo_id = str(uuid.uuid4())
+    post(logged_in, machine, client_capture_id=photo_id, confirmed="0")
+    ok = post(logged_in, machine, kind="annotate", annotations=json.dumps(ARROWS),
+              for_capture=photo_id)                         # no version: the phone never saw it
+    assert ok.status_code == 200 and fake.patches[-1]["iso_annotations"] == ARROWS
+
+
+def test_arrow_for_a_photo_that_never_uploaded_is_refused(logged_in, machine, fake):
+    machine.iso_verdict = "low_confidence"          # arrows allowed on this photo, so the link is what fails
+    machine.save()
+    fake.rows["SK-001"] = live_row(iso_photo_is_placeholder=False)
+    response = post(logged_in, machine, kind="annotate", annotations=json.dumps(ARROWS),
+                    for_capture=str(uuid.uuid4()))
+    assert response.status_code == 400 and "did not upload" in response.json()["error"]
+
+
+def test_arrow_for_a_photo_since_replaced_is_refused(logged_in, machine, fake):
+    first = str(uuid.uuid4())
+    post(logged_in, machine, client_capture_id=first)
+    post(logged_in, machine)                                 # a newer photo replaces it
+    response = post(logged_in, machine, kind="annotate", annotations=json.dumps(ARROWS),
+                    for_capture=first)
+    assert response.status_code == 400 and "changed" in response.json()["error"]
+
+
+def test_malformed_photo_reference_is_rejected(logged_in, machine, fake):
+    assert post(logged_in, machine, kind="annotate", annotations="[]",
+                for_capture="nope").status_code == 400

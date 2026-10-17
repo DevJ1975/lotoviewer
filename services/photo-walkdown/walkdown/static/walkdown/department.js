@@ -32,6 +32,23 @@
   document.addEventListener('walkdown:queue-changed', showQueued);
   showQueued();
 
+  // A weak signal drops requests: give each page and photo three tries with a
+  // pause between, and a limit so one stalled request cannot hold up the rest.
+  async function fetchWithRetry(url) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const response = await fetch(url, {
+          credentials: 'same-origin', headers: { 'X-Walkdown-Precache': '1' },
+          signal: AbortSignal.timeout(30000),
+        });
+        if (response.ok) return true;
+        if (response.status < 500 && response.status !== 429) return false;
+      } catch (error) { /* try again */ }
+      await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+    }
+    return false;
+  }
+
   const button = document.getElementById('download-offline');
   const status = document.getElementById('download-status');
   button.addEventListener('click', async () => {
@@ -51,14 +68,7 @@
       const workers = Array.from({ length: 4 }, async () => {
         while (urls.length) {
           const url = urls.shift();
-          try {
-            const response = await fetch(url, {
-              credentials: 'same-origin', headers: { 'X-Walkdown-Precache': '1' },
-            });
-            if (!response.ok) failed += 1;
-          } catch (error) {
-            failed += 1;
-          }
+          if (!(await fetchWithRetry(url))) failed += 1;
           finished += 1;
           status.textContent = `Saving ${finished} of ${manifest.urls.length}…`;
         }

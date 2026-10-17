@@ -1,4 +1,5 @@
 import hashlib
+import uuid
 from dataclasses import dataclass
 
 from django.conf import settings
@@ -171,3 +172,71 @@ class Capture(models.Model):
 
     def __str__(self) -> str:
         return f"{self.machine_id} {self.slot} {self.kind}"
+
+
+class Decision(models.TextChoices):
+    PENDING = "", "Waiting"
+    CONFIRMED = "confirmed", "Confirmed"
+    REJECTED = "rejected", "Not right"
+
+
+class ConfirmationRequest(models.Model):
+    """A maintenance supervisor asked to confirm what the photos show.
+
+    The supervisor needs no account: the emailed link carries a signed token for
+    this row, and answers are recorded on it (once).
+    """
+
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    machine = models.ForeignKey(Machine, on_delete=models.CASCADE, related_name="confirmation_requests")
+    slots = models.JSONField(default=list)  # which photos were put to them: "equip", "iso"
+    to_email = models.EmailField()
+    to_name = models.CharField(max_length=100, blank=True)
+    message = models.TextField(blank=True, max_length=1000)
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    sent_at = models.DateTimeField(null=True, blank=True)
+    send_error = models.CharField(max_length=300, blank=True)
+    # The answer.
+    responded_at = models.DateTimeField(null=True, blank=True)
+    responder_name = models.CharField(max_length=100, blank=True)
+    equip_decision = models.CharField(max_length=16, choices=Decision.choices, blank=True)
+    iso_decision = models.CharField(max_length=16, choices=Decision.choices, blank=True)
+    equip_note = models.CharField(max_length=500, blank=True)
+    iso_note = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.machine_id} -> {self.to_email}"
+
+    @property
+    def is_answered(self) -> bool:
+        return self.responded_at is not None
+
+    def decision(self, slot: Slot) -> str:
+        return self.equip_decision if slot == Slot.EQUIP else self.iso_decision
+
+    def note(self, slot: Slot) -> str:
+        return self.equip_note if slot == Slot.EQUIP else self.iso_note
+
+    @property
+    def all_confirmed(self) -> bool:
+        """Answered, and every photo put to them was confirmed."""
+        decisions = [d for d in (self.equip_decision, self.iso_decision) if d]
+        return self.is_answered and bool(decisions) and all(d == Decision.CONFIRMED for d in decisions)
+
+    @property
+    def summary(self) -> str:
+        """One line for the machine page and the client report."""
+        if not self.is_answered:
+            return "Waiting for " + (self.to_name or self.to_email)
+        parts = []
+        for slot in Slot:
+            decision = self.decision(slot)
+            if decision:
+                label = "confirmed" if decision == Decision.CONFIRMED else "flagged as not right"
+                parts.append(f"{slot.label.lower()} {label}")
+        return f"{self.responder_name}: " + "; ".join(parts)

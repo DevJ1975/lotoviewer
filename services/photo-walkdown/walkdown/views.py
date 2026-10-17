@@ -1,4 +1,3 @@
-import hashlib
 import io
 import json
 import logging
@@ -27,12 +26,13 @@ from django.utils.text import slugify
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
-from PIL import Image, ImageDraw, UnidentifiedImageError
+from PIL import Image, UnidentifiedImageError
 
 from . import auth, reporting, supabase, sync
 from .annotations import InvalidAnnotations, parse_annotations
 from .isolation_points import label_options, points_to_photograph, reviewer_note
 from .models import Capture, Machine, Slot, photo_version
+from .thumbnails import thumbnail_response
 
 log = logging.getLogger(__name__)
 THUMB_PX = 480
@@ -60,9 +60,10 @@ def _departments(machines: list[Machine]) -> list[dict]:
 
 
 def _client_ip(request) -> str:
-    # Behind Railway's proxy the left-most X-Forwarded-For entry is the client.
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    return forwarded.split(",")[0].strip() or request.META.get("REMOTE_ADDR", "")
+    # The proxy appends the address it saw to X-Forwarded-For, so the LAST entry
+    # is the trustworthy one; anything to its left is whatever the client sent.
+    forwarded = [hop.strip() for hop in request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")]
+    return forwarded[-1] or request.META.get("REMOTE_ADDR", "")
 
 
 def login_view(request):
@@ -72,8 +73,8 @@ def login_view(request):
     if request.method == "POST":
         email = request.POST.get("email", "")
         try:
-            user = auth.authenticate_supabase_user(email, request.POST.get("password", ""),
-                                                   _client_ip(request))
+            user, supabase_user_id = auth.authenticate_supabase_user(
+                email, request.POST.get("password", ""), _client_ip(request))
         except supabase.InvalidCredentials:
             error = "Email or password is incorrect."
         except auth.NotAuthorized:
@@ -85,6 +86,8 @@ def login_view(request):
             error = "Could not reach the server. Check your signal and try again."
         else:
             login(request, user)
+            request.session["supabase_user_id"] = supabase_user_id
+            request.session["membership_checked_at"] = timezone.now().timestamp()
             target = request.GET.get("next", "")
             if not url_has_allowed_host_and_scheme(target, {request.get_host()}):
                 target = reverse("departments")
@@ -139,6 +142,7 @@ def machine(request, pk):
         "note": reviewer_note(current.recommended_fix),
         "previous": siblings[index - 1] if index else None,
         "next": siblings[index + 1] if index + 1 < len(siblings) else None,
+        "confirmations": list(current.confirmation_requests.all()[:3]),
         "position": index + 1, "department_total": len(siblings),
         "department_slug": slugify(current.department)})
 
@@ -199,47 +203,13 @@ def precache_manifest(request, slug):
 # ── thumbnails ─────────────────────────────────────────────────────────────
 
 
-def _placeholder_thumb(text: str) -> bytes:
-    image = Image.new("RGB", (THUMB_PX, THUMB_PX * 3 // 4), "#E8EEF8")
-    ImageDraw.Draw(image).text((20, THUMB_PX * 3 // 8 - 6), text, fill="#6B7385")
-    buffer = io.BytesIO()
-    image.save(buffer, "JPEG", quality=80)
-    return buffer.getvalue()
-
-
 @require_GET
 def thumb(request, pk, slot):
-    """A 480 px copy of the photo now on the placard.
-
-    A department is ~120 photos; shrinking them here keeps "download for
-    offline" to a few MB, and keeps the page's img-src to 'self'.
-    """
+    """A 480 px copy of the photo now on the placard."""
     if slot not in {s.value for s in Slot}:
         raise Http404("Unknown slot")
     item = get_object_or_404(Machine, pk=pk)
-    url = item.photo_url(Slot(slot))
-    if not url:
-        response = HttpResponse(_placeholder_thumb("No photo on file"), content_type="image/jpeg")
-        response["Cache-Control"] = "no-store"
-        return response
-    cache_dir = settings.THUMBNAIL_DIR
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    cached = cache_dir / f"{hashlib.sha256(url.encode()).hexdigest()}.jpg"
-    if not cached.exists():
-        try:
-            image = Image.open(io.BytesIO(supabase.download(url)))
-            image.thumbnail((THUMB_PX, THUMB_PX))
-            image.convert("RGB").save(cached, "JPEG", quality=78)
-        except (supabase.SupabaseError, supabase.httpx.HTTPError, UnidentifiedImageError, OSError):
-            log.warning("Thumbnail unavailable for %s %s", item.equipment_id, slot, exc_info=True)
-            response = HttpResponse(_placeholder_thumb("Photo unavailable"),
-                                    content_type="image/jpeg", status=200)
-            response["Cache-Control"] = "no-store"
-            return response
-    response = FileResponse(cached.open("rb"), content_type="image/jpeg")
-    # The URL changes whenever the photo does, so a day is safe for the phone.
-    response["Cache-Control"] = "private, max-age=86400"
-    return response
+    return thumbnail_response(item.photo_url(Slot(slot)), THUMB_PX)
 
 
 # ── capture API ────────────────────────────────────────────────────────────
@@ -284,9 +254,15 @@ def _parse_capture(request) -> dict:
         captured_at = timezone.now()
     if timezone.is_naive(captured_at):
         captured_at = timezone.make_aware(captured_at)
+    try:
+        for_capture = (uuid.UUID(request.POST["for_capture"])
+                       if request.POST.get("for_capture") else None)
+    except ValueError as error:
+        raise ValidationError("Bad photo reference.") from error
     return {"client_capture_id": client_capture_id, "slot": Slot(slot), "kind": kind,
             "captured_at": captured_at, "confirmed": request.POST.get("confirmed") == "1",
-            "annotations": annotations, "expect_version": request.POST.get("expect_version", "")}
+            "annotations": annotations, "expect_version": request.POST.get("expect_version", ""),
+            "for_capture": for_capture}
 
 
 @require_POST
@@ -314,7 +290,8 @@ def api_capture(request):
             if fields["annotations"] is None:
                 raise ValidationError("Mark at least one arrow, or clear them.")
             capture = sync.apply_annotation(annotations=fields["annotations"],
-                                            expect_version=fields["expect_version"], **common)
+                                            expect_version=fields["expect_version"],
+                                            for_capture=fields["for_capture"], **common)
     except (ValidationError, sync.CaptureRejected) as error:
         message = error.messages[0] if isinstance(error, ValidationError) else str(error)
         return JsonResponse({"ok": False, "error": message}, status=400)

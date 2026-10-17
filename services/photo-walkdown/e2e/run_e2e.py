@@ -27,6 +27,8 @@ FAKE_PORT, APP_PORT = 54321, 8765
 APP = f"http://localhost:{APP_PORT}"
 FAKE = f"http://127.0.0.1:{FAKE_PORT}"
 CHROMIUM = os.environ.get("CHROMIUM_PATH", "/opt/pw-browsers/chromium")
+# Chromium's built-in test pattern stands in for the phone's rear camera.
+FAKE_CAMERA = ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"]
 
 
 def wait_for(condition, what, timeout=20):
@@ -92,11 +94,16 @@ def run(headed: bool) -> None:
             browser = playwright.chromium.launch(executable_path=f"{CHROMIUM}/chrome-linux/chrome"
                                                  if Path(f"{CHROMIUM}/chrome-linux/chrome").exists()
                                                  else None, headless=not headed,
-                                                 args=["--no-sandbox"])
-            context = browser.new_context(viewport={"width": 414, "height": 896}, has_touch=True)
+                                                 args=["--no-sandbox", *FAKE_CAMERA])
+            context = browser.new_context(viewport={"width": 414, "height": 896}, has_touch=True,
+                                          permissions=["camera"])
             page = context.new_page()
-            page.on("console", lambda m: problems.append(m.text) if m.type == "error" else None)
+            page.on("console", lambda m: problems.append(f"{m.text} @ {m.location.get('url', '')}")
+                    if m.type == "error" else None)
             page.on("pageerror", lambda e: problems.append(str(e)))
+            # Navigating away cancels in-flight loads (ERR_ABORTED): not a fault.
+            page.on("requestfailed", lambda r: problems.append(f"request failed: {r.url} ({r.failure})")
+                    if "ERR_ABORTED" not in (r.failure or "") else None)
 
             # 1. sign in
             page.goto(f"{APP}/login/")
@@ -146,7 +153,8 @@ def run(headed: bool) -> None:
                                          "buffer": exif_rotated_jpeg()}])
             wait_for(lambda: "Saved on this phone" in text_of(page, "section[data-slot=iso] [data-capture-message]"),
                      "the photo to be saved")
-            assert page.locator("section[data-slot=iso] [data-queued-slot]").is_visible()
+            wait_for(lambda: page.locator("section[data-slot=iso] [data-queued-slot]").is_visible(),
+                     "the Queued badge")
             assert page.locator("#queue-count").inner_text() == "1"
             print("ok  photo queued on the phone, nothing sent")
 
@@ -187,7 +195,9 @@ def run(headed: bool) -> None:
             upload = urllib.request.urlopen(f"{FAKE}/storage/v1/object/public/loto-photos/{stored}").read()
             width, height = Image.open(io.BytesIO(upload)).size
             assert height > width and max(width, height) <= 2048 and len(upload) <= 1_000_000, (width, height)
-            assert state["hygiene"][-1]["action"] == "photo_reshoot"
+            # The audit row is written just after the placard update, so wait for it.
+            wait_for(lambda: fake_state()["hygiene"], "the audit row")
+            assert fake_state()["hygiene"][-1]["action"] == "photo_reshoot"
             wait_for(lambda: page.locator("#queue-count").is_hidden(), "the queue to empty")
             print(f"ok  synced: upright {width}x{height} JPEG under 1 MB, arrow saved, audit row written")
 
@@ -214,6 +224,95 @@ def run(headed: bool) -> None:
             assert "iso_photo_url" not in last and len(last["iso_annotations"]) == 1, last
             print("ok  arrow added to an existing photo without replacing it")
 
+            # 9b. the case that failed in production: a machine whose photo the audit
+            #     found wrong. Tapping "mark arrow" must take the photo first, then open
+            #     the editor, and the arrow must still arrive after the photo uploaded
+            #     while the editor was open.
+            fresh = next(m for m in SEED if m["merged_iso_verdict"] == "mismatch"
+                         and m["equipment_id"] != target["equipment_id"])
+            page.goto(f"{APP}/")
+            page.fill("input[name=q]", fresh["equipment_id"])
+            page.locator("#search-results a.row").first.wait_for()
+            page.locator("#search-results a.row").first.click()
+            page.wait_for_selector("section[data-slot=iso]")
+            mark = page.locator("[data-mark-isolation]")
+            assert mark.inner_text() == "Take photo, then mark arrow", mark.inner_text()
+            patches, hygiene = len(fake_state()["patches"]), len(fake_state()["hygiene"])
+            mark.click()                                     # opens the live camera, not a file menu
+            page.wait_for_selector("#camera[open]")
+            assert "another machine" in text_of(page, "section[data-slot=iso] [data-capture-message]")
+            page.wait_for_function("() => document.getElementById('camera-video').videoWidth > 0")
+            page.click("#camera-shutter")
+            page.wait_for_selector("#annotator[open]")
+            page.locator("#annotator-image").evaluate("i => i.complete || new Promise(r => i.onload = r)")
+            wrap = page.locator(".annotator-wrap").bounding_box()
+            page.mouse.click(wrap["x"] + wrap["width"] * 0.4, wrap["y"] + wrap["height"] * 0.6)
+            # The photo uploads while the editor is still open.
+            wait_for(lambda: len(fake_state()["patches"]) > patches, "the photo to upload")
+            page.click("#annotator-save")
+            wait_for(lambda: len(fake_state()["patches"]) > patches + 1, "the arrow to upload")
+            photo_patch, arrow_patch = fake_state()["patches"][patches:patches + 2]
+            assert photo_patch["equipment_id"] == fresh["equipment_id"] == arrow_patch["equipment_id"]
+            assert "iso_photo_url" in photo_patch and photo_patch["iso_annotations"] == []
+            assert "iso_photo_url" not in arrow_patch and len(arrow_patch["iso_annotations"]) == 1
+            wait_for(lambda: len(fake_state()["hygiene"]) >= hygiene + 2, "both audit rows")
+            assert all(r["tenant_id"] for r in fake_state()["hygiene"])
+            print("ok  wrong-photo machine: camera opened, editor opened, arrow followed the photo")
+
+            # 9c. camera blocked or missing: the phone's own capture input takes over
+            blocked = browser.new_context(viewport={"width": 414, "height": 896}, has_touch=True)
+            blocked.add_init_script("navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('no', 'NotAllowedError'))")
+            other = blocked.new_page()
+            other.goto(f"{APP}/login/")
+            other.fill("#email", "tech@snakking.example")
+            other.fill("#password", "pw")
+            other.click("button[type=submit]")
+            try:
+                other.wait_for_selector("input[name=q]", timeout=15000)
+            except Exception:
+                print("second sign-in stalled:", other.url, other.locator(".error").all_inner_texts(),
+                      other.locator("h1").all_inner_texts(), flush=True)
+                raise
+            other.goto(machine_url)
+            other.wait_for_selector("section[data-slot=iso]")
+            with other.expect_file_chooser() as picker:
+                other.click("section[data-slot=iso] [data-take-photo]")
+            assert picker.value.element.get_attribute("capture") == "environment"
+            print("ok  camera blocked: falls back to the capture file input")
+            blocked.close()
+
+            # 9d. ask a maintenance supervisor to confirm; they answer from a phone, signed out
+            page.goto(machine_url)
+            page.click("a[href$='/confirm-request/']")
+            page.fill("#to_email", "supervisor@snakking.example")
+            page.fill("#to_name", "Maria")
+            page.click("button[type=submit]")
+            page.wait_for_selector("#confirm-link")
+            assert "Not sent yet" in page.content()          # no email key in this environment
+            assert page.locator("a[href^='mailto:supervisor']").count() == 1
+            confirm_link = page.input_value("#confirm-link")
+            supervisor = browser.new_context(viewport={"width": 402, "height": 874}, has_touch=True)
+            sp = supervisor.new_page()
+            sp.goto(confirm_link)
+            sp.wait_for_selector("section.slot[data-slot=iso]")
+            assert sp.locator(".bar a").count() == 0 and "Sync" not in sp.content()
+            sp.wait_for_function("() => [...document.querySelectorAll('.thumb')].every(i => i.complete && i.naturalWidth > 0)")
+            sp.check("input[name=equip_decision][value=confirmed]")
+            sp.check("input[name=iso_decision][value=rejected]")
+            sp.click("button[type=submit]")                    # no note and no name yet: the browser blocks it
+            assert sp.locator("input[name=iso_note], textarea[name=iso_note]").evaluate("e => e.validity.valueMissing")
+            sp.fill("#iso_note", "That arrow is on the wrong disconnect")
+            sp.fill("#name", "Maria Lopez")
+            sp.click("button[type=submit]")
+            sp.wait_for_selector("text=Thank you, Maria Lopez")
+            assert "flagged as not right" in sp.content()
+            page.goto(machine_url)
+            assert "Maria Lopez" in page.content() and "flagged as not right" in page.content()
+            page.goto(f"{APP}/report/")
+            assert "Maria Lopez" in page.content()
+            supervisor.close()
+            print("ok  supervisor confirmation: request, answer from a signed-out phone, shown to staff and in the report")
+
             # 10. the client report and its public link
             page.goto(f"{APP}/report/")
             assert "View placard" in page.content()
@@ -225,12 +324,18 @@ def run(headed: bool) -> None:
             assert "tech@snakking.example" not in html
             print("ok  client report link works signed out and shows the placard link")
 
+            # While the test holds the browser offline the app still tries to upload (it
+            # cannot trust navigator.onLine on cellular); that failed attempt is expected.
+            problems[:] = [p for p in problems
+                           if not ("ERR_INTERNET_DISCONNECTED" in p and "/api/captures/" in p)]
             csp = [p for p in problems if "Content Security Policy" in p or "Refused" in p]
             assert not csp, csp
             assert not problems, problems
             print("ok  no console errors or CSP violations")
             browser.close()
     finally:
+        if problems:
+            print("browser console errors:", *problems, sep="\n  ", file=sys.stderr)
         app.terminate()
         fake.terminate()
 

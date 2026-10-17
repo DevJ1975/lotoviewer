@@ -84,7 +84,10 @@ class Handler(BaseHTTPRequestHandler):
             STATE["uploads"][key] = self.body()
             return self.send_json({"Key": key})
         if url.path == "/rest/v1/loto_hygiene_log":
-            STATE["hygiene"].append(json.loads(self.body()))
+            body = json.loads(self.body())
+            if not body.get("tenant_id"):  # NOT NULL in production, no active_tenant_id() here
+                return self.send_json({"code": "23502", "message": "null value in tenant_id"}, 400)
+            STATE["hygiene"].append(body)
             return self.send(201)
         self.send_json({"error": "not found"}, 404)
 
