@@ -62,7 +62,15 @@
       });
     });
     let reloading = false;
+    // On a first visit the new worker claims this page, which also fires
+    // controllerchange. Reloading then would only wipe what the person is typing
+    // (slowest on a weak link, where the worker takes longest to install).
+    let firstInstall = !navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (firstInstall) {
+        firstInstall = false;
+        return;
+      }
       if (reloading) return;
       reloading = true;
       window.location.reload();

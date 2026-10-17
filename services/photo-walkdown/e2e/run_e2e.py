@@ -105,6 +105,24 @@ def run(headed: bool) -> None:
             page.on("requestfailed", lambda r: problems.append(f"request failed: {r.url} ({r.failure})")
                     if "ERR_ABORTED" not in (r.failure or "") else None)
 
+            # 0. first visit: the service worker installs and takes over the page. It must not
+            #    reload it, which on a weak link would wipe a half-typed password.
+            navigations: list[str] = []
+
+            def count_navigation(frame):
+                if frame == page.main_frame:
+                    navigations.append(frame.url)
+
+            page.on("framenavigated", count_navigation)
+            page.goto(f"{APP}/login/")
+            page.fill("#email", "tech@snakking.example")
+            page.wait_for_function("() => navigator.serviceWorker.controller !== null")
+            time.sleep(1.5)  # the reload used to follow the takeover within ~100 ms
+            page.remove_listener("framenavigated", count_navigation)
+            assert len(navigations) == 1, f"the sign-in page reloaded itself on first visit: {navigations}"
+            assert page.input_value("#email") == "tech@snakking.example", "the typed email was wiped"
+            print("ok  first visit: service worker took over without reloading the sign-in page")
+
             # 1. sign in
             page.goto(f"{APP}/login/")
             page.fill("#email", "tech@snakking.example")
