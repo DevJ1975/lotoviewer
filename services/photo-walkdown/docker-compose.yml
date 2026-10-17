@@ -1,0 +1,13 @@
+# Local run:  cp .env.example .env  (fill it in)  &&  docker compose up --build
+# Then open http://localhost:8000 (set DJANGO_SSL_REDIRECT=0 and DJANGO_DEBUG=1 in .env).
+services:
+  walkdown:
+    build: .
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - walkdown-data:/data
+    restart: unless-stopped
+volumes:
+  walkdown-data:

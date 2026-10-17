@@ -1,0 +1,74 @@
+name: Photo walkdown
+
+# Lint, security scans, unit tests, the browser suites (offline flow, device
+# layouts, weak network) and the Docker build for services/photo-walkdown.
+# It never touches production Supabase: the tests use a fake one.
+on:
+  pull_request:
+    paths:
+      - "services/photo-walkdown/**"
+      - ".github/workflows/photo-walkdown.yml"
+  push:
+    branches: [main]
+    paths:
+      - "services/photo-walkdown/**"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: services/photo-walkdown
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/photo-walkdown/requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - name: Security scans
+        run: |
+          bandit -q -r walkdown config --exclude walkdown/migrations -ll
+          pip-audit -r requirements.txt
+      - run: pytest -q
+      - name: Phone-side logic
+        run: node --test tests/js/mark-rules.test.mjs
+      - name: Browser tests
+        run: |
+          playwright install --with-deps chromium
+          python e2e/run_e2e.py        # offline photo + arrow, sync, supervisor confirmation
+          python e2e/run_layout.py     # iPhone 17 Pro and iPad Pro 12.9" fit
+          python e2e/run_network.py    # weak cellular / Wi-Fi: drops, stalls, two tabs, bursts
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -t photo-walkdown .
+      - name: Container starts and passes its health check
+        run: |
+          docker run -d --name walkdown -p 8000:8000 \
+            -e DJANGO_SECRET_KEY=ci -e DJANGO_SSL_REDIRECT=0 \
+            -e SUPABASE_URL=https://ci.invalid -e SUPABASE_ANON_KEY=ci \
+            -e SUPABASE_SERVICE_ROLE_KEY=ci \
+            -e WALKDOWN_TENANT_ID=ae3f1973-4c3e-4b6e-b91f-9de5ff10529e \
+            -e ALLOWED_HOSTS=localhost,127.0.0.1 photo-walkdown
+          for _ in $(seq 1 30); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' walkdown)" = healthy ] && break
+            sleep 2
+          done
+          docker inspect -f '{{.State.Health.Status}}' walkdown | grep -x healthy
+          # the app itself (PID 1 after the entrypoint drops privileges) must not be root
+          test "$(docker exec walkdown awk '/^Uid:/{print $2}' /proc/1/status)" = 10001
+          curl -fsS http://127.0.0.1:8000/healthz
+          # the same smoke test that is run against the live site
+          pip install httpx
+          python e2e/smoke.py http://127.0.0.1:8000
+          docker logs walkdown

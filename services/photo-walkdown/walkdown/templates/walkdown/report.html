@@ -1,0 +1,91 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>LOTO Photo Walkdown Report</title>
+  {% if inline_css %}<style>{{ inline_css|safe }}</style>
+  {% else %}<link rel="stylesheet" href="{% static 'walkdown/report.css' %}">{% endif %}
+</head>
+<body>
+<div class="report">
+  {% if internal %}
+  <section class="toolbar no-print">
+    <a href="{% url 'departments' %}">&larr; Back to the walkdown</a>
+    <form method="get" class="range">
+      <label>From <input type="date" name="since" value="{{ since_value|date:'Y-m-d' }}"></label>
+      <label>To <input type="date" name="until" value="{{ until_value|date:'Y-m-d' }}"></label>
+      <button type="submit">Update</button>
+    </form>
+    <p>
+      <a class="button" href="{% url 'report_download' 'html' %}?since={{ since_value|date:'Y-m-d' }}&amp;until={{ until_value|date:'Y-m-d' }}">Download report (HTML)</a>
+      <a class="button" href="{% url 'report_download' 'csv' %}?since={{ since_value|date:'Y-m-d' }}&amp;until={{ until_value|date:'Y-m-d' }}">Download list (CSV)</a>
+    </p>
+    <label class="link-box">Link to send the client
+      <input type="text" readonly value="{{ client_link }}" id="client-link">
+    </label>
+    <p class="hint">Anyone with this link can view the report and the placard pages it lists, with no
+      sign-in. It always shows the latest progress and stops working after {{ link_days }} days.</p>
+  </section>
+  {% endif %}
+
+  <header>
+    <h1>Snak King LOTO Photo Walkdown</h1>
+    <p class="sub">Progress report · prepared by Trainovations · {{ report.generated|date:"F j, Y" }}
+      {% if report.since or report.until %}<br>Covers
+        {% if report.since %}{{ report.since|date:"F j, Y" }}{% else %}the start{% endif %}
+        to {% if report.until %}{{ report.until|date:"F j, Y" }}{% else %}today{% endif %}{% endif %}</p>
+  </header>
+
+  <section class="cards">
+    <div class="card"><span class="n">{{ report.machines_updated }}</span>machines updated</div>
+    <div class="card"><span class="n">{{ report.new_photos }}</span>photos retaken</div>
+    <div class="card"><span class="n">{{ report.confirmations }}</span>existing photos confirmed at the machine</div>
+    <div class="card"><span class="n">{{ report.arrows_marked }}</span>isolation points marked</div>
+    <div class="card"><span class="n">{{ report.confirmed_by_maintenance }}</span>confirmed by Snak King maintenance</div>
+  </section>
+
+  <p>{{ report.machines_done }} of {{ report.machines_total }} machines on the photo worklist now have
+    photos confirmed at the machine; {{ report.machines_remaining }} remain. Each machine listed below
+    links to its placard, which shows the new photo and arrow as soon as it was saved.</p>
+
+  <h2>Progress by department</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Department</th><th class="num">Machines</th><th class="num">Updated</th>
+      <th class="num">Complete</th><th class="num">Remaining</th></tr></thead>
+    <tbody>
+    {% for d in report.departments %}
+      <tr><td>{{ d.name }}</td><td class="num">{{ d.total }}</td><td class="num">{{ d.updated }}</td>
+        <td class="num">{{ d.done }}</td><td class="num">{{ d.remaining }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+
+  <h2>Machines updated</h2>
+  {% if report.updated %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Machine</th><th>Department</th><th>What was done</th><th>Maintenance confirmation</th><th>Date</th><th>Placard</th></tr></thead>
+    <tbody>
+    {% for m in report.updated %}
+      <tr>
+        <td><strong>{{ m.equipment_id }}</strong><br><span class="muted">{{ m.description }}</span></td>
+        <td>{{ m.department }}</td>
+        <td>{% for action in m.actions %}{{ action }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
+        <td>{{ m.confirmation|default:"—" }}</td>
+        <td class="nowrap">{{ m.last_date|date:"M j, Y" }}</td>
+        <td class="nowrap">{% if m.placard_url %}<a href="{{ m.placard_url }}">View placard</a>{% else %}&mdash;{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="muted">No machines have been updated in this period yet.</p>{% endif %}
+
+  <h2>What happens next</h2>
+  <p>The remaining machines are being worked through department by department. Any machine not listed
+    above keeps its current placard until its photos are retaken and confirmed at the machine. This
+    report updates as the work continues.</p>
+</div>
+{% if internal %}<script src="{% static 'walkdown/report.js' %}"></script>{% endif %}
+</body>
+</html>
