@@ -25,9 +25,24 @@ describe('isPublicPath', () => {
     expect(isPublicPath('/r/bbs/anon-token')).toBe(true)
   })
 
+  it('keeps the anonymous incident report intake and PIN status reachable when signed out', () => {
+    expect(isPublicPath('/report/abc123')).toBe(true)
+    expect(isPublicPath('/report/status')).toBe(true)
+  })
+
+  it('keeps the other token-gated public portals reachable when signed out', () => {
+    expect(isPublicPath('/witness/abc123')).toBe(true)
+    expect(isPublicPath('/permit-signon/abc123')).toBe(true)
+    expect(isPublicPath('/contractor-prequal/abc123')).toBe(true)
+    expect(isPublicPath('/inspector')).toBe(true)
+    expect(isPublicPath('/admin/compliance/inspector')).toBe(false)
+  })
+
   it('does not leak the prefix match to sibling paths that merely share a stem', () => {
     expect(isPublicPath('/qrcode')).toBe(false)
     expect(isPublicPath('/reviews')).toBe(false)
+    expect(isPublicPath('/reports')).toBe(false)
+    expect(isPublicPath('/reporting')).toBe(false)
   })
 
   it('gates authenticated app routes', () => {
