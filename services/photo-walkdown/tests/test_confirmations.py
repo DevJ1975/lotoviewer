@@ -1,12 +1,12 @@
-import json
 import re
+import smtplib
 import uuid
 from datetime import timedelta
 from urllib.parse import parse_qs, urlparse
 
-import httpx
 import pytest
 from django.core import signing
+from django.core.mail import EmailMultiAlternatives
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
@@ -18,14 +18,12 @@ from walkdown.reporting import build_report, report_csv
 
 
 @pytest.fixture
-def resend(supabase_mock, settings):
-    """Resend configured and accepting mail; records what was sent."""
-    settings.RESEND_API_KEY = "re_test_key"
-    sent = []
-    supabase_mock.route(method="POST", host="api.resend.com", path="/emails").mock(
-        side_effect=lambda request: (sent.append(json.loads(request.content)),
-                                     httpx.Response(200, json={"id": "email-1"}))[1])
-    return sent
+def outbox(settings, mailoutbox):
+    """Email configured; Django's test backend records what was sent."""
+    settings.EMAIL_HOST = "smtp.test"
+    settings.DEFAULT_FROM_EMAIL = "Trainovations <noreply@trainovations.test>"
+    settings.EMAIL_HOST_PASSWORD = "smtp-secret"
+    return mailoutbox
 
 
 def ask(client, machine, **fields):
@@ -44,22 +42,32 @@ def path_of(link: str) -> str:
 
 # ── asking ─────────────────────────────────────────────────────────────────
 
-def test_request_sends_an_email_with_the_link_and_reply_to(logged_in, machine, fake, resend, user):
+def test_request_sends_an_email_with_the_link_and_reply_to(logged_in, machine, fake, outbox, user):
     response = ask(logged_in, machine, message="Please check the guard door too")
     assert response.status_code == 200 and "Request sent" in response.content.decode()
-    [mail] = resend
-    assert mail["to"] == ["super@snakking.example"] and mail["reply_to"] == user.email
-    assert mail["subject"] == "Please confirm the LOTO photos for SK-001"
+    [mail] = outbox
+    assert mail.to == ["super@snakking.example"] and mail.reply_to == [user.email]
+    assert mail.from_email == "Trainovations <noreply@trainovations.test>"
+    assert mail.subject == "Please confirm the LOTO photos for SK-001"
     link = link_from(response)
-    assert link in mail["text"] and f'<a href="{link}">' in mail["html"]
-    assert "Hello Maria" in mail["text"] and "guard door" in mail["text"]
-    assert "equipment photo and the isolation point photo" in mail["text"]
+    [(html_body, mimetype)] = mail.alternatives
+    assert mimetype == "text/html" and f'<a href="{link}">' in html_body
+    assert link in mail.body
+    assert "Hello Maria" in mail.body and "guard door" in mail.body
+    assert "equipment photo and the isolation point photo" in mail.body
     saved = ConfirmationRequest.objects.get()
     assert saved.sent_at is not None and saved.send_error == "" and saved.slots == ["equip", "iso"]
 
 
-def test_no_email_key_gives_a_prefilled_mailto_instead(logged_in, machine, settings):
-    settings.RESEND_API_KEY = ""
+@pytest.mark.parametrize("host, sender, expected", [
+    ("", "", False), ("smtp.test", "", False), ("", "a@b.co", False), ("smtp.test", "a@b.co", True)])
+def test_email_needs_both_a_server_and_a_sender(settings, host, sender, expected):
+    settings.EMAIL_HOST, settings.DEFAULT_FROM_EMAIL = host, sender
+    assert mailer.is_configured() is expected
+
+
+def test_no_email_server_gives_a_prefilled_mailto_instead(logged_in, machine, settings):
+    settings.EMAIL_HOST = ""
     response = ask(logged_in, machine)
     html = response.content.decode()
     assert "Not sent yet" in html and "not set up" in html
@@ -72,48 +80,55 @@ def test_no_email_key_gives_a_prefilled_mailto_instead(logged_in, machine, setti
     assert ConfirmationRequest.objects.get().sent_at is None
 
 
-def test_email_service_failure_falls_back_and_is_recorded(logged_in, machine, supabase_mock, settings):
-    settings.RESEND_API_KEY = "re_test_key"
-    supabase_mock.route(method="POST", host="api.resend.com", path="/emails").mock(
-        return_value=httpx.Response(422, json={"message": "domain not verified"}))
-    response = ask(logged_in, machine)
-    assert "Not sent yet" in response.content.decode() and "refused" in response.content.decode()
-    assert "domain not verified" not in response.content.decode()      # provider text is not echoed
-    assert "refused" in ConfirmationRequest.objects.get().send_error
-    supabase_mock.route(method="POST", host="api.resend.com", path="/emails").mock(side_effect=httpx.ConnectError("x"))
-    assert "could not be reached" in ask(logged_in, machine, to_email="b@snakking.example").content.decode()
+@pytest.mark.parametrize("error, shown", [
+    (smtplib.SMTPAuthenticationError(535, b"5.7.8 bad credentials for user@secret-host"), "rejected the sign-in"),
+    (smtplib.SMTPRecipientsRefused({"super@snakking.example": (550, b"no such user")}), "refused the message"),
+    (ConnectionRefusedError("secret-host:587"), "could not be reached"),
+    (TimeoutError("timed out talking to secret-host"), "could not be reached"),
+])
+def test_email_server_failure_falls_back_and_is_recorded(logged_in, machine, outbox, monkeypatch, caplog,
+                                                         error, shown):
+    def fail(self, fail_silently=False):
+        raise error
 
-
-def test_the_api_key_never_appears_in_pages_or_logs(logged_in, machine, resend, caplog):
+    monkeypatch.setattr(EmailMultiAlternatives, "send", fail)
     html = ask(logged_in, machine).content.decode()
-    assert "re_test_key" not in html and "re_test_key" not in caplog.text
+    assert "Not sent yet" in html and shown in html and "mailto:" in html
+    assert "secret-host" not in html and "no such user" not in html      # the server's own text is not echoed
+    assert shown in ConfirmationRequest.objects.get().send_error
+    assert type(error).__name__ in caplog.text and "secret-host" not in caplog.text
+
+
+def test_the_smtp_password_never_appears_in_pages_or_logs(logged_in, machine, outbox, caplog):
+    html = ask(logged_in, machine).content.decode()
+    assert "smtp-secret" not in html and "smtp-secret" not in caplog.text
 
 
 @pytest.mark.parametrize("bad", ["not-an-email", "a@b", "a b@c.com", "x@y.com\nBcc: evil@z.com",
                                  "x@y.com\r\nSubject: hi", "", "a@" + "b" * 300 + ".com"])
-def test_bad_addresses_and_header_injection_are_refused(logged_in, machine, resend, bad):
+def test_bad_addresses_and_header_injection_are_refused(logged_in, machine, outbox, bad):
     response = ask(logged_in, machine, to_email=bad)
-    assert response.status_code == 400 and not resend and not ConfirmationRequest.objects.exists()
+    assert response.status_code == 400 and not outbox and not ConfirmationRequest.objects.exists()
 
 
-def test_names_with_line_breaks_are_refused(logged_in, machine, resend):
+def test_names_with_line_breaks_are_refused(logged_in, machine, outbox):
     assert ask(logged_in, machine, to_name="Maria\nBcc: evil@z.com").status_code == 400
     assert ask(logged_in, machine, to_name="x" * 101).status_code == 400
-    assert not resend
+    assert not outbox
 
 
-def test_must_choose_a_photo_and_stay_within_length_limits(logged_in, machine, resend):
+def test_must_choose_a_photo_and_stay_within_length_limits(logged_in, machine, outbox):
     assert ask(logged_in, machine, slots=[]).status_code == 400
     assert ask(logged_in, machine, slots=["bogus"]).status_code == 400
     assert ask(logged_in, machine, message="x" * 1001).status_code == 400
 
 
-def test_the_subject_cannot_be_steered_by_what_a_user_types(logged_in, machine, resend):
+def test_the_subject_cannot_be_steered_by_what_a_user_types(logged_in, machine, outbox):
     ask(logged_in, machine, to_name="Hello, send money", message="Subject: pwned")
-    assert resend[0]["subject"] == "Please confirm the LOTO photos for SK-001"
+    assert outbox[0].subject == "Please confirm the LOTO photos for SK-001"
 
 
-def test_sending_is_limited_per_user_and_per_recipient(logged_in, machine, resend):
+def test_sending_is_limited_per_user_and_per_recipient(logged_in, machine, outbox):
     for _ in range(confirmations.REQUESTS_PER_RECIPIENT_PER_DAY):
         assert ask(logged_in, machine).status_code == 200
     blocked = ask(logged_in, machine)
@@ -125,15 +140,15 @@ def test_sending_is_limited_per_user_and_per_recipient(logged_in, machine, resen
     assert "a lot of requests" in ask(logged_in, machine, to_email="new@x.com").content.decode()
 
 
-def test_only_signed_in_staff_can_ask(client, machine, resend):
+def test_only_signed_in_staff_can_ask(client, machine, outbox):
     assert client.post(reverse("request_confirmation", args=[machine.pk]), {"to_email": "a@b.co"}).status_code == 302
-    assert not resend
+    assert not outbox
 
 
 # ── answering ──────────────────────────────────────────────────────────────
 
 @pytest.fixture
-def asked(logged_in, machine, fake, resend):
+def asked(logged_in, machine, fake, outbox):
     fake.rows["SK-001"]["iso_annotations"] = ARROWS
     machine.iso_annotations = ARROWS
     machine.save()
@@ -199,7 +214,7 @@ def test_a_request_can_only_be_answered_once(asked):
     assert ConfirmationRequest.objects.get().iso_decision == Decision.CONFIRMED       # unchanged
 
 
-def test_only_the_requested_photos_are_asked_and_served(logged_in, machine, fake, resend):
+def test_only_the_requested_photos_are_asked_and_served(logged_in, machine, fake, outbox):
     link = link_from(ask(logged_in, machine, slots=["iso"]))
     page = Client().get(path_of(link)).content.decode()
     assert "Isolation photo" in page and "Equipment photo" not in page

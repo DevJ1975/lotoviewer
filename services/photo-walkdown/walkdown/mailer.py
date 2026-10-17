@@ -1,16 +1,19 @@
 """The confirmation request email.
 
-Sent through Resend's HTTP API (the same service the platform uses). Everything a
-person types is kept out of the subject and headers: the subject is built from the
-machine id only, and addresses are validated before they get here.
+Sent through Django's email framework, so any SMTP provider works (Resend, SendGrid,
+Google Workspace, Amazon SES, ...): which one is a matter of environment variables.
+Everything a person types is kept out of the subject and headers: the subject is built
+from the machine id only, and addresses are validated before they get here.
 """
 import html
+import logging
+import smtplib
 from urllib.parse import quote
 
-import httpx
 from django.conf import settings
+from django.core.mail import EmailMultiAlternatives
 
-TIMEOUT = httpx.Timeout(20.0, connect=10.0)
+logger = logging.getLogger(__name__)
 
 
 class MailError(RuntimeError):
@@ -49,19 +52,30 @@ def mailto_for(*, to_email: str, subject: str, body: str) -> str:
     return f"mailto:{quote(to_email)}?subject={quote(subject)}&body={quote(body)}"
 
 
+def is_configured() -> bool:
+    return bool(settings.EMAIL_HOST and settings.DEFAULT_FROM_EMAIL)
+
+
 def send(*, to_email: str, subject: str, text: str, link: str, reply_to: str) -> None:
-    if not settings.RESEND_API_KEY:
+    if not is_configured():
         raise MailError("Email is not set up on the server.")
+    message = EmailMultiAlternatives(subject, text, to=[to_email], reply_to=[reply_to])
+    message.attach_alternative(html_for(text, link), "text/html")
     try:
-        response = httpx.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
-            json={"from": settings.WALKDOWN_FROM_EMAIL, "to": [to_email], "reply_to": reply_to,
-                  "subject": subject, "text": text, "html": html_for(text, link)},
-            timeout=TIMEOUT,
-        )
-    except httpx.HTTPError as error:
-        raise MailError("The email service could not be reached.") from error
-    if not response.is_success:
-        # Resend's error body is short JSON and never echoes the key.
-        raise MailError(f"The email service refused the message ({response.status_code}).")
+        message.send()
+    except smtplib.SMTPAuthenticationError as error:
+        _log_failure(error)
+        raise MailError("The email server rejected the sign-in.") from error
+    except (smtplib.SMTPRecipientsRefused, smtplib.SMTPSenderRefused, smtplib.SMTPDataError) as error:
+        _log_failure(error)
+        raise MailError("The email server refused the message.") from error
+    except OSError as error:  # smtplib.SMTPException is an OSError, as are timeouts and TLS errors
+        _log_failure(error)
+        raise MailError("The email server could not be reached.") from error
+
+
+def _log_failure(error: Exception) -> None:
+    # The class and SMTP code say what went wrong; the server's own text can name
+    # addresses, so it is not logged or shown.
+    logger.warning("Confirmation email failed: %s (SMTP code %s)", type(error).__name__,
+                   getattr(error, "smtp_code", "n/a"))

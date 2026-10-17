@@ -39,11 +39,17 @@ WALKDOWN_TENANT_ID = _required("WALKDOWN_TENANT_ID")
 SUPERADMIN_EMAILS = {email.lower() for email in _csv("SUPERADMIN_EMAILS")}
 # Where the placards live; the client report links to <this>/qr/<token>.
 PLATFORM_URL = os.environ.get("PLATFORM_URL", "https://soteriafield.app").rstrip("/")
-# Email to maintenance supervisors goes out through Resend, as the platform's own
-# mail does. Without a key the request screen hands the user a pre-filled
-# mailto: link instead, so the feature never depends on a secret being set.
-RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
-WALKDOWN_FROM_EMAIL = os.environ.get("WALKDOWN_FROM_EMAIL", "Soteria Field <onboarding@resend.dev>")
+# Email to maintenance supervisors goes out over SMTP (Django's standard backend), so
+# any provider works. Without EMAIL_HOST and a sender the request screen hands the
+# user a pre-filled mailto: link instead, so the feature never depends on a secret.
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "").strip()
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "") == "1"  # port 465
+EMAIL_USE_TLS = not EMAIL_USE_SSL and os.environ.get("EMAIL_USE_TLS", "1") == "1"  # STARTTLS, port 587
+EMAIL_TIMEOUT = 20  # seconds; a request thread must not wait on a dead mail server
+DEFAULT_FROM_EMAIL = os.environ.get("WALKDOWN_FROM_EMAIL", "").strip()
 CONFIRM_LINK_DAYS = 14
 PHOTO_BUCKET = "loto-photos"
 # Same ceiling as the platform's review-portal upload route; the phone

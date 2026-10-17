@@ -118,9 +118,8 @@ shell history.
    `SUPABASE_SERVICE_ROLE_KEY`, `WALKDOWN_TENANT_ID`, `ALLOWED_HOSTS=photos.soteriafield.app`,
    `CSRF_TRUSTED_ORIGINS=https://photos.soteriafield.app`, `PLATFORM_URL=https://soteriafield.app`,
    and optionally `SUPERADMIN_EMAILS`. The service-role key is a secret: set it only in Railway.
-   To send supervisor emails from the app, also set `RESEND_API_KEY` and `WALKDOWN_FROM_EMAIL` (a sender
-   Resend has verified, e.g. the platform's `SUPPORT_FROM_EMAIL`). Without them the app still works: it
-   opens a prefilled email in the phone's mail app and shows the link to copy.
+   To send supervisor emails from the app, also set the SMTP variables in "Email" below. Without them the
+   app still works: it opens a prefilled email in the phone's mail app and shows the link to copy.
 4. Health check path `/healthz`.
 5. Add the custom domain `photos.soteriafield.app` in Railway and create the CNAME record it shows.
 
@@ -155,10 +154,30 @@ client report counts the machines "confirmed by Snak King maintenance" and shows
 "Maintenance confirmation" column.
 
 - The link is signed, expires after 14 days, and accepts one answer. It shows only that machine's photos.
-- The email is sent through Resend with replies going to whoever asked.
+- The email goes out over SMTP (see "Email" below) with replies going to whoever asked. If the mail server
+  is not set up, or fails, the screen shows a prefilled `mailto:` link and the link to copy instead.
 - Abuse limits: 30 requests per user per hour, 5 per recipient per day, 20 answers per link per hour.
 - A supervisor answering "No, this is not right" does not change the placard; it is recorded with their note as
   "flagged as not right" on the machine page and in the report, so the photo can be retaken.
+
+## Email
+
+Supervisor emails use Django's standard SMTP backend, so any provider works. Set these in Railway
+(`.env.example` lists them): `EMAIL_HOST`, `EMAIL_PORT` (587 by default, STARTTLS), `EMAIL_HOST_USER`,
+`EMAIL_HOST_PASSWORD`, and `WALKDOWN_FROM_EMAIL`, a sender your provider has verified. For port 465 set
+`EMAIL_USE_SSL=1`. The password is a secret: set it only in Railway.
+
+| Provider | `EMAIL_HOST` | `EMAIL_HOST_USER` | `EMAIL_HOST_PASSWORD` |
+|---|---|---|---|
+| Resend | `smtp.resend.com` | `resend` | the Resend API key |
+| SendGrid | `smtp.sendgrid.net` | `apikey` | the SendGrid API key |
+| Google Workspace | `smtp.gmail.com` | the mailbox | an app password |
+
+Railway only allows outbound SMTP on the Pro plan and above. On Hobby, use a provider's web API (for
+example with django-anymail) instead. Microsoft 365 often has SMTP sign-in disabled by default.
+After setting the variables, ask a supervisor to confirm one machine (send it to yourself first). A failure
+shows on the request screen as "rejected the sign-in", "refused the message" or "could not be reached",
+and the Railway log records the error class without any server text.
 
 ## Security
 
