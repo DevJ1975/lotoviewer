@@ -1,8 +1,8 @@
 name: Photo walkdown
 
-# Lint, unit tests, the offline browser test and the Docker build for
-# services/photo-walkdown. It never touches production Supabase: the tests
-# use a fake one.
+# Lint, security scans, unit tests, the browser suites (offline flow, device
+# layouts, weak network) and the Docker build for services/photo-walkdown.
+# It never touches production Supabase: the tests use a fake one.
 on:
   pull_request:
     paths:
@@ -32,11 +32,19 @@ jobs:
           cache-dependency-path: services/photo-walkdown/requirements-dev.txt
       - run: pip install -r requirements-dev.txt
       - run: ruff check .
+      - name: Security scans
+        run: |
+          bandit -q -r walkdown config --exclude walkdown/migrations -ll
+          pip-audit -r requirements.txt
       - run: pytest -q
-      - name: Offline browser test
+      - name: Phone-side logic
+        run: node --test tests/js/mark-rules.test.mjs
+      - name: Browser tests
         run: |
           playwright install --with-deps chromium
-          python e2e/run_e2e.py
+          python e2e/run_e2e.py        # offline photo + arrow, sync, supervisor confirmation
+          python e2e/run_layout.py     # iPhone 17 Pro and iPad Pro 12.9" fit
+          python e2e/run_network.py    # weak cellular / Wi-Fi: drops, stalls, two tabs, bursts
 
   docker:
     runs-on: ubuntu-latest
@@ -60,4 +68,7 @@ jobs:
           # the app itself (PID 1 after the entrypoint drops privileges) must not be root
           test "$(docker exec walkdown awk '/^Uid:/{print $2}' /proc/1/status)" = 10001
           curl -fsS http://127.0.0.1:8000/healthz
+          # the same smoke test that is run against the live site
+          pip install httpx
+          python e2e/smoke.py http://127.0.0.1:8000
           docker logs walkdown

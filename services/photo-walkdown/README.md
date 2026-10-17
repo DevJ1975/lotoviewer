@@ -12,10 +12,14 @@ Intended address: `https://photos.soteriafield.app`.
 For each of the 497 machines with a photo delta:
 
 - shows what the audit found wrong and what to photograph (derived from the machine's energy sources)
-- takes a new equipment or isolation photo, or confirms the photo already on the placard
+- takes a new equipment or isolation photo (tapping the photo button opens the camera), or confirms the
+  photo already on the placard
 - lets you mark the isolation point with an arrow (several per photo, optional label)
-- works with no signal: photos and arrows queue on the phone and upload when signal returns
+- works with no signal: photos and arrows queue on the phone and upload when signal returns, and it keeps
+  retrying on a weak cellular or Wi-Fi link without ever sending a photo twice
+- emails a maintenance supervisor a link to confirm the equipment and isolation photos (no account needed)
 - produces a progress report for the client, with a link to each updated placard
+- fits an iPhone 17 Pro and an iPad Pro 12.9" in portrait and landscape
 
 ## What a synced photo changes
 
@@ -67,15 +71,44 @@ python manage.py runserver
 ## Tests
 
 ```bash
-pytest -q                          # 80+ tests, Supabase mocked with respx
-python e2e/run_e2e.py              # real browser: offline download, queued photo + arrow, sync
 ruff check .
+pytest -q                                   # 160+ tests, Supabase mocked with respx
+node --test tests/js/mark-rules.test.mjs    # the phone-side rules for when an arrow may be drawn
+python e2e/run_e2e.py                       # real browser, whole flow (below)
+python e2e/run_layout.py [--shots DIR]      # iPhone 17 Pro + iPad Pro 12.9", portrait and landscape
+python e2e/run_network.py                   # weak cellular / Wi-Fi
+bandit -q -r walkdown config --exclude walkdown/migrations -ll
+pip-audit -r requirements.txt
 ```
 
-The browser test starts gunicorn (as in the container) and a fake Supabase (`e2e/fake_supabase.py`),
-downloads a department, goes offline, takes a photo with an EXIF-rotated image, draws arrows, comes back
-online and checks exactly what reached "Supabase". CI (`.github/workflows/photo-walkdown.yml`) runs all
-of this plus the Docker build and the container health check.
+The browser tests start gunicorn (as in the container) and a fake Supabase (`e2e/fake_supabase.py`) and
+check exactly what reached "Supabase".
+
+- **`run_e2e.py`**: downloads a department, goes offline, takes a photo with an EXIF-rotated image (through
+  a fake camera, and again with the camera blocked), draws arrows, comes back online, and checks the upload,
+  the hygiene row and the report. It also sends a supervisor confirmation request and answers it from a
+  signed-out phone.
+- **`run_layout.py`**: every screen fits the device (no sideways scroll, 44 px tap targets, no iOS input
+  zoom) and the arrow editor and its Save button stay on screen.
+- **`run_network.py`**: throttled to weak 3G with a dropped connection, a 503 and a reply lost after the
+  server applied the photo (each photo still reaches Supabase exactly once); a request that never answers
+  (times out, then the photo is re-encoded smaller); a browser that wrongly reports "offline"; two tabs
+  sending the same photo; and 30 phones uploading at once.
+- **`smoke.py`**: a read-only check of a running copy (below).
+
+CI (`.github/workflows/photo-walkdown.yml`) runs all of this plus the Docker build, the container health
+check and the smoke test against the container.
+
+### Smoke test a deployed copy
+
+```bash
+python e2e/smoke.py https://photos.soteriafield.app                 # is it up, locked down, installable
+SMOKE_EMAIL=you@example.com SMOKE_PASSWORD=... \
+    python e2e/smoke.py https://photos.soteriafield.app --signed-in  # and is it talking to Supabase
+```
+
+It never uploads or changes anything. The password is read from the environment so it stays out of your
+shell history.
 
 ## Deploy (Railway)
 
@@ -85,6 +118,9 @@ of this plus the Docker build and the container health check.
    `SUPABASE_SERVICE_ROLE_KEY`, `WALKDOWN_TENANT_ID`, `ALLOWED_HOSTS=photos.soteriafield.app`,
    `CSRF_TRUSTED_ORIGINS=https://photos.soteriafield.app`, `PLATFORM_URL=https://soteriafield.app`,
    and optionally `SUPERADMIN_EMAILS`. The service-role key is a secret: set it only in Railway.
+   To send supervisor emails from the app, also set `RESEND_API_KEY` and `WALKDOWN_FROM_EMAIL` (a sender
+   Resend has verified, e.g. the platform's `SUPPORT_FROM_EMAIL`). Without them the app still works: it
+   opens a prefilled email in the phone's mail app and shows the link to copy.
 4. Health check path `/healthz`.
 5. Add the custom domain `photos.soteriafield.app` in Railway and create the CNAME record it shows.
 
@@ -108,6 +144,38 @@ The container migrates and reloads the worklist from `seed/snak_king_photo_audit
 progress, expires after 90 days, and lists each updated machine with a link to its placard
 (`PLATFORM_URL/qr/<token>`). It contains no staff names or emails. Anyone with the link can open the
 placard pages it lists, exactly as with the QR codes posted on the machines.
+
+## Asking a maintenance supervisor to confirm
+
+On a machine page, **Ask a maintenance supervisor to confirm** takes the supervisor's email (and name),
+which photos to put to them, and an optional message. They receive a link to a page showing the equipment
+and isolation photos (with the arrows) and answer "Yes, this is right" or "No, this is not right" for each, with a
+note, from any phone and without an account. Their answer, name and time appear on the machine page, and the
+client report counts the machines "confirmed by Snak King maintenance" and shows each answer in a
+"Maintenance confirmation" column.
+
+- The link is signed, expires after 14 days, and accepts one answer. It shows only that machine's photos.
+- The email is sent through Resend with replies going to whoever asked.
+- Abuse limits: 30 requests per user per hour, 5 per recipient per day, 20 answers per link per hour.
+- A supervisor answering "No, this is not right" does not change the placard; it is recorded with their note as
+  "flagged as not right" on the machine page and in the report, so the photo can be retaken.
+
+## Security
+
+Everything is on by default; the tests in `tests/test_security.py` and `e2e/smoke.py` hold it in place.
+
+- Sign-in is Supabase's, limited to tenant owners/admins, re-checked every 12 hours while online (an outage
+  keeps you signed in so queued photos are not stranded). Five failures per email and address, or 20 per
+  address, lock that out for 15 minutes; the address is the last `X-Forwarded-For` hop, which a caller
+  cannot forge.
+- Every screen and the API need a session. Only sign-in, `/healthz`, the static and PWA files, and the two signed
+  links (`/c/…` for supervisors, `/r/…` for the client report) are public. State-changing requests carry CSRF tokens.
+- Request bodies are capped (64 KB for forms, about 2 MB for a photo) and the API is rate limited per user.
+- A strict Content-Security-Policy (no inline script, no `eval`), `frame-ancestors 'none'`, nosniff, a
+  camera-only Permissions-Policy, HSTS, secure cookies (the session cookie is also HttpOnly), and
+  `noindex`/no-store on the signed pages.
+- The service-role key lives only in the Railway variables. Photo downloads are restricted to this
+  project's storage bucket and never follow redirects. The container runs as a non-root user.
 
 ## Refreshing the Excel master
 
