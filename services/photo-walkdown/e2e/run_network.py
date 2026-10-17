@@ -36,7 +36,20 @@ DELTAS = [m for m in e2e.SEED
           if m["merged_iso_verdict"] != "match" or m["equip_photo"]["verdict"] != "match"]
 PK = {m["equipment_id"]: index + 1 for index, m in enumerate(DELTAS)}  # load_deltas order
 WEAK_3G = {"offline": False, "latency": 900, "downloadThroughput": 60_000, "uploadThroughput": 40_000}
+NO_THROTTLE = {"offline": False, "latency": 0, "downloadThroughput": -1, "uploadThroughput": -1}
 ID_IN_BODY = re.compile(rb'name="client_capture_id"\r\n\r\n([0-9a-f-]{36})')
+
+
+def eventually(condition, timeout=30) -> bool:
+    """True once condition() holds, False if it never does. Unlike e2e.wait_for it
+    reports a failed check instead of aborting the run. Waits for an outcome, never
+    for a transient state: online, a queued photo is sent at once and leaves the queue."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if condition():
+            return True
+        time.sleep(0.2)
+    return False
 
 
 def noisy_photo(size=(2400, 1800), seed=0) -> bytes:
@@ -182,14 +195,11 @@ def run() -> int:
             lying.add_init_script("Object.defineProperty(navigator, 'onLine', {get: () => false})")
             open_machine(lying, c_id)
             take_photo(lying, 3)
-            e2e.wait_for(lambda: queued(lying), "the photo to queue")
-            for _ in range(10):
-                if not queued(lying):
-                    break
-                drain(lying)
-                time.sleep(0.3)
-            check(not queued(lying) and len(patches_for(e2e.fake_state(), c_id)) == 1,
-                  "C: delivered although navigator.onLine claimed offline")
+            # No forced drain: the send the app starts by itself after the capture must
+            # go out whatever navigator.onLine says.
+            delivered = eventually(lambda: len(patches_for(e2e.fake_state(), c_id)) == 1)
+            check(delivered and eventually(lambda: not queued(lying), timeout=10),
+                  "C: delivered by itself although navigator.onLine claimed offline")
             lying.close()
 
             # ── D: two tabs, one photo ─────────────────────────────────────────────
@@ -200,22 +210,19 @@ def run() -> int:
             open_machine(tab_one, d_id)
             tab_two = context.new_page()
             open_machine(tab_two, d_id)
+            # Tab one's own connection is slow (throttling is per page), so its automatic
+            # send is still in flight, the photo still queued, while tab two tries.
+            slow = context.new_cdp_session(tab_one)
+            slow.send("Network.enable")
+            slow.send("Network.emulateNetworkConditions", {**NO_THROTTLE, "latency": 4000})
             take_photo(tab_one, 5)
             e2e.wait_for(lambda: queued(tab_one), "the photo to queue")
-            # A slow link keeps the first send in flight while the second tab tries.
-            cdp.send("Network.emulateNetworkConditions", {**WEAK_3G, "latency": 2500})
-            tab_one.evaluate("() => { window.__first = window.WalkdownQueue.drain({force: true}); }")
-            time.sleep(0.3)
             second = tab_two.evaluate("() => window.WalkdownQueue.drain({force: true})")
-            tab_one.evaluate("() => window.__first")  # let the first drain finish
-            cdp.send("Network.emulateNetworkConditions", {**WEAK_3G, "latency": 0,
-                     "downloadThroughput": -1, "uploadThroughput": -1})
-            time.sleep(1)
-            # The first tab's own automatic sync is already sending, so its forced drain
-            # also stands down; what matters is that nobody sends a second copy.
+            slow.send("Network.emulateNetworkConditions", NO_THROTTLE)
+            arrived = eventually(lambda: len(patches_for(e2e.fake_state(), d_id)) == 1)
             check(second["sent"] == 0 and sent_requests["n"] == 1,
                   f"D: the second tab stood down; {sent_requests['n']} request on the wire")
-            check(len(patches_for(e2e.fake_state(), d_id)) == 1 and len(uploads_for(e2e.fake_state(), d_id)) == 1,
+            check(arrived and len(uploads_for(e2e.fake_state(), d_id)) == 1,
                   f"D: two tabs produced one upload ({sent_requests['n']} request(s) on the wire)")
             tab_one.close()
             tab_two.close()
