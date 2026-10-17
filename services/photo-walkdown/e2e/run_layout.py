@@ -114,6 +114,9 @@ def run(shots: Path | None) -> int:
                 # The arrow editor: whole dialog and its Save button on screen.
                 page.goto(machine_url)
                 page.wait_for_selector("section[data-slot=iso]")
+                # Offline, as in the plant: online the photo uploads at once and the
+                # "Queued" badge is gone before a poll can see it.
+                context.set_offline(True)
                 page.set_input_files("section[data-slot=iso] [data-capture-input]",
                                      files=[{"name": "p.jpg", "mimeType": "image/jpeg",
                                              "buffer": e2e.exif_rotated_jpeg()}])
