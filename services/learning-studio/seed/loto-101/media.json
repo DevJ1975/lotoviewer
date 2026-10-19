@@ -1,0 +1,254 @@
+{
+  "voice": {
+    "name": "Cole - Corporate Narrator",
+    "id": "oXuGG4PpSq1U1YAFxeEO"
+  },
+  "flow_id": "qqiWfdGXkK6TBByIqVnR",
+  "generated_at": "2026-10-19T23:57:17+00:00",
+  "generator": "ElevenLabs Creative (via Claude Code connector)",
+  "files": [
+    {
+      "file": "s1-why.mp3",
+      "kind": "narration",
+      "block_key": "s1-why",
+      "duration_ms": 37747,
+      "bytes": 302228,
+      "model": "eleven_multilingual_v2",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s1-why.vtt",
+      "kind": "captions",
+      "block_key": "s1-why",
+      "duration_ms": 37747,
+      "bytes": 789,
+      "model": "proportional-timing",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s2-energy.mp3",
+      "kind": "narration",
+      "block_key": "s2-energy",
+      "duration_ms": 30824,
+      "bytes": 246848,
+      "model": "eleven_multilingual_v2",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s2-energy.vtt",
+      "kind": "captions",
+      "block_key": "s2-energy",
+      "duration_ms": 30824,
+      "bytes": 758,
+      "model": "proportional-timing",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s3-roles.mp3",
+      "kind": "narration",
+      "block_key": "s3-roles",
+      "duration_ms": 27115,
+      "bytes": 217173,
+      "model": "eleven_multilingual_v2",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s3-roles.vtt",
+      "kind": "captions",
+      "block_key": "s3-roles",
+      "duration_ms": 27115,
+      "bytes": 674,
+      "model": "proportional-timing",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s4-prepare.mp3",
+      "kind": "narration",
+      "block_key": "s4-prepare",
+      "duration_ms": 22282,
+      "bytes": 178512,
+      "model": "eleven_multilingual_v2",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s4-prepare.vtt",
+      "kind": "captions",
+      "block_key": "s4-prepare",
+      "duration_ms": 22282,
+      "bytes": 550,
+      "model": "proportional-timing",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s5-isolate.mp3",
+      "kind": "narration",
+      "block_key": "s5-isolate",
+      "duration_ms": 26645,
+      "bytes": 213412,
+      "model": "eleven_multilingual_v2",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s5-isolate.vtt",
+      "kind": "captions",
+      "block_key": "s5-isolate",
+      "duration_ms": 26645,
+      "bytes": 708,
+      "model": "proportional-timing",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s6-verify.mp3",
+      "kind": "narration",
+      "block_key": "s6-verify",
+      "duration_ms": 30642,
+      "bytes": 245386,
+      "model": "eleven_multilingual_v2",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s6-verify.vtt",
+      "kind": "captions",
+      "block_key": "s6-verify",
+      "duration_ms": 30642,
+      "bytes": 686,
+      "model": "proportional-timing",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s7-group.mp3",
+      "kind": "narration",
+      "block_key": "s7-group",
+      "duration_ms": 26331,
+      "bytes": 210904,
+      "model": "eleven_multilingual_v2",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s7-group.vtt",
+      "kind": "captions",
+      "block_key": "s7-group",
+      "duration_ms": 26331,
+      "bytes": 680,
+      "model": "proportional-timing",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s8-restart.mp3",
+      "kind": "narration",
+      "block_key": "s8-restart",
+      "duration_ms": 28186,
+      "bytes": 225741,
+      "model": "eleven_multilingual_v2",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s8-restart.vtt",
+      "kind": "captions",
+      "block_key": "s8-restart",
+      "duration_ms": 28186,
+      "bytes": 710,
+      "model": "proportional-timing",
+      "safety_check": "pass"
+    },
+    {
+      "file": "scene-01-why.jpg",
+      "kind": "image",
+      "block_key": "s1-why",
+      "bytes": 127356,
+      "prompt": "Photorealistic workplace safety training photo, 16:9 landscape. Setting: a clean, modern food-production plant with stainless steel equipment and natural overhead plant lighting. Subject: a maintenance technician wearing a blue bump cap, white hairnet, clear safety glasses, gloves, no jewelry, standing beside a STOPPED stainless conveyor. He is attaching a red padlock and a blank red-and-white danger tag to the handle of a grey wall-mounted electrical disconnect switch set to OFF. His hands are only on the disconnect, well away from the belt and all moving parts. Constraints: no readable text anywhere, no logos, no hard hats, no lock on any button or panel, no one touching the conveyor.",
+      "model": "gpt-image-2.5-sunburst",
+      "width": 1280,
+      "height": 720,
+      "safety_check": "pass (minor: technician has light stubble without a beard net; disconnect handle position reads ambiguous ON/OFF)"
+    },
+    {
+      "file": "scene-02-energy.jpg",
+      "kind": "image",
+      "block_key": "s2-energy",
+      "bytes": 172565,
+      "prompt": "Photorealistic workplace safety training photo, 16:9 landscape, no people. Setting: the side of a large stainless steel food-processing machine in a clean modern plant, natural plant lighting. Clearly visible, well separated: a grey electrical disconnect box with a handle, black hydraulic hoses running to a cylinder, a blue pneumatic air line with a quarter-turn ball valve, and an insulated silver steam pipe with a red gate valve wheel. Composition reads left to right like a tour of energy sources. Constraints: no readable text, no labels, no logos.",
+      "model": "gpt-image-2.5-sunburst",
+      "width": 1280,
+      "height": 720,
+      "safety_check": "pass"
+    },
+    {
+      "file": "scene-03-roles.jpg",
+      "kind": "image",
+      "block_key": "s3-roles",
+      "bytes": 105778,
+      "prompt": "Photorealistic workplace safety training photo, 16:9 landscape. Setting: clean modern food-production plant floor, stainless equipment, natural plant lighting. Foreground left: a maintenance worker in a blue bump cap, white hairnet, clear safety glasses and gloves applying a red padlock and blank danger tag to a grey wall-mounted electrical disconnect handle in the OFF position. Background right, standing a safe distance away: a line operator wearing a white hairnet, safety glasses and a white smock, watching attentively with arms at her sides. Constraints: no readable text, no logos, no hard hats, no jewelry, nobody near moving parts.",
+      "model": "gpt-image-2.5-sunburst",
+      "width": 1280,
+      "height": 720,
+      "safety_check": "pass (minor: authorized worker has light stubble without a beard net)"
+    },
+    {
+      "file": "scene-04-prepare.jpg",
+      "kind": "image",
+      "block_key": "s4-prepare",
+      "bytes": 139212,
+      "prompt": "Photorealistic workplace safety training photo, 16:9 landscape. Setting: beside a stainless steel packaging machine in a clean modern food plant, natural plant lighting. Subject: a technician in a blue bump cap, white hairnet and clear safety glasses reading a laminated lockout procedure placard mounted on the machine frame. The placard shows a bold yellow header band, small colored energy-source icons, and photo thumbnails; the writing is not legible. Constraints: no readable text, no logos, no hard hats, no jewelry.",
+      "model": "gpt-image-2.5-sunburst",
+      "width": 1280,
+      "height": 720,
+      "safety_check": "pass"
+    },
+    {
+      "file": "scene-05-lock.jpg",
+      "kind": "image",
+      "block_key": "s5-isolate",
+      "bytes": 118882,
+      "prompt": "Photorealistic macro close-up safety training photo, 16:9 landscape. A gloved hand closing the shackle of a red personal safety padlock through the lockout hasp of a grey industrial electrical disconnect handle that is in the OFF (down) position. A blank red-and-white danger tag hangs from the same shackle. Shallow depth of field, stainless steel plant softly blurred behind, natural plant lighting. Constraints: no readable text on the tag or switch, no logos.",
+      "model": "gpt-image-2.5-sunburst",
+      "width": 1280,
+      "height": 720,
+      "safety_check": "pass"
+    },
+    {
+      "file": "hotspot-isolation.jpg",
+      "kind": "image",
+      "block_key": "i2-hotspot-isolation",
+      "bytes": 107755,
+      "prompt": "Photorealistic straight-on photo, 16:9 landscape, no people, for an interactive training exercise. A stainless steel industrial dough mixer station in a clean modern food plant, natural plant lighting. Four objects must be clearly separate, fully visible, and spaced apart across the frame: (1) far left: a grey wall-mounted lockable electrical disconnect switch box with a large rotary handle; (2) upper center: a single large red mushroom-head emergency stop button on a yellow control box; (3) upper right: a mounted operator touchscreen panel with a glowing blank screen; (4) lower right: a blue pneumatic air line with a lockable yellow-handled quarter-turn shutoff ball valve and exhaust port. Constraints: no locks applied to anything, no readable text, no logos.",
+      "model": "gpt-image-2.5-sunburst",
+      "width": 1280,
+      "height": 720,
+      "safety_check": "pass"
+    },
+    {
+      "file": "scene-06-verify.jpg",
+      "kind": "image",
+      "block_key": "s6-verify",
+      "bytes": 129854,
+      "prompt": "Photorealistic workplace safety training photo, 16:9 landscape. Setting: clean modern food-production plant with stainless equipment, natural plant lighting. Subject: a technician in a blue bump cap, white hairnet, clear safety glasses and gloves pressing the green start button on the closed control panel of a stopped stainless machine, standing well clear of all moving parts; all machine guards are in place. Clearly visible in the same frame, a few feet away: a grey wall-mounted electrical disconnect in the OFF position with a red padlock and a blank danger tag on it. Constraints: no open electrical panels, no readable text, no logos, no hard hats, no jewelry.",
+      "model": "gpt-image-2.5-sunburst",
+      "width": 1280,
+      "height": 720,
+      "safety_check": "pass (minor: locked disconnect handle position reads ambiguous ON/OFF)"
+    },
+    {
+      "file": "scene-07-group.jpg",
+      "kind": "image",
+      "block_key": "s7-group",
+      "bytes": 133903,
+      "prompt": "Photorealistic close-up safety training photo, 16:9 landscape. A red metal group lockout box mounted on a white plant wall in a clean modern food factory, its hasp holding six personal safety padlocks of different colors (red, blue, yellow, green) each with a blank tag. Soft natural plant lighting, stainless equipment blurred in the background. Constraints: no readable text, no logos, no people.",
+      "model": "gpt-image-2.5-sunburst",
+      "width": 1280,
+      "height": 720,
+      "safety_check": "pass"
+    },
+    {
+      "file": "scene-08-restart.jpg",
+      "kind": "image",
+      "block_key": "s8-restart",
+      "bytes": 123497,
+      "prompt": "Photorealistic workplace safety training photo, 16:9 landscape. Setting: clean modern food-production plant, stainless conveyor with its yellow guard reinstalled, tools put away, work area clear and tidy, natural plant lighting. Subject: a technician in a blue bump cap, white hairnet, clear safety glasses and gloves removing their own red padlock and blank danger tag from a grey wall-mounted electrical disconnect. Constraints: no readable text, no logos, no hard hats, no jewelry, nobody touching the conveyor.",
+      "model": "gpt-image-2.5-sunburst",
+      "width": 1280,
+      "height": 720,
+      "safety_check": "pass"
+    }
+  ]
+}
