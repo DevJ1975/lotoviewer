@@ -5,7 +5,32 @@ import {
   isStrikeCompletionCurrent,
   normalizeStrikeSlug,
   scoreStrikeQuiz,
+  strikeCompletionFloor,
 } from '@soteria/core/strike'
+
+describe('strike completion lineage (supersession floor)', () => {
+  const v1 = { id: 'v1', versionNumber: 1, supersedesCompletions: false }
+  const v2Material = { id: 'v2', versionNumber: 2, supersedesCompletions: true }
+  const v3Typo = { id: 'v3', versionNumber: 3, supersedesCompletions: false }
+
+  it('a minor edit keeps every earlier completion current', () => {
+    const lineage = [v1, { ...v2Material, supersedesCompletions: false }]
+    expect(strikeCompletionFloor(lineage)).toBe(1)
+    expect(isStrikeCompletionCurrent({ completedAt: '2026-05-01', moduleVersionId: 'v1', lineage })).toBe(true)
+  })
+
+  it('a material change retires completions below it, and a later typo fix does not move the floor', () => {
+    const lineage = [v1, v2Material, v3Typo]
+    expect(strikeCompletionFloor(lineage)).toBe(2)
+    expect(isStrikeCompletionCurrent({ completedAt: '2026-05-01', moduleVersionId: 'v1', lineage })).toBe(false)
+    expect(isStrikeCompletionCurrent({ completedAt: '2026-05-01', moduleVersionId: 'v2', lineage })).toBe(true)
+    expect(isStrikeCompletionCurrent({ completedAt: '2026-05-01', moduleVersionId: 'v3', lineage })).toBe(true)
+  })
+
+  it('treats a completion of an unknown version as not current once a floor exists', () => {
+    expect(isStrikeCompletionCurrent({ completedAt: '2026-05-01', moduleVersionId: 'v0', lineage: [v1, v2Material] })).toBe(false)
+  })
+})
 
 describe('isStrikeCompletionCurrent', () => {
   it('accepts completed training with no expiration', () => {

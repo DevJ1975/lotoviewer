@@ -26,6 +26,7 @@ import {
   computeStrikeReadiness,
   isStrikeAssignmentApplicable,
   isStrikeCompletionCurrent,
+  type StrikeVersionLineage,
   STRIKE_ASSIGNMENT_TARGET_TYPES,
   STRIKE_REQUIREMENT_SOURCE_TYPES,
   type StrikeAssignmentTargetType,
@@ -51,6 +52,8 @@ interface StrikeVersionRow {
   id: string
   module_id: string
   version_number: number
+  status: 'published' | 'superseded'
+  supersedes_completions: boolean
   transcript: string | null
   duration_seconds: number | null
   passing_score: number
@@ -153,9 +156,9 @@ export default function StrikePage() {
       if (moduleIds.length > 0) {
         const { data: versionRows, error: versionErr } = await supabase
           .from('strike_module_versions')
-          .select('id,module_id,version_number,transcript,duration_seconds,passing_score,published_at')
+          .select('id,module_id,version_number,status,supersedes_completions,transcript,duration_seconds,passing_score,published_at')
           .in('module_id', moduleIds)
-          .eq('status', 'published')
+          .in('status', ['published', 'superseded'])
           .order('version_number', { ascending: false })
         if (versionErr) throw versionErr
         setVersions((versionRows ?? []) as StrikeVersionRow[])
@@ -223,8 +226,23 @@ export default function StrikePage() {
   const latestVersionByModule = useMemo(() => {
     const map = new Map<string, StrikeVersionRow>()
     for (const version of versions) {
+      if (version.status !== 'published') continue
       const current = map.get(version.module_id)
       if (!current || version.version_number > current.version_number) map.set(version.module_id, version)
+    }
+    return map
+  }, [versions])
+
+  const lineageByModule = useMemo(() => {
+    const map = new Map<string, StrikeVersionLineage[]>()
+    for (const version of versions) {
+      const list = map.get(version.module_id) ?? []
+      list.push({
+        id: version.id,
+        versionNumber: version.version_number,
+        supersedesCompletions: version.supersedes_completions,
+      })
+      map.set(version.module_id, list)
     }
     return map
   }, [versions])
@@ -232,17 +250,16 @@ export default function StrikePage() {
   const currentCompletionByModule = useMemo(() => {
     const map = new Map<string, StrikeCompletionRow>()
     for (const row of completions) {
-      const requiredVersionId = latestVersionByModule.get(row.module_id)?.id
       if (!isStrikeCompletionCurrent({
         completedAt: row.completed_at,
         expiresAt: row.expires_at,
         moduleVersionId: row.module_version_id,
-        requiredVersionId,
+        lineage: lineageByModule.get(row.module_id) ?? [],
       })) continue
       if (!map.has(row.module_id)) map.set(row.module_id, row)
     }
     return map
-  }, [completions, latestVersionByModule])
+  }, [completions, lineageByModule])
 
   const activeAssignments = assignments.filter(a => a.status === 'active')
   const visibleAssignments = canManageTenantTraining

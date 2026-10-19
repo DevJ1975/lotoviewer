@@ -32,8 +32,17 @@ export interface StrikeCompletionLike {
 }
 
 export interface StrikeCompletionCurrencyInput extends StrikeCompletionLike {
+  /** Pins one exact version (an explicit requirement on a source record). */
   requiredVersionId?: string | null | undefined
+  /** The module's released versions; completions below the newest superseding version stop counting. */
+  lineage?: StrikeVersionLineage[]
   now?: string | Date
+}
+
+export interface StrikeVersionLineage {
+  id: string
+  versionNumber: number
+  supersedesCompletions: boolean
 }
 
 export interface StrikeReadinessInput {
@@ -90,11 +99,33 @@ export function isStrikeCompletionCurrent(input: StrikeCompletionCurrencyInput):
     return false
   }
 
+  if (input.lineage && !isAboveSupersessionFloor(input.moduleVersionId, input.lineage)) return false
+
   const expiresAt = toTime(input.expiresAt)
   if (expiresAt === null) return true
 
   const now = toTime(input.now ?? new Date())
   return now !== null && expiresAt >= now
+}
+
+/**
+ * The lowest version number whose completions still count: the newest
+ * version that declared itself a material change, or 1 when none has.
+ * A minor edit (supersedesCompletions = false) never moves the floor, so a
+ * typo fix cannot mark a trained workforce untrained.
+ */
+export function strikeCompletionFloor(lineage: StrikeVersionLineage[]): number {
+  return lineage.reduce(
+    (floor, version) => (version.supersedesCompletions && version.versionNumber > floor ? version.versionNumber : floor),
+    1,
+  )
+}
+
+function isAboveSupersessionFloor(moduleVersionId: string | null | undefined, lineage: StrikeVersionLineage[]): boolean {
+  const floor = strikeCompletionFloor(lineage)
+  if (floor <= 1) return true
+  const version = lineage.find(v => v.id === moduleVersionId)
+  return !!version && version.versionNumber >= floor
 }
 
 export function computeStrikeReadiness(input: StrikeReadinessInput): StrikeReadinessResult {
