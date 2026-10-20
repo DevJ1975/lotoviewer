@@ -156,6 +156,17 @@ describe('normalizeStrikeSlug', () => {
 })
 
 describe('scoreStrikeQuiz', () => {
+  // The points column allows 0. A quiz whose questions are all worth 0 used to
+  // score 100% for a blank submission, passing everyone without an answer.
+  it('makes the answers count even when every question is worth 0 points', () => {
+    const questions = [
+      { questionId: 'q1', questionType: 'multiple_choice' as const, points: 0, correctAnswerIds: ['a'] },
+      { questionId: 'q2', questionType: 'multiple_choice' as const, points: 0, correctAnswerIds: ['b'] },
+    ]
+    expect(scoreStrikeQuiz({ questions, answersByQuestionId: {}, passingScore: 80 })).toMatchObject({ scorePercent: 0, passed: false })
+    expect(scoreStrikeQuiz({ questions, answersByQuestionId: { q1: 'a', q2: 'b' }, passingScore: 80 })).toMatchObject({ scorePercent: 100, passed: true })
+  })
+
   it('scores exact single and select-all answers', () => {
     expect(scoreStrikeQuiz({
       passingScore: 80,
