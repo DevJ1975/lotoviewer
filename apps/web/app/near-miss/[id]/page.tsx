@@ -6,13 +6,12 @@ import { ArrowLeft, AlertTriangle, Loader2, ArrowUpRight } from 'lucide-react'
 import EscalateModal from '../_components/EscalateModal'
 import { AiInsightsCard } from '../_components/AiInsightsCard'
 import { useTenant } from '@/components/TenantProvider'
-import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { supabase } from '@/lib/supabase'
 
-// Edit gate uses the legacy is_admin / is_superadmin flags on the
-// profile (same posture as /risk/[id]). The API enforces the
-// tenant-membership role independently — this is just a UX gate
-// that hides the controls from users who can't use them.
+// Edit gate follows the tenant-membership role (same posture as
+// /risk/[id]). The API enforces that role independently — this is
+// just a UX gate that hides the controls from users who can't use them.
 import {
   NEAR_MISS_STATUSES,
   ageInDays,
@@ -52,9 +51,7 @@ export default function NearMissDetailPage({ params }: { params: Promise<{ id: s
   const { id } = use(params)
   const { tenant } = useTenant()
   const tenantId = tenant?.id
-  const { profile } = useAuth()
-  const canEdit = !!profile?.is_admin || !!profile?.is_superadmin
-
+  const { canManage: canEdit } = useCanManageTenant()
   const [bundle,        setBundle]        = useState<DetailBundle | null>(null)
   const [error,         setError]         = useState<string | null>(null)
   const [saving,        setSaving]        = useState(false)

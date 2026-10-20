@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Download, FileCheck2, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
 
@@ -33,7 +34,8 @@ interface ArtifactRow {
 const PAGE_SIZE = 100
 
 export default function SignedArtifactsPage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
   const [rows, setRows]           = useState<ArtifactRow[] | null>(null)
   const [search, setSearch]       = useState('')
@@ -57,8 +59,8 @@ export default function SignedArtifactsPage() {
   }, [tenantId])
 
   useEffect(() => {
-    if (!authLoading && profile?.is_admin) void load()
-  }, [authLoading, profile, load])
+    if (!authLoading && canManage) void load()
+  }, [authLoading, canManage, load])
 
   if (authLoading) {
     return (
@@ -67,7 +69,7 @@ export default function SignedArtifactsPage() {
       </div>
     )
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return (
       <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">
         Admins only.

@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Mountain, Loader2, Trash2 } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
@@ -31,7 +32,9 @@ export default function ClauseDetailPage({ params }: { params: Promise<{ clauseC
   const decoded = decodeURIComponent(clauseCode)
   const clause  = findClause(decoded)
 
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
 
   const [rows,  setRows]          = useState<EvidenceRow[] | null>(null)
@@ -64,8 +67,8 @@ export default function ClauseDetailPage({ params }: { params: Promise<{ clauseC
   }, [tenantId, clause])
 
   useEffect(() => {
-    if (!authLoading && profile?.is_admin) void load()
-  }, [authLoading, profile, load])
+    if (!authLoading && canManage) void load()
+  }, [authLoading, canManage, load])
 
   const filtered = useMemo(() => {
     if (!rows) return [] as EvidenceRow[]
@@ -130,7 +133,7 @@ export default function ClauseDetailPage({ params }: { params: Promise<{ clauseC
       </div>
     )
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return (
       <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">
         Admins only.

@@ -5,6 +5,7 @@ import { ArrowRight, ShieldCheck } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
 import { ADMIN_SECTIONS, SETTINGS_NOTIFICATIONS_TILE, type AdminTile } from '@/lib/adminCatalog'
+import { canManageTenant } from '@/lib/auth/tenantRole'
 
 // Admin landing index. The catalog at lib/adminCatalog.ts is the
 // single source of truth; this page just renders it. Per-route role
@@ -13,8 +14,8 @@ import { ADMIN_SECTIONS, SETTINGS_NOTIFICATIONS_TILE, type AdminTile } from '@/l
 
 export default function AdminHome() {
   const { profile, loading: authLoading } = useAuth()
-  const { tenant, loading: tenantLoading } = useTenant()
-  const canManage = !!profile?.is_admin || !!profile?.is_superadmin
+  const { tenant, role, loading: tenantLoading } = useTenant()
+  const canManage = canManageTenant(role, profile)
 
   if (authLoading || tenantLoading) {
     return (

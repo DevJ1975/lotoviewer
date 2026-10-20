@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Loader2, Sparkles } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { fetchInsightsMetrics, type InsightsMetrics } from '@soteria/core/insightsMetrics'
 import { WorstSpacesCard }   from './_components/WorstSpacesCard'
 import { AnomalyCard }       from './_components/AnomalyCard'
@@ -35,7 +36,8 @@ const WINDOW_OPTIONS = [
 ]
 
 export default function InsightsPage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const [windowDays, setWindowDays] = useState(90)
   const [metrics, setMetrics] = useState<InsightsMetrics | null>(null)
   const [loading, setLoading] = useState(true)
@@ -60,7 +62,7 @@ export default function InsightsPage() {
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 

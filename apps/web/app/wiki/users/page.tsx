@@ -160,9 +160,10 @@ export default function WikiUsersPage() {
           },
           {
             q: 'What does marking someone as admin do?',
-            a: <>Sets <code>is_admin=true</code> on their tenant membership,
-              which RLS uses to gate every <code>/admin/*</code> route. The
-              flag toggles immediately on next page load.</>,
+            a: <>Sets their membership <code>role</code> in the active tenant
+              to <code>admin</code> (or <code>owner</code>). Every
+              <code>/admin/*</code> route and API checks that role, and the
+              Administration link appears on their next page load.</>,
           },
           {
             q: 'Where can I see what a user has done?',

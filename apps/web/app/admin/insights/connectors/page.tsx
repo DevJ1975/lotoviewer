@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Loader2, Cable, AlertCircle, CheckCircle2, KeyRound, Plug } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { supabase } from '@/lib/supabase'
 
 // /admin/insights/connectors
@@ -33,9 +34,8 @@ const STATUS_META: Record<ConnectorStatus, { label: string; cls: string; icon: t
 
 export default function DataConnectorsPage() {
   const { tenant, loading: tenantLoading } = useTenant()
-  const { profile, loading: authLoading } = useAuth()
-  const canView = !!profile?.is_admin || !!profile?.is_superadmin
-
+  const { loading: authLoading } = useAuth()
+  const { canManage: canView } = useCanManageTenant()
   const [connectors, setConnectors] = useState<ConnectorRow[]>([])
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState<string | null>(null)

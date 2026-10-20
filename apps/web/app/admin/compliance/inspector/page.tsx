@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, ClipboardCopy, Eye, Loader2, ShieldCheck } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 
 // Admin tool to mint a read-only inspector URL. Pick a date range +
@@ -22,7 +23,8 @@ function nDaysAgoIso(n: number): string {
 }
 
 export default function InspectorMintPage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   // The minted token is scoped to this tenant, and /api/inspector/sign
   // rejects a request without it — the URL must never be ambiguous about
   // whose permits it exposes.
@@ -93,7 +95,7 @@ export default function InspectorMintPage() {
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 

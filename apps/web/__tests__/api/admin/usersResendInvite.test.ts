@@ -38,9 +38,14 @@ function tenantAdminOk() {
   })
 }
 
-/** Membership lookup + the reactivate UPDATE both drain this table's queue. */
+/**
+ * The route drains this table's queue three times: the membership lookup,
+ * the shared-account count (0 → the account belongs to this tenant alone),
+ * and the reactivate UPDATE.
+ */
 function queueMembership(row: Record<string, unknown> | null) {
   mockState.queue('tenant_memberships', { data: row, error: null })
+  mockState.queue('tenant_memberships', { data: null, count: 0, error: null })
   mockState.queue('tenant_memberships', { data: null, error: null })
 }
 
@@ -129,6 +134,49 @@ describe('POST /api/admin/users/[userId]/resend-invite', () => {
     // Anchored to now, not nulled — otherwise the daily cron would fire a
     // reminder the morning after the resend.
     expect((update.payload as { invite_last_reminder_at: string }).invite_last_reminder_at).toBeTruthy()
+  })
+
+  it('withholds the raw link and emails it instead when the account belongs to another tenant too', async () => {
+    // An invite link sets the account's password. If the same account is a
+    // pending member elsewhere, handing the link to THIS tenant's admin would
+    // let them take over a person they have no standing over.
+    mockState.queue('tenant_memberships', { data: { user_id: PENDING_USER, invite_cancelled_at: null }, error: null })
+    mockState.queue('tenant_memberships', { data: null, count: 1, error: null })   // other-tenant lookup
+    mockState.queue('tenant_memberships', { data: null, error: null })             // reactivate update
+    signedInNever()
+    mockState.queue('tenants', { data: { id: 'T1', name: 'Snak King' }, error: null })
+    mockState.queue('profiles', { data: { full_name: 'Pending Person' }, error: null })
+
+    const res = await resendInvite(
+      jsonRequest('POST', { sendEmail: false }),
+      ctxFor({ userId: PENDING_USER }),
+    )
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.inviteUrl).toBeUndefined()
+    expect(body.linkWithheld).toBe(true)
+    // "Link only" was asked for, but the link still reaches the person who
+    // owns the account, not the caller.
+    expect(body.emailSent).toBe(true)
+    expect(sendInviteEmailMock).toHaveBeenCalledTimes(1)
+    const emailArgs = sendInviteEmailMock.mock.calls[0]![0] as Record<string, unknown>
+    expect(emailArgs.to).toBe('pending@example.com')
+    expect(emailArgs.inviteUrl).toContain('/accept-invite?token=')
+  })
+
+  it('fails closed when the shared-account lookup errors', async () => {
+    mockState.queue('tenant_memberships', { data: { user_id: PENDING_USER, invite_cancelled_at: null }, error: null })
+    mockState.queue('tenant_memberships', { data: null, error: { message: 'connection reset' } })
+
+    const res = await resendInvite(
+      jsonRequest('POST', { sendEmail: false }),
+      ctxFor({ userId: PENDING_USER }),
+    )
+
+    expect(res.status).toBe(500)
+    expect(mockState.inserts.some(i => i.table === 'invite_tokens')).toBe(false)
+    expect(sendInviteEmailMock).not.toHaveBeenCalled()
   })
 
   it('404s for a user who is not a member of the active tenant', async () => {

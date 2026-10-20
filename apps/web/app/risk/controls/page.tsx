@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Loader2, Plus, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
-import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import {
   HIERARCHY_LABELS,
   HIERARCHY_ORDER,
@@ -43,9 +43,7 @@ const HAZARD_CATS = [
 export default function ControlsLibraryPage() {
   const { tenant } = useTenant()
   const tenantId = tenant?.id
-  const { profile } = useAuth()
-  const isAdmin = !!profile?.is_admin || !!profile?.is_superadmin
-
+  const { canManage: isAdmin } = useCanManageTenant()
   const [controls, setControls] = useState<LibraryControl[]>([])
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState<string | null>(null)

@@ -1,15 +1,19 @@
 import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 // POST /api/superadmin/queries/run
 //   Body: { sql: string, max_rows?: number }
 //
 // Executes a read-only SQL query via public.exec_readonly_sql() and
-// returns the rows. Three independent guard rails:
+// returns the rows. Four independent guard rails:
 //   1. requireSuperadmin (route-level).
 //   2. Regex check below: must start with WITH/SELECT/EXPLAIN.
-//   3. exec_readonly_sql sets transaction_read_only = on + a 10s
+//   3. exec_readonly_sql re-checks is_superadmin() from auth.uid(), so the
+//      RPC runs as the CALLER, through a client carrying their bearer
+//      token — never the service-role client, whose auth.uid() is null and
+//      would make that check refuse every call.
+//   4. exec_readonly_sql sets transaction_read_only = on + a 10s
 //      statement_timeout. The DB refuses writes even if we slip
 //      something past the regex.
 //
@@ -29,8 +33,15 @@ export interface RunResponse {
 }
 
 export async function POST(req: Request) {
-  const gate = await requireSuperadmin(req.headers.get('authorization'))
+  const authHeader = req.headers.get('authorization')
+  const gate = await requireSuperadmin(authHeader)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
+  const url  = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anon || !authHeader) {
+    return NextResponse.json({ error: 'Supabase env not configured' }, { status: 500 })
+  }
 
   let body: { sql?: string; max_rows?: number }
   try { body = (await req.json()) as typeof body }
@@ -49,9 +60,12 @@ export async function POST(req: Request) {
   const maxRowsRaw = Number(body.max_rows ?? 1000)
   const maxRows = Number.isFinite(maxRowsRaw) ? Math.min(Math.max(Math.floor(maxRowsRaw), 1), 5000) : 1000
 
-  const admin = supabaseAdmin()
+  const asCaller = createClient(url, anon, {
+    auth:   { persistSession: false },
+    global: { headers: { Authorization: authHeader } },
+  })
   const startedAt = Date.now()
-  const { data, error } = await admin.rpc('exec_readonly_sql', { sql_text: sql, max_rows: maxRows })
+  const { data, error } = await asCaller.rpc('exec_readonly_sql', { sql_text: sql, max_rows: maxRows })
   const durationMs = Date.now() - startedAt
 
   if (error) {

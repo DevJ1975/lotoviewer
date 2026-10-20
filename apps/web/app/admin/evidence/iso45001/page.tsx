@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, BookText, Loader2 } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
@@ -21,7 +22,8 @@ interface ClauseEvidenceCount {
 }
 
 export default function Iso45001MapPage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
   const [counts, setCounts]       = useState<Map<string, number>>(new Map())
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -50,8 +52,8 @@ export default function Iso45001MapPage() {
   }, [tenantId])
 
   useEffect(() => {
-    if (!authLoading && profile?.is_admin) void load()
-  }, [authLoading, profile, load])
+    if (!authLoading && canManage) void load()
+  }, [authLoading, canManage, load])
 
   if (authLoading) {
     return (
@@ -60,7 +62,7 @@ export default function Iso45001MapPage() {
       </div>
     )
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return (
       <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">
         Admins only.

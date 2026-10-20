@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
-import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { readRiskConfig } from '@soteria/core/risk'
 import RiskScoreCard from '../_components/RiskScoreCard'
 import ControlsTable from '../_components/ControlsTable'
@@ -29,7 +29,6 @@ export default function RiskDetailPage({ params }: { params: Promise<{ id: strin
   const { id } = use(params)
   const { tenant } = useTenant()
   const tenantId = tenant?.id
-  const { profile } = useAuth()
 
   const [bundle, setBundle] = useState<RiskDetailBundle | null>(null)
   const [loading, setLoading] = useState(true)
@@ -58,11 +57,9 @@ export default function RiskDetailPage({ params }: { params: Promise<{ id: strin
 
   useEffect(() => { void fetchData() }, [fetchData])
 
-  // is_admin from the profiles row (legacy single-tenant flag) is
-  // good enough for the slice 2 quick actions; the API enforces
+  // UX gate only for the slice 2 quick actions; the API enforces the
   // tenant-membership role anyway.
-  const canEdit = !!profile?.is_admin || !!profile?.is_superadmin
-
+  const { canManage: canEdit } = useCanManageTenant()
   if (loading) return <FullPageSpinner />
   if (error)   return <ErrorScreen message={error} />
   if (!bundle) return <NotFoundScreen />

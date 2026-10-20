@@ -6,6 +6,7 @@ import { ArrowLeft, Download, Loader2, Search, SearchX, TriangleAlert, Wrench } 
 import { supabase } from '@/lib/supabase'
 import { EmptyState } from '@/components/EmptyState'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import type { HygieneAction, HygieneLogRow } from '@soteria/core/types'
 
 // Hygiene-log viewer. Surfaces rows from loto_hygiene_log — populated
@@ -44,7 +45,8 @@ const DATE_SCOPE_LABEL: Record<DateScope, string> = {
 }
 
 export default function HygieneLogPage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const [rows, setRows]                 = useState<HygieneLogRow[]>([])
   const [loading, setLoading]           = useState(true)
   const [loadError, setLoadError]       = useState<string | null>(null)
@@ -81,9 +83,9 @@ export default function HygieneLogPage() {
 
   useEffect(() => {
     if (authLoading) return
-    if (!profile?.is_admin) return
+    if (!canManage) return
     fetchRows()
-  }, [authLoading, profile, fetchRows])
+  }, [authLoading, canManage, fetchRows])
 
   // Distinct section list for the dropdown — derived from current page
   // of rows, not a separate roundtrip. With PAGE_SIZE=500 this captures
@@ -113,7 +115,7 @@ export default function HygieneLogPage() {
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 

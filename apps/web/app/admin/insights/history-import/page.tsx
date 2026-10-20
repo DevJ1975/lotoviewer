@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, CheckCircle2, FileUp, Loader2, Table2, Upload } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { INJURY_TYPES, INJURY_TYPE_LABEL, type InjuryType } from '@soteria/core/oshaForms'
 import { parseDelimited } from '@/lib/csv/parseDelimited'
@@ -79,7 +80,8 @@ async function authHeaders(tenantId: string): Promise<Record<string, string>> {
 type ImportMode = 'pdf' | 'csv'
 
 export default function HistoryImportPage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
 
   const [mode, setMode] = useState<ImportMode>('pdf')
@@ -99,7 +101,7 @@ export default function HistoryImportPage() {
   // Establishment dropdown — RLS-scoped read, so it only ever returns
   // the active tenant's rows.
   useEffect(() => {
-    if (authLoading || !profile?.is_admin || !tenantId) return
+    if (authLoading || !canManage || !tenantId) return
     let cancelled = false
     ;(async () => {
       const { data, error: loadError } = await supabase
@@ -113,7 +115,7 @@ export default function HistoryImportPage() {
       if (rows.length === 1) setEstablishmentId(rows[0]!.id)
     })()
     return () => { cancelled = true }
-  }, [authLoading, profile, tenantId])
+  }, [authLoading, canManage, tenantId])
 
   function switchMode(next: ImportMode) {
     if (next === mode) return
@@ -176,7 +178,7 @@ export default function HistoryImportPage() {
   if (authLoading) {
     return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 

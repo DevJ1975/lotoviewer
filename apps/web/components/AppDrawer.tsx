@@ -36,6 +36,7 @@ import { isFeatureAccessible, type FeatureDef } from '@soteria/core/features'
 import { cn } from '@/lib/utils'
 import { useRecentRoutes } from '@/lib/useRecentRoutes'
 import { resolveHref } from '@/lib/resolveHref'
+import { canManageTenant } from '@/lib/auth/tenantRole'
 
 interface Props {
   onClose?: () => void
@@ -47,11 +48,12 @@ function openCommandPalette() {
 
 export default function AppDrawer({ onClose }: Props) {
   const pathname = usePathname()
-  const { tenant } = useTenant()
+  const { tenant, role } = useTenant()
   const { profile } = useAuth()
   const { setOpen } = useSidebar()
   const groups = getNavigationGroups(tenant?.modules ?? null)
   const tenantId = tenant?.id ?? null
+  const showAdministration = canManageTenant(role, profile)
 
   // Which modules the user has opened by hand. Read on mount rather than in a
   // useState initialiser so the server render and the first client render
@@ -140,7 +142,7 @@ export default function AppDrawer({ onClose }: Props) {
       </SidebarContent>
 
       <SidebarFooter className="space-y-2">
-        {(profile?.is_admin || profile?.is_superadmin) && (
+        {showAdministration && (
           <Link
             href="/admin"
             onClick={close}

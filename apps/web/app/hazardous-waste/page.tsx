@@ -17,7 +17,7 @@ import {
   ShieldAlert,
   ShieldCheck,
 } from 'lucide-react'
-import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import {
@@ -64,9 +64,7 @@ const nextBiennialDue = nextBiennialDueDate(new Date()).toLocaleDateString('en-U
 export default function HazardousWastePage() {
   const { tenant } = useTenant()
   const tenantId = tenant?.id
-  const { profile } = useAuth()
-  const canManageAreas = !!profile?.is_admin || !!profile?.is_superadmin
-
+  const { canManage: canManageAreas } = useCanManageTenant()
   const [areas,        setAreas]       = useState<AreaWithLastInspection[] | null>(null)
   const [inspections,  setInspections] = useState<HazardousWasteInspectionRow[] | null>(null)
   const [streams,      setStreams]     = useState<HazardousWasteStreamRow[] | null>(null)

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, AlertTriangle, CheckCircle2, FileText, Loader2, Upload } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { supabase } from '@/lib/supabase'
 import {
   parseRiskCsv,
@@ -37,9 +38,8 @@ interface ImportResult {
 
 export default function RiskCsvImportPage() {
   const { tenant } = useTenant()
-  const { profile, loading: authLoading } = useAuth()
-  const canImport = !!profile?.is_admin || !!profile?.is_superadmin
-
+  const { loading: authLoading } = useAuth()
+  const { canManage: canImport } = useCanManageTenant()
   const [rows,   setRows]   = useState<ParsedRiskRow[]>([])
   const [headerError, setHeaderError] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)

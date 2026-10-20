@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { isAllowlistedSuperadminEmail } from '@/lib/auth/superadminAllowlist'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
 
 // Shared tenant auth gate for the /api/risk/* family. Same pattern
@@ -95,9 +96,7 @@ async function gate(req: Request, opts: GateOptions = {}): Promise<TenantGate> {
       .select('role, invite_cancelled_at, tenants:tenant_id(disabled_at)')
       .eq('user_id', user.id).eq('tenant_id', tenantId).maybeSingle(),
   ])
-  const allow = (process.env.SUPERADMIN_EMAILS ?? '')
-    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
-  const isSuperadmin = !!profile?.is_superadmin && !!user.email && allow.includes(user.email.toLowerCase())
+  const isSuperadmin = !!profile?.is_superadmin && isAllowlistedSuperadminEmail(user.email)
 
   if (isSuperadmin) {
     return makeOk(user, tenantId, facilityId, 'superadmin', token, url, anon)

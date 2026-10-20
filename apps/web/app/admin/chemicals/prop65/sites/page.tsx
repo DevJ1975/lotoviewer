@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Loader2, Plus, MapPin } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
 
@@ -30,7 +31,8 @@ async function tenantHeaders(tenantId: string) {
 }
 
 export default function Prop65SitesPage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
   const [rows, setRows]   = useState<SiteRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -49,7 +51,7 @@ export default function Prop65SitesPage() {
     setRows((data ?? []) as SiteRow[])
   }, [tenantId])
 
-  useEffect(() => { if (!authLoading && profile?.is_admin) void load() }, [authLoading, profile, load])
+  useEffect(() => { if (!authLoading && canManage) void load() }, [authLoading, canManage, load])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -77,7 +79,7 @@ export default function Prop65SitesPage() {
   }
 
   if (authLoading) return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
-  if (!profile?.is_admin) return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
+  if (!canManage) return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-5">

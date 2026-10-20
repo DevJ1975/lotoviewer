@@ -35,6 +35,7 @@ import {
   ReferenceLine,
 } from 'recharts'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { fetchScorecardMetrics, type DayBucket, type ScorecardMetrics } from '@soteria/core/scorecardMetrics'
@@ -129,7 +130,8 @@ const TONE_STYLES: Record<Tone, {
 }
 
 export default function ScorecardPage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const [windowDays, setWindowDays] = useState<number>(30)
   const [metrics, setMetrics] = useState<ScorecardMetrics | null>(null)
   const [loading, setLoading] = useState(true)
@@ -137,7 +139,7 @@ export default function ScorecardPage() {
 
   useEffect(() => {
     if (authLoading) return
-    if (!profile?.is_admin) return
+    if (!canManage) return
     let cancelled = false
     setLoading(true)
     setLoadError(null)
@@ -146,7 +148,7 @@ export default function ScorecardPage() {
       .catch(err => { if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Could not load scorecard.') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [authLoading, profile, windowDays])
+  }, [authLoading, canManage, windowDays])
 
   const { tenantId } = useTenant()
   const drill = useMetricDrill()
@@ -214,20 +216,20 @@ export default function ScorecardPage() {
   // the permit window selector since TRIR/DART are annual by definition.
   const [incidentMetrics, setIncidentMetrics] = useState<IncidentScorecardMetrics | null>(null)
   useEffect(() => {
-    if (authLoading || !profile?.is_admin) return
+    if (authLoading || !canManage) return
     let cancelled = false
     fetchIncidentScorecardMetrics(365)
       .then(m => { if (!cancelled && m) setIncidentMetrics(m) })
       .catch(() => { /* non-fatal — section just stays hidden */ })
     return () => { cancelled = true }
-  }, [authLoading, profile])
+  }, [authLoading, canManage])
 
   // Year-over-year history from saved OSHA 300A annual summaries (imported
   // prior-year data + posted current year). RLS-scoped client-side read; the
   // current calendar year is overlaid live from incidentMetrics.
   const [annualHistory, setAnnualHistory] = useState<YearMetric[] | null>(null)
   useEffect(() => {
-    if (authLoading || !profile?.is_admin) return
+    if (authLoading || !canManage) return
     let cancelled = false
     ;(async () => {
       const { data, error } = await supabase
@@ -237,13 +239,13 @@ export default function ScorecardPage() {
       if (!cancelled) setAnnualHistory(aggregateAnnualHistory(data as AnnualSummaryRow[]))
     })()
     return () => { cancelled = true }
-  }, [authLoading, profile])
+  }, [authLoading, canManage])
 
   // Tenant's NAICS sector (from the first establishment that has one) — the
   // key for the BLS industry benchmark. RLS-scoped read; null when unset.
   const [naics, setNaics] = useState<string | null>(null)
   useEffect(() => {
-    if (authLoading || !profile?.is_admin) return
+    if (authLoading || !canManage) return
     let cancelled = false
     ;(async () => {
       const { data, error } = await supabase
@@ -255,7 +257,7 @@ export default function ScorecardPage() {
       if (!cancelled) setNaics((data[0]?.naics_code as string | undefined) ?? null)
     })()
     return () => { cancelled = true }
-  }, [authLoading, profile])
+  }, [authLoading, canManage])
 
   // Scorecard goals + benchmark overrides (kind='target' / 'benchmark').
   // RLS- + admin-scoped. The table ships in migration 196; until it's
@@ -269,9 +271,9 @@ export default function ScorecardPage() {
     setTargetRows(data as TargetRow[])
   }, [])
   useEffect(() => {
-    if (authLoading || !profile?.is_admin) return
+    if (authLoading || !canManage) return
     void loadTargets()
-  }, [authLoading, profile, loadTargets])
+  }, [authLoading, canManage, loadTargets])
 
   // Replace-in-place save: per metric, delete the existing row then insert
   // the new value (PostgREST upsert can't target our partial unique
@@ -354,7 +356,7 @@ export default function ScorecardPage() {
   if (authLoading) {
     return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 

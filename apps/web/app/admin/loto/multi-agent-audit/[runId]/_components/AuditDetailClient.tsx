@@ -24,6 +24,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { toast } from '@/components/ui/sonner'
 import type {
@@ -97,7 +98,8 @@ const STATUS_LABEL: Record<AuditRunStatus, string> = {
 const ROLLBACK_CONFIRM_PHRASE = 'ROLLBACK'
 
 export default function AuditDetailClient({ runId }: { runId: string }) {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
 
   const [summary, setSummary]   = useState<RunSummary | null>(null)
@@ -142,8 +144,8 @@ export default function AuditDetailClient({ runId }: { runId: string }) {
   }, [loadSummary, loadChanges])
 
   useEffect(() => {
-    if (!authLoading && profile?.is_admin) void loadAll()
-  }, [authLoading, profile, loadAll])
+    if (!authLoading && canManage) void loadAll()
+  }, [authLoading, canManage, loadAll])
 
   // Poll the summary while the engine is still working. We re-read the latest
   // status off `summary` inside the interval (via the ref) so the effect only
@@ -151,13 +153,13 @@ export default function AuditDetailClient({ runId }: { runId: string }) {
   const summaryRef = useRef<RunSummary | null>(null)
   summaryRef.current = summary
   useEffect(() => {
-    if (!profile?.is_admin) return
+    if (!canManage) return
     const id = setInterval(() => {
       if (summaryRef.current?.run.status !== 'running') return
       void loadSummary().catch(() => { /* transient; next tick retries */ })
     }, POLL_MS)
     return () => clearInterval(id)
-  }, [profile, loadSummary])
+  }, [canManage, loadSummary])
 
   // When the run finishes (running → terminal), refresh the change-set once so
   // the staged diffs appear without the admin reloading.
@@ -258,7 +260,7 @@ export default function AuditDetailClient({ runId }: { runId: string }) {
   if (authLoading) {
     return <main className="mx-auto max-w-5xl px-4 py-12"><Loader2 className="size-4 animate-spin" /></main>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <main className="mx-auto max-w-5xl px-4 py-12 text-sm text-slate-500">Admins only.</main>
   }
 

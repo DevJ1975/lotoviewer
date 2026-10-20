@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { isAllowlistedSuperadminEmail } from '@/lib/auth/superadminAllowlist'
 
 // Server-side guard for /api/superadmin/* routes. Both checks must pass:
 //   1. Caller's profiles.is_superadmin = true (DB flag)
@@ -37,12 +38,9 @@ export async function requireSuperadmin(authHeader: string | null): Promise<Supe
     return { ok: false, status: 401, message: 'Invalid session' }
   }
 
-  // Gate 1: env allowlist. Comma-separated list, case-insensitive compare.
-  const allowlist = (process.env.SUPERADMIN_EMAILS ?? '')
-    .split(',')
-    .map(s => s.trim().toLowerCase())
-    .filter(Boolean)
-  if (!allowlist.includes(user.email.toLowerCase())) {
+  // Gate 1: env allowlist. Checked first so an unlisted caller never costs
+  // a database read.
+  if (!isAllowlistedSuperadminEmail(user.email)) {
     return { ok: false, status: 403, message: 'Superadmin only' }
   }
 

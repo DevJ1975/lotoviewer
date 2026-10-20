@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, ClipboardCheck, Copy, Loader2, Plus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import {
@@ -52,6 +53,7 @@ interface ContractorRow {
 export default function ContractorPrequalPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: contractorId } = use(params)
   const { profile, loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
 
   const [contractor, setContractor] = useState<ContractorRow | null>(null)
@@ -82,7 +84,7 @@ export default function ContractorPrequalPage({ params }: { params: Promise<{ id
     setRows((pRes.data ?? []) as PrequalDetail[])
   }, [tenantId, contractorId])
 
-  useEffect(() => { if (!authLoading && profile?.is_admin) void load() }, [authLoading, profile, load])
+  useEffect(() => { if (!authLoading && canManage) void load() }, [authLoading, canManage, load])
 
   async function invite() {
     if (!tenantId) return
@@ -120,7 +122,7 @@ export default function ContractorPrequalPage({ params }: { params: Promise<{ id
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 

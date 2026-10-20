@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, ClipboardList, Loader2, Plus, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import {
@@ -19,6 +20,7 @@ const ROLES: CompetencyExamRole[] = ['operator', 'supervisor', 'energy_iso', 're
 export default function CompetencyExamsListPage() {
   const router = useRouter()
   const { profile, loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
   const [exams, setExams] = useState<CompetencyExam[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -38,12 +40,12 @@ export default function CompetencyExamsListPage() {
     setExams((data ?? []) as CompetencyExam[])
   }, [tenantId])
 
-  useEffect(() => { if (!authLoading && profile?.is_admin) load() }, [authLoading, profile, load])
+  useEffect(() => { if (!authLoading && canManage) load() }, [authLoading, canManage, load])
 
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 

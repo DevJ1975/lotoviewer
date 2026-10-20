@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, ArrowRight, GraduationCap, LayoutGrid, Loader2, Plus, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { TRAINING_ROLE_LABELS } from '@/lib/trainingRecords'
 import {
   RETRAINING_TRIGGER_LABELS,
@@ -24,7 +25,8 @@ import type { TrainingRecord, TrainingRole } from '@soteria/core/types'
 const ROLES: TrainingRole[] = ['entrant', 'attendant', 'entry_supervisor', 'rescuer', 'other']
 
 export default function TrainingRecordsPage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const [rows, setRows] = useState<TrainingRecord[]>([])
   const [retrainingStatus, setRetrainingStatus] = useState<WorkerRetrainingStatusRow[]>([])
   const [openTriggers, setOpenTriggers] = useState<RetrainingTrigger[]>([])
@@ -73,9 +75,9 @@ export default function TrainingRecordsPage() {
 
   useEffect(() => {
     if (authLoading) return
-    if (!profile?.is_admin) return
+    if (!canManage) return
     load()
-  }, [authLoading, profile, load])
+  }, [authLoading, canManage, load])
 
   // Resolve a single trigger by linking it to a specific training
   // record. The migration-142 schema allows training_record_id to
@@ -97,7 +99,7 @@ export default function TrainingRecordsPage() {
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 

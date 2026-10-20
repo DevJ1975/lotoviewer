@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, AlertTriangle, Loader2, ShieldCheck } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { supabase } from '@/lib/supabase'
 import { readRiskConfig, DEFAULT_ACCEPTANCE_THRESHOLD, type BandScheme } from '@soteria/core/risk'
 
@@ -18,9 +19,8 @@ import { readRiskConfig, DEFAULT_ACCEPTANCE_THRESHOLD, type BandScheme } from '@
 
 export default function RiskSettingsPage() {
   const { tenant, loading: tenantLoading, refresh } = useTenant()
-  const { profile, loading: authLoading } = useAuth()
-  const canEdit = !!profile?.is_admin || !!profile?.is_superadmin
-
+  const { loading: authLoading } = useAuth()
+  const { canManage: canEdit } = useCanManageTenant()
   const [scheme,    setScheme]    = useState<BandScheme>('4-band')
   const [threshold, setThreshold] = useState<number>(DEFAULT_ACCEPTANCE_THRESHOLD)
   const [saving,    setSaving]    = useState(false)

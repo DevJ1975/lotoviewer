@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Loader2, MapPin, FileWarning, ClipboardList, Bell } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 
 // /admin/chemicals/prop65/sites/[id] — Per-site detail with three tabs.
@@ -53,7 +54,8 @@ interface PageProps { params: Promise<{ id: string }> }
 
 export default function Prop65SiteDetailPage({ params }: PageProps) {
   const { id } = use(params)
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
   const [site, setSite] = useState<Site | null>(null)
   const [tab, setTab]   = useState<Tab>('assessments')
@@ -77,7 +79,7 @@ export default function Prop65SiteDetailPage({ params }: PageProps) {
     setNotifications((n ?? []) as Notification[])
   }, [id, tenantId])
 
-  useEffect(() => { if (!authLoading && profile?.is_admin) void load() }, [authLoading, profile, load])
+  useEffect(() => { if (!authLoading && canManage) void load() }, [authLoading, canManage, load])
 
   async function sign(assessmentId: string) {
     const name = window.prompt('Enter your name to sign this assessment:')
@@ -123,7 +125,7 @@ export default function Prop65SiteDetailPage({ params }: PageProps) {
   }
 
   if (authLoading) return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
-  if (!profile?.is_admin) return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
+  if (!canManage) return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   if (!site) return <div className="max-w-4xl mx-auto px-4 py-6"><Link href="/admin/chemicals/prop65/sites" className="text-xs text-brand-navy hover:underline">← Back to sites</Link><p className="text-sm text-slate-500 mt-4">Site not found.</p></div>
 
   return (

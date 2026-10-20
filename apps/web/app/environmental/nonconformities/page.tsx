@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ClipboardCheck, Loader2, ShieldCheck, Trash2 } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
@@ -61,7 +62,8 @@ const sourceLabel = (v: NonconformitySourceType) =>
   NONCONFORMITY_SOURCE_TYPES.find(o => o.value === v)?.label ?? v
 
 export default function NonconformitiesPage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
 
   const [rows, setRows]           = useState<NcRow[] | null>(null)
@@ -113,8 +115,8 @@ export default function NonconformitiesPage() {
   }, [tenantId])
 
   useEffect(() => {
-    if (!authLoading && profile?.is_admin) void load()
-  }, [authLoading, profile, load])
+    if (!authLoading && canManage) void load()
+  }, [authLoading, canManage, load])
 
   const actionsByNc = useMemo(() => {
     const m = new Map<string, ActionRow[]>()
@@ -232,7 +234,7 @@ export default function NonconformitiesPage() {
       </div>
     )
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return (
       <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">
         Admins only.

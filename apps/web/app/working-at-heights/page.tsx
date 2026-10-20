@@ -14,8 +14,8 @@ import {
   ScanSearch,
   ScrollText,
 } from 'lucide-react'
-import { useAuth } from '@/components/AuthProvider'
 
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 // Worker-facing module home for Working at Heights. Phase 1 shipped
 // the wiki manual + AI ingest + calculator math; Phase 2 shipped the
 // admin inventory CRUD. This page is the entry the drawer + home
@@ -27,9 +27,7 @@ import { useAuth } from '@/components/AuthProvider'
 // and the scan flow, those replace their "Coming soon" cards here.
 
 export default function WorkingAtHeightsHome() {
-  const { profile } = useAuth()
-  const isAdmin = !!profile?.is_admin || !!profile?.is_superadmin
-
+  const { canManage: isAdmin } = useCanManageTenant()
   return (
     <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
       <header className="mb-8">

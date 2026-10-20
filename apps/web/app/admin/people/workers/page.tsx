@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { TableSkeleton } from '@/components/Skeleton'
 import { useUrlState } from '@/hooks/useUrlState'
 import { useTenant } from '@/components/TenantProvider'
@@ -35,6 +36,7 @@ interface WorkerRow extends LotoWorker {
 
 export default function WorkersPage() {
   const { profile, loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
 
   const [workers, setWorkers] = useState<LotoWorker[] | null>(null)
@@ -80,9 +82,9 @@ export default function WorkersPage() {
 
   useEffect(() => {
     if (authLoading) return
-    if (!profile?.is_admin) return
+    if (!canManage) return
     void load()
-  }, [authLoading, profile, load])
+  }, [authLoading, canManage, load])
 
   const decorated: WorkerRow[] = useMemo(() => {
     if (!workers) return []
@@ -128,7 +130,7 @@ export default function WorkersPage() {
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 

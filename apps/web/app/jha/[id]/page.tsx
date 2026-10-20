@@ -4,7 +4,7 @@ import { use, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, AlertTriangle, Loader2, FileText, ShieldCheck, Pencil, ArrowUpRight } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
-import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { supabase } from '@/lib/supabase'
 import {
   groupHazardsByStep,
@@ -66,9 +66,7 @@ export default function JhaDetailPage({ params }: { params: Promise<{ id: string
   const { id } = use(params)
   const { tenant } = useTenant()
   const tenantId = tenant?.id
-  const { profile } = useAuth()
-  const canEdit = !!profile?.is_admin || !!profile?.is_superadmin
-
+  const { canManage: canEdit } = useCanManageTenant()
   const [bundle, setBundle] = useState<DetailBundle | null>(null)
   const [error,  setError]  = useState<string | null>(null)
 

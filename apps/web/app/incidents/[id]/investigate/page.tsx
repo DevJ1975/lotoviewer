@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { ArrowLeft, AlertTriangle, BookOpen, Loader2, CheckCircle2, Play, Sparkles } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
-import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { supabase } from '@/lib/supabase'
 import {
   ACTIVE_RCA_METHODS,
@@ -56,9 +56,7 @@ const NARRATIVE_FIELDS: Array<{
 export default function InvestigatePage() {
   const { id } = useParams<{ id: string }>()
   const { tenant } = useTenant()
-  const { profile } = useAuth()
-  const isAdmin = !!profile?.is_admin || !!profile?.is_superadmin
-
+  const { canManage: isAdmin } = useCanManageTenant()
   const [investigation, setInvestigation] = useState<IncidentInvestigationRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
