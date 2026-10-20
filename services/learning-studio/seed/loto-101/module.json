@@ -138,7 +138,8 @@
             "answer": "Mechanical block or pin"
           }
         ],
-        "remediate_block_key": "s2-energy"
+        "remediate_block_key": "s2-energy",
+        "hint": "Ask what would physically stop each kind of energy. Wires need a switch opened, pipes need a valve closed, and a raised part needs something holding it up."
       },
       {
         "key": "s3-roles",
@@ -306,7 +307,8 @@
             "correct": false
           }
         ],
-        "remediate_block_key": "s5-isolate"
+        "remediate_block_key": "s5-isolate",
+        "hint": "A control only sends a signal. Look for the devices that physically break the path of the energy."
       },
       {
         "key": "s6-verify",
@@ -385,7 +387,8 @@
             "label": "Verify zero energy"
           }
         ],
-        "remediate_block_key": "s6-verify"
+        "remediate_block_key": "s6-verify",
+        "hint": "Start with what you do before you touch anything. End with the last check before your hands go in."
       },
       {
         "key": "c1-stored",
@@ -462,7 +465,8 @@
             "feedback": "A tag is a warning, not a physical barrier. Where a lock can be applied, apply your lock."
           }
         ],
-        "remediate_block_key": "s7-group"
+        "remediate_block_key": "s7-group",
+        "hint": "Ask yourself: who holds the key to the lock that is protecting you?"
       },
       {
         "key": "s8-restart",

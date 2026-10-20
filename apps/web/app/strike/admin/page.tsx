@@ -10,9 +10,10 @@ import { LibraryTab } from '@/components/strike/admin/LibraryTab'
 import { CurriculaTab } from '@/components/strike/admin/CurriculaTab'
 import { TriggersTab } from '@/components/strike/admin/TriggersTab'
 import { ComplianceTab } from '@/components/strike/admin/ComplianceTab'
+import { LmsSyncTab } from '@/components/strike/admin/LmsSyncTab'
 
 // STRIKE admin console: assign from the library, schedule curricula, set
-// what work requires training, and see who is current.
+// what work requires training, see who is current, and connect an LMS.
 export default function StrikeAdminPage() {
   const { tenantId, role } = useTenant()
   const { userId, profile } = useAuth()
@@ -25,7 +26,7 @@ export default function StrikeAdminPage() {
         icon={Zap}
         eyebrow="STRIKE microlearning"
         title="Training admin"
-        description="Assign library modules, schedule curricula, decide what work requires training, and track who is current."
+        description="Assign library modules, schedule curricula, decide what work requires training, track who is current, and sync records to your LMS."
         back="/strike"
       />
 
@@ -44,11 +45,13 @@ export default function StrikeAdminPage() {
             <TabsTab id="schedule">Schedule</TabsTab>
             <TabsTab id="triggers">Required for work</TabsTab>
             <TabsTab id="compliance">Compliance</TabsTab>
+            <TabsTab id="lms">LMS sync</TabsTab>
           </TabsList>
           <TabsPanel id="library"><LibraryTab tenantId={tenantId} userId={userId} data={data} onChanged={reload} /></TabsPanel>
           <TabsPanel id="schedule"><CurriculaTab tenantId={tenantId} userId={userId} data={data} onChanged={reload} /></TabsPanel>
           <TabsPanel id="triggers"><TriggersTab tenantId={tenantId} userId={userId} data={data} onChanged={reload} /></TabsPanel>
           <TabsPanel id="compliance"><ComplianceTab tenantId={tenantId} data={data} /></TabsPanel>
+          <TabsPanel id="lms"><LmsSyncTab tenantId={tenantId} /></TabsPanel>
         </Tabs>
       )}
     </main>

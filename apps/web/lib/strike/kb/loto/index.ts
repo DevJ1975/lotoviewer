@@ -26,6 +26,7 @@ export const LOTO_COACH_KB: readonly CoachKbDoc[] = [
   { key: 'loto-coach:periodic-inspection', file: '08-periodic-inspection.md', title: 'LOTO Coach: Periodic inspection', section: '1910.147(c)(6)' },
   { key: 'loto-coach:contractors', file: '09-contractors.md', title: 'LOTO Coach: Contractors', section: '1910.147(f)(2)' },
   { key: 'loto-coach:faq', file: '10-faq.md', title: 'LOTO Coach: Frequently asked questions', section: '1910.147' },
+  { key: 'loto-coach:practice-checks', file: '11-practice-checks.md', title: 'LOTO Coach: LOTO 101 practice checks', section: '1910.147(b), (d)' },
 ]
 
 export function readCoachKbDoc(doc: CoachKbDoc): string {

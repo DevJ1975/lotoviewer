@@ -14,7 +14,9 @@ import {
   type StrikeBlockEventRecord,
   type StrikeContent,
 } from '@soteria/core/strikeContent'
+import { strikeXapiEventsForBlockEvents } from '@soteria/core/strikeXapi'
 import type { StrikeVersionRow } from '@/lib/strike/moduleAccess'
+import { enqueueStrikeXapi } from '@/lib/strike/xapi'
 import { awardPassXp } from '@/lib/strike/xp'
 
 // The attempt lifecycle shared by the signed-in learner routes and the
@@ -120,6 +122,12 @@ export async function openAttempt(
     .select('id')
     .single()
   if (createErr) throw new Error(createErr.message)
+  await enqueueStrikeXapi(admin, learner, {
+    moduleId: opts.moduleId,
+    version: opts.version,
+    attemptId: created.id as string,
+    events: [{ verb: 'attempted' }],
+  })
   return { attemptId: created.id as string, reached: [], resumed: false }
 }
 
@@ -167,7 +175,7 @@ export async function recordBlockEvents(
   const unknown = opts.events.find(e => !knownKeys.has(e.block_key))
   if (unknown) return { ok: false, status: 400, message: `Unknown block "${unknown.block_key}".` }
 
-  const { error } = await admin
+  const { data: inserted, error } = await admin
     .from('strike_block_events')
     .upsert(
       opts.events.map(e => ({
@@ -180,7 +188,15 @@ export async function recordBlockEvents(
       })),
       { onConflict: 'attempt_id,block_key,event', ignoreDuplicates: true },
     )
+    // Only rows actually inserted come back, so a repeated event is not re-reported to the LMS.
+    .select('block_key,event,detail')
   if (error) throw new Error(error.message)
+  await enqueueStrikeXapi(admin, learner, {
+    moduleId: opts.moduleId,
+    version: opts.version,
+    attemptId: opts.attemptId,
+    events: strikeXapiEventsForBlockEvents(content, (inserted ?? []) as { block_key: string; event: StrikeBlockEvent; detail: Record<string, unknown> }[]),
+  })
   return { ok: true, value: { recorded: opts.events.length } }
 }
 
@@ -370,6 +386,15 @@ export async function gradeAndRecordAttempt(
       interactionKeys: new Set((content?.blocks ?? []).filter(b => b.kind !== 'motion_scene' && b.kind !== 'callout').map(b => b.key)),
     })
   }
+
+  await enqueueStrikeXapi(admin, learner, {
+    moduleId: opts.moduleId,
+    version,
+    attemptId,
+    events: score.passed
+      ? [{ verb: 'passed', scorePercent: score.scorePercent }, { verb: 'completed', block: null }]
+      : [{ verb: 'failed', scorePercent: score.scorePercent }],
+  })
 
   // Explanations are column-revoked from the browser (260) so they can't be
   // read before answering; returning them only for missed questions, after

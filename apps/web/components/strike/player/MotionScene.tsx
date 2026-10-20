@@ -113,7 +113,7 @@ export function MotionScene({ block, index, urls, completed, captionsOn, onToggl
             type="button"
             onClick={togglePlay}
             aria-label={playing ? `Pause ${block.title}` : `Play ${block.title}`}
-            className="motion-press inline-flex h-11 w-11 items-center justify-center rounded-full bg-brand-yellow text-slate-950"
+            className="motion-press inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-yellow text-slate-950"
           >
             {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 translate-x-0.5" />}
           </button>
@@ -125,7 +125,7 @@ export function MotionScene({ block, index, urls, completed, captionsOn, onToggl
               {formatDuration(positionMs)} / {formatDuration(durationMs)}
             </p>
           </div>
-          <button type="button" onClick={replay} aria-label="Replay scene" className="rounded p-2 text-white/80 hover:text-white">
+          <button type="button" onClick={replay} aria-label="Replay scene" className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded text-white/80 hover:text-white">
             <RotateCcw className="h-4 w-4" />
           </button>
           <button
@@ -133,7 +133,7 @@ export function MotionScene({ block, index, urls, completed, captionsOn, onToggl
             onClick={onToggleCaptions}
             aria-pressed={captionsOn}
             aria-label={captionsOn ? 'Hide captions' : 'Show captions'}
-            className="rounded p-2 text-white/80 hover:text-white"
+            className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded text-white/80 hover:text-white"
           >
             {captionsOn ? <Captions className="h-4 w-4" /> : <CaptionsOff className="h-4 w-4" />}
           </button>
@@ -157,8 +157,8 @@ export function MotionScene({ block, index, urls, completed, captionsOn, onToggl
       ) : null}
 
       {narration && (
-        <details className="bg-white px-4 py-2 text-sm dark:bg-slate-950">
-          <summary className="cursor-pointer font-semibold text-slate-700 dark:text-slate-200">Transcript</summary>
+        <details className="bg-white px-4 py-1 text-sm dark:bg-slate-950">
+          <summary className="cursor-pointer py-2.5 font-semibold text-slate-700 dark:text-slate-200">Transcript</summary>
           <p className="mt-2 text-slate-600 dark:text-slate-300">{narration.transcript}</p>
         </details>
       )}

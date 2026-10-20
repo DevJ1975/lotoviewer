@@ -57,6 +57,9 @@ function shouldHide(pathname: string | null): boolean {
   if (pathname.startsWith('/inspector/')) return true
   if (pathname.startsWith('/permit-signon/')) return true
   if (pathname.startsWith('/train/')) return true
+  // A STRIKE module page has its own LOTO Coach in this corner; two
+  // assistants there overlap and compete for the learner's question.
+  if (pathname.startsWith('/strike/') && pathname !== '/strike/admin' && pathname !== '/strike/qr') return true
   // Avoid double-mount on the full-page view itself.
   if (pathname.startsWith('/assistant')) return true
   return false

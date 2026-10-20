@@ -2,7 +2,8 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { LOTO_COACH_KB } from '@/lib/strike/kb/loto'
-import { ATTEMPT_OPEN_RULE, buildCoachDynamicPrompt, LOTO_COACH_STATIC_PROMPT } from '@/lib/strike/coachPrompt'
+import { parseStrikeContent } from '@soteria/core/strikeContent'
+import { ATTEMPT_OPEN_RULE, buildCoachDynamicPrompt, LOTO_COACH_STATIC_PROMPT, practiceCheckPrompts } from '@/lib/strike/coachPrompt'
 
 const KB_DIR = resolve(__dirname, '../../lib/strike/kb/loto')
 const files = readdirSync(KB_DIR).filter(f => f.endsWith('.md')).sort()
@@ -48,10 +49,42 @@ describe('LOTO Coach prompt', () => {
   })
 
   it('adds the knowledge-check rule only while an attempt is open', () => {
-    const open = buildCoachDynamicPrompt({ tenantName: 'T', moduleTitle: 'LOTO 101', attemptOpen: true, retrievedContext: '' })
-    const closed = buildCoachDynamicPrompt({ tenantName: 'T', moduleTitle: 'LOTO 101', attemptOpen: false, retrievedContext: '' })
+    const open = buildCoachDynamicPrompt({ tenantName: 'T', moduleTitle: 'LOTO 101', attemptOpen: true, practiceChecks: [], retrievedContext: '' })
+    const closed = buildCoachDynamicPrompt({ tenantName: 'T', moduleTitle: 'LOTO 101', attemptOpen: false, practiceChecks: [], retrievedContext: '' })
     expect(open).toContain(ATTEMPT_OPEN_RULE)
     expect(closed).not.toContain(ATTEMPT_OPEN_RULE)
     expect(closed).toContain('nothing retrieved')
+  })
+})
+
+describe('LOTO Coach and practice checks', () => {
+  const seed = JSON.parse(readFileSync(resolve(__dirname, '../../../../services/learning-studio/seed/loto-101/module.json'), 'utf8'))
+  const parsed = parseStrikeContent(seed.content)
+  if (!parsed.ok) throw new Error('LOTO 101 seed no longer parses')
+
+  it('lists exactly the ungraded interactions, by the text the learner sees', () => {
+    expect(practiceCheckPrompts(parsed.content)).toEqual([
+      'Match each energy source to the device that isolates it.',
+      'Tap every true energy-isolation point on this machine. Leave the others.',
+      'Put the seven lockout steps in the right order.',
+      expect.stringContaining('You arrive to help a coworker clear a jam.'),
+    ])
+  })
+
+  it('names the practice checks as exempt from the open-attempt rule and tells the coach to hint, not hand over', () => {
+    const prompt = buildCoachDynamicPrompt({
+      tenantName: 'T', moduleTitle: 'LOTO 101', attemptOpen: true, practiceChecks: practiceCheckPrompts(parsed.content), retrievedContext: '',
+    })
+    expect(prompt).toContain('PRACTICE CHECKS IN THIS MODULE')
+    expect(prompt).toContain('- Put the seven lockout steps in the right order.')
+    expect(ATTEMPT_OPEN_RULE).toMatch(/practice checks .* are not graded and are exempt/)
+    expect(LOTO_COACH_STATIC_PROMPT).toMatch(/one hint at a time/)
+  })
+
+  it('has a knowledge-base doc that covers every LOTO 101 practice check', () => {
+    const doc = readFileSync(join(KB_DIR, '11-practice-checks.md'), 'utf8')
+    for (const heading of ['Match each energy source', 'Tap every true energy-isolation point', 'seven lockout steps', "I locked it out"]) {
+      expect(doc).toContain(heading)
+    }
   })
 })

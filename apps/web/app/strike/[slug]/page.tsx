@@ -276,7 +276,7 @@ export default function StrikeModulePage() {
           learnerName={profile?.full_name?.split(' ')[0] ?? null}
           certificate={{ learnerName: profile?.full_name || email || 'Learner', organization: tenant?.name ?? null }}
           onPassed={() => setPassed(true)}
-          coach={tenantId ? <CoachDock tenantId={tenantId} moduleId={module.id} attemptOpen={!passed} /> : null}
+          coach={tenantId ? <CoachDock tenantId={tenantId} moduleId={module.id} moduleVersionId={version.id} attemptOpen={!passed} /> : null}
           legacyMedia={(
             <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
               {media?.url ? (

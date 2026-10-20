@@ -136,7 +136,8 @@ export function StrikeModuleRunner({
   const explanationById = new Map(result?.missedFeedback.map(f => [f.question_id, f.explanation]) ?? [])
 
   return (
-    <div className="space-y-6">
+    // Room at the bottom so the floating coach button never covers Submit.
+    <div className={`space-y-6 ${coach ? 'pb-20' : ''}`}>
       {error && (
         <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />

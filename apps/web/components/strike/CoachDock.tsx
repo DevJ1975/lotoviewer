@@ -21,6 +21,8 @@ interface CoachTurn {
 interface CoachDockProps {
   tenantId: string
   moduleId?: string
+  /** The version on screen, so the coach knows which practice checks it may help with. */
+  moduleVersionId?: string
   /** While the graded check is open the coach explains concepts but won't give answers. */
   attemptOpen: boolean
 }
@@ -34,7 +36,7 @@ const STARTERS = [
 // Floating "Ask LOTO Coach" panel beside a STRIKE module. A bottom sheet on
 // phones, a docked card on wider screens. The footer is permanent on purpose:
 // the coach explains; the site procedure and the supervisor decide.
-export function CoachDock({ tenantId, moduleId, attemptOpen }: CoachDockProps) {
+export function CoachDock({ tenantId, moduleId, moduleVersionId, attemptOpen }: CoachDockProps) {
   const [open, setOpen] = useState(false)
   const [turns, setTurns] = useState<CoachTurn[]>([])
   const [draft, setDraft] = useState('')
@@ -63,7 +65,7 @@ export function CoachDock({ tenantId, moduleId, attemptOpen }: CoachDockProps) {
       const res = await strikeFetch<{ conversationId: string; reply: string; citations: CoachCitation[] }>(
         '/api/strike/coach/chat',
         tenantId,
-        { body: { message, conversation_id: conversationId, module_id: moduleId ?? null, attempt_open: attemptOpen } },
+        { body: { message, conversation_id: conversationId, module_id: moduleId ?? null, module_version_id: moduleVersionId ?? null, attempt_open: attemptOpen } },
       )
       setConversationId(res.conversationId)
       setTurns(prev => [...prev, { role: 'assistant', content: res.reply, citations: dedupe(res.citations) }])
@@ -84,7 +86,7 @@ export function CoachDock({ tenantId, moduleId, attemptOpen }: CoachDockProps) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="motion-press fixed bottom-4 right-4 z-40 inline-flex min-h-12 items-center gap-2 rounded-full bg-brand-navy px-4 py-3 text-sm font-bold text-white shadow-lg ring-2 ring-brand-yellow hover:bg-brand-navy/90"
+        className="motion-press fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-40 inline-flex min-h-12 items-center gap-2 rounded-full bg-brand-navy px-4 py-3 text-sm font-bold text-white shadow-lg ring-2 ring-brand-yellow hover:bg-brand-navy/90"
       >
         <MessageCircleQuestion className="h-5 w-5 text-brand-yellow" aria-hidden />
         Ask LOTO Coach
@@ -96,7 +98,7 @@ export function CoachDock({ tenantId, moduleId, attemptOpen }: CoachDockProps) {
     <section
       role="dialog"
       aria-label="LOTO Coach"
-      className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85vh] flex-col rounded-t-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-950 sm:inset-x-auto sm:bottom-4 sm:right-4 sm:max-h-[min(640px,80vh)] sm:w-[400px] sm:rounded-2xl"
+      className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85vh] flex-col rounded-t-2xl pb-[env(safe-area-inset-bottom)] sm:pb-0 border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-950 sm:inset-x-auto sm:bottom-4 sm:right-4 sm:max-h-[min(640px,80vh)] sm:w-[400px] sm:rounded-2xl"
     >
       <header className="flex items-center justify-between gap-2 rounded-t-2xl bg-brand-navy px-4 py-3 text-white">
         <div className="flex items-center gap-2">
