@@ -1,0 +1,84 @@
+{% extends "studio/base.html" %}
+{% block title %}{{ module.title }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <p class="eyebrow"><a href="/">Modules</a> / media board</p>
+  <h1 class="stencil">{{ module.title }}</h1>
+  {% if version %}
+  <p class="muted">Version {{ version.version_number }} · <strong>{{ version.status }}</strong>
+    {% if not editable %} · read-only: published versions cannot change{% endif %}</p>
+  {% else %}
+  <p class="muted">No version yet.</p>
+  {% endif %}
+</div>
+
+{% if version %}
+<section class="card">
+  <h2 class="section">Downloadable video</h2>
+  {% if video_url %}
+  <video class="video" controls preload="metadata" src="{{ video_url }}"></video>
+  {% if editable %}
+  <form method="post" action="{% url 'decide_asset' module.id %}" class="decision">
+    {% csrf_token %}
+    <input type="hidden" name="asset_path" value="{{ version.download_path }}">
+    <input type="hidden" name="kind" value="video">
+    <input name="notes" placeholder="Notes (required to reject)" aria-label="Notes">
+    <button class="btn primary" name="decision" value="approved">Approve video</button>
+    <button class="btn danger" name="decision" value="rejected">Reject</button>
+  </form>
+  {% endif %}
+  {% else %}
+  <p class="muted">Not rendered yet. Run <code>python manage.py render_module seed/&lt;module&gt; --upload</code>.</p>
+  {% endif %}
+</section>
+
+<div class="grid">
+  {% for item in assets %}
+  {% with a=item.asset %}
+  <article class="card asset">
+    <div class="row">
+      <span class="pill">{{ a.kind }}</span>
+      {% if a.ai_generated %}<span class="pill pill-ai">AI generated</span>{% endif %}
+      {% if a.approved_at %}<span class="pill pill-ok">Approved by {{ a.approved_by }}</span>{% else %}<span class="pill pill-warn">Awaiting approval</span>{% endif %}
+    </div>
+    <h3>{{ a.title }}</h3>
+    <p class="meta">{{ a.block_key }} · <code>{{ a.path }}</code></p>
+    {% if a.kind == "image" %}
+    <img class="preview" src="{{ item.url }}" alt="{{ a.alt_or_transcript }}">
+    <p class="muted"><strong>Alt:</strong> {{ a.alt_or_transcript|default:"⚠ missing alt text" }}</p>
+    {% else %}
+    <audio controls preload="none" src="{{ item.url }}"></audio>
+    <details><summary>Transcript{% if item.captions_url %} · <a href="{{ item.captions_url }}">captions (.vtt)</a>{% endif %}</summary><p>{{ a.alt_or_transcript }}</p></details>
+    {% endif %}
+    {% if editable %}
+    <form method="post" action="{% url 'decide_asset' module.id %}" class="decision">
+      {% csrf_token %}
+      <input type="hidden" name="asset_path" value="{{ a.path }}">
+      <input type="hidden" name="kind" value="{{ a.kind }}">
+      <input name="notes" placeholder="Notes (required to reject)" aria-label="Notes">
+      <button class="btn primary" name="decision" value="approved">Approve</button>
+      <button class="btn danger" name="decision" value="rejected">Reject</button>
+    </form>
+    {% endif %}
+  </article>
+  {% endwith %}
+  {% empty %}
+  <p class="card muted">This version has no media yet.</p>
+  {% endfor %}
+</div>
+{% endif %}
+
+<section class="card">
+  <h2 class="section">Decision history</h2>
+  <table class="table">
+    <thead><tr><th>When</th><th>Asset</th><th>Decision</th><th>By</th><th>Notes</th></tr></thead>
+    <tbody>
+    {% for h in history %}
+    <tr><td>{{ h.approved_at|date:"M j, H:i" }}</td><td><code>{{ h.asset_path }}</code></td><td>{{ h.decision }}</td><td>{{ h.approved_by }}</td><td>{{ h.notes }}</td></tr>
+    {% empty %}
+    <tr><td colspan="5" class="muted">No decisions yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

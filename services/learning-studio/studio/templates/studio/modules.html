@@ -1,0 +1,28 @@
+{% extends "studio/base.html" %}
+{% block title %}Modules{% endblock %}
+{% block content %}
+<div class="page-header">
+  <p class="eyebrow">Microlearning library</p>
+  <h1 class="stencil">Modules</h1>
+  <p class="muted">Narrate, render and approve media here. Publishing happens in the Soteria web app once every AI asset is approved.</p>
+</div>
+{% if error %}<p class="alert" role="alert">Could not load modules: {{ error }}</p>{% endif %}
+<div class="grid">
+  {% for m in modules %}
+  <a class="card module" href="{% url 'module_board' m.id %}">
+    <div class="row">
+      <span class="pill pill-{{ m.library_scope }}">{{ m.library_scope }}</span>
+      <span class="pill pill-status">{{ m.status|cut:"_" }}</span>
+    </div>
+    <h2>{{ m.title }}</h2>
+    <p class="muted">{{ m.slug }}{% if m.estimated_minutes %} · {{ m.estimated_minutes }} min{% endif %}</p>
+    {% if m.latest %}
+    <p class="meta">v{{ m.latest.version_number }} · {{ m.latest.status }} · {{ m.asset_count }} assets
+      {% if m.pending %}<strong class="warn">· {{ m.pending }} awaiting approval</strong>{% else %}<span class="ok">· all approved</span>{% endif %}</p>
+    {% endif %}
+  </a>
+  {% empty %}
+  {% if not error %}<p class="card muted">No modules yet. Run <code>python manage.py import_seed_module seed/loto-101</code> to add LOTO 101.</p>{% endif %}
+  {% endfor %}
+</div>
+{% endblock %}

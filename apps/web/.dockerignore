@@ -1,0 +1,7 @@
+# Used when apps/web is the build context; the root .dockerignore covers the
+# documented repo-root build (docker build -f apps/web/Dockerfile .).
+node_modules
+.next
+coverage
+.env*
+!.env.example
