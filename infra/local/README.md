@@ -59,3 +59,19 @@ makes are the same ones the AWS deployment will make.
 Union of buckets the code uses and buckets the migrations insert.
 `loto-photos`, `policy-uploads` and `fleet-docs` are not created by any
 migration, so the real AWS infrastructure must create them explicitly.
+
+## Web image
+
+`apps/web/Dockerfile` builds the production container for the web app. Build from
+the repository root:
+
+```bash
+docker build -f apps/web/Dockerfile --build-arg ALLOW_DEEPLINK_PLACEHOLDERS=1 -t soteria-web .
+docker run --rm -p 3000:3000 soteria-web
+```
+
+`NEXT_PUBLIC_*` values are baked into the browser bundle at build time, so pass
+them with `--build-arg` for each environment (the Dockerfile lists them). The
+standalone output is opt-in through `NEXT_OUTPUT=standalone`, which only the
+Dockerfile sets, so the Vercel build is unchanged. CI builds and boots the image
+on every change to the web app (`.github/workflows/web-image.yml`).

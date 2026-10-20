@@ -1,0 +1,67 @@
+name: Web image
+
+# Builds the production container image for the web app (apps/web/Dockerfile),
+# starts it, and checks that it serves. This is what keeps the AWS container in
+# step with the code that ships to Vercel: any change that would break the image
+# fails here, before it merges.
+#
+# It never touches production: the image runs with no Supabase settings and
+# only the public login page and one protected route are requested.
+on:
+  pull_request:
+    paths:
+      - "apps/web/**"
+      - "packages/core/**"
+      - "scripts/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".dockerignore"
+      - ".github/workflows/web-image.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/web/**"
+      - "packages/core/**"
+      - "package-lock.json"
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      # ALLOW_DEEPLINK_PLACEHOLDERS matches the build step in the PR template;
+      # the mobile deep-link IDs are still placeholders.
+      - name: Build image
+        run: |
+          docker build -f apps/web/Dockerfile \
+            --build-arg ALLOW_DEEPLINK_PLACEHOLDERS=1 \
+            -t soteria-web:ci .
+
+      - name: Runs as a non-root user
+        run: |
+          uid=$(docker run --rm --entrypoint id soteria-web:ci -u)
+          echo "uid=$uid"
+          test "$uid" != "0"
+
+      - name: Starts and serves
+        run: |
+          docker run -d --name web -p 3000:3000 soteria-web:ci
+          for i in $(seq 1 60); do
+            curl -fs -o /dev/null http://127.0.0.1:3000/login && break
+            sleep 2
+          done
+          login=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/login)
+          protected=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/superadmin/tenant-health)
+          echo "/login -> $login (want 200)"
+          echo "/api/superadmin/tenant-health -> $protected (want 401)"
+          test "$login" = "200"
+          test "$protected" = "401"
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs web || true

@@ -1,6 +1,7 @@
 import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs';
 import { execSync } from 'node:child_process';
+import path from 'node:path';
 import pkg from './package.json';
 import { getAdminRedirects } from './lib/adminCatalog';
 
@@ -87,7 +88,18 @@ function reportOnlyCsp(): string {
   ].join('; ')
 }
 
+// Container builds (apps/web/Dockerfile) set NEXT_OUTPUT=standalone to get a
+// self-contained server. Vercel's build never sets it, so production there is
+// unchanged. The tracing root is the monorepo root because @soteria/core lives
+// in packages/core, outside this project folder, and would otherwise be left
+// out of the traced output.
+const standaloneOutput: NextConfig =
+  process.env.NEXT_OUTPUT === 'standalone'
+    ? { output: 'standalone', outputFileTracingRoot: path.join(process.cwd(), '../..') }
+    : {};
+
 const nextConfig: NextConfig = {
+  ...standaloneOutput,
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
     NEXT_PUBLIC_BUILD_ITERATION: buildIteration(),

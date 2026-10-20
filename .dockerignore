@@ -1,0 +1,16 @@
+# Build context for apps/web/Dockerfile (built from the repository root).
+# The web build only needs apps/web, packages/core, scripts/ and the root manifests.
+**/node_modules
+**/.next
+**/.turbo
+.git
+.github
+**/.env*
+!**/.env.example
+apps/mobile/*
+!apps/mobile/package.json
+docs
+infra
+services
+**/coverage
+**/*.log
