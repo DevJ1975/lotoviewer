@@ -283,8 +283,10 @@ function parseHeader(raw: Record<string, unknown>, issues: string[], label = 'mo
   }
   const slug = str(raw.slug)
   if (!SLUG_RE.test(slug)) return fail('slug must be 2–80 lowercase letters, digits or dashes.')
+  // strike_modules.title is capped at 160 by the database (114); versions
+  // allow 200 (301) but the module row is what a package creates first.
   const title = str(raw.title)
-  if (!title || title.length > 200) return fail('title is required (200 characters max).')
+  if (!title || title.length > 160) return fail('title is required (160 characters max).')
   const mediaPrefix = str(raw.media_prefix).replace(/^\/+|\/+$/g, '')
   if (!MEDIA_PREFIX_RE.test(mediaPrefix)) return fail('media_prefix must look like global/<slug>/v1.')
   const estimatedMinutes = num(raw.estimated_minutes)
@@ -322,6 +324,7 @@ function parseQuestions(raw: unknown, issues: string[], label: string): StrikePa
       ? entry.answers.map(a => (isRecord(a) && str(a.text) ? { text: str(a.text), correct: a.correct === true } : null))
       : []
     if (answers.length < 1 || answers.some(a => a === null)) return fail('every answer needs text.')
+    if (answers.some(a => a!.text.length > 1000)) return fail('answers are capped at 1000 characters.')
     const valid = answers as StrikePackageAnswer[]
     const correct = valid.filter(a => a.correct).length
     if (questionType === 'true_false' && valid.length !== 2) return fail('true/false needs exactly two answers.')
@@ -351,7 +354,12 @@ function rewriteMediaPaths(
   issues: string[],
 ): StrikeContent {
   const resolve = (original: string): string => {
-    if (original.includes('/')) return original
+    if (original.includes('/')) {
+      // A global module may only point at global media; a tenant's folder
+      // would be served to every learner through the service-role signer.
+      if (!original.startsWith('global/')) issues.push(`${label}: media path "${original}" must be under global/.`)
+      return original
+    }
     const file = filesByName.get(original)
     if (!file) {
       issues.push(`${label}: media file "${original}" is not in the package.`)

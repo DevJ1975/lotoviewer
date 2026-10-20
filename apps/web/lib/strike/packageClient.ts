@@ -47,7 +47,12 @@ export async function loadPackage(entries: PackageEntry[]): Promise<LoadedPackag
   const documents: StrikePackageDocument[] = []
   const blobs = new Map<string, Blob>()
   const files: StrikePackageInput['files'] = []
+  const seen = new Set<string>()
   for (const entry of entries) {
+    // Folders are flattened to basenames, so two files with one name would
+    // silently shadow each other.
+    if (seen.has(entry.name)) throw new Error(`${entry.name} appears more than once in the package.`)
+    seen.add(entry.name)
     if (isStrikePackageDocument(entry.name)) {
       documents.push({ name: entry.name, json: await readJson(entry) })
     } else {

@@ -126,7 +126,8 @@ describe('POST /api/superadmin/strike/import', () => {
 
     const res = await commitImport(jsonRequest('POST', packageBody()))
     expect(res.status).toBe(200)
-    expect(mockState.updates.map(u => u.table)).toEqual(['strike_modules', 'strike_module_versions'])
+    // The status-guarded version update runs first: it is the step that can still be refused.
+    expect(mockState.updates.map(u => u.table)).toEqual(['strike_module_versions', 'strike_modules'])
     expect(mockState.deletes.map(d => d.table)).toEqual(['strike_quiz_questions'])
     expect(mockState.inserts.map(i => i.table)).toEqual(['strike_quiz_questions', 'strike_quiz_answers'])
   })
@@ -141,5 +142,30 @@ describe('POST /api/superadmin/strike/import', () => {
     const res = await commitImport(jsonRequest('POST', packageBody()))
     expect(res.status).toBe(409)
     expect(mockState.inserts).toHaveLength(0)
+    expect(mockState.updates.map(u => u.table)).toEqual(['strike_module_versions'])
+  })
+
+  it('imports English and Spanish as versions 1 and 2, the translation carrying its own title', async () => {
+    bucketHasEverything()
+    const body = packageBody()
+    body.documents.push({ name: 'module.es.json', json: JSON.parse(readFileSync(join(SEED_DIR, 'module.es.json'), 'utf8')) as unknown })
+    mockState.queue('strike_modules', { data: null, error: null })
+    mockState.queue('strike_modules', { data: { id: 'mod-new' }, error: null })
+    mockState.queue('strike_module_versions', { data: { id: 'ver-en' }, error: null })
+    mockState.queue('strike_quiz_questions', { data: null, error: null })
+    mockState.queue('strike_quiz_questions', { data: Array.from({ length: 10 }, (_, i) => ({ id: `q${i}`, sort_order: i })), error: null })
+    mockState.queue('strike_module_versions', { data: { id: 'ver-es' }, error: null })
+    mockState.queue('strike_quiz_questions', { data: null, error: null })
+    mockState.queue('strike_quiz_questions', { data: Array.from({ length: 10 }, (_, i) => ({ id: `s${i}`, sort_order: i })), error: null })
+
+    const res = await commitImport(jsonRequest('POST', body))
+    expect(res.status).toBe(201)
+    const json = await res.json()
+    expect(json.versions).toEqual([
+      { locale: 'en', versionId: 'ver-en', versionNumber: 1, action: 'create' },
+      { locale: 'es', versionId: 'ver-es', versionNumber: 2, action: 'create' },
+    ])
+    const versionInserts = mockState.inserts.filter(i => i.table === 'strike_module_versions').map(i => i.payload as Record<string, unknown>)
+    expect(versionInserts.map(v => [v.version_number, v.locale, v.title])).toEqual([[1, 'en', null], [2, 'es', 'LOTO 101: Control de energía peligrosa']])
   })
 })

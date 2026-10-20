@@ -137,12 +137,12 @@ export async function importStrikePackage(
     updated_by: userId,
   }
 
+  // Without a transaction, order the writes so the status-guarded version
+  // updates (the only step that can still be refused) run before anything
+  // else changes on an existing module.
   let moduleId: string
   if (existing) {
     moduleId = existing.id
-    const changes = ['published', 'archived'].includes(existing.status) ? moduleFields : { ...moduleFields, status: 'in_review' }
-    const { error } = await admin.from('strike_modules').update(changes).eq('id', moduleId)
-    if (error) throw new Error(error.message)
   } else {
     const { data, error } = await admin
       .from('strike_modules')
@@ -154,7 +154,8 @@ export async function importStrikePackage(
   }
 
   const versions: ImportedVersion[] = []
-  for (const action of decision.versions) {
+  const ordered = [...decision.versions].sort((a, b) => Number(b.action === 'update') - Number(a.action === 'update'))
+  for (const action of ordered) {
     if (action.action === 'refused') continue
     const version = plan.versions.find(v => v.locale === action.locale)!
     const versionId = action.action === 'update'
@@ -162,6 +163,12 @@ export async function importStrikePackage(
       : await insertVersion(admin, moduleId, action.versionNumber, version, userId)
     await replaceQuiz(admin, versionId, version)
     versions.push({ locale: action.locale, versionId, versionNumber: action.versionNumber, action: action.action })
+  }
+
+  if (existing) {
+    const changes = ['published', 'archived'].includes(existing.status) ? moduleFields : { ...moduleFields, status: 'in_review' }
+    const { error } = await admin.from('strike_modules').update(changes).eq('id', moduleId)
+    if (error) throw new Error(error.message)
   }
 
   return { moduleId, moduleAction: decision.moduleAction, versions }

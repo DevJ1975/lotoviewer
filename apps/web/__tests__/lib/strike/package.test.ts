@@ -132,6 +132,27 @@ describe('readStrikePackage refusals', () => {
     if (!read.ok) expect(read.issues[0]).toMatch(/question 1: needs exactly one correct answer/)
   })
 
+  it('rejects values the database would refuse after the upload', () => {
+    const longTitle = readStrikePackage({ ...seedInput(), documents: [{ name: 'module.json', json: moduleJson({ title: 'x'.repeat(161) }) }] })
+    expect(longTitle.ok).toBe(false)
+    if (!longTitle.ok) expect(longTitle.issues[0]).toMatch(/160 characters/)
+
+    const doc = moduleJson()
+    ;(doc.questions as Array<{ answers: Array<{ text: string }> }>)[0]!.answers[0]!.text = 'y'.repeat(1001)
+    const longAnswer = readStrikePackage({ ...seedInput(), documents: [{ name: 'module.json', json: doc }] })
+    expect(longAnswer.ok).toBe(false)
+    if (!longAnswer.ok) expect(longAnswer.issues[0]).toMatch(/1000 characters/)
+  })
+
+  it('refuses pre-pathed media outside global/', () => {
+    const doc = moduleJson()
+    const content = doc.content as { blocks: Array<Record<string, unknown>> }
+    content.blocks[0]!.image = { path: '11111111-1111-1111-1111-111111111111/secret.jpg', alt: 'x', ai_generated: false }
+    const read = readStrikePackage({ ...seedInput(), documents: [{ name: 'module.json', json: doc }] })
+    expect(read.ok).toBe(false)
+    if (!read.ok) expect(read.issues[0]).toMatch(/must be under global\//)
+  })
+
   it('reports block problems through parseStrikeContent', () => {
     const doc = moduleJson()
     const content = doc.content as { blocks: Array<Record<string, unknown>> }
