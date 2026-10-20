@@ -24,3 +24,13 @@ export async function authHeaders(tenantId: string): Promise<Record<string, stri
   if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
   return headers
 }
+
+// Public web pages (privacy, terms, support) the app links to. Unlike
+// apiBase() this falls back to the production origin instead of throwing: a
+// build missing the env var should still be able to show the privacy policy.
+const DEFAULT_WEB_ORIGIN = 'https://soteriafield.app'
+
+export function webUrl(path: string): string {
+  const base = process.env.EXPO_PUBLIC_WEB_ORIGIN ?? process.env.EXPO_PUBLIC_API_BASE_URL ?? DEFAULT_WEB_ORIGIN
+  return `${base.replace(/\/$/, '')}${path}`
+}
