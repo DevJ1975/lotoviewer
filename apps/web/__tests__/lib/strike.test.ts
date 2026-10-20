@@ -136,6 +136,13 @@ describe('isStrikeAssignmentApplicable', () => {
       role: 'member',
     })).toBe(false)
   })
+
+  it('matches department and site against the roster labels, ignoring case and spacing', () => {
+    const base = { userId: 'user-1', role: 'member', department: 'Sanitation ', site: 'City of Industry' }
+    expect(isStrikeAssignmentApplicable({ ...base, targetType: 'department', targetId: 'sanitation' })).toBe(true)
+    expect(isStrikeAssignmentApplicable({ ...base, targetType: 'department', targetId: 'Packaging' })).toBe(false)
+    expect(isStrikeAssignmentApplicable({ ...base, targetType: 'site', targetId: 'city of industry' })).toBe(true)
+  })
 })
 
 describe('normalizeStrikeSlug', () => {

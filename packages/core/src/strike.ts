@@ -55,6 +55,9 @@ export interface StrikeAssignmentApplicabilityInput {
   targetId: string | null | undefined
   userId: string | null | undefined
   role: string | null | undefined
+  /** The learner's roster department / site label, when known. */
+  department?: string | null
+  site?: string | null
 }
 
 export interface StrikeReadinessResult {
@@ -149,11 +152,15 @@ export function isStrikeAssignmentApplicable(input: StrikeAssignmentApplicabilit
   if (input.targetType === 'tenant') return input.targetId == null || input.targetId === ''
   if (input.targetType === 'user') return !!input.userId && input.targetId === input.userId
   if (input.targetType === 'role') return !!input.role && input.targetId === input.role
-
-  // Site and department targeting need worker profile context that is not
-  // part of the STRIKE shell yet. Keep them tenant-scoped at the API layer
-  // but do not infer learner applicability from this pure helper.
+  // Department and site match the roster's labels case-insensitively: they
+  // are free text on members, typed by different admins over time.
+  if (input.targetType === 'department') return sameLabel(input.department, input.targetId)
+  if (input.targetType === 'site') return sameLabel(input.site, input.targetId)
   return false
+}
+
+function sameLabel(a: string | null | undefined, b: string | null | undefined): boolean {
+  return !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase()
 }
 
 export function scoreStrikeQuiz(input: StrikeQuizScoreInput): StrikeQuizScoreResult {

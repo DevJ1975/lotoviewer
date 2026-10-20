@@ -116,6 +116,14 @@
     {
       "path": "/api/cron/safety-board-digests",
       "schedule": "20 * * * *"
+    },
+    {
+      "path": "/api/cron/strike-recurring-assignments",
+      "schedule": "5 11 * * *"
+    },
+    {
+      "path": "/api/cron/strike-assignment-reminders",
+      "schedule": "20 12 * * *"
     }
   ]
 }
