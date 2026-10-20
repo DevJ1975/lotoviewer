@@ -1,6 +1,8 @@
 import type { Worksheet } from 'exceljs'
 import type { IncidentRiskResult } from '@soteria/core/incidentRiskModel'
 import { summarizeRecordableDistribution } from '@soteria/core/scorecardDistribution'
+import type { MicrolearningSummary } from '@soteria/core/strikeScorecard'
+import { LOCALE_NAMES, MICROLEARNING_NOTES, microlearningFacts } from './scorecardMicrolearning'
 
 // Multi-tab Excel (.xlsx) export of the EHS Scorecard. The same numbers the
 // page and the PDF show, in a workbook an analyst can pivot — and that imports
@@ -57,6 +59,8 @@ export interface ScorecardWorkbookInput {
   /** Recomputed server-side — the authoritative predicted-risk headline. */
   risk?:      IncidentRiskResult | null
   targets?:   TargetSummaryRow[]
+  /** Computed server-side; absent when STRIKE is off for the tenant. */
+  microlearning?: MicrolearningSummary | null
   generatedAt?: Date
 }
 
@@ -267,6 +271,52 @@ export async function buildScorecardWorkbook(input: ScorecardWorkbookInput): Pro
     }
   }
 
+  if (input.microlearning) addMicrolearningSheets(wb, input.microlearning)
+
   const buf = await wb.xlsx.writeBuffer()
   return new Uint8Array(buf)
+}
+
+// ── Microlearning (STRIKE) ───────────────────────────────────────────────────
+// The facts read exactly as in the PDF and Word document; the per-module and
+// trend tabs carry plain numbers so an analyst can pivot them.
+function addMicrolearningSheets(wb: import('exceljs').Workbook, ml: MicrolearningSummary): void {
+  {
+    const ws = wb.addWorksheet('Microlearning')
+    ws.columns = [{ width: 40 }, { width: 30 }]
+    addTitle(ws, `Microlearning (STRIKE) — last ${ml.windowDays} days`)
+    addRow(ws, [])
+    addHeader(ws, ['Measure', 'Value'])
+    for (const fact of microlearningFacts(ml)) addRow(ws, [fact.label, fact.value])
+    addRow(ws, [])
+    for (const note of MICROLEARNING_NOTES) addRow(ws, [note])
+  }
+
+  {
+    const locales = [...new Set(ml.modules.flatMap(m => Object.keys(m.byLocale)))].sort()
+    const ws = wb.addWorksheet('Microlearning by module')
+    ws.columns = [{ width: 40 }, ...Array.from({ length: 7 + locales.length }, () => ({ width: 14 }))]
+    addTitle(ws, `Completions by module — last ${ml.windowDays} days`)
+    addRow(ws, [])
+    addHeader(ws, [
+      'Module', 'Completions', 'People', 'Quiz attempts', 'Passed', 'Pass rate %', 'Average score %', 'Supervisor-verified (ADA)',
+      ...locales.map(l => `${LOCALE_NAMES[l] ?? l} completions`),
+    ])
+    if (ml.modules.length === 0) addRow(ws, ['No microlearning activity in this window.'])
+    for (const m of ml.modules) {
+      addRow(ws, [
+        m.title, m.completions, m.learners, m.passRate.denominator, m.passRate.numerator, m.passRate.percent, m.averageScore, m.assisted,
+        ...locales.map(l => m.byLocale[l] ?? 0),
+      ])
+    }
+  }
+
+  {
+    const ws = wb.addWorksheet('Microlearning trend')
+    ws.columns = [{ width: 16 }, { width: 14 }]
+    addTitle(ws, ml.trend.bucketDays === 1 ? 'Completions per day' : 'Completions per week')
+    addRow(ws, [])
+    addHeader(ws, [ml.trend.bucketDays === 1 ? 'Day' : 'Week starting', 'Completions'])
+    for (const p of ml.trend.points) addRow(ws, [p.start, p.completions])
+  }
 }

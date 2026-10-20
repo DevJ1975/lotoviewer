@@ -1,0 +1,103 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+// Contract tests for POST /api/scorecard/export-docx: the same security posture
+// as the PDF and Excel routes. Admin-gated, tenant derived server-side, risk
+// and microlearning computed server-side, document streamed as an attachment.
+// The builder is covered separately (__tests__/lib/scorecardDocument.test.ts).
+
+const { requireTenantAdminMock, computeIncidentRiskMock, buildDocxMock, authedClient, loadMicrolearningMock } = vi.hoisted(() => {
+  // Awaitable, chainable Supabase stub: supports .select().eq().maybeSingle(),
+  // a directly-awaited .select(), and .select().not().limit() — every shape the
+  // route's tenant lookup + buildTargets reach for. All resolve to empty data.
+  function chain(): Record<string, unknown> {
+    const result = { data: null, error: null }
+    const c: Record<string, unknown> = {
+      select: () => c,
+      eq: () => c,
+      not: () => c,
+      limit: () => Promise.resolve(result),
+      maybeSingle: () => Promise.resolve(result),
+      then: (onF: (v: typeof result) => unknown, onR?: (e: unknown) => unknown) =>
+        Promise.resolve(result).then(onF, onR),
+    }
+    return c
+  }
+  return {
+    requireTenantAdminMock: vi.fn(),
+    computeIncidentRiskMock: vi.fn(),
+    buildDocxMock: vi.fn(),
+    authedClient: { from: () => chain() },
+    loadMicrolearningMock: vi.fn(),
+  }
+})
+
+vi.mock('@/lib/auth/tenantGate', () => ({ requireTenantAdmin: (req: Request) => requireTenantAdminMock(req) }))
+vi.mock('@/lib/incidentRiskFeatures', () => ({ computeIncidentRisk: (...a: unknown[]) => computeIncidentRiskMock(...a) }))
+vi.mock('@/lib/scorecardDocument', () => ({ buildScorecardDocx: (...a: unknown[]) => buildDocxMock(...a) }))
+vi.mock('@/lib/supabaseAdmin', () => ({ supabaseAdmin: () => ({}) }))
+vi.mock('@/lib/strike/scorecardData', () => ({ loadMicrolearningSummary: (...a: unknown[]) => loadMicrolearningMock(...a) }))
+
+import { POST } from '@/app/api/scorecard/export-docx/route'
+
+const TENANT_ID = '11111111-1111-1111-1111-111111111111'
+const WORD_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+
+function req(body: unknown): Request {
+  return new Request('http://localhost/api/scorecard/export-docx', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+  })
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  requireTenantAdminMock.mockResolvedValue({ ok: true, userId: 'admin', tenantId: TENANT_ID, authedClient })
+  computeIncidentRiskMock.mockResolvedValue(null)
+  loadMicrolearningMock.mockResolvedValue(null)
+  buildDocxMock.mockResolvedValue(new Uint8Array([1, 2, 3, 4]))
+})
+
+describe('POST /api/scorecard/export-docx', () => {
+  it('rejects a non-admin with the gate status and never builds a document', async () => {
+    requireTenantAdminMock.mockResolvedValue({ ok: false, status: 403, message: 'forbidden' })
+    const res = await POST(req({ incidentMetrics: {} }))
+    expect(res.status).toBe(403)
+    expect(buildDocxMock).not.toHaveBeenCalled()
+  })
+
+  it('returns 400 on a malformed body', async () => {
+    const res = await POST(req('{ not json'))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'invalid_json' })
+    expect(buildDocxMock).not.toHaveBeenCalled()
+  })
+
+  it('streams the document as a .docx attachment on the happy path', async () => {
+    const res = await POST(req({ metrics: {}, incidentMetrics: {}, windowDays: 30 }))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe(WORD_MIME)
+    expect(res.headers.get('content-disposition')).toMatch(/attachment; filename="ehs-scorecard-\d{4}-\d{2}-\d{2}\.docx"/)
+    expect(new Uint8Array(await res.arrayBuffer()).byteLength).toBeGreaterThan(0)
+    expect(buildDocxMock).toHaveBeenCalledOnce()
+  })
+
+  it('scopes risk to the gate tenant and ignores a client-supplied tenant id', async () => {
+    await POST(req({ tenantId: 'attacker-tenant', incidentMetrics: {} }))
+    expect(computeIncidentRiskMock).toHaveBeenCalledWith(expect.anything(), TENANT_ID)
+  })
+
+  // The microlearning section is computed here, like risk: never from the
+  // client, and only for one of the scorecard's own windows.
+  it('computes microlearning for the gate tenant and clamps the window', async () => {
+    await POST(req({ tenantId: 'attacker-tenant', windowDays: 100000, incidentMetrics: {} }))
+    expect(loadMicrolearningMock).toHaveBeenCalledWith(expect.anything(), TENANT_ID, 30)
+  })
+
+  it('still exports when the microlearning section fails, leaving it out', async () => {
+    loadMicrolearningMock.mockRejectedValue(new Error('db down'))
+    const res = await POST(req({ incidentMetrics: {}, windowDays: 90 }))
+    expect(res.status).toBe(200)
+    expect(buildDocxMock).toHaveBeenCalledWith(expect.objectContaining({ microlearning: null, windowDays: 90 }))
+  })
+})

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // server-side, PDF streamed as an attachment. The gate, risk computer, and PDF
 // builder are mocked so this stays a fast route-level test.
 
-const { requireTenantAdminMock, computeIncidentRiskMock, buildPdfMock, authedClient } = vi.hoisted(() => {
+const { requireTenantAdminMock, computeIncidentRiskMock, buildPdfMock, authedClient, loadMicrolearningMock } = vi.hoisted(() => {
   function chain(): Record<string, unknown> {
     // logo_url omitted ⇒ the route skips the network logo fetch entirely.
     const result = { data: { name: 'Acme', logo_url: null }, error: null }
@@ -23,6 +23,7 @@ const { requireTenantAdminMock, computeIncidentRiskMock, buildPdfMock, authedCli
     computeIncidentRiskMock: vi.fn(),
     buildPdfMock: vi.fn(),
     authedClient: { from: () => chain() },
+    loadMicrolearningMock: vi.fn(),
   }
 })
 
@@ -30,6 +31,7 @@ vi.mock('@/lib/auth/tenantGate', () => ({ requireTenantAdmin: (req: Request) => 
 vi.mock('@/lib/incidentRiskFeatures', () => ({ computeIncidentRisk: (...a: unknown[]) => computeIncidentRiskMock(...a) }))
 vi.mock('@/lib/pdfScorecard', () => ({ buildScorecardPdf: (...a: unknown[]) => buildPdfMock(...a) }))
 vi.mock('@/lib/supabaseAdmin', () => ({ supabaseAdmin: () => ({}) }))
+vi.mock('@/lib/strike/scorecardData', () => ({ loadMicrolearningSummary: (...a: unknown[]) => loadMicrolearningMock(...a) }))
 
 import { POST } from '@/app/api/scorecard/export/route'
 
@@ -47,6 +49,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   requireTenantAdminMock.mockResolvedValue({ ok: true, userId: 'admin', tenantId: TENANT_ID, authedClient })
   computeIncidentRiskMock.mockResolvedValue(null)
+  loadMicrolearningMock.mockResolvedValue(null)
   buildPdfMock.mockResolvedValue(new Uint8Array([1, 2, 3, 4]))
 })
 
@@ -77,5 +80,19 @@ describe('POST /api/scorecard/export', () => {
   it('scopes risk to the gate tenant and ignores a client-supplied tenant id', async () => {
     await POST(req({ tenantId: 'attacker-tenant', incidentMetrics: {} }))
     expect(computeIncidentRiskMock).toHaveBeenCalledWith(expect.anything(), TENANT_ID)
+  })
+
+  // The microlearning section is computed here, like risk: never from the
+  // client, and only for one of the scorecard's own windows.
+  it('computes microlearning for the gate tenant and clamps the window', async () => {
+    await POST(req({ tenantId: 'attacker-tenant', windowDays: 100000, incidentMetrics: {} }))
+    expect(loadMicrolearningMock).toHaveBeenCalledWith(expect.anything(), TENANT_ID, 30)
+  })
+
+  it('still exports when the microlearning section fails, leaving it out', async () => {
+    loadMicrolearningMock.mockRejectedValue(new Error('db down'))
+    const res = await POST(req({ incidentMetrics: {}, windowDays: 90 }))
+    expect(res.status).toBe(200)
+    expect(buildPdfMock).toHaveBeenCalledWith(expect.objectContaining({ microlearning: null, windowDays: 90 }))
   })
 })

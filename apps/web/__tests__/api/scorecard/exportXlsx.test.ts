@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // attachment. We mock the gate, the risk computer, and the workbook builder so
 // this stays a fast route-level test (the builder itself is covered separately).
 
-const { requireTenantAdminMock, computeIncidentRiskMock, buildWorkbookMock, authedClient } = vi.hoisted(() => {
+const { requireTenantAdminMock, computeIncidentRiskMock, buildWorkbookMock, authedClient, loadMicrolearningMock } = vi.hoisted(() => {
   // Awaitable, chainable Supabase stub: supports .select().eq().maybeSingle(),
   // a directly-awaited .select(), and .select().not().limit() — every shape the
   // route's tenant lookup + buildTargets reach for. All resolve to empty data.
@@ -28,6 +28,7 @@ const { requireTenantAdminMock, computeIncidentRiskMock, buildWorkbookMock, auth
     computeIncidentRiskMock: vi.fn(),
     buildWorkbookMock: vi.fn(),
     authedClient: { from: () => chain() },
+    loadMicrolearningMock: vi.fn(),
   }
 })
 
@@ -35,6 +36,7 @@ vi.mock('@/lib/auth/tenantGate', () => ({ requireTenantAdmin: (req: Request) => 
 vi.mock('@/lib/incidentRiskFeatures', () => ({ computeIncidentRisk: (...a: unknown[]) => computeIncidentRiskMock(...a) }))
 vi.mock('@/lib/scorecardWorkbook', () => ({ buildScorecardWorkbook: (...a: unknown[]) => buildWorkbookMock(...a) }))
 vi.mock('@/lib/supabaseAdmin', () => ({ supabaseAdmin: () => ({}) }))
+vi.mock('@/lib/strike/scorecardData', () => ({ loadMicrolearningSummary: (...a: unknown[]) => loadMicrolearningMock(...a) }))
 
 import { POST } from '@/app/api/scorecard/export-xlsx/route'
 
@@ -53,6 +55,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   requireTenantAdminMock.mockResolvedValue({ ok: true, userId: 'admin', tenantId: TENANT_ID, authedClient })
   computeIncidentRiskMock.mockResolvedValue(null)
+  loadMicrolearningMock.mockResolvedValue(null)
   buildWorkbookMock.mockResolvedValue(new Uint8Array([1, 2, 3, 4]))
 })
 
@@ -83,5 +86,19 @@ describe('POST /api/scorecard/export-xlsx', () => {
   it('scopes risk to the gate tenant and ignores a client-supplied tenant id', async () => {
     await POST(req({ tenantId: 'attacker-tenant', incidentMetrics: {} }))
     expect(computeIncidentRiskMock).toHaveBeenCalledWith(expect.anything(), TENANT_ID)
+  })
+
+  // The microlearning section is computed here, like risk: never from the
+  // client, and only for one of the scorecard's own windows.
+  it('computes microlearning for the gate tenant and clamps the window', async () => {
+    await POST(req({ tenantId: 'attacker-tenant', windowDays: 100000, incidentMetrics: {} }))
+    expect(loadMicrolearningMock).toHaveBeenCalledWith(expect.anything(), TENANT_ID, 30)
+  })
+
+  it('still exports when the microlearning section fails, leaving it out', async () => {
+    loadMicrolearningMock.mockRejectedValue(new Error('db down'))
+    const res = await POST(req({ incidentMetrics: {}, windowDays: 90 }))
+    expect(res.status).toBe(200)
+    expect(buildWorkbookMock).toHaveBeenCalledWith(expect.objectContaining({ microlearning: null, windowDays: 90 }))
   })
 })

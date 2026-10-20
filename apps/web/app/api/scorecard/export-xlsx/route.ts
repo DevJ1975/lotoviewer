@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sanitizeError } from '@/lib/security/sanitizeError'
 import { computeIncidentRisk } from '@/lib/incidentRiskFeatures'
 import { buildScorecardWorkbook, type ScorecardWorkbookInput, type TargetSummaryRow } from '@/lib/scorecardWorkbook'
+import { loadExportMicrolearning, parseScorecardWindow, scorecardExportResponse } from '@/lib/scorecardExport'
 import { benchmarkForNaics } from '@soteria/core/industryBenchmark'
 import {
   TARGET_METRICS, TARGET_METRIC_META, evaluateTarget, type TargetMetric,
@@ -17,12 +18,6 @@ import {
 // Excel and imports cleanly into Google Sheets.
 
 export const runtime = 'nodejs'
-
-const SPREADSHEET_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-
-function num(v: unknown, fallback = 0): number {
-  return typeof v === 'number' && Number.isFinite(v) ? v : fallback
-}
 
 // Evaluate the tenant's configured goals (current vs. target vs. industry
 // benchmark) for the Targets tab. Reads are RLS-scoped via the authed client and
@@ -72,7 +67,7 @@ export async function POST(req: Request) {
 
   let body: { metrics?: ScorecardWorkbookInput['loto']; incidentMetrics?: ScorecardWorkbookInput['incident']; windowDays?: number }
   try { body = await req.json() } catch { return Response.json({ error: 'invalid_json' }, { status: 400 }) }
-  const windowDays = num(body.windowDays, 30)
+  const windowDays = parseScorecardWindow(body.windowDays)
 
   try {
     const { data: tenant } = await g.authedClient
@@ -85,6 +80,7 @@ export async function POST(req: Request) {
     try { risk = await computeIncidentRisk(supabaseAdmin(), g.tenantId) } catch { risk = null }
 
     const targets = await buildTargets(g.authedClient, body.incidentMetrics ?? null)
+    const microlearning = await loadExportMicrolearning(supabaseAdmin(), g.tenantId, windowDays)
 
     const bytes = await buildScorecardWorkbook({
       tenantName,
@@ -93,14 +89,10 @@ export async function POST(req: Request) {
       incident: body.incidentMetrics ?? null,
       risk,
       targets,
+      microlearning,
     })
 
-    return new Response(new Uint8Array(bytes), {
-      headers: {
-        'content-type': SPREADSHEET_MIME,
-        'content-disposition': `attachment; filename="ehs-scorecard-${new Date().toISOString().slice(0, 10)}.xlsx"`,
-      },
-    })
+    return scorecardExportResponse(bytes, 'xlsx')
   } catch (e) {
     return sanitizeError(e, 'POST /api/scorecard/export-xlsx')
   }
