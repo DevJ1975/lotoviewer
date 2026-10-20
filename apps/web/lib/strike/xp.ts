@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import * as Sentry from '@sentry/nextjs'
 import { curriculumCompleteEvent, xpEventsForPass, type StrikeXpEvent } from '@soteria/core/strikeGamification'
+import { STRIKE_DEFAULT_LOCALE } from '@soteria/core/strikeLocale'
 
 // Writes the XP ledger after a pass. Awarding is best-effort: a ledger
 // failure must never undo or block the training record itself, which is
@@ -22,16 +23,17 @@ export async function awardPassXp(
 ): Promise<void> {
   if (!ctx.memberId) return
   try {
-    const [{ data: solved }, { data: assignment }] = await Promise.all([
+    const [{ data: solved }, { data: assignment }, xpVersionId] = await Promise.all([
       admin.from('strike_block_events').select('block_key').eq('attempt_id', ctx.attemptId).eq('event', 'completed'),
       ctx.assignmentId
         ? admin.from('strike_assignments').select('id,due_at,curriculum_id').eq('id', ctx.assignmentId).maybeSingle()
         : Promise.resolve({ data: null }),
+      originalVersionId(admin, ctx.moduleId, ctx.versionId),
     ])
 
     const events: StrikeXpEvent[] = xpEventsForPass({
       moduleId: ctx.moduleId,
-      versionId: ctx.versionId,
+      versionId: xpVersionId,
       passedAt: ctx.passedAt,
       assignment: assignment ? { id: assignment.id as string, dueAt: assignment.due_at as string | null } : null,
       solvedBlockKeys: (solved ?? []).map(r => r.block_key as string).filter(key => ctx.interactionKeys.has(key)),
@@ -57,6 +59,33 @@ export async function awardPassXp(
   } catch (e) {
     Sentry.captureException(e, { tags: { module: 'strike/xp' } })
   }
+}
+
+/**
+ * XP is earned once per version's content. A translation teaches the same
+ * content as the default-language version it was made from, so its pass
+ * shares that version's ledger keys instead of paying out a second time.
+ */
+async function originalVersionId(admin: SupabaseClient, moduleId: string, versionId: string): Promise<string> {
+  const { data: passed, error } = await admin
+    .from('strike_module_versions')
+    .select('locale,version_number')
+    .eq('id', versionId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!passed || passed.locale === STRIKE_DEFAULT_LOCALE) return versionId
+  const { data: original, error: originalErr } = await admin
+    .from('strike_module_versions')
+    .select('id')
+    .eq('module_id', moduleId)
+    .eq('locale', STRIKE_DEFAULT_LOCALE)
+    .in('status', ['published', 'superseded'])
+    .lte('version_number', passed.version_number as number)
+    .order('version_number', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (originalErr) throw new Error(originalErr.message)
+  return (original?.id as string | undefined) ?? versionId
 }
 
 async function curriculumFinished(admin: SupabaseClient, tenantId: string, memberId: string, curriculumId: string): Promise<boolean> {

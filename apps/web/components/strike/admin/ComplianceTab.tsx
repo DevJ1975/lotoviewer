@@ -145,6 +145,8 @@ function MostMissed({ tenantId }: { tenantId: string }) {
         .from('strike_attempts')
         .select('module_version_id,client_context')
         .eq('tenant_id', tenantId)
+        // Supervisor-verified (assisted) sessions never saw the quiz.
+        .eq('delivery', 'standard')
         .not('submitted_at', 'is', null)
         .gte('submitted_at', since)
         .limit(5000)

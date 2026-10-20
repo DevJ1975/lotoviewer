@@ -92,6 +92,19 @@ describe('verifyAssistedAttempt', () => {
     expect(enqueueStrikeXapi).toHaveBeenCalledWith(admin, expect.objectContaining({ memberId: 'm1' }), expect.objectContaining({ events: [{ verb: 'completed', block: null }] }))
   })
 
+  // The stored record must say exactly what the supervisor read and signed,
+  // which on a Spanish version is the Spanish title, not the module's.
+  it('signs a Spanish session with the Spanish version title', async () => {
+    const es = JSON.parse(readFileSync(resolve(__dirname, '../../../../services/learning-studio/seed/loto-101/module.es.json'), 'utf8'))
+    const { admin, calls } = fakeAdmin({
+      version: { id: 'ver-2', module_id: 'mod-1', status: 'published', content: es.content, locale: 'es', title: 'LOTO 101: Control de energía peligrosa', validity_days: 365, passing_score: 80 },
+    })
+    expect(await verifyAssistedAttempt(admin, verifier, input)).toMatchObject({ ok: true })
+    const verification = calls.find(c => c.table === 'strike_assisted_verifications' && c.op === 'insert')?.payload as Record<string, unknown>
+    expect(verification.locale).toBe('es')
+    expect(verification.acknowledgment).toMatch(/Ana Ruiz entiende “LOTO 101: Control de energía peligrosa”/)
+  })
+
   it('refuses a standard (quiz) session', async () => {
     const { admin } = fakeAdmin({ attempt: { id: 'att-1', tenant_id: 't1', module_id: 'mod-1', module_version_id: 'ver-1', assignment_id: null, user_id: null, member_id: 'm1', delivery: 'standard', submitted_at: null } })
     expect(await verifyAssistedAttempt(admin, verifier, input)).toMatchObject({ ok: false, status: 409 })

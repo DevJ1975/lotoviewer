@@ -422,7 +422,7 @@ export async function gradeAndRecordAttempt(
   return { ok: true, value: { ...score, attemptId, missedFeedback } }
 }
 
-async function checkAssignment(
+export async function checkAssignment(
   admin: SupabaseClient,
   learner: StrikeLearner,
   moduleId: string,
@@ -444,15 +444,35 @@ async function checkAssignment(
   ) {
     return { ok: false, status: 400, message: 'Assignment does not match this module.' }
   }
+  const targetType = assignment.target_type as StrikeAssignmentTargetType
+  const roster = targetType === 'department' || targetType === 'site' ? await loadRosterLabels(admin, learner) : null
   if (!isStrikeAssignmentApplicable({
-    targetType: assignment.target_type as StrikeAssignmentTargetType,
+    targetType,
     targetId: assignment.target_id as string | null,
     userId: learner.userId,
     role: learner.role,
+    department: roster?.department ?? null,
+    site: roster?.site_label ?? null,
   })) {
     return { ok: false, status: 403, message: 'Assignment is not assigned to this user.' }
   }
   return { ok: true, value: null }
+}
+
+/** The learner's roster labels, which department and site assignments target. */
+async function loadRosterLabels(
+  admin: SupabaseClient,
+  learner: StrikeLearner,
+): Promise<{ department: string | null; site_label: string | null } | null> {
+  if (!learner.memberId) return null
+  const { data, error } = await admin
+    .from('members')
+    .select('department,site_label')
+    .eq('id', learner.memberId)
+    .eq('tenant_id', learner.tenantId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return data as { department: string | null; site_label: string | null } | null
 }
 
 /**

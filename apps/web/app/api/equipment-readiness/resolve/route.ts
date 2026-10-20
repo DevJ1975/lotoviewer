@@ -166,14 +166,31 @@ async function loadStrikeReadiness(
 
   const satisfied = new Set<string>()
   const completionRows = completions ?? []
+  // A requirement pinned to one version is also met by a pass of that
+  // module's version in another language (the same rule as the permit gate).
+  const versionIds = [...new Set([
+    ...completionRows.map(row => row.module_version_id as string),
+    ...activeRequirements.map(req => req.module_version_id as string | null).filter((id): id is string => !!id),
+  ])]
+  const { data: versionLocales, error: localeErr } = versionIds.length > 0
+    ? await admin.from('strike_module_versions').select('id,locale').in('id', versionIds)
+    : { data: [], error: null }
+  if (localeErr) throw localeErr
+  const localeByVersion = new Map((versionLocales ?? []).map(row => [row.id as string, row.locale as string]))
+  const isTranslationOfPin = (passedVersionId: string, pinnedVersionId: string | null) => {
+    const passedLocale = localeByVersion.get(passedVersionId)
+    const pinnedLocale = pinnedVersionId ? localeByVersion.get(pinnedVersionId) : undefined
+    return !!passedLocale && !!pinnedLocale && passedLocale !== pinnedLocale
+  }
   for (const req of activeRequirements) {
+    const pinnedVersionId = req.module_version_id as string | null
     const completion = completionRows.find(row => (
       row.module_id === req.module_id
       && isStrikeCompletionCurrent({
         completedAt: row.completed_at as string,
         expiresAt: row.expires_at as string | null,
         moduleVersionId: row.module_version_id as string,
-        requiredVersionId: req.module_version_id as string | null,
+        requiredVersionId: isTranslationOfPin(row.module_version_id as string, pinnedVersionId) ? null : pinnedVersionId,
       })
     ))
     if (completion) satisfied.add(req.id as string)

@@ -84,7 +84,7 @@ export async function POST(req: Request) {
           member_name: memberName,
           locales,
           expires_at: new Date(verified.claims.expiresAt).toISOString(),
-          version: { id: version.id, passing_score: version.passing_score, content: version.content, locale: version.locale },
+          version: { id: version.id, passing_score: version.passing_score, content: version.content, locale: version.locale, title: version.title },
           questions: questions ?? [],
           answers: answers ?? [],
         })

@@ -84,7 +84,7 @@ export async function verifyAssistedAttempt(
   const checklist = strikeAssistedChecklist(content, { learnerName: learner.name, locale })
   const unchecked = uncheckedChecklistItems(checklist, input.checkedKeys)
   if (unchecked.length > 0) return { ok: false, status: 422, message: 'Tick every checklist item before signing.' }
-  const acknowledgment = strikeAssistedAcknowledgment({ learnerName: learner.name, moduleTitle: (moduleRow?.title as string | undefined) ?? '', locale })
+  const acknowledgment = strikeAssistedAcknowledgment({ learnerName: learner.name, moduleTitle: version.title ?? (moduleRow?.title as string | undefined) ?? '', locale })
 
   const signedAt = new Date()
   const signedAtIso = signedAt.toISOString()

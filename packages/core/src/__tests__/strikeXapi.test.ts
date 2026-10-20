@@ -46,6 +46,14 @@ describe('strikeXapiStatement', () => {
     expect(s.context.contextActivities).toBeUndefined()
   })
 
+  // A supervisor-verified (assisted) completion has no score, so this is the
+  // only statement that tells the LMS the learner succeeded.
+  it('reports completing the module as a success, with or without a score', () => {
+    const s = strikeXapiStatement({ ...base, module, event: { verb: 'completed', block: null } })
+    expect(s.verb.id).toBe('http://adlnet.gov/expapi/verbs/completed')
+    expect(s.result).toEqual({ completion: true, success: true })
+  })
+
   it('records a failed attempt as unsuccessful but complete', () => {
     const s = strikeXapiStatement({ ...base, module, event: { verb: 'failed', scorePercent: 60 } })
     expect(s.result).toMatchObject({ success: false, completion: true, score: { scaled: 0.6 } })

@@ -36,7 +36,7 @@ export async function enqueueStrikeXapi(
   learner: StrikeLearner,
   opts: {
     moduleId: string
-    version: Pick<StrikeVersionRow, 'id' | 'locale'>
+    version: Pick<StrikeVersionRow, 'id' | 'locale' | 'title'>
     attemptId: string
     events: StrikeXapiEvent[]
   },
@@ -59,7 +59,7 @@ export async function enqueueStrikeXapi(
 
     const xapiModule = {
       moduleId: opts.moduleId,
-      moduleTitle: (moduleRow?.title as string | undefined) ?? 'STRIKE module',
+      moduleTitle: opts.version.title ?? (moduleRow?.title as string | undefined) ?? 'STRIKE module',
       versionId: opts.version.id,
       locale: opts.version.locale,
     }

@@ -10,7 +10,7 @@ vi.mock('@sentry/nextjs', () => ({ captureException }))
 import { enqueueStrikeXapi, strikeXapiStatementId } from '@/lib/strike/xapi'
 
 const learner = { tenantId: 't1', userId: 'u1', memberId: 'm1', role: 'member', channel: 'account' as const }
-const opts = { moduleId: 'mod-1', version: { id: 'ver-1', locale: 'en' }, attemptId: 'att-1', events: [{ verb: 'attempted' as const }] }
+const opts = { moduleId: 'mod-1', version: { id: 'ver-1', locale: 'en', title: null }, attemptId: 'att-1', events: [{ verb: 'attempted' as const }] }
 
 function fakeAdmin(rows: Record<string, unknown>, upsertError: { message: string } | null = null) {
   const upserts: { rows: unknown; options: unknown }[] = []
@@ -55,6 +55,19 @@ describe('enqueueStrikeXapi', () => {
     expect(row.verb).toBe('attempted')
     expect(row.statement.id).toBe(row.id)
     expect(row.statement.actor.mbox).toBe('mailto:ana@plant.com')
+  })
+
+  // The LRS stores the name under the version's language, so a Spanish
+  // version must name itself in Spanish, not with the module's English title.
+  it('names the activity with the title of a translated version', async () => {
+    const { admin, upserts } = fakeAdmin({
+      strike_lrs_endpoints: { enabled: true },
+      strike_modules: { title: 'LOTO 101: Control of Hazardous Energy' },
+      profiles: { full_name: 'Ana Ruiz', email: 'ana@plant.com' },
+    })
+    await enqueueStrikeXapi(admin, learner, { ...opts, version: { id: 'ver-2', locale: 'es', title: 'LOTO 101: Control de energía peligrosa' } })
+    const [row] = upserts[0].rows as { statement: { object: { definition: { name: Record<string, string> } } } }[]
+    expect(row.statement.object.definition.name).toEqual({ es: 'LOTO 101: Control de energía peligrosa' })
   })
 
   it('reports a storage failure to Sentry instead of failing the learner', async () => {
