@@ -163,7 +163,7 @@ function drawTracked(page: PDFPage, text: string, s: TextStyle & ({ x: number } 
 
 /** Shrinks long names and titles to fit, down to 60% size, then truncates. */
 function fit(text: string, font: PDFFont, size: number, maxWidthPx: number): { value: string; size: number } {
-  let value = winAnsi(text)
+  const value = winAnsi(text)
   let current = size
   while (font.widthOfTextAtSize(value, pt(current)) > pt(maxWidthPx) && current > size * 0.6) current -= 1
   const fits = (candidate: string) => font.widthOfTextAtSize(candidate, pt(current)) <= pt(maxWidthPx)
