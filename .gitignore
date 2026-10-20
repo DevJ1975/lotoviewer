@@ -51,3 +51,11 @@ scripts/.osha-build/
 .venv*/
 **/__pycache__/
 .claude/worktrees/
+
+# terraform (infra/aws) — keep .terraform.lock.hcl committed, never state or real vars
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+infra/aws/envs/*/backend.hcl

@@ -1,0 +1,4 @@
+# cp backend.hcl.example backend.hcl, fill in the bucket from the bootstrap
+# output, then: terraform init -backend-config=backend.hcl
+bucket = "soteria-tfstate-<account-id>"
+region = "us-west-2"

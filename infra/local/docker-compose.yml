@@ -1,0 +1,87 @@
+# AWS Soteria Field: a local stand-in for the AWS deployment.
+#
+#   cd infra/local && docker compose up -d
+#
+# Everything binds to 127.0.0.1 and uses throwaway credentials. Reset with
+# `docker compose down -v`. See README.md for what each service stands in for.
+name: aws-soteria-field
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-postgres}
+      POSTGRES_DB: soteria
+      AUTHENTICATOR_PASSWORD: ${AUTHENTICATOR_PASSWORD:-local-dev-authenticator}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-54322}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d soteria"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    image: pgvector/pgvector:pg17
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-local-dev-postgres}@postgres:5432/soteria
+      MIGRATIONS_DIR: /migrations
+    volumes:
+      - ../../apps/web/migrations:/migrations:ro
+      - ./scripts:/scripts:ro
+    entrypoint: ["/bin/sh", "/scripts/apply-migrations.sh"]
+    restart: "no"
+
+  postgrest:
+    image: postgrest/postgrest:v16.4
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${AUTHENTICATOR_PASSWORD:-local-dev-authenticator}@postgres:5432/soteria
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      # Local-only signing secret; the AWS deployment verifies Cognito's public keys instead.
+      PGRST_JWT_SECRET: ${PGRST_JWT_SECRET:-local-dev-only-jwt-secret-not-for-production}
+    ports:
+      - "127.0.0.1:${POSTGREST_PORT:-54321}:3000"
+
+  s3:
+    image: chrislusf/seaweedfs:4.48
+    command: ["server", "-dir=/data", "-s3", "-s3.config=/etc/seaweedfs/s3-identities.json", "-s3.port=8333", "-ip.bind=0.0.0.0"]
+    ports:
+      - "127.0.0.1:${S3_PORT:-8333}:8333"
+    volumes:
+      - s3-data:/data
+      - ./s3-identities.json:/etc/seaweedfs/s3-identities.json:ro
+
+  create-buckets:
+    image: amazon/aws-cli:latest
+    depends_on:
+      - s3
+    environment:
+      AWS_ACCESS_KEY_ID: local-access-key
+      AWS_SECRET_ACCESS_KEY: local-secret-key
+      AWS_DEFAULT_REGION: us-west-2
+      AWS_ENDPOINT_URL: http://s3:8333
+    volumes:
+      - ./scripts:/scripts:ro
+    entrypoint: ["/bin/sh", "-c", "for i in $$(seq 1 30); do aws s3api list-buckets >/dev/null 2>&1 && break; sleep 1; done; exec /bin/sh /scripts/create-buckets.sh"]
+    restart: "no"
+
+  mailpit:
+    image: axllent/mailpit:v1.31.6
+    ports:
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
+
+volumes:
+  postgres-data:
+  s3-data:
