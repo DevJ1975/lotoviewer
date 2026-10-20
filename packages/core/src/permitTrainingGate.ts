@@ -80,7 +80,7 @@ export const OVERRIDE_REASON_MIN_LENGTH = 20
 export function validateOverrideReason(reason: string): string | null {
   const trimmed = reason.trim()
   if (trimmed.length < OVERRIDE_REASON_MIN_LENGTH) {
-    return `Explain the emergency in at least ${OVERRIDE_REASON_MIN_LENGTH} characters. This is audited and sent to EHS.`
+    return `Explain the emergency in at least ${OVERRIDE_REASON_MIN_LENGTH} characters. It is audited and emailed to every owner and admin.`
   }
   return null
 }

@@ -125,7 +125,8 @@ function RequiredTrainingSection() {
       <p>
         When an admin has required a STRIKE module for working-at-heights
         permits, a permit cannot be issued until both the worker and the CP
-        hold a current pass. A working-at-heights permit goes straight to{' '}
+        hold a current pass or are covered by an emergency override (below).
+        A working-at-heights permit goes straight to{' '}
         <em>Active</em> when you press <strong>Save</strong>, so that is when
         the check runs. As soon as a worker or CP is chosen, a{' '}
         <strong>Required training</strong> panel on the form shows each

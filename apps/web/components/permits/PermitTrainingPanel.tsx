@@ -73,7 +73,7 @@ export function PermitTrainingPanel({ tenantId, permitType, permitId, extraMembe
     return (
       <p className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
         <GraduationCap className="h-4 w-4" aria-hidden />
-        No STRIKE training is required for this permit type. Admins can require modules on STRIKE → Triggers.
+        No STRIKE training is required for this permit type. Admins can require modules under STRIKE → Training admin → Required for work.
       </p>
     )
   }
@@ -120,7 +120,7 @@ export function PermitTrainingPanel({ tenantId, permitType, permitId, extraMembe
       {!summary.ready && canOverride && (
         <button type="button" onClick={() => setOverrideOpen(true)}
           className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-rose-700 underline-offset-2 hover:underline dark:text-rose-300">
-          <ShieldAlert className="h-3.5 w-3.5" aria-hidden /> Emergency override (audited, EHS notified)
+          <ShieldAlert className="h-3.5 w-3.5" aria-hidden /> Emergency override (audited, emailed to owners and admins)
         </button>
       )}
 
