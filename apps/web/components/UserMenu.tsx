@@ -4,11 +4,15 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ChevronDown, History, LogOut, Mail, Shield, UserRound, UserRoundCog } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
+import { useTenant } from '@/components/TenantProvider'
+import { canManageTenant } from '@/lib/auth/tenantRole'
 import ThemeToggle from '@/components/ThemeToggle'
 import { Avatar } from '@/components/ui/Avatar'
 
 export default function UserMenu() {
   const { email, profile, signOut } = useAuth()
+  const { role } = useTenant()
+  const showAdminLinks = canManageTenant(role, profile)
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -55,7 +59,7 @@ export default function UserMenu() {
               <div className="truncate">{email}</div>
             </div>
           </div>
-          {profile?.is_admin && (
+          {showAdminLinks && (
             <>
               <Link
                 href="/admin/people/members"

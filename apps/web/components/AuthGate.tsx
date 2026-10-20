@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, type ReactNode } from 'react'
 import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
+import { canManageTenant } from '@/lib/auth/tenantRole'
 import OpsSpinner from '@/components/OpsSpinner'
 
 // Routes that should render WITHOUT requiring an authenticated session.
@@ -46,7 +47,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   const { role, loading: tenantLoading } = useTenant()
 
   const isPublic = isPublicPath(pathname)
-  const isTenantAdmin = role === 'owner' || role === 'admin'
+  const canManage = canManageTenant(role, profile)
 
   useEffect(() => {
     if (loading) return
@@ -62,9 +63,10 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     }
     // Gate /admin routes to active-tenant admins. The server remains the
     // source of truth; this only prevents obvious client-side navigation.
-    if (userId && pathname.startsWith('/admin') && profile && !profile.is_admin && !profile.is_superadmin) {
+    // The role is unknown until the tenant resolves, so wait rather than
+    // bounce a legitimate admin on a slow membership read.
+    if (userId && pathname.startsWith('/admin') && profile && !canManage) {
       if (tenantLoading) return
-      if (isTenantAdmin) return
       router.replace('/')
     }
     // Gate /superadmin routes to superadmin users (the DB flag is the
@@ -72,7 +74,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     if (userId && pathname.startsWith('/superadmin') && profile && !profile.is_superadmin) {
       router.replace('/')
     }
-  }, [loading, tenantLoading, userId, profile, pathname, isPublic, isTenantAdmin, router])
+  }, [loading, tenantLoading, userId, profile, pathname, isPublic, canManage, router])
 
   if (loading || (userId && pathname.startsWith('/admin') && tenantLoading)) {
     return (
