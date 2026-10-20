@@ -270,8 +270,10 @@ function parseDocument(document: StrikePackageDocument, issues: string[]): Parse
   const questions = parseQuestions(raw.questions, issues, label)
   if (!questions) return null
 
+  // The column is an int: 79.5 would read fine here and then fail the
+  // insert, after the operator had uploaded every file.
   const passingScore = num(raw.passing_score) ?? 80
-  if (passingScore < 1 || passingScore > 100) return fail('passing_score must be between 1 and 100.')
+  if (!Number.isInteger(passingScore) || passingScore < 1 || passingScore > 100) return fail('passing_score must be a whole number between 1 and 100.')
   const retakeLimit = optionalPositiveInt(raw.retake_limit)
   if (retakeLimit === undefined) return fail('retake_limit must be null or a positive whole number.')
   const validityDays = optionalPositiveInt(raw.validity_days)
