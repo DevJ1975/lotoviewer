@@ -46,14 +46,14 @@ export function QuizQuestion({
         {index + 1}. {question.prompt}
       </legend>
       {isAck ? (
-        <label className="mt-3 flex items-start gap-2 text-sm text-slate-700 dark:text-slate-200">
-          <input type="checkbox" checked={value === true} onChange={e => onChange(e.target.checked)} className="mt-1" />
+        <label className="mt-3 flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm text-slate-700 has-[:checked]:border-brand-navy has-[:checked]:bg-blue-50 dark:border-slate-700 dark:text-slate-200 dark:has-[:checked]:bg-blue-950/40">
+          <input type="checkbox" checked={value === true} onChange={e => onChange(e.target.checked)} className="h-5 w-5 shrink-0 accent-brand-navy" />
           I acknowledge this requirement.
         </label>
       ) : (
         <div className="mt-3 space-y-2">
           {answers.map(answer => (
-            <label key={answer.id} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-200">
+            <label key={answer.id} className="flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm text-slate-700 has-[:checked]:border-brand-navy has-[:checked]:bg-blue-50 dark:border-slate-700 dark:text-slate-200 dark:has-[:checked]:bg-blue-950/40">
               <input
                 type={isMulti ? 'checkbox' : 'radio'}
                 name={question.id}
@@ -69,7 +69,7 @@ export function QuizQuestion({
                     onChange(answer.id)
                   }
                 }}
-                className="mt-1"
+                className="h-5 w-5 shrink-0 accent-brand-navy"
               />
               {answer.answer_text}
             </label>

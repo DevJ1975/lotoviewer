@@ -8,6 +8,7 @@ import {
   scoreStrikeInteraction,
   stableShuffle,
   strikeContentRuntimeMs,
+  strikeInteractionHints,
   validateStrikeVersionForPublish,
   type StrikeContent,
   type StrikeInteractionBlock,
@@ -170,6 +171,39 @@ describe('scoreStrikeInteraction', () => {
     expect(scoreStrikeInteraction(scenario, { kind: 'scenario', choiceId: 'y' }).correct).toBe(true)
     expect(scoreStrikeInteraction(scenario, { kind: 'scenario', choiceId: 'n' }).correct).toBe(false)
     expect(scoreStrikeInteraction(scenario, { kind: 'hotspot', selectedIds: ['y'] }).correct).toBe(false)
+  })
+})
+
+describe('strikeInteractionHints', () => {
+  const [sort, match, hot, scenario] = parsed([
+    { ...sortBlock, hint: 'Think about what you do before you touch the machine.' },
+    { key: 'match', kind: 'drag_match', pairs: [{ id: 'e', prompt: 'Electrical', answer: 'Disconnect' }, { id: 'p', prompt: 'Pneumatic', answer: 'Valve' }] },
+    { key: 'hot', kind: 'hotspot', image: { path: 'h.png', alt: 'm' }, targets: [
+      { id: 'estop', label: 'E-stop', x_pct: 2, y_pct: 2 },
+      { id: 'disc', label: 'Disconnect', x_pct: 1, y_pct: 1, correct: true },
+      { id: 'valve', label: 'Air valve', x_pct: 3, y_pct: 3, correct: true },
+    ] },
+    { key: 'sc', kind: 'scenario', stem: 'S', choices: [
+      { id: 'y', label: 'Own lock', correct: true, feedback: 'Yes' }, { id: 'n', label: 'Trust', feedback: 'No' },
+    ] },
+  ]).blocks as StrikeInteractionBlock[]
+
+  it("offers the author's nudge before the derived partial answer", () => {
+    expect(strikeInteractionHints(sort)).toEqual([
+      { kind: 'authored', text: 'Think about what you do before you touch the machine.' },
+      { kind: 'sort_ends', first: 'A', last: 'C' },
+    ])
+  })
+
+  it('derives a hint for every interaction kind when the author wrote none', () => {
+    expect(strikeInteractionHints(match)).toEqual([{ kind: 'match_one', prompt: 'Electrical', answer: 'Disconnect' }])
+    expect(strikeInteractionHints(hot)).toEqual([{ kind: 'hotspot_count', correctCount: 2, example: 'Disconnect' }])
+    expect(strikeInteractionHints(scenario)).toEqual([{ kind: 'scenario_not', label: 'Trust' }])
+  })
+
+  it('never reveals a correct scenario choice as the one to rule out', () => {
+    const hint = strikeInteractionHints(scenario).at(-1)
+    expect(hint?.kind === 'scenario_not' && hint.label).not.toBe('Own lock')
   })
 })
 

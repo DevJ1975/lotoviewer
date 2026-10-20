@@ -7,7 +7,7 @@ export class StrikeApiError extends Error {
 }
 
 /** Authenticated JSON call to a STRIKE API route on behalf of the signed-in learner. */
-export async function strikeFetch<T>(path: string, tenantId: string, init: { method?: 'GET' | 'POST'; body?: unknown } = {}): Promise<T> {
+export async function strikeFetch<T>(path: string, tenantId: string, init: { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; body?: unknown } = {}): Promise<T> {
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
   if (!token) throw new StrikeApiError('Sign in again to continue.', 401)

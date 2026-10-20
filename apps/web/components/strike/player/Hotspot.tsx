@@ -3,19 +3,20 @@
 import { useState } from 'react'
 import { Check } from 'lucide-react'
 import { scoreStrikeInteraction, type StrikeHotspotBlock } from '@soteria/core/strikeContent'
-import { InteractionShell, type InteractionFeedback } from './InteractionShell'
+import { InteractionShell, type HintControl, type InteractionFeedback } from './InteractionShell'
 
 interface HotspotProps {
   block: StrikeHotspotBlock
   urls: Record<string, string>
   completed: boolean
   remediation: { blockKey: string; title: string } | null
+  hint: HintControl
   onResult: (correct: boolean, detail: Record<string, unknown>) => void
 }
 
 // Graded by target id, never by tap coordinates, so the pictorial markers
 // and the accessible checklist below are two renderings of one input.
-export function Hotspot({ block, urls, completed, remediation, onResult }: HotspotProps) {
+export function Hotspot({ block, urls, completed, remediation, hint, onResult }: HotspotProps) {
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(completed ? block.targets.filter(t => t.correct).map(t => t.id) : []),
   )
@@ -57,11 +58,13 @@ export function Hotspot({ block, urls, completed, remediation, onResult }: Hotsp
       blockKey={block.key}
       label="Find the hazard"
       prompt={block.prompt}
+      instructions="Tap the numbered markers on the photo, or tick them in the list below."
       feedback={feedback}
       completed={completed}
       canCheck={selected.size > 0}
       onCheck={check}
       remediation={remediation}
+      hint={hint}
     >
       <div className="relative overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
         {imageUrl && (
@@ -80,7 +83,7 @@ export function Hotspot({ block, urls, completed, remediation, onResult }: Hotsp
               aria-label={target.label}
               tabIndex={-1}
               style={{ left: `${target.x_pct}%`, top: `${target.y_pct}%` }}
-              className={`absolute flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[3px] text-sm font-black shadow-lg transition ${
+              className={`absolute flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[3px] text-sm font-black shadow-lg transition ${
                 isWrong ? 'border-amber-400 bg-amber-500 text-white'
                   : isOn ? 'border-white bg-brand-navy text-white'
                     : 'border-white bg-slate-900/60 text-white hover:bg-brand-navy/80'
@@ -96,11 +99,11 @@ export function Hotspot({ block, urls, completed, remediation, onResult }: Hotsp
         {block.targets.map((target, i) => (
           <label
             key={target.id}
-            className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+            className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm ${
               wrong.has(target.id) ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/40' : 'border-slate-200 dark:border-slate-700'
             }`}
           >
-            <input type="checkbox" checked={selected.has(target.id)} disabled={completed} onChange={() => toggle(target.id)} className="h-4 w-4 accent-brand-navy" />
+            <input type="checkbox" checked={selected.has(target.id)} disabled={completed} onChange={() => toggle(target.id)} className="h-5 w-5 shrink-0 accent-brand-navy" />
             <span className="font-semibold text-slate-500">{i + 1}.</span>
             <span className="text-slate-800 dark:text-slate-100">{target.label}</span>
           </label>

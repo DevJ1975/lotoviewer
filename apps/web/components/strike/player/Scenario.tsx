@@ -2,17 +2,18 @@
 
 import { useState } from 'react'
 import { scoreStrikeInteraction, type StrikeScenarioBlock } from '@soteria/core/strikeContent'
-import { InteractionShell, type InteractionFeedback } from './InteractionShell'
+import { InteractionShell, type HintControl, type InteractionFeedback } from './InteractionShell'
 
 interface ScenarioProps {
   block: StrikeScenarioBlock
   urls: Record<string, string>
   completed: boolean
   remediation: { blockKey: string; title: string } | null
+  hint: HintControl
   onResult: (correct: boolean, detail: Record<string, unknown>) => void
 }
 
-export function Scenario({ block, urls, completed, remediation, onResult }: ScenarioProps) {
+export function Scenario({ block, urls, completed, remediation, hint, onResult }: ScenarioProps) {
   const correctId = block.choices.find(c => c.correct)?.id ?? null
   const [choiceId, setChoiceId] = useState<string | null>(completed ? correctId : null)
   const [feedback, setFeedback] = useState<InteractionFeedback>(() => {
@@ -39,6 +40,7 @@ export function Scenario({ block, urls, completed, remediation, onResult }: Scen
       canCheck={!!choiceId}
       onCheck={check}
       remediation={remediation}
+      hint={hint}
     >
       {imageUrl && block.image && (
         // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL

@@ -8,7 +8,8 @@ import { checkAiRateLimit, logAiInvocation } from '@/lib/ai/rateLimit'
 import { getAnthropic, aiErrorToResponse } from '@/lib/ai/client'
 import { toSendableHistory } from '@/lib/ai/conversationWindow'
 import { retrieveContext, type KnowledgeSource, type RetrievedChunk } from '@/lib/ai/rag'
-import { buildCoachDynamicPrompt, LOTO_COACH_STATIC_PROMPT } from '@/lib/strike/coachPrompt'
+import { parseStrikeContent } from '@soteria/core/strikeContent'
+import { buildCoachDynamicPrompt, LOTO_COACH_STATIC_PROMPT, practiceCheckPrompts } from '@/lib/strike/coachPrompt'
 
 // Worst case is timeout × (retries + 1); it must fit inside maxDuration.
 export const runtime     = 'nodejs'
@@ -39,6 +40,7 @@ interface RequestBody {
   message?:         unknown
   conversation_id?: unknown
   module_id?:       unknown
+  module_version_id?: unknown
   attempt_open?:    unknown
 }
 
@@ -57,6 +59,7 @@ export async function POST(req: Request) {
   }
   const conversationIdIn = typeof body.conversation_id === 'string' && UUID_RE.test(body.conversation_id) ? body.conversation_id : null
   const moduleId = typeof body.module_id === 'string' && UUID_RE.test(body.module_id) ? body.module_id : null
+  const moduleVersionId = typeof body.module_version_id === 'string' && UUID_RE.test(body.module_version_id) ? body.module_version_id : null
   const attemptOpen = body.attempt_open === true
 
   const limit = await checkAiRateLimit({ userId: gate.userId, tenantId: gate.tenantId, surface: SURFACE })
@@ -69,9 +72,9 @@ export async function POST(req: Request) {
 
   const admin = supabaseAdmin()
 
-  const [{ data: tenantRow }, moduleTitle] = await Promise.all([
+  const [{ data: tenantRow }, visibleModule] = await Promise.all([
     admin.from('tenants').select('name').eq('id', gate.tenantId).maybeSingle(),
-    moduleId ? loadVisibleModuleTitle(admin, moduleId, gate.tenantId) : Promise.resolve(null),
+    moduleId ? loadVisibleModule(admin, moduleId, moduleVersionId, gate.tenantId) : Promise.resolve(null),
   ])
 
   let conversationId: string
@@ -148,8 +151,9 @@ export async function POST(req: Request) {
           type: 'text',
           text: buildCoachDynamicPrompt({
             tenantName: (tenantRow?.name as string | undefined) ?? null,
-            moduleTitle,
+            moduleTitle: visibleModule?.title ?? null,
             attemptOpen,
+            practiceChecks: visibleModule?.practiceChecks ?? [],
             retrievedContext: retrieved.contextBlock,
           }),
         },
@@ -214,13 +218,20 @@ export async function POST(req: Request) {
   })
 }
 
-async function loadVisibleModuleTitle(admin: ReturnType<typeof supabaseAdmin>, moduleId: string, tenantId: string): Promise<string | null> {
-  const { data } = await admin
-    .from('strike_modules')
-    .select('title, tenant_id, library_scope, status')
-    .eq('id', moduleId)
-    .maybeSingle()
+async function loadVisibleModule(
+  admin: ReturnType<typeof supabaseAdmin>,
+  moduleId: string,
+  moduleVersionId: string | null,
+  tenantId: string,
+): Promise<{ title: string; practiceChecks: string[] } | null> {
+  const [{ data }, { data: version }] = await Promise.all([
+    admin.from('strike_modules').select('title, tenant_id, library_scope, status').eq('id', moduleId).maybeSingle(),
+    moduleVersionId
+      ? admin.from('strike_module_versions').select('content, status').eq('id', moduleVersionId).eq('module_id', moduleId).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
   if (!data || data.status !== 'published') return null
   if (data.library_scope === 'tenant' && data.tenant_id !== tenantId) return null
-  return data.title as string
+  const parsed = version?.status === 'published' && version.content != null ? parseStrikeContent(version.content) : null
+  return { title: data.title as string, practiceChecks: parsed?.ok ? practiceCheckPrompts(parsed.content) : [] }
 }

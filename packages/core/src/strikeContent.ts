@@ -83,6 +83,8 @@ export interface StrikeDragSortBlock extends BlockBase {
   /** Listed in the correct order; the player shuffles them. */
   items: StrikeChoice[]
   remediate_block_key: string | null
+  /** Author-written nudge shown before the derived hint; null means derived only. */
+  hint: string | null
 }
 
 export interface StrikeMatchPair {
@@ -96,6 +98,7 @@ export interface StrikeDragMatchBlock extends BlockBase {
   prompt: string
   pairs: StrikeMatchPair[]
   remediate_block_key: string | null
+  hint: string | null
 }
 
 /** Coordinates are display-only percentages; grading is by target id. */
@@ -113,6 +116,7 @@ export interface StrikeHotspotBlock extends BlockBase {
   image: StrikeImageRef
   targets: StrikeHotspotTarget[]
   remediate_block_key: string | null
+  hint: string | null
 }
 
 export interface StrikeScenarioChoice extends StrikeChoice {
@@ -126,6 +130,7 @@ export interface StrikeScenarioBlock extends BlockBase {
   image: StrikeImageRef | null
   choices: StrikeScenarioChoice[]
   remediate_block_key: string | null
+  hint: string | null
 }
 
 export type StrikeInteractionBlock =
@@ -226,13 +231,13 @@ function parseBlock(raw: unknown, index: number, issues: StrikeContentIssue[]): 
     case 'drag_sort': {
       const items = parseChoices(raw.items)
       if (!items || items.length < 3) return fail('Drag-sort needs at least 3 items with unique ids.')
-      return { key, kind: 'drag_sort', prompt: str(raw.prompt), items, remediate_block_key: str(raw.remediate_block_key) || null }
+      return { key, kind: 'drag_sort', prompt: str(raw.prompt), items, remediate_block_key: str(raw.remediate_block_key) || null, hint: str(raw.hint) || null }
     }
     case 'drag_match': {
       const pairs = Array.isArray(raw.pairs) ? raw.pairs.map(parsePair) : []
       if (pairs.length < 2 || pairs.some(p => p === null)) return fail('Drag-match needs at least 2 pairs with id, prompt and answer.')
       if (!uniqueIds(pairs as StrikeMatchPair[])) return fail('Drag-match pair ids must be unique.')
-      return { key, kind: 'drag_match', prompt: str(raw.prompt), pairs: pairs as StrikeMatchPair[], remediate_block_key: str(raw.remediate_block_key) || null }
+      return { key, kind: 'drag_match', prompt: str(raw.prompt), pairs: pairs as StrikeMatchPair[], remediate_block_key: str(raw.remediate_block_key) || null, hint: str(raw.hint) || null }
     }
     case 'hotspot': {
       const image = parseImage(raw.image)
@@ -241,7 +246,7 @@ function parseBlock(raw: unknown, index: number, issues: StrikeContentIssue[]): 
       if (targets.length < 2 || targets.some(t => t === null)) return fail('Hotspot needs at least 2 targets positioned within 0–100%.')
       if (!uniqueIds(targets as StrikeHotspotTarget[])) return fail('Hotspot target ids must be unique.')
       if (!(targets as StrikeHotspotTarget[]).some(t => t.correct)) return fail('Hotspot needs at least one correct target.')
-      return { key, kind: 'hotspot', prompt: str(raw.prompt), image, targets: targets as StrikeHotspotTarget[], remediate_block_key: str(raw.remediate_block_key) || null }
+      return { key, kind: 'hotspot', prompt: str(raw.prompt), image, targets: targets as StrikeHotspotTarget[], remediate_block_key: str(raw.remediate_block_key) || null, hint: str(raw.hint) || null }
     }
     case 'scenario': {
       const choices = Array.isArray(raw.choices) ? raw.choices.map(parseScenarioChoice) : []
@@ -249,7 +254,7 @@ function parseBlock(raw: unknown, index: number, issues: StrikeContentIssue[]): 
       if (!uniqueIds(choices as StrikeScenarioChoice[])) return fail('Scenario choice ids must be unique.')
       if (!(choices as StrikeScenarioChoice[]).some(c => c.correct)) return fail('Scenario needs a correct choice.')
       const image = raw.image == null ? null : parseImage(raw.image)
-      return { key, kind: 'scenario', stem: str(raw.stem), image, choices: choices as StrikeScenarioChoice[], remediate_block_key: str(raw.remediate_block_key) || null }
+      return { key, kind: 'scenario', stem: str(raw.stem), image, choices: choices as StrikeScenarioChoice[], remediate_block_key: str(raw.remediate_block_key) || null, hint: str(raw.hint) || null }
     }
   }
 }
@@ -469,6 +474,41 @@ export function scoreStrikeInteraction(
       const choice = block.choices.find(c => c.id === choiceId)
       return { correct: !!choice?.correct, incorrectIds: choice?.correct ? [] : [choiceId] }
     }
+  }
+}
+
+// ── Hints (escalating: the author's nudge first, then a partial reveal) ────
+
+export type StrikeInteractionHint =
+  | { kind: 'authored'; text: string }
+  | { kind: 'sort_ends'; first: string; last: string }
+  | { kind: 'match_one'; prompt: string; answer: string }
+  | { kind: 'hotspot_count'; correctCount: number; example: string }
+  | { kind: 'scenario_not'; label: string }
+
+/**
+ * The hints a learner can reveal one at a time. The last one is always
+ * derived from the block's own answer key, so every practice check has a
+ * hint, including content that published before authors could write one.
+ * Structured rather than prose so the player can phrase it in any locale.
+ */
+export function strikeInteractionHints(block: StrikeInteractionBlock): StrikeInteractionHint[] {
+  const authored: StrikeInteractionHint[] = block.hint ? [{ kind: 'authored', text: block.hint }] : []
+  return [...authored, derivedHint(block)]
+}
+
+function derivedHint(block: StrikeInteractionBlock): StrikeInteractionHint {
+  switch (block.kind) {
+    case 'drag_sort':
+      return { kind: 'sort_ends', first: block.items[0].label, last: block.items[block.items.length - 1].label }
+    case 'drag_match':
+      return { kind: 'match_one', prompt: block.pairs[0].prompt, answer: block.pairs[0].answer }
+    case 'hotspot': {
+      const correct = block.targets.filter(t => t.correct)
+      return { kind: 'hotspot_count', correctCount: correct.length, example: correct[0].label }
+    }
+    case 'scenario':
+      return { kind: 'scenario_not', label: (block.choices.find(c => !c.correct) ?? block.choices[0]).label }
   }
 }
 

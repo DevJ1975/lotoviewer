@@ -4,17 +4,18 @@ import { useState } from 'react'
 import { ChevronDown, ChevronUp, GripVertical } from 'lucide-react'
 import { Button as DragButton, DropIndicator, GridList, GridListItem, useDragAndDrop } from 'react-aria-components'
 import { scoreStrikeInteraction, stableShuffle, type StrikeDragSortBlock } from '@soteria/core/strikeContent'
-import { InteractionShell, type InteractionFeedback } from './InteractionShell'
+import { InteractionShell, type HintControl, type InteractionFeedback } from './InteractionShell'
 
 interface DragSortProps {
   block: StrikeDragSortBlock
   seed: string
   completed: boolean
   remediation: { blockKey: string; title: string } | null
+  hint: HintControl
   onResult: (correct: boolean, detail: Record<string, unknown>) => void
 }
 
-export function DragSort({ block, seed, completed, remediation, onResult }: DragSortProps) {
+export function DragSort({ block, seed, completed, remediation, hint, onResult }: DragSortProps) {
   const [order, setOrder] = useState(() =>
     completed ? block.items.map(i => i.id) : stableShuffle(block.items, `${seed}:${block.key}`).map(i => i.id),
   )
@@ -67,11 +68,13 @@ export function DragSort({ block, seed, completed, remediation, onResult }: Drag
       blockKey={block.key}
       label="Drag to order"
       prompt={block.prompt}
+      instructions="Drag a step by its handle, or use the arrows to move it up or down."
       feedback={feedback}
       completed={completed}
       canCheck
       onCheck={check}
       remediation={remediation}
+      hint={hint}
     >
       <GridList
         aria-label={block.prompt}
@@ -87,28 +90,27 @@ export function DragSort({ block, seed, completed, remediation, onResult }: Drag
             <GridListItem
               id={item.id}
               textValue={item.label}
-              className={`flex items-center gap-2 rounded-lg border bg-white p-2 outline-none data-[dragging]:opacity-50 data-[focus-visible]:ring-2 data-[focus-visible]:ring-brand-navy dark:bg-slate-900 ${
+              className={`flex select-none items-center gap-2 rounded-lg border bg-white p-1.5 outline-none [-webkit-touch-callout:none] data-[dragging]:opacity-50 data-[focus-visible]:ring-2 data-[focus-visible]:ring-brand-navy dark:bg-slate-900 ${
                 isWrong ? 'border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/40' : 'border-slate-200 dark:border-slate-700'
               }`}
             >
               <DragButton slot="drag" aria-label={`Move ${item.label}`} isDisabled={completed}
-                className="cursor-grab rounded p-1 text-slate-400 outline-none data-[disabled]:cursor-default data-[focus-visible]:ring-2 data-[focus-visible]:ring-brand-navy">
-                <GripVertical className="h-5 w-5" />
+                className="flex min-h-12 w-11 shrink-0 cursor-grab touch-none flex-col items-center justify-center gap-0.5 self-stretch rounded text-slate-400 outline-none data-[disabled]:cursor-default data-[focus-visible]:ring-2 data-[focus-visible]:ring-brand-navy">
+                <span className="text-sm font-black tabular-nums text-slate-700 dark:text-slate-200">{index + 1}</span>
+                <GripVertical className="h-5 w-5" aria-hidden />
               </DragButton>
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-slate-100 text-sm font-black tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                {index + 1}
-              </span>
               <span className="min-w-0 flex-1 text-sm font-medium text-slate-900 dark:text-slate-100">{item.label}</span>
               {!completed && (
-                <span className="flex shrink-0 gap-1">
+                // Stacked on phones so the step text keeps its width; side by side on tablets.
+                <span className="flex shrink-0 flex-col gap-1 sm:flex-row">
                   <button type="button" onClick={() => move(index, index - 1)} disabled={index === 0}
                     aria-label={`Move ${item.label} up`}
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 text-slate-600 disabled:opacity-30 dark:border-slate-700 dark:text-slate-300">
+                    className="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-slate-200 text-slate-600 disabled:opacity-30 dark:border-slate-700 dark:text-slate-300">
                     <ChevronUp className="h-5 w-5" />
                   </button>
                   <button type="button" onClick={() => move(index, index + 1)} disabled={index === order.length - 1}
                     aria-label={`Move ${item.label} down`}
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 text-slate-600 disabled:opacity-30 dark:border-slate-700 dark:text-slate-300">
+                    className="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-slate-200 text-slate-600 disabled:opacity-30 dark:border-slate-700 dark:text-slate-300">
                     <ChevronDown className="h-5 w-5" />
                   </button>
                 </span>

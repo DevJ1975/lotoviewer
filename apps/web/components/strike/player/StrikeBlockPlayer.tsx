@@ -1,20 +1,24 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AlertTriangle, Info, OctagonAlert } from 'lucide-react'
+import { AlertTriangle, Info, Lock, OctagonAlert } from 'lucide-react'
 import {
   missingRequiredBlocks,
+  strikeInteractionHints,
   type StrikeBlock,
   type StrikeBlockEvent,
   type StrikeBlockEventRecord,
   type StrikeCalloutBlock,
   type StrikeContent,
+  type StrikeInteractionBlock,
 } from '@soteria/core/strikeContent'
 import { MotionScene } from './MotionScene'
 import { DragSort } from './DragSort'
 import { DragMatch } from './DragMatch'
 import { Hotspot } from './Hotspot'
 import { Scenario } from './Scenario'
+import type { HintControl } from './InteractionShell'
+import { hintText } from './hintText'
 import type { QueuedBlockEvent } from './useBlockEventQueue'
 
 interface StrikeBlockPlayerProps {
@@ -33,6 +37,7 @@ const SEEN_DWELL_MS = 800
 export function StrikeBlockPlayer({ content, urls, seed, initialReached, onEvent, onProgress }: StrikeBlockPlayerProps) {
   const [reached, setReached] = useState<StrikeBlockEventRecord[]>(initialReached)
   const [captionsOn, setCaptionsOn] = useState(true)
+  const [hintsShown, setHintsShown] = useState<Record<string, number>>({})
   const titleByKey = useMemo(() => new Map(content.blocks.map(b => [b.key, blockTitle(b)])), [content])
   const missing = useMemo(() => missingRequiredBlocks(content, reached), [content, reached])
   const completedKeys = useMemo(
@@ -50,9 +55,26 @@ export function StrikeBlockPlayer({ content, urls, seed, initialReached, onEvent
   }, [onEvent])
 
   const done = content.blocks.length - missing.length
+  // Strictly in order: everything after the first unfinished block stays
+  // locked, so the next scene cannot play until the check before it is solved.
+  const firstOpenIndex = content.blocks.findIndex(b => missing.includes(b.key))
+  const firstOpen = firstOpenIndex === -1 ? null : content.blocks[firstOpenIndex]
+  const lockNotice = firstOpen ? { blockKey: firstOpen.key, title: lockedBehindLabel(firstOpen) } : null
+
+  const hintFor = (block: StrikeInteractionBlock): HintControl => {
+    const hints = strikeInteractionHints(block).map(hintText)
+    const shown = hintsShown[block.key] ?? 0
+    return {
+      revealed: hints.slice(0, shown),
+      canReveal: shown < hints.length,
+      onReveal: () => setHintsShown(prev => ({ ...prev, [block.key]: shown + 1 })),
+    }
+  }
 
   return (
-    <div className="space-y-5">
+    // manipulation: rapid taps on the arrows or markers must not trigger
+    // iOS double-tap zoom.
+    <div className="touch-manipulation space-y-5">
       <div className="sticky top-0 z-10 -mx-1 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
         <div className="flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-300">
           <span>{done} of {content.blocks.length} sections</span>
@@ -73,12 +95,19 @@ export function StrikeBlockPlayer({ content, urls, seed, initialReached, onEvent
         const remediationKey = 'remediate_block_key' in block ? block.remediate_block_key : null
         const remediation = remediationKey ? { blockKey: remediationKey, title: titleByKey.get(remediationKey) ?? 'the related scene' } : null
         const completed = completedKeys.has(block.key)
+        const locked = firstOpen !== null && index > firstOpenIndex
         const onResult = (correct: boolean, detail: Record<string, unknown>) => {
-          mark(block.key, 'interaction', { detail: { ...detail, correct } })
+          mark(block.key, 'interaction', { detail: { ...detail, correct, hints_used: hintsShown[block.key] ?? 0 } })
           if (correct) mark(block.key, 'completed')
         }
         return (
-          <SeenTracker key={block.key} blockKey={block.key} onSeen={dwell => mark(block.key, 'seen', { dwell_ms: dwell })}>
+          <SeenTracker
+            key={block.key}
+            blockKey={block.key}
+            active={!locked}
+            lockedBehind={locked ? lockNotice : null}
+            onSeen={dwell => mark(block.key, 'seen', { dwell_ms: dwell })}
+          >
             {block.kind === 'motion_scene' && (
               <MotionScene
                 block={block}
@@ -91,15 +120,26 @@ export function StrikeBlockPlayer({ content, urls, seed, initialReached, onEvent
               />
             )}
             {block.kind === 'callout' && <Callout block={block} />}
-            {block.kind === 'drag_sort' && <DragSort block={block} seed={seed} completed={completed} remediation={remediation} onResult={onResult} />}
-            {block.kind === 'drag_match' && <DragMatch block={block} seed={seed} completed={completed} remediation={remediation} onResult={onResult} />}
-            {block.kind === 'hotspot' && <Hotspot block={block} urls={urls} completed={completed} remediation={remediation} onResult={onResult} />}
-            {block.kind === 'scenario' && <Scenario block={block} urls={urls} completed={completed} remediation={remediation} onResult={onResult} />}
+            {block.kind === 'drag_sort' && <DragSort block={block} seed={seed} completed={completed} remediation={remediation} hint={hintFor(block)} onResult={onResult} />}
+            {block.kind === 'drag_match' && <DragMatch block={block} seed={seed} completed={completed} remediation={remediation} hint={hintFor(block)} onResult={onResult} />}
+            {block.kind === 'hotspot' && <Hotspot block={block} urls={urls} completed={completed} remediation={remediation} hint={hintFor(block)} onResult={onResult} />}
+            {block.kind === 'scenario' && <Scenario block={block} urls={urls} completed={completed} remediation={remediation} hint={hintFor(block)} onResult={onResult} />}
           </SeenTracker>
         )
       })}
     </div>
   )
+}
+
+function lockedBehindLabel(block: StrikeBlock): string {
+  switch (block.kind) {
+    case 'motion_scene':
+      return `the scene “${block.title}”`
+    case 'callout':
+      return `“${block.title}”`
+    default:
+      return 'the practice check above'
+  }
 }
 
 function blockTitle(block: StrikeBlock): string {
@@ -115,15 +155,22 @@ function blockTitle(block: StrikeBlock): string {
 }
 
 // "Seen" = at least half the block on screen for 800 ms. Reported once per
-// mount; the server dedupes per attempt anyway.
-function SeenTracker({ blockKey, onSeen, children }: { blockKey: string; onSeen: (dwellMs: number) => void; children: ReactNode }) {
+// mount, and never while the block is locked: a locked block shows what is
+// ahead but earns nothing. The server dedupes per attempt anyway.
+function SeenTracker({ blockKey, active, lockedBehind, onSeen, children }: {
+  blockKey: string
+  active: boolean
+  lockedBehind: { blockKey: string; title: string } | null
+  onSeen: (dwellMs: number) => void
+  children: ReactNode
+}) {
   const ref = useRef<HTMLDivElement>(null)
   const onSeenRef = useRef(onSeen)
   useEffect(() => { onSeenRef.current = onSeen }, [onSeen])
 
   useEffect(() => {
     const node = ref.current
-    if (!node || typeof IntersectionObserver === 'undefined') return
+    if (!active || !node || typeof IntersectionObserver === 'undefined') return
     let visibleSince: number | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
     let reported = false
@@ -146,9 +193,26 @@ function SeenTracker({ blockKey, onSeen, children }: { blockKey: string; onSeen:
       observer.disconnect()
       if (timer) clearTimeout(timer)
     }
-  }, [])
+  }, [active])
 
-  return <div ref={ref} id={`block-${blockKey}`} className="scroll-mt-16">{children}</div>
+  return (
+    <div ref={ref} id={`block-${blockKey}`} className="relative scroll-mt-16">
+      <div inert={!active} className={active ? undefined : 'pointer-events-none select-none opacity-35 grayscale'}>
+        {children}
+      </div>
+      {lockedBehind && (
+        <div className="absolute inset-0 flex items-center justify-center p-4">
+          <a
+            href={`#block-${lockedBehind.blockKey}`}
+            className="inline-flex max-w-sm items-center gap-2 rounded-lg bg-slate-900/90 px-4 py-3 text-sm font-semibold text-white shadow-lg"
+          >
+            <Lock className="h-4 w-4 shrink-0 text-brand-yellow" aria-hidden />
+            Locked. Finish {lockedBehind.title} to unlock this.
+          </a>
+        </div>
+      )}
+    </div>
+  )
 }
 
 const CALLOUT_STYLES = {

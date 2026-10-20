@@ -4,13 +4,14 @@ import { useMemo, useRef, useState } from 'react'
 import { useDrag, useDrop, type TextDropItem } from 'react-aria'
 import { X } from 'lucide-react'
 import { scoreStrikeInteraction, stableShuffle, type StrikeDragMatchBlock } from '@soteria/core/strikeContent'
-import { InteractionShell, type InteractionFeedback } from './InteractionShell'
+import { InteractionShell, type HintControl, type InteractionFeedback } from './InteractionShell'
 
 interface DragMatchProps {
   block: StrikeDragMatchBlock
   seed: string
   completed: boolean
   remediation: { blockKey: string; title: string } | null
+  hint: HintControl
   onResult: (correct: boolean, detail: Record<string, unknown>) => void
 }
 
@@ -19,7 +20,7 @@ const DRAG_TYPE = 'strike-match-answer'
 // Two input paths over one state: drag a chip onto a slot (react-aria gives
 // mouse, touch and keyboard drag), or tap a chip then tap a slot — the path
 // that works with gloves, where a long-press drag does not.
-export function DragMatch({ block, seed, completed, remediation, onResult }: DragMatchProps) {
+export function DragMatch({ block, seed, completed, remediation, hint, onResult }: DragMatchProps) {
   const answers = useMemo(
     () => stableShuffle(block.pairs.map(p => p.answer), `${seed}:${block.key}`),
     [block, seed],
@@ -62,11 +63,13 @@ export function DragMatch({ block, seed, completed, remediation, onResult }: Dra
       blockKey={block.key}
       label="Drag to match"
       prompt={block.prompt}
+      instructions="Tap an answer, then tap the row it belongs to. You can also drag it."
       feedback={feedback}
       completed={completed}
       canCheck={Object.keys(placed).length === block.pairs.length}
       onCheck={check}
       remediation={remediation}
+      hint={hint}
     >
       {!completed && (
         <div className="mb-4 flex flex-wrap gap-2" aria-label="Answers">
@@ -89,7 +92,7 @@ export function DragMatch({ block, seed, completed, remediation, onResult }: Dra
             answer={placed[pair.id] ?? null}
             wrong={wrong.has(pair.id)}
             disabled={completed}
-            armed={selected !== null}
+            armedAnswer={selected}
             onPlace={answer => place(pair.id, answer)}
             onTap={() => selected && place(pair.id, selected)}
             onClear={() => clear(pair.id)}
@@ -110,7 +113,7 @@ function AnswerChip({ answer, used, selected, onSelect }: { answer: string; used
       {...dragProps}
       onClick={onSelect}
       aria-pressed={selected}
-      className={`motion-press min-h-11 rounded-lg border px-3 py-2 text-left text-sm font-semibold transition ${
+      className={`motion-press min-h-12 select-none rounded-lg border px-4 py-2 text-left text-sm font-semibold transition [-webkit-touch-callout:none] ${
         selected
           ? 'border-brand-navy bg-brand-navy text-white'
           : used
@@ -124,13 +127,14 @@ function AnswerChip({ answer, used, selected, onSelect }: { answer: string; used
 }
 
 function MatchSlot({
-  prompt, answer, wrong, disabled, armed, onPlace, onTap, onClear,
+  prompt, answer, wrong, disabled, armedAnswer, onPlace, onTap, onClear,
 }: {
   prompt: string
   answer: string | null
   wrong: boolean
   disabled: boolean
-  armed: boolean
+  /** The chip the learner tapped, waiting for a row to land in. */
+  armedAnswer: string | null
   onPlace: (answer: string) => void
   onTap: () => void
   onClear: () => void
@@ -154,22 +158,22 @@ function MatchSlot({
         {...dropProps}
         role="button"
         tabIndex={disabled ? -1 : 0}
-        aria-label={answer ? `${prompt}: ${answer}` : `${prompt}: empty. ${armed ? 'Press to place the selected answer.' : 'Select an answer first.'}`}
+        aria-label={answer ? `${prompt}: ${answer}` : `${prompt}: empty. ${armedAnswer ? `Press to place ${armedAnswer}.` : 'Select an answer first.'}`}
         onClick={onTap}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onTap() } }}
         className={`flex min-h-12 items-center justify-between gap-2 rounded-lg border-2 px-3 py-2 text-sm transition ${
           isDropTarget ? 'border-brand-navy bg-blue-50 dark:bg-blue-950/40'
             : wrong ? 'border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/40'
               : answer ? 'border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900'
-                : `border-dashed ${armed ? 'border-brand-navy' : 'border-slate-300 dark:border-slate-700'}`
+                : `border-dashed ${armedAnswer ? 'border-brand-navy bg-blue-50/60 dark:bg-blue-950/30' : 'border-slate-300 dark:border-slate-700'}`
         }`}
       >
         <span className={answer ? 'font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-400'}>
-          {answer ?? 'Drop or tap to place'}
+          {answer ?? (armedAnswer ? `Tap to place “${armedAnswer}”` : 'Empty')}
         </span>
         {answer && !disabled && (
           <button type="button" onClick={e => { e.stopPropagation(); onClear() }} aria-label={`Clear ${prompt}`}
-            className="rounded p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+            className="-my-2 -mr-2 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
             <X className="h-4 w-4" />
           </button>
         )}
