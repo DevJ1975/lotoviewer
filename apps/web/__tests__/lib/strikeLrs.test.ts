@@ -94,6 +94,15 @@ describe('postStatements', () => {
     expect(await postStatements(creds, [], fetchImpl)).toEqual({ ok: false, retry: true, error: 'ECONNRESET' })
   })
 
+  // A resolver outage is not a verdict on the endpoint: retrying it is how
+  // the statements still arrive once DNS is back.
+  it('retries when the host cannot be looked up at all, without sending', async () => {
+    lookup.mockRejectedValue(Object.assign(new Error('queryA EAI_AGAIN lrs.example.com'), { code: 'EAI_AGAIN' }))
+    const fetchImpl = respond(200)
+    expect(await postStatements(creds, [{ id: 'id-1' }], fetchImpl)).toMatchObject({ ok: false, retry: true })
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
   it('never sends when the host has started resolving privately since it was saved', async () => {
     lookup.mockResolvedValue([{ address: '10.0.0.5', family: 4 }])
     const fetchImpl = respond(200)

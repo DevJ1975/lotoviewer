@@ -1,4 +1,5 @@
-import { promises as dns } from 'node:dns'
+import { lookup as lookupCallback, promises as dns, type LookupAddress, type LookupOptions } from 'node:dns'
+import { request as httpsRequest } from 'node:https'
 import { BlockList, isIP } from 'node:net'
 
 // SSRF guard for server-side fetches of tenant-supplied URLs (manufacturer
@@ -29,12 +30,71 @@ export function isPrivateAddress(addr: string): boolean {
   return NON_PUBLIC.check(addr, family === 4 ? 'ipv4' : 'ipv6')
 }
 
+/**
+ * Whether every address a host resolves to is public. 'unresolved' (the
+ * lookup itself failed) is kept apart from 'private' because a resolver
+ * outage is temporary and a private answer is not.
+ */
+export async function publicHostStatus(hostname: string): Promise<'public' | 'private' | 'unresolved'> {
+  let records: LookupAddress[]
+  try { records = await dns.lookup(hostname, { all: true, verbatim: true }) }
+  catch { return 'unresolved' }
+  if (records.length === 0) return 'unresolved'
+  return records.every(r => !isPrivateAddress(r.address)) ? 'public' : 'private'
+}
+
 export async function resolvesPublicly(hostname: string): Promise<boolean> {
-  try {
-    const records = await dns.lookup(hostname, { all: true, verbatim: true })
-    if (records.length === 0) return false
-    return records.every(r => !isPrivateAddress(r.address))
-  } catch {
-    return false
-  }
+  return (await publicHostStatus(hostname)) === 'public'
+}
+
+type LookupCallback = (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void
+
+/**
+ * A `lookup` for an http(s) request that refuses a non-public address. A
+ * resolvesPublicly() check before fetch() is not enough on its own: fetch
+ * resolves the name again, and a DNS answer with a zero TTL can be public
+ * for the check and 169.254.169.254 for the connection. Resolving here, in
+ * the connection itself, makes the address checked the address used.
+ */
+export function publicLookup(hostname: string, options: LookupOptions, callback: LookupCallback): void {
+  lookupCallback(hostname, { ...options, all: true }, (err, records) => {
+    if (err) return callback(err, '')
+    const list = records as LookupAddress[]
+    if (list.length === 0 || list.some(r => isPrivateAddress(r.address))) {
+      const refused: NodeJS.ErrnoException = new Error(`${hostname} does not resolve to a public address`)
+      refused.code = 'ENONPUBLIC'
+      return callback(refused, '')
+    }
+    if (options.all) return callback(null, list)
+    callback(null, list[0].address, list[0].family)
+  })
+}
+
+/**
+ * fetch() for tenant-supplied https URLs, connecting only to public
+ * addresses (see publicLookup) and never following a redirect. Covers what
+ * those callers use: method, headers, a string body, and an abort signal.
+ */
+export function publicFetch(input: string | URL, init: RequestInit = {}): Promise<Response> {
+  const url = new URL(String(input))
+  if (url.protocol !== 'https:') return Promise.reject(new Error('Only https URLs can be fetched'))
+  return new Promise((resolve, reject) => {
+    const req = httpsRequest(url, {
+      method: init.method ?? 'GET',
+      headers: Object.fromEntries(new Headers(init.headers).entries()),
+      lookup: publicLookup,
+      signal: init.signal ?? undefined,
+    }, res => {
+      const chunks: Buffer[] = []
+      res.on('data', (chunk: Buffer) => chunks.push(chunk))
+      res.on('error', reject)
+      res.on('end', () => {
+        const status = res.statusCode ?? 500
+        const nullBody = status === 204 || status === 205 || status === 304
+        resolve(new Response(nullBody ? null : Buffer.concat(chunks), { status }))
+      })
+    })
+    req.on('error', reject)
+    req.end(typeof init.body === 'string' ? init.body : undefined)
+  })
 }

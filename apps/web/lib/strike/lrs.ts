@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { XAPI_VERSION } from '@soteria/core/strikeXapi'
-import { resolvesPublicly } from '@/lib/security/publicHost'
+import { publicFetch, publicHostStatus, resolvesPublicly } from '@/lib/security/publicHost'
 
 // The delivery half of LMS sync: POST queued xAPI statements to each
 // tenant's LRS. Runs from /api/cron/strike-xapi-sync. Safe to overlap with
@@ -18,6 +18,9 @@ export interface LrsCredentials {
   auth_username: string
   auth_password: string
 }
+
+/** How a request reaches the LRS; publicFetch in production, a stub in tests. */
+export type LrsTransport = (url: URL, init: RequestInit) => Promise<Response>
 
 export type LrsResult =
   | { ok: true; status: number }
@@ -55,12 +58,14 @@ async function lrsRequest(
   creds: LrsCredentials,
   url: URL,
   init: { method: 'GET' | 'POST'; body?: string },
-  fetchImpl: typeof fetch,
+  fetchImpl: LrsTransport,
 ): Promise<LrsResult> {
   // Re-checked on every send: DNS can change after the endpoint was saved.
-  if (!(await resolvesPublicly(url.hostname))) {
-    return { ok: false, retry: false, error: 'The endpoint host no longer resolves to a public address.' }
-  }
+  // The default transport (publicFetch) enforces this again at connect time;
+  // checking here first gives the admin a readable reason.
+  const host = await publicHostStatus(url.hostname)
+  if (host === 'unresolved') return { ok: false, retry: true, error: `Could not look up ${url.hostname}.` }
+  if (host === 'private') return { ok: false, retry: false, error: 'The endpoint host no longer resolves to a public address.' }
   try {
     const res = await fetchImpl(url, {
       method: init.method,
@@ -86,7 +91,7 @@ async function lrsRequest(
   }
 }
 
-export function postStatements(creds: LrsCredentials, statements: unknown[], fetchImpl: typeof fetch = fetch): Promise<LrsResult> {
+export function postStatements(creds: LrsCredentials, statements: unknown[], fetchImpl: LrsTransport = publicFetch): Promise<LrsResult> {
   return lrsRequest(creds, statementsUrl(creds.endpoint), { method: 'POST', body: JSON.stringify(statements) }, fetchImpl)
 }
 
@@ -95,7 +100,7 @@ export function postStatements(creds: LrsCredentials, statements: unknown[], fet
  * valid credentials. Many LMSs issue write-only keys, so 403 (authenticated,
  * not allowed to read) still proves the key works.
  */
-export async function testLrsConnection(creds: LrsCredentials, fetchImpl: typeof fetch = fetch): Promise<{ ok: boolean; message: string }> {
+export async function testLrsConnection(creds: LrsCredentials, fetchImpl: LrsTransport = publicFetch): Promise<{ ok: boolean; message: string }> {
   const url = statementsUrl(creds.endpoint)
   url.searchParams.set('limit', '1')
   const result = await lrsRequest(creds, url, { method: 'GET' }, fetchImpl)
@@ -121,7 +126,7 @@ export interface FlushSummary {
 export async function flushStrikeXapiOutbox(
   admin: SupabaseClient,
   now: Date,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: LrsTransport = publicFetch,
 ): Promise<FlushSummary> {
   const nowIso = now.toISOString()
   const { data: due, error } = await admin
