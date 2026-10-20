@@ -8,9 +8,13 @@ import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { StrikeVideoPlayer, type WatchProgress } from '@/components/strike/StrikeVideoPlayer'
 import { supabase } from '@/lib/supabase'
-import { strikeFetch } from '@/lib/strike/clientApi'
+import { strikeFetch, strikeFetchBytes } from '@/lib/strike/clientApi'
+import { certificateFilename } from '@/lib/strike/certificate'
 import { parseStrikeContent, type StrikeContent } from '@soteria/core/strikeContent'
 import { StrikeModuleRunner, type StrikeRunnerTransport, type StrikeSubmitFn, type StrikeSubmitResult } from '@/components/strike/StrikeModuleRunner'
+import { isStrikeLocale } from '@/components/strike/player/copy'
+import { LanguageSwitch } from '@/components/strike/LanguageSwitch'
+import { latestVersionPerLocale, pickStrikeLocale } from '@soteria/core/strikeLocale'
 import type { QuizAnswerRow, QuizQuestionRow } from '@/components/strike/QuizQuestion'
 import { CoachDock } from '@/components/strike/CoachDock'
 import type { StrikeBlockEventRecord } from '@soteria/core/strikeContent'
@@ -33,6 +37,23 @@ interface VersionRow {
   duration_seconds: number | null
   passing_score: number
   content: unknown
+  locale: string
+  title: string | null
+}
+
+// A per-viewer convenience: the language a learner last chose. Storage may be
+// unavailable (private mode), so it is only ever a hint.
+const LOCALE_KEY = 'strike-locale'
+function rememberedLocale(): string | null {
+  try { return window.localStorage.getItem(LOCALE_KEY) }
+  catch { return null }
+}
+function rememberLocale(locale: string) {
+  try { window.localStorage.setItem(LOCALE_KEY, locale) }
+  catch { /* a missed preference only means asking again */ }
+}
+function browserLocale(): string | null {
+  return typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('es') ? 'es' : null
 }
 
 interface MediaSource {
@@ -86,6 +107,8 @@ export default function StrikeModulePage() {
   const [error, setError] = useState<string | null>(null)
   // The coach withholds quiz answers until this learner has passed.
   const [passed, setPassed] = useState(false)
+  const [locales, setLocales] = useState<string[]>([])
+  const [chosenLocale, setChosenLocale] = useState<string | null>(null)
 
   const assignmentId = searchParams.get('assignment') ?? null
 
@@ -126,13 +149,15 @@ export default function StrikeModulePage() {
 
       const { data: versions, error: versionErr } = await supabase
         .from('strike_module_versions')
-        .select('id,module_id,version_number,transcript,duration_seconds,passing_score,content')
+        .select('id,module_id,version_number,transcript,duration_seconds,passing_score,content,locale,title')
         .eq('module_id', nextModule.id)
         .eq('status', 'published')
-        .order('version_number', { ascending: false })
-        .limit(1)
       if (versionErr) throw versionErr
-      const nextVersion = (versions?.[0] ?? null) as VersionRow | null
+      const latestByLocale = latestVersionPerLocale((versions ?? []) as VersionRow[])
+      const available = [...latestByLocale.keys()].sort()
+      const locale = pickStrikeLocale(available, chosenLocale ?? rememberedLocale() ?? browserLocale())
+      setLocales(available)
+      const nextVersion = locale ? latestByLocale.get(locale) ?? null : null
       setVersion(nextVersion)
 
       if (!nextVersion) {
@@ -179,7 +204,7 @@ export default function StrikeModulePage() {
     }
     // The React Compiler infers `tenant` (object) as the dependency; listing
     // the narrower `tenant?.id` here blocks compilation of the component.
-  }, [params.slug, tenant])
+  }, [params.slug, tenant, chosenLocale])
 
   useEffect(() => { void load() }, [load])
 
@@ -207,8 +232,8 @@ export default function StrikeModulePage() {
     if (!module || !version) return null
     const base = `/api/strike/${module.id}`
     return {
-      start: () => strikeFetch<{ attempt_id: string; reached: StrikeBlockEventRecord[] }>(`${base}/start`, tenantId, {
-        body: { module_version_id: version.id, assignment_id: assignmentId },
+      start: delivery => strikeFetch<{ attempt_id: string; reached: StrikeBlockEventRecord[] }>(`${base}/start`, tenantId, {
+        body: { module_version_id: version.id, assignment_id: assignmentId, delivery },
       }),
       events: async (attemptId, events) => {
         await strikeFetch(`${base}/events`, tenantId, { body: { module_version_id: version.id, attempt_id: attemptId, events } })
@@ -217,6 +242,13 @@ export default function StrikeModulePage() {
         `${base}/assets?version=${version.id}`, tenantId,
       ),
       download: async () => (await strikeFetch<{ url: string }>(`${base}/assets?version=${version.id}&download=1`, tenantId)).url,
+      certificate: async attemptId => ({
+        pdf: await strikeFetchBytes(`/api/strike/certificate?attempt=${attemptId}`, tenantId),
+        filename: certificateFilename(version.title ?? module.title),
+      }),
+      emailCertificate: async (attemptId, to) => {
+        await strikeFetch('/api/strike/certificate', tenantId, { body: { attempt_id: attemptId, to } })
+      },
     }
   }, [module, version, tenantId, assignmentId])
 
@@ -244,16 +276,21 @@ export default function StrikeModulePage() {
         </button>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{module.title}</h1>
+            <h1 lang={version?.locale} className="text-2xl font-bold text-slate-900 dark:text-slate-100">{version?.title ?? module.title}</h1>
             <p className="max-w-3xl text-sm text-slate-500 dark:text-slate-400">
               {module.description ?? 'Short, field-ready safety instruction.'}
             </p>
           </div>
-          {version && (
-            <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
-              v{version.version_number} · pass {version.passing_score}%
-            </span>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {version && (
+              <LanguageSwitch locales={locales} value={version.locale} onChange={locale => { rememberLocale(locale); setChosenLocale(locale) }} />
+            )}
+            {version && (
+              <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+                v{version.version_number} · pass {version.passing_score}%
+              </span>
+            )}
+          </div>
         </div>
       </header>
 
@@ -266,7 +303,9 @@ export default function StrikeModulePage() {
 
       {version && transport && (
         <StrikeModuleRunner
-          moduleTitle={module.title}
+          // A language switch is a different version: start its own attempt.
+          key={version.id}
+          moduleTitle={version.title ?? module.title}
           passingScore={version.passing_score}
           content={content}
           questions={questions}
@@ -274,7 +313,10 @@ export default function StrikeModulePage() {
           transport={transport}
           submit={submitAttempt}
           learnerName={profile?.full_name?.split(' ')[0] ?? null}
-          certificate={{ learnerName: profile?.full_name || email || 'Learner', organization: tenant?.name ?? null }}
+          learnerFullName={profile?.full_name || email || 'Learner'}
+          locale={isStrikeLocale(version.locale) ? version.locale : 'en'}
+          tenantId={tenantId}
+          learnerEmail={email ?? null}
           onPassed={() => setPassed(true)}
           coach={tenantId ? <CoachDock tenantId={tenantId} moduleId={module.id} moduleVersionId={version.id} attemptOpen={!passed} /> : null}
           legacyMedia={(

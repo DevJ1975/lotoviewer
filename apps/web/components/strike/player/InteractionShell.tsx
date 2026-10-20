@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react'
 import { ArrowUpRight, CheckCircle2, Hand, Lightbulb, Loader2, XCircle } from 'lucide-react'
+import { useStrikeCopy } from './copy'
 
 export type InteractionFeedback =
   | { state: 'idle' }
@@ -38,6 +39,7 @@ interface InteractionShellProps {
 export function InteractionShell({
   blockKey, label, prompt, instructions, feedback, completed, checking, canCheck, onCheck, remediation, hint, children,
 }: InteractionShellProps) {
+  const t = useStrikeCopy()
   return (
     <section
       aria-labelledby={`${blockKey}-prompt`}
@@ -49,7 +51,7 @@ export function InteractionShell({
         </span>
         {completed && (
           <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-            <CheckCircle2 className="h-4 w-4" aria-hidden /> Solved
+            <CheckCircle2 className="h-4 w-4" aria-hidden /> {t.solved}
           </span>
         )}
       </div>
@@ -58,11 +60,11 @@ export function InteractionShell({
       <div className="mt-4">{children}</div>
 
       {!completed && hint.revealed.length > 0 && (
-        <ol aria-label="Hints" className="mt-4 space-y-1.5 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100">
+        <ol aria-label={t.hintsLabel} className="mt-4 space-y-1.5 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100">
           {hint.revealed.map((text, i) => (
             <li key={text} className="flex items-start gap-2">
               <Lightbulb className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-              <span><span className="font-semibold">Hint {i + 1}:</span> {text}</span>
+              <span><span className="font-semibold">{t.hintN(i + 1)}</span> {text}</span>
             </li>
           ))}
         </ol>
@@ -77,7 +79,7 @@ export function InteractionShell({
             className="motion-press inline-flex min-h-12 items-center gap-2 rounded-lg bg-brand-navy px-5 py-2 text-sm font-semibold text-white hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {checking && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
-            Check
+            {t.check}
           </button>
         )}
         {!completed && hint.canReveal && (
@@ -87,7 +89,7 @@ export function InteractionShell({
             className="motion-press inline-flex min-h-12 items-center gap-2 rounded-lg border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 hover:border-brand-navy dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
           >
             <Lightbulb className="h-4 w-4" aria-hidden />
-            {hint.revealed.length === 0 ? 'Hint' : 'Another hint'}
+            {hint.revealed.length === 0 ? t.hint : t.anotherHint}
           </button>
         )}
         <div aria-live="polite" className="min-w-0 flex-1">
@@ -103,7 +105,7 @@ export function InteractionShell({
               </p>
               {remediation && (
                 <a href={`#block-${remediation.blockKey}`} className="inline-flex items-center gap-1 text-sm font-semibold text-brand-navy underline-offset-2 hover:underline dark:text-blue-300">
-                  Review: {remediation.title} <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
+                  {t.review(remediation.title)} <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
                 </a>
               )}
             </div>

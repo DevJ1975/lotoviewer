@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, GripVertical } from 'lucide-react'
 import { Button as DragButton, DropIndicator, GridList, GridListItem, useDragAndDrop } from 'react-aria-components'
 import { scoreStrikeInteraction, stableShuffle, type StrikeDragSortBlock } from '@soteria/core/strikeContent'
 import { InteractionShell, type HintControl, type InteractionFeedback } from './InteractionShell'
+import { useStrikeCopy } from './copy'
 
 interface DragSortProps {
   block: StrikeDragSortBlock
@@ -16,6 +17,7 @@ interface DragSortProps {
 }
 
 export function DragSort({ block, seed, completed, remediation, hint, onResult }: DragSortProps) {
+  const t = useStrikeCopy()
   const [order, setOrder] = useState(() =>
     completed ? block.items.map(i => i.id) : stableShuffle(block.items, `${seed}:${block.key}`).map(i => i.id),
   )
@@ -58,17 +60,17 @@ export function DragSort({ block, seed, completed, remediation, hint, onResult }
     const result = scoreStrikeInteraction(block, { kind: 'drag_sort', orderedIds: order })
     setWrong(new Set(result.incorrectIds))
     setFeedback(result.correct
-      ? { state: 'correct', message: 'Correct order. That sequence is what keeps you safe.' }
-      : { state: 'incorrect', message: `${result.incorrectIds.length} step${result.incorrectIds.length === 1 ? ' is' : 's are'} out of place. The highlighted steps need to move.` })
+      ? { state: 'correct', message: t.sortCorrect }
+      : { state: 'incorrect', message: t.sortWrong(result.incorrectIds.length) })
     onResult(result.correct, { ordered_ids: order })
   }
 
   return (
     <InteractionShell
       blockKey={block.key}
-      label="Drag to order"
+      label={t.sortLabel}
       prompt={block.prompt}
-      instructions="Drag a step by its handle, or use the arrows to move it up or down."
+      instructions={t.sortInstructions}
       feedback={feedback}
       completed={completed}
       canCheck
@@ -94,7 +96,7 @@ export function DragSort({ block, seed, completed, remediation, hint, onResult }
                 isWrong ? 'border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/40' : 'border-slate-200 dark:border-slate-700'
               }`}
             >
-              <DragButton slot="drag" aria-label={`Move ${item.label}`} isDisabled={completed}
+              <DragButton slot="drag" aria-label={t.move(item.label)} isDisabled={completed}
                 className="flex min-h-12 w-11 shrink-0 cursor-grab touch-none flex-col items-center justify-center gap-0.5 self-stretch rounded text-slate-400 outline-none data-[disabled]:cursor-default data-[focus-visible]:ring-2 data-[focus-visible]:ring-brand-navy">
                 <span className="text-sm font-black tabular-nums text-slate-700 dark:text-slate-200">{index + 1}</span>
                 <GripVertical className="h-5 w-5" aria-hidden />
@@ -104,12 +106,12 @@ export function DragSort({ block, seed, completed, remediation, hint, onResult }
                 // Stacked on phones so the step text keeps its width; side by side on tablets.
                 <span className="flex shrink-0 flex-col gap-1 sm:flex-row">
                   <button type="button" onClick={() => move(index, index - 1)} disabled={index === 0}
-                    aria-label={`Move ${item.label} up`}
+                    aria-label={t.moveUp(item.label)}
                     className="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-slate-200 text-slate-600 disabled:opacity-30 dark:border-slate-700 dark:text-slate-300">
                     <ChevronUp className="h-5 w-5" />
                   </button>
                   <button type="button" onClick={() => move(index, index + 1)} disabled={index === order.length - 1}
-                    aria-label={`Move ${item.label} down`}
+                    aria-label={t.moveDown(item.label)}
                     className="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-slate-200 text-slate-600 disabled:opacity-30 dark:border-slate-700 dark:text-slate-300">
                     <ChevronDown className="h-5 w-5" />
                   </button>

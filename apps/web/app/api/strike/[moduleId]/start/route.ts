@@ -3,7 +3,7 @@ import * as Sentry from '@sentry/nextjs'
 import { requireStrikeMember } from '@/lib/strike/gate'
 import { checkMemoryRateLimit } from '@/lib/rateLimit/memory'
 import { loadPublishedStrikeVersion } from '@/lib/strike/moduleAccess'
-import { openAttempt, resolveMemberIdForUser } from '@/lib/strike/attempts'
+import { openAttempt, parseDelivery, resolveMemberIdForUser } from '@/lib/strike/attempts'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const runtime = 'nodejs'
@@ -27,7 +27,7 @@ export async function POST(req: Request, ctx: RouteContext) {
   const limit = checkMemoryRateLimit(`strike-start:${gate.tenantId}:${gate.userId}`, 20, 60_000)
   if (!limit.ok) return NextResponse.json({ error: 'Too many requests. Try again in a minute.' }, { status: 429 })
 
-  let body: { module_version_id?: unknown; assignment_id?: unknown }
+  let body: { module_version_id?: unknown; assignment_id?: unknown; delivery?: unknown }
   try { body = await req.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
@@ -46,7 +46,7 @@ export async function POST(req: Request, ctx: RouteContext) {
       memberId: await resolveMemberIdForUser(admin, gate.tenantId, gate.userId),
       role: gate.role,
       channel: 'account',
-    }, { moduleId, version: lookup.version, assignmentId })
+    }, { moduleId, version: lookup.version, assignmentId, delivery: parseDelivery(body.delivery) })
 
     return NextResponse.json(
       { attempt_id: opened.attemptId, reached: opened.reached, resumed: opened.resumed },

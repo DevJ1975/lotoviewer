@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Captions, CaptionsOff, CheckCircle2, Pause, Play, RotateCcw } from 'lucide-react'
 import { formatDuration, type StrikeMotionSceneBlock } from '@soteria/core/strikeContent'
+import { STRIKE_LOCALE_LABEL, useStrikeCopy } from './copy'
 
 interface MotionSceneProps {
   block: StrikeMotionSceneBlock
@@ -19,6 +20,7 @@ interface MotionSceneProps {
 // live HTML, so it is crisp, selectable, translatable and screen-readable —
 // the reason scenes are rendered rather than shipped as a video file.
 export function MotionScene({ block, index, urls, completed, captionsOn, onToggleCaptions, onCompleted }: MotionSceneProps) {
+  const t = useStrikeCopy()
   const audioRef = useRef<HTMLAudioElement>(null)
   const [playing, setPlaying] = useState(false)
   const [positionMs, setPositionMs] = useState(0)
@@ -82,11 +84,11 @@ export function MotionScene({ block, index, urls, completed, captionsOn, onToggl
 
         <div className="absolute inset-x-0 top-0 flex items-center justify-between p-3 sm:p-4">
           <span className="rounded bg-brand-yellow px-2 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-slate-950">
-            {block.eyebrow ?? `Scene ${index + 1}`}
+            {block.eyebrow ?? t.sceneN(index + 1)}
           </span>
           {completed && (
             <span className="inline-flex items-center gap-1 rounded bg-emerald-500/90 px-2 py-1 text-xs font-semibold text-white">
-              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Done
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> {t.done}
             </span>
           )}
         </div>
@@ -112,7 +114,7 @@ export function MotionScene({ block, index, urls, completed, captionsOn, onToggl
           <button
             type="button"
             onClick={togglePlay}
-            aria-label={playing ? `Pause ${block.title}` : `Play ${block.title}`}
+            aria-label={playing ? t.pause(block.title) : t.play(block.title)}
             className="motion-press inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-yellow text-slate-950"
           >
             {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 translate-x-0.5" />}
@@ -125,14 +127,14 @@ export function MotionScene({ block, index, urls, completed, captionsOn, onToggl
               {formatDuration(positionMs)} / {formatDuration(durationMs)}
             </p>
           </div>
-          <button type="button" onClick={replay} aria-label="Replay scene" className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded text-white/80 hover:text-white">
+          <button type="button" onClick={replay} aria-label={t.replay} className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded text-white/80 hover:text-white">
             <RotateCcw className="h-4 w-4" />
           </button>
           <button
             type="button"
             onClick={onToggleCaptions}
             aria-pressed={captionsOn}
-            aria-label={captionsOn ? 'Hide captions' : 'Show captions'}
+            aria-label={captionsOn ? t.hideCaptions : t.showCaptions}
             className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded text-white/80 hover:text-white"
           >
             {captionsOn ? <Captions className="h-4 w-4" /> : <CaptionsOff className="h-4 w-4" />}
@@ -151,14 +153,14 @@ export function MotionScene({ block, index, urls, completed, captionsOn, onToggl
               onCompleted()
             }}
           >
-            {captionsUrl && <track kind="captions" srcLang="en" label="English" src={captionsUrl} default />}
+            {captionsUrl && <track kind="captions" srcLang={t.lang} label={STRIKE_LOCALE_LABEL[t.lang]} src={captionsUrl} default />}
           </audio>
         </div>
       ) : null}
 
       {narration && (
         <details className="bg-white px-4 py-1 text-sm dark:bg-slate-950">
-          <summary className="cursor-pointer py-2.5 font-semibold text-slate-700 dark:text-slate-200">Transcript</summary>
+          <summary className="cursor-pointer py-2.5 font-semibold text-slate-700 dark:text-slate-200">{t.transcript}</summary>
           <p className="mt-2 text-slate-600 dark:text-slate-300">{narration.transcript}</p>
         </details>
       )}

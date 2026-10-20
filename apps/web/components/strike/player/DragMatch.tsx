@@ -5,6 +5,7 @@ import { useDrag, useDrop, type TextDropItem } from 'react-aria'
 import { X } from 'lucide-react'
 import { scoreStrikeInteraction, stableShuffle, type StrikeDragMatchBlock } from '@soteria/core/strikeContent'
 import { InteractionShell, type HintControl, type InteractionFeedback } from './InteractionShell'
+import { useStrikeCopy } from './copy'
 
 interface DragMatchProps {
   block: StrikeDragMatchBlock
@@ -21,6 +22,7 @@ const DRAG_TYPE = 'strike-match-answer'
 // mouse, touch and keyboard drag), or tap a chip then tap a slot — the path
 // that works with gloves, where a long-press drag does not.
 export function DragMatch({ block, seed, completed, remediation, hint, onResult }: DragMatchProps) {
+  const t = useStrikeCopy()
   const answers = useMemo(
     () => stableShuffle(block.pairs.map(p => p.answer), `${seed}:${block.key}`),
     [block, seed],
@@ -53,17 +55,17 @@ export function DragMatch({ block, seed, completed, remediation, hint, onResult 
     const result = scoreStrikeInteraction(block, { kind: 'drag_match', answerByPairId: placed })
     setWrong(new Set(result.incorrectIds))
     setFeedback(result.correct
-      ? { state: 'correct', message: 'All matched. Each energy source has the right way to isolate it.' }
-      : { state: 'incorrect', message: `${result.incorrectIds.length} match${result.incorrectIds.length === 1 ? ' is' : 'es are'} wrong. Fix the highlighted rows.` })
+      ? { state: 'correct', message: t.matchCorrect }
+      : { state: 'incorrect', message: t.matchWrong(result.incorrectIds.length) })
     onResult(result.correct, { answer_by_pair_id: placed })
   }
 
   return (
     <InteractionShell
       blockKey={block.key}
-      label="Drag to match"
+      label={t.matchLabel}
       prompt={block.prompt}
-      instructions="Tap an answer, then tap the row it belongs to. You can also drag it."
+      instructions={t.matchInstructions}
       feedback={feedback}
       completed={completed}
       canCheck={Object.keys(placed).length === block.pairs.length}
@@ -72,7 +74,7 @@ export function DragMatch({ block, seed, completed, remediation, hint, onResult 
       hint={hint}
     >
       {!completed && (
-        <div className="mb-4 flex flex-wrap gap-2" aria-label="Answers">
+        <div className="mb-4 flex flex-wrap gap-2" aria-label={t.answers}>
           {answers.map(answer => (
             <AnswerChip
               key={answer}
@@ -139,6 +141,7 @@ function MatchSlot({
   onTap: () => void
   onClear: () => void
 }) {
+  const t = useStrikeCopy()
   const ref = useRef<HTMLDivElement>(null)
   const { dropProps, isDropTarget } = useDrop({
     ref,
@@ -158,7 +161,7 @@ function MatchSlot({
         {...dropProps}
         role="button"
         tabIndex={disabled ? -1 : 0}
-        aria-label={answer ? `${prompt}: ${answer}` : `${prompt}: empty. ${armedAnswer ? `Press to place ${armedAnswer}.` : 'Select an answer first.'}`}
+        aria-label={answer ? `${prompt}: ${answer}` : t.slotEmpty(prompt, armedAnswer)}
         onClick={onTap}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onTap() } }}
         className={`flex min-h-12 items-center justify-between gap-2 rounded-lg border-2 px-3 py-2 text-sm transition ${
@@ -169,10 +172,10 @@ function MatchSlot({
         }`}
       >
         <span className={answer ? 'font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-400'}>
-          {answer ?? (armedAnswer ? `Tap to place “${armedAnswer}”` : 'Empty')}
+          {answer ?? (armedAnswer ? t.tapToPlace(armedAnswer) : t.empty)}
         </span>
         {answer && !disabled && (
-          <button type="button" onClick={e => { e.stopPropagation(); onClear() }} aria-label={`Clear ${prompt}`}
+          <button type="button" onClick={e => { e.stopPropagation(); onClear() }} aria-label={t.clear(prompt)}
             className="-my-2 -mr-2 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
             <X className="h-4 w-4" />
           </button>

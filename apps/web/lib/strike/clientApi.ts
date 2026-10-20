@@ -25,3 +25,16 @@ export async function strikeFetch<T>(path: string, tenantId: string, init: { met
   if (!res.ok) throw new StrikeApiError((payload as { error?: string }).error ?? 'Request failed', res.status)
   return payload as T
 }
+
+/** Authenticated binary download (e.g. a certificate PDF) from a STRIKE API route. */
+export async function strikeFetchBytes(path: string, tenantId: string): Promise<Uint8Array> {
+  const { data } = await supabase.auth.getSession()
+  const token = data.session?.access_token
+  if (!token) throw new StrikeApiError('Sign in again to continue.', 401)
+  const res = await fetch(path, { headers: { authorization: `Bearer ${token}`, 'x-active-tenant': tenantId } })
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}))
+    throw new StrikeApiError((payload as { error?: string }).error ?? 'Download failed', res.status)
+  }
+  return new Uint8Array(await res.arrayBuffer())
+}

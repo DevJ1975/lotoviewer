@@ -38,6 +38,14 @@ export interface StrikeLearner {
 
 export type StrikeResult<T> = { ok: true; value: T } | { ok: false; status: number; message: string }
 
+/** Standard: scenes, practice checks and the graded quiz. Assisted (ADA): scenes only, then a supervisor signs. */
+export const STRIKE_DELIVERIES = ['standard', 'assisted'] as const
+export type StrikeDelivery = typeof STRIKE_DELIVERIES[number]
+
+export function parseDelivery(value: unknown): StrikeDelivery {
+  return value === 'assisted' ? 'assisted' : 'standard'
+}
+
 const REUSE_OPEN_ATTEMPT_MS = 24 * 60 * 60 * 1000
 const MAX_EVENTS_PER_BATCH = 50
 
@@ -82,7 +90,7 @@ export interface OpenedAttempt {
 export async function openAttempt(
   admin: SupabaseClient,
   learner: StrikeLearner,
-  opts: { moduleId: string; version: StrikeVersionRow; assignmentId: string | null },
+  opts: { moduleId: string; version: StrikeVersionRow; assignmentId: string | null; delivery: StrikeDelivery },
 ): Promise<OpenedAttempt> {
   const since = new Date(Date.now() - REUSE_OPEN_ATTEMPT_MS).toISOString()
   const [learnerColumn, learnerValue] = learnerKey(learner)
@@ -92,6 +100,7 @@ export async function openAttempt(
     .eq('tenant_id', learner.tenantId)
     .eq('module_version_id', opts.version.id)
     .eq(learnerColumn, learnerValue)
+    .eq('delivery', opts.delivery)
     .is('submitted_at', null)
     .gte('started_at', since)
     .order('started_at', { ascending: false })
@@ -117,6 +126,7 @@ export async function openAttempt(
       assignment_id: opts.assignmentId,
       user_id: learner.userId,
       member_id: learner.memberId,
+      delivery: opts.delivery,
       client_context: { mode: learner.channel === 'kiosk' ? 'kiosk_player' : 'learner_player' },
     })
     .select('id')
@@ -282,7 +292,7 @@ export async function gradeAndRecordAttempt(
   }
 
   if (opts.assignmentId) {
-    const assignment = await checkAssignment(admin, learner, opts.moduleId, version.id, opts.assignmentId)
+    const assignment = await checkAssignment(admin, learner, opts.moduleId, version, opts.assignmentId)
     if (!assignment.ok) return assignment
   }
 
@@ -416,7 +426,7 @@ async function checkAssignment(
   admin: SupabaseClient,
   learner: StrikeLearner,
   moduleId: string,
-  versionId: string,
+  version: Pick<StrikeVersionRow, 'id' | 'locale'>,
   assignmentId: string,
 ): Promise<StrikeResult<null>> {
   const { data: assignment, error } = await admin
@@ -430,7 +440,7 @@ async function checkAssignment(
     || assignment.tenant_id !== learner.tenantId
     || assignment.module_id !== moduleId
     || assignment.status !== 'active'
-    || (assignment.module_version_id && assignment.module_version_id !== versionId)
+    || (assignment.module_version_id && !(await isAssignedVersionOrTranslation(admin, assignment.module_version_id as string, version)))
   ) {
     return { ok: false, status: 400, message: 'Assignment does not match this module.' }
   }
@@ -443,6 +453,21 @@ async function checkAssignment(
     return { ok: false, status: 403, message: 'Assignment is not assigned to this user.' }
   }
   return { ok: true, value: null }
+}
+
+/**
+ * An assignment pins one version; a learner who chose another language takes
+ * that language's version instead, which satisfies the same assignment.
+ */
+async function isAssignedVersionOrTranslation(
+  admin: SupabaseClient,
+  assignedVersionId: string,
+  version: Pick<StrikeVersionRow, 'id' | 'locale'>,
+): Promise<boolean> {
+  if (assignedVersionId === version.id) return true
+  const { data, error } = await admin.from('strike_module_versions').select('locale').eq('id', assignedVersionId).maybeSingle()
+  if (error) throw new Error(error.message)
+  return !!data && data.locale !== version.locale
 }
 
 async function updateAttempt(admin: SupabaseClient, attemptId: string, fields: Record<string, unknown>): Promise<string> {
