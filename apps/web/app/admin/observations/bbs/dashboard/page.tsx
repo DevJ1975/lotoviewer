@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft, Award, Eye, ListChecks, Loader2, ShieldAlert, Users } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import {
@@ -53,7 +54,8 @@ interface ActionTeamRow {
 const WINDOW_DAYS = 30
 
 export default function BbsDashboardPage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
   const [rows, setRows]   = useState<ObservationDashboardRow[] | null>(null)
   const [teams, setTeams] = useState<ActionTeamRow[]>([])
@@ -89,8 +91,8 @@ export default function BbsDashboardPage() {
   }, [tenantId])
 
   useEffect(() => {
-    if (!authLoading && profile?.is_admin) { void load(); void loadTeams() }
-  }, [authLoading, profile, load, loadTeams])
+    if (!authLoading && canManage) { void load(); void loadTeams() }
+  }, [authLoading, canManage, load, loadTeams])
 
   // Sampled rather than read at render: Date.now() during render is impure,
   // so the overdue badge froze at whenever the last unrelated render happened.
@@ -126,7 +128,7 @@ export default function BbsDashboardPage() {
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 

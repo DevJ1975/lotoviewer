@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, ClipboardCheck, Loader2, ExternalLink, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
 
@@ -38,7 +39,8 @@ const VIA_BADGE: Record<string, string> = {
 }
 
 export default function ReviewQueuePage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
   const [rows, setRows]           = useState<FlaggedRow[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -63,8 +65,8 @@ export default function ReviewQueuePage() {
   }, [tenantId])
 
   useEffect(() => {
-    if (!authLoading && profile?.is_admin) load()
-  }, [authLoading, profile, load])
+    if (!authLoading && canManage) load()
+  }, [authLoading, canManage, load])
 
   async function clearFlag(equipmentId: string) {
     if (!tenantId) return
@@ -107,7 +109,7 @@ export default function ReviewQueuePage() {
   if (authLoading) {
     return <main className="mx-auto max-w-5xl px-4 py-12"><Loader2 className="size-4 animate-spin" /></main>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <main className="mx-auto max-w-5xl px-4 py-12 text-sm text-slate-500">Admins only.</main>
   }
 

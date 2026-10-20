@@ -230,9 +230,10 @@ export default function NotificationsSettingsPage() {
               You&apos;ll receive an alert when an atmospheric reading fails or when one of your permits is about
               to expire. Each device has to be enabled separately. You can disable any time.
             </p>
-            {/* Admin-only self-test. Sends a push only to the current
-                profile so it's safe to click on a noisy production org. */}
-            {profile.is_admin && subscribed && (
+            {/* Self-test. Sends a push only to the current profile, which
+                /api/push/dispatch allows for any signed-in user, so it's
+                safe to click on a noisy production org. */}
+            {subscribed && (
               <button
                 type="button"
                 onClick={sendTest}

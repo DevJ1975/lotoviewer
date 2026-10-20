@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { ArrowRight, LayoutGrid } from 'lucide-react'
-import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { PanelEyebrow } from '@/components/DashboardPanel'
 import { useTenant } from '@/components/TenantProvider'
 import { isModuleVisible } from '@soteria/core/moduleVisibility'
@@ -21,11 +21,11 @@ import { isModuleVisible } from '@soteria/core/moduleVisibility'
 const MATRIX_HREF = '/admin/people/training-competency-matrix'
 
 export default function TrainingMatrixNavCard() {
-  const { profile } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenant, loading: tenantLoading } = useTenant()
 
   const visible = isModuleVisible('admin-training-competency-matrix', tenant?.modules)
-  if (tenantLoading || !profile?.is_admin || !visible) return null
+  if (tenantLoading || !canManage || !visible) return null
 
   // Not a DashboardPanel: the whole card is one link, so it takes the
   // system's interactive-placard treatment rather than a panel header.

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { CheckCircle2, Clock3, Loader2, Plus, ShieldCheck, X } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { supabase } from '@/lib/supabase'
 import {
   CAPA_HIERARCHY_LEVELS,
@@ -45,8 +46,7 @@ export default function CapaPanel({ incidentId }: Props) {
   const tenantId = tenant?.id
   const { profile } = useAuth()
   const userId = profile?.id ?? null
-  const canEdit = !!profile?.is_admin || !!profile?.is_superadmin
-
+  const { canManage: canEdit } = useCanManageTenant()
   const [rows,  setRows]  = useState<CapaRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy,  setBusy]  = useState(false)

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Mountain, Loader2, Trash2, LineChart } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import { formatSupabaseError } from '@/lib/supabaseError'
@@ -66,7 +67,8 @@ function numOrNull(s: string): number | null {
 }
 
 export default function EnvironmentalObjectivesPage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
 
   const [rows, setRows]             = useState<ObjectiveRow[] | null>(null)
@@ -129,8 +131,8 @@ export default function EnvironmentalObjectivesPage() {
   }, [tenantId])
 
   useEffect(() => {
-    if (!authLoading && profile?.is_admin) void load()
-  }, [authLoading, profile, load])
+    if (!authLoading && canManage) void load()
+  }, [authLoading, canManage, load])
 
   // Latest reading per objective (readings already sorted date desc).
   const latestByObjective = useMemo(() => {
@@ -239,7 +241,7 @@ export default function EnvironmentalObjectivesPage() {
       </div>
     )
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return (
       <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">
         Admins only.

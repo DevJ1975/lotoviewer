@@ -5,6 +5,7 @@ import { HardHat } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { InventoryShell, InventoryEmpty } from '../_components/InventoryShell'
 import {
   decorateWithDaysLeft,
@@ -27,8 +28,8 @@ interface ComponentRow {
 
 export default function FallProtectionPage() {
   const { tenantId, loading: tenantLoading } = useTenant()
-  const { profile, loading: authLoading } = useAuth()
-  const canManage = !!profile?.is_admin || !!profile?.is_superadmin
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const [rows, setRows] = useState<Array<ComponentRow & { days_left: number | null }> | null>(null)
   const [error, setError] = useState<string | null>(null)
 

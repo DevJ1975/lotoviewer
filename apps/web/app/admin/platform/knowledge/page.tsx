@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Loader2, Upload, Trash2, FileText, AlertCircle, CheckCircle2, Sparkles } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { supabase } from '@/lib/supabase'
 import Dropzone from '@/components/ui/Dropzone'
 import { inferUploadHint } from '@/lib/policyUploadHints'
@@ -36,9 +37,8 @@ interface DocRow {
 
 export default function TenantKnowledgePage() {
   const { tenant, loading: tenantLoading } = useTenant()
-  const { profile, loading: authLoading } = useAuth()
-  const canEdit = !!profile?.is_admin || !!profile?.is_superadmin
-
+  const { loading: authLoading } = useAuth()
+  const { canManage: canEdit } = useCanManageTenant()
   const [docs, setDocs]           = useState<DocRow[]>([])
   const [loading, setLoading]     = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)

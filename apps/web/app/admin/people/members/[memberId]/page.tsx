@@ -33,6 +33,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import {
@@ -72,10 +73,9 @@ export default function AdminMemberDetailPage() {
   const router = useRouter()
   const memberId = params?.memberId ?? ''
 
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
   const { tenantId, loading: tenantLoading } = useTenant()
-  const canManage = !!profile?.is_admin || !!profile?.is_superadmin
-
+  const { canManage } = useCanManageTenant()
   const [member, setMember]     = useState<AdminMemberRow | null>(null)
   const [events, setEvents]     = useState<MemberStatusEvent[]>([])
   const [loading, setLoading]   = useState(true)

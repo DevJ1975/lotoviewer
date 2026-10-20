@@ -5,6 +5,7 @@ import { ScanSearch } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { InventoryShell, InventoryEmpty } from '../_components/InventoryShell'
 
 interface Row {
@@ -42,8 +43,8 @@ function targetLabel(r: Row): string {
 
 export default function InspectionsPage() {
   const { tenantId, loading: tenantLoading } = useTenant()
-  const { profile, loading: authLoading } = useAuth()
-  const canManage = !!profile?.is_admin || !!profile?.is_superadmin
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const [rows, setRows] = useState<Row[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 

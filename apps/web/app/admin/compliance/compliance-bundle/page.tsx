@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Download, FileArchive, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import { loadPermitsInWindow }      from '@/lib/queries/confinedSpacePermits'
 import { loadHotWorkPermitsInWindow } from '@/lib/queries/hotWorkPermits'
@@ -36,7 +37,8 @@ function nDaysAgoIso(n: number): string {
 }
 
 export default function CompliancePage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   // Default to the last 90 days — typical inspector look-back.
   const [start, setStart] = useState<string>(() => nDaysAgoIso(90))
   const [end, setEnd]     = useState<string>(() => todayIso())
@@ -189,7 +191,7 @@ export default function CompliancePage() {
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 

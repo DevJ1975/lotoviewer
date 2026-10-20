@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import type { LotoWorker } from '@soteria/core/types'
@@ -39,6 +40,7 @@ function TakeExam() {
   const router = useRouter()
   const { id: examId, workerId } = useParams<{ id: string; workerId: string }>()
   const { profile, loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
 
   const [exam, setExam] = useState<CompetencyExam | null>(null)
@@ -82,12 +84,12 @@ function TakeExam() {
     setAnswers(new Array((examResult.data as CompetencyExam).questions.length).fill(-1))
   }, [tenantId, examId, workerId])
 
-  useEffect(() => { if (!authLoading && profile?.is_admin) load() }, [authLoading, profile, load])
+  useEffect(() => { if (!authLoading && canManage) load() }, [authLoading, canManage, load])
 
   useEffect(() => { if (exam && !attemptId) start() }, [exam, attemptId, start])
 
   if (authLoading || !exam || !worker || !attemptId) return <Loader />
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 

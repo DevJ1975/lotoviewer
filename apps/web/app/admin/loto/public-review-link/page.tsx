@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import PhotoReconcilePanel from './_components/PhotoReconcilePanel'
 
@@ -42,7 +43,8 @@ interface PublicLinkRow {
 interface ActionResult { kind: 'ok' | 'err'; message: string }
 
 export default function PublicReviewLinkPage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
   const [link, setLink]       = useState<PublicLinkRow | null>(null)
   const [loadErr, setLoadErr] = useState<string | null>(null)
@@ -78,8 +80,8 @@ export default function PublicReviewLinkPage() {
   }, [tenantId])
 
   useEffect(() => {
-    if (!authLoading && profile?.is_admin) void refresh()
-  }, [authLoading, profile, refresh])
+    if (!authLoading && canManage) void refresh()
+  }, [authLoading, canManage, refresh])
 
   async function mint() {
     if (!tenantId) return
@@ -147,7 +149,7 @@ export default function PublicReviewLinkPage() {
   }
 
   if (authLoading) return <main className="mx-auto max-w-3xl px-4 py-12"><Loader2 className="size-4 animate-spin" /></main>
-  if (!profile?.is_admin) return <main className="mx-auto max-w-3xl px-4 py-12 text-sm text-slate-500">Admins only.</main>
+  if (!canManage) return <main className="mx-auto max-w-3xl px-4 py-12 text-sm text-slate-500">Admins only.</main>
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 lg:px-8">

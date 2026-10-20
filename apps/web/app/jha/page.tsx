@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Loader2, AlertTriangle, Plus, FileText } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
-import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { supabase } from '@/lib/supabase'
 import type { JhaRow, JhaStatus, JhaFrequency } from '@soteria/core/jha'
 
@@ -31,9 +31,7 @@ const FREQUENCY_LABEL: Record<JhaFrequency, string> = {
 export default function JhaListPage() {
   const { tenant } = useTenant()
   const tenantId = tenant?.id
-  const { profile } = useAuth()
-  const canCreate = !!profile?.is_admin || !!profile?.is_superadmin
-
+  const { canManage: canCreate } = useCanManageTenant()
   const [rows,  setRows]  = useState<JhaRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showSuperseded, setShowSuperseded] = useState(false)

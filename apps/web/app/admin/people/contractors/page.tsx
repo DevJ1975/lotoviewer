@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Building2, CheckCircle2, Loader2, Plus, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import {
@@ -25,6 +26,7 @@ const STATUS_PILL = {
 
 export default function ContractorsPage() {
   const { profile, loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
   const [companies, setCompanies] = useState<ContractorCompany[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -45,14 +47,14 @@ export default function ContractorsPage() {
     setCompanies((data ?? []) as ContractorCompany[])
   }, [tenantId])
 
-  useEffect(() => { if (!authLoading && profile?.is_admin) load() }, [authLoading, profile, load])
+  useEffect(() => { if (!authLoading && canManage) load() }, [authLoading, canManage, load])
 
   const now = useMemo(() => new Date(), [companies])  // eslint-disable-line react-hooks/exhaustive-deps
 
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 

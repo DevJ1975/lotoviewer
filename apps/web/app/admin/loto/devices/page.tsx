@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, KeyRound, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import {
   loadAllDevices,
@@ -34,6 +35,7 @@ interface ProfileLite {
 
 export default function LotoDevicesPage() {
   const { profile, loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const [devices, setDevices]       = useState<LotoDevice[] | null>(null)
   const [openCheckouts, setOpenCheckouts] = useState<OpenCheckoutRow[] | null>(null)
   const [profileById, setProfileById] = useState<Map<string, ProfileLite>>(new Map())
@@ -177,7 +179,7 @@ export default function LotoDevicesPage() {
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 

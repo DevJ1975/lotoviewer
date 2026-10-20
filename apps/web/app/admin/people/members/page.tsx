@@ -19,13 +19,14 @@ import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import MemberAccessBadge from '@/components/MemberAccessBadge'
 import { listAdminMembers } from '@/lib/members/client'
 import type { AdminMemberRow } from '@/lib/members/types'
 
 export default function AdminMembersPage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
   const { tenantId } = useTenant()
   const [members, setMembers] = useState<AdminMemberRow[]>([])
   const [q, setQ] = useState('')
@@ -33,8 +34,7 @@ export default function AdminMembersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const canManage = !!profile?.is_admin || !!profile?.is_superadmin
-
+  const { canManage } = useCanManageTenant()
   const load = useCallback(async () => {
     if (!tenantId || !canManage) return
     setLoading(true)

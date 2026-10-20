@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Loader2, Settings } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { formatWorkOrderUrl } from '@soteria/core/orgConfig'
 import { formatSupabaseError } from '@/lib/supabaseError'
@@ -26,6 +27,7 @@ import type { OrgConfig } from '@soteria/core/types'
 
 export default function ConfigurationPage() {
   const { profile, loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
   const [config, setConfig] = useState<OrgConfig | null>(null)
   const [template, setTemplate] = useState('')
@@ -42,7 +44,7 @@ export default function ConfigurationPage() {
 
   useEffect(() => {
     if (authLoading) return
-    if (!profile?.is_admin) return
+    if (!canManage) return
     let cancelled = false
     supabase
       .from('loto_org_config')
@@ -62,7 +64,7 @@ export default function ConfigurationPage() {
         setLoading(false)
       })
     return () => { cancelled = true }
-  }, [authLoading, profile])
+  }, [authLoading, canManage])
 
   // Auto-clear the "Saved" indicator after 5s. Deriving the visibility
   // from Date.now() during render would never re-render to hide it.
@@ -73,7 +75,7 @@ export default function ConfigurationPage() {
   }, [savedAt])
 
   useEffect(() => {
-    if (authLoading || !profile?.is_admin || !tenantId) return
+    if (authLoading || !canManage || !tenantId) return
     let cancelled = false
     supabase
       .from('tenants')
@@ -87,7 +89,7 @@ export default function ConfigurationPage() {
         setTenantLangSaved(lang)
       })
     return () => { cancelled = true }
-  }, [authLoading, profile, tenantId])
+  }, [authLoading, canManage, tenantId])
 
   async function saveLanguage(next: Language) {
     if (!tenantId) return
@@ -107,7 +109,7 @@ export default function ConfigurationPage() {
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 

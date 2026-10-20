@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ChevronRight, Loader2, Play, Sparkles } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { toast } from '@/components/ui/sonner'
 import type { AuditRunStatus, LotoAuditRun } from '@/lib/loto/audit/schemas'
@@ -45,7 +46,8 @@ const STATUS_LABEL: Record<AuditRunStatus, string> = {
 }
 
 export default function AuditListPage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
   const [runs, setRuns]         = useState<RunRow[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -69,8 +71,8 @@ export default function AuditListPage() {
   }, [tenantId])
 
   useEffect(() => {
-    if (!authLoading && profile?.is_admin) void load()
-  }, [authLoading, profile, load])
+    if (!authLoading && canManage) void load()
+  }, [authLoading, canManage, load])
 
   async function startRun() {
     if (!tenantId) return
@@ -107,7 +109,7 @@ export default function AuditListPage() {
   if (authLoading) {
     return <main className="mx-auto max-w-5xl px-4 py-12"><Loader2 className="size-4 animate-spin" /></main>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <main className="mx-auto max-w-5xl px-4 py-12 text-sm text-slate-500">Admins only.</main>
   }
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, Brain, Loader2 } from 'lucide-react'
-import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import {
@@ -29,10 +29,10 @@ interface PredictionRow {
 }
 
 export default function EscalationPredictionPanel({ incidentId, currentSeverity }: Props) {
-  const { profile } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenant } = useTenant()
   const tenantId = tenant?.id
-  const isAdmin = !!profile?.is_admin
+  const isAdmin = canManage
 
   const [latest, setLatest] = useState<PredictionRow | null>(null)
   const [busy,   setBusy]   = useState(false)

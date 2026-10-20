@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 // Permit detail + lifecycle actions. The list page hands an id; here the
 // permit row is hydrated with its joined CP / worker / anchor / rescue
 // plan, the clearance snapshot is rendered, and the issuer can:
@@ -70,7 +71,7 @@ export default function PermitDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { tenantId } = useTenant()
   const { profile } = useAuth()
-  const canManage = !!profile?.is_admin || !!profile?.is_superadmin
+  const { canManage } = useCanManageTenant()
   const [permit, setPermit]         = useState<PermitRow | null>(null)
   const [components, setComponents] = useState<ComponentRow[]>([])
   const [busy, setBusy]             = useState<null | 'suspend' | 'resume' | 'complete' | 'cancel'>(null)

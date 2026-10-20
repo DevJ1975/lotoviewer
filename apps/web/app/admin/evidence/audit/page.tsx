@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { ArrowLeft, Download, History, Loader2, Search } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useTenant } from '@/components/TenantProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { TableSkeleton } from '@/components/Skeleton'
 import { useUrlState } from '@/hooks/useUrlState'
 import { AuditNarrativeCard } from './_components/AuditNarrativeCard'
@@ -30,7 +32,9 @@ const OP_STYLE: Record<AuditRow['operation'], string> = {
 const PAGE_SIZE = 100
 
 export default function AuditLogPage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { tenantId } = useTenant()
+  const { canManage } = useCanManageTenant()
   const [rows, setRows]               = useState<AuditRow[]>([])
   const [loading, setLoading]         = useState(true)
   const [loadError, setLoadError]     = useState<string | null>(null)
@@ -42,12 +46,16 @@ export default function AuditLogPage() {
   const [search, setSearch]           = useUrlState<string>('q', '')
   const [expandedId, setExpandedId]   = useState<number | null>(null)
 
-  const fetchRows = useCallback(async () => {
+  const fetchRows = useCallback(async (activeTenantId: string) => {
     setLoading(true)
     setLoadError(null)
+    // This page is the ACTIVE tenant's change history. RLS alone would also
+    // let through rows from every other tenant the viewer belongs to (and
+    // every tenant, for a superadmin); the cross-tenant view is /superadmin/audit.
     let q = supabase
       .from('audit_log')
       .select('*')
+      .eq('tenant_id', activeTenantId)
       .order('created_at', { ascending: false })
       .limit(PAGE_SIZE)
     if (tableFilter) q = q.eq('table_name', tableFilter)
@@ -64,9 +72,9 @@ export default function AuditLogPage() {
 
   useEffect(() => {
     if (authLoading) return
-    if (!profile?.is_admin) return
-    fetchRows()
-  }, [authLoading, profile, fetchRows])
+    if (!canManage || !tenantId) return
+    fetchRows(tenantId)
+  }, [authLoading, canManage, tenantId, fetchRows])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -81,7 +89,7 @@ export default function AuditLogPage() {
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 

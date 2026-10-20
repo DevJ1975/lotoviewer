@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Webhook, Loader2, Trash2, Plus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import type { WebhookEvent, WebhookSubscription } from '@soteria/core/types'
@@ -43,7 +44,8 @@ const ALL_EVENTS: { id: WebhookEvent; label: string; hint: string }[] = [
 ]
 
 export default function WebhooksPage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const [rows, setRows] = useState<WebhookSubscription[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -67,14 +69,14 @@ export default function WebhooksPage() {
 
   useEffect(() => {
     if (authLoading) return
-    if (!profile?.is_admin) return
+    if (!canManage) return
     load()
-  }, [authLoading, profile, load])
+  }, [authLoading, canManage, load])
 
   if (authLoading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" /></div>
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">Admins only.</div>
   }
 

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Archive, Loader2, Lock, Plus, Unlock } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import { DEFAULT_RETENTION_POLICY, type RetentionPolicy } from '@soteria/core/retentionPolicy'
@@ -47,7 +48,8 @@ interface HoldRow {
 }
 
 export default function RetentionPage() {
-  const { profile, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const { canManage } = useCanManageTenant()
   const { tenantId } = useTenant()
 
   const [policy,  setPolicy]  = useState<PolicyRow | null>(null)
@@ -109,8 +111,8 @@ export default function RetentionPage() {
   }, [tenantId])
 
   useEffect(() => {
-    if (!authLoading && profile?.is_admin) void load()
-  }, [authLoading, profile, load])
+    if (!authLoading && canManage) void load()
+  }, [authLoading, canManage, load])
 
   const dirty = useMemo(() => {
     if (!policy) return false
@@ -208,7 +210,7 @@ export default function RetentionPage() {
       </div>
     )
   }
-  if (!profile?.is_admin) {
+  if (!canManage) {
     return (
       <div className="flex items-center justify-center min-h-[60vh] text-sm text-slate-500 dark:text-slate-400">
         Admins only.

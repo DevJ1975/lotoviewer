@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, Archive, ArchiveRestore, Loader2, Plus, Trash2 } from 'lucide-react'
-import { useAuth } from '@/components/AuthProvider'
+import { useCanManageTenant } from '@/hooks/useCanManageTenant'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
 import {
@@ -30,9 +30,7 @@ const AREA_TYPE_OPTIONS: ReadonlyArray<{ value: HazardousWasteAreaType; label: s
 export default function HazardousWasteAreasPage() {
   const { tenant } = useTenant()
   const tenantId = tenant?.id
-  const { profile } = useAuth()
-  const canWrite = !!profile?.is_admin || !!profile?.is_superadmin
-
+  const { canManage: canWrite } = useCanManageTenant()
   const [areas,        setAreas]       = useState<AreaRow[] | null>(null)
   const [error,        setError]       = useState<string | null>(null)
   const [showArchived, setShowArchived] = useState(false)
