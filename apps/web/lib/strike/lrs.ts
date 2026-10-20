@@ -24,7 +24,7 @@ export type LrsTransport = (url: URL, init: RequestInit) => Promise<Response>
 
 export type LrsResult =
   | { ok: true; status: number }
-  | { ok: false; retry: boolean; error: string }
+  | { ok: false; retry: boolean; error: string; status?: number }
 
 /** Minutes double per try, capped at a day: 2, 4, 8 … 1440. */
 export function retryDelayMs(tries: number): number {
@@ -85,6 +85,7 @@ async function lrsRequest(
       ok: false,
       retry: res.status >= 500 || res.status === 408 || res.status === 429,
       error: `The LRS answered ${res.status}${detail ? `: ${detail}` : ''}`,
+      status: res.status,
     }
   } catch (e) {
     return { ok: false, retry: true, error: e instanceof Error ? e.message : String(e) }
@@ -129,48 +130,37 @@ export async function flushStrikeXapiOutbox(
   fetchImpl: LrsTransport = publicFetch,
 ): Promise<FlushSummary> {
   const nowIso = now.toISOString()
-  const { data: due, error } = await admin
-    .from('strike_xapi_statements')
-    .select('id,tenant_id,statement,tries')
-    .is('sent_at', null)
-    .lt('tries', MAX_TRIES)
-    .lte('next_try_at', nowIso)
-    .order('created_at', { ascending: true })
-    .limit(SCAN_LIMIT)
-  if (error) throw new Error(error.message)
-
-  const byTenant = new Map<string, DueRow[]>()
-  for (const row of (due ?? []) as DueRow[]) {
-    const list = byTenant.get(row.tenant_id) ?? []
-    list.push(row)
-    byTenant.set(row.tenant_id, list)
-  }
+  const { data: endpoints, error: endpointErr } = await admin
+    .from('strike_lrs_endpoints')
+    .select('tenant_id,endpoint,auth_username,auth_password')
+    .eq('enabled', true)
+  if (endpointErr) throw new Error(endpointErr.message)
 
   const summary: FlushSummary = { tenants: 0, sent: 0, failed: 0 }
-  if (byTenant.size > 0) {
-    const { data: endpoints, error: endpointErr } = await admin
-      .from('strike_lrs_endpoints')
-      .select('tenant_id,endpoint,auth_username,auth_password,enabled')
-      .in('tenant_id', [...byTenant.keys()])
-    if (endpointErr) throw new Error(endpointErr.message)
+  for (const endpoint of (endpoints ?? []) as (LrsCredentials & { tenant_id: string })[]) {
+    // Scanned per tenant: one shared scan of the oldest due rows let a
+    // tenant with a thousand rows that never send (a disabled or deleted
+    // endpoint) fill every tick, so no other tenant's statements went out.
+    const { data: due, error } = await admin
+      .from('strike_xapi_statements')
+      .select('id,tenant_id,statement,tries')
+      .eq('tenant_id', endpoint.tenant_id)
+      .is('sent_at', null)
+      .lt('tries', MAX_TRIES)
+      .lte('next_try_at', nowIso)
+      .order('created_at', { ascending: true })
+      .limit(SCAN_LIMIT)
+    if (error) throw new Error(error.message)
+    const rows = (due ?? []) as DueRow[]
+    if (rows.length === 0) continue
 
-    for (const endpoint of endpoints ?? []) {
-      if (!endpoint.enabled) continue
-      summary.tenants++
-      const rows = byTenant.get(endpoint.tenant_id as string) ?? []
-      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-        const batch = rows.slice(i, i + BATCH_SIZE)
-        const result = await postStatements(endpoint as LrsCredentials, batch.map(r => r.statement), fetchImpl)
-        if (result.ok) {
-          await markSent(admin, endpoint.tenant_id as string, batch, nowIso)
-          summary.sent += batch.length
-          continue
-        }
-        await markFailed(admin, endpoint.tenant_id as string, batch, result, now)
-        summary.failed += batch.length
-        // Don't keep hammering an LRS that just refused; the rest wait for the next tick.
-        break
-      }
+    summary.tenants++
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const outcome = await deliver(admin, endpoint, rows.slice(i, i + BATCH_SIZE), now, fetchImpl)
+      summary.sent += outcome.sent
+      summary.failed += outcome.failed
+      // Don't keep hammering an LRS that is down or refusing our key; the rest wait for the next tick.
+      if (outcome.stop) break
     }
   }
 
@@ -179,6 +169,39 @@ export async function flushStrikeXapiOutbox(
   if (purgeErr) throw new Error(purgeErr.message)
 
   return summary
+}
+
+/** The LRS refused the content of the batch, not the connection or the key. */
+function rejectsStatements(result: Extract<LrsResult, { ok: false }>): boolean {
+  return !result.retry && (result.status === 400 || result.status === 413)
+}
+
+/**
+ * Sends one batch. When the LRS rejects its content, the batch is halved
+ * until the statement it objects to is alone, so one malformed statement
+ * fails by itself instead of taking 49 good ones down with it.
+ */
+async function deliver(
+  admin: SupabaseClient,
+  endpoint: LrsCredentials & { tenant_id: string },
+  batch: DueRow[],
+  now: Date,
+  fetchImpl: LrsTransport,
+): Promise<{ sent: number; failed: number; stop: boolean }> {
+  const result = await postStatements(endpoint, batch.map(r => r.statement), fetchImpl)
+  if (result.ok) {
+    await markSent(admin, endpoint.tenant_id, batch, now.toISOString())
+    return { sent: batch.length, failed: 0, stop: false }
+  }
+  if (rejectsStatements(result) && batch.length > 1) {
+    const middle = Math.ceil(batch.length / 2)
+    const first = await deliver(admin, endpoint, batch.slice(0, middle), now, fetchImpl)
+    if (first.stop) return first
+    const second = await deliver(admin, endpoint, batch.slice(middle), now, fetchImpl)
+    return { sent: first.sent + second.sent, failed: first.failed + second.failed, stop: second.stop }
+  }
+  await markFailed(admin, endpoint.tenant_id, batch, result, now)
+  return { sent: 0, failed: batch.length, stop: !rejectsStatements(result) }
 }
 
 async function markSent(admin: SupabaseClient, tenantId: string, batch: DueRow[], nowIso: string): Promise<void> {

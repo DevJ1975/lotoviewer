@@ -86,7 +86,7 @@ describe('postStatements', () => {
   it('retries server errors and rate limits but not a refusal', async () => {
     expect(await postStatements(creds, [], respond(503))).toMatchObject({ ok: false, retry: true })
     expect(await postStatements(creds, [], respond(429))).toMatchObject({ ok: false, retry: true })
-    expect(await postStatements(creds, [], respond(400, 'bad statement'))).toEqual({ ok: false, retry: false, error: 'The LRS answered 400: bad statement' })
+    expect(await postStatements(creds, [], respond(400, 'bad statement'))).toEqual({ ok: false, retry: false, error: 'The LRS answered 400: bad statement', status: 400 })
   })
 
   it('retries a network failure', async () => {
@@ -152,23 +152,19 @@ function fakeAdmin(results: Record<string, unknown[]>) {
 describe('flushStrikeXapiOutbox', () => {
   const now = new Date('2026-10-20T12:00:00Z')
 
+  const endpointFor = (tenant: string) => ({ tenant_id: tenant, endpoint: `https://${tenant.toLowerCase()}.example.com/xapi/`, auth_username: tenant, auth_password: 'x' })
+  const row = (id: string, tenant: string, tries = 0) => ({ id, tenant_id: tenant, statement: { id }, tries })
+
   it("sends each tenant's statements to its own LRS, marks sent rows, and backs off failures", async () => {
     const { admin, calls } = fakeAdmin({
-      strike_xapi_statements: [[
-        { id: 'a1', tenant_id: 'A', statement: { id: 'a1' }, tries: 0 },
-        { id: 'b1', tenant_id: 'B', statement: { id: 'b1' }, tries: 2 },
-        { id: 'c1', tenant_id: 'C', statement: { id: 'c1' }, tries: 0 },
-      ]],
-      strike_lrs_endpoints: [[
-        { tenant_id: 'A', endpoint: 'https://a.example.com/xapi/', auth_username: 'a', auth_password: 'x', enabled: true },
-        { tenant_id: 'B', endpoint: 'https://b.example.com/xapi/', auth_username: 'b', auth_password: 'y', enabled: true },
-        { tenant_id: 'C', endpoint: 'https://c.example.com/xapi/', auth_username: 'c', auth_password: 'z', enabled: false },
-      ]],
+      strike_lrs_endpoints: [[endpointFor('A'), endpointFor('B')]],
+      strike_xapi_statements: [[row('a1', 'A')], [row('b1', 'B', 2)]],
     })
     const fetchImpl = vi.fn<typeof fetch>(async url => new Response(null, { status: String(url).includes('a.example.com') ? 200 : 503 }))
 
     expect(await flushStrikeXapiOutbox(admin, now, fetchImpl)).toEqual({ tenants: 2, sent: 1, failed: 1 })
 
+    expect(calls.find(c => c.table === 'strike_lrs_endpoints')?.filters).toContainEqual(['eq', ['enabled', true]])
     expect(fetchImpl.mock.calls.map(([url]) => new URL(String(url)).host)).toEqual(['a.example.com', 'b.example.com'])
     const updates = calls.filter(c => c.op === 'update' && c.table === 'strike_xapi_statements')
     expect(updates[0]).toMatchObject({ payload: { sent_at: now.toISOString(), last_error: null }, filters: [['in', ['id', ['a1']]]] })
@@ -179,13 +175,41 @@ describe('flushStrikeXapiOutbox', () => {
     expect(calls.some(c => c.op === 'delete' && c.table === 'strike_xapi_statements')).toBe(true)
   })
 
+  // A tenant whose endpoint is off can pile up rows that never send. A
+  // shared "oldest 1000 due" scan then returned only those rows, every tick.
+  it("scans each enabled tenant's own rows, so one stuck tenant can't starve the rest", async () => {
+    const { admin, calls } = fakeAdmin({
+      strike_lrs_endpoints: [[endpointFor('A')]],
+      strike_xapi_statements: [[row('a1', 'A')]],
+    })
+    expect(await flushStrikeXapiOutbox(admin, now, respond(200))).toEqual({ tenants: 1, sent: 1, failed: 0 })
+    const scan = calls.find(c => c.table === 'strike_xapi_statements' && c.op === 'select')
+    expect(scan?.filters).toContainEqual(['eq', ['tenant_id', 'A']])
+  })
+
   it('stops retrying a batch the LRS refuses outright', async () => {
     const { admin, calls } = fakeAdmin({
-      strike_xapi_statements: [[{ id: 'a1', tenant_id: 'A', statement: {}, tries: 0 }]],
-      strike_lrs_endpoints: [[{ tenant_id: 'A', endpoint: 'https://a.example.com/xapi/', auth_username: 'a', auth_password: 'x', enabled: true }]],
+      strike_lrs_endpoints: [[endpointFor('A')]],
+      strike_xapi_statements: [[row('a1', 'A')]],
     })
     await flushStrikeXapiOutbox(admin, now, respond(401))
     const update = calls.find(c => c.op === 'update' && c.table === 'strike_xapi_statements')
     expect(update?.payload).toMatchObject({ tries: MAX_TRIES })
+  })
+
+  it('isolates the one statement an LRS rejects and still delivers the others', async () => {
+    const rows = Array.from({ length: 8 }, (_, i) => row(`a${i}`, 'A'))
+    const { admin, calls } = fakeAdmin({ strike_lrs_endpoints: [[endpointFor('A')]], strike_xapi_statements: [rows] })
+    const fetchImpl = vi.fn<typeof fetch>(async (_url, init) => {
+      const ids = (JSON.parse(String(init?.body)) as { id: string }[]).map(s => s.id)
+      return new Response(null, { status: ids.includes('a5') ? 400 : 200 })
+    })
+
+    expect(await flushStrikeXapiOutbox(admin, now, fetchImpl)).toEqual({ tenants: 1, sent: 7, failed: 1 })
+    const updates = calls.filter(c => c.op === 'update' && c.table === 'strike_xapi_statements')
+    const sent = updates.filter(u => (u.payload as { sent_at?: string }).sent_at).flatMap(u => (u.filters[0][1] as unknown[])[1] as string[])
+    expect(sent.sort()).toEqual(['a0', 'a1', 'a2', 'a3', 'a4', 'a6', 'a7'])
+    const failed = updates.find(u => (u.payload as { tries?: number }).tries === MAX_TRIES)
+    expect(failed?.filters).toEqual([['in', ['id', ['a5']]]])
   })
 })
