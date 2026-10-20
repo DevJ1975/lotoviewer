@@ -4,6 +4,7 @@ import { UploadQueueProvider } from '@/components/UploadQueueProvider'
 import { SessionProvider } from '@/components/SessionProvider'
 import { SpectrumProvider } from '@/components/SpectrumProvider'
 import { AuthProvider } from '@/components/AuthProvider'
+import { QueryProvider } from '@/components/QueryProvider'
 import { TenantProvider } from '@/components/TenantProvider'
 import { FacilityProvider } from '@/components/FacilityProvider'
 import { ThemeProvider, NO_FLASH_SCRIPT } from '@/components/ThemeProvider'
@@ -60,17 +61,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <SpectrumProvider>
             <AuthProvider>
-              <TenantProvider>
-                <FacilityProvider>
-                  <SessionProvider>
-                    <UploadQueueProvider>
-                      <AuthGate>
-                        <AppChrome>{children}</AppChrome>
-                      </AuthGate>
-                    </UploadQueueProvider>
-                  </SessionProvider>
-                </FacilityProvider>
-              </TenantProvider>
+              <QueryProvider>
+                <TenantProvider>
+                  <FacilityProvider>
+                    <SessionProvider>
+                      <UploadQueueProvider>
+                        <AuthGate>
+                          <AppChrome>{children}</AppChrome>
+                        </AuthGate>
+                      </UploadQueueProvider>
+                    </SessionProvider>
+                  </FacilityProvider>
+                </TenantProvider>
+              </QueryProvider>
             </AuthProvider>
           </SpectrumProvider>
         </ThemeProvider>

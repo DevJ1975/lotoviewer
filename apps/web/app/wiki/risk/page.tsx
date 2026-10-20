@@ -1,10 +1,18 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.1.0'
-const LAST_UPDATED    = '2026-05-15'
+const CURRENT_VERSION = '1.1.1'
+const LAST_UPDATED    = '2026-10-20'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.1',
+    date:    '2026-10-20',
+    changes: [
+      'Risk register list keeps the current page on screen while the next ' +
+      'page or filter result loads, instead of briefly showing an empty table.',
+    ],
+  },
   {
     version: '1.1.0',
     date:    '2026-05-15',
