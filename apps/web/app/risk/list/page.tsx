@@ -1,8 +1,9 @@
 'use client'
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
@@ -33,33 +34,18 @@ function RiskListPageInner() {
   const filters = useMemo<RiskFilterState>(() => parseRiskFilters(search), [search])
   const config  = useMemo(() => readRiskConfig(tenant?.settings ?? null), [tenant?.settings])
 
-  const [risks,   setRisks]   = useState<RiskSummary[]>([])
-  const [total,   setTotal]   = useState<number>(0)
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState<string | null>(null)
-
-  const fetchData = useCallback(async () => {
-    setLoading(true); setError(null)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const headers: Record<string, string> = {}
-      if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
-      if (tenantId)              headers['x-active-tenant'] = tenantId
-
-      const params = toApiParams(filters)
-      const res = await fetch(`/api/risk?${params.toString()}`, { headers })
-      const body = await res.json()
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
-      setRisks((body.risks ?? []) as RiskSummary[])
-      setTotal(body.total ?? 0)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setLoading(false)
-    }
-  }, [filters, tenantId])
-
-  useEffect(() => { void fetchData() }, [fetchData])
+  const apiQuery = toApiParams(filters).toString()
+  // keepPreviousData holds the current page on screen while the next
+  // page or filter result loads, instead of flashing an empty table.
+  const { data, isPending, isPlaceholderData, error } = useQuery({
+    queryKey: ['risks', 'list', tenantId, apiQuery],
+    queryFn:  () => fetchRiskPage(apiQuery, tenantId),
+    placeholderData: keepPreviousData,
+  })
+  // Silent background refetches (window refocus) don't count as loading.
+  const loading = isPending || isPlaceholderData
+  const risks = data?.risks ?? []
+  const total = data?.total ?? 0
 
   function gotoPage(offsetDelta: number) {
     const next = new URLSearchParams(search?.toString() ?? '')
@@ -126,7 +112,7 @@ function RiskListPageInner() {
         </div>
 
         {error ? (
-          <div className="py-8 text-center text-sm text-rose-700 bg-rose-50 rounded-lg">{error}</div>
+          <div className="py-8 text-center text-sm text-rose-700 bg-rose-50 rounded-lg">{error.message}</div>
         ) : loading && risks.length === 0 ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
@@ -158,6 +144,21 @@ function RiskListPageInner() {
       </section>
     </main>
   )
+}
+
+async function fetchRiskPage(
+  apiQuery: string,
+  tenantId: string | undefined,
+): Promise<{ risks: RiskSummary[]; total: number }> {
+  const { data: { session } } = await supabase.auth.getSession()
+  const headers: Record<string, string> = {}
+  if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`
+  if (tenantId)              headers['x-active-tenant'] = tenantId
+
+  const res = await fetch(`/api/risk?${apiQuery}`, { headers })
+  const body = await res.json()
+  if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
+  return { risks: (body.risks ?? []) as RiskSummary[], total: body.total ?? 0 }
 }
 
 function SortButton({
