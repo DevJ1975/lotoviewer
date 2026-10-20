@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import webpush from 'web-push'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { requireSuperadmin } from '@/lib/auth/superadmin'
 import type { PushPayload } from '@/lib/push'
 
 // POST /api/push/dispatch — fans out a payload to every subscriber in
@@ -10,9 +11,12 @@ import type { PushPayload } from '@/lib/push'
 // If profile_ids is omitted, every subscription receives the push.
 //
 // Two auth paths:
-//   1. Bearer token + admin profile  — for human-driven dispatches
-//      (the "Send a test push" button on /settings/notifications).
-//   2. X-Internal-Secret header     — for machine-driven dispatches
+//   1. Bearer token — for human-driven dispatches. A signed-in user may
+//      push to their OWN devices (the "Send a test push" button on
+//      /settings/notifications); anything wider is a platform-wide
+//      broadcast and requires a superadmin. Subscriptions carry no
+//      tenant, so there is no narrower "my tenant" tier to offer.
+//   2. X-Internal-Secret header — for machine-driven dispatches
 //      (the Postgres trigger from migration 018 calling via pg_net).
 //      The secret value must match env INTERNAL_PUSH_SECRET.
 //
@@ -23,10 +27,14 @@ import type { PushPayload } from '@/lib/push'
 // Generate with `npx web-push generate-vapid-keys`.
 
 interface Body extends PushPayload {
-  profile_ids?: string[]
+  profile_ids?: unknown
 }
 
-async function requireAdmin(authHeader: string | null): Promise<string | null> {
+type DispatchAuth =
+  | { ok: true }
+  | { ok: false; status: number; message: string }
+
+async function resolveUserId(authHeader: string | null): Promise<string | null> {
   if (!authHeader?.startsWith('Bearer ')) return null
   const token = authHeader.slice('Bearer '.length)
   const url  = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -34,14 +42,31 @@ async function requireAdmin(authHeader: string | null): Promise<string | null> {
   if (!url || !anon) return null
   const client = createClient(url, anon, { auth: { persistSession: false } })
   const { data: { user }, error } = await client.auth.getUser(token)
-  if (error || !user) return null
-  const admin = supabaseAdmin()
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('is_admin')
-    .eq('id', user.id)
-    .maybeSingle()
-  return profile?.is_admin ? user.id : null
+  return error || !user ? null : user.id
+}
+
+// The previous gate read profiles.is_admin, the pre-multi-tenant flag that
+// nothing writes any more. It locked every newer user out of their own
+// self-test and let a legacy admin fan out to every subscriber in every
+// tenant. Self-targeting needs only a valid session; a broadcast needs the
+// superadmin gate, which also carries the env allowlist.
+async function authorizeHumanDispatch(authHeader: string | null, targets: string[]): Promise<DispatchAuth> {
+  if (targets.length === 1) {
+    const userId = await resolveUserId(authHeader)
+    if (userId && userId === targets[0]) return { ok: true }
+  }
+  const gate = await requireSuperadmin(authHeader)
+  if (gate.ok) return { ok: true }
+  return {
+    ok:      false,
+    status:  gate.status,
+    message: gate.status === 403 ? 'Only your own devices can be targeted; broadcasts are superadmin-only' : gate.message,
+  }
+}
+
+function targetProfileIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter((id): id is string => typeof id === 'string' && id.length > 0)
 }
 
 function configureVapid(): { ok: true } | { ok: false; reason: string } {
@@ -72,18 +97,6 @@ export async function POST(req: Request) {
   const expected = process.env.INTERNAL_PUSH_SECRET ?? ''
   const internalOk = expected.length > 0 && provided.length > 0 && safeEqual(provided, expected)
 
-  if (!internalOk) {
-    const adminId = await requireAdmin(req.headers.get('authorization'))
-    if (!adminId) {
-      return NextResponse.json({ error: 'Admin only' }, { status: 403 })
-    }
-  }
-
-  const vapid = configureVapid()
-  if (!vapid.ok) {
-    return NextResponse.json({ error: vapid.reason }, { status: 500 })
-  }
-
   let body: Body
   try {
     body = await req.json()
@@ -93,13 +106,26 @@ export async function POST(req: Request) {
   if (!body.title || !body.body) {
     return NextResponse.json({ error: 'Missing title or body' }, { status: 400 })
   }
+  const targets = targetProfileIds(body.profile_ids)
+
+  if (!internalOk) {
+    const auth = await authorizeHumanDispatch(req.headers.get('authorization'), targets)
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.message }, { status: auth.status })
+    }
+  }
+
+  const vapid = configureVapid()
+  if (!vapid.ok) {
+    return NextResponse.json({ error: vapid.reason }, { status: 500 })
+  }
 
   const admin = supabaseAdmin()
   let q = admin
     .from('loto_push_subscriptions')
     .select('id, endpoint, p256dh, auth, profile_id')
-  if (body.profile_ids && body.profile_ids.length > 0) {
-    q = q.in('profile_id', body.profile_ids)
+  if (targets.length > 0) {
+    q = q.in('profile_id', targets)
   }
   const { data: subs, error } = await q
   if (error) {
