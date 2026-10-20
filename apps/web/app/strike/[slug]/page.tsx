@@ -3,12 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { AlertTriangle, ArrowLeft, CheckCircle2, Loader2, PlayCircle, Send, Video } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Loader2, Video } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { StrikeVideoPlayer, type WatchProgress } from '@/components/strike/StrikeVideoPlayer'
 import { supabase } from '@/lib/supabase'
-import type { StrikeQuestionType } from '@soteria/core/strike'
+import { strikeFetch } from '@/lib/strike/clientApi'
+import { parseStrikeContent, type StrikeContent } from '@soteria/core/strikeContent'
+import { StrikeModuleRunner, type StrikeRunnerTransport, type StrikeSubmitFn, type StrikeSubmitResult } from '@/components/strike/StrikeModuleRunner'
+import type { QuizAnswerRow, QuizQuestionRow } from '@/components/strike/QuizQuestion'
+import type { StrikeBlockEventRecord } from '@soteria/core/strikeContent'
 
 interface ModuleRow {
   id: string
@@ -27,33 +31,7 @@ interface VersionRow {
   transcript: string | null
   duration_seconds: number | null
   passing_score: number
-}
-
-// `explanation` is deliberately absent: it is a soft copy of the answer key
-// ("Correct, because ...") and the strike_security_hardening migration
-// revoked it from `authenticated`. (Referenced by slug, not number: that
-// migration's prefix has been renumbered three times by collisions on main.)
-// It comes back in the submit response, per missed question, after grading.
-interface QuestionRow {
-  id: string
-  question_type: StrikeQuestionType
-  prompt: string
-  sort_order: number
-  required: boolean
-  points: number
-}
-
-interface AnswerRow {
-  id: string
-  question_id: string
-  answer_text: string
-  sort_order: number
-}
-
-interface SubmitResult {
-  scorePercent: number
-  passed: boolean
-  missedQuestionIds: string[]
+  content: unknown
 }
 
 interface MediaSource {
@@ -95,19 +73,16 @@ export default function StrikeModulePage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { tenant } = useTenant()
-  const { userId, email } = useAuth()
+  const { email } = useAuth()
   const [module, setModule] = useState<ModuleRow | null>(null)
   const [version, setVersion] = useState<VersionRow | null>(null)
-  const [questions, setQuestions] = useState<QuestionRow[]>([])
-  const [answers, setAnswers] = useState<AnswerRow[]>([])
+  const [questions, setQuestions] = useState<QuizQuestionRow[]>([])
+  const [answers, setAnswers] = useState<QuizAnswerRow[]>([])
   const [media, setMedia] = useState<MediaSource | null>(null)
   const [videoNotice, setVideoNotice] = useState<string | null>(null)
   const watchProgressRef = useRef<WatchProgress | null>(null)
-  const [responses, setResponses] = useState<Record<string, string[] | string | boolean>>({})
   const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<SubmitResult | null>(null)
 
   const assignmentId = searchParams.get('assignment') ?? null
 
@@ -124,8 +99,6 @@ export default function StrikeModulePage() {
     }
     setLoading(true)
     setError(null)
-    setResult(null)
-    setResponses({})
     setMedia(null)
     setVideoNotice(null)
 
@@ -150,7 +123,7 @@ export default function StrikeModulePage() {
 
       const { data: versions, error: versionErr } = await supabase
         .from('strike_module_versions')
-        .select('id,module_id,version_number,transcript,duration_seconds,passing_score')
+        .select('id,module_id,version_number,transcript,duration_seconds,passing_score,content')
         .eq('module_id', nextModule.id)
         .eq('status', 'published')
         .order('version_number', { ascending: false })
@@ -170,9 +143,10 @@ export default function StrikeModulePage() {
         .from('strike_quiz_questions')
         .select('id,question_type,prompt,sort_order,required,points')
         .eq('module_version_id', nextVersion.id)
+        .eq('graded', true)
         .order('sort_order', { ascending: true })
       if (questionErr) throw questionErr
-      const nextQuestions = (questionRows ?? []) as QuestionRow[]
+      const nextQuestions = (questionRows ?? []) as QuizQuestionRow[]
       setQuestions(nextQuestions)
 
       if (nextQuestions.length > 0) {
@@ -182,16 +156,18 @@ export default function StrikeModulePage() {
           .in('question_id', nextQuestions.map(q => q.id))
           .order('sort_order', { ascending: true })
         if (answerErr) throw answerErr
-        setAnswers((answerRows ?? []) as AnswerRow[])
+        setAnswers((answerRows ?? []) as QuizAnswerRow[])
       } else {
         setAnswers([])
       }
 
-      const mediaResult = await requestPlaybackUrl(nextModule.id, nextVersion.id, tenant.id)
-      if (mediaResult.ok) {
-        setMedia(mediaResult.media)
-      } else {
-        setVideoNotice(mediaResult.notice)
+      if (nextVersion.content == null) {
+        const mediaResult = await requestPlaybackUrl(nextModule.id, nextVersion.id, tenant.id)
+        if (mediaResult.ok) {
+          setMedia(mediaResult.media)
+        } else {
+          setVideoNotice(mediaResult.notice)
+        }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -204,50 +180,42 @@ export default function StrikeModulePage() {
 
   useEffect(() => { void load() }, [load])
 
-  const answersByQuestion = useMemo(() => {
-    const map = new Map<string, AnswerRow[]>()
-    for (const answer of answers) {
-      const list = map.get(answer.question_id) ?? []
-      list.push(answer)
-      map.set(answer.question_id, list)
-    }
-    return map
-  }, [answers])
+  const content = useMemo<StrikeContent | null>(() => {
+    if (version?.content == null) return null
+    const parsed = parseStrikeContent(version.content)
+    return parsed.ok ? parsed.content : null
+  }, [version])
 
-  async function submit() {
-    if (!module || !version || !userId) return
-    setSubmitting(true)
-    setError(null)
-    setResult(null)
-    const { data: sessionData } = await supabase.auth.getSession()
-    const token = sessionData.session?.access_token
-    if (!token) {
-      setSubmitting(false)
-      setError('Sign in again to submit this module.')
-      return
-    }
-    const res = await fetch(`/api/strike/${module.id}/submit`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${token}`,
-        'content-type': 'application/json',
-        'x-active-tenant': tenant?.id ?? '',
-      },
-      body: JSON.stringify({
+  const tenantId = tenant?.id ?? ''
+  const submitAttempt = useCallback<StrikeSubmitFn>(({ attempt_id, answers: submitted }) => {
+    if (!module || !version) return Promise.reject(new Error('Module is not loaded'))
+    return strikeFetch<StrikeSubmitResult>(`/api/strike/${module.id}/submit`, tenantId, {
+      body: {
         module_version_id: version.id,
         assignment_id: assignmentId,
-        answers: responses,
+        attempt_id,
+        answers: submitted,
         watch: watchProgressRef.current,
-      }),
+      },
     })
-    const payload = await res.json()
-    setSubmitting(false)
-    if (!res.ok) {
-      setError(payload.error ?? 'Submission failed')
-      return
+  }, [module, version, tenantId, assignmentId])
+
+  const transport = useMemo<StrikeRunnerTransport | null>(() => {
+    if (!module || !version) return null
+    const base = `/api/strike/${module.id}`
+    return {
+      start: () => strikeFetch<{ attempt_id: string; reached: StrikeBlockEventRecord[] }>(`${base}/start`, tenantId, {
+        body: { module_version_id: version.id, assignment_id: assignmentId },
+      }),
+      events: async (attemptId, events) => {
+        await strikeFetch(`${base}/events`, tenantId, { body: { module_version_id: version.id, attempt_id: attemptId, events } })
+      },
+      assets: () => strikeFetch<{ urls: Record<string, string>; has_download: boolean }>(
+        `${base}/assets?version=${version.id}`, tenantId,
+      ),
+      download: async () => (await strikeFetch<{ url: string }>(`${base}/assets?version=${version.id}&download=1`, tenantId)).url,
     }
-    setResult(payload as SubmitResult)
-  }
+  }, [module, version, tenantId, assignmentId])
 
   if (loading) {
     return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
@@ -293,138 +261,42 @@ export default function StrikeModulePage() {
         </div>
       )}
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
-        {media?.url ? (
-          <StrikeVideoPlayer
-            src={media.url}
-            watermarkText={email ?? 'SoteriaField viewer'}
-            onProgress={progress => { watchProgressRef.current = progress }}
-          />
-        ) : (
-          <div className="flex aspect-video items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-400">
-            <div className="text-center">
-              <Video className="mx-auto h-8 w-8" />
-              <p className="mt-2 text-sm">{videoNotice ?? 'No video file attached yet.'}</p>
-            </div>
-          </div>
-        )}
-        {version?.transcript && (
-          <details className="mt-4 rounded-lg border border-slate-100 p-3 text-sm dark:border-slate-800">
-            <summary className="cursor-pointer font-semibold text-slate-900 dark:text-slate-100">Transcript</summary>
-            <p className="mt-2 whitespace-pre-wrap text-slate-600 dark:text-slate-300">{version.transcript}</p>
-          </details>
-        )}
-      </section>
-
-      <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
-        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase text-slate-500 dark:text-slate-400">
-          <PlayCircle className="h-4 w-4" />
-          Knowledge check
-        </h2>
-        {questions.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">No quiz questions are attached. Submitting records an acknowledgement.</p>
-        ) : (
-          <div className="mt-4 space-y-4">
-            {questions.map((question, index) => (
-              <Question
-                key={question.id}
-                index={index}
-                question={question}
-                answers={answersByQuestion.get(question.id) ?? []}
-                value={responses[question.id]}
-                onChange={value => setResponses(prev => ({ ...prev, [question.id]: value }))}
-              />
-            ))}
-          </div>
-        )}
-
-        {questions.length === 0 && (
-          <label className="mt-4 flex items-start gap-2 text-sm text-slate-700 dark:text-slate-200">
-            <input
-              type="checkbox"
-              checked={responses.acknowledgement === true}
-              onChange={e => setResponses({ acknowledgement: e.target.checked })}
-              className="mt-1"
-            />
-            I reviewed the instruction and understand the task expectations.
-          </label>
-        )}
-
-        <div className="mt-5 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={submit}
-            disabled={submitting || !version || (questions.length === 0 && responses.acknowledgement !== true)}
-            className="inline-flex items-center gap-2 rounded-lg bg-brand-navy px-4 py-2 text-sm font-semibold text-white hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Submit
-          </button>
-          {result && (
-            <span className={`inline-flex items-center gap-1.5 text-sm font-semibold ${result.passed ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}>
-              <CheckCircle2 className="h-4 w-4" />
-              {result.scorePercent}% · {result.passed ? 'complete' : 'try again'}
-            </span>
+      {version && transport && (
+        <StrikeModuleRunner
+          moduleTitle={module.title}
+          passingScore={version.passing_score}
+          content={content}
+          questions={questions}
+          answers={answers}
+          transport={transport}
+          submit={submitAttempt}
+          learnerName={null}
+          legacyMedia={(
+            <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
+              {media?.url ? (
+                <StrikeVideoPlayer
+                  src={media.url}
+                  watermarkText={email ?? 'SoteriaField viewer'}
+                  onProgress={progress => { watchProgressRef.current = progress }}
+                />
+              ) : (
+                <div className="flex aspect-video items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+                  <div className="text-center">
+                    <Video className="mx-auto h-8 w-8" />
+                    <p className="mt-2 text-sm">{videoNotice ?? 'No video file attached yet.'}</p>
+                  </div>
+                </div>
+              )}
+              {version.transcript && (
+                <details className="mt-4 rounded-lg border border-slate-100 p-3 text-sm dark:border-slate-800">
+                  <summary className="cursor-pointer font-semibold text-slate-900 dark:text-slate-100">Transcript</summary>
+                  <p className="mt-2 whitespace-pre-wrap text-slate-600 dark:text-slate-300">{version.transcript}</p>
+                </details>
+              )}
+            </section>
           )}
-        </div>
-      </section>
-    </div>
-  )
-}
-
-function Question({
-  index,
-  question,
-  answers,
-  value,
-  onChange,
-}: {
-  index: number
-  question: QuestionRow
-  answers: AnswerRow[]
-  value: string[] | string | boolean | undefined
-  onChange: (value: string[] | string | boolean) => void
-}) {
-  const selected = Array.isArray(value) ? value : typeof value === 'string' ? [value] : []
-  const isMulti = question.question_type === 'select_all'
-  const isAck = question.question_type === 'acknowledgement'
-
-  return (
-    <fieldset className="rounded-lg border border-slate-100 p-3 dark:border-slate-800">
-      <legend className="px-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-        {index + 1}. {question.prompt}
-      </legend>
-      {isAck ? (
-        <label className="mt-3 flex items-start gap-2 text-sm text-slate-700 dark:text-slate-200">
-          <input type="checkbox" checked={value === true} onChange={e => onChange(e.target.checked)} className="mt-1" />
-          I acknowledge this requirement.
-        </label>
-      ) : (
-        <div className="mt-3 space-y-2">
-          {answers.map(answer => (
-            <label key={answer.id} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-200">
-              <input
-                type={isMulti ? 'checkbox' : 'radio'}
-                name={question.id}
-                value={answer.id}
-                checked={selected.includes(answer.id)}
-                onChange={e => {
-                  if (isMulti) {
-                    const next = e.target.checked
-                      ? Array.from(new Set([...selected, answer.id]))
-                      : selected.filter(id => id !== answer.id)
-                    onChange(next)
-                  } else {
-                    onChange(answer.id)
-                  }
-                }}
-                className="mt-1"
-              />
-              {answer.answer_text}
-            </label>
-          ))}
-        </div>
+        />
       )}
-    </fieldset>
+    </div>
   )
 }

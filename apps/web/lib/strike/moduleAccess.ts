@@ -15,6 +15,9 @@ export interface StrikeVersionRow {
   retake_limit: number | null
   video_external_id: string | null
   video_meta: Record<string, unknown> | null
+  content: unknown
+  validity_days: number | null
+  download_path: string | null
 }
 
 export type StrikeVersionLookup =
@@ -49,7 +52,7 @@ export async function loadPublishedStrikeVersion(
 
   const { data: version, error: versionErr } = await admin
     .from('strike_module_versions')
-    .select('id,module_id,tenant_id,library_scope,status,passing_score,retake_limit,video_external_id,video_meta')
+    .select('id,module_id,tenant_id,library_scope,status,passing_score,retake_limit,video_external_id,video_meta,content,validity_days,download_path')
     .eq('id', opts.moduleVersionId)
     .eq('module_id', opts.moduleId)
     .maybeSingle()

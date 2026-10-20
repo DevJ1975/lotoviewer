@@ -397,6 +397,19 @@ function blockImages(block: StrikeBlock): StrikeImageRef[] {
   }
 }
 
+/** Every storage object the player needs, deduplicated, for one batch of signed URLs. */
+export function strikeContentAssetPaths(content: StrikeContent): string[] {
+  const paths = new Set<string>()
+  for (const block of content.blocks) {
+    for (const image of blockImages(block)) paths.add(image.path)
+    if (block.kind === 'motion_scene' && block.narration) {
+      paths.add(block.narration.audio_path)
+      paths.add(block.narration.captions_path)
+    }
+  }
+  return [...paths]
+}
+
 function isApproved(approval: StrikeApproval): boolean {
   return !!approval.approved_by && !!approval.approved_at
 }

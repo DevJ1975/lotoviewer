@@ -1,0 +1,122 @@
+'use client'
+
+import { useState } from 'react'
+import { ChevronDown, ChevronUp, GripVertical } from 'lucide-react'
+import { Button as DragButton, DropIndicator, GridList, GridListItem, useDragAndDrop } from 'react-aria-components'
+import { scoreStrikeInteraction, stableShuffle, type StrikeDragSortBlock } from '@soteria/core/strikeContent'
+import { InteractionShell, type InteractionFeedback } from './InteractionShell'
+
+interface DragSortProps {
+  block: StrikeDragSortBlock
+  seed: string
+  completed: boolean
+  remediation: { blockKey: string; title: string } | null
+  onResult: (correct: boolean, detail: Record<string, unknown>) => void
+}
+
+export function DragSort({ block, seed, completed, remediation, onResult }: DragSortProps) {
+  const [order, setOrder] = useState(() =>
+    completed ? block.items.map(i => i.id) : stableShuffle(block.items, `${seed}:${block.key}`).map(i => i.id),
+  )
+  const [wrong, setWrong] = useState<Set<string>>(new Set())
+  const [feedback, setFeedback] = useState<InteractionFeedback>({ state: 'idle' })
+  const labelById = new Map(block.items.map(i => [i.id, i.label]))
+
+  function move(from: number, to: number) {
+    if (to < 0 || to >= order.length) return
+    setOrder(prev => {
+      const next = [...prev]
+      const [item] = next.splice(from, 1)
+      next.splice(to, 0, item)
+      return next
+    })
+    setWrong(new Set())
+    setFeedback({ state: 'idle' })
+  }
+
+  const { dragAndDropHooks } = useDragAndDrop({
+    isDisabled: completed,
+    getItems: keys => [...keys].map(k => ({ 'strike-sort-item': String(k), 'text/plain': labelById.get(String(k)) ?? '' })),
+    acceptedDragTypes: ['strike-sort-item'],
+    getDropOperation: () => 'move',
+    onReorder(e) {
+      const moved = String([...e.keys][0] ?? '')
+      const from = order.indexOf(moved)
+      let to = order.indexOf(String(e.target.key))
+      if (from < 0 || to < 0) return
+      if (e.target.dropPosition === 'after') to += 1
+      if (from < to) to -= 1
+      move(from, to)
+    },
+    renderDropIndicator: target => (
+      <DropIndicator target={target} className="my-0.5 h-1 rounded bg-transparent outline-none data-[drop-target]:bg-brand-navy" />
+    ),
+  })
+
+  function check() {
+    const result = scoreStrikeInteraction(block, { kind: 'drag_sort', orderedIds: order })
+    setWrong(new Set(result.incorrectIds))
+    setFeedback(result.correct
+      ? { state: 'correct', message: 'Correct order. That sequence is what keeps you safe.' }
+      : { state: 'incorrect', message: `${result.incorrectIds.length} step${result.incorrectIds.length === 1 ? ' is' : 's are'} out of place. The highlighted steps need to move.` })
+    onResult(result.correct, { ordered_ids: order })
+  }
+
+  return (
+    <InteractionShell
+      blockKey={block.key}
+      label="Drag to order"
+      prompt={block.prompt}
+      feedback={feedback}
+      completed={completed}
+      canCheck
+      onCheck={check}
+      remediation={remediation}
+    >
+      <GridList
+        aria-label={block.prompt}
+        items={order.map(id => ({ id, label: labelById.get(id) ?? id }))}
+        selectionMode="none"
+        dragAndDropHooks={dragAndDropHooks}
+        className="space-y-2 outline-none"
+      >
+        {item => {
+          const index = order.indexOf(item.id)
+          const isWrong = wrong.has(item.id)
+          return (
+            <GridListItem
+              id={item.id}
+              textValue={item.label}
+              className={`flex items-center gap-2 rounded-lg border bg-white p-2 outline-none data-[dragging]:opacity-50 data-[focus-visible]:ring-2 data-[focus-visible]:ring-brand-navy dark:bg-slate-900 ${
+                isWrong ? 'border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/40' : 'border-slate-200 dark:border-slate-700'
+              }`}
+            >
+              <DragButton slot="drag" aria-label={`Move ${item.label}`} isDisabled={completed}
+                className="cursor-grab rounded p-1 text-slate-400 outline-none data-[disabled]:cursor-default data-[focus-visible]:ring-2 data-[focus-visible]:ring-brand-navy">
+                <GripVertical className="h-5 w-5" />
+              </DragButton>
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-slate-100 text-sm font-black tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                {index + 1}
+              </span>
+              <span className="min-w-0 flex-1 text-sm font-medium text-slate-900 dark:text-slate-100">{item.label}</span>
+              {!completed && (
+                <span className="flex shrink-0 gap-1">
+                  <button type="button" onClick={() => move(index, index - 1)} disabled={index === 0}
+                    aria-label={`Move ${item.label} up`}
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 text-slate-600 disabled:opacity-30 dark:border-slate-700 dark:text-slate-300">
+                    <ChevronUp className="h-5 w-5" />
+                  </button>
+                  <button type="button" onClick={() => move(index, index + 1)} disabled={index === order.length - 1}
+                    aria-label={`Move ${item.label} down`}
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 text-slate-600 disabled:opacity-30 dark:border-slate-700 dark:text-slate-300">
+                    <ChevronDown className="h-5 w-5" />
+                  </button>
+                </span>
+              )}
+            </GridListItem>
+          )
+        }}
+      </GridList>
+    </InteractionShell>
+  )
+}
