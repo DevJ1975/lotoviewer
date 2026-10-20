@@ -48,6 +48,14 @@ describe('buildCertificatePdf', () => {
 })
 
 describe('certificateFilename', () => {
+  // The name is the learner's own profile text, so its length is theirs to
+  // choose, and certificates render on the server.
+  it('renders an absurdly long name in well under a second', async () => {
+    const started = performance.now()
+    await buildCertificatePdf({ ...base, learnerName: 'A'.repeat(20_000), moduleTitle: 'B'.repeat(20_000) })
+    expect(performance.now() - started).toBeLessThan(1000)
+  })
+
   it('makes a safe, readable file name from the module title', () => {
     expect(certificateFilename('LOTO 101: Control de energía peligrosa')).toBe('loto-101-control-de-energ-a-peligrosa-certificate.pdf')
     expect(certificateFilename('!!!')).toBe('strike-certificate.pdf')

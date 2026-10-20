@@ -166,8 +166,20 @@ function fit(text: string, font: PDFFont, size: number, maxWidthPx: number): { v
   let value = winAnsi(text)
   let current = size
   while (font.widthOfTextAtSize(value, pt(current)) > pt(maxWidthPx) && current > size * 0.6) current -= 1
-  while (value.length > 1 && font.widthOfTextAtSize(value, pt(current)) > pt(maxWidthPx)) value = `${value.slice(0, -2)}…`
-  return { value, size: current }
+  const fits = (candidate: string) => font.widthOfTextAtSize(candidate, pt(current)) <= pt(maxWidthPx)
+  if (fits(value)) return { value, size: current }
+  // Binary search for the longest prefix that fits with an ellipsis. Trimming
+  // one character at a time re-measured the whole string on every step, so a
+  // 20,000-character name took half a minute of server CPU to render.
+  const chars = [...value]
+  let lo = 0
+  let hi = chars.length
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2)
+    if (fits(`${chars.slice(0, mid).join('')}…`)) lo = mid
+    else hi = mid - 1
+  }
+  return { value: `${chars.slice(0, lo).join('')}…`, size: current }
 }
 
 // Standard PDF fonts encode WinAnsi only (Latin-1 plus a few typographic
