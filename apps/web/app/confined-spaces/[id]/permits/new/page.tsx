@@ -10,6 +10,8 @@ import { formatSupabaseError } from '@/lib/supabaseError'
 import type { ConfinedSpace } from '@soteria/core/types'
 import { effectiveThresholds, SITE_DEFAULTS } from '@soteria/core/confinedSpaceThresholds'
 import { useNow } from '@/hooks/useNow'
+import { RosterPicker } from '@/components/permits/RosterPicker'
+import { crewNames, savePermitCrew, type CrewMember } from '@/lib/permits/permitCrew'
 
 // Permit issuance — creates the row in `pending_signature` state. The
 // supervisor reviews the live permit page, takes the pre-entry atmospheric
@@ -58,8 +60,7 @@ export default function NewPermitPage() {
   // Form fields
   const [purpose, setPurpose]                       = useState('')
   const [expiresAt, setExpiresAt]                   = useState(defaultExpiresAt)
-  const [entrants, setEntrants]                     = useState('')
-  const [attendants, setAttendants]                 = useState('')
+  const [crew, setCrew]                             = useState<CrewMember[]>([])
   const [hazardsText, setHazardsText]               = useState('')
   const [isolationText, setIsolationText]           = useState('')
   const [equipmentText, setEquipmentText]           = useState('')
@@ -125,8 +126,8 @@ export default function NewPermitPage() {
     )
   }
 
-  const entrantList   = splitLines(entrants)
-  const attendantList = splitLines(attendants)
+  const entrantList   = crewNames(crew, 'entrant')
+  const attendantList = crewNames(crew, 'attendant')
 
   const trimmedPurpose = purpose.trim()
   const expiresDate    = expiresAt ? new Date(expiresAt) : null
@@ -246,6 +247,14 @@ export default function NewPermitPage() {
       return
     }
 
+    // The crew is what the training gate checks at signature; the permit
+    // page shows it and lets the supervisor fix it if this save failed.
+    try {
+      await savePermitCrew(tenant?.id ?? '', 'confined_space', data.id, crew)
+    } catch (crewError) {
+      console.error('[confined-space permit] crew save failed', crewError)
+    }
+
     router.push(`/confined-spaces/${encodeURIComponent(spaceId)}/permits/${data.id}`)
   }
 
@@ -345,25 +354,18 @@ export default function NewPermitPage() {
         </Field>
       </Section>
 
-      <Section title="Personnel" hint="Names — one per line">
-        <Field label="Authorized entrants" required>
-          <textarea
-            rows={3}
-            value={entrants}
-            onChange={e => setEntrants(e.target.value)}
-            placeholder="Jane Doe&#10;John Smith"
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy font-mono"
+      <Section title="Personnel" hint="Picked from the roster so training can be verified before entry">
+        {tenant?.id && (
+          <RosterPicker
+            tenantId={tenant.id}
+            value={crew}
+            onChange={setCrew}
+            roles={[
+              { role: 'entrant', label: 'Authorized entrants', required: true },
+              { role: 'attendant', label: 'Attendant(s)', required: true, hint: 'Stays outside throughout entry per §(i)' },
+            ]}
           />
-        </Field>
-        <Field label="Attendant(s)" required hint="Stays outside throughout entry per §(i)">
-          <textarea
-            rows={2}
-            value={attendants}
-            onChange={e => setAttendants(e.target.value)}
-            placeholder="Alex Kim"
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy font-mono"
-          />
-        </Field>
+        )}
       </Section>
 
       <Section title="Hazards & Isolation" hint="One per line">

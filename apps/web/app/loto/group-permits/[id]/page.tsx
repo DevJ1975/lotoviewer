@@ -9,6 +9,9 @@ import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import type { LotoWorker } from '@soteria/core/types'
+import { parseTrainingRequiredError } from '@soteria/core/permitTrainingGate'
+import { PermitTrainingPanel } from '@/components/permits/PermitTrainingPanel'
+import { resolveRosterMemberId } from '@/lib/permits/permitCrew'
 import {
   canAddMember,
   canClosePermit,
@@ -53,6 +56,16 @@ function GroupPermitDetail() {
   const [addingWorkerId, setAddingWorkerId] = useState('')
   const [addingUserId, setAddingUserId] = useState('')
   const [lockSerial, setLockSerial] = useState('')
+  // Roster entry of the person being added, so their training shows (and can
+  // be completed with Train now) before the gate refuses the join.
+  const [addingMemberId, setAddingMemberId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!tenantId || (!addingWorkerId && !addingUserId)) { setAddingMemberId(null); return }
+    resolveRosterMemberId(tenantId, { userId: addingUserId || null, lotoWorkerId: addingWorkerId || null })
+      .then(setAddingMemberId)
+      .catch(() => setAddingMemberId(null))
+  }, [tenantId, addingWorkerId, addingUserId])
 
   // Handoff form
   const [handoffToUserId, setHandoffToUserId] = useState('')
@@ -134,7 +147,7 @@ function GroupPermitDetail() {
           user_id:              addingUserId   || null,
           personal_lock_serial: lockSerial.trim(),
         })
-      if (err) throw new Error(formatSupabaseError(err, 'add member'))
+      if (err) throw new Error(parseTrainingRequiredError(err.message) ?? formatSupabaseError(err, 'add member'))
       setAddingWorkerId('')
       setAddingUserId('')
       setLockSerial('')
@@ -294,6 +307,14 @@ function GroupPermitDetail() {
                 className="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20"
               />
             </div>
+            {tenantId && addingMemberId && (
+              <PermitTrainingPanel
+                tenantId={tenantId}
+                permitType="loto_group"
+                permitId={permitId}
+                extraMemberIds={[addingMemberId]}
+              />
+            )}
             <button
               type="button"
               onClick={addMember}

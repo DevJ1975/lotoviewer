@@ -22,10 +22,13 @@ import {
 import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
+import { isAssignmentReleased } from '@soteria/core/strikeSchedule'
+import { MyProgress } from '@/components/strike/MyProgress'
 import {
   computeStrikeReadiness,
   isStrikeAssignmentApplicable,
   isStrikeCompletionCurrent,
+  type StrikeVersionLineage,
   STRIKE_ASSIGNMENT_TARGET_TYPES,
   STRIKE_REQUIREMENT_SOURCE_TYPES,
   type StrikeAssignmentTargetType,
@@ -51,6 +54,8 @@ interface StrikeVersionRow {
   id: string
   module_id: string
   version_number: number
+  status: 'published' | 'superseded'
+  supersedes_completions: boolean
   transcript: string | null
   duration_seconds: number | null
   passing_score: number
@@ -73,6 +78,7 @@ interface StrikeAssignmentRow {
   module_version_id: string | null
   target_type: StrikeAssignmentTargetType
   target_id: string | null
+  starts_at: string | null
   due_at: string | null
   expires_at: string | null
   reason: string | null
@@ -115,6 +121,13 @@ export default function StrikePage() {
   const isSuperadmin = profile?.is_superadmin === true
   const isTenantAdmin = role === 'admin' || role === 'owner'
   const canManageTenantTraining = isTenantAdmin || isSuperadmin
+  const [myRoster, setMyRoster] = useState<{ department: string | null; site_label: string | null } | null>(null)
+
+  useEffect(() => {
+    if (!tenantId || !userId) return
+    supabase.from('members').select('department,site_label').eq('tenant_id', tenantId).eq('profile_id', userId).maybeSingle()
+      .then(({ data }) => setMyRoster(data ?? null))
+  }, [tenantId, userId])
 
   const [modules, setModules] = useState<StrikeModuleRow[] | null>(null)
   const [versions, setVersions] = useState<StrikeVersionRow[]>([])
@@ -153,9 +166,9 @@ export default function StrikePage() {
       if (moduleIds.length > 0) {
         const { data: versionRows, error: versionErr } = await supabase
           .from('strike_module_versions')
-          .select('id,module_id,version_number,transcript,duration_seconds,passing_score,published_at')
+          .select('id,module_id,version_number,status,supersedes_completions,transcript,duration_seconds,passing_score,published_at')
           .in('module_id', moduleIds)
-          .eq('status', 'published')
+          .in('status', ['published', 'superseded'])
           .order('version_number', { ascending: false })
         if (versionErr) throw versionErr
         setVersions((versionRows ?? []) as StrikeVersionRow[])
@@ -185,7 +198,7 @@ export default function StrikePage() {
       ] = await Promise.all([
         supabase
           .from('strike_assignments')
-          .select('id,module_id,module_version_id,target_type,target_id,due_at,expires_at,reason,status')
+          .select('id,module_id,module_version_id,target_type,target_id,starts_at,due_at,expires_at,reason,status')
           .eq('tenant_id', tenantId)
           .eq('status', 'active')
           .order('due_at', { ascending: true, nullsFirst: false })
@@ -223,8 +236,23 @@ export default function StrikePage() {
   const latestVersionByModule = useMemo(() => {
     const map = new Map<string, StrikeVersionRow>()
     for (const version of versions) {
+      if (version.status !== 'published') continue
       const current = map.get(version.module_id)
       if (!current || version.version_number > current.version_number) map.set(version.module_id, version)
+    }
+    return map
+  }, [versions])
+
+  const lineageByModule = useMemo(() => {
+    const map = new Map<string, StrikeVersionLineage[]>()
+    for (const version of versions) {
+      const list = map.get(version.module_id) ?? []
+      list.push({
+        id: version.id,
+        versionNumber: version.version_number,
+        supersedesCompletions: version.supersedes_completions,
+      })
+      map.set(version.module_id, list)
     }
     return map
   }, [versions])
@@ -232,26 +260,29 @@ export default function StrikePage() {
   const currentCompletionByModule = useMemo(() => {
     const map = new Map<string, StrikeCompletionRow>()
     for (const row of completions) {
-      const requiredVersionId = latestVersionByModule.get(row.module_id)?.id
       if (!isStrikeCompletionCurrent({
         completedAt: row.completed_at,
         expiresAt: row.expires_at,
         moduleVersionId: row.module_version_id,
-        requiredVersionId,
+        lineage: lineageByModule.get(row.module_id) ?? [],
       })) continue
       if (!map.has(row.module_id)) map.set(row.module_id, row)
     }
     return map
-  }, [completions, latestVersionByModule])
+  }, [completions, lineageByModule])
 
   const activeAssignments = assignments.filter(a => a.status === 'active')
+  // Learners see only released work that targets them; scheduled curriculum
+  // modules stay hidden until their release date.
   const visibleAssignments = canManageTenantTraining
     ? activeAssignments
-    : activeAssignments.filter(a => isStrikeAssignmentApplicable({
+    : activeAssignments.filter(a => isAssignmentReleased(a.starts_at, new Date()) && isStrikeAssignmentApplicable({
       targetType: a.target_type,
       targetId: a.target_id,
       userId,
       role,
+      department: myRoster?.department ?? null,
+      site: myRoster?.site_label ?? null,
     }))
   const assignedModuleIds = new Set(visibleAssignments.map(a => a.module_id))
   const assignedCompletions = visibleAssignments.filter(a => currentCompletionByModule.has(a.module_id)).length
@@ -317,6 +348,12 @@ export default function StrikePage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {canManageTenantTraining && (
+            <Link href="/strike/admin" className="inline-flex items-center gap-2 rounded-lg bg-brand-navy px-3 py-2 text-sm font-semibold text-white hover:bg-brand-navy/90">
+              <Target className="h-4 w-4" />
+              Training admin
+            </Link>
+          )}
           <Link href="/strike/qr" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-brand-navy/40 hover:text-brand-navy dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
             <QrCode className="h-4 w-4" />
             QR cards
@@ -327,6 +364,8 @@ export default function StrikePage() {
           </div>
         </div>
       </header>
+
+      {tenantId && userId && <MyProgress tenantId={tenantId} />}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Metric label="Published modules" value={moduleCount} icon={BookOpen} />

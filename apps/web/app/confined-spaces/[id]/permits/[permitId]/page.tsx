@@ -31,7 +31,11 @@ import { AuthorizationBlock }    from './_components/AuthorizationBlock'
 import { EntrantLog }            from './_components/EntrantLog'
 import { TestRow, NewTestForm }  from './_components/AtmosphericTests'
 import { TrainingGap }           from './_components/TrainingGap'
-import { EditRosterDialog }      from './_components/EditRosterDialog'
+import { CrewEditor }            from './_components/CrewEditor'
+import { PermitTrainingPanel }   from '@/components/permits/PermitTrainingPanel'
+import { useTenant }             from '@/components/TenantProvider'
+import { loadPermitCrew, resolveRosterMemberId, type CrewMember } from '@/lib/permits/permitCrew'
+import { parseTrainingRequiredError, type PermitTrainingSummary } from '@soteria/core/permitTrainingGate'
 import { CancelDialog }          from './_components/CancelDialog'
 
 // Live permit page — the OSHA-compliant lifecycle:
@@ -85,6 +89,14 @@ export default function PermitDetailPage() {
   // it from the evacuation banner (vs. the regular Cancel button).
   const [cancelInitialReason, setCancelInitialReason] = useState<CancelReason>('task_complete')
   const [rosterOpen, setRosterOpen] = useState(false)
+  const { tenant } = useTenant()
+  const tenantId = tenant?.id ?? ''
+  const [crew, setCrew] = useState<CrewMember[]>([])
+  const [crewVersion, setCrewVersion] = useState(0)
+  // The STRIKE gate (migration permit_training_gate) supersedes the legacy
+  // name-matched §(g) check once this permit type requires a module.
+  const [strikeTraining, setStrikeTraining] = useState<PermitTrainingSummary | null>(null)
+  const strikeGated = !!strikeTraining?.gated
 
   const load = useCallback(async () => {
     const res = await loadPermitPage({ spaceId, permitId })
@@ -106,6 +118,19 @@ export default function PermitDetailPage() {
   }, [spaceId, permitId])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    if (!tenantId) return
+    loadPermitCrew(tenantId, 'confined_space', permitId).then(setCrew).catch(() => setCrew([]))
+  }, [tenantId, permitId, crewVersion])
+
+  // The signing entry supervisor is gated too, so show their status with the crew.
+  const [supervisorMemberId, setSupervisorMemberId] = useState<string | null>(null)
+  const supervisorProfileId = permit?.entry_supervisor_id ?? null
+  useEffect(() => {
+    if (!tenantId || !supervisorProfileId) return
+    resolveRosterMemberId(tenantId, { userId: supervisorProfileId }).then(setSupervisorMemberId).catch(() => setSupervisorMemberId(null))
+  }, [tenantId, supervisorProfileId])
 
   const thresholds = useMemo(() => effectiveThresholds(permit, space), [permit, space])
   const state      = useMemo(() => permit ? permitState(permit) : null, [permit])
@@ -238,7 +263,11 @@ export default function PermitDetailPage() {
     // training record. Soft block: if any are missing/expired, require
     // the supervisor to acknowledge they verified training off-app via
     // the override checkbox below the sign button.
-    if (trainingIssues.length > 0 && !trainingOverride) {
+    if (strikeGated && !strikeTraining?.ready) {
+      setServerError('Everyone on this permit must pass the required STRIKE training first. Use Train now below.')
+      return
+    }
+    if (!strikeGated && trainingIssues.length > 0 && !trainingOverride) {
       setServerError('Some entrants or attendants are missing current training records — review the §(g) banner and confirm verification before signing.')
       return
     }
@@ -252,8 +281,9 @@ export default function PermitDetailPage() {
       .select('*')
       .single()
     if (error || !data) {
-      setServerError(error?.message ?? 'Could not sign the permit.')
+      setServerError(parseTrainingRequiredError(error?.message) ?? error?.message ?? 'Could not sign the permit.')
       setSigning(false)
+      setCrewVersion(v => v + 1)
       return
     }
     setPermit(data as ConfinedSpacePermit)
@@ -316,16 +346,42 @@ export default function PermitDetailPage() {
             entrants and attendants as crews swap during a shift. The
             modal validates against the live entries log so you can't
             silently drop a worker who's still inside the space. */}
-        {state === 'active' && (
-          <div className="pt-1">
-            <button
-              type="button"
-              onClick={() => setRosterOpen(true)}
-              className="text-xs font-semibold text-brand-navy hover:underline"
-            >
-              + Edit roster (mid-job)
-            </button>
-          </div>
+        {(state === 'active' || state === 'pending_signature') && tenantId && (
+          rosterOpen ? (
+            <CrewEditor
+              tenantId={tenantId}
+              permit={permit}
+              entries={entries}
+              crew={crew}
+              onClose={() => setRosterOpen(false)}
+              onSaved={(updated, nextCrew) => {
+                setPermit(updated)
+                setCrew(nextCrew)
+                setRosterOpen(false)
+                setCrewVersion(v => v + 1)
+              }}
+            />
+          ) : (
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setRosterOpen(true)}
+                className="text-xs font-semibold text-brand-navy hover:underline"
+              >
+                {state === 'active' ? '+ Edit crew (mid-job)' : '+ Edit crew'}
+              </button>
+            </div>
+          )
+        )}
+        {tenantId && state !== 'canceled' && (
+          <PermitTrainingPanel
+            tenantId={tenantId}
+            permitType="confined_space"
+            permitId={permitId}
+            extraMemberIds={supervisorMemberId ? [supervisorMemberId] : []}
+            refreshKey={crewVersion}
+            onSummary={setStrikeTraining}
+          />
         )}
       </Section>
 
@@ -462,7 +518,7 @@ export default function PermitDetailPage() {
                 : 'Pre-entry test passes — ready to sign.'}
             </p>
           </div>
-          {trainingIssues.length > 0 && (
+          {!strikeGated && trainingIssues.length > 0 && (
             <TrainingGap
               issues={trainingIssues}
               acknowledged={trainingOverride}
@@ -476,7 +532,7 @@ export default function PermitDetailPage() {
               signing ||
               !preEntryTest ||
               preEntryStatus !== 'pass' ||
-              (trainingIssues.length > 0 && !trainingOverride)
+              (strikeGated ? !strikeTraining?.ready : trainingIssues.length > 0 && !trainingOverride)
             }
             className="px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold disabled:opacity-40 hover:bg-emerald-700 transition-colors"
           >
@@ -541,17 +597,6 @@ export default function PermitDetailPage() {
         />
       )}
 
-      {rosterOpen && permit && (
-        <EditRosterDialog
-          permit={permit}
-          entries={entries}
-          onClose={() => setRosterOpen(false)}
-          onSaved={(updated) => {
-            setPermit(updated)
-            setRosterOpen(false)
-          }}
-        />
-      )}
     </div>
   )
 }

@@ -1,0 +1,69 @@
+# Local preview of Soteria Field + the STRIKE Media Studio under OrbStack.
+#
+#   cp .env.orb.example .env.orb      # fill it in
+#   docker compose --env-file .env.orb -f docker-compose.orb.yml up --build
+#
+# OrbStack serves each service at its dev.orbstack.domains label over HTTPS:
+#   https://web.soteria.orb.local      Next.js app (learner player, admin, permits)
+#   https://studio.soteria.orb.local   Django Media Studio (narrate, render, approve)
+# Plain Docker works too, on http://localhost:3000 and :8000.
+#
+# --env-file is required: NEXT_PUBLIC_* values are compiled into the web bundle
+# at build time, and compose only reads .env.orb for interpolation when told to.
+
+name: soteria
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?set in .env.orb and pass --env-file .env.orb}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?set in .env.orb}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://web.soteria.orb.local}
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY:-}
+    env_file: .env.orb
+    environment:
+      ALLOWED_ORIGIN_HOSTS: ${ALLOWED_ORIGIN_HOSTS:-web.soteria.orb.local,localhost:3000}
+    ports:
+      - "3000:3000"
+    labels:
+      dev.orbstack.domains: web.soteria.orb.local
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
+    restart: unless-stopped
+
+  studio:
+    build:
+      context: services/learning-studio
+    env_file: .env.orb
+    environment:
+      SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?set in .env.orb}
+      SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?set in .env.orb}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set in .env.orb}
+      ALLOWED_HOSTS: studio.soteria.orb.local,localhost
+      CSRF_TRUSTED_ORIGINS: https://studio.soteria.orb.local,http://localhost:8000
+      DJANGO_SSL_REDIRECT: "0"
+    ports:
+      - "8000:8000"
+    volumes:
+      - studio-data:/data
+      # Read-write so `narrate` and `render_module` write mp3/vtt/mp4 next to module.json.
+      - ./services/learning-studio/seed:/srv/seed
+    labels:
+      dev.orbstack.domains: studio.soteria.orb.local
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4).status != 200)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  studio-data:

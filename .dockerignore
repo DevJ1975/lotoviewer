@@ -1,38 +1,46 @@
-# Source control
+# Shared by every image built from the repo root: the AWS production image
+# (Dockerfile) and the local preview image (apps/web/Dockerfile).
+
+# Source control and tooling
 .git
 .github
+.claude
 
-# Build artefacts — excluded so Docker only sees clean source
-.next
+# Build artefacts — Docker should only see clean source
+**/.next
 out
-apps/web/.next
-apps/mobile/.next
-
-# All node_modules — Docker's own install stage creates them
-node_modules
-apps/*/node_modules
-packages/*/node_modules
-services/*/node_modules
-
-# Test output
-coverage
+**/.turbo
+**/*.tsbuildinfo
+**/.vite
 **/coverage
 
-# Local env files — secrets are injected at runtime via ECS Secrets Manager,
-# never baked into the image
-.env*
-!.env.example
+# Dependencies — each image runs its own install
+**/node_modules
+
+# Local env files — secrets are injected at build or run time, never baked in
+**/.env*
+!**/.env.example
+!.env.orb.example
+
+# Python virtualenvs and caches
+.venv*/
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+
+# Service data and generated media
+services/*/data
+services/*/staticfiles
+services/learning-studio/seed/**/*.mp4
+
+# Native mobile projects, CDK output and OSHA ingest work dir
+apps/mobile/ios
+apps/mobile/android
+infra/cdk/cdk.out
+scripts/.osha-build
 
 # Editor / OS noise
 .DS_Store
 *.pem
 *.log
-
-# CDK output — not needed in the image
-infra/cdk/cdk.out
-infra/cdk/node_modules
-
-# Python virtualenvs and caches (OSHA ingest scripts)
-.venv*/
-**/__pycache__
-scripts/.osha-build

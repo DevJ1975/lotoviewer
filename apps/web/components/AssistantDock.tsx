@@ -56,6 +56,7 @@ function shouldHide(pathname: string | null): boolean {
   if (pathname.startsWith('/reset-password')) return true
   if (pathname.startsWith('/inspector/')) return true
   if (pathname.startsWith('/permit-signon/')) return true
+  if (pathname.startsWith('/train/')) return true
   // Avoid double-mount on the full-page view itself.
   if (pathname.startsWith('/assistant')) return true
   return false

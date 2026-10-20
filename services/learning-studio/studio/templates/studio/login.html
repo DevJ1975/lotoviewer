@@ -1,0 +1,17 @@
+{% extends "studio/base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <p class="eyebrow">Soteria Field</p>
+  <h1 class="stencil">Sign in</h1>
+  <p class="muted">Use your Soteria Field account. Superadmins and studio tenant admins only.</p>
+  {% if error %}<p class="alert" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" class="stack">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <label>Email<input type="email" name="email" autocomplete="username" required></label>
+    <label>Password<input type="password" name="password" autocomplete="current-password" required></label>
+    <button class="btn primary" type="submit">Sign in</button>
+  </form>
+</section>
+{% endblock %}

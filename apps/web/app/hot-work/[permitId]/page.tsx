@@ -33,6 +33,10 @@ import { FireWatchSignOnDialog } from './_components/FireWatchSignOnDialog'
 import { CancelDialog }          from './_components/CancelDialog'
 import { ChecklistDisplay }      from './_components/ChecklistDisplay'
 import { AreaPhotos }            from './_components/AreaPhotos'
+import { PermitCrewCard }        from '@/components/permits/PermitCrewCard'
+import { useTenant }             from '@/components/TenantProvider'
+import { crewNames, resolveRosterMemberId, type CrewMember } from '@/lib/permits/permitCrew'
+import { parseTrainingRequiredError, type PermitTrainingSummary } from '@soteria/core/permitTrainingGate'
 
 // Hot Work permit detail page. Six-state lifecycle with action buttons
 // shown contextually:
@@ -83,6 +87,19 @@ export default function HotWorkPermitDetailPage() {
   const [busy, setBusy]           = useState<null | 'sign' | 'fire_watch' | 'complete' | 'cancel'>(null)
   const [now, setNow]             = useState(() => Date.now())
   const [trainingOverride, setTrainingOverride] = useState(false)
+  const { tenantId } = useTenant()
+  // The STRIKE gate (migration permit_training_gate) supersedes the legacy
+  // name-matched check once hot work requires a module.
+  const [strikeTraining, setStrikeTraining] = useState<PermitTrainingSummary | null>(null)
+  const [signAttempts, setSignAttempts] = useState(0)
+  const strikeGated = !!strikeTraining?.gated
+  // The signing PAI is gated too, so show their status with the crew.
+  const [paiMemberId, setPaiMemberId] = useState<string | null>(null)
+  const paiProfileId = permit?.pai_id ?? null
+  useEffect(() => {
+    if (!tenantId || !paiProfileId) return
+    resolveRosterMemberId(tenantId, { userId: paiProfileId }).then(setPaiMemberId).catch(() => setPaiMemberId(null))
+  }, [tenantId, paiProfileId])
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelInitial, setCancelInitial] = useState<HotWorkCancelReason>('task_complete')
   const [fireWatchOpen, setFireWatchOpen] = useState(false)
@@ -154,7 +171,11 @@ export default function HotWorkPermitDetailPage() {
       setServerError('Resolve the sign-gate issues below before authorizing.')
       return
     }
-    if (trainingIssues.length > 0 && !trainingOverride) {
+    if (strikeGated && !strikeTraining?.ready) {
+      setServerError('Everyone on this permit must pass the required STRIKE training first. Use Train now in Personnel.')
+      return
+    }
+    if (!strikeGated && trainingIssues.length > 0 && !trainingOverride) {
       setServerError('Some operators or watchers have missing or expired training — review the §(g) banner and confirm verification before signing.')
       return
     }
@@ -166,7 +187,26 @@ export default function HotWorkPermitDetailPage() {
       .select('*')
       .single()
     setBusy(null)
-    if (error || !data) { setServerError(error?.message ?? 'Could not sign.'); return }
+    if (error || !data) {
+      setServerError(parseTrainingRequiredError(error?.message) ?? error?.message ?? 'Could not sign.')
+      setSignAttempts(n => n + 1)
+      return
+    }
+    setPermit(data as HotWorkPermit)
+  }
+
+  async function syncHotWorkNames(crew: CrewMember[]) {
+    const { data, error } = await supabase
+      .from('loto_hot_work_permits')
+      .update({
+        hot_work_operators: crewNames(crew, 'operator'),
+        fire_watch_personnel: crewNames(crew, 'fire_watch'),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', permitId)
+      .select('*')
+      .single()
+    if (error || !data) throw new Error(error?.message ?? 'Could not update the printed roster.')
     setPermit(data as HotWorkPermit)
   }
 
@@ -302,8 +342,27 @@ export default function HotWorkPermitDetailPage() {
       {/* Personnel */}
       <Section title="Personnel">
         <KV label="Permit Authorizing Individual" value={permit.pai_id.slice(0, 8) + (permit.pai_signature_at ? ` · signed ${new Date(permit.pai_signature_at).toLocaleString()}` : ' · unsigned')} />
-        <KV label="Hot work operators" value={permit.hot_work_operators.length === 0 ? '—' : permit.hot_work_operators.join(', ')} />
-        <KV label="Fire watch personnel" value={permit.fire_watch_personnel.length === 0 ? '—' : permit.fire_watch_personnel.join(', ')} />
+        {tenantId ? (
+          <PermitCrewCard
+            tenantId={tenantId}
+            permitType="hot_work"
+            permitId={permitId}
+            editable={state === 'pending_signature' || state === 'active'}
+            roles={[
+              { role: 'operator', label: 'Hot work operators' },
+              { role: 'fire_watch', label: 'Fire watch personnel' },
+            ]}
+            syncLegacyNames={syncHotWorkNames}
+            extraMemberIds={paiMemberId ? [paiMemberId] : []}
+            onSummary={setStrikeTraining}
+            refreshKey={signAttempts}
+          />
+        ) : (
+          <>
+            <KV label="Hot work operators" value={permit.hot_work_operators.length === 0 ? '—' : permit.hot_work_operators.join(', ')} />
+            <KV label="Fire watch personnel" value={permit.fire_watch_personnel.length === 0 ? '—' : permit.fire_watch_personnel.join(', ')} />
+          </>
+        )}
         {permit.fire_watch_signature_at && (
           <KV label="Fire watch on duty" value={`${permit.fire_watch_signature_name ?? '—'} · ${new Date(permit.fire_watch_signature_at).toLocaleString()}`} />
         )}
@@ -337,7 +396,7 @@ export default function HotWorkPermitDetailPage() {
               </ul>
             </div>
           )}
-          {trainingIssues.length > 0 && signBlocks.length === 0 && (
+          {!strikeGated && trainingIssues.length > 0 && signBlocks.length === 0 && (
             <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 space-y-1.5">
               <p className="text-[11px] font-bold text-amber-900 dark:text-amber-100">§1910.252(a)(2)(xv) — training records not on file</p>
               <ul className="text-[11px] text-amber-900 dark:text-amber-100/85 space-y-0.5 pl-4">
@@ -366,7 +425,7 @@ export default function HotWorkPermitDetailPage() {
               disabled={
                 busy === 'sign' ||
                 signBlocks.length > 0 ||
-                (trainingIssues.length > 0 && !trainingOverride)
+                (strikeGated ? !strikeTraining?.ready : trainingIssues.length > 0 && !trainingOverride)
               }
               className="px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold disabled:opacity-40 hover:bg-emerald-700 transition-colors"
             >

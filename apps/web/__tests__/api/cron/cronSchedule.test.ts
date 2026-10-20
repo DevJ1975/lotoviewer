@@ -18,8 +18,6 @@ const MANUAL_ONLY: Record<string, string> = {
     'autonomous AI spend stays opt-in; an operator drains a seed run via Run now',
   '/api/cron/sds-library-verify':
     'kept opt-in alongside the seed drip; an operator runs it via Run now',
-  '/api/cron/strike-recurring-assignments':
-    'dormant: nothing writes strike_assignments.recurrence_rule yet, so there is nothing to advance. Schedule it when recurring assignments ship',
 }
 
 function scheduledPaths(): string[] {

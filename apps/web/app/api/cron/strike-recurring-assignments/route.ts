@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { withCronLogging } from '@/lib/cronInstrumentation'
+import { expiryFor, nextDueDate, parseRecurrenceRule } from '@soteria/core/strikeSchedule'
 
 export const runtime = 'nodejs'
 // Hard-capped at 500 assignments per tick, each a single indexed UPDATE with no
@@ -27,11 +28,6 @@ function authorize(req: Request): boolean {
   return false
 }
 
-interface RecurrenceRule {
-  interval_days?: unknown
-  expiry_days?: unknown
-}
-
 interface AssignmentRow {
   id: string
   tenant_id: string
@@ -41,7 +37,7 @@ interface AssignmentRow {
   target_id: string | null
   assigned_by: string | null
   due_at: string | null
-  recurrence_rule: RecurrenceRule | null
+  recurrence_rule: unknown
   reason: string | null
 }
 
@@ -74,15 +70,13 @@ async function runCron(): Promise<NextResponse> {
     let advanced = 0
 
     for (const row of rows) {
-      const intervalDays = Number(row.recurrence_rule?.interval_days)
-      if (!Number.isFinite(intervalDays) || intervalDays < 1) continue
+      const rule = parseRecurrenceRule(row.recurrence_rule)
+      if (!rule) continue
 
-      const base = row.due_at ? new Date(row.due_at) : now
-      const nextDue = new Date(Math.max(base.getTime(), now.getTime()) + intervalDays * 86_400_000)
-      const expiryDays = Number(row.recurrence_rule?.expiry_days)
-      const nextExpiry = Number.isFinite(expiryDays) && expiryDays > 0
-        ? new Date(nextDue.getTime() + expiryDays * 86_400_000).toISOString()
-        : null
+      // Anchored to the previous due date, so "every quarter on the 15th"
+      // stays on the 15th however late the cron runs.
+      const nextDue = nextDueDate(rule, row.due_at ? new Date(row.due_at) : now, now)
+      const nextExpiry = expiryFor(rule, nextDue)?.toISOString() ?? null
 
       const { error: updateErr } = await admin
         .from('strike_assignments')

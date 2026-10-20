@@ -25,6 +25,7 @@ const PUBLIC_PREFIXES = [
   '/r/bbs',     // Behavior-Based Safety anonymous QR submission
   '/review',    // LOTO placard reviewer portal — the URL token is the auth
   '/qr',        // Public LOTO placard view from a scanned placard QR
+  '/train',     // STRIKE "Train now" kiosk — the signed short-lived token is the auth
 ] as const
 
 export function isPublicPath(pathname: string): boolean {
