@@ -12,6 +12,7 @@ import { strikeFetch } from '@/lib/strike/clientApi'
 import { parseStrikeContent, type StrikeContent } from '@soteria/core/strikeContent'
 import { StrikeModuleRunner, type StrikeRunnerTransport, type StrikeSubmitFn, type StrikeSubmitResult } from '@/components/strike/StrikeModuleRunner'
 import type { QuizAnswerRow, QuizQuestionRow } from '@/components/strike/QuizQuestion'
+import { CoachDock } from '@/components/strike/CoachDock'
 import type { StrikeBlockEventRecord } from '@soteria/core/strikeContent'
 
 interface ModuleRow {
@@ -83,6 +84,8 @@ export default function StrikeModulePage() {
   const watchProgressRef = useRef<WatchProgress | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // The coach withholds quiz answers until this learner has passed.
+  const [passed, setPassed] = useState(false)
 
   const assignmentId = searchParams.get('assignment') ?? null
 
@@ -271,6 +274,8 @@ export default function StrikeModulePage() {
           transport={transport}
           submit={submitAttempt}
           learnerName={null}
+          onPassed={() => setPassed(true)}
+          coach={tenantId ? <CoachDock tenantId={tenantId} moduleId={module.id} attemptOpen={!passed} /> : null}
           legacyMedia={(
             <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
               {media?.url ? (
