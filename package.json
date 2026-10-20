@@ -20,12 +20,14 @@
     "check:deeplinks": "node scripts/check-deeplink-placeholders.mjs",
     "check:nav": "node scripts/check-nav-sync.mjs",
     "check:version": "node scripts/check-version-sync.mjs",
-    "check:repo": "npm run check:migrations && npm run check:manuals && npm run check:nav && npm run check:version && ALLOW_DEEPLINK_PLACEHOLDERS=1 npm run check:deeplinks",
+    "check:repo": "npm run check:migrations && npm run check:manuals && npm run check:nav && npm run check:version && npm run check:migration-drift",
     "check:wiki": "node scripts/check-wiki-sync.mjs",
     "build:tokens": "node scripts/build-spectrum-tokens.mjs",
     "check:wiki:staged": "node scripts/check-wiki-sync.mjs --staged",
     "doctor:git": "bash scripts/repo-doctor.sh",
-    "wiki:touch": "node scripts/wiki-touch.mjs"
+    "wiki:touch": "node scripts/wiki-touch.mjs",
+    "check:migration-drift": "node scripts/check-migration-drift.mjs",
+    "typecheck": "npm --workspace web exec -- tsc --noEmit"
   },
   "dependencies": {}
 }
