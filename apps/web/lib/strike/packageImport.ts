@@ -14,8 +14,14 @@
 // - Nothing is written until every media file the content references is in
 //   the bucket: the player signs URLs for them and a missing one is a dead
 //   scene.
+// - No upload may land on a file a published version, or another module,
+//   already uses. Uploads overwrite, and media_prefix is whatever the package
+//   says, so re-dropping a package with an unchanged prefix (or another
+//   module's) would change what learners are shown under a published version.
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { parseStrikeContent, strikeContentAssetPaths } from '@soteria/core/strikeContent'
 import { STRIKE_MEDIA_BUCKET } from '@/lib/strike/assets'
+import { fetchAll } from '@/lib/strike/fetchAll'
 import type { StrikePackagePlan, StrikePackageVersionPlan } from '@/lib/strike/package'
 
 const EDITABLE_STATUSES = ['draft', 'in_review'] as const
@@ -42,14 +48,21 @@ export type VersionAction =
 export interface ImportDecision {
   moduleAction: 'create' | 'update'
   versions: VersionAction[]
+  /** Upload paths that would overwrite media in use elsewhere; any one blocks the import. */
+  conflicts: string[]
 }
 
-/** Pure: what the import would do to this module, locale by locale. */
-export function decideImport(plan: StrikePackagePlan, existing: ExistingModule | null): ImportDecision {
+/**
+ * Pure: what the import would do to this module, locale by locale.
+ * `protectedPaths` are bucket paths no upload may replace (see loadProtectedMedia).
+ */
+export function decideImport(plan: StrikePackagePlan, existing: ExistingModule | null, protectedPaths: ReadonlySet<string> = new Set()): ImportDecision {
+  const conflicts = plan.uploads.map(u => u.bucketPath).filter(path => protectedPaths.has(path))
   if (!existing) {
     return {
       moduleAction: 'create',
       versions: plan.versions.map((version, index) => ({ locale: version.locale, action: 'create', versionNumber: index + 1 })),
+      conflicts,
     }
   }
   let nextNumber = Math.max(0, ...existing.versions.map(v => v.version_number)) + 1
@@ -70,7 +83,7 @@ export function decideImport(plan: StrikePackagePlan, existing: ExistingModule |
     }
     return { locale: version.locale, action: 'create', versionNumber: nextNumber++ }
   })
-  return { moduleAction: 'update', versions }
+  return { moduleAction: 'update', versions, conflicts }
 }
 
 export async function loadExistingModule(admin: SupabaseClient, slug: string): Promise<ExistingModule | null> {
@@ -84,6 +97,28 @@ export async function loadExistingModule(admin: SupabaseClient, slug: string): P
   if (!data) return null
   const row = data as { id: string; status: string; strike_module_versions: ExistingVersion[] | null }
   return { id: row.id, status: row.status, versions: row.strike_module_versions ?? [] }
+}
+
+/**
+ * Media no import may overwrite: everything a published or superseded global
+ * version serves (learners were credited against it), and everything any
+ * version of a different module uses. This module's own drafts are fair game;
+ * replacing their media is what re-dropping a fixed package is for.
+ */
+export async function loadProtectedMedia(admin: SupabaseClient, moduleId: string | null): Promise<Set<string>> {
+  const rows = await fetchAll<{ module_id: string; status: string; content: unknown; download_path: string | null }>(() =>
+    admin.from('strike_module_versions')
+      .select('id,module_id,status,content,download_path')
+      .eq('library_scope', 'global')
+      .order('id'))
+  const paths = new Set<string>()
+  for (const row of rows) {
+    if (row.module_id === moduleId && isEditable(row.status)) continue
+    const content = parseStrikeContent(row.content)
+    if (content.ok) for (const path of strikeContentAssetPaths(content.content)) paths.add(path)
+    if (row.download_path) paths.add(row.download_path)
+  }
+  return paths
 }
 
 /** Bucket paths from the plan's uploads that are not in strike-media yet. */
@@ -123,6 +158,9 @@ export async function importStrikePackage(
   decision: ImportDecision,
   userId: string,
 ): Promise<ImportOutcome> {
+  if (decision.conflicts.length > 0) {
+    throw new ImportRefused(`These files are already used by a published version or another module: ${decision.conflicts.join(', ')}. Give the package a new media_prefix (for example …/v2).`)
+  }
   const refused = decision.versions.filter(v => v.action === 'refused')
   if (refused.length > 0) {
     throw new ImportRefused(refused.map(v => (v as { reason: string }).reason).join(' '))

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { parseStrikePackageInput, readStrikePackage } from '@/lib/strike/package'
-import { decideImport, loadExistingModule, type ImportDecision } from '@/lib/strike/packageImport'
+import { decideImport, loadExistingModule, loadProtectedMedia, type ImportDecision } from '@/lib/strike/packageImport'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -33,8 +33,9 @@ export async function POST(req: Request) {
   if (!read.ok) return NextResponse.json({ error: 'Package is not importable', issues: read.issues }, { status: 422 })
 
   try {
-    const existing = await loadExistingModule(supabaseAdmin(), read.plan.slug)
-    const decision = decideImport(read.plan, existing)
+    const admin = supabaseAdmin()
+    const existing = await loadExistingModule(admin, read.plan.slug)
+    const decision = decideImport(read.plan, existing, await loadProtectedMedia(admin, existing?.id ?? null))
     return NextResponse.json({ decision, uploads: read.plan.uploads.map(u => u.bucketPath) } satisfies StrikeImportPlanResponse)
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not read the library' }, { status: 500 })

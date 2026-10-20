@@ -234,6 +234,7 @@ function ReviewCard({ plan, decision, onCommit, onCancel }: {
 }) {
   const totalBytes = plan.uploads.reduce((sum, u) => sum + u.size, 0)
   const refused = decision.versions.filter(v => v.action === 'refused')
+  const blocked = refused.length > 0 || decision.conflicts.length > 0
   const scenes = plan.versions[0]?.content.blocks.filter(b => b.kind === 'motion_scene').length ?? 0
   const interactions = plan.versions[0]?.content.blocks.filter(b => !['motion_scene', 'callout'].includes(b.kind)).length ?? 0
 
@@ -257,6 +258,13 @@ function ReviewCard({ plan, decision, onCommit, onCancel }: {
           {plan.ignored.length > 0 && ` · ${plan.ignored.length} not needed (${plan.ignored.slice(0, 4).join(', ')}${plan.ignored.length > 4 ? '…' : ''})`}
         </p>
       </div>
+      {decision.conflicts.length > 0 && (
+        <p className="text-xs text-rose-700 dark:text-rose-300">
+          {decision.conflicts.length} file{decision.conflicts.length === 1 ? ' is' : 's are'} already used by a published version or another
+          module ({decision.conflicts.slice(0, 3).join(', ')}{decision.conflicts.length > 3 ? '…' : ''}). Uploading would change what
+          learners see there. Give the package a new media_prefix, for example …/v2.
+        </p>
+      )}
       {refused.length > 0 && (
         <p className="text-xs text-amber-800 dark:text-amber-200">
           Nothing will be imported until every language above can be written.
@@ -267,7 +275,7 @@ function ReviewCard({ plan, decision, onCommit, onCancel }: {
           className="px-3 py-1.5 rounded-md text-xs font-semibold border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">
           Cancel
         </button>
-        <button type="button" onClick={onCommit} disabled={refused.length > 0}
+        <button type="button" onClick={onCommit} disabled={blocked}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-navy text-white text-xs font-semibold hover:bg-brand-navy/90 disabled:opacity-50">
           Upload and import as draft
         </button>

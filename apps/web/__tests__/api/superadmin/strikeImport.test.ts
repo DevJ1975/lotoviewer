@@ -23,6 +23,20 @@ function bucketHasEverything() {
   storageListMock.mockResolvedValue({ data: names.map(name => ({ name })), error: null })
 }
 
+/** The global library's media scan finds nothing in use (one empty page). */
+function noMediaInUse() {
+  mockState.queue('strike_module_versions', { data: [], error: null })
+}
+
+/** A published global version of another module already serving one of the package's files. */
+function publishedVersionUses(path: string) {
+  const blocks = JSON.parse(readFileSync(join(SEED_DIR, 'module.json'), 'utf8')).content.blocks as Array<{ kind: string; image?: { path: string } }>
+  const scene = { ...blocks.find(b => b.kind === 'motion_scene')!, image: { ...blocks.find(b => b.kind === 'motion_scene')!.image!, path } }
+  mockState.queue('strike_module_versions',
+    { data: [{ id: 'old-v1', module_id: 'other-module', status: 'published', content: { blocks: [scene] }, download_path: null }], error: null },
+    { data: [], error: null })
+}
+
 describe('POST /api/superadmin/strike/import/plan', () => {
   beforeEach(() => { resetMocks(); gateOk() })
 
@@ -50,9 +64,20 @@ describe('POST /api/superadmin/strike/import/plan', () => {
     const res = await planImport(jsonRequest('POST', packageBody()))
     expect(res.status).toBe(200)
     const json = await res.json()
-    expect(json.decision).toEqual({ moduleAction: 'create', versions: [{ locale: 'en', action: 'create', versionNumber: 1 }] })
+    expect(json.decision).toEqual({ moduleAction: 'create', versions: [{ locale: 'en', action: 'create', versionNumber: 1 }], conflicts: [] })
     expect(json.uploads).toContain('global/loto-101/v1/s1-why.mp3')
     expect(mockState.inserts).toHaveLength(0)
+  })
+
+  // Uploads overwrite, and the package names its own folder. Reusing a
+  // folder a published version serves would swap the media learners were
+  // credited against, so the plan refuses before anything is uploaded.
+  it('refuses a package whose uploads would overwrite media a published version serves', async () => {
+    publishedVersionUses('global/loto-101/v1/scene-01-why.jpg')
+    const res = await planImport(jsonRequest('POST', packageBody()))
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.decision.conflicts).toEqual(['global/loto-101/v1/scene-01-why.jpg'])
   })
 
   it('refuses a language that is already published without writing anything', async () => {
@@ -82,6 +107,7 @@ describe('POST /api/superadmin/strike/import', () => {
     bucketHasEverything()
     mockState.queue('strike_modules', { data: null, error: null })                 // slug lookup: new module
     mockState.queue('strike_modules', { data: { id: 'mod-new' }, error: null })    // insert
+    noMediaInUse()
     mockState.queue('strike_module_versions', { data: { id: 'ver-new' }, error: null })
     mockState.queue('strike_quiz_questions', { data: null, error: null })          // delete
     mockState.queue('strike_quiz_questions', {                                     // insert
@@ -120,6 +146,7 @@ describe('POST /api/superadmin/strike/import', () => {
       data: { id: 'mod-1', status: 'in_review', strike_module_versions: [{ id: 'v1', version_number: 1, status: 'draft', locale: 'en' }] },
       error: null,
     })
+    noMediaInUse()
     mockState.queue('strike_module_versions', { data: [{ id: 'v1' }], error: null }) // guarded update matched one row
     mockState.queue('strike_quiz_questions', { data: null, error: null })
     mockState.queue('strike_quiz_questions', { data: Array.from({ length: 10 }, (_, i) => ({ id: `q${i}`, sort_order: i })), error: null })
@@ -138,6 +165,7 @@ describe('POST /api/superadmin/strike/import', () => {
       data: { id: 'mod-1', status: 'in_review', strike_module_versions: [{ id: 'v1', version_number: 1, status: 'draft', locale: 'en' }] },
       error: null,
     })
+    noMediaInUse()
     mockState.queue('strike_module_versions', { data: [], error: null }) // the status-guarded update matched nothing
     const res = await commitImport(jsonRequest('POST', packageBody()))
     expect(res.status).toBe(409)
@@ -151,6 +179,7 @@ describe('POST /api/superadmin/strike/import', () => {
     body.documents.push({ name: 'module.es.json', json: JSON.parse(readFileSync(join(SEED_DIR, 'module.es.json'), 'utf8')) as unknown })
     mockState.queue('strike_modules', { data: null, error: null })
     mockState.queue('strike_modules', { data: { id: 'mod-new' }, error: null })
+    noMediaInUse()
     mockState.queue('strike_module_versions', { data: { id: 'ver-en' }, error: null })
     mockState.queue('strike_quiz_questions', { data: null, error: null })
     mockState.queue('strike_quiz_questions', { data: Array.from({ length: 10 }, (_, i) => ({ id: `q${i}`, sort_order: i })), error: null })
@@ -167,5 +196,16 @@ describe('POST /api/superadmin/strike/import', () => {
     ])
     const versionInserts = mockState.inserts.filter(i => i.table === 'strike_module_versions').map(i => i.payload as Record<string, unknown>)
     expect(versionInserts.map(v => [v.version_number, v.locale, v.title])).toEqual([[1, 'en', null], [2, 'es', 'LOTO 101: Control de energía peligrosa']])
+  })
+
+  it('writes nothing when an upload path is in use by a published version', async () => {
+    bucketHasEverything()
+    mockState.queue('strike_modules', { data: null, error: null })
+    publishedVersionUses('global/loto-101/v1/s1-why.mp3')
+    const res = await commitImport(jsonRequest('POST', packageBody()))
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toMatch(/global\/loto-101\/v1\/s1-why\.mp3/)
+    expect(mockState.inserts).toHaveLength(0)
+    expect(mockState.updates).toHaveLength(0)
   })
 })

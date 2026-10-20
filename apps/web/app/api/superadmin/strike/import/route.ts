@@ -3,7 +3,7 @@ import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { parseStrikePackageInput, readStrikePackage } from '@/lib/strike/package'
 import {
-  decideImport, importStrikePackage, ImportRefused, loadExistingModule, missingUploads, type ImportOutcome,
+  decideImport, importStrikePackage, ImportRefused, loadExistingModule, loadProtectedMedia, missingUploads, type ImportOutcome,
 } from '@/lib/strike/packageImport'
 
 export const runtime = 'nodejs'
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Some media files are not in the bucket yet', missing }, { status: 409 })
     }
     const existing = await loadExistingModule(admin, read.plan.slug)
-    const decision = decideImport(read.plan, existing)
+    const decision = decideImport(read.plan, existing, await loadProtectedMedia(admin, existing?.id ?? null))
     const outcome = await importStrikePackage(admin, read.plan, existing, decision, gate.userId)
     return NextResponse.json(outcome satisfies StrikeImportResponse, { status: existing ? 200 : 201 })
   } catch (error) {
