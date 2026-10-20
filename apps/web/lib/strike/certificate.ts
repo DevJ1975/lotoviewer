@@ -182,13 +182,22 @@ function fit(text: string, font: PDFFont, size: number, maxWidthPx: number): { v
   return { value: `${chars.slice(0, lo).join('')}…`, size: current }
 }
 
-// Standard PDF fonts encode WinAnsi only (Latin-1 plus a few typographic
-// marks). Spanish is covered; anything else would make pdf-lib throw.
-const WIN_ANSI_EXTRA = new Set(['–', '—', '‘', '’', '“', '”', '•', '…', '€'])
-function winAnsi(text: string): string {
-  return [...text].filter(ch => {
-    const code = ch.codePointAt(0) ?? 0
-    return (code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff) || WIN_ANSI_EXTRA.has(ch)
+// Standard PDF fonts encode WinAnsi only (Latin-1 plus the cp1252 extras);
+// anything else would make pdf-lib throw. A letter outside it is reduced to
+// its base letter (ễ → e) so "Nguyễn" prints as "Nguyen", not "Nguyn"; the
+// few letters Unicode does not decompose are mapped by hand.
+const WIN_ANSI_EXTRA = new Set([...'€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ'])
+const UNDECOMPOSABLE: Record<string, string> = { Đ: 'D', đ: 'd', Ł: 'L', ł: 'l', Ħ: 'H', ħ: 'h', ı: 'i' }
+function isWinAnsi(ch: string): boolean {
+  const code = ch.codePointAt(0) ?? 0
+  return (code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff) || WIN_ANSI_EXTRA.has(ch)
+}
+export function winAnsi(text: string): string {
+  return [...text.normalize('NFC')].map(ch => {
+    if (isWinAnsi(ch)) return ch
+    if (UNDECOMPOSABLE[ch]) return UNDECOMPOSABLE[ch]
+    const base = ch.normalize('NFD').replace(/\p{M}/gu, '')
+    return [...base].every(isWinAnsi) ? base : ''
   }).join('')
 }
 

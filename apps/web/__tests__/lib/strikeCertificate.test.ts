@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { PDFDocument } from 'pdf-lib'
-import { buildCertificatePdf, certificateFilename, type CertificateData } from '@/lib/strike/certificate'
+import { buildCertificatePdf, certificateFilename, winAnsi, type CertificateData } from '@/lib/strike/certificate'
 
 // A 1×1 transparent PNG: enough for pdf-lib to embed a signature.
 const PIXEL_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
@@ -54,6 +54,17 @@ describe('certificateFilename', () => {
     const started = performance.now()
     await buildCertificatePdf({ ...base, learnerName: 'A'.repeat(20_000), moduleTitle: 'B'.repeat(20_000) })
     expect(performance.now() - started).toBeLessThan(1000)
+  })
+
+  it.each([
+    ['Nguyễn Thị Ánh', 'Nguyen Thi Ánh'],
+    ['Nguye\u0303\u0302n', 'Nguyen'],
+    ['Zoë Ångström', 'Zoë Ångström'],
+    ['Šimon Žák', 'Šimon Žák'],
+    ['Đặng Łukasz', 'Dang Lukasz'],
+    ['李小龙', ''],
+  ])('keeps %s readable on the certificate', (name, printed) => {
+    expect(winAnsi(name)).toBe(printed)
   })
 
   it('makes a safe, readable file name from the module title', () => {
