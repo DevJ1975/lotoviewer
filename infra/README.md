@@ -29,6 +29,11 @@ Route 53 ─▶ ALB (HTTPS, 330 s timeout) ─┘      EventBridge (29 rules) �
 You need the AWS CLI signed in to the target account, Node 20, and admin
 rights in that account for the first deploy.
 
+**Shortcut:** `infra/aws-setup.sh` runs steps 2 to 5 below in one go (and
+starts the first deploy when the `gh` CLI is signed in). Do step 1 first if
+you want HTTPS from the start; otherwise run it as is and add the domain
+later.
+
 ```bash
 cd infra/cdk && npm ci
 export AWS_REGION=us-east-1                      # or your region

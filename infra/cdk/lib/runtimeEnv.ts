@@ -35,6 +35,15 @@ export const BUILD_ONLY_KEYS: ReadonlySet<string> = new Set([
 
 const ENV_KEY = /^[A-Z][A-Z0-9_]*$/
 
+// Vercel's own system variables. `vercel env pull` exports them alongside the
+// app's settings, but they describe the Vercel deployment, and the web stack
+// sets the two the app reads (VERCEL_ENV, VERCEL_GIT_COMMIT_SHA) itself.
+const VERCEL_SYSTEM_KEY = /^(NEXT_PUBLIC_)?VERCEL(_|$)/
+
+export function isVercelSystemKey(key: string): boolean {
+  return VERCEL_SYSTEM_KEY.test(key)
+}
+
 /**
  * Given the keys present in the secret, returns the ones to inject into the
  * container. Throws, naming every problem at once, if a required key is
@@ -51,5 +60,5 @@ export function runtimeSecretKeys(presentKeys: readonly string[]): string[] {
   ].filter(Boolean)
   if (problems.length) throw new Error(`soteria/web/env secret is ${problems.join('; ')}`)
 
-  return [...present].filter(key => !BUILD_ONLY_KEYS.has(key)).sort()
+  return [...present].filter(key => !BUILD_ONLY_KEYS.has(key) && !isVercelSystemKey(key)).sort()
 }
