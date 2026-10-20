@@ -55,6 +55,19 @@ container. Run commands with
    to `strike-media/<media_prefix>/` and saves the module as a **draft** in the
    global library, with its 10-question quiz. Re-running updates that same draft.
    It refuses to touch a published version.
+
+   **Or drag and drop.** The STRIKE Studio page in the web app
+   (`/superadmin/strike`) accepts the seed folder, or a zip of it, as a
+   *STRIKE package*: `module.json` (plus `module.es.json` for the translation),
+   the images, narration and captions they reference, and the rendered
+   `module.mp4` / `module.es.mp4` downloads. The browser validates the
+   documents, uploads the media to `strike-media/<media_prefix>/` as the
+   signed-in superadmin, and the web app writes the same draft rows as
+   `import_seed_module` (`apps/web/lib/strike/package.ts`,
+   `packageImport.ts`). Every AI approval in the package is cleared on
+   import; a person approves in the studio as before. Media files over the
+   project's Storage upload limit fail with a clear message — raise the
+   limit in Supabase → Storage settings or import that module from the shell.
 5. **Approve.** In the studio, open the module, listen to each narration, check
    each image for hazard accuracy (lock placement, PPE, isolation points), then
    approve it, or reject it with a note.

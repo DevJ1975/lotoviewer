@@ -1,0 +1,259 @@
+// Writes a STRIKE package plan into the global library as drafts. The same
+// rows `python manage.py import_seed_module` produces, reached from the web
+// app instead of a shell.
+//
+// Rules carried over from the studio importer:
+// - A published version is never touched: one that learners were credited
+//   against must not change underneath their completions. Re-importing a
+//   locale that is only published is refused, not superseded.
+// - A locale that already has a draft or in-review version is updated in
+//   place (content, quiz, download), so re-dropping a package after fixes
+//   does not pile up versions.
+// - A locale the module does not have yet becomes the next version number,
+//   which is how translations are stored (strikeLocale.ts).
+// - Nothing is written until every media file the content references is in
+//   the bucket: the player signs URLs for them and a missing one is a dead
+//   scene.
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { STRIKE_MEDIA_BUCKET } from '@/lib/strike/assets'
+import type { StrikePackagePlan, StrikePackageVersionPlan } from '@/lib/strike/package'
+
+const EDITABLE_STATUSES = ['draft', 'in_review'] as const
+const DEFAULT_LOCALE = 'en'
+
+export interface ExistingVersion {
+  id: string
+  version_number: number
+  status: string
+  locale: string
+}
+
+export interface ExistingModule {
+  id: string
+  status: string
+  versions: ExistingVersion[]
+}
+
+export type VersionAction =
+  | { locale: string; action: 'create'; versionNumber: number }
+  | { locale: string; action: 'update'; versionId: string; versionNumber: number }
+  | { locale: string; action: 'refused'; reason: string }
+
+export interface ImportDecision {
+  moduleAction: 'create' | 'update'
+  versions: VersionAction[]
+}
+
+/** Pure: what the import would do to this module, locale by locale. */
+export function decideImport(plan: StrikePackagePlan, existing: ExistingModule | null): ImportDecision {
+  if (!existing) {
+    return {
+      moduleAction: 'create',
+      versions: plan.versions.map((version, index) => ({ locale: version.locale, action: 'create', versionNumber: index + 1 })),
+    }
+  }
+  let nextNumber = Math.max(0, ...existing.versions.map(v => v.version_number)) + 1
+  const versions = plan.versions.map((version): VersionAction => {
+    const inLocale = existing.versions.filter(v => v.locale === version.locale).sort((a, b) => a.version_number - b.version_number)
+    const editable = inLocale.filter(v => isEditable(v.status))
+    if (editable.length > 0) {
+      const target = editable[editable.length - 1]!
+      return { locale: version.locale, action: 'update', versionId: target.id, versionNumber: target.version_number }
+    }
+    if (inLocale.length > 0) {
+      const latest = inLocale[inLocale.length - 1]!
+      return {
+        locale: version.locale,
+        action: 'refused',
+        reason: `Version ${latest.version_number} (${version.locale}) is ${latest.status} and cannot be overwritten. Start a new version in the studio first.`,
+      }
+    }
+    return { locale: version.locale, action: 'create', versionNumber: nextNumber++ }
+  })
+  return { moduleAction: 'update', versions }
+}
+
+export async function loadExistingModule(admin: SupabaseClient, slug: string): Promise<ExistingModule | null> {
+  const { data, error } = await admin
+    .from('strike_modules')
+    .select('id, status, strike_module_versions(id, version_number, status, locale)')
+    .eq('slug', slug)
+    .eq('library_scope', 'global')
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) return null
+  const row = data as { id: string; status: string; strike_module_versions: ExistingVersion[] | null }
+  return { id: row.id, status: row.status, versions: row.strike_module_versions ?? [] }
+}
+
+/** Bucket paths from the plan's uploads that are not in strike-media yet. */
+export async function missingUploads(admin: SupabaseClient, plan: StrikePackagePlan): Promise<string[]> {
+  if (plan.uploads.length === 0) return []
+  const { data, error } = await admin.storage
+    .from(STRIKE_MEDIA_BUCKET)
+    .list(plan.mediaPrefix, { limit: 1000 })
+  if (error) throw new Error(error.message)
+  const present = new Set((data ?? []).map(object => `${plan.mediaPrefix}/${object.name}`))
+  return plan.uploads.map(u => u.bucketPath).filter(path => !present.has(path))
+}
+
+export interface ImportedVersion {
+  locale: string
+  versionId: string
+  versionNumber: number
+  action: 'create' | 'update'
+}
+
+export interface ImportOutcome {
+  moduleId: string
+  moduleAction: 'create' | 'update'
+  versions: ImportedVersion[]
+}
+
+export class ImportRefused extends Error {}
+
+/**
+ * Apply a decision. Call only after `missingUploads` came back empty; the
+ * quiz is replaced wholesale on an update, the same as the studio importer.
+ */
+export async function importStrikePackage(
+  admin: SupabaseClient,
+  plan: StrikePackagePlan,
+  existing: ExistingModule | null,
+  decision: ImportDecision,
+  userId: string,
+): Promise<ImportOutcome> {
+  const refused = decision.versions.filter(v => v.action === 'refused')
+  if (refused.length > 0) {
+    throw new ImportRefused(refused.map(v => (v as { reason: string }).reason).join(' '))
+  }
+
+  const moduleFields = {
+    title: plan.title,
+    description: plan.description,
+    category: plan.category,
+    tags: plan.tags,
+    estimated_minutes: plan.estimatedMinutes,
+    updated_by: userId,
+  }
+
+  let moduleId: string
+  if (existing) {
+    moduleId = existing.id
+    const changes = ['published', 'archived'].includes(existing.status) ? moduleFields : { ...moduleFields, status: 'in_review' }
+    const { error } = await admin.from('strike_modules').update(changes).eq('id', moduleId)
+    if (error) throw new Error(error.message)
+  } else {
+    const { data, error } = await admin
+      .from('strike_modules')
+      .insert({ ...moduleFields, slug: plan.slug, library_scope: 'global', tenant_id: null, status: 'in_review', created_by: userId })
+      .select('id')
+      .single()
+    if (error) throw new Error(error.message)
+    moduleId = (data as { id: string }).id
+  }
+
+  const versions: ImportedVersion[] = []
+  for (const action of decision.versions) {
+    if (action.action === 'refused') continue
+    const version = plan.versions.find(v => v.locale === action.locale)!
+    const versionId = action.action === 'update'
+      ? await updateVersion(admin, action.versionId, version)
+      : await insertVersion(admin, moduleId, action.versionNumber, version, userId)
+    await replaceQuiz(admin, versionId, version)
+    versions.push({ locale: action.locale, versionId, versionNumber: action.versionNumber, action: action.action })
+  }
+
+  return { moduleId, moduleAction: decision.moduleAction, versions }
+}
+
+function versionFields(version: StrikePackageVersionPlan) {
+  return {
+    content: version.content,
+    passing_score: version.passingScore,
+    retake_limit: version.retakeLimit,
+    validity_days: version.validityDays,
+    locale: version.locale,
+    // The default-language version is described by the module row (301).
+    title: version.locale === DEFAULT_LOCALE ? null : version.title,
+    download_path: version.downloadPath,
+  }
+}
+
+async function updateVersion(admin: SupabaseClient, versionId: string, version: StrikePackageVersionPlan): Promise<string> {
+  const { data, error } = await admin
+    .from('strike_module_versions')
+    .update(versionFields(version))
+    .eq('id', versionId)
+    .in('status', [...EDITABLE_STATUSES])
+    .select('id')
+  if (error) throw new Error(error.message)
+  if (!Array.isArray(data) || data.length !== 1) {
+    throw new ImportRefused(`Version for ${version.locale} was published while the import ran; nothing changed for it.`)
+  }
+  return versionId
+}
+
+async function insertVersion(
+  admin: SupabaseClient,
+  moduleId: string,
+  versionNumber: number,
+  version: StrikePackageVersionPlan,
+  userId: string,
+): Promise<string> {
+  const { data, error } = await admin
+    .from('strike_module_versions')
+    .insert({
+      ...versionFields(version),
+      module_id: moduleId,
+      library_scope: 'global',
+      tenant_id: null,
+      version_number: versionNumber,
+      status: 'draft',
+      created_by: userId,
+    })
+    .select('id')
+    .single()
+  if (error) throw new Error(error.message)
+  return (data as { id: string }).id
+}
+
+async function replaceQuiz(admin: SupabaseClient, versionId: string, version: StrikePackageVersionPlan): Promise<void> {
+  const { error: deleteError } = await admin.from('strike_quiz_questions').delete().eq('module_version_id', versionId)
+  if (deleteError) throw new Error(deleteError.message)
+
+  const { data: questions, error: questionError } = await admin
+    .from('strike_quiz_questions')
+    .insert(version.questions.map((question, index) => ({
+      module_version_id: versionId,
+      library_scope: 'global',
+      tenant_id: null,
+      question_type: question.question_type,
+      prompt: question.prompt,
+      explanation: question.explanation,
+      sort_order: index,
+      points: 1,
+      required: true,
+      graded: true,
+    })))
+    .select('id, sort_order')
+  if (questionError) throw new Error(questionError.message)
+
+  const idBySortOrder = new Map((questions as { id: string; sort_order: number }[]).map(q => [q.sort_order, q.id]))
+  const answers = version.questions.flatMap((question, index) =>
+    question.answers.map((answer, answerIndex) => ({
+      question_id: idBySortOrder.get(index),
+      library_scope: 'global',
+      tenant_id: null,
+      answer_text: answer.text,
+      is_correct: answer.correct,
+      sort_order: answerIndex,
+    })),
+  )
+  const { error: answerError } = await admin.from('strike_quiz_answers').insert(answers)
+  if (answerError) throw new Error(answerError.message)
+}
+
+function isEditable(status: string): boolean {
+  return (EDITABLE_STATUSES as readonly string[]).includes(status)
+}
