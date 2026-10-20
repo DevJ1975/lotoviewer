@@ -1,10 +1,21 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-05-15'
+const CURRENT_VERSION = '1.1.0'
+const LAST_UPDATED    = '2026-10-20'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.0',
+    date:    '2026-10-20',
+    changes: [
+      'Required training can now block a group lockout permit. When an admin requires a STRIKE module for LOTO group permits, the permit cannot be created until the primary authorized employee holds a current pass (they must be on the roster), and each worker is checked as they attach their personal lock. The database enforces this, so it cannot be clicked past.',
+      'When LOTO group permits require training, a worker joining the group lockbox must be on the roster (People). App users are matched through their profile and shop-floor LOTO workers through their linked roster entry; anyone not on the roster is refused because their training cannot be verified, so add them under People first.',
+      'Train now: the Required training panel on the new-permit form and in Add member on the permit page gives each worker missing training a QR code that opens the module on their own phone with no login. The link is for that one worker, expires after 30 minutes, and the panel updates when they pass.',
+      'Emergency override: owners and admins can let a blocked worker onto a group permit with a written reason of at least 20 characters. It cannot be edited or deleted, is recorded in the audit log, and is emailed to every owner and admin.',
+      'Nothing changes until an admin requires a module. Without a requirement, group permits are created and joined exactly as before.',
+    ],
+  },
   {
     version: '1.0.0',
     date:    '2026-05-15',
@@ -36,6 +47,7 @@ export default function WikiLotoCompliancePage() {
         { id: 'walkdown',  label: '§(c)(6) — walkdown checklist' },
         { id: 'competency',label: '§(c)(7) — competency exams' },
         { id: 'group',     label: '§(f)(3)/(f)(4) — group LOTO' },
+        { id: 'training',  label: 'Required training' },
         { id: 'contractors',label:'§(f)(2) — contractors' },
         { id: 'retraining',label: '§(g)(2) — retraining' },
         { id: 'faq',       label: 'FAQ' },
@@ -154,6 +166,64 @@ export default function WikiLotoCompliancePage() {
         </p>
       </Section>
 
+      <Section id="training" title="Required training">
+        <p>
+          This applies to group lockout permits. When an admin has required a
+          STRIKE module for <strong>LOTO group permits</strong>, the database
+          checks for a current pass at two moments, so it cannot be clicked
+          past:
+        </p>
+        <ul>
+          <li><strong>Creating the permit</strong> — the primary authorized
+            employee is checked, and must be on the roster (People) or the
+            permit is refused because their training cannot be verified. The new-permit
+            form shows a <strong>Required training</strong> panel for them,
+            and the permit cannot be created until it reads{' '}
+            <em>Crew ready</em>.</li>
+          <li><strong>Joining the group lockbox</strong> — each worker is
+            checked as they attach their personal lock under{' '}
+            <strong>Add member</strong> on the permit page. Pick the worker
+            and, if they are on the roster, the same panel shows their status
+            before you press{' '}
+            <strong>Attach personal lock</strong>.</li>
+        </ul>
+        <p>
+          Training is checked against the person&apos;s roster entry, so a
+          joining worker must be on the roster (People). App users are
+          matched through their profile; shop-floor LOTO workers through
+          their linked roster entry. If there is no roster entry, the join is
+          refused with &quot;This worker is not on the roster, so their
+          training cannot be verified&quot;. Add them under People in the{' '}
+          <Link href="/admin/people/members">member roster</Link>, then
+          attach their lock again.
+        </p>
+        <ul>
+          <li><strong>Train now</strong> — appears next to each missing
+            module. It shows a QR code the worker scans with their own phone
+            to take the module on the spot, with no login. The link is for
+            that one worker and expires after 30 minutes. The panel updates
+            when they pass.</li>
+          <li><strong>Emergency override</strong> — owners and admins only,
+            for when waiting is less safe than going ahead. Choose the blocked
+            workers and write the reason (at least 20 characters). The
+            override is permanent, recorded in the audit log, and emailed to
+            every owner and admin. On the new-permit form it can be recorded
+            before the permit exists, because the form reserves the permit&apos;s
+            ID up front.</li>
+        </ul>
+        <p>
+          Nothing changes until an admin requires a module. With no
+          requirement for LOTO group permits, permits are created and
+          workers join exactly as before, roster entry or not. Admins set
+          requirements at{' '}
+          <Link href="/strike/admin">STRIKE → Training admin</Link> →{' '}
+          <strong>Required for work</strong>, choosing{' '}
+          <em>LOTO group permit</em>, the module, and how recent the pass
+          must be: any current pass, fresh for each job (within 24 hours),
+          within the last 90 days, or within the last year.
+        </p>
+      </Section>
+
       <Section id="contractors" title="§(f)(2) — Contractor companies">
         <p>
           Multi-employer worksites carry the obligation to inform outside
@@ -233,6 +303,30 @@ export default function WikiLotoCompliancePage() {
               three departments is a single group permit.</>,
           },
           {
+            q: 'Creating a group permit is refused because required training is missing. What now?',
+            a: <>Use <strong>Train now</strong> in the Required training panel
+              on the new-permit form so the primary authorized employee can
+              pass the module on their phone. Once the panel shows{' '}
+              <em>Crew ready</em>, create the permit. If waiting is less safe
+              than going ahead, an owner or admin can record an{' '}
+              <strong>Emergency override</strong> with a written reason; it is
+              audited and emailed to every owner and admin.</>,
+          },
+          {
+            q: 'Attaching a worker\'s lock fails with "not on the roster". Why?',
+            a: <>An admin has required training for LOTO group permits, and
+              training can only be verified against a roster entry. App users are matched through
+              their profile and shop-floor LOTO workers through their linked
+              roster entry. Add the person under People, then attach their
+              lock again.</>,
+          },
+          {
+            q: 'Does an emergency override carry over to the next group permit?',
+            a: <>No. An override is recorded against one permit. On any other
+              permit the worker shows as missing training again until they
+              pass the module.</>,
+          },
+          {
             q: 'A contractor\'s insurance expired today. What happens?',
             a: <>The contractor is bucketed as <em>expiring</em> through
               today and flips to <em>expired</em> tomorrow. They remain
@@ -277,6 +371,7 @@ export default function WikiLotoCompliancePage() {
             'Tag every contractor worker to a contractor company at intake — the host-procedure acknowledgement is a per-company event, not a per-worker one.',
             'Use group permits for any multi-craft job — the §(f)(3) workflow is what the standard expects, not "everyone applies a personal lock to the disconnect".',
             'Run the competency exam adjacent to the initial training session, not weeks later — the proctored format is most defensible when the connection between training and verification is fresh.',
+            'In Add member on a group permit, pick the worker and check the Required training panel before they hang their lock; use Train now for anyone flagged.',
           ]}
           donts={[
             'Don\'t treat the §(c)(6) periodic inspection as a paperwork task. The standard requires observation of an authorized employee actually using the procedure — record their names in the form.',
@@ -284,6 +379,7 @@ export default function WikiLotoCompliancePage() {
             'Don\'t reuse a single periodic inspection for a family of equipment. Each procedure gets its own row. The denormalized next-due date on loto_equipment is per-equipment.',
             'Don\'t bypass the retraining-trigger panel. If you suppress triggers without resolution, the §(g)(2) audit trail rots and the system can\'t defend you under inspection.',
             'Don\'t let a contractor work without an active host-procedure acknowledgement on file. The admin/contractors page is the gate; treat it like a vendor onboarding control.',
+            'Don\'t use the emergency training override to save time. It is for when waiting is less safe, and every use is audited and emailed to every owner and admin.',
           ]}
         />
       </Section>
