@@ -41,7 +41,6 @@ interface RequestBody {
   conversation_id?: unknown
   module_id?:       unknown
   module_version_id?: unknown
-  attempt_open?:    unknown
 }
 
 export async function POST(req: Request) {
@@ -60,7 +59,6 @@ export async function POST(req: Request) {
   const conversationIdIn = typeof body.conversation_id === 'string' && UUID_RE.test(body.conversation_id) ? body.conversation_id : null
   const moduleId = typeof body.module_id === 'string' && UUID_RE.test(body.module_id) ? body.module_id : null
   const moduleVersionId = typeof body.module_version_id === 'string' && UUID_RE.test(body.module_version_id) ? body.module_version_id : null
-  const attemptOpen = body.attempt_open === true
 
   const limit = await checkAiRateLimit({ userId: gate.userId, tenantId: gate.tenantId, surface: SURFACE })
   if (!limit.ok) {
@@ -72,9 +70,10 @@ export async function POST(req: Request) {
 
   const admin = supabaseAdmin()
 
-  const [{ data: tenantRow }, visibleModule] = await Promise.all([
+  const [{ data: tenantRow }, visibleModule, attemptOpen] = await Promise.all([
     admin.from('tenants').select('name').eq('id', gate.tenantId).maybeSingle(),
     moduleId ? loadVisibleModule(admin, moduleId, moduleVersionId, gate.tenantId) : Promise.resolve(null),
+    moduleId ? knowledgeCheckOpen(admin, gate.tenantId, gate.userId, moduleId) : Promise.resolve(false),
   ])
 
   let conversationId: string
@@ -234,4 +233,22 @@ async function loadVisibleModule(
   if (data.library_scope === 'tenant' && data.tenant_id !== tenantId) return null
   const parsed = version?.status === 'published' && version.content != null ? parseStrikeContent(version.content) : null
   return { title: data.title as string, practiceChecks: parsed?.ok ? practiceCheckPrompts(parsed.content) : [] }
+}
+
+/**
+ * Whether the coach must hold back graded-quiz answers: inside a module, until
+ * this learner has passed it. Decided here, never by the browser, which could
+ * simply say the quiz is closed. A failed lookup keeps the rule on.
+ */
+async function knowledgeCheckOpen(admin: ReturnType<typeof supabaseAdmin>, tenantId: string, userId: string, moduleId: string): Promise<boolean> {
+  const { data, error } = await admin
+    .from('strike_completions')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('user_id', userId)
+    .eq('module_id', moduleId)
+    .eq('passed', true)
+    .limit(1)
+  if (error) return true
+  return (data ?? []).length === 0
 }

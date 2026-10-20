@@ -129,16 +129,30 @@ describe('POST /api/strike/coach/chat', () => {
     expect(logAiInvocationMock).toHaveBeenCalledWith(expect.objectContaining({ surface: 'strike-coach', status: 'success' }))
   })
 
-  it('adds the no-answers rule while a knowledge check is open, and only then', async () => {
+  // The server decides, from the learner's own completions: a browser that
+  // says the quiz is closed must not unlock graded answers.
+  it.each([
+    ['not yet passed the module', { data: [], error: null }, { attempt_open: false }, true],
+    ['passed the module', { data: [{ id: 'c1' }], error: null }, { attempt_open: true }, false],
+    ['a completion lookup that failed', { data: null, error: { message: 'boom' } }, { attempt_open: false }, true],
+  ])('holds back graded answers for a learner who has %s, whatever the browser claims', async (_, completions, claim, expectRule) => {
+    queue('strike_completions', completions)
+    queue('assistant_conversations', { data: { id: CONVERSATION_ID } })
+    queue('assistant_messages', { data: null }, { data: [{ role: 'user', content: 'Is the answer B?', created_at: 'x' }] })
+    queueAnthropic('Let me explain the concept instead.')
     const { POST } = await import('@/app/api/strike/coach/chat/route')
-    for (const attemptOpen of [true, false]) {
-      queue('assistant_conversations', { data: { id: CONVERSATION_ID } })
-      queue('assistant_messages', { data: null }, { data: [{ role: 'user', content: 'Is the answer B?', created_at: 'x' }] })
-      queueAnthropic('Let me explain the concept instead.')
-      await POST(post({ message: 'Is the answer B?', attempt_open: attemptOpen }))
-      if (attemptOpen) expect(systemText()).toContain('KNOWLEDGE CHECK IN PROGRESS')
-      else expect(systemText()).not.toContain('KNOWLEDGE CHECK IN PROGRESS')
-    }
+    await POST(post({ message: 'Is the answer B?', module_id: MODULE_ID, ...claim }))
+    if (expectRule) expect(systemText()).toContain('KNOWLEDGE CHECK IN PROGRESS')
+    else expect(systemText()).not.toContain('KNOWLEDGE CHECK IN PROGRESS')
+  })
+
+  it('does not apply the quiz rule to general questions outside a module', async () => {
+    queue('assistant_conversations', { data: { id: CONVERSATION_ID } })
+    queue('assistant_messages', { data: null }, { data: [{ role: 'user', content: 'What is LOTO?', created_at: 'x' }] })
+    queueAnthropic('LOTO is...')
+    const { POST } = await import('@/app/api/strike/coach/chat/route')
+    await POST(post({ message: 'What is LOTO?' }))
+    expect(systemText()).not.toContain('KNOWLEDGE CHECK IN PROGRESS')
   })
 
   it('caches the static guardrail block and keeps it identical across calls', async () => {
