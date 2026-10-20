@@ -4,6 +4,13 @@ _From the end-to-end monorepo audit (2026-05-24). Outlines what to integrate/add
 to the Expo app (`apps/mobile`) to bring it toward parity with the web app
 (`apps/web`), sharing `packages/core`._
 
+> **Status (2026-10):** the Tier-1 field modules below shipped in the store-readiness
+> pass: AI assistant, incidents, inspections, BBS observation capture, confined-space
+> and hot-work permit field operations, hazardous-waste sync and push notifications
+> (Expo). Still web-only: permit creation, toolbox-talk signing (needs a signature
+> pad), photo/signature inspection items, fire-watch sign-on, chemicals, working at
+> heights, and the offline sync queue (Tier 3). See `apps/mobile/docs/app-store-submission.md`.
+
 ## Where mobile is today
 
 - **Stack:** Expo SDK 54 + `expo-router`. Tabs: dashboard, equipment,

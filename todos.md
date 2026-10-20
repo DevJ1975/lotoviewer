@@ -45,7 +45,7 @@ Investigation-SLA escalations and the annual OSHA-300A posting prompt intentiona
 
 ## 7. AI follow-ups (2026-05-24)
 - [ ] **Train the agent on more manuals — admin upload UI.** The RAG ingest pipeline exists (`apps/web/lib/ai/{chunker,embeddings,policyExtract,syncManualToRag}.ts` → `knowledge_documents`/`knowledge_chunks`), but there's no friendly admin page to upload an arbitrary manual/policy and run it. Build that page (global regs vs. per-tenant policy) so you can train the agent without code. _(Deferred — its own focused build.)_
-- [ ] **Mobile parity** — see `docs/mobile-parity-plan.md`. Tier 1: mobile AI assistant (reuse `/api/assistant/chat`), field permit/incident/inspection/BBS capture, push notifications.
+- [ ] **Mobile parity** — see `docs/mobile-parity-plan.md`. Tier 1 shipped 2026-10 (assistant, incidents, inspections, BBS, CS + hot-work field ops, hazardous-waste sync, push). Remaining: toolbox-talk signing, permit creation, photo/signature inspection items, offline sync queue. **Before store submission:** run `eas init`, upload an APNs key, apply migration 304, and follow `apps/mobile/docs/app-store-submission.md`.
 - **WLS demo seed — DONE:** the WLS Demo tenant has demo overdue CAPAs + expired certs (tagged "Demo —") so the incident-risk predictor + weather-report preview show a rich scenario.
 
 ## 8. Scorecard historical import — year-over-year (2026-05-24)
