@@ -87,3 +87,16 @@ export function verifyPngDataUrl(dataUrl: string): string | null {
   if (!verifyPNG(buf)) return 'png-magic-bytes-missing'
   return null
 }
+
+/**
+ * Pixel size of a PNG data URL, read from its IHDR chunk (always the first
+ * chunk, RFC 2083 § 11.2.2), or null when it is not a well-formed PNG.
+ * Lets a caller refuse an image that passes the magic-byte check but is
+ * too small to be what it claims, such as a 1×1 "signature".
+ */
+export function pngDataUrlDimensions(dataUrl: string): { width: number; height: number } | null {
+  if (verifyPngDataUrl(dataUrl) !== null) return null
+  const buf = Buffer.from(dataUrl.slice('data:image/png;base64,'.length), 'base64')
+  if (buf.length < 24 || buf.toString('latin1', 12, 16) !== 'IHDR') return null
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) }
+}
