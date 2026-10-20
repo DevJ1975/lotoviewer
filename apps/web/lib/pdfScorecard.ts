@@ -5,6 +5,8 @@ import {
   sanitizeForWinAnsi, drawBrandMark, reserveSpace, type DrawCtx,
 } from './pdfShared'
 import type { IncidentRiskResult } from '@soteria/core/incidentRiskModel'
+import type { MicrolearningSummary } from '@soteria/core/strikeScorecard'
+import { MICROLEARNING_NOTES, microlearningFacts, microlearningModuleRows } from './scorecardMicrolearning'
 import { summarizeRecordableDistribution } from '@soteria/core/scorecardDistribution'
 
 // Comprehensive, branded EHS Scorecard PDF. Replaces the previous minimal export
@@ -52,6 +54,8 @@ export interface ScorecardPdfInput {
   incident?: IncidentLike | null
   /** Recomputed server-side — the authoritative predicted-risk headline. */
   risk?: IncidentRiskResult | null
+  /** Computed server-side; absent when STRIKE is off for the tenant. */
+  microlearning?: MicrolearningSummary | null
 }
 
 // ── Small formatters ────────────────────────────────────────────────────────
@@ -293,7 +297,102 @@ export async function buildScorecardPdf(input: ScorecardPdfInput): Promise<Uint8
     for (const r of reasons) drawKeyValue(ctx, String(r.reason ?? '—'), String(num(r.count)))
   }
 
+  if (input.microlearning) drawMicrolearning(ctx, input.microlearning)
+
   return await doc.save()
+}
+
+// ── Microlearning (STRIKE) ─────────────────────────────────────────────────
+// Same facts and wording as the Excel tab and the Word document
+// (lib/scorecardExport.ts), laid out as a fact table, a completions trend and
+// a per-module table.
+const BLUE = rgb(0.11, 0.24, 0.81)
+
+function fitText(text: string, font: PDFFont, size: number, maxW: number): string {
+  let t = sanitizeForWinAnsi(text)
+  if (font.widthOfTextAtSize(t, size) <= maxW) return t
+  while (t.length > 1 && font.widthOfTextAtSize(`${t}...`, size) > maxW) t = t.slice(0, -1)
+  return `${t}...`
+}
+
+function drawMicrolearning(ctx: DrawCtx, ml: MicrolearningSummary): void {
+  drawDivider(ctx)
+  drawSectionBar(ctx, `Microlearning (STRIKE) - last ${ml.windowDays} days`)
+
+  const labelW = 210
+  for (const fact of microlearningFacts(ml)) {
+    reserveSpace(ctx, 14)
+    ctx.page.drawText(sanitizeForWinAnsi(fact.label), { x: MARGIN, y: ctx.y - 10, size: 8, font: ctx.bold, color: NAVY })
+    ctx.page.drawText(fitText(fact.value, ctx.font, 9, PAGE_W - 2 * MARGIN - labelW), { x: MARGIN + labelW, y: ctx.y - 10, size: 9, font: ctx.font, color: SLATE })
+    ctx.y -= 13
+  }
+
+  drawDivider(ctx)
+  // Keep the chart's title bar on the same page as the chart.
+  reserveSpace(ctx, 24 + 8 + TREND_PLOT_H + 24)
+  drawSectionBar(ctx, ml.trend.bucketDays === 1 ? 'Microlearning completions per day' : 'Microlearning completions per week')
+  drawCompletionTrend(ctx, ml)
+
+  const rows = microlearningModuleRows(ml)
+  drawDivider(ctx)
+  drawSectionBar(ctx, 'Completions by module')
+  if (rows.length === 0) {
+    drawKeyValue(ctx, '', 'No microlearning activity in this window.')
+  } else {
+    const cols = [
+      { label: 'Module', x: MARGIN, w: 180 },
+      { label: 'Done', x: MARGIN + 184, w: 34 },
+      { label: 'People', x: MARGIN + 220, w: 36 },
+      { label: 'Pass rate', x: MARGIN + 260, w: 92 },
+      { label: 'Avg', x: MARGIN + 354, w: 30 },
+      { label: 'ADA', x: MARGIN + 386, w: 26 },
+      { label: 'Languages', x: MARGIN + 414, w: PAGE_W - 2 * MARGIN - 414 },
+    ]
+    const drawRow = (cells: string[], header: boolean) => {
+      reserveSpace(ctx, 14)
+      cells.forEach((cell, i) => ctx.page.drawText(fitText(cell, header ? ctx.bold : ctx.font, 8, cols[i].w), {
+        x: cols[i].x, y: ctx.y - 10, size: 8, font: header ? ctx.bold : ctx.font, color: header ? NAVY : SLATE,
+      }))
+      ctx.y -= 13
+    }
+    drawRow(cols.map(c => c.label), true)
+    for (const r of rows) {
+      drawRow([r.title, String(r.completions), String(r.learners), r.passRate, r.averageScore, String(r.assisted), r.languages], false)
+    }
+  }
+
+  drawDivider(ctx)
+  for (const note of MICROLEARNING_NOTES) drawKeyValue(ctx, '', note, { wrap: true })
+}
+
+const TREND_PLOT_H = 80
+
+function drawCompletionTrend(ctx: DrawCtx, ml: MicrolearningSummary): void {
+  const plotH = TREND_PLOT_H
+  reserveSpace(ctx, plotH + 24)
+  ctx.y -= 8 // headroom for the "max" label under the section bar
+  const x0 = MARGIN
+  const plotW = PAGE_W - 2 * MARGIN
+  const yBase = ctx.y - plotH
+  const points = ml.trend.points
+  const maxV = Math.max(1, ...points.map(p => p.completions))
+  const slot = plotW / Math.max(1, points.length)
+  const barW = Math.max(2, Math.min(14, slot * 0.6))
+
+  ctx.page.drawLine({ start: { x: x0, y: yBase }, end: { x: x0 + plotW, y: yBase }, color: RULE, thickness: 0.8 })
+  ctx.page.drawLine({ start: { x: x0, y: yBase + plotH }, end: { x: x0 + plotW, y: yBase + plotH }, color: FAINT, thickness: 0.6 })
+  ctx.page.drawText(`max ${maxV}`, { x: x0, y: yBase + plotH + 2, size: 6, font: ctx.font, color: MUTED })
+  const labelEvery = Math.ceil(points.length / 10)
+  points.forEach((p, i) => {
+    const cx = x0 + i * slot + slot / 2
+    ctx.page.drawRectangle({ x: cx - barW / 2, y: yBase, width: barW, height: (p.completions / maxV) * plotH, color: BLUE })
+    if (i % labelEvery === 0) {
+      const label = p.start.slice(5)
+      const w = ctx.font.widthOfTextAtSize(label, 6)
+      ctx.page.drawText(label, { x: cx - w / 2, y: yBase - 9, size: 6, font: ctx.font, color: MUTED })
+    }
+  })
+  ctx.y = yBase - 16
 }
 
 // Merge the two monthly series into a sorted, aligned trend for the chart.

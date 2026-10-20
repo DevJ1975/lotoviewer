@@ -1,10 +1,26 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.15.1'
-const LAST_UPDATED    = '2026-09-27'
+const CURRENT_VERSION = '1.16.0'
+const LAST_UPDATED    = '2026-10-20'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.16.0',
+    date:    '2026-10-20',
+    changes: [
+      'New “Microlearning (STRIKE)” section: how many modules were completed and ' +
+      'by how many people, which modules, how much of the workforce holds a ' +
+      'current pass, assignments complete and overdue, certifications about to ' +
+      'expire, quiz and first-try pass rates, practice-check results, and the ' +
+      'English / Spanish and quiz / supervisor-verified (ADA) split.',
+      'New Word (.docx) export beside PDF and Excel. All three files now carry ' +
+      'the microlearning section, computed on the server so the files match ' +
+      'the screen.',
+      'Export and window controls are now 44 px touch targets and wrap on ' +
+      'phones instead of running off the screen.',
+    ],
+  },
   {
     version: '1.15.1',
     date:    '2026-09-27',
@@ -245,7 +261,7 @@ export default function WikiScorecardPage() {
   return (
     <WikiPage
       title="EHS Scorecard"
-      subtitle="Strategic BI board — drill-down KPIs, predictive analytics, an AI focus assistant, and branded PDF / Excel exports."
+      subtitle="Strategic BI board — drill-down KPIs, predictive analytics, microlearning, an AI focus assistant, and branded PDF / Excel / Word exports."
       modulePath="/admin/insights/scorecard"
       audience="admin"
       category="Reports"
@@ -261,6 +277,7 @@ export default function WikiScorecardPage() {
         { id: 'scope',        label: 'Scope & period' },
         { id: 'using',        label: 'How to read the board' },
         { id: 'distribution', label: 'Distributions & forecast' },
+        { id: 'microlearning', label: 'Microlearning (STRIKE)' },
         { id: 'sharing',      label: 'Present, export & email' },
         { id: 'predict',      label: 'Predicted incident risk' },
         { id: 'focus',        label: 'Where to focus (AI)' },
@@ -283,7 +300,7 @@ export default function WikiScorecardPage() {
           act), and on top of the deterministic numbers sit a next-month{' '}
           <em>forecast</em> and an on-demand AI{' '}
           <em>&quot;Where to focus&quot;</em> assistant. Export the whole picture
-          to a branded PDF or a multi-tab Excel workbook.
+          to a branded PDF, a multi-tab Excel workbook, or an editable Word document.
         </p>
       </Section>
 
@@ -544,6 +561,43 @@ export default function WikiScorecardPage() {
         </p>
       </Section>
 
+      <Section id="microlearning" title="Microlearning (STRIKE)">
+        <p>
+          When STRIKE microlearning is turned on for your organization, the
+          bottom of the scorecard shows how training is going for the selected
+          window. It answers three questions: <strong>how many</strong> modules
+          were completed and by how many people, <strong>which</strong> modules,
+          and whether the workforce is <strong>current</strong>.
+        </p>
+        <ul>
+          <li><strong>Completed / people trained.</strong> Passed modules in the
+            window, and the distinct people behind them.</li>
+          <li><strong>Workforce current.</strong> Active roster members who hold
+            at least one current (unexpired) pass, out of everyone on the roster.</li>
+          <li><strong>Assignments complete, overdue, due soon.</strong> The same
+            standings as the STRIKE admin&apos;s Compliance tab, as of today.</li>
+          <li><strong>Expiring in 30 days / lapsed.</strong> Certifications to
+            schedule a retrain for now, and ones that already ran out.</li>
+          <li><strong>Pass rates and average score.</strong> From quiz attempts in
+            the window. <em>First-try pass</em> counts each person&apos;s first
+            attempt at each module, so retakes can&apos;t inflate it.</li>
+          <li><strong>Which modules.</strong> Completions per module with its pass
+            rate, how many were supervisor-verified, and the language split.</li>
+          <li><strong>Who and how.</strong> English vs Spanish completions, quiz vs
+            supervisor-verified (ADA) delivery, and how practice checks went: solved
+            on the first try, and how often a hint was needed.</li>
+        </ul>
+        <p>
+          A supervisor-verified (ADA) completion is a real completion, but the
+          worker took no quiz, so it is left out of every pass rate and score
+          rather than counted as 100%. A Spanish completion counts toward the same
+          module as the English one. Rates always show their counts (&quot;77% —
+          44 of 57&quot;) so a small sample is never mistaken for a trend. For a
+          worker-by-worker view, follow <em>Compliance by worker</em> to the STRIKE
+          admin.
+        </p>
+      </Section>
+
       <Section id="sharing" title="Present, export & email">
         <p>
           Several ways to get the scorecard in front of people who aren&apos;t
@@ -558,8 +612,9 @@ export default function WikiScorecardPage() {
             comprehensive, multi-page report — executive summary, predicted
             risk and its drivers, leading vs lagging indicators, a recordable
             &amp; near-miss trend chart, the <strong>recordable distribution +
-            next-month forecast</strong>, reporting/investigation quality, and the
-            permit/LOTO program — with your tenant logo and brand mark in the
+            next-month forecast</strong>, reporting/investigation quality, the
+            permit/LOTO program and, with STRIKE on, the microlearning section —
+            with your tenant logo and brand mark in the
             header. The risk score is recomputed server-side so the board-pack
             headline is authoritative. Set the logo under tenant settings if the
             header looks empty.</li>
@@ -570,7 +625,15 @@ export default function WikiScorecardPage() {
             <strong>imports cleanly into Google Sheets</strong> (File ▸ Import) —
             the &quot;Google spreadsheet&quot; route, with no add-on to install.
             The risk headline is recomputed server-side, and every cell is
-            guarded against spreadsheet formula injection.</li>
+            guarded against spreadsheet formula injection. With microlearning on,
+            three more tabs follow: <em>Microlearning</em>, <em>Microlearning by
+            module</em> and <em>Microlearning trend</em>, with plain numbers to
+            pivot.</li>
+          <li><strong>Word.</strong> The &quot;Word&quot; button downloads an
+            editable .docx with the same headline numbers and the microlearning
+            section, ready to paste into a board report or edit before sending.
+            Every format&apos;s microlearning numbers are computed on the server,
+            so the PDF, the workbook, the document and the screen always agree.</li>
           <li><strong>Weekly weather report.</strong> Every Monday, owners and
             admins get an automated email summarizing week-over-week movement
             on the key leading and lagging indicators (recordables, near-miss

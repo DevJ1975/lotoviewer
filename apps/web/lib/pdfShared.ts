@@ -66,6 +66,7 @@ export function sanitizeForWinAnsi(s: string): string {
     .replace(/…/g, '...')                                                // …
     .replace(/[–—]/g, '-')                                          // – —
     .replace(/[×]/g, 'x')                                                // × (in WinAnsi but normalize)
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')                    // control chars: pdf-lib can't encode them
     .replace(stripOther, '?')                                            // strip anything else (preserve WinAnsi 0x80-0x9F)
 }
 

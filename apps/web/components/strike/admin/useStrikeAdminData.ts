@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { StrikeVersionLineage } from '@soteria/core/strike'
+import { STRIKE_DEFAULT_LOCALE } from '@soteria/core/strikeLocale'
 import type { ComplianceAssignment, ComplianceCompletion, ComplianceMember } from '@soteria/core/strikeCompliance'
 import { supabase } from '@/lib/supabase'
 
@@ -95,20 +96,27 @@ export function useStrikeAdminData(tenantId: string | null) {
       const moduleRows = modulesRes.data ?? []
       const { data: versions, error: versionErr } = moduleRows.length > 0
         ? await supabase.from('strike_module_versions')
-          .select('id,module_id,version_number,status,supersedes_completions')
+          .select('id,module_id,version_number,status,supersedes_completions,locale')
           .in('module_id', moduleRows.map(m => m.id))
           .in('status', ['published', 'superseded'])
         : { data: [], error: null }
       if (versionErr) throw new Error(versionErr.message)
 
       const lineageByModule = new Map<string, StrikeVersionLineage[]>()
-      const latestByModule = new Map<string, { id: string; n: number }>()
+      const latestByModule = new Map<string, { id: string; n: number; isDefault: boolean }>()
       for (const v of versions ?? []) {
         const list = lineageByModule.get(v.module_id) ?? []
         list.push({ id: v.id, versionNumber: v.version_number, supersedesCompletions: v.supersedes_completions })
         lineageByModule.set(v.module_id, list)
+        // Assignments bind to the default-language version when there is one;
+        // translations of it satisfy them (lib/strike/attempts.ts
+        // isAssignedVersionOrTranslation).
+        if (v.status !== 'published') continue
         const latest = latestByModule.get(v.module_id)
-        if (v.status === 'published' && (!latest || v.version_number > latest.n)) latestByModule.set(v.module_id, { id: v.id, n: v.version_number })
+        const isDefault = v.locale === STRIKE_DEFAULT_LOCALE
+        if (!latest || (isDefault && !latest.isDefault) || (isDefault === latest.isDefault && v.version_number > latest.n)) {
+          latestByModule.set(v.module_id, { id: v.id, n: v.version_number, isDefault })
+        }
       }
 
       const roleByUser = new Map((membershipsRes.data ?? []).map(m => [m.user_id as string, m.role as string]))

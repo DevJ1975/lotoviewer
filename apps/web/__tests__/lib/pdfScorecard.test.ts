@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { PDFDocument } from 'pdf-lib'
 import { buildScorecardPdf, type ScorecardPdfInput } from '@/lib/pdfScorecard'
 import { summarizeIncidentRisk } from '@soteria/core/incidentRiskModel'
+import { microlearningFixture } from '../fixtures/microlearning'
 
 // Smoke tests for the comprehensive EHS scorecard generator. We don't snapshot
 // bytes (PDF dates vary); we assert it produces a valid, re-parseable PDF, never
@@ -82,5 +83,14 @@ describe('buildScorecardPdf', () => {
     }))
     expect(bytes.byteLength).toBeGreaterThan(800)
     expect(await pageCount(bytes)).toBeGreaterThanOrEqual(1)
+  })
+
+  // The microlearning section draws tenant-authored module titles; a control
+  // character in one must not fail the whole report (pdf-lib can't encode it).
+  it('adds the microlearning section, surviving a module title with a control character', async () => {
+    const without = await buildScorecardPdf(fullInput())
+    const withMl = await buildScorecardPdf(fullInput({ microlearning: microlearningFixture() }))
+    expect(await pageCount(withMl)).toBeGreaterThanOrEqual(await pageCount(without))
+    expect(withMl.byteLength).toBeGreaterThan(without.byteLength)
   })
 })

@@ -11,6 +11,7 @@ import {
   ClipboardCheck,
   FileDown,
   FileSpreadsheet,
+  FileText,
   Gauge,
   HeartPulse,
   Loader2,
@@ -55,6 +56,7 @@ import { rateInterval, wilsonInterval } from '@soteria/core/statistics'
 import { buildWeatherRow } from '@soteria/core/scorecardWeatherReport'
 import { PredictiveSection } from '@/components/scorecard/PredictiveSection'
 import { FocusCard } from '@/components/scorecard/FocusCard'
+import { MicrolearningSection } from '@/components/scorecard/MicrolearningSection'
 import {
   metricDetailFromDriver, buildIncidentKpiDetails,
   type MetricDetail, type IncidentKpiId,
@@ -70,6 +72,22 @@ const WINDOW_OPTIONS = [
   { value: 30, label: 'Last 30 days' },
   { value: 90, label: 'Last 90 days' },
 ] as const
+
+type ExportFormat = 'pdf' | 'xlsx' | 'docx'
+
+const EXPORT_ENDPOINT: Record<ExportFormat, string> = {
+  pdf: '/api/scorecard/export',
+  xlsx: '/api/scorecard/export-xlsx',
+  docx: '/api/scorecard/export-docx',
+}
+
+const EXPORT_LABEL: Record<ExportFormat, string> = { pdf: 'PDF', xlsx: 'Excel', docx: 'Word' }
+
+const EXPORT_FORMATS: { format: ExportFormat; label: string; ariaLabel: string; icon: LucideIcon }[] = [
+  { format: 'pdf', label: EXPORT_LABEL.pdf, ariaLabel: 'Download PDF report', icon: FileDown },
+  { format: 'xlsx', label: EXPORT_LABEL.xlsx, ariaLabel: 'Download Excel workbook', icon: FileSpreadsheet },
+  { format: 'docx', label: EXPORT_LABEL.docx, ariaLabel: 'Download Word document', icon: FileText },
+]
 
 type Tone = 'safe' | 'watch' | 'critical' | 'neutral'
 
@@ -133,7 +151,7 @@ export default function ScorecardPage() {
   const { tenantId } = useTenant()
   const drill = useMetricDrill()
   const [presentation, setPresentation] = useState(false)
-  const [exporting, setExporting] = useState<'pdf' | 'xlsx' | null>(null)
+  const [exporting, setExporting] = useState<ExportFormat | null>(null)
   const [previewing, setPreviewing] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
@@ -155,15 +173,15 @@ export default function ScorecardPage() {
     }
   }
 
-  // One downloader for both formats — same admin-gated body, different endpoint
-  // and file extension. The server recomputes the authoritative risk headline.
-  async function downloadScorecard(format: 'pdf' | 'xlsx') {
+  // One downloader for every format — same admin-gated body, different endpoint
+  // and file extension. The server recomputes the authoritative risk headline
+  // and the microlearning section.
+  async function downloadScorecard(format: ExportFormat) {
     if (!tenantId || !metrics) return
     setExporting(format); setExportError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const endpoint = format === 'pdf' ? '/api/scorecard/export' : '/api/scorecard/export-xlsx'
-      const res = await fetch(endpoint, {
+      const res = await fetch(EXPORT_ENDPOINT[format], {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -172,16 +190,20 @@ export default function ScorecardPage() {
         },
         body: JSON.stringify({ metrics, incidentMetrics, windowDays }),
       })
-      if (!res.ok) throw new Error(`Export failed (${res.status})`)
+      if (!res.ok) {
+        const body = await res.json().catch(() => null) as { error?: string } | null
+        throw new Error(body?.error ?? `Export failed (${res.status})`)
+      }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
       a.download = `ehs-scorecard-${new Date().toISOString().slice(0, 10)}.${format}`
       document.body.appendChild(a); a.click(); a.remove()
-      URL.revokeObjectURL(url)
+      // Revoking straight after click() can cancel the download on iOS Safari.
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (e) {
-      setExportError(e instanceof Error ? e.message : `Could not export ${format.toUpperCase()}`)
+      setExportError(e instanceof Error ? e.message : `Could not export the ${EXPORT_LABEL[format]} file`)
     } finally {
       setExporting(null)
     }
@@ -364,38 +386,33 @@ export default function ScorecardPage() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <select
               value={windowDays}
               onChange={e => setWindowDays(Number(e.target.value))}
-              className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 shadow-sm focus:border-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-navy/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              aria-label="Scorecard window"
+              className="h-11 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 shadow-sm focus:border-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-navy/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             >
               {WINDOW_OPTIONS.map(opt => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
-            <button
-              onClick={() => downloadScorecard('pdf')}
-              disabled={exporting !== null || !metrics}
-              className="motion-press flex h-10 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-brand-navy/30 hover:text-brand-navy disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-              aria-label="Download PDF report"
-            >
-              {exporting === 'pdf' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-              <span className="hidden sm:inline">PDF</span>
-            </button>
-            <button
-              onClick={() => downloadScorecard('xlsx')}
-              disabled={exporting !== null || !metrics}
-              className="motion-press flex h-10 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-brand-navy/30 hover:text-brand-navy disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-              aria-label="Download Excel workbook"
-            >
-              {exporting === 'xlsx' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
-              <span className="hidden sm:inline">Excel</span>
-            </button>
+            {EXPORT_FORMATS.map(({ format, label, ariaLabel, icon: Icon }) => (
+              <button
+                key={format}
+                onClick={() => downloadScorecard(format)}
+                disabled={exporting !== null || !metrics}
+                className="motion-press flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-brand-navy/30 hover:text-brand-navy disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                aria-label={ariaLabel}
+              >
+                {exporting === format ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
             <button
               onClick={previewWeather}
               disabled={previewing}
-              className="motion-press flex h-10 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-brand-navy/30 hover:text-brand-navy disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              className="motion-press flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-brand-navy/30 hover:text-brand-navy disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
               aria-label="Preview the weekly email"
             >
               {previewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
@@ -403,7 +420,7 @@ export default function ScorecardPage() {
             </button>
             <button
               onClick={togglePresentation}
-              className="motion-press flex h-10 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-brand-navy/30 hover:text-brand-navy dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              className="motion-press flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-brand-navy/30 hover:text-brand-navy dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
               aria-label={presentation ? 'Exit presentation mode' : 'Enter presentation mode'}
             >
               {presentation ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
@@ -461,6 +478,8 @@ export default function ScorecardPage() {
       ) : (
         <ScorecardSkeleton />
       )}
+
+      {tenantId && <MicrolearningSection tenantId={tenantId} windowDays={windowDays} />}
 
       <MetricDetailSheet detail={drill.selected} onClose={drill.close} />
     </div>

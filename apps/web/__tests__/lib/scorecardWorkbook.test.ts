@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as ExcelJS from 'exceljs'
+import { microlearningFixture } from '../fixtures/microlearning'
 import { buildScorecardWorkbook, type ScorecardWorkbookInput } from '@/lib/scorecardWorkbook'
 import { summarizeIncidentRisk } from '@soteria/core/incidentRiskModel'
 
@@ -108,5 +109,31 @@ describe('buildScorecardWorkbook', () => {
     let insufficient = false
     dist.eachRow(row => { if (row.getCell(1).value === 'Insufficient data') insufficient = true })
     expect(insufficient).toBe(true)
+  })
+
+  it('adds the microlearning tabs, with numbers an analyst can pivot', async () => {
+    const wb = await load(await buildScorecardWorkbook(fullInput({ microlearning: microlearningFixture() })))
+    expect(wb.worksheets.map(w => w.name)).toEqual(expect.arrayContaining(['Microlearning', 'Microlearning by module', 'Microlearning trend']))
+    expect(findRowValue(wb.getWorksheet('Microlearning')!, 'Completions (last 30 days)')).toBe('3')
+    const byModule = wb.getWorksheet('Microlearning by module')!
+    let loto: ExcelJS.CellValue[] = []
+    byModule.eachRow(row => { if (String(row.getCell(1).value).startsWith('LOTO 101')) loto = (row.values as ExcelJS.CellValue[]).slice(1) })
+    // Module, completions, people, attempts, passed, pass %, avg score, ADA, English, Spanish
+    expect(loto).toEqual(['LOTO 101: Control of Hazardous Energy', 2, 2, 2, 2, 100, 95, 0, 1, 1])
+  })
+
+  it('neutralizes a formula in a module title', async () => {
+    const wb = await load(await buildScorecardWorkbook(fullInput({ microlearning: microlearningFixture() })))
+    let title: unknown = null
+    wb.getWorksheet('Microlearning by module')!.eachRow(row => {
+      const v = row.getCell(1).value
+      if (typeof v === 'string' && v.includes('HYPERLINK')) title = v
+    })
+    expect(title).toMatch(/^'=HYPERLINK/)
+  })
+
+  it('leaves the microlearning tabs out when STRIKE is off', async () => {
+    const wb = await load(await buildScorecardWorkbook(fullInput({ microlearning: null })))
+    expect(wb.worksheets.map(w => w.name)).not.toContain('Microlearning')
   })
 })
