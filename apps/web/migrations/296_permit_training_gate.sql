@@ -309,6 +309,40 @@ $$;
 
 revoke execute on function public.assert_permit_training(uuid, text, uuid, uuid[]) from anon, public;
 
+-- The person issuing a permit (entry supervisor, PAI, primary authorized
+-- employee) is a login, not a roster pick. When the permit type is gated
+-- they must be on the roster too, or their training could not be checked
+-- and they would pass silently — the same rule a LOTO group joiner meets.
+create or replace function public.gated_issuer_member(
+  p_tenant_id   uuid,
+  p_permit_type text,
+  p_permit_id   uuid,
+  p_profile_id  uuid
+)
+returns uuid
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_member uuid;
+begin
+  if not public.permit_type_is_gated(p_tenant_id, p_permit_type, p_permit_id) then
+    return null;
+  end if;
+  v_member := public.member_for_profile(p_tenant_id, p_profile_id);
+  if v_member is null then
+    raise exception 'TRAINING_REQUIRED: the person issuing this permit is not on the roster, so their training cannot be verified'
+      using errcode = 'check_violation',
+            hint = 'Add them to People first, then complete the required training.';
+  end if;
+  return v_member;
+end;
+$$;
+
+revoke execute on function public.gated_issuer_member(uuid, text, uuid, uuid) from anon, public;
+
 -- ── Enforcement triggers ───────────────────────────────────────────────
 
 create or replace function public.gate_confined_space_permit_issue()
@@ -322,7 +356,7 @@ begin
   then
     perform public.assert_permit_training(
       new.tenant_id, 'confined_space', new.id,
-      array[public.member_for_profile(new.tenant_id, new.entry_supervisor_id)]
+      array[public.gated_issuer_member(new.tenant_id, 'confined_space', new.id, new.entry_supervisor_id)]
     );
   end if;
   return new;
@@ -345,7 +379,7 @@ begin
   then
     perform public.assert_permit_training(
       new.tenant_id, 'hot_work', new.id,
-      array[public.member_for_profile(new.tenant_id, new.pai_id)]
+      array[public.gated_issuer_member(new.tenant_id, 'hot_work', new.id, new.pai_id)]
     );
   end if;
   return new;
@@ -386,7 +420,7 @@ as $$
 begin
   perform public.assert_permit_training(
     new.tenant_id, 'loto_group', new.id,
-    array[public.member_for_profile(new.tenant_id, new.primary_authorized_employee_id)]
+    array[public.gated_issuer_member(new.tenant_id, 'loto_group', new.id, new.primary_authorized_employee_id)]
   );
   return new;
 end;

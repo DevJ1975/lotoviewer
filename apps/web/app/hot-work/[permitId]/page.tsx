@@ -35,7 +35,7 @@ import { ChecklistDisplay }      from './_components/ChecklistDisplay'
 import { AreaPhotos }            from './_components/AreaPhotos'
 import { PermitCrewCard }        from '@/components/permits/PermitCrewCard'
 import { useTenant }             from '@/components/TenantProvider'
-import { crewNames, type CrewMember } from '@/lib/permits/permitCrew'
+import { crewNames, resolveRosterMemberId, type CrewMember } from '@/lib/permits/permitCrew'
 import { parseTrainingRequiredError, type PermitTrainingSummary } from '@soteria/core/permitTrainingGate'
 
 // Hot Work permit detail page. Six-state lifecycle with action buttons
@@ -93,6 +93,13 @@ export default function HotWorkPermitDetailPage() {
   const [strikeTraining, setStrikeTraining] = useState<PermitTrainingSummary | null>(null)
   const [signAttempts, setSignAttempts] = useState(0)
   const strikeGated = !!strikeTraining?.gated
+  // The signing PAI is gated too, so show their status with the crew.
+  const [paiMemberId, setPaiMemberId] = useState<string | null>(null)
+  const paiProfileId = permit?.pai_id ?? null
+  useEffect(() => {
+    if (!tenantId || !paiProfileId) return
+    resolveRosterMemberId(tenantId, { userId: paiProfileId }).then(setPaiMemberId).catch(() => setPaiMemberId(null))
+  }, [tenantId, paiProfileId])
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelInitial, setCancelInitial] = useState<HotWorkCancelReason>('task_complete')
   const [fireWatchOpen, setFireWatchOpen] = useState(false)
@@ -346,6 +353,7 @@ export default function HotWorkPermitDetailPage() {
               { role: 'fire_watch', label: 'Fire watch personnel' },
             ]}
             syncLegacyNames={syncHotWorkNames}
+            extraMemberIds={paiMemberId ? [paiMemberId] : []}
             onSummary={setStrikeTraining}
             refreshKey={signAttempts}
           />

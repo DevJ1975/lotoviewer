@@ -60,6 +60,17 @@ describe('permit_training_gate migration', () => {
     expect(sql).toMatch(/create trigger permit_training_overrides_audit/)
   })
 
+  it('refuses an issuer who is not on the roster once the permit type is gated, instead of skipping them', () => {
+    const body = fn('gated_issuer_member')
+    expect(body.indexOf('permit_type_is_gated')).toBeLessThan(body.indexOf('member_for_profile'))
+    expect(body).toContain("'TRAINING_REQUIRED: the person issuing this permit is not on the roster")
+    for (const call of [
+      "gated_issuer_member(new.tenant_id, 'confined_space', new.id, new.entry_supervisor_id)",
+      "gated_issuer_member(new.tenant_id, 'hot_work', new.id, new.pai_id)",
+      "gated_issuer_member(new.tenant_id, 'loto_group', new.id, new.primary_authorized_employee_id)",
+    ]) expect(sql).toContain(call)
+  })
+
   it('only demands a roster entry for a LOTO group join when the permit type is gated', () => {
     const body = fn('gate_loto_group_member_join')
     expect(body.indexOf('permit_type_is_gated')).toBeGreaterThan(-1)

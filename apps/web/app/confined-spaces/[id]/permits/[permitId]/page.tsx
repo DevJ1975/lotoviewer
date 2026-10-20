@@ -34,7 +34,7 @@ import { TrainingGap }           from './_components/TrainingGap'
 import { CrewEditor }            from './_components/CrewEditor'
 import { PermitTrainingPanel }   from '@/components/permits/PermitTrainingPanel'
 import { useTenant }             from '@/components/TenantProvider'
-import { loadPermitCrew, type CrewMember } from '@/lib/permits/permitCrew'
+import { loadPermitCrew, resolveRosterMemberId, type CrewMember } from '@/lib/permits/permitCrew'
 import { parseTrainingRequiredError, type PermitTrainingSummary } from '@soteria/core/permitTrainingGate'
 import { CancelDialog }          from './_components/CancelDialog'
 
@@ -123,6 +123,14 @@ export default function PermitDetailPage() {
     if (!tenantId) return
     loadPermitCrew(tenantId, 'confined_space', permitId).then(setCrew).catch(() => setCrew([]))
   }, [tenantId, permitId, crewVersion])
+
+  // The signing entry supervisor is gated too, so show their status with the crew.
+  const [supervisorMemberId, setSupervisorMemberId] = useState<string | null>(null)
+  const supervisorProfileId = permit?.entry_supervisor_id ?? null
+  useEffect(() => {
+    if (!tenantId || !supervisorProfileId) return
+    resolveRosterMemberId(tenantId, { userId: supervisorProfileId }).then(setSupervisorMemberId).catch(() => setSupervisorMemberId(null))
+  }, [tenantId, supervisorProfileId])
 
   const thresholds = useMemo(() => effectiveThresholds(permit, space), [permit, space])
   const state      = useMemo(() => permit ? permitState(permit) : null, [permit])
@@ -370,7 +378,7 @@ export default function PermitDetailPage() {
             tenantId={tenantId}
             permitType="confined_space"
             permitId={permitId}
-            extraMemberIds={[]}
+            extraMemberIds={supervisorMemberId ? [supervisorMemberId] : []}
             refreshKey={crewVersion}
             onSummary={setStrikeTraining}
           />
