@@ -92,6 +92,8 @@ export interface StrikePackagePlan {
   uploads: StrikePackageUpload[]
   /** Package files no document references; they stay on disk. */
   ignored: string[]
+  /** Bucket paths the content points at outside the package; they must already be in the bucket. */
+  externalMedia: string[]
 }
 
 export type StrikePackageReadResult =
@@ -140,6 +142,7 @@ export function readStrikePackage(input: StrikePackageInput): StrikePackageReadR
   const filesByName = new Map(input.files.map(file => [file.name, file]))
   const uploads = new Map<string, StrikePackageUpload>()
   const referenced = new Set<string>()
+  const externalMedia = new Set<string>()
   const versions: StrikePackageVersionPlan[] = []
   const headers = new Map<StrikePackageLocale, ModuleHeader>()
 
@@ -158,7 +161,7 @@ export function readStrikePackage(input: StrikePackageInput): StrikePackageReadR
     headers.set(parsed.locale, parsed.header)
 
     const prefix = parsed.header.mediaPrefix
-    const content = rewriteMediaPaths(parsed.content, prefix, document.name, filesByName, uploads, referenced, issues)
+    const content = rewriteMediaPaths(parsed.content, prefix, document.name, filesByName, uploads, referenced, externalMedia, issues)
 
     const videoName = downloadVideoName(parsed.locale)
     const video = filesByName.get(videoName)
@@ -199,6 +202,7 @@ export function readStrikePackage(input: StrikePackageInput): StrikePackageReadR
       versions: versions.sort((a, b) => (a.locale === DEFAULT_LOCALE ? -1 : b.locale === DEFAULT_LOCALE ? 1 : a.locale.localeCompare(b.locale))),
       uploads: [...uploads.values()].sort((a, b) => a.name.localeCompare(b.name)),
       ignored: input.files.map(f => f.name).filter(name => !referenced.has(name) && !isStrikePackageDocument(name)).sort(),
+      externalMedia: [...externalMedia].sort(),
     },
   }
 }
@@ -351,13 +355,20 @@ function rewriteMediaPaths(
   filesByName: Map<string, StrikePackageFile>,
   uploads: Map<string, StrikePackageUpload>,
   referenced: Set<string>,
+  externalMedia: Set<string>,
   issues: string[],
 ): StrikeContent {
   const resolve = (original: string): string => {
     if (original.includes('/')) {
       // A global module may only point at global media; a tenant's folder
       // would be served to every learner through the service-role signer.
-      if (!original.startsWith('global/')) issues.push(`${label}: media path "${original}" must be under global/.`)
+      // A dot segment ("global/../<tenant>/…") would escape that check.
+      const segments = original.split('/')
+      if (segments[0] !== 'global' || segments.some(segment => segment === '' || segment === '.' || segment === '..')) {
+        issues.push(`${label}: media path "${original}" must be a plain path under global/.`)
+      } else {
+        externalMedia.add(original)
+      }
       return original
     }
     const file = filesByName.get(original)

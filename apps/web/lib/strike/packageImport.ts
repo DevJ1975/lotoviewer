@@ -121,15 +121,27 @@ export async function loadProtectedMedia(admin: SupabaseClient, moduleId: string
   return paths
 }
 
-/** Bucket paths from the plan's uploads that are not in strike-media yet. */
-export async function missingUploads(admin: SupabaseClient, plan: StrikePackagePlan): Promise<string[]> {
-  if (plan.uploads.length === 0) return []
-  const { data, error } = await admin.storage
-    .from(STRIKE_MEDIA_BUCKET)
-    .list(plan.mediaPrefix, { limit: 1000 })
-  if (error) throw new Error(error.message)
-  const present = new Set((data ?? []).map(object => `${plan.mediaPrefix}/${object.name}`))
-  return plan.uploads.map(u => u.bucketPath).filter(path => !present.has(path))
+/**
+ * Every bucket path the plan's content needs that is not in strike-media:
+ * the files the browser was to upload, and the ones the content points at
+ * outside the package (which the import never uploads, so a typo there was
+ * a dead scene nobody noticed until a learner reached it).
+ */
+export async function missingMedia(admin: SupabaseClient, plan: StrikePackagePlan): Promise<string[]> {
+  const needed = [...new Set([...plan.uploads.map(u => u.bucketPath), ...plan.externalMedia])]
+  const byFolder = new Map<string, string[]>()
+  for (const path of needed) {
+    const folder = path.slice(0, path.lastIndexOf('/'))
+    byFolder.set(folder, [...(byFolder.get(folder) ?? []), path])
+  }
+  const missing: string[] = []
+  for (const [folder, paths] of byFolder) {
+    const { data, error } = await admin.storage.from(STRIKE_MEDIA_BUCKET).list(folder, { limit: 1000 })
+    if (error) throw new Error(error.message)
+    const present = new Set((data ?? []).map(object => `${folder}/${object.name}`))
+    missing.push(...paths.filter(path => !present.has(path)))
+  }
+  return missing.sort()
 }
 
 export interface ImportedVersion {
@@ -148,7 +160,7 @@ export interface ImportOutcome {
 export class ImportRefused extends Error {}
 
 /**
- * Apply a decision. Call only after `missingUploads` came back empty; the
+ * Apply a decision. Call only after `missingMedia` came back empty; the
  * quiz is replaced wholesale on an update, the same as the studio importer.
  */
 export async function importStrikePackage(

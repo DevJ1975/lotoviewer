@@ -20,7 +20,7 @@ function version(locale: 'en' | 'es'): StrikePackageVersionPlan {
 function plan(locales: Array<'en' | 'es'>): StrikePackagePlan {
   return {
     slug: 'loto-102', title: 'LOTO 102', description: null, category: null, tags: [], estimatedMinutes: 5,
-    mediaPrefix: 'global/loto-102/v1', versions: locales.map(version), uploads: [], ignored: [],
+    mediaPrefix: 'global/loto-102/v1', versions: locales.map(version), uploads: [], ignored: [], externalMedia: [],
   }
 }
 

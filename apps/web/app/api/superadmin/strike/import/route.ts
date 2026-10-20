@@ -3,7 +3,7 @@ import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { parseStrikePackageInput, readStrikePackage } from '@/lib/strike/package'
 import {
-  decideImport, importStrikePackage, ImportRefused, loadExistingModule, loadProtectedMedia, missingUploads, type ImportOutcome,
+  decideImport, importStrikePackage, ImportRefused, loadExistingModule, loadProtectedMedia, missingMedia, type ImportOutcome,
 } from '@/lib/strike/packageImport'
 
 export const runtime = 'nodejs'
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
 
   const admin = supabaseAdmin()
   try {
-    const missing = await missingUploads(admin, read.plan)
+    const missing = await missingMedia(admin, read.plan)
     if (missing.length > 0) {
       return NextResponse.json({ error: 'Some media files are not in the bucket yet', missing }, { status: 409 })
     }

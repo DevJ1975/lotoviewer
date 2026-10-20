@@ -96,7 +96,20 @@ describe('readStrikePackage refusals', () => {
     const scene = read.plan.versions[0]!.content.blocks[0]
     expect(scene.kind === 'motion_scene' && scene.image?.path).toBe('global/shared/intro.jpg')
     expect(read.plan.uploads.some(u => u.bucketPath === 'global/shared/intro.jpg')).toBe(false)
+    // Not uploaded, so the commit must find it already in the bucket.
+    expect(read.plan.externalMedia).toEqual(['global/shared/intro.jpg'])
   })
+
+  // "global/../<tenant>/x" passes a startsWith('global/') test and would be
+  // signed with the service role for every learner of a global module.
+  it.each(['global/../11111111-1111-1111-1111-111111111111/secret.jpg', 'global/./x.jpg', 'global//x.jpg', 'global/a/../../t/x.jpg'])(
+    'refuses the dot or empty segments in %s', path => {
+      const doc = moduleJson()
+      const content = doc.content as { blocks: Array<Record<string, unknown>> }
+      content.blocks[0]!.image = { path, alt: 'x', ai_generated: false }
+      const read = readStrikePackage({ ...seedInput(), documents: [{ name: 'module.json', json: doc }] })
+      expect(read.ok).toBe(false)
+    })
 
   it('rejects a document whose locale disagrees with its file name', () => {
     const input = seedInput()
@@ -150,7 +163,7 @@ describe('readStrikePackage refusals', () => {
     content.blocks[0]!.image = { path: '11111111-1111-1111-1111-111111111111/secret.jpg', alt: 'x', ai_generated: false }
     const read = readStrikePackage({ ...seedInput(), documents: [{ name: 'module.json', json: doc }] })
     expect(read.ok).toBe(false)
-    if (!read.ok) expect(read.issues[0]).toMatch(/must be under global\//)
+    if (!read.ok) expect(read.issues[0]).toMatch(/plain path under global\//)
   })
 
   it('reports block problems through parseStrikeContent', () => {

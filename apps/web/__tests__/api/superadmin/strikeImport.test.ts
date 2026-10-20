@@ -208,4 +208,17 @@ describe('POST /api/superadmin/strike/import', () => {
     expect(mockState.inserts).toHaveLength(0)
     expect(mockState.updates).toHaveLength(0)
   })
+
+  it('refuses when content points at media outside the package that is not in the bucket', async () => {
+    const body = packageBody()
+    const doc = body.documents[0]!.json as { content: { blocks: Array<{ kind: string; image?: { path: string } }> } }
+    doc.content.blocks.find(b => b.kind === 'motion_scene')!.image!.path = 'global/shared/missing-intro.jpg'
+    storageListMock.mockImplementation(async (folder: string) => folder === 'global/shared'
+      ? { data: [{ name: 'other.jpg' }], error: null }
+      : { data: readdirSync(SEED_DIR).map(name => ({ name })), error: null })
+    const res = await commitImport(jsonRequest('POST', body))
+    expect(res.status).toBe(409)
+    expect((await res.json()).missing).toEqual(['global/shared/missing-intro.jpg'])
+    expect(mockState.inserts).toHaveLength(0)
+  })
 })
