@@ -7,7 +7,7 @@ const PAGE_SIZE = 1000
 /** PostgREST's answer to a page that starts past the last row. */
 const RANGE_NOT_SATISFIABLE = 'PGRST103'
 
-type PageQuery = { range: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }> }
+export type PageQuery = { range: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }> }
 
 /**
  * Every row a query matches, a page at a time. A short page doesn't prove
