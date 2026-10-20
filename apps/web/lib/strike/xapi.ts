@@ -39,6 +39,8 @@ export async function enqueueStrikeXapi(
     version: Pick<StrikeVersionRow, 'id' | 'locale' | 'title'>
     attemptId: string
     events: StrikeXapiEvent[]
+    /** When the learning happened, for events an offline device recorded; defaults to now. */
+    at?: Date
   },
 ): Promise<void> {
   if (opts.events.length === 0) return
@@ -64,7 +66,7 @@ export async function enqueueStrikeXapi(
       locale: opts.version.locale,
     }
     const actor = strikeXapiActor(identity)
-    const timestamp = new Date().toISOString()
+    const timestamp = (opts.at ?? new Date()).toISOString()
     const rows = new Map<string, Record<string, unknown>>()
     for (const event of opts.events) {
       const activityId = strikeXapiActivityId(xapiModule, 'block' in event && event.block ? event.block.key : null)

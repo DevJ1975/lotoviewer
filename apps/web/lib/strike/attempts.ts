@@ -36,7 +36,10 @@ export interface StrikeLearner {
   kioskIssuedBy?: string
 }
 
-export type StrikeResult<T> = { ok: true; value: T } | { ok: false; status: number; message: string }
+/** Lets a caller that cannot read prose (the offline sync) tell a final refusal from one worth explaining. */
+export type StrikeFailureCode = 'retake_limit' | 'incomplete' | 'already_submitted'
+
+export type StrikeResult<T> = { ok: true; value: T } | { ok: false; status: number; message: string; code?: StrikeFailureCode }
 
 /** Standard: scenes, practice checks and the graded quiz. Assisted (ADA): scenes only, then a supervisor signs. */
 export const STRIKE_DELIVERIES = ['standard', 'assisted'] as const
@@ -94,6 +97,120 @@ export interface OpenedAttempt {
   attemptId: string
   reached: StrikeBlockEventRecord[]
   resumed: boolean
+}
+
+export interface OfflineOpenedAttempt {
+  attemptId: string
+  /** True when this client attempt id was synced before, so nothing new was opened. */
+  alreadySynced: boolean
+  submitted: boolean
+  scorePercent: number | null
+  passed: boolean | null
+}
+
+/**
+ * Opens the attempt an offline device recorded, keyed by the id the device
+ * generated. Replaying it finds the same row instead of opening a second, which
+ * is what makes a retried sync safe. Unlike openAttempt, it never reuses
+ * another open attempt: an offline attempt is its own record.
+ */
+export async function openOfflineAttempt(
+  admin: SupabaseClient,
+  learner: StrikeLearner,
+  opts: {
+    moduleId: string
+    version: StrikeVersionRow
+    assignmentId: string | null
+    clientAttemptId: string
+    deviceId: string | null
+    startedAt: Date
+  },
+): Promise<StrikeResult<OfflineOpenedAttempt>> {
+  const existing = await findOfflineAttempt(admin, learner.tenantId, opts.clientAttemptId)
+  if (existing) return adoptOfflineAttempt(learner, opts.version, existing)
+
+  const { data: created, error } = await admin
+    .from('strike_attempts')
+    .insert({
+      tenant_id: learner.tenantId,
+      module_id: opts.moduleId,
+      module_version_id: opts.version.id,
+      assignment_id: opts.assignmentId,
+      user_id: learner.userId,
+      member_id: learner.memberId,
+      delivery: 'standard',
+      client_attempt_id: opts.clientAttemptId,
+      device_id: opts.deviceId,
+      client_started_at: opts.startedAt.toISOString(),
+      started_at: opts.startedAt.toISOString(),
+      client_context: {
+        mode: learner.channel === 'kiosk' ? 'kiosk_player' : 'learner_player',
+        offline: true,
+        ...(learner.kioskIssuedBy ? { kiosk_issued_by: learner.kioskIssuedBy } : {}),
+      },
+    })
+    .select('id')
+    .single()
+  if (error) {
+    // Two syncs of the same attempt racing: the loser finds the winner's row.
+    if (error.code === '23505') {
+      const raced = await findOfflineAttempt(admin, learner.tenantId, opts.clientAttemptId)
+      if (raced) return adoptOfflineAttempt(learner, opts.version, raced)
+    }
+    throw new Error(error.message)
+  }
+  await enqueueStrikeXapi(admin, learner, {
+    moduleId: opts.moduleId,
+    version: opts.version,
+    attemptId: created.id as string,
+    at: opts.startedAt,
+    events: [{ verb: 'attempted' }],
+  })
+  return { ok: true, value: { attemptId: created.id as string, alreadySynced: false, submitted: false, scorePercent: null, passed: null } }
+}
+
+interface OfflineAttemptRow {
+  id: string
+  module_version_id: string
+  user_id: string | null
+  member_id: string | null
+  submitted_at: string | null
+  score_percent: number | null
+  passed: boolean | null
+}
+
+async function findOfflineAttempt(admin: SupabaseClient, tenantId: string, clientAttemptId: string): Promise<OfflineAttemptRow | null> {
+  const { data, error } = await admin
+    .from('strike_attempts')
+    .select('id,module_version_id,user_id,member_id,submitted_at,score_percent,passed')
+    .eq('tenant_id', tenantId)
+    .eq('client_attempt_id', clientAttemptId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return data as OfflineAttemptRow | null
+}
+
+// A client attempt id is only ever one learner's attempt at one version. A
+// matching id from anyone else is a collision or a replay of someone's id, and
+// must not hand back (or write to) the original owner's attempt.
+function adoptOfflineAttempt(
+  learner: StrikeLearner,
+  version: StrikeVersionRow,
+  row: OfflineAttemptRow,
+): StrikeResult<OfflineOpenedAttempt> {
+  if (row.module_version_id !== version.id || !ownsAttempt(learner, row)) {
+    return { ok: false, status: 409, message: 'This attempt id belongs to another attempt.' }
+  }
+  return {
+    ok: true,
+    value: {
+      attemptId: row.id,
+      alreadySynced: true,
+      submitted: row.submitted_at !== null,
+      scorePercent: row.score_percent,
+      passed: row.passed,
+    },
+  }
 }
 
 export async function openAttempt(
@@ -165,6 +282,8 @@ export interface IncomingBlockEvent {
   event: StrikeBlockEvent
   dwell_ms: number | null
   detail: Record<string, unknown>
+  /** When the learner did it, for events an offline device recorded; absent means "now". */
+  occurred_at?: string
 }
 
 export function parseBlockEvents(value: unknown): IncomingBlockEvent[] | null {
@@ -190,7 +309,7 @@ export function parseBlockEvents(value: unknown): IncomingBlockEvent[] | null {
 export async function recordBlockEvents(
   admin: SupabaseClient,
   learner: StrikeLearner,
-  opts: { moduleId: string; version: StrikeVersionRow; attemptId: string; events: IncomingBlockEvent[] },
+  opts: { moduleId: string; version: StrikeVersionRow; attemptId: string; events: IncomingBlockEvent[]; at?: Date },
 ): Promise<StrikeResult<{ recorded: number }>> {
   const content = versionContent(opts.version)
   if (!content) return { ok: false, status: 400, message: 'This module has no interactive content.' }
@@ -212,6 +331,7 @@ export async function recordBlockEvents(
         event: e.event,
         dwell_ms: e.dwell_ms,
         detail: e.detail,
+        ...(e.occurred_at ? { occurred_at: e.occurred_at } : {}),
       })),
       { onConflict: 'attempt_id,block_key,event', ignoreDuplicates: true },
     )
@@ -222,6 +342,7 @@ export async function recordBlockEvents(
     moduleId: opts.moduleId,
     version: opts.version,
     attemptId: opts.attemptId,
+    at: opts.at,
     events: strikeXapiEventsForBlockEvents(content, (inserted ?? []) as { block_key: string; event: StrikeBlockEvent; detail: Record<string, unknown> }[]),
   })
   return { ok: true, value: { recorded: opts.events.length } }
@@ -244,7 +365,7 @@ async function loadOwnedOpenAttempt(
     && data.module_version_id === versionId
     && ownsAttempt(learner, data)
   if (!owned) return { ok: false, status: 404, message: 'Attempt not found.' }
-  if (data.submitted_at) return { ok: false, status: 409, message: 'This attempt was already submitted. Start a new one.' }
+  if (data.submitted_at) return { ok: false, status: 409, message: 'This attempt was already submitted. Start a new one.', code: 'already_submitted' }
   return { ok: true, value: { id: data.id as string, delivery: data.delivery as string } }
 }
 
@@ -273,6 +394,8 @@ export async function gradeAndRecordAttempt(
     assignmentId: string | null
     answers: StrikeAnswerMap
     watch: WatchProgress | null
+    /** Set when an offline device recorded this attempt: the record carries its (clamped) clock, not the server's. */
+    offline?: { submittedAt: Date; deviceId: string | null; provisionalPassed: boolean }
   },
 ): Promise<StrikeResult<GradedAttempt>> {
   const { version } = opts
@@ -298,7 +421,7 @@ export async function gradeAndRecordAttempt(
     if (error) throw new Error(error.message)
     // Count-then-insert race accepted: a pacing limit, not a security boundary.
     if ((count ?? 0) >= version.retake_limit) {
-      return { ok: false, status: 409, message: 'Retake limit reached for this module version.' }
+      return { ok: false, status: 409, message: 'Retake limit reached for this module version.', code: 'retake_limit' }
     }
   }
 
@@ -324,7 +447,7 @@ export async function gradeAndRecordAttempt(
     if (error) throw new Error(error.message)
     const missing = missingRequiredBlocks(content, (events ?? []) as StrikeBlockEventRecord[])
     if (missing.length > 0) {
-      return { ok: false, status: 422, message: `Finish every section before the knowledge check (${missing.length} remaining).` }
+      return { ok: false, status: 422, message: `Finish every section before the knowledge check (${missing.length} remaining).`, code: 'incomplete' }
     }
   }
 
@@ -373,10 +496,11 @@ export async function gradeAndRecordAttempt(
     })),
   })
 
-  const now = new Date()
+  const now = opts.offline?.submittedAt ?? new Date()
   const nowIso = now.toISOString()
   const clientContext = {
     mode: learner.channel === 'kiosk' ? 'kiosk_player' : 'learner_player',
+    ...(opts.offline ? { offline: true } : {}),
     missed_question_ids: score.missedQuestionIds,
     ...(opts.watch ? { watch: opts.watch, watch_evidence: 'client_claimed' } : {}),
   }
@@ -386,12 +510,17 @@ export async function gradeAndRecordAttempt(
     passed: score.passed,
     answers: opts.answers,
     client_context: clientContext,
+    ...(opts.offline ? {
+      client_submitted_at: nowIso,
+      synced_at: new Date().toISOString(),
+      provisional_passed: opts.offline.provisionalPassed,
+    } : {}),
   }
 
   const attemptId = opts.attemptId
     ? await updateAttempt(admin, opts.attemptId, attemptFields)
     : await insertAttempt(admin, learner, opts.moduleId, version.id, opts.assignmentId, attemptFields)
-  if (!attemptId) return { ok: false, status: 409, message: 'This attempt was already submitted. Start a new one.' }
+  if (!attemptId) return { ok: false, status: 409, message: 'This attempt was already submitted. Start a new one.', code: 'already_submitted' }
 
   if (score.passed) {
     const expiresAt = version.validity_days
@@ -415,6 +544,7 @@ export async function gradeAndRecordAttempt(
         evidence: {
           mode: content ? 'blocks_and_quiz' : 'quiz',
           channel: learner.channel,
+          ...(opts.offline ? { offline: true, device_id: opts.offline.deviceId } : {}),
           ...(learner.kioskIssuedBy ? { kiosk_issued_by: learner.kioskIssuedBy } : {}),
           earned_points: score.earnedPoints,
           possible_points: score.possiblePoints,
@@ -439,6 +569,7 @@ export async function gradeAndRecordAttempt(
     moduleId: opts.moduleId,
     version,
     attemptId,
+    at: opts.offline?.submittedAt,
     events: score.passed
       ? [{ verb: 'passed', scorePercent: score.scorePercent }, { verb: 'completed', block: null }]
       : [{ verb: 'failed', scorePercent: score.scorePercent }],
