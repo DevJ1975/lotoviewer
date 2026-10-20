@@ -10,7 +10,28 @@ app at `/superadmin/release-notes`.
 
 ## [Unreleased]
 
-_Nothing pending._
+### Added
+- **Soteria FIELD (mobile) is ready for App Store review.** New field
+  modules: incident reporting, behavior-based-safety observations, inspections
+  (with answers kept on the device while a run is in progress), and working an
+  open confined-space or hot-work permit from the phone, including atmospheric
+  readings checked against the permit's limits as you type, the entrant log,
+  the PAI signature and starting the post-work fire watch.
+- **Hazardous-waste inspections made on the phone now upload.** Until now the
+  mobile checklist only saved a draft on the device.
+- **Push notifications reach phones.** Every alert that already goes to
+  browsers (permit expiry, failed atmospheric readings, incident actions,
+  chat) is also delivered through Expo to the mobile app, and tapping one opens
+  the right permit or incident.
+- **Account deletion from inside the app.** The request is queued for support
+  and completed within 30 days; safety records are retained and anonymized.
+
+### Changed
+- The mobile app navigation is four tabs (Home, Permits, Assistant, Account);
+  every module opens from the Home hub, which hides modules a workspace has
+  switched off.
+- The mobile app icon and splash screen use the SoteriaField mark instead of
+  placeholder art.
 
 ## [1.19.0] — 2026-08-29
 

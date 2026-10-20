@@ -182,7 +182,7 @@ export default function NewRiskScreen() {
 
       const newId: string | undefined = body?.risk?.id
       if (newId) router.replace({ pathname: '/risk/[id]', params: { id: newId } })
-      else       router.replace('/(tabs)/risk')
+      else       router.replace('/risk')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       setSubmitting(false)

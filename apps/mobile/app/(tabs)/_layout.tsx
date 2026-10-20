@@ -7,7 +7,9 @@ import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 
-// You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
+// Four tabs keep every label readable on a phone. Everything else (incidents,
+// inspections, near-miss, JHA, risk, equipment, ...) is reached from the Home
+// hub as a stack route.
 function TabBarIcon(props: {
   name: React.ComponentProps<typeof FontAwesome>['name'];
   color: ColorValue;
@@ -29,8 +31,15 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Dashboard',
+          title: 'Home',
           tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="permits"
+        options={{
+          title: 'Permits',
+          tabBarIcon: ({ color }) => <TabBarIcon name="file-text-o" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -41,45 +50,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="equipment"
+        name="account"
         options={{
-          title: 'Equipment',
-          tabBarIcon: ({ color }) => <TabBarIcon name="cogs" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="near-miss"
-        options={{
-          title: 'Near-Miss',
-          tabBarIcon: ({ color }) => <TabBarIcon name="exclamation-triangle" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="jha"
-        options={{
-          title: 'JHA',
-          tabBarIcon: ({ color }) => <TabBarIcon name="list-alt" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="risk"
-        options={{
-          title: 'Risk',
-          tabBarIcon: ({ color }) => <TabBarIcon name="shield" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="hazardous-waste"
-        options={{
-          title: 'Waste',
-          tabBarIcon: ({ color }) => <TabBarIcon name="recycle" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="loto-devices"
-        options={{
-          title: 'Devices',
-          tabBarIcon: ({ color }) => <TabBarIcon name="key" color={color} />,
+          title: 'Account',
+          tabBarIcon: ({ color }) => <TabBarIcon name="user" color={color} />,
         }}
       />
     </Tabs>

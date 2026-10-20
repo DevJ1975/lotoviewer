@@ -4,6 +4,10 @@ This is a manual checklist to drive against the iOS/iPad build after the
 2026-05-09 audit pass. Each item lists the screen, what to do, and what
 to verify.
 
+> **Navigation changed (2026-10):** the old Equipment, Near-Miss, JHA, Risk, Waste and
+> Devices tabs now open from tiles on the Home hub. The steps below still apply to
+> those screens; "tab" means "screen reached from Home".
+
 Run on **two tenants** (one as admin, one as non-admin member) so you
 exercise the gating paths.
 
@@ -86,6 +90,52 @@ exercise the gating paths.
 - [ ] Return a device → confirms via Alert, closes the open checkout, status flips to "available"
 - [ ] **Race-condition gut-check**: try to check out the same device from two phones at once
   - One should succeed, the other should surface "Already checked out. Return it first." (DB unique index catches it)
+
+## Home hub + navigation (2026-10 store-readiness pass)
+- [ ] Four tabs only: Home, Permits, Assistant, Account
+- [ ] Home shows the active tenant pill, three quick-report buttons and module tiles
+- [ ] Switch to a tenant with a module turned off (e.g. Incidents) → its tile and quick action disappear
+- [ ] Every tile opens its screen and the header back button returns to Home
+
+## Incidents (`/incidents`, `/incidents/new`, `/incidents/[id]`)
+- [ ] List shows active incidents, most severe first; pull to refresh
+- [ ] File an incident with no description → validation error
+- [ ] File an injury incident → lands on the detail screen; the web app shows the same report, and the intake notification email arrives
+- [ ] File a near-miss without touching "Actual outcome" → accepted (defaults to *No injury*)
+
+## BBS observations (`/bbs`, `/bbs/new`)
+- [ ] Pick *Safe behavior* → behavior tags and "Recognize" appear; *Unsafe act* → control recommendation and hierarchy appear
+- [ ] Critical + unsafe shows the rapid-review notice; the saved row has `rapid_review_required = true`
+- [ ] After saving, the form resets and the count banner increments; the new row is in My observations
+
+## Inspections (`/inspections`)
+- [ ] Templates list loads; tapping one creates a run and opens it
+- [ ] Answer some items, force-quit the app, reopen → answers are restored
+- [ ] Template with a required photo/signature item → submit stays disabled with the web-app message
+- [ ] Submit → result banner shows pass/fail and score; a second submit shows "already submitted"
+
+## Permits (Permits tab)
+- [ ] Open confined-space and hot-work permits appear with live countdowns
+- [ ] CS permit: type O₂ 18 → the field turns red; save a passing pre-entry reading → it appears in Readings
+- [ ] CS permit not yet signed: *Log IN* is hidden with an explanation; after signature it appears
+- [ ] Log an entrant IN then OUT; the open entry shows "Inside since …"
+- [ ] Hot work permit pending signature as a non-PAI → sign button disabled; as the PAI with an incomplete roster → gate messages listed
+- [ ] Active hot work permit → *Mark work complete* starts the post-work fire watch countdown
+
+## Hazardous-waste sync
+- [ ] Complete some checks, pick an area of the matching type, *Submit inspection* → appears on web; the local draft clears
+- [ ] Tenant with no area of that type → explanatory message, draft untouched
+
+## Push notifications (physical device only)
+- [ ] First launch after sign-in prompts for notification permission
+- [ ] An `expo_push_tokens` row exists for the user
+- [ ] Trigger a CS atmospheric-test failure on web → notification arrives within seconds; tapping it opens the permit screen
+- [ ] Sign out → the token row is removed
+
+## Account + deletion
+- [ ] Privacy, Terms and Support open in the in-app browser
+- [ ] *Request account deletion* → confirm → signed out; an `account_deletion_requests` row is `pending` and support receives the email
+- [ ] Sign back in → the Account tab shows "Deletion requested on …" and no second request can be filed
 
 ## Auth-gating spot checks
 For each of the following, verify the **non-admin** path is blocked:
