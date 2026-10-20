@@ -1,0 +1,77 @@
+name: Infra (AWS)
+
+# Format and validate the Terraform in infra/aws on every change. The plan job
+# also runs once the dev AWS account exists and the repository variables below
+# are set; until then it is skipped, so this workflow is green without AWS.
+#
+# Repository variables (Settings > Secrets and variables > Actions > Variables):
+#   AWS_DEV_ROLE_ARN        output `terraform_plan_role_arn` from envs/dev
+#   AWS_TFSTATE_BUCKET      output `state_bucket_name` from bootstrap
+#   AWS_REGION              e.g. us-west-2
+#   AWS_BUDGET_ALERT_EMAILS HCL list, e.g. ["you@example.com"]
+on:
+  pull_request:
+    paths:
+      - "infra/aws/**"
+      - ".github/workflows/infra-aws.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/aws/**"
+
+permissions:
+  contents: read
+
+env:
+  TERRAFORM_VERSION: "1.10.5"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Format
+        run: terraform fmt -check -recursive -diff infra/aws
+      - name: Validate each stack
+        run: |
+          for stack in infra/aws/bootstrap infra/aws/envs/dev; do
+            echo "::group::$stack"
+            terraform -chdir="$stack" init -backend=false -input=false
+            terraform -chdir="$stack" validate
+            echo "::endgroup::"
+          done
+
+  plan-dev:
+    needs: validate
+    # Fork pull requests get no OIDC token, and the role only trusts this repo.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      vars.AWS_DEV_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TF_VAR_state_bucket_name: ${{ vars.AWS_TFSTATE_BUCKET }}
+      TF_VAR_budget_alert_emails: ${{ vars.AWS_BUDGET_ALERT_EMAILS }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEV_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Init
+        run: |
+          terraform -chdir=infra/aws/envs/dev init -input=false \
+            -backend-config="bucket=${{ vars.AWS_TFSTATE_BUCKET }}" \
+            -backend-config="region=${{ vars.AWS_REGION }}"
+      # -lock=false: the role is read-only on purpose, and a plan changes nothing.
+      - name: Plan
+        run: terraform -chdir=infra/aws/envs/dev plan -input=false -lock=false
