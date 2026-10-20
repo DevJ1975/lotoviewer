@@ -23,6 +23,7 @@ import { useTenant } from '@/components/TenantProvider'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import { isAssignmentReleased } from '@soteria/core/strikeSchedule'
+import { MyProgress } from '@/components/strike/MyProgress'
 import {
   computeStrikeReadiness,
   isStrikeAssignmentApplicable,
@@ -363,6 +364,8 @@ export default function StrikePage() {
           </div>
         </div>
       </header>
+
+      {tenantId && userId && <MyProgress tenantId={tenantId} />}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Metric label="Published modules" value={moduleCount} icon={BookOpen} />

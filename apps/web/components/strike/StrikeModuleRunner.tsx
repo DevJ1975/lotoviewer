@@ -1,12 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { AlertTriangle, CheckCircle2, Download, Loader2, Lock, PlayCircle, RotateCcw, Send } from 'lucide-react'
+import { AlertTriangle, Award, CheckCircle2, Download, Loader2, Lock, PlayCircle, RotateCcw, Send } from 'lucide-react'
 import type { StrikeBlockEventRecord, StrikeContent } from '@soteria/core/strikeContent'
 import { StrikeBlockPlayer } from './player/StrikeBlockPlayer'
 import { useBlockEventQueue, type QueuedBlockEvent } from './player/useBlockEventQueue'
 import { QuizQuestion, type QuizAnswerRow, type QuizQuestionRow, type QuizResponse } from './QuizQuestion'
 import { PassCelebration } from './PassCelebration'
+import { buildCertificatePdf, downloadPdf } from '@/lib/strike/certificate'
 
 export interface StrikeSubmitResult {
   attempt_id: string
@@ -38,12 +39,14 @@ interface StrikeModuleRunnerProps {
   /** Legacy video-only modules render their player here. */
   legacyMedia?: ReactNode
   learnerName: string | null
+  /** Enables the completion certificate download after a pass. */
+  certificate?: { learnerName: string; organization: string | null }
   onPassed?: (result: StrikeSubmitResult) => void
   coach?: ReactNode
 }
 
 export function StrikeModuleRunner({
-  moduleTitle, passingScore, content, questions, answers, transport, submit: submitAttempt, legacyMedia, learnerName, onPassed, coach,
+  moduleTitle, passingScore, content, questions, answers, transport, submit: submitAttempt, legacyMedia, learnerName, certificate, onPassed, coach,
 }: StrikeModuleRunnerProps) {
   const [attemptId, setAttemptId] = useState<string | null>(null)
   const [initialReached, setInitialReached] = useState<StrikeBlockEventRecord[] | null>(content ? null : [])
@@ -182,7 +185,27 @@ export function StrikeModuleRunner({
             Finish every section above to unlock the knowledge check ({missing.length} remaining).
           </p>
         ) : result?.passed ? (
-          <PassCelebration moduleTitle={moduleTitle} scorePercent={result.scorePercent} learnerName={learnerName} />
+          <PassCelebration
+            moduleTitle={moduleTitle}
+            scorePercent={result.scorePercent}
+            learnerName={learnerName}
+            actions={certificate && (
+              <button type="button" onClick={async () => {
+                const bytes = await buildCertificatePdf({
+                  learnerName: certificate.learnerName,
+                  moduleTitle,
+                  organization: certificate.organization,
+                  scorePercent: result.scorePercent,
+                  completedAt: new Date(),
+                  reference: result.attempt_id,
+                })
+                downloadPdf(bytes, `${moduleTitle.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-certificate.pdf`)
+              }}
+                className="motion-press inline-flex min-h-11 items-center gap-2 rounded-lg bg-brand-navy px-4 py-2 text-sm font-semibold text-white">
+                <Award className="h-4 w-4" aria-hidden /> Download certificate
+              </button>
+            )}
+          />
         ) : (
           <>
             {questions.length === 0 ? (

@@ -98,6 +98,7 @@ export default function TrainNowPage() {
         transport={transport}
         submit={submit}
         learnerName={boot.member_name.split(' ')[0] ?? null}
+        certificate={{ learnerName: boot.member_name, organization: null }}
       />
     </main>
   )

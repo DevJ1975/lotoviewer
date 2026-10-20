@@ -74,7 +74,7 @@ export default function StrikeModulePage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { tenant } = useTenant()
-  const { email } = useAuth()
+  const { email, profile } = useAuth()
   const [module, setModule] = useState<ModuleRow | null>(null)
   const [version, setVersion] = useState<VersionRow | null>(null)
   const [questions, setQuestions] = useState<QuizQuestionRow[]>([])
@@ -273,7 +273,8 @@ export default function StrikeModulePage() {
           answers={answers}
           transport={transport}
           submit={submitAttempt}
-          learnerName={null}
+          learnerName={profile?.full_name?.split(' ')[0] ?? null}
+          certificate={{ learnerName: profile?.full_name || email || 'Learner', organization: tenant?.name ?? null }}
           onPassed={() => setPassed(true)}
           coach={tenantId ? <CoachDock tenantId={tenantId} moduleId={module.id} attemptOpen={!passed} /> : null}
           legacyMedia={(

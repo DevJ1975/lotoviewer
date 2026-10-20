@@ -15,6 +15,7 @@ import {
   type StrikeContent,
 } from '@soteria/core/strikeContent'
 import type { StrikeVersionRow } from '@/lib/strike/moduleAccess'
+import { awardPassXp } from '@/lib/strike/xp'
 
 // The attempt lifecycle shared by the signed-in learner routes and the
 // kiosk ("Train now") routes: open an attempt, record block evidence, then
@@ -357,6 +358,17 @@ export async function gradeAndRecordAttempt(
         },
       })
     if (completionErr) throw new Error(completionErr.message)
+
+    await awardPassXp(admin, {
+      tenantId: learner.tenantId,
+      memberId: learner.memberId,
+      moduleId: opts.moduleId,
+      versionId: version.id,
+      attemptId,
+      assignmentId: opts.assignmentId,
+      passedAt: now,
+      interactionKeys: new Set((content?.blocks ?? []).filter(b => b.kind !== 'motion_scene' && b.kind !== 'callout').map(b => b.key)),
+    })
   }
 
   // Explanations are column-revoked from the browser (260) so they can't be
