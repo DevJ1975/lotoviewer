@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const { queues, tableProxy, sendMock } = vi.hoisted(() => {
   type Result = { data?: unknown; error?: { message: string } | null }
   const queues = new Map<string, Result[]>()
-  const sendMock = vi.fn(async (_args: unknown) => true)
+  const sendMock = vi.fn<(args: unknown) => Promise<boolean>>(async () => true)
   function tableProxy(table: string) {
     const chain: Record<string, unknown> = {}
     for (const m of ['select', 'eq', 'in', 'not', 'is', 'limit', 'order']) chain[m] = () => chain
