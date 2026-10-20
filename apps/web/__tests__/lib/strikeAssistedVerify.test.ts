@@ -92,6 +92,20 @@ describe('verifyAssistedAttempt', () => {
     expect(enqueueStrikeXapi).toHaveBeenCalledWith(admin, expect.objectContaining({ memberId: 'm1' }), expect.objectContaining({ events: [{ verb: 'completed', block: null }] }))
   })
 
+  // A kiosk session is opened by one person and signed off by another; the
+  // completion must still name who handed the worker the kiosk link, as a
+  // kiosk quiz pass does.
+  it('keeps who issued the kiosk link on a kiosk session’s completion', async () => {
+    const { admin, calls } = fakeAdmin({
+      attempt: { id: 'att-1', tenant_id: 't1', module_id: 'mod-1', module_version_id: 'ver-1', assignment_id: null, user_id: null, member_id: 'm1', delivery: 'assisted', submitted_at: null, client_context: { mode: 'kiosk_player', kiosk_issued_by: 'lead-7' } },
+    })
+    expect((await verifyAssistedAttempt(admin, verifier, input)).ok).toBe(true)
+    const completion = calls.find(c => c.table === 'strike_completions' && c.op === 'insert')?.payload as { evidence: Record<string, unknown> }
+    expect(completion.evidence).toMatchObject({ channel: 'kiosk', kiosk_issued_by: 'lead-7' })
+    const attemptUpdate = calls.find(c => c.table === 'strike_attempts' && c.op === 'update')?.payload as { client_context: Record<string, unknown> }
+    expect(attemptUpdate.client_context).toMatchObject({ mode: 'assisted', kiosk_issued_by: 'lead-7' })
+  })
+
   // The stored record must say exactly what the supervisor read and signed,
   // which on a Spanish version is the Spanish title, not the module's.
   it('signs a Spanish session with the Spanish version title', async () => {

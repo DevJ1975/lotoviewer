@@ -40,6 +40,7 @@ interface AttemptRow {
   member_id: string | null
   delivery: string
   submitted_at: string | null
+  client_context: { kiosk_issued_by?: unknown } | null
 }
 
 export async function verifyAssistedAttempt(
@@ -49,7 +50,7 @@ export async function verifyAssistedAttempt(
 ): Promise<StrikeResult<{ completionId: string; signedAt: string }>> {
   const { data: attempt, error } = await admin
     .from('strike_attempts')
-    .select('id,tenant_id,module_id,module_version_id,assignment_id,user_id,member_id,delivery,submitted_at')
+    .select('id,tenant_id,module_id,module_version_id,assignment_id,user_id,member_id,delivery,submitted_at,client_context')
     .eq('id', input.attemptId)
     .maybeSingle<AttemptRow>()
   if (error) throw new Error(error.message)
@@ -85,6 +86,9 @@ export async function verifyAssistedAttempt(
   const unchecked = uncheckedChecklistItems(checklist, input.checkedKeys)
   if (unchecked.length > 0) return { ok: false, status: 422, message: 'Tick every checklist item before signing.' }
   const acknowledgment = strikeAssistedAcknowledgment({ learnerName: learner.name, moduleTitle: version.title ?? (moduleRow?.title as string | undefined) ?? '', locale })
+
+  const kioskIssuedBy = typeof attempt.client_context?.kiosk_issued_by === 'string' ? attempt.client_context.kiosk_issued_by : null
+  const kioskEvidence = kioskIssuedBy ? { kiosk_issued_by: kioskIssuedBy } : {}
 
   const signedAt = new Date()
   const signedAtIso = signedAt.toISOString()
@@ -129,6 +133,7 @@ export async function verifyAssistedAttempt(
       evidence: {
         mode: 'assisted_verified',
         channel: attempt.user_id ? 'account' : 'kiosk',
+        ...kioskEvidence,
         verification_id: verification.id,
         verified_by: verifier.userId,
         verifier_name: verifier.name,
@@ -148,7 +153,7 @@ export async function verifyAssistedAttempt(
       submitted_at: signedAtIso,
       passed: true,
       score_percent: null,
-      client_context: { mode: 'assisted', verification_id: verification.id },
+      client_context: { mode: 'assisted', verification_id: verification.id, ...kioskEvidence },
     }).eq('id', attempt.id).is('submitted_at', null),
   ])
   if (linkErr || attemptErr) throw new Error((linkErr ?? attemptErr)?.message)

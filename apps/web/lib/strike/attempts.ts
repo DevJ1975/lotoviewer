@@ -139,7 +139,12 @@ export async function openAttempt(
       user_id: learner.userId,
       member_id: learner.memberId,
       delivery: opts.delivery,
-      client_context: { mode: learner.channel === 'kiosk' ? 'kiosk_player' : 'learner_player' },
+      client_context: {
+        mode: learner.channel === 'kiosk' ? 'kiosk_player' : 'learner_player',
+        // An assisted session is signed off later, by someone else, so the
+        // attempt has to remember who opened the kiosk for the record.
+        ...(learner.kioskIssuedBy ? { kiosk_issued_by: learner.kioskIssuedBy } : {}),
+      },
     })
     .select('id')
     .single()
