@@ -6,6 +6,7 @@ import { withCronLogging } from '@/lib/cronInstrumentation'
 import { logAiInvocation } from '@/lib/ai/rateLimit'
 import { MODEL_BY_SURFACE } from '@/lib/ai/models'
 import { sendDailyReport } from '@/lib/email/sendDailyReport'
+import { superadminAllowlist } from '@/lib/auth/superadminAllowlist'
 
 // Daily superadmin morning report.
 //
@@ -401,8 +402,7 @@ async function runCron(): Promise<NextResponse> {
   let emailSent = 0
   let emailFail = 0
   if (!alreadyDelivered) {
-    const allowlist = (process.env.SUPERADMIN_EMAILS ?? '')
-      .split(',').map(s => s.trim()).filter(Boolean)
+    const allowlist = superadminAllowlist()
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') ?? ''
     const reportUrl = `${baseUrl}/superadmin/daily-report`
     for (const to of allowlist) {

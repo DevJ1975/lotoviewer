@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { isAllowlistedSuperadminEmail } from '@/lib/auth/superadminAllowlist'
 
 // Auth helper for /api/manuals/*. Manuals are platform-wide so we
 // don't go through tenantGate (no x-active-tenant header required).
@@ -33,16 +34,12 @@ export async function requireManualReader(req: Request): Promise<ManualReader> {
     .eq('id', user.id)
     .maybeSingle()
   const dbFlag = !!(profile as { is_superadmin: boolean } | null)?.is_superadmin
-  const allow = (process.env.SUPERADMIN_EMAILS ?? '')
-    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
-  const envAllowed = !!user.email && allow.includes(user.email.toLowerCase())
-  // Both gates required to expose drafts — same posture as
-  // requireSuperadmin, just extracted here so read routes don't have
-  // to import from /superadmin auth helper.
+  // Both gates required to expose drafts — same posture as requireSuperadmin,
+  // but a failed check here is "reader, not superadmin" rather than a 403.
   return {
     ok: true,
     userId: user.id,
     email: user.email ?? null,
-    isSuperadmin: dbFlag && envAllowed,
+    isSuperadmin: dbFlag && isAllowlistedSuperadminEmail(user.email),
   }
 }
