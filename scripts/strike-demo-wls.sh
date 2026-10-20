@@ -8,22 +8,35 @@
 #   5. Require LOTO 101 before that tenant's hot-work permits (permit gate demo).
 #
 # Required env:
-#   SUPABASE_DB_URL            postgres connection string (Session pooler URI)
 #   SUPABASE_URL               https://<ref>.supabase.co
 #   SUPABASE_ANON_KEY
 #   SUPABASE_SERVICE_ROLE_KEY
 #   DEMO_APPROVER              email of the person who reviewed the media
+#   Database — one of:
+#     SUPABASE_DB_URL          full postgres URI (Supabase → Connect → Session pooler), or
+#     SUPABASE_DB_PASSWORD     the database password, with
+#     SUPABASE_DB_HOST         the Session pooler host (aws-N-<region>.pooler.supabase.com).
+#                              The pooler user is postgres.<ref>; the password travels via
+#                              PGPASSWORD, so it never needs URL-encoding.
 # Optional env:
-#   DEMO_TENANT_NUMBER (0002)  SKIP_RENDER=1  SKIP_GATE=1
+#   DEMO_TENANT_NUMBER (0002)  SUPABASE_DB_PORT (5432)  SKIP_RENDER=1  SKIP_GATE=1
 set -euo pipefail
 
-: "${SUPABASE_DB_URL:?}" "${SUPABASE_URL:?}" "${SUPABASE_ANON_KEY:?}" "${SUPABASE_SERVICE_ROLE_KEY:?}" "${DEMO_APPROVER:?}"
+: "${SUPABASE_URL:?}" "${SUPABASE_ANON_KEY:?}" "${SUPABASE_SERVICE_ROLE_KEY:?}" "${DEMO_APPROVER:?}"
+if [ -n "${SUPABASE_DB_URL:-}" ]; then
+  PSQL_CONN="$SUPABASE_DB_URL"
+else
+  : "${SUPABASE_DB_PASSWORD:?set SUPABASE_DB_URL, or SUPABASE_DB_PASSWORD and SUPABASE_DB_HOST}" "${SUPABASE_DB_HOST:?}"
+  PROJECT_REF="$(sed -E 's#^https?://([^.]+)\..*#\1#' <<<"$SUPABASE_URL")"
+  export PGPASSWORD="$SUPABASE_DB_PASSWORD"
+  PSQL_CONN="host=$SUPABASE_DB_HOST port=${SUPABASE_DB_PORT:-5432} user=postgres.$PROJECT_REF dbname=postgres sslmode=require"
+fi
 TENANT_NUMBER="${DEMO_TENANT_NUMBER:-0002}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STUDIO="$ROOT/services/learning-studio"
 SEED="$STUDIO/seed/loto-101"
 SLUG="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["slug"])' "$SEED/module.json")"
-psql_() { psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -q "$@"; }
+psql_() { psql "$PSQL_CONN" -X -v ON_ERROR_STOP=1 -q "$@"; }
 
 echo "== 1/5 Migrations"
 for f in "$ROOT"/apps/web/migrations/{294,295,296,297,298,299}_*.sql; do
