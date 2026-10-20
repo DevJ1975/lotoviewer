@@ -3,7 +3,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 
 from studio import supabase
-from studio.content import load_module
+from studio.content import load_module, media_prefix_for
 from studio.jobs import track_job
 from studio.models import MediaJob
 from studio.render import probe_duration, render_module
@@ -18,9 +18,11 @@ class Command(BaseCommand):
         parser.add_argument("--burn-captions", action="store_true")
         parser.add_argument("--upload", action="store_true",
                             help="Upload to strike-media and set the draft version's download_path")
+        parser.add_argument("--tenant", dest="tenant_id", default=None,
+                            help="Tenant UUID of a tenant-owned module (see import_seed_module --tenant)")
 
     def handle(self, *args, seed_dir: Path, out: Path | None, burn_captions: bool, upload: bool,
-               **options):
+               tenant_id: str | None, **options):
         module = load_module(seed_dir)
         out = out or seed_dir / "module.mp4"
         with track_job(MediaJob.Kind.RENDER, module["slug"]) as job:
@@ -35,17 +37,17 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Rendered {out} ({seconds:.1f}s)"))
 
             if upload:
-                self._upload(module, out, job)
+                self._upload(module, out, job, tenant_id)
 
-    def _upload(self, module: dict, out: Path, job: MediaJob) -> None:
-        existing = supabase.get_global_module_by_slug(module["slug"])
+    def _upload(self, module: dict, out: Path, job: MediaJob, tenant_id: str | None) -> None:
+        existing = supabase.get_module_by_slug(module["slug"], tenant_id)
         versions = sorted((existing or {}).get("strike_module_versions") or [],
                           key=lambda v: v["version_number"])
         editable = [v for v in versions if v["status"] in supabase.EDITABLE_STATUSES]
         if not editable:
             raise CommandError("No draft version to attach the video to. Run import_seed_module "
                                "first (published versions cannot change).")
-        path = f"{module['media_prefix'].strip('/')}/module.mp4"
+        path = f"{media_prefix_for(module, tenant_id)}/module.mp4"
         supabase.upload(path, out.read_bytes(), "video/mp4")
         supabase.update_editable_version(editable[-1]["id"], {"download_path": path})
         job.version_number = editable[-1]["version_number"]

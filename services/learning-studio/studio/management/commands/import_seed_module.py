@@ -16,8 +16,10 @@ class Command(BaseCommand):
         parser.add_argument("seed_dir", type=Path)
         parser.add_argument("--allow-missing", action="store_true",
                             help="Import even if some referenced media files are not generated yet")
+        parser.add_argument("--tenant", dest="tenant_id", default=None,
+                            help="Tenant UUID: import as that tenant's own module instead of the global library")
 
-    def handle(self, *args, seed_dir: Path, allow_missing: bool, **options):
+    def handle(self, *args, seed_dir: Path, allow_missing: bool, tenant_id: str | None, **options):
         if not (seed_dir / "module.json").is_file():
             raise CommandError(f"{seed_dir} has no module.json")
         slug = load_module(seed_dir)["slug"]
@@ -27,7 +29,7 @@ class Command(BaseCommand):
                     job.append(line)
                     self.stdout.write(line)
 
-                result = import_seed_module(seed_dir, allow_missing=allow_missing, log=log)
+                result = import_seed_module(seed_dir, allow_missing=allow_missing, tenant_id=tenant_id, log=log)
                 job.version_number = result.version_number
         except (ImportRefused, supabase.SupabaseError) as error:
             raise CommandError(str(error)) from error

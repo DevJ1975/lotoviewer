@@ -89,6 +89,8 @@ class FakeSupabase:
             rows = [m for m in rows if m["slug"] == slug]
         if scope := _eq(params, "library_scope"):
             rows = [m for m in rows if m["library_scope"] == scope]
+        if tenant := _eq(params, "tenant_id"):
+            rows = [m for m in rows if m.get("tenant_id") == tenant]
         if "or" in params:
             clause = params["or"]
             rows = [m for m in rows if ("library_scope.eq.global" in clause and m["library_scope"] == "global")

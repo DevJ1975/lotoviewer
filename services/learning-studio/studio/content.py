@@ -46,6 +46,17 @@ def content_type_for(path: str) -> str:
     return CONTENT_TYPES.get(PurePosixPath(path).suffix.lower(), "application/octet-stream")
 
 
+def media_prefix_for(module: dict, tenant_id: str | None = None) -> str:
+    """Storage folder for a module's media. Tenant-owned modules must live under
+    the tenant's own top-level folder (strike-media storage policy), so the
+    seed's global/ prefix is swapped for the tenant id."""
+    prefix = module["media_prefix"].strip("/")
+    if not tenant_id:
+        return prefix
+    rest = prefix.split("/", 1)[1] if prefix.startswith("global/") else prefix
+    return f"{tenant_id}/{rest}"
+
+
 def bucket_path(prefix: str, path: str) -> str:
     """Seed refs are bare filenames; bucket refs already carry the prefix."""
     return path if "/" in path else f"{prefix.strip('/')}/{path}"

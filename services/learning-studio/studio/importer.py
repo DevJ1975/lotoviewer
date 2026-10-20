@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import supabase
-from .content import content_type_for, load_module, rewrite_media_paths
+from .content import content_type_for, load_module, media_prefix_for, rewrite_media_paths
 
 EDITABLE = set(supabase.EDITABLE_STATUSES)
 
@@ -28,15 +28,20 @@ class ImportResult:
     questions: int
 
 
-def import_seed_module(seed_dir: Path, *, allow_missing: bool = False, log=print) -> ImportResult:
+def import_seed_module(seed_dir: Path, *, allow_missing: bool = False, tenant_id: str | None = None,
+                       log=print) -> ImportResult:
+    """Global library module by default; with tenant_id, a module owned by that one tenant.
+    Tenant media lives under the tenant's own top-level folder, which the
+    strike-media storage policy requires."""
     module = load_module(seed_dir)
-    content, uploads, missing = rewrite_media_paths(module["content"], module["media_prefix"],
-                                                    seed_dir)
+    prefix = media_prefix_for(module, tenant_id)
+    scope = {"library_scope": "tenant" if tenant_id else "global", "tenant_id": tenant_id}
+    content, uploads, missing = rewrite_media_paths(module["content"], prefix, seed_dir)
     if missing and not allow_missing:
         raise ImportRefused(f"Media files missing from {seed_dir}: {', '.join(missing)}. "
                             "Generate them first or pass --allow-missing.")
 
-    existing = supabase.get_global_module_by_slug(module["slug"])
+    existing = supabase.get_module_by_slug(module["slug"], tenant_id)
     versions = sorted((existing or {}).get("strike_module_versions") or [],
                       key=lambda v: v["version_number"])
     editable = [v for v in versions if v["status"] in EDITABLE]
@@ -66,8 +71,7 @@ def import_seed_module(seed_dir: Path, *, allow_missing: bool = False, log=print
         supabase.update_module(module_id, changes)
     else:
         module_id = supabase.insert_row("strike_modules", {
-            **module_fields, "slug": module["slug"], "library_scope": "global",
-            "tenant_id": None, "status": "in_review",
+            **module_fields, "slug": module["slug"], **scope, "status": "in_review",
         })["id"]
 
     version_fields = {
@@ -83,21 +87,20 @@ def import_seed_module(seed_dir: Path, *, allow_missing: bool = False, log=print
         created_version = False
     else:
         version = supabase.insert_row("strike_module_versions", {
-            **version_fields, "module_id": module_id, "library_scope": "global",
-            "tenant_id": None, "version_number": 1, "status": "draft",
+            **version_fields, "module_id": module_id, **scope, "version_number": 1, "status": "draft",
         })
         created_version = True
 
     supabase.delete_questions(version["id"])
     questions = supabase.insert_rows("strike_quiz_questions", [
-        {"module_version_id": version["id"], "library_scope": "global", "tenant_id": None,
+        {"module_version_id": version["id"], **scope,
          "question_type": q["question_type"], "prompt": q["prompt"],
          "explanation": q.get("explanation"), "sort_order": index, "points": 1,
          "required": True, "graded": True}
         for index, q in enumerate(module["questions"])
     ])
     supabase.insert_rows("strike_quiz_answers", [
-        {"question_id": row["id"], "library_scope": "global", "tenant_id": None,
+        {"question_id": row["id"], **scope,
          "answer_text": answer["text"], "is_correct": bool(answer["correct"]),
          "sort_order": answer_index}
         for row, source in zip(questions, module["questions"], strict=True)

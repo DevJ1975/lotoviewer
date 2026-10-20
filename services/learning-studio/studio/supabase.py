@@ -123,9 +123,11 @@ def get_module(module_id: str) -> dict | None:
     return rows[0] if rows else None
 
 
-def get_global_module_by_slug(slug: str) -> dict | None:
+def get_module_by_slug(slug: str, tenant_id: str | None = None) -> dict | None:
+    """The global module with this slug, or the tenant's own when tenant_id is given."""
+    scope = {"tenant_id": f"eq.{tenant_id}"} if tenant_id else {"library_scope": "eq.global"}
     response = httpx.get(_url("/rest/v1/strike_modules"), params={
-        "select": MODULE_COLUMNS, "slug": f"eq.{slug}", "library_scope": "eq.global"},
+        "select": MODULE_COLUMNS, "slug": f"eq.{slug}", **scope},
         headers=_service_headers(), timeout=TIMEOUT)
     rows = _check(response, "Module lookup").json()
     return rows[0] if rows else None
