@@ -10,6 +10,8 @@ import {
   FormShell, Field, TextInput, NumberInput, TextArea, Select, TwoCol,
 } from '../../_components/FormShell'
 import { calculateRequiredClearance, type ClearanceInputs } from '@soteria/core/workingAtHeights'
+import { parseTrainingRequiredError, type PermitTrainingSummary } from '@soteria/core/permitTrainingGate'
+import { PermitTrainingPanel } from '@/components/permits/PermitTrainingPanel'
 
 // Permit issuance form. Gates an at-height task with pre-conditions
 // the manual describes:
@@ -82,6 +84,10 @@ export default function NewPermitPage() {
   // Form fields
   const [workLocation,  setWorkLocation]  = useState('')
   const [taskDesc,      setTaskDesc]      = useState('')
+  // Pre-generated so the training gate (checked on insert) and any audited
+  // override can reference this permit before the row exists.
+  const [permitId]                        = useState(() => crypto.randomUUID())
+  const [training,      setTraining]      = useState<PermitTrainingSummary | null>(null)
   const [workerId,      setWorkerId]      = useState('')
   const [cpId,          setCpId]          = useState('')
   const [anchorId,      setAnchorId]      = useState('')
@@ -172,7 +178,8 @@ export default function NewPermitPage() {
   const allChecksOk = workerAuthOk && cpAuthOk && anchorOk && componentsOk
     && rescuePlanOk && clearanceOk && !weatherFail
 
-  const canSubmit = !!tenantId && !!workLocation.trim() && allChecksOk
+  const trainingOk = !training?.gated || training.ready
+  const canSubmit = !!tenantId && !!workLocation.trim() && allChecksOk && trainingOk
 
   function toggleComponent(id: string) {
     setComponentIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
@@ -184,6 +191,7 @@ export default function NewPermitPage() {
     const validUntil = new Date(now.getTime() + validHours * 3600 * 1000)
     const permitNumber = `WAH-${now.getFullYear()}-${Math.floor(Math.random() * 1_000_000).toString().padStart(6, '0')}`
     const { error } = await supabase.from('wah_permits').insert({
+      id:                    permitId,
       tenant_id:             tenantId,
       permit_number:         permitNumber,
       work_location:         workLocation.trim(),
@@ -214,7 +222,7 @@ export default function NewPermitPage() {
       notes:         notes.trim() || null,
       created_by:    profile?.id ?? null,
     })
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(parseTrainingRequiredError(error.message) ?? error.message)
     router.push('/admin/working-at-heights/permits')
   }
 
@@ -266,6 +274,16 @@ export default function NewPermitPage() {
           <Select value={cpId} onChange={e => setCpId(e.target.value)} options={memberOptions} />
         </Field>
       </TwoCol>
+
+      {tenantId && (workerId || cpId) && (
+        <PermitTrainingPanel
+          tenantId={tenantId}
+          permitType="working_at_heights"
+          permitId={permitId}
+          extraMemberIds={[workerId, cpId].filter(Boolean)}
+          onSummary={setTraining}
+        />
+      )}
 
       <Field label="Anchor point" required hint="Engineered or QP-certified anchor; must be in service.">
         <Select value={anchorId} onChange={e => setAnchorId(e.target.value)} options={anchorOptions} />
