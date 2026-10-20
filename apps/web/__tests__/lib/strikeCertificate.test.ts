@@ -1,28 +1,55 @@
 import { describe, expect, it } from 'vitest'
 import { PDFDocument } from 'pdf-lib'
-import { buildCertificatePdf } from '@/lib/strike/certificate'
+import { buildCertificatePdf, certificateFilename, type CertificateData } from '@/lib/strike/certificate'
+
+// A 1×1 transparent PNG: enough for pdf-lib to embed a signature.
+const PIXEL_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
+
+const base: CertificateData = {
+  locale: 'en',
+  learnerName: 'Ana Ruiz',
+  moduleTitle: 'LOTO 101: Control of Hazardous Energy',
+  organization: 'Snak King',
+  completedAt: new Date('2026-11-10T12:00:00Z'),
+  reference: 'a1b2c3d4-0000-0000-0000-000000000000',
+  result: { kind: 'score', scorePercent: 90 },
+  signatory: null,
+}
+
+async function load(data: CertificateData) {
+  return PDFDocument.load(await buildCertificatePdf(data))
+}
 
 describe('buildCertificatePdf', () => {
-  it('produces a one-page landscape certificate titled for the module', async () => {
-    const bytes = await buildCertificatePdf({
-      learnerName: 'Ana Ruiz',
-      moduleTitle: 'LOTO 101: Control of Hazardous Energy',
-      organization: 'Snak King',
-      scorePercent: 90,
-      completedAt: new Date('2026-11-10T12:00:00Z'),
-      reference: 'a1b2c3d4-0000-0000-0000-000000000000',
-    })
-    const doc = await PDFDocument.load(bytes)
+  it('produces one landscape Letter page titled for the module', async () => {
+    const doc = await load(base)
     expect(doc.getPageCount()).toBe(1)
-    const { width, height } = doc.getPage(0).getSize()
-    expect(width).toBeGreaterThan(height)
+    expect(doc.getPage(0).getSize()).toEqual({ width: 792, height: 612 })
     expect(doc.getTitle()).toBe('LOTO 101: Control of Hazardous Energy — Certificate of Completion')
   })
 
+  it('is titled in Spanish for the Spanish version', async () => {
+    const doc = await load({ ...base, locale: 'es', moduleTitle: 'LOTO 101: Control de energía peligrosa' })
+    expect(doc.getTitle()).toBe('LOTO 101: Control de energía peligrosa — Certificado de Finalización')
+  })
+
+  it('stamps the signatory signature and names the issuer', async () => {
+    const doc = await load({
+      ...base,
+      result: { kind: 'verified', verifierName: 'Juan Pérez' },
+      signatory: { name: 'Signer', title: 'Founder', issuer: 'Trainovations', signaturePng: PIXEL_PNG },
+    })
+    expect(doc.getAuthor()).toBe('Trainovations')
+  })
+
   it('does not throw on names the standard fonts cannot encode', async () => {
-    await expect(buildCertificatePdf({
-      learnerName: 'Nguyễn Thị 李', moduleTitle: 'LOTO 101', organization: null,
-      scorePercent: 80, completedAt: new Date(), reference: 'abcdef12',
-    })).resolves.toBeInstanceOf(Uint8Array)
+    await expect(buildCertificatePdf({ ...base, learnerName: 'Nguyễn Thị 李', organization: '' })).resolves.toBeInstanceOf(Uint8Array)
+  })
+})
+
+describe('certificateFilename', () => {
+  it('makes a safe, readable file name from the module title', () => {
+    expect(certificateFilename('LOTO 101: Control de energía peligrosa')).toBe('loto-101-control-de-energ-a-peligrosa-certificate.pdf')
+    expect(certificateFilename('!!!')).toBe('strike-certificate.pdf')
   })
 })

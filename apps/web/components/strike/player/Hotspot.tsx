@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Check } from 'lucide-react'
 import { scoreStrikeInteraction, type StrikeHotspotBlock } from '@soteria/core/strikeContent'
 import { InteractionShell, type HintControl, type InteractionFeedback } from './InteractionShell'
+import { useStrikeCopy } from './copy'
 
 interface HotspotProps {
   block: StrikeHotspotBlock
@@ -17,6 +18,7 @@ interface HotspotProps {
 // Graded by target id, never by tap coordinates, so the pictorial markers
 // and the accessible checklist below are two renderings of one input.
 export function Hotspot({ block, urls, completed, remediation, hint, onResult }: HotspotProps) {
+  const t = useStrikeCopy()
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(completed ? block.targets.filter(t => t.correct).map(t => t.id) : []),
   )
@@ -42,12 +44,12 @@ export function Hotspot({ block, urls, completed, remediation, hint, onResult }:
     const decoys = result.incorrectIds.filter(id => selected.has(id))
     const missed = result.incorrectIds.length - decoys.length
     setFeedback(result.correct
-      ? { state: 'correct', message: 'Exactly right. Only a device that physically blocks energy is an isolation point.' }
+      ? { state: 'correct', message: t.hotspotCorrect }
       : {
           state: 'incorrect',
           message: [
-            decoys.length > 0 ? `${decoys.length} of your picks ${decoys.length === 1 ? 'is a control, not an isolation point' : 'are controls, not isolation points'}.` : '',
-            missed > 0 ? `You missed ${missed} isolation point${missed === 1 ? '' : 's'}.` : '',
+            decoys.length > 0 ? t.hotspotDecoys(decoys.length) : '',
+            missed > 0 ? t.hotspotMissed(missed) : '',
           ].filter(Boolean).join(' '),
         })
     onResult(result.correct, { selected_ids: [...selected] })
@@ -56,9 +58,9 @@ export function Hotspot({ block, urls, completed, remediation, hint, onResult }:
   return (
     <InteractionShell
       blockKey={block.key}
-      label="Find the hazard"
+      label={t.hotspotLabel}
       prompt={block.prompt}
-      instructions="Tap the numbered markers on the photo, or tick them in the list below."
+      instructions={t.hotspotInstructions}
       feedback={feedback}
       completed={completed}
       canCheck={selected.size > 0}

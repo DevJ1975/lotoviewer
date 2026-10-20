@@ -249,6 +249,184 @@
       "width": 1280,
       "height": 720,
       "safety_check": "pass"
+    },
+    {
+      "file": "s1-why.es.mp3",
+      "kind": "narration",
+      "block_key": "s1-why",
+      "locale": "es",
+      "voice": "KIKO HDZ - Informative & Educational",
+      "duration_ms": 35135,
+      "bytes": 281330,
+      "model": "eleven_multilingual_v2",
+      "safety_check": "pass: ElevenLabs Scribe transcript matched the script word for word"
+    },
+    {
+      "file": "s1-why.es.vtt",
+      "kind": "captions",
+      "block_key": "s1-why",
+      "locale": "es",
+      "duration_ms": 35135,
+      "bytes": 805,
+      "model": "scribe-word-timing",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s2-energy.es.mp3",
+      "kind": "narration",
+      "block_key": "s2-energy",
+      "locale": "es",
+      "voice": "KIKO HDZ - Informative & Educational",
+      "duration_ms": 32784,
+      "bytes": 262522,
+      "model": "eleven_multilingual_v2",
+      "safety_check": "pass: ElevenLabs Scribe transcript matched the script word for word"
+    },
+    {
+      "file": "s2-energy.es.vtt",
+      "kind": "captions",
+      "block_key": "s2-energy",
+      "locale": "es",
+      "duration_ms": 32784,
+      "bytes": 863,
+      "model": "scribe-word-timing",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s3-roles.es.mp3",
+      "kind": "narration",
+      "block_key": "s3-roles",
+      "locale": "es",
+      "voice": "KIKO HDZ - Informative & Educational",
+      "duration_ms": 28421,
+      "bytes": 227622,
+      "model": "eleven_multilingual_v2",
+      "safety_check": "pass: ElevenLabs Scribe transcript matched the script word for word"
+    },
+    {
+      "file": "s3-roles.es.vtt",
+      "kind": "captions",
+      "block_key": "s3-roles",
+      "locale": "es",
+      "duration_ms": 28421,
+      "bytes": 692,
+      "model": "scribe-word-timing",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s4-prepare.es.mp3",
+      "kind": "narration",
+      "block_key": "s4-prepare",
+      "locale": "es",
+      "voice": "KIKO HDZ - Informative & Educational",
+      "duration_ms": 22100,
+      "bytes": 177049,
+      "model": "eleven_multilingual_v2",
+      "safety_check": "pass: ElevenLabs Scribe transcript matched the script word for word"
+    },
+    {
+      "file": "s4-prepare.es.vtt",
+      "kind": "captions",
+      "block_key": "s4-prepare",
+      "locale": "es",
+      "duration_ms": 22100,
+      "bytes": 548,
+      "model": "scribe-word-timing",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s5-isolate.es.mp3",
+      "kind": "narration",
+      "block_key": "s5-isolate",
+      "locale": "es",
+      "voice": "KIKO HDZ - Informative & Educational",
+      "duration_ms": 33802,
+      "bytes": 270672,
+      "model": "eleven_multilingual_v2",
+      "safety_check": "pass: ElevenLabs Scribe transcript matched the script word for word"
+    },
+    {
+      "file": "s5-isolate.es.vtt",
+      "kind": "captions",
+      "block_key": "s5-isolate",
+      "locale": "es",
+      "duration_ms": 33802,
+      "bytes": 819,
+      "model": "scribe-word-timing",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s6-verify.es.mp3",
+      "kind": "narration",
+      "block_key": "s6-verify",
+      "locale": "es",
+      "voice": "KIKO HDZ - Informative & Educational",
+      "duration_ms": 33045,
+      "bytes": 264612,
+      "model": "eleven_multilingual_v2",
+      "safety_check": "pass: ElevenLabs Scribe transcript matched the script word for word"
+    },
+    {
+      "file": "s6-verify.es.vtt",
+      "kind": "captions",
+      "block_key": "s6-verify",
+      "locale": "es",
+      "duration_ms": 33045,
+      "bytes": 898,
+      "model": "scribe-word-timing",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s7-group.es.mp3",
+      "kind": "narration",
+      "block_key": "s7-group",
+      "locale": "es",
+      "voice": "KIKO HDZ - Informative & Educational",
+      "duration_ms": 27533,
+      "bytes": 220517,
+      "model": "eleven_multilingual_v2",
+      "safety_check": "pass: ElevenLabs Scribe transcript matched the script word for word"
+    },
+    {
+      "file": "s7-group.es.vtt",
+      "kind": "captions",
+      "block_key": "s7-group",
+      "locale": "es",
+      "duration_ms": 27533,
+      "bytes": 729,
+      "model": "scribe-word-timing",
+      "safety_check": "pass"
+    },
+    {
+      "file": "s8-restart.es.mp3",
+      "kind": "narration",
+      "block_key": "s8-restart",
+      "locale": "es",
+      "voice": "KIKO HDZ - Informative & Educational",
+      "duration_ms": 31164,
+      "bytes": 249565,
+      "model": "eleven_multilingual_v2",
+      "safety_check": "pass: ElevenLabs Scribe transcript matched the script word for word"
+    },
+    {
+      "file": "s8-restart.es.vtt",
+      "kind": "captions",
+      "block_key": "s8-restart",
+      "locale": "es",
+      "duration_ms": 31164,
+      "bytes": 850,
+      "model": "scribe-word-timing",
+      "safety_check": "pass"
     }
-  ]
+  ],
+  "es": {
+    "voice": {
+      "name": "KIKO HDZ - Informative & Educational",
+      "id": "sDh3eviBhiuHKi0MjTNq"
+    },
+    "flow_id": "rv0EdTkNQ4I2Tz9RK1tR",
+    "generated_at": "2026-10-20T06:18:00+00:00",
+    "generator": "ElevenLabs Creative (via Claude Code connector)",
+    "captions": "Word timings from an ElevenLabs Scribe transcription of each take; spoken numbers shown as digits to match the transcript"
+  }
 }

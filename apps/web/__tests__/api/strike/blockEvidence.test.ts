@@ -48,6 +48,7 @@ const VERSION_ID = '33333333-3333-3333-3333-333333333333'
 const ATTEMPT_ID = '44444444-4444-4444-4444-444444444444'
 const USER_ID = '55555555-5555-5555-5555-555555555555'
 const MEMBER_ID = '66666666-6666-6666-6666-666666666666'
+const ASSIGNMENT_ID = '77777777-7777-7777-7777-777777777777'
 
 const CONTENT = {
   blocks: [
@@ -187,6 +188,29 @@ describe('POST /api/strike/[moduleId]/start', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ attempt_id: ATTEMPT_ID, reached: [{ block_key: 'scene', event: 'completed' }], resumed: true })
     expect(captured.inserts).toHaveLength(0)
+  })
+
+  // A supervisor-verified (assisted) completion is credited to the attempt's
+  // assignment with no quiz re-check, so /start keeps only one that applies.
+  it('keeps an assignment that targets the department on the learner roster entry', async () => {
+    const { POST } = await import('@/app/api/strike/[moduleId]/start/route')
+    queueGateAndVersion()
+    queue('strike_assignments', { data: { id: ASSIGNMENT_ID, tenant_id: TENANT_ID, module_id: MODULE_ID, module_version_id: null, target_type: 'department', target_id: 'Sanitation', status: 'active' } })
+    queue('members', { data: { department: ' sanitation ', site_label: null } })
+    queue('strike_attempts', { data: null }, { data: { id: ATTEMPT_ID } })
+    const res = await POST(post('start', { module_version_id: VERSION_ID, assignment_id: ASSIGNMENT_ID, delivery: 'assisted' }), ctx())
+    expect(res.status).toBe(201)
+    expect(captured.inserts[0].payload).toEqual(expect.objectContaining({ assignment_id: ASSIGNMENT_ID, delivery: 'assisted' }))
+  })
+
+  it('opens the attempt as voluntary when the assignment is for another module', async () => {
+    const { POST } = await import('@/app/api/strike/[moduleId]/start/route')
+    queueGateAndVersion()
+    queue('strike_assignments', { data: { id: ASSIGNMENT_ID, tenant_id: TENANT_ID, module_id: 'other-module', module_version_id: null, target_type: 'tenant', target_id: null, status: 'active' } })
+    queue('strike_attempts', { data: null }, { data: { id: ATTEMPT_ID } })
+    const res = await POST(post('start', { module_version_id: VERSION_ID, assignment_id: ASSIGNMENT_ID, delivery: 'assisted' }), ctx())
+    expect(res.status).toBe(201)
+    expect(captured.inserts[0].payload).toEqual(expect.objectContaining({ assignment_id: null }))
   })
 
   it('opens a new attempt bound to the learner and their roster entry', async () => {

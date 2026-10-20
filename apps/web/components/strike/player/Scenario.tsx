@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { scoreStrikeInteraction, type StrikeScenarioBlock } from '@soteria/core/strikeContent'
 import { InteractionShell, type HintControl, type InteractionFeedback } from './InteractionShell'
+import { useStrikeCopy } from './copy'
 
 interface ScenarioProps {
   block: StrikeScenarioBlock
@@ -14,6 +15,7 @@ interface ScenarioProps {
 }
 
 export function Scenario({ block, urls, completed, remediation, hint, onResult }: ScenarioProps) {
+  const t = useStrikeCopy()
   const correctId = block.choices.find(c => c.correct)?.id ?? null
   const [choiceId, setChoiceId] = useState<string | null>(completed ? correctId : null)
   const [feedback, setFeedback] = useState<InteractionFeedback>(() => {
@@ -33,7 +35,7 @@ export function Scenario({ block, urls, completed, remediation, hint, onResult }
   return (
     <InteractionShell
       blockKey={block.key}
-      label="What would you do?"
+      label={t.scenarioLabel}
       prompt={block.stem}
       feedback={feedback}
       completed={completed}

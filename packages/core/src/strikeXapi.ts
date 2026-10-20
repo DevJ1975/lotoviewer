@@ -160,8 +160,11 @@ function resultFor(event: StrikeXapiEvent): Pick<XapiStatement, 'result'> {
   switch (event.verb) {
     case 'answered':
       return { result: { success: event.success, extensions: { [HINTS_USED_EXTENSION]: event.hintsUsed } } }
+    // A module is only ever reported completed on a pass, and a supervisor
+    // sign-off (assisted delivery) has no score to send as 'passed', so this
+    // statement is what tells an LMS the learner succeeded.
     case 'completed':
-      return { result: { completion: true, ...(event.block ? { success: true } : {}) } }
+      return { result: { completion: true, success: true } }
     case 'passed':
     case 'failed': {
       const raw = Math.max(0, Math.min(100, Math.round(event.scorePercent)))

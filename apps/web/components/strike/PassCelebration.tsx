@@ -2,12 +2,14 @@
 
 import { useMemo, type CSSProperties, type ReactNode } from 'react'
 import { Award } from 'lucide-react'
+import { useStrikeCopy } from './player/copy'
 
 const CONFETTI_COLORS = ['#FFD900', '#1D3ECF', '#22c55e', '#ffffff', '#f97316']
 
 interface PassCelebrationProps {
   moduleTitle: string
-  scorePercent: number
+  /** A quiz pass shows its score; an assisted session was verified by a supervisor. */
+  outcome: { kind: 'score'; scorePercent: number } | { kind: 'verified' }
   learnerName: string | null
   actions?: ReactNode
 }
@@ -15,7 +17,9 @@ interface PassCelebrationProps {
 // Celebrates completion, never the score itself: the number is shown, but
 // nothing rewards a higher pass over a lower one (see the gamification
 // decisions in docs/handoffs/2026-08-29-strike-phase-2.md).
-export function PassCelebration({ moduleTitle, scorePercent, learnerName, actions }: PassCelebrationProps) {
+export function PassCelebration({ moduleTitle, outcome, learnerName, actions }: PassCelebrationProps) {
+  const t = useStrikeCopy()
+  const [before, title, after] = outcome.kind === 'score' ? t.passedWith(moduleTitle, outcome.scorePercent) : t.verifiedComplete(moduleTitle)
   const pieces = useMemo(() => Array.from({ length: 28 }, (_, i) => ({
     color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
     dx: `${Math.round(Math.cos((i / 28) * Math.PI * 2) * (120 + (i % 5) * 30))}px`,
@@ -35,12 +39,12 @@ export function PassCelebration({ moduleTitle, scorePercent, learnerName, action
         />
       ))}
       <Award className="mx-auto h-12 w-12 text-emerald-600 dark:text-emerald-300" aria-hidden />
-      <p className="mt-2 text-[11px] font-black uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">Training complete</p>
+      <p className="mt-2 text-[11px] font-black uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">{t.trainingComplete}</p>
       <h3 className="stencil-title mt-1 text-2xl text-slate-900 dark:text-slate-50">
-        {learnerName ? `Nice work, ${learnerName}.` : 'Nice work.'}
+        {t.niceWork(learnerName)}
       </h3>
       <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">
-        You passed <strong>{moduleTitle}</strong> with {scorePercent}%. Your training record is updated.
+        {before}<strong>{title}</strong>{after}
       </p>
       {actions && <div className="mt-4 flex flex-wrap justify-center gap-2">{actions}</div>}
     </div>

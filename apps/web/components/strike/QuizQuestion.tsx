@@ -1,6 +1,7 @@
 'use client'
 
 import type { StrikeQuestionType } from '@soteria/core/strike'
+import { useStrikeCopy } from './player/copy'
 
 // `explanation` is deliberately absent: it is a soft copy of the answer key
 // and the strike_security_hardening migration revoked it from `authenticated`.
@@ -36,6 +37,7 @@ export function QuizQuestion({
   value: QuizResponse | undefined
   onChange: (value: QuizResponse) => void
 }) {
+  const t = useStrikeCopy()
   const selected = Array.isArray(value) ? value : typeof value === 'string' ? [value] : []
   const isMulti = question.question_type === 'select_all'
   const isAck = question.question_type === 'acknowledgement'
@@ -48,7 +50,7 @@ export function QuizQuestion({
       {isAck ? (
         <label className="mt-3 flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm text-slate-700 has-[:checked]:border-brand-navy has-[:checked]:bg-blue-50 dark:border-slate-700 dark:text-slate-200 dark:has-[:checked]:bg-blue-950/40">
           <input type="checkbox" checked={value === true} onChange={e => onChange(e.target.checked)} className="h-5 w-5 shrink-0 accent-brand-navy" />
-          I acknowledge this requirement.
+          {t.acknowledgeRequirement}
         </label>
       ) : (
         <div className="mt-3 space-y-2">

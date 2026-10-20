@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { StudioVideoLink } from '@/components/strike/StudioVideoLink'
 import { superadminJson } from '@/lib/superadminFetch'
+import { CertificateSignatoryCard } from '@/components/strike/admin/CertificateSignatoryCard'
 import type {
   StrikeStudioModuleRow,
   StrikeStudioRequestRow,
@@ -179,6 +180,8 @@ export default function StrikeStudioPage() {
         <Metric label="Drafts and reviews" value={stats.drafts} icon={<FileVideo className="h-4 w-4" />} />
         <Metric label="Open studio requests" value={stats.openRequests} icon={<Clock className="h-4 w-4" />} />
       </section>
+
+      <CertificateSignatoryCard />
 
       {showNew && (
         <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 p-4 space-y-4">

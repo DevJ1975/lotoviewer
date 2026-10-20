@@ -263,4 +263,35 @@ describe('LOTO 101 seed module', () => {
     expect(seed.questions).toHaveLength(10)
     for (const q of seed.questions) expect(q.answers.some((a: { correct: boolean }) => a.correct)).toBe(true)
   })
+
+  describe('Spanish version', () => {
+    const es = JSON.parse(readFileSync(
+      resolve(__dirname, '../../../../services/learning-studio/seed/loto-101/module.es.json'),
+      'utf8',
+    ))
+
+    it('parses, and keeps the same blocks so progress and xAPI activities line up across languages', () => {
+      const result = parseStrikeContent(es.content)
+      expect(result.ok ? [] : result.issues).toEqual([])
+      expect(es.content.blocks.map((b: { key: string; kind: string }) => `${b.key}:${b.kind}`))
+        .toEqual(seed.content.blocks.map((b: { key: string; kind: string }) => `${b.key}:${b.kind}`))
+      expect(es.slug).toBe(seed.slug)
+      expect(es.locale).toBe('es')
+    })
+
+    it('marks the same answers correct as the English quiz', () => {
+      const key = (m: { questions: { answers: { correct: boolean }[] }[] }) => m.questions.map(q => q.answers.map(a => a.correct))
+      expect(key(es)).toEqual(key(seed))
+    })
+
+    it('narrates in Spanish within the module time budget, reusing the English images', () => {
+      const parsed = parseStrikeContent(es.content)
+      if (!parsed.ok) throw new Error('unparsable')
+      expect(strikeContentRuntimeMs(parsed.content)).toBeLessThanOrEqual(es.estimated_minutes * 60_000)
+      for (const block of es.content.blocks.filter((b: { kind: string }) => b.kind === 'motion_scene')) {
+        expect(block.narration.audio_path).toMatch(/\.es\.mp3$/)
+        expect(block.image.path).not.toMatch(/\.es\./)
+      }
+    })
+  })
 })

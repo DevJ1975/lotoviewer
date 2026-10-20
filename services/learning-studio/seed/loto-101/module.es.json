@@ -1,0 +1,736 @@
+{
+  "slug": "loto-101-control-hazardous-energy",
+  "title": "LOTO 101: Control de energía peligrosa",
+  "description": "Microaprendizaje de 5 minutos sobre la norma 29 CFR 1910.147 de OSHA: los tipos de energía, quién hace qué, los siete pasos del bloqueo y etiquetado, el bloqueo grupal y el arranque seguro. Termina con una evaluación de 10 preguntas.",
+  "category": "Lockout/Tagout",
+  "tags": [
+    "loto",
+    "1910.147",
+    "hazardous energy",
+    "general industry"
+  ],
+  "estimated_minutes": 5,
+  "library_scope": "global",
+  "locale": "es",
+  "passing_score": 80,
+  "retake_limit": null,
+  "validity_days": 365,
+  "media_prefix": "global/loto-101/v1",
+  "content": {
+    "blocks": [
+      {
+        "key": "s1-why",
+        "kind": "motion_scene",
+        "eyebrow": "Módulo 1 · LOTO",
+        "title": "Por qué importa el bloqueo y etiquetado",
+        "animation": "ken_burns_in",
+        "image": {
+          "path": "scene-01-why.jpg",
+          "alt": "Un técnico de mantenimiento con gorra protectora, cofia y lentes de seguridad junto a un transportador detenido de una planta de alimentos, poniendo un candado rojo y una etiqueta de peligro en su interruptor de desconexión eléctrica. Sus manos están lejos de la banda y de todas las partes móviles.",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        },
+        "script": "Cada máquina de esta planta almacena energía. Cuando alguien mete las manos en una máquina que arranca de forma inesperada, el resultado son amputaciones, lesiones por aplastamiento y muertes. La norma de bloqueo y etiquetado de OSHA, 29 CFR 1910.147, existe para evitarlo. OSHA estima que cumplirla previene alrededor de 120 muertes y 50,000 lesiones cada año. En los próximos cinco minutos aprenderá a dejar una máquina segura antes de trabajar en ella, y a mantenerla segura hasta terminar.",
+        "beats": [
+          {
+            "at_ms": 0,
+            "text": "Las máquinas almacenan energía"
+          },
+          {
+            "at_ms": 8309,
+            "text": "Arranque inesperado = amputaciones, aplastamiento, muerte"
+          },
+          {
+            "at_ms": 16618,
+            "text": "OSHA 29 CFR 1910.147"
+          },
+          {
+            "at_ms": 23740,
+            "text": "Estimación de OSHA: ≈120 muertes y 50,000 lesiones evitadas cada año"
+          }
+        ],
+        "narration": {
+          "audio_path": "s1-why.es.mp3",
+          "captions_path": "s1-why.es.vtt",
+          "transcript": "Cada máquina de esta planta almacena energía. Cuando alguien mete las manos en una máquina que arranca de forma inesperada, el resultado son amputaciones, lesiones por aplastamiento y muertes. La norma de bloqueo y etiquetado de OSHA, 29 CFR 1910.147, existe para evitarlo. OSHA estima que cumplirla previene alrededor de 120 muertes y 50,000 lesiones cada año. En los próximos cinco minutos aprenderá a dejar una máquina segura antes de trabajar en ella, y a mantenerla segura hasta terminar.",
+          "duration_ms": 35135,
+          "voice": "KIKO HDZ - Informative & Educational",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        }
+      },
+      {
+        "key": "s2-energy",
+        "kind": "motion_scene",
+        "eyebrow": "Conozca el peligro",
+        "title": "La energía peligrosa tiene muchas formas",
+        "animation": "pan_left",
+        "image": {
+          "path": "scene-02-energy.jpg",
+          "alt": "Un área de máquinas industriales con un interruptor de desconexión eléctrica, mangueras hidráulicas, una línea de aire neumática y una tubería de vapor.",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        },
+        "script": "La energía peligrosa es cualquier energía que puede mover, calentar o lastimar. La energía eléctrica en motores y tableros. La energía mecánica en bandas, cuchillas y volantes que siguen girando. La energía hidráulica y neumática atrapada a presión en mangueras y cilindros. La energía térmica y el vapor. Químicos y gas en las líneas. Y la gravedad, que puede dejar caer sobre usted una pieza levantada. La mayoría de las máquinas tienen más de una. Su placa indica cada fuente, y todas se deben controlar.",
+        "beats": [
+          {
+            "at_ms": 0,
+            "text": "Eléctrica"
+          },
+          {
+            "at_ms": 5538,
+            "text": "Mecánica"
+          },
+          {
+            "at_ms": 11076,
+            "text": "Hidráulica · Neumática"
+          },
+          {
+            "at_ms": 16613,
+            "text": "Térmica · Vapor · Química · Gas"
+          },
+          {
+            "at_ms": 22151,
+            "text": "Gravedad"
+          },
+          {
+            "at_ms": 27689,
+            "text": "Controle cada fuente de la placa"
+          }
+        ],
+        "narration": {
+          "audio_path": "s2-energy.es.mp3",
+          "captions_path": "s2-energy.es.vtt",
+          "transcript": "La energía peligrosa es cualquier energía que puede mover, calentar o lastimar. La energía eléctrica en motores y tableros. La energía mecánica en bandas, cuchillas y volantes que siguen girando. La energía hidráulica y neumática atrapada a presión en mangueras y cilindros. La energía térmica y el vapor. Químicos y gas en las líneas. Y la gravedad, que puede dejar caer sobre usted una pieza levantada. La mayoría de las máquinas tienen más de una. Su placa indica cada fuente, y todas se deben controlar.",
+          "duration_ms": 32784,
+          "voice": "KIKO HDZ - Informative & Educational",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        }
+      },
+      {
+        "key": "i1-match-devices",
+        "kind": "drag_match",
+        "prompt": "Relacione cada fuente de energía con el dispositivo que la aísla.",
+        "pairs": [
+          {
+            "id": "electrical",
+            "prompt": "Eléctrica",
+            "answer": "Interruptor de desconexión con candado"
+          },
+          {
+            "id": "pneumatic",
+            "prompt": "Neumática",
+            "answer": "Válvula de aire con bloqueo y purga"
+          },
+          {
+            "id": "steam",
+            "prompt": "Vapor",
+            "answer": "Válvula de compuerta con cubierta de bloqueo"
+          },
+          {
+            "id": "gravity",
+            "prompt": "Gravedad",
+            "answer": "Bloque mecánico o pasador"
+          }
+        ],
+        "remediate_block_key": "s2-energy",
+        "hint": "Pregúntese qué detendría físicamente cada tipo de energía. Los cables necesitan un interruptor abierto, las tuberías una válvula cerrada, y una pieza levantada algo que la sostenga."
+      },
+      {
+        "key": "s3-roles",
+        "kind": "motion_scene",
+        "eyebrow": "Quién hace qué",
+        "title": "Empleados autorizados y afectados",
+        "animation": "ken_burns_out",
+        "image": {
+          "path": "scene-03-roles.jpg",
+          "alt": "Un trabajador de mantenimiento con gorra protectora, cofia y lentes de seguridad poniendo un candado rojo y una etiqueta de peligro en un interruptor de desconexión, mientras una operadora de línea con cofia y bata blanca observa a una distancia segura.",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        },
+        "script": "Un empleado autorizado bloquea una máquina y le da servicio. Solo los empleados autorizados y capacitados colocan candados. Un empleado afectado opera la máquina o trabaja en el área. Debe reconocer un bloqueo y nunca volver a arrancar un equipo bloqueado. Si su trabajo implica meter las manos, como destapar un atasco o limpiar, debe estar capacitado como autorizado y bloquear primero. Todos los demás deben respetar cada candado y cada etiqueta.",
+        "beats": [
+          {
+            "at_ms": 0,
+            "text": "Autorizado: bloquea y da servicio"
+          },
+          {
+            "at_ms": 8484,
+            "text": "Afectado: opera la máquina o trabaja cerca"
+          },
+          {
+            "at_ms": 15907,
+            "text": "¿Va a destapar un atasco o limpiar? Bloquee primero"
+          },
+          {
+            "at_ms": 24391,
+            "text": "Todos respetan cada candado y etiqueta"
+          }
+        ],
+        "narration": {
+          "audio_path": "s3-roles.es.mp3",
+          "captions_path": "s3-roles.es.vtt",
+          "transcript": "Un empleado autorizado bloquea una máquina y le da servicio. Solo los empleados autorizados y capacitados colocan candados. Un empleado afectado opera la máquina o trabaja en el área. Debe reconocer un bloqueo y nunca volver a arrancar un equipo bloqueado. Si su trabajo implica meter las manos, como destapar un atasco o limpiar, debe estar capacitado como autorizado y bloquear primero. Todos los demás deben respetar cada candado y cada etiqueta.",
+          "duration_ms": 28421,
+          "voice": "KIKO HDZ - Informative & Educational",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        }
+      },
+      {
+        "key": "s4-prepare",
+        "kind": "motion_scene",
+        "eyebrow": "Pasos 1–3",
+        "title": "Prepare, avise, apague",
+        "animation": "pan_right",
+        "image": {
+          "path": "scene-04-prepare.jpg",
+          "alt": "Un técnico leyendo una placa de bloqueo plastificada montada junto a una máquina empacadora.",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        },
+        "script": "Paso uno: prepárese. Lea la placa de bloqueo de la máquina para conocer cada fuente de energía y dónde está su punto de aislamiento. Paso dos: avise a los empleados afectados que va a apagar la máquina y bloquearla. Paso tres: apague la máquina con su control de paro normal, nunca desconectando la energía mientras trabaja con carga.",
+        "beats": [
+          {
+            "at_ms": 0,
+            "text": "1 · Prepare: lea la placa"
+          },
+          {
+            "at_ms": 7144,
+            "text": "2 · Avise a los empleados afectados"
+          },
+          {
+            "at_ms": 13336,
+            "text": "3 · Apague con el paro normal"
+          }
+        ],
+        "narration": {
+          "audio_path": "s4-prepare.es.mp3",
+          "captions_path": "s4-prepare.es.vtt",
+          "transcript": "Paso uno: prepárese. Lea la placa de bloqueo de la máquina para conocer cada fuente de energía y dónde está su punto de aislamiento. Paso dos: avise a los empleados afectados que va a apagar la máquina y bloquearla. Paso tres: apague la máquina con su control de paro normal, nunca desconectando la energía mientras trabaja con carga.",
+          "duration_ms": 22100,
+          "voice": "KIKO HDZ - Informative & Educational",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        }
+      },
+      {
+        "key": "s5-isolate",
+        "kind": "motion_scene",
+        "eyebrow": "Pasos 4–5",
+        "title": "Aísle, luego bloquee y etiquete",
+        "animation": "ken_burns_in",
+        "image": {
+          "path": "scene-05-lock.jpg",
+          "alt": "Acercamiento de una mano con guante cerrando un candado personal rojo con etiqueta de peligro en la manija de un interruptor de desconexión eléctrica en posición de apagado.",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        },
+        "script": "Paso cuatro: aísle. Ponga cada dispositivo de aislamiento de energía en la posición segura: abra el interruptor de desconexión y cierre las válvulas. Un botón de paro del panel de control no es un punto de aislamiento. Paso cinco: ponga su propio candado y su etiqueta en cada punto de aislamiento. Una persona, un candado, una llave. Su llave se queda con usted. Use una etiqueta sin candado solo donde su procedimiento escrito diga que no se puede poner un candado, y en ese caso con protección adicional.",
+        "beats": [
+          {
+            "at_ms": 0,
+            "text": "4 · Aísle cada fuente"
+          },
+          {
+            "at_ms": 8573,
+            "text": "Un botón de paro NO es aislamiento"
+          },
+          {
+            "at_ms": 14697,
+            "text": "5 · Su candado + etiqueta en cada punto"
+          },
+          {
+            "at_ms": 22045,
+            "text": "Una persona · un candado · una llave"
+          }
+        ],
+        "narration": {
+          "audio_path": "s5-isolate.es.mp3",
+          "captions_path": "s5-isolate.es.vtt",
+          "transcript": "Paso cuatro: aísle. Ponga cada dispositivo de aislamiento de energía en la posición segura: abra el interruptor de desconexión y cierre las válvulas. Un botón de paro del panel de control no es un punto de aislamiento. Paso cinco: ponga su propio candado y su etiqueta en cada punto de aislamiento. Una persona, un candado, una llave. Su llave se queda con usted. Use una etiqueta sin candado solo donde su procedimiento escrito diga que no se puede poner un candado, y en ese caso con protección adicional.",
+          "duration_ms": 33802,
+          "voice": "KIKO HDZ - Informative & Educational",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        }
+      },
+      {
+        "key": "i2-hotspot-isolation",
+        "kind": "hotspot",
+        "prompt": "Toque cada punto real de aislamiento de energía en esta máquina. Deje los demás.",
+        "image": {
+          "path": "hotspot-isolation.jpg",
+          "alt": "Una estación de mezcladora de masa de acero inoxidable: a la izquierda un interruptor de desconexión eléctrica con candado montado en la pared, arriba al centro un botón rojo de paro de emergencia en una caja amarilla, arriba a la derecha una pantalla táctil del operador, y abajo a la derecha una línea de aire azul con una válvula de cierre con manija amarilla, candado y escape.",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        },
+        "targets": [
+          {
+            "id": "disconnect",
+            "label": "Interruptor de desconexión eléctrica",
+            "x_pct": 20.7,
+            "y_pct": 24.3,
+            "correct": true
+          },
+          {
+            "id": "air-valve",
+            "label": "Válvula de cierre de aire con candado (con escape)",
+            "x_pct": 86.7,
+            "y_pct": 67.0,
+            "correct": true
+          },
+          {
+            "id": "estop",
+            "label": "Botón de paro de emergencia",
+            "x_pct": 54.5,
+            "y_pct": 15.7,
+            "correct": false
+          },
+          {
+            "id": "touchscreen",
+            "label": "Pantalla táctil del operador",
+            "x_pct": 77.2,
+            "y_pct": 25.7,
+            "correct": false
+          }
+        ],
+        "remediate_block_key": "s5-isolate",
+        "hint": "Un control solo envía una señal. Busque los dispositivos que cortan físicamente el paso de la energía."
+      },
+      {
+        "key": "s6-verify",
+        "kind": "motion_scene",
+        "eyebrow": "Pasos 6–7",
+        "title": "Libere la energía almacenada y verifique",
+        "animation": "ken_burns_out",
+        "image": {
+          "path": "scene-06-verify.jpg",
+          "alt": "Un técnico con gorra protectora, cofia y lentes de seguridad presionando el botón de arranque de una máquina detenida, alejado de todas las partes móviles, con un candado rojo y una etiqueta de peligro visibles en el interruptor de desconexión cercano. Las guardas están en su lugar.",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        },
+        "script": "Paso seis: libere o contenga la energía almacenada. Purgue la presión de aire y la hidráulica, bloquee las piezas levantadas, deje que los volantes se detengan y que las partes calientes se enfríen. Paso siete: verifique. Asegúrese de que todos estén alejados y luego intente arrancar la máquina. No debe pasar nada. Si el procedimiento pide una prueba de voltaje, la hace un electricista calificado. Después regrese los controles a apagado. Solo entonces la máquina está en energía cero y es segura para trabajar.",
+        "beats": [
+          {
+            "at_ms": 0,
+            "text": "6 · Libere o bloquee la energía almacenada"
+          },
+          {
+            "at_ms": 10327,
+            "text": "7 · Verifique: todos alejados, intente arrancar"
+          },
+          {
+            "at_ms": 18358,
+            "text": "Prueba de voltaje: solo persona calificada"
+          },
+          {
+            "at_ms": 24095,
+            "text": "Controles en APAGADO → energía cero"
+          }
+        ],
+        "narration": {
+          "audio_path": "s6-verify.es.mp3",
+          "captions_path": "s6-verify.es.vtt",
+          "transcript": "Paso seis: libere o contenga la energía almacenada. Purgue la presión de aire y la hidráulica, bloquee las piezas levantadas, deje que los volantes se detengan y que las partes calientes se enfríen. Paso siete: verifique. Asegúrese de que todos estén alejados y luego intente arrancar la máquina. No debe pasar nada. Si el procedimiento pide una prueba de voltaje, la hace un electricista calificado. Después regrese los controles a apagado. Solo entonces la máquina está en energía cero y es segura para trabajar.",
+          "duration_ms": 33045,
+          "voice": "KIKO HDZ - Informative & Educational",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        }
+      },
+      {
+        "key": "i3-sort-steps",
+        "kind": "drag_sort",
+        "prompt": "Ponga los siete pasos del bloqueo en el orden correcto.",
+        "items": [
+          {
+            "id": "prepare",
+            "label": "Prepare: lea la placa"
+          },
+          {
+            "id": "notify",
+            "label": "Avise a los empleados afectados"
+          },
+          {
+            "id": "shutdown",
+            "label": "Apague con el paro normal"
+          },
+          {
+            "id": "isolate",
+            "label": "Aísle cada fuente de energía"
+          },
+          {
+            "id": "lock",
+            "label": "Ponga su candado y su etiqueta"
+          },
+          {
+            "id": "release",
+            "label": "Libere o bloquee la energía almacenada"
+          },
+          {
+            "id": "verify",
+            "label": "Verifique la energía cero"
+          }
+        ],
+        "remediate_block_key": "s6-verify",
+        "hint": "Empiece con lo que hace antes de tocar cualquier cosa. Termine con la última revisión antes de meter las manos."
+      },
+      {
+        "key": "c1-stored",
+        "kind": "callout",
+        "tone": "danger",
+        "title": "Una máquina bloqueada todavía puede lastimarlo",
+        "body": "Los cilindros hidráulicos, resortes, volantes, capacitores, horquillas levantadas y superficies calientes conservan su energía después de apagar el desconector. Libérela o bloquéela, y luego verifique, cada vez."
+      },
+      {
+        "key": "s7-group",
+        "kind": "motion_scene",
+        "eyebrow": "Trabajo en equipo",
+        "title": "Bloqueo grupal y cambio de turno",
+        "animation": "pan_left",
+        "image": {
+          "path": "scene-07-group.jpg",
+          "alt": "Una caja de bloqueo grupal cubierta con los candados de varios trabajadores, colgada en una pared de la planta.",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        },
+        "script": "Cuando un equipo trabaja en la misma máquina, se usa el bloqueo grupal. Un empleado autorizado bloquea la máquina, verifica la energía cero y pone las llaves en una caja de bloqueo grupal. Luego cada trabajador pone su propio candado personal en la caja. A nadie lo protege el candado de otra persona. En el cambio de turno, el trabajador que entra pone su candado antes de que el que sale quite el suyo, para que la máquina nunca quede sin protección.",
+        "beats": [
+          {
+            "at_ms": 0,
+            "text": "Caja de bloqueo grupal"
+          },
+          {
+            "at_ms": 8850,
+            "text": "Cada trabajador pone su propio candado"
+          },
+          {
+            "at_ms": 14750,
+            "text": "Nunca dependa del candado de otro"
+          },
+          {
+            "at_ms": 19667,
+            "text": "Cambio de turno: el que entra bloquea antes de que el que sale quite el suyo"
+          }
+        ],
+        "narration": {
+          "audio_path": "s7-group.es.mp3",
+          "captions_path": "s7-group.es.vtt",
+          "transcript": "Cuando un equipo trabaja en la misma máquina, se usa el bloqueo grupal. Un empleado autorizado bloquea la máquina, verifica la energía cero y pone las llaves en una caja de bloqueo grupal. Luego cada trabajador pone su propio candado personal en la caja. A nadie lo protege el candado de otra persona. En el cambio de turno, el trabajador que entra pone su candado antes de que el que sale quite el suyo, para que la máquina nunca quede sin protección.",
+          "duration_ms": 27533,
+          "voice": "KIKO HDZ - Informative & Educational",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        }
+      },
+      {
+        "key": "i4-scenario",
+        "kind": "scenario",
+        "stem": "Usted llega a ayudar a un compañero a destapar un atasco. Su candado ya está en el desconector y le dice: \"Ya estás cubierto, yo bloqueé.\" ¿Qué hace?",
+        "image": null,
+        "choices": [
+          {
+            "id": "own-lock",
+            "label": "Pongo mi propio candado y mi etiqueta, y verifico la energía cero, antes de meter las manos.",
+            "correct": true,
+            "feedback": "Correcto. Su candado es el único que lo protege a usted. Su compañero podría terminar, quitar el suyo y arrancar la máquina mientras usted sigue adentro."
+          },
+          {
+            "id": "trust",
+            "label": "Empiezo a trabajar. Su candado está puesto, así que la máquina no puede arrancar.",
+            "correct": false,
+            "feedback": "El candado de su compañero lo protege a él, no a usted. Si lo quita mientras usted está adentro, nada impide que la máquina arranque."
+          },
+          {
+            "id": "tag-only",
+            "label": "Cuelgo mi propia etiqueta de peligro junto a su candado.",
+            "correct": false,
+            "feedback": "Una etiqueta es una advertencia, no una barrera física. Donde se pueda poner un candado, ponga su candado."
+          }
+        ],
+        "remediate_block_key": "s7-group",
+        "hint": "Pregúntese: ¿quién tiene la llave del candado que lo está protegiendo a usted?"
+      },
+      {
+        "key": "s8-restart",
+        "kind": "motion_scene",
+        "eyebrow": "Terminar con seguridad",
+        "title": "Retiro, arranque y las reglas que nunca cambian",
+        "animation": "ken_burns_in",
+        "image": {
+          "path": "scene-08-restart.jpg",
+          "alt": "Un técnico quitando su propio candado de un interruptor de desconexión después de despejar el área de trabajo, con la guarda reinstalada.",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        },
+        "script": "Cuando termine el trabajo, retire las herramientas y vuelva a poner las guardas. Asegúrese de que todos estén alejados. Luego cada persona quita solo su propio candado. Si alguien deja un candado puesto, solo un supervisor puede quitarlo, siguiendo las reglas de la planta. Antes de arrancar, avise a los empleados afectados que se quitaron los candados. Nunca trabaje en una máquina que no esté bloqueada, aunque sea un trabajo rápido. Si tiene dudas, deténgase y pregunte. Ahora veamos lo que aprendió.",
+        "beats": [
+          {
+            "at_ms": 0,
+            "text": "Herramientas fuera · guardas en su lugar"
+          },
+          {
+            "at_ms": 6233,
+            "text": "Todos alejados"
+          },
+          {
+            "at_ms": 10388,
+            "text": "Quite solo SU candado"
+          },
+          {
+            "at_ms": 15582,
+            "text": "Candados fuera → avise a los afectados"
+          },
+          {
+            "at_ms": 20776,
+            "text": "Sin atajos · si tiene dudas, deténgase y pregunte"
+          }
+        ],
+        "narration": {
+          "audio_path": "s8-restart.es.mp3",
+          "captions_path": "s8-restart.es.vtt",
+          "transcript": "Cuando termine el trabajo, retire las herramientas y vuelva a poner las guardas. Asegúrese de que todos estén alejados. Luego cada persona quita solo su propio candado. Si alguien deja un candado puesto, solo un supervisor puede quitarlo, siguiendo las reglas de la planta. Antes de arrancar, avise a los empleados afectados que se quitaron los candados. Nunca trabaje en una máquina que no esté bloqueada, aunque sea un trabajo rápido. Si tiene dudas, deténgase y pregunte. Ahora veamos lo que aprendió.",
+          "duration_ms": 31164,
+          "voice": "KIKO HDZ - Informative & Educational",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        }
+      }
+    ]
+  },
+  "questions": [
+    {
+      "prompt": "¿Cuál es el propósito principal del bloqueo y etiquetado?",
+      "question_type": "multiple_choice",
+      "explanation": "El bloqueo y etiquetado evita el arranque inesperado o la liberación de energía almacenada mientras las personas dan servicio al equipo.",
+      "answers": [
+        {
+          "text": "Evitar el arranque inesperado o la liberación de energía mientras se da servicio al equipo",
+          "correct": true
+        },
+        {
+          "text": "Mantener la producción funcionando durante el mantenimiento",
+          "correct": false
+        },
+        {
+          "text": "Registrar quién usó la máquina por última vez",
+          "correct": false
+        },
+        {
+          "text": "Impedir que personas no autorizadas operen máquinas durante los descansos",
+          "correct": false
+        }
+      ]
+    },
+    {
+      "prompt": "¿Quién puede colocar un dispositivo de bloqueo?",
+      "question_type": "multiple_choice",
+      "explanation": "Solo los empleados autorizados y capacitados colocan candados. Los empleados afectados reconocen los bloqueos, pero no los colocan.",
+      "answers": [
+        {
+          "text": "Un empleado autorizado y capacitado",
+          "correct": true
+        },
+        {
+          "text": "Cualquier empleado afectado que opere la máquina",
+          "correct": false
+        },
+        {
+          "text": "Quien esté más cerca del desconector",
+          "correct": false
+        },
+        {
+          "text": "Solo el gerente de la planta",
+          "correct": false
+        }
+      ]
+    },
+    {
+      "prompt": "Presionar el botón de paro de emergencia de la máquina es suficiente para aislar su energía.",
+      "question_type": "true_false",
+      "explanation": "Los botones de paro y los circuitos de control no son dispositivos de aislamiento de energía. Aísle en el desconector, la válvula o el bloque.",
+      "answers": [
+        {
+          "text": "Verdadero",
+          "correct": false
+        },
+        {
+          "text": "Falso",
+          "correct": true
+        }
+      ]
+    },
+    {
+      "prompt": "Seleccione cada fuente de energía que debe controlar en una máquina que tiene un motor, un cilindro de aire y una platina levantada.",
+      "question_type": "select_all",
+      "explanation": "El motor es eléctrico, el cilindro de aire es neumático y una platina levantada almacena energía por gravedad.",
+      "answers": [
+        {
+          "text": "Eléctrica",
+          "correct": true
+        },
+        {
+          "text": "Neumática",
+          "correct": true
+        },
+        {
+          "text": "Gravedad",
+          "correct": true
+        },
+        {
+          "text": "Vapor (esta máquina no tiene línea de vapor)",
+          "correct": false
+        }
+      ]
+    },
+    {
+      "prompt": "¿Qué sigue inmediatamente después de poner su candado y su etiqueta?",
+      "question_type": "multiple_choice",
+      "explanation": "Después de bloquear y etiquetar, libere o contenga la energía almacenada y luego verifique.",
+      "answers": [
+        {
+          "text": "Liberar o bloquear la energía almacenada",
+          "correct": true
+        },
+        {
+          "text": "Empezar la reparación",
+          "correct": false
+        },
+        {
+          "text": "Avisar a los empleados afectados",
+          "correct": false
+        },
+        {
+          "text": "Quitar la guarda",
+          "correct": false
+        }
+      ]
+    },
+    {
+      "prompt": "¿Cómo verifica que una máquina está en energía cero?",
+      "question_type": "multiple_choice",
+      "explanation": "Con todos alejados, intente arrancarla (una persona calificada hace cualquier prueba de voltaje que pida el procedimiento) y luego regrese los controles a apagado.",
+      "answers": [
+        {
+          "text": "Alejar a todos, intentar arrancarla y luego regresar los controles a apagado",
+          "correct": true
+        },
+        {
+          "text": "Mirar el candado para confirmar que está cerrado",
+          "correct": false
+        },
+        {
+          "text": "Preguntarle al operador si está apagada",
+          "correct": false
+        },
+        {
+          "text": "Esperar cinco minutos",
+          "correct": false
+        }
+      ]
+    },
+    {
+      "prompt": "El candado de su compañero ya está en el desconector. ¿Está usted protegido?",
+      "question_type": "multiple_choice",
+      "explanation": "Cada trabajador debe poner su propio candado. El candado de otra persona la protege a ella, no a usted.",
+      "answers": [
+        {
+          "text": "No. Debo poner mi propio candado y mi etiqueta",
+          "correct": true
+        },
+        {
+          "text": "Sí. Un candado es suficiente para todo el equipo",
+          "correct": false
+        },
+        {
+          "text": "Sí, si puedo verlo",
+          "correct": false
+        },
+        {
+          "text": "Solo si el trabajo dura menos de 10 minutos",
+          "correct": false
+        }
+      ]
+    },
+    {
+      "prompt": "Durante un cambio de turno en una máquina bloqueada, ¿cuál es el orden correcto?",
+      "question_type": "multiple_choice",
+      "explanation": "La protección debe ser continua: los trabajadores que entran ponen sus candados antes de que los que salen quiten los suyos, siguiendo el procedimiento de cambio de turno de su planta.",
+      "answers": [
+        {
+          "text": "El trabajador que entra pone su candado antes de que el que sale quite el suyo",
+          "correct": true
+        },
+        {
+          "text": "El trabajador que sale quita su candado y luego el que entra pone el suyo",
+          "correct": false
+        },
+        {
+          "text": "El supervisor quita todos los candados y vuelve a poner uno",
+          "correct": false
+        },
+        {
+          "text": "Se vuelve a arrancar la máquina y se bloquea otra vez",
+          "correct": false
+        }
+      ]
+    },
+    {
+      "prompt": "Seleccione cada acción necesaria antes de volver a arrancar cuando termina el trabajo.",
+      "question_type": "select_all",
+      "explanation": "Retire las herramientas, reinstale las guardas, confirme que todos están alejados, avise a los empleados afectados, y cada persona quita solo su propio candado.",
+      "answers": [
+        {
+          "text": "Retirar las herramientas y reinstalar las guardas",
+          "correct": true
+        },
+        {
+          "text": "Confirmar que todos están alejados y avisar a los empleados afectados",
+          "correct": true
+        },
+        {
+          "text": "Cada persona quita solo su propio candado",
+          "correct": true
+        },
+        {
+          "text": "Quitar cualquier candado que dejó un compañero que ya se fue a casa",
+          "correct": false
+        }
+      ]
+    },
+    {
+      "prompt": "Una etiqueta puede reemplazar a un candado cuando el candado sea poco práctico.",
+      "question_type": "true_false",
+      "explanation": "Una etiqueta sola se usa solo donde el procedimiento escrito dice que un dispositivo no acepta candado, y en ese caso con medidas de protección adicionales.",
+      "answers": [
+        {
+          "text": "Verdadero",
+          "correct": false
+        },
+        {
+          "text": "Falso",
+          "correct": true
+        }
+      ]
+    }
+  ]
+}

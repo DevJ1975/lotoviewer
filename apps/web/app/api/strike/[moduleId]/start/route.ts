@@ -3,7 +3,7 @@ import * as Sentry from '@sentry/nextjs'
 import { requireStrikeMember } from '@/lib/strike/gate'
 import { checkMemoryRateLimit } from '@/lib/rateLimit/memory'
 import { loadPublishedStrikeVersion } from '@/lib/strike/moduleAccess'
-import { openAttempt, resolveMemberIdForUser } from '@/lib/strike/attempts'
+import { checkAssignment, openAttempt, parseDelivery, resolveMemberIdForUser, type StrikeLearner } from '@/lib/strike/attempts'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const runtime = 'nodejs'
@@ -27,7 +27,7 @@ export async function POST(req: Request, ctx: RouteContext) {
   const limit = checkMemoryRateLimit(`strike-start:${gate.tenantId}:${gate.userId}`, 20, 60_000)
   if (!limit.ok) return NextResponse.json({ error: 'Too many requests. Try again in a minute.' }, { status: 429 })
 
-  let body: { module_version_id?: unknown; assignment_id?: unknown }
+  let body: { module_version_id?: unknown; assignment_id?: unknown; delivery?: unknown }
   try { body = await req.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
@@ -40,13 +40,26 @@ export async function POST(req: Request, ctx: RouteContext) {
     const lookup = await loadPublishedStrikeVersion(admin, { moduleId, moduleVersionId, tenantId: gate.tenantId, role: gate.role })
     if (!lookup.ok) return NextResponse.json({ error: lookup.message }, { status: lookup.status })
 
-    const opened = await openAttempt(admin, {
+    const learner: StrikeLearner = {
       tenantId: gate.tenantId,
       userId: gate.userId,
       memberId: await resolveMemberIdForUser(admin, gate.tenantId, gate.userId),
       role: gate.role,
       channel: 'account',
-    }, { moduleId, version: lookup.version, assignmentId })
+    }
+    // The attempt's assignment is what a supervisor-verified (assisted)
+    // completion is credited to, and no quiz re-checks it there, so only an
+    // assignment that really applies to this learner is kept. Any other id
+    // leaves the attempt voluntary rather than blocking the training.
+    const assignment = assignmentId
+      ? await checkAssignment(admin, learner, moduleId, lookup.version, assignmentId)
+      : null
+    const opened = await openAttempt(admin, learner, {
+      moduleId,
+      version: lookup.version,
+      assignmentId: assignment?.ok ? assignmentId : null,
+      delivery: parseDelivery(body.delivery),
+    })
 
     return NextResponse.json(
       { attempt_id: opened.attemptId, reached: opened.reached, resumed: opened.resumed },

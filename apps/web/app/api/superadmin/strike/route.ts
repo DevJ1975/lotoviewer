@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireSuperadmin } from '@/lib/auth/superadmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { STRIKE_DEFAULT_LOCALE } from '@soteria/core/strikeLocale'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -93,6 +94,7 @@ interface VersionRow {
   passing_score: number
   video_external_id: string | null
   video_meta: Record<string, unknown> | null
+  locale: string
 }
 
 interface RequestRow {
@@ -127,7 +129,7 @@ export async function GET(req: Request) {
       .limit(300),
     admin
       .from('strike_module_versions')
-      .select('id, module_id, version_number, status, published_at, duration_seconds, passing_score, video_external_id, video_meta')
+      .select('id, module_id, version_number, status, published_at, duration_seconds, passing_score, video_external_id, video_meta, locale')
       .order('version_number', { ascending: false }),
     admin
       .from('strike_studio_requests')
@@ -151,7 +153,9 @@ export async function GET(req: Request) {
   const modules = ((modulesResult.data ?? []) as ModuleRow[]).map(module => {
     const tenant = module.tenant_id ? tenantById.get(module.tenant_id) : null
     const versions = versionsByModule.get(module.id) ?? []
-    const latest = versions[0] ?? null
+    // A translation is a newer version number in another language, not a
+    // newer edition: the module is described by its default-language version.
+    const latest = versions.find(v => v.locale === STRIKE_DEFAULT_LOCALE) ?? versions[0] ?? null
     return {
       ...module,
       tags: module.tags ?? [],

@@ -8,17 +8,19 @@ import {
   gradeAndRecordAttempt,
   openAttempt,
   parseBlockEvents,
+  parseDelivery,
   recordBlockEvents,
   versionContent,
   type StrikeAnswerMap,
 } from '@/lib/strike/attempts'
 import { signStrikeContentAssets, STRIKE_ASSET_TTL_SECONDS } from '@/lib/strike/assets'
+import { emailCertificate, parseCertificateRecipient, renderCertificate } from '@/lib/strike/certificateDelivery'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const runtime = 'nodejs'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const ACTIONS = ['bootstrap', 'start', 'events', 'assets', 'submit'] as const
+const ACTIONS = ['bootstrap', 'start', 'events', 'assets', 'submit', 'certificate', 'email_certificate'] as const
 type KioskAction = typeof ACTIONS[number]
 
 // The no-login "Train now" player. The signed token in the body is the only
@@ -55,9 +57,9 @@ export async function POST(req: Request) {
 
   try {
     const admin = supabaseAdmin()
-    const session = await loadKioskSession(admin, verified.claims)
+    const session = await loadKioskSession(admin, verified.claims, typeof body.locale === 'string' ? body.locale : null)
     if (!session.ok) return NextResponse.json({ error: session.message }, { status: session.status })
-    const { learner, module, version, memberName } = session.value
+    const { learner, module, version, memberName, locales } = session.value
     const attemptId = typeof body.attempt_id === 'string' && UUID_RE.test(body.attempt_id) ? body.attempt_id : null
 
     switch (action) {
@@ -78,15 +80,17 @@ export async function POST(req: Request) {
         if (aErr) throw new Error(aErr.message)
         return NextResponse.json({
           module,
+          tenant_id: learner.tenantId,
           member_name: memberName,
+          locales,
           expires_at: new Date(verified.claims.expiresAt).toISOString(),
-          version: { id: version.id, passing_score: version.passing_score, content: version.content },
+          version: { id: version.id, passing_score: version.passing_score, content: version.content, locale: version.locale, title: version.title },
           questions: questions ?? [],
           answers: answers ?? [],
         })
       }
       case 'start': {
-        const opened = await openAttempt(admin, learner, { moduleId: module.id, version, assignmentId: null })
+        const opened = await openAttempt(admin, learner, { moduleId: module.id, version, assignmentId: null, delivery: parseDelivery(body.delivery) })
         return NextResponse.json({ attempt_id: opened.attemptId, reached: opened.reached })
       }
       case 'assets': {
@@ -108,6 +112,20 @@ export async function POST(req: Request) {
         if (!result.ok) return NextResponse.json({ error: result.message }, { status: result.status })
         const { attemptId: recorded, ...score } = result.value
         return NextResponse.json({ attempt_id: recorded, ...score }, { status: 201 })
+      }
+      case 'certificate': {
+        if (!attemptId) return NextResponse.json({ error: 'Invalid attempt id' }, { status: 400 })
+        const result = await renderCertificate(admin, learner, attemptId)
+        if (!result.ok) return NextResponse.json({ error: result.message }, { status: result.status })
+        return NextResponse.json({ filename: result.value.filename, pdf_base64: Buffer.from(result.value.pdf).toString('base64') })
+      }
+      case 'email_certificate': {
+        const to = parseCertificateRecipient(body.to)
+        if (!attemptId || !to) return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 })
+        const emailLimit = checkMemoryRateLimit(`strike-kiosk-certificate:${tokenKey}`, 5, 60 * 60_000)
+        if (!emailLimit.ok) return NextResponse.json({ error: 'Several were sent already. Try again later.' }, { status: 429 })
+        const result = await emailCertificate(admin, learner, attemptId, to)
+        return result.ok ? NextResponse.json(result.value) : NextResponse.json({ error: result.message }, { status: result.status })
       }
     }
   } catch (e) {

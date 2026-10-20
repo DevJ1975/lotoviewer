@@ -24,6 +24,7 @@ import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import { isAssignmentReleased } from '@soteria/core/strikeSchedule'
 import { MyProgress } from '@/components/strike/MyProgress'
+import { STRIKE_DEFAULT_LOCALE } from '@soteria/core/strikeLocale'
 import {
   computeStrikeReadiness,
   isStrikeAssignmentApplicable,
@@ -60,6 +61,7 @@ interface StrikeVersionRow {
   duration_seconds: number | null
   passing_score: number
   published_at: string | null
+  locale: string
 }
 
 interface StrikeCompletionRow {
@@ -166,7 +168,7 @@ export default function StrikePage() {
       if (moduleIds.length > 0) {
         const { data: versionRows, error: versionErr } = await supabase
           .from('strike_module_versions')
-          .select('id,module_id,version_number,status,supersedes_completions,transcript,duration_seconds,passing_score,published_at')
+          .select('id,module_id,version_number,status,supersedes_completions,transcript,duration_seconds,passing_score,published_at,locale')
           .in('module_id', moduleIds)
           .in('status', ['published', 'superseded'])
           .order('version_number', { ascending: false })
@@ -233,12 +235,17 @@ export default function StrikePage() {
 
   useEffect(() => { void load() }, [load])
 
+  // The version assignments bind to and the library describes: the newest in
+  // the default language, so a later translation never becomes "the" version.
   const latestVersionByModule = useMemo(() => {
     const map = new Map<string, StrikeVersionRow>()
+    const rank = (v: StrikeVersionRow) => [v.locale === STRIKE_DEFAULT_LOCALE ? 1 : 0, v.version_number]
     for (const version of versions) {
       if (version.status !== 'published') continue
       const current = map.get(version.module_id)
-      if (!current || version.version_number > current.version_number) map.set(version.module_id, version)
+      const [aLocale, aNumber] = rank(version)
+      const [bLocale, bNumber] = current ? rank(current) : [-1, -1]
+      if (aLocale > bLocale || (aLocale === bLocale && aNumber > bNumber)) map.set(version.module_id, version)
     }
     return map
   }, [versions])
@@ -294,8 +301,10 @@ export default function StrikePage() {
     ? Math.round((taskChecks.filter(c => c.readiness_status === 'ready').length / taskChecks.length) * 100)
     : readiness.percent
   const overdueCount = visibleAssignments.filter(a => a.due_at && a.due_at < new Date().toISOString()).length
-  const avgScore = completions.length > 0
-    ? Math.round(completions.reduce((sum, c) => sum + (c.score_percent ?? 100), 0) / completions.length)
+  // Supervisor-verified (assisted) completions have no quiz score; they are not 100%.
+  const scoredCompletions = completions.filter(c => c.score_percent != null)
+  const avgScore = scoredCompletions.length > 0
+    ? Math.round(scoredCompletions.reduce((sum, c) => sum + (c.score_percent ?? 0), 0) / scoredCompletions.length)
     : 0
   const failedAttempts = Math.max(0, visibleAssignments.length - assignedCompletions)
   const voluntaryCompletions = completions.filter(c => !assignedModuleIds.has(c.module_id)).length
@@ -433,7 +442,7 @@ export default function StrikePage() {
           {canManageTenantTraining && (
             <aside className="space-y-4">
               <AssignmentPanel modules={modules} latestVersionByModule={latestVersionByModule} tenantId={tenantId} userId={userId} onSaved={load} />
-              <RequirementPanel modules={modules} latestVersionByModule={latestVersionByModule} tenantId={tenantId} userId={userId} onSaved={load} />
+              <RequirementPanel modules={modules} tenantId={tenantId} userId={userId} onSaved={load} />
             </aside>
           )}
         </section>
@@ -694,13 +703,11 @@ function AssignmentPanel({
 
 function RequirementPanel({
   modules,
-  latestVersionByModule,
   tenantId,
   userId,
   onSaved,
 }: {
   modules: StrikeModuleRow[]
-  latestVersionByModule: Map<string, StrikeVersionRow>
   tenantId: string | null
   userId: string | null
   onSaved: () => Promise<void>
@@ -732,7 +739,8 @@ function RequirementPanel({
       .insert({
         tenant_id: tenantId,
         module_id: moduleId,
-        module_version_id: latestVersionByModule.get(moduleId)?.id ?? null,
+        // Per module, like every other requirement: a pass in any language or version counts.
+        module_version_id: null,
         source_type: sourceType,
         source_id: cleanSourceId || null,
         hazard_category: hazard.trim() || null,

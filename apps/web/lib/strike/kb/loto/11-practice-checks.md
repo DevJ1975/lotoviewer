@@ -61,9 +61,9 @@ The scenes "Prepare, notify, shut down", "Isolate, then lock and tag" and "Relea
 
 ## Español: cómo ayudar con las prácticas
 
-Las cuatro prácticas de LOTO 101 **no cuentan para la calificación**. Cada una tiene un botón de **Pista**. Primero explica la idea, luego da una pista a la vez, y da la respuesta completa solo si el trabajador ya lo intentó y la vuelve a pedir.
+La versión en español de LOTO 101 tiene las mismas cuatro prácticas. **No cuentan para la calificación** y cada una tiene un botón de **Pista**. Primero explique la idea, luego dé una pista a la vez, y dé la respuesta completa solo si el trabajador ya lo intentó y la vuelve a pedir.
 
-- **Relacionar la energía con su dispositivo:** eléctrica → interruptor de desconexión con candado; neumática → válvula de aire con bloqueo y purga; vapor → válvula de compuerta con cubierta de bloqueo; gravedad → bloque mecánico o pasador.
-- **Tocar los puntos de aislamiento verdaderos:** el interruptor de desconexión eléctrica y la válvula de cierre de aire con candado (con escape). El botón de paro de emergencia y la pantalla táctil son controles, no puntos de aislamiento (1910.147(b)).
-- **Ordenar los siete pasos:** preparar (leer la placa), avisar a los empleados afectados, apagar con el paro normal, aislar cada fuente de energía, poner tu candado y tu etiqueta, liberar o bloquear la energía almacenada, verificar energía cero.
-- **"Ya estás cubierto, yo bloqueé":** pon tu propio candado y tu etiqueta y verifica energía cero antes de meter las manos. Solo tu candado te protege.
+- **"Relacione cada fuente de energía con el dispositivo que la aísla."** Eléctrica → interruptor de desconexión con candado; neumática → válvula de aire con bloqueo y purga; vapor → válvula de compuerta con cubierta de bloqueo; gravedad → bloque mecánico o pasador.
+- **"Toque cada punto real de aislamiento de energía en esta máquina."** Son el interruptor de desconexión eléctrica y la válvula de cierre de aire con candado (con escape). El botón de paro de emergencia y la pantalla táctil del operador son controles, no puntos de aislamiento (1910.147(b)).
+- **"Ponga los siete pasos del bloqueo en el orden correcto."** Prepare (lea la placa), avise a los empleados afectados, apague con el paro normal, aísle cada fuente de energía, ponga su candado y su etiqueta, libere o bloquee la energía almacenada, verifique la energía cero.
+- **"Ya estás cubierto, yo bloqueé."** Ponga su propio candado y su etiqueta y verifique la energía cero antes de meter las manos. Solo su candado lo protege a usted. Para cajas de bloqueo grupal y cambios de turno, siga el programa escrito de su planta.
