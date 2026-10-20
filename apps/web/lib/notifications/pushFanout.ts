@@ -2,6 +2,7 @@ import webpush from 'web-push'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import type { PushPayload } from '@/lib/push'
+import { sendExpoPush } from '@/lib/notifications/expoPush'
 
 // Direct (in-process) Web Push fanout to a list of profile ids.
 // Mirrors /api/push/dispatch but callable from any server route so we
@@ -41,7 +42,7 @@ function configureVapid(): boolean {
   return true
 }
 
-export async function dispatchPushToProfiles({
+async function dispatchWebPush({
   payload, profileIds, source,
 }: FanoutOpts): Promise<FanoutResult> {
   if (profileIds.length === 0) {
@@ -100,5 +101,19 @@ export async function dispatchPushToProfiles({
       sent: 0, failed: 0, pruned: 0,
       reason: e instanceof Error ? e.message : String(e),
     }
+  }
+}
+
+// Fans out to browsers (Web Push) and to phones (Expo Push) in parallel. The
+// two channels are independent: a tenant with no VAPID keys still reaches the
+// mobile app, and vice versa.
+export async function dispatchPushToProfiles(opts: FanoutOpts): Promise<FanoutResult> {
+  const [web, expo] = await Promise.all([dispatchWebPush(opts), sendExpoPush(opts)])
+  const sent = web.sent + expo.sent
+  return {
+    sent,
+    failed: web.failed + expo.failed,
+    pruned: web.pruned + expo.pruned,
+    reason: sent === 0 ? (web.reason ?? expo.reason) : undefined,
   }
 }
