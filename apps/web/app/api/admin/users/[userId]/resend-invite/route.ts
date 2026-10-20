@@ -87,6 +87,21 @@ export async function POST(req: Request, ctx: RouteContext) {
   if (membershipErr) return sanitizeError(membershipErr, 'admin/users/resend-invite membership lookup')
   if (!membership) return NextResponse.json({ error: 'Membership not found' }, { status: 404 })
 
+  // One account can hold memberships in several tenants, and the invite link
+  // sets that account's password. Handing the raw link to this tenant's admin
+  // is fine while the account belongs to this tenant alone; once another
+  // tenant shares it, the link is a takeover primitive against a person the
+  // caller has no standing over, so it travels by email to the address that
+  // owns the account — the same line POST /api/admin/users draws for reused
+  // accounts. A failed lookup is treated as shared: fail closed.
+  const { count: otherMemberships, error: otherErr } = await admin
+    .from('tenant_memberships')
+    .select('tenant_id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .neq('tenant_id', gate.tenantId)
+  if (otherErr) return sanitizeError(otherErr, 'admin/users/resend-invite shared-account lookup')
+  const sharedAccount = (otherMemberships ?? 0) > 0
+
   const { data: authData } = await admin.auth.admin.getUserById(userId)
   const authUser = authData?.user ?? null
   // Someone who has signed in owns a password we must not disturb: an invite
@@ -141,7 +156,7 @@ export async function POST(req: Request, ctx: RouteContext) {
     tenantName: (tenant as { name: string }).name,
     createdBy:  gate.userId,
     req,
-    emailMode:  sendEmail ? 'invite_link' : 'link_only',
+    emailMode:  sendEmail || sharedAccount ? 'invite_link' : 'link_only',
   })
 
   // issueAndSendInvite fails soft when the token can't be minted, and a
@@ -150,5 +165,13 @@ export async function POST(req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: 'Could not issue an invite link. Try again.' }, { status: 500 })
   }
 
-  return NextResponse.json({ ok: true, email, fullName, inviteUrl, expiresAt, emailSent })
+  return NextResponse.json({
+    ok: true,
+    email,
+    fullName,
+    inviteUrl:    sharedAccount ? undefined : inviteUrl,
+    linkWithheld: sharedAccount,
+    expiresAt,
+    emailSent,
+  })
 }
