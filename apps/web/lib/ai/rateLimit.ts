@@ -61,6 +61,7 @@ export type AiSurface =
   | 'safety-briefing-narrate'
   | 'hazard-hunt-csp'
   | 'hazard-hunt-ds'
+  | 'strike-coach'
 
 // Per-surface limits. Tuned for typical authoring workflows:
 //   generate-loto-steps          — heavy reasoning, low frequency
@@ -168,6 +169,9 @@ export const AI_LIMITS: Record<AiSurface, { perHour: number; perDay: number }> =
   // above honest volume while bounding a retry loop.
   'hazard-hunt-csp':                  { perHour: 30, perDay: 150 },
   'hazard-hunt-ds':                   { perHour: 30, perDay: 150 },
+  // A worker asks a handful of questions per module; the cap bounds a stuck
+  // retry loop or a learner trying to extract quiz answers by brute force.
+  'strike-coach':                     { perHour: 40, perDay: 200 },
 }
 
 interface CheckArgs {
