@@ -9,12 +9,15 @@ import { useEffect } from 'react'
 import { AlertTriangle, RefreshCcw } from 'lucide-react'
 import * as Sentry from '@sentry/nextjs'
 
+// `retry` re-fetches and re-renders the boundary's children; it replaced
+// `unstable_retry` when it went stable in Next 16.3, and the boundary no
+// longer passes the old name at all.
 interface Props {
-  error:          Error & { digest?: string }
-  unstable_retry: () => void
+  error: Error & { digest?: string }
+  retry: () => void
 }
 
-export default function Error({ error, unstable_retry }: Props) {
+export default function Error({ error, retry }: Props) {
   useEffect(() => {
     // Surface to Sentry first (so the team sees it before the user
     // does), then to the console so we can grep server logs.
@@ -40,7 +43,7 @@ export default function Error({ error, unstable_retry }: Props) {
         </div>
         <button
           type="button"
-          onClick={() => unstable_retry()}
+          onClick={() => retry()}
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-navy text-white text-sm font-semibold hover:bg-brand-navy/90 transition-colors min-h-[44px]"
         >
           <RefreshCcw className="h-4 w-4" />
