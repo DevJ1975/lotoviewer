@@ -4,7 +4,7 @@
 Excel never grows a merged cell to fit its contents: whatever overflows the
 merged height is simply not drawn, with no error and no visual cue. On a
 LOTO placard that means a missing line of isolation procedure, so this runs
-over every text cell in the Placards sheet, re-wraps it, and compares the
+over every text cell on every placard page, re-wraps it, and compares the
 result against the height actually allocated.
 
     python scripts/check_placards_xlsx.py placards.xlsx
@@ -86,10 +86,29 @@ def main() -> int:
     if len(sys.argv) < 2:
         sys.exit(__doc__)
     workbook = load_workbook(sys.argv[1])
-    if "Placards" not in workbook.sheetnames:
-        sys.exit("No 'Placards' sheet in this workbook.")
-    ws = workbook["Placards"]
     fonts = load_fonts()
+    overflows, checked = [], 0
+    # Every worksheet in a placard workbook is one placard page.
+    for ws in workbook.worksheets:
+        sheet_checked, sheet_overflows = check_sheet(ws, fonts)
+        checked += sheet_checked
+        overflows.extend((ws.title, *overflow) for overflow in sheet_overflows)
+
+    print(f"checked {checked} cells across {len(workbook.worksheets)} placard pages "
+          f"that Excel clips rather than spills")
+    print(f"clipped: {len(overflows)}")
+    for title, row, span, short, have, text in sorted(overflows, key=lambda o: -o[3])[:15]:
+        print(f"  {title:>16} row {row:4d} {span:>7}  short {short:6.1f}pt of {have:6.1f}pt  "
+              f"{text[:60].replace(chr(10), ' / ')}")
+    if overflows:
+        print("\nby column span:")
+        for span, count in Counter(o[2] for o in overflows).most_common():
+            print(f"  {span:>7}: {count}")
+    return 1 if overflows else 0
+
+
+def check_sheet(ws, fonts) -> tuple[int, list[tuple]]:
+    """Cells on one placard page whose text Excel would clip."""
 
     width_of_column = {}
     for index in range(1, ws.max_column + 1):
@@ -163,16 +182,7 @@ def main() -> int:
                     overflows.append((cell.row, span_label(cell.column, last_col),
                                       short, available, cell.value))
 
-    print(f"checked {checked} cells that Excel clips rather than spills")
-    print(f"clipped: {len(overflows)}")
-    for row, span, short, have, text in sorted(overflows, key=lambda o: -o[2])[:15]:
-        print(f"  row {row:6d} {span:>7}  short {short:6.1f}pt of {have:6.1f}pt  "
-              f"{text[:70].replace(chr(10), ' / ')}")
-    if overflows:
-        print("\nby column span:")
-        for span, count in Counter(o[1] for o in overflows).most_common():
-            print(f"  {span:>7}: {count}")
-    return 1 if overflows else 0
+    return checked, overflows
 
 
 if __name__ == "__main__":

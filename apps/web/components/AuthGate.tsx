@@ -30,6 +30,7 @@ const PUBLIC_PREFIXES = [
   '/permit-signon',      // Confined-space worker QR sign-on — permit token
   '/contractor-prequal', // Contractor prequalification portal — portal_token
   '/inspector',          // Regulator read-only view — HMAC-signed ?sig= link
+  '/train',     // STRIKE "Train now" kiosk — the signed short-lived token is the auth
 ] as const
 
 export function isPublicPath(pathname: string): boolean {

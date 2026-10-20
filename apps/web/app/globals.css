@@ -983,3 +983,65 @@
   --accent:            var(--s2-gray-200);
   --ring:              var(--s2-blue-600);
 }
+
+/* ── STRIKE motion scenes ───────────────────────────────────────────
+   Claude-Motion-style scenes rendered live: the still image drifts while
+   on-screen beats reveal on the narration's cue times. CSS-only by design
+   (no animation library — see docs/handoffs/2026-08-29-strike-phase-2.md).
+   The scene's duration drives the drift via --scene-ms. */
+.strike-scene-media {
+  animation-duration: var(--scene-ms, 30000ms);
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-play-state: var(--scene-play, paused);
+  will-change: transform;
+}
+.strike-anim-ken_burns_in  { animation-name: strike-ken-burns-in; }
+.strike-anim-ken_burns_out { animation-name: strike-ken-burns-out; }
+.strike-anim-pan_left      { animation-name: strike-pan-left; }
+.strike-anim-pan_right     { animation-name: strike-pan-right; }
+
+@keyframes strike-ken-burns-in  { from { transform: scale(1.02); } to { transform: scale(1.14) translate(-1.5%, -1%); } }
+@keyframes strike-ken-burns-out { from { transform: scale(1.16) translate(1%, 1%); } to { transform: scale(1.03); } }
+@keyframes strike-pan-left      { from { transform: scale(1.12) translateX(4%); } to { transform: scale(1.12) translateX(-4%); } }
+@keyframes strike-pan-right     { from { transform: scale(1.12) translateX(-4%); } to { transform: scale(1.12) translateX(4%); } }
+
+.strike-beat-in {
+  animation: strike-beat-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes strike-beat-in {
+  from { opacity: 0; transform: translateY(10px); clip-path: inset(0 100% 0 0); }
+  to   { opacity: 1; transform: translateY(0);    clip-path: inset(0 0 0 0); }
+}
+
+.strike-shake { animation: strike-shake 360ms ease both; }
+@keyframes strike-shake {
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+/* Pass celebration: a single CSS burst, no library, never on failure. */
+.strike-confetti-piece {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  width: 8px;
+  height: 14px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: strike-confetti 1400ms cubic-bezier(0.15, 0.7, 0.3, 1) forwards;
+}
+@keyframes strike-confetti {
+  0%   { opacity: 1; transform: translate(-50%, 0) rotate(0deg); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), var(--dy)) rotate(var(--rot)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .strike-scene-media,
+  .strike-beat-in,
+  .strike-shake,
+  .strike-confetti-piece {
+    animation: none !important;
+  }
+  .strike-confetti-piece { display: none; }
+}

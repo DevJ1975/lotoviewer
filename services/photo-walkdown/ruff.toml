@@ -1,0 +1,7 @@
+line-length = 100
+extend-exclude = ["walkdown/migrations", "staticfiles", "data"]
+
+[lint]
+# Django's `class Meta: ordering = [...]` is read once by the ORM, not a
+# shared-mutable-default bug, so RUF012 only produces noise here.
+ignore = ["RUF012"]

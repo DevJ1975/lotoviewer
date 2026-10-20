@@ -1,0 +1,59 @@
+{% extends "walkdown/base.html" %}
+{% block title %}Ask maintenance to confirm{% endblock %}
+{% block back %}<a class="bar-title" href="{% url 'machine' machine.pk %}">&larr; {{ machine.equipment_id }}</a>{% endblock %}
+{% block content %}
+<h1>Ask maintenance to confirm</h1>
+<p>{{ machine.description }}</p>
+
+{% if result %}
+<section class="card">
+  {% if result.sent %}
+    <h2>Request sent</h2>
+    <p>An email with a link went to <strong>{{ result.to }}</strong>. They can answer from a phone with nothing to log in to.</p>
+  {% else %}
+    <h2>Not sent yet</h2>
+    <p class="note">{{ result.error|default:"The email could not be sent." }} Use one of these to send it yourself:</p>
+    <a class="btn primary block" href="{{ result.mailto }}">Open in my email app</a>
+  {% endif %}
+  <label for="confirm-link">The link{% if not result.sent %} (paste it into any message){% endif %}</label>
+  <input id="confirm-link" type="text" readonly value="{{ result.link }}">
+  <p class="muted small">It works for {{ confirm_days }} days and shows only this machine's photos.</p>
+  <a class="btn block" href="{% url 'machine' machine.pk %}">Back to the machine</a>
+</section>
+{% else %}
+<form method="post" class="card">
+  {% csrf_token %}
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <label for="to_email">Maintenance supervisor's email</label>
+  <input id="to_email" name="to_email" type="email" required autocomplete="email" maxlength="254"
+         value="{{ values.to_email }}">
+  <label for="to_name">Their name (optional)</label>
+  <input id="to_name" name="to_name" type="text" maxlength="100" autocomplete="name" value="{{ values.to_name }}">
+
+  <fieldset class="choices">
+    <legend>Photos to confirm</legend>
+    {% for slot in slots_all %}
+    <label class="check"><input type="checkbox" name="slots" value="{{ slot.value }}" checked>
+      {{ slot.label }}</label>
+    {% endfor %}
+  </fieldset>
+
+  <label for="message">Note to them (optional)</label>
+  <textarea id="message" name="message" rows="3" maxlength="1000">{{ values.message }}</textarea>
+  <button class="btn primary block" type="submit">Send request</button>
+  <p class="muted small">They get a link that shows the current photo{% if machine.iso_annotations %} and your arrow{% endif %} and asks
+    whether it is right. Nothing on the placard changes until you decide.</p>
+</form>
+{% endif %}
+
+{% if previous %}
+<h2>Earlier requests</h2>
+<ul class="list">
+  {% for r in previous %}
+  <li class="row"><span class="grow"><strong>{{ r.to_name|default:r.to_email }}</strong>
+    <span class="muted small">{{ r.summary }}</span></span>
+    <span class="muted small">{{ r.created_at|date:"M j" }}</span></li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,46 @@
+# Shared by every image built from the repo root: the AWS production image
+# (Dockerfile) and the local preview image (apps/web/Dockerfile).
+
+# Source control and tooling
+.git
+.github
+.claude
+
+# Build artefacts — Docker should only see clean source
+**/.next
+out
+**/.turbo
+**/*.tsbuildinfo
+**/.vite
+**/coverage
+
+# Dependencies — each image runs its own install
+**/node_modules
+
+# Local env files — secrets are injected at build or run time, never baked in
+**/.env*
+!**/.env.example
+!.env.orb.example
+
+# Python virtualenvs and caches
+.venv*/
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+
+# Service data and generated media
+services/*/data
+services/*/staticfiles
+services/learning-studio/seed/**/*.mp4
+
+# Native mobile projects, CDK output and OSHA ingest work dir
+apps/mobile/ios
+apps/mobile/android
+infra/cdk/cdk.out
+scripts/.osha-build
+
+# Editor / OS noise
+.DS_Store
+*.pem
+*.log

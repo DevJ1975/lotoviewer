@@ -1,0 +1,15 @@
+{
+  "app": "npx tsx bin/app.ts",
+  "watch": {
+    "include": ["bin/**", "lib/**", "lambda/**"]
+  },
+  "context": {
+    "@aws-cdk/core:defaultCrossStackReferences": "strong",
+    "githubRepo": "DevJ1975/lotoviewer",
+    "deployEnvironment": "aws-production",
+    "domainName": "",
+    "hostedZoneName": "",
+    "enableCrons": false,
+    "existingGithubOidcProviderArn": ""
+  }
+}

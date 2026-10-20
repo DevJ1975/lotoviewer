@@ -206,6 +206,10 @@ export const MODEL_BY_SURFACE = {
   //   trends. Advisory, text-only, never computes the EHS score — same advisory
   //   class as scorecard-focus. Sonnet (drop to Haiku if volume dominates).
   'hazard-hunt-ds':                   SONNET,
+  // STRIKE LOTO Coach: a guarded, retrieval-grounded explainer for frontline
+  // workers inside a training module. Conversational like assistant-chat, no
+  // tools, short answers — Sonnet for reliable guardrail adherence.
+  'strike-coach':                     SONNET,
 } as const
 
 export type AiSurface = keyof typeof MODEL_BY_SURFACE

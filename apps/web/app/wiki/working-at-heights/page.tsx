@@ -1,20 +1,45 @@
 import { Fragment } from 'react'
-import WikiPage, { Section, DoDont, type ChangelogEntry } from '../_components/WikiPage'
+import Link from 'next/link'
+import WikiPage, { Section, Faq, DoDont, type ChangelogEntry } from '../_components/WikiPage'
 import {
   SECTIONS,
   MANUAL_TITLE,
   MANUAL_SUBTITLE,
-  MANUAL_VERSION,
-  MANUAL_LAST_UPDATED,
   type ManualSection,
 } from './_content'
 
-// Working at Heights manual. The content lives in ./_content.ts so the
+// Working at Heights manual. The manual prose lives in ./_content.ts so the
 // AI seed script (apps/web/scripts/seed-working-at-heights-manual.mjs)
-// can ingest the exact same prose the operator sees here. Edit the
-// content there; this file is only the layout shell.
+// can ingest the exact same prose the operator sees here; edit it there.
+// The exception is the "Required training" section below: it documents app
+// behaviour with in-app links and an FAQ, which the plain-string content
+// model cannot express, so it is rendered here and is not ingested.
+//
+// CURRENT_VERSION versions this whole page, including that section.
+// MANUAL_VERSION in ./_content.ts is what the seed script records for the
+// ingested prose.
+
+const CURRENT_VERSION = '1.5.0'
+const LAST_UPDATED    = '2026-10-20'
+
+// The permit training gate extends the permit section, so it renders
+// directly after it. Its id cannot be 'training': ./_content.ts already
+// uses that for the OSHA training-requirements section.
+const REQUIRED_TRAINING = { id: 'permit-training', label: 'Required training' }
+const REQUIRED_TRAINING_FOLLOWS = 'permits'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.5.0',
+    date: '2026-10-20',
+    changes: [
+      'Required training can now block a permit. When an admin requires a STRIKE module for working-at-heights permits, a permit cannot be issued until both the worker and the Competent Person hold a current pass. A working-at-heights permit goes straight to Active when it is saved, so that is when the check runs, and it runs again when a suspended permit is resumed. The database enforces this, so it cannot be clicked past.',
+      'New Required training panel on the new-permit form. It appears once a worker or CP is chosen, shows each person\u2019s status, and keeps Save disabled while anyone is missing a module.',
+      'Train now: each person missing training gets a QR code that opens the module on their own phone with no login. The link is for that one person, expires after 30 minutes, and the panel updates when they pass.',
+      'Emergency override: owners and admins can let a blocked worker or CP onto the permit with a written reason of at least 20 characters. It can be recorded before the permit is saved, because the form reserves the permit\u2019s id up front. It cannot be edited or deleted, is recorded in the audit log, and is emailed to every owner and admin.',
+      'Nothing changes until an admin requires a module at STRIKE \u2192 Training admin \u2192 Required for work. The Authorized-Person and Competent-Person designation checks are unchanged and still apply separately.',
+    ],
+  },
   {
     version: '1.4.1',
     date: '2026-08-28',
@@ -67,17 +92,119 @@ export default function WikiWorkingAtHeightsPage() {
       modulePath="/working-at-heights"
       audience="coming-soon"
       category="Safety"
-      version={MANUAL_VERSION}
-      lastUpdated={MANUAL_LAST_UPDATED}
+      version={CURRENT_VERSION}
+      lastUpdated={LAST_UPDATED}
       changelog={CHANGELOG}
-      toc={SECTIONS.map(s => ({ id: s.id, label: s.title }))}
+      toc={SECTIONS.flatMap(s => {
+        const item = { id: s.id, label: s.title }
+        return s.id === REQUIRED_TRAINING_FOLLOWS ? [item, REQUIRED_TRAINING] : [item]
+      })}
     >
       {SECTIONS.map(s => (
-        <Section key={s.id} id={s.id} title={s.title}>
-          <SectionBody section={s} />
-        </Section>
+        <Fragment key={s.id}>
+          <Section id={s.id} title={s.title}>
+            <SectionBody section={s} />
+          </Section>
+          {s.id === REQUIRED_TRAINING_FOLLOWS && <RequiredTrainingSection />}
+        </Fragment>
       ))}
     </WikiPage>
+  )
+}
+
+function RequiredTrainingSection() {
+  return (
+    <Section id={REQUIRED_TRAINING.id} title={REQUIRED_TRAINING.label}>
+      <p>
+        The worker and the Competent Person on a permit are picked from the
+        roster on the <strong>Issue Working-at-Heights Permit</strong> form.
+        Because each pick is a roster entry rather than a typed name, the
+        permit can check that person&apos;s STRIKE training. If someone is not
+        in the list, add them to the roster first.
+      </p>
+      <p>
+        When an admin has required a STRIKE module for working-at-heights
+        permits, a permit cannot be issued until both the worker and the CP
+        hold a current pass or are covered by an emergency override (below).
+        A working-at-heights permit goes straight to{' '}
+        <em>Active</em> when you press <strong>Save</strong>, so that is when
+        the check runs. As soon as a worker or CP is chosen, a{' '}
+        <strong>Required training</strong> panel on the form shows each
+        person&apos;s status, and <strong>Save</strong> stays disabled while
+        anyone is missing a module. The database runs the same check when the
+        permit is saved, so it cannot be clicked past, and again when a
+        suspended permit is resumed.
+      </p>
+      <ul>
+        <li><strong>Train now</strong> &mdash; appears next to each missing
+          module. It shows a QR code the person scans with their own phone to
+          take the module on the spot, with no login. The link is for that one
+          person and expires after 30 minutes. The panel updates when they
+          pass.</li>
+        <li><strong>Emergency override</strong> &mdash; owners and admins only,
+          for when waiting is less safe than going ahead. Choose the blocked
+          people and write the reason (at least 20 characters). It can be
+          recorded before the permit is saved, because the form reserves the
+          permit&apos;s id up front. The override cannot be edited or deleted,
+          is recorded in the audit log, and is emailed to every owner and
+          admin.</li>
+      </ul>
+      <p>
+        This is separate from the designation checks in the pre-condition
+        checklist, which are unchanged: the worker still needs a current
+        Authorized-Person designation and the CP a current Competent-Person
+        designation. A STRIKE pass does not stand in for either, and a training
+        override does not waive them.
+      </p>
+      <p>
+        Nothing changes until an admin requires a module. With no requirement
+        for working-at-heights permits, the panel notes that none is required
+        and permits issue as before. Admins set requirements at{' '}
+        <Link href="/strike/admin">STRIKE &rarr; Training admin</Link> &rarr;{' '}
+        <strong>Required for work</strong>, choosing the module and how recent
+        the pass must be: any current pass, fresh for each job (within 24
+        hours), within the last 90 days, or within the last year.
+      </p>
+
+      <Faq items={[
+        {
+          q: 'Save is disabled and the panel says training is missing. What now?',
+          a: <>Use <strong>Train now</strong> next to each missing module and
+            have that person scan the QR code with their phone. Once everyone
+            has passed, the panel shows <em>Crew ready</em> and Save unlocks as
+            long as the rest of the checklist passes. If waiting is less safe
+            than going ahead, an owner or admin can record an{' '}
+            <strong>Emergency override</strong> with a written reason; it is
+            audited and emailed to every owner and admin.</>,
+        },
+        {
+          q: 'Can the override be recorded before the permit exists?',
+          a: <>Yes. The form reserves the permit&apos;s id when it opens, so the
+            override attaches to the permit you are about to issue. If you leave
+            or reload the form without saving, that override authorizes nothing
+            (a reloaded form is a new permit), but it stays in the audit
+            trail.</>,
+        },
+        {
+          q: 'Why was resuming a suspended permit refused for training?',
+          a: <>Resuming puts the permit back into <em>Active</em>, so the check
+            runs again, and a pass can stop counting while the permit is
+            suspended. A &ldquo;fresh for each job&rdquo; requirement, for
+            example, only accepts a pass from the last 24 hours. The message
+            names who is missing which module; once they hold a current pass,
+            resume again.</>,
+        },
+      ]} />
+
+      <DoDont
+        dos={[
+          'Choose the worker and CP early and use Train now for anyone flagged, so training is not what holds the permit up once the rest of the checklist clears.',
+        ]}
+        donts={[
+          'Don\'t use the emergency training override to save time. It is for when waiting is less safe, and every use is audited and emailed to every owner and admin.',
+        ]}
+      />
+    </Section>
   )
 }
 

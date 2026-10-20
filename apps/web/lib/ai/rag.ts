@@ -31,7 +31,7 @@ import {
 } from '@/lib/ai/embeddings'
 
 export type KnowledgeSource =
-  | 'regulation' | 'state_reg' | 'dot' | 'epa' | 'rcra' | 'company_policy' | 'manual'
+  | 'regulation' | 'state_reg' | 'dot' | 'epa' | 'rcra' | 'company_policy' | 'manual' | 'training'
 
 export interface RetrievedChunk {
   chunk_id:        string

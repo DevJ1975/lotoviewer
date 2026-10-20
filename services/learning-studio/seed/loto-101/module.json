@@ -1,0 +1,733 @@
+{
+  "slug": "loto-101-control-hazardous-energy",
+  "title": "LOTO 101: Control of Hazardous Energy",
+  "description": "A 5-minute microlearning on OSHA 29 CFR 1910.147: the energy types, who does what, the seven steps of lockout/tagout, group lockout, and safe restart. Ends with a 10-question knowledge check.",
+  "category": "Lockout/Tagout",
+  "tags": [
+    "loto",
+    "1910.147",
+    "hazardous energy",
+    "general industry"
+  ],
+  "estimated_minutes": 5,
+  "library_scope": "global",
+  "locale": "en",
+  "passing_score": 80,
+  "retake_limit": null,
+  "validity_days": 365,
+  "media_prefix": "global/loto-101/v1",
+  "content": {
+    "blocks": [
+      {
+        "key": "s1-why",
+        "kind": "motion_scene",
+        "eyebrow": "Module 1 · LOTO",
+        "title": "Why lockout/tagout matters",
+        "animation": "ken_burns_in",
+        "image": {
+          "path": "scene-01-why.jpg",
+          "alt": "A maintenance technician in a bump cap, hairnet, and safety glasses beside a stopped food-plant conveyor, attaching a red padlock and danger tag to its electrical disconnect. Hands are away from the belt and all moving parts.",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        },
+        "script": "Every machine in this plant stores energy. When someone reaches into a machine that starts up unexpectedly, the result is amputations, crushing injuries, and deaths. OSHA's lockout/tagout standard, 29 CFR 1910.147, exists to stop that. OSHA estimates that following it prevents about 120 deaths and 50,000 injuries every year. In the next five minutes you'll learn how to make a machine safe before you work on it, and keep it safe until you're done.",
+        "beats": [
+          {
+            "at_ms": 0,
+            "text": "Machines store energy"
+          },
+          {
+            "at_ms": 8927,
+            "text": "Unexpected start-up = amputations, crushing, death"
+          },
+          {
+            "at_ms": 17853,
+            "text": "OSHA 29 CFR 1910.147"
+          },
+          {
+            "at_ms": 25505,
+            "text": "OSHA estimate: ≈120 deaths and 50,000 injuries prevented each year"
+          }
+        ],
+        "narration": {
+          "audio_path": "s1-why.mp3",
+          "captions_path": "s1-why.vtt",
+          "transcript": "Every machine in this plant stores energy. When someone reaches into a machine that starts up unexpectedly, the result is amputations, crushing injuries, and deaths. OSHA's lockout/tagout standard, 29 CFR 1910.147, exists to stop that. OSHA estimates that following it prevents about 120 deaths and 50,000 injuries every year. In the next five minutes you'll learn how to make a machine safe before you work on it, and keep it safe until you're done.",
+          "duration_ms": 37747,
+          "voice": "Cole - Corporate Narrator",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        }
+      },
+      {
+        "key": "s2-energy",
+        "kind": "motion_scene",
+        "eyebrow": "Know the hazard",
+        "title": "Hazardous energy comes in many forms",
+        "animation": "pan_left",
+        "image": {
+          "path": "scene-02-energy.jpg",
+          "alt": "An industrial machine area showing an electrical disconnect, hydraulic hoses, a pneumatic air line, and a steam pipe.",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        },
+        "script": "Hazardous energy is any energy that can move, heat, or hurt. Electrical energy in motors and panels. Mechanical energy in belts, blades, and flywheels that keep spinning. Hydraulic and pneumatic energy trapped under pressure in hoses and cylinders. Thermal energy and steam. Chemicals and gas in lines. And gravity, which can drop a raised part on you. Most machines have more than one. Your placard lists every source, and every one must be controlled.",
+        "beats": [
+          {
+            "at_ms": 0,
+            "text": "Electrical"
+          },
+          {
+            "at_ms": 5207,
+            "text": "Mechanical"
+          },
+          {
+            "at_ms": 10414,
+            "text": "Hydraulic · Pneumatic"
+          },
+          {
+            "at_ms": 15620,
+            "text": "Thermal · Steam · Chemical · Gas"
+          },
+          {
+            "at_ms": 20827,
+            "text": "Gravity"
+          },
+          {
+            "at_ms": 26034,
+            "text": "Control every source on the placard"
+          }
+        ],
+        "narration": {
+          "audio_path": "s2-energy.mp3",
+          "captions_path": "s2-energy.vtt",
+          "transcript": "Hazardous energy is any energy that can move, heat, or hurt. Electrical energy in motors and panels. Mechanical energy in belts, blades, and flywheels that keep spinning. Hydraulic and pneumatic energy trapped under pressure in hoses and cylinders. Thermal energy and steam. Chemicals and gas in lines. And gravity, which can drop a raised part on you. Most machines have more than one. Your placard lists every source, and every one must be controlled.",
+          "duration_ms": 30824,
+          "voice": "Cole - Corporate Narrator",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        }
+      },
+      {
+        "key": "i1-match-devices",
+        "kind": "drag_match",
+        "prompt": "Match each energy source to the device that isolates it.",
+        "pairs": [
+          {
+            "id": "electrical",
+            "prompt": "Electrical",
+            "answer": "Lockable disconnect switch"
+          },
+          {
+            "id": "pneumatic",
+            "prompt": "Pneumatic",
+            "answer": "Air valve with lockout and bleed"
+          },
+          {
+            "id": "steam",
+            "prompt": "Steam",
+            "answer": "Gate valve with valve cover lock"
+          },
+          {
+            "id": "gravity",
+            "prompt": "Gravity",
+            "answer": "Mechanical block or pin"
+          }
+        ],
+        "remediate_block_key": "s2-energy"
+      },
+      {
+        "key": "s3-roles",
+        "kind": "motion_scene",
+        "eyebrow": "Who does what",
+        "title": "Authorized and affected employees",
+        "animation": "ken_burns_out",
+        "image": {
+          "path": "scene-03-roles.jpg",
+          "alt": "A maintenance worker in a bump cap, hairnet, and safety glasses applying a red padlock and danger tag to a disconnect while a line operator in a hairnet and white smock watches from a safe distance.",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        },
+        "script": "An authorized employee locks out a machine and services it. Only trained, authorized employees apply locks. An affected employee runs the machine or works in the area. They must recognize a lockout and never restart locked-out equipment. If your job means reaching in, like clearing a jam or cleaning, you must be trained as authorized and lock out first. Everyone else must respect every lock and tag.",
+        "beats": [
+          {
+            "at_ms": 0,
+            "text": "Authorized: locks out and services"
+          },
+          {
+            "at_ms": 8094,
+            "text": "Affected: runs the machine or works nearby"
+          },
+          {
+            "at_ms": 15176,
+            "text": "Reaching in to clear a jam or clean? Lock out first"
+          },
+          {
+            "at_ms": 23270,
+            "text": "Everyone respects every lock and tag"
+          }
+        ],
+        "narration": {
+          "audio_path": "s3-roles.mp3",
+          "captions_path": "s3-roles.vtt",
+          "transcript": "An authorized employee locks out a machine and services it. Only trained, authorized employees apply locks. An affected employee runs the machine or works in the area. They must recognize a lockout and never restart locked-out equipment. If your job means reaching in, like clearing a jam or cleaning, you must be trained as authorized and lock out first. Everyone else must respect every lock and tag.",
+          "duration_ms": 27115,
+          "voice": "Cole - Corporate Narrator",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        }
+      },
+      {
+        "key": "s4-prepare",
+        "kind": "motion_scene",
+        "eyebrow": "Steps 1–3",
+        "title": "Prepare, notify, shut down",
+        "animation": "pan_right",
+        "image": {
+          "path": "scene-04-prepare.jpg",
+          "alt": "A technician reading a laminated lockout placard mounted beside a packaging machine.",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        },
+        "script": "Step one: prepare. Read the machine's lockout placard so you know every energy source and where its isolation point is. Step two: notify the affected employees that you are shutting the machine down and locking it out. Step three: shut the machine down using its normal stop control, never by pulling a disconnect while it's running under load.",
+        "beats": [
+          {
+            "at_ms": 0,
+            "text": "1 · Prepare: read the placard"
+          },
+          {
+            "at_ms": 7203,
+            "text": "2 · Notify affected employees"
+          },
+          {
+            "at_ms": 13446,
+            "text": "3 · Shut down with the normal stop"
+          }
+        ],
+        "narration": {
+          "audio_path": "s4-prepare.mp3",
+          "captions_path": "s4-prepare.vtt",
+          "transcript": "Step one: prepare. Read the machine's lockout placard so you know every energy source and where its isolation point is. Step two: notify the affected employees that you are shutting the machine down and locking it out. Step three: shut the machine down using its normal stop control, never by pulling a disconnect while it's running under load.",
+          "duration_ms": 22282,
+          "voice": "Cole - Corporate Narrator",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        }
+      },
+      {
+        "key": "s5-isolate",
+        "kind": "motion_scene",
+        "eyebrow": "Steps 4–5",
+        "title": "Isolate, then lock and tag",
+        "animation": "ken_burns_in",
+        "image": {
+          "path": "scene-05-lock.jpg",
+          "alt": "Close-up of a gloved hand closing a red personal safety padlock and danger tag onto an electrical disconnect handle in the off position.",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        },
+        "script": "Step four: isolate. Move every energy-isolating device to the safe position: open the disconnect, close the valves. A control-panel stop button is not an isolation point. Step five: apply your own lock and tag to every isolation point. One person, one lock, one key. Your key stays with you. Use a tag alone only where your written procedure says a lock can't be applied, and then with extra protection.",
+        "beats": [
+          {
+            "at_ms": 0,
+            "text": "4 · Isolate every source"
+          },
+          {
+            "at_ms": 6758,
+            "text": "A stop button is NOT isolation"
+          },
+          {
+            "at_ms": 11585,
+            "text": "5 · Your lock + tag on every point"
+          },
+          {
+            "at_ms": 17377,
+            "text": "One person · one lock · one key"
+          }
+        ],
+        "narration": {
+          "audio_path": "s5-isolate.mp3",
+          "captions_path": "s5-isolate.vtt",
+          "transcript": "Step four: isolate. Move every energy-isolating device to the safe position: open the disconnect, close the valves. A control-panel stop button is not an isolation point. Step five: apply your own lock and tag to every isolation point. One person, one lock, one key. Your key stays with you. Use a tag alone only where your written procedure says a lock can't be applied, and then with extra protection.",
+          "duration_ms": 26645,
+          "voice": "Cole - Corporate Narrator",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        }
+      },
+      {
+        "key": "i2-hotspot-isolation",
+        "kind": "hotspot",
+        "prompt": "Tap every true energy-isolation point on this machine. Leave the others.",
+        "image": {
+          "path": "hotspot-isolation.jpg",
+          "alt": "A stainless dough mixer station: a wall-mounted lockable electrical disconnect at left, a red emergency stop button on a yellow box at top center, an operator touchscreen at upper right, and a blue air line with a yellow-handled lockable shutoff valve and exhaust at lower right.",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        },
+        "targets": [
+          {
+            "id": "disconnect",
+            "label": "Electrical disconnect",
+            "x_pct": 20.7,
+            "y_pct": 24.3,
+            "correct": true
+          },
+          {
+            "id": "air-valve",
+            "label": "Lockable air shutoff valve (with exhaust)",
+            "x_pct": 86.7,
+            "y_pct": 67.0,
+            "correct": true
+          },
+          {
+            "id": "estop",
+            "label": "Emergency stop button",
+            "x_pct": 54.5,
+            "y_pct": 15.7,
+            "correct": false
+          },
+          {
+            "id": "touchscreen",
+            "label": "Operator touchscreen",
+            "x_pct": 77.2,
+            "y_pct": 25.7,
+            "correct": false
+          }
+        ],
+        "remediate_block_key": "s5-isolate"
+      },
+      {
+        "key": "s6-verify",
+        "kind": "motion_scene",
+        "eyebrow": "Steps 6–7",
+        "title": "Release stored energy, then verify",
+        "animation": "ken_burns_out",
+        "image": {
+          "path": "scene-06-verify.jpg",
+          "alt": "A technician in a bump cap, hairnet, and safety glasses pressing the start button on a stopped machine, standing clear of all moving parts, with a red padlock and danger tag visible on the nearby disconnect. Guards are in place.",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        },
+        "script": "Step six: release or restrain stored energy. Bleed air and hydraulic pressure, block raised parts, let flywheels stop, and let hot parts cool. Step seven: verify. Make sure everyone is clear, then try to start the machine. Nothing should happen. If the procedure calls for a voltage test, a qualified electrician does it. Then return the controls to off. Only now is the machine at zero energy and safe to work on.",
+        "beats": [
+          {
+            "at_ms": 0,
+            "text": "6 · Release or block stored energy"
+          },
+          {
+            "at_ms": 9576,
+            "text": "7 · Verify: everyone clear, try to start"
+          },
+          {
+            "at_ms": 17023,
+            "text": "Voltage test: qualified person only"
+          },
+          {
+            "at_ms": 22343,
+            "text": "Controls back to OFF → zero energy"
+          }
+        ],
+        "narration": {
+          "audio_path": "s6-verify.mp3",
+          "captions_path": "s6-verify.vtt",
+          "transcript": "Step six: release or restrain stored energy. Bleed air and hydraulic pressure, block raised parts, let flywheels stop, and let hot parts cool. Step seven: verify. Make sure everyone is clear, then try to start the machine. Nothing should happen. If the procedure calls for a voltage test, a qualified electrician does it. Then return the controls to off. Only now is the machine at zero energy and safe to work on.",
+          "duration_ms": 30642,
+          "voice": "Cole - Corporate Narrator",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        }
+      },
+      {
+        "key": "i3-sort-steps",
+        "kind": "drag_sort",
+        "prompt": "Put the seven lockout steps in the right order.",
+        "items": [
+          {
+            "id": "prepare",
+            "label": "Prepare: read the placard"
+          },
+          {
+            "id": "notify",
+            "label": "Notify affected employees"
+          },
+          {
+            "id": "shutdown",
+            "label": "Shut down with the normal stop"
+          },
+          {
+            "id": "isolate",
+            "label": "Isolate every energy source"
+          },
+          {
+            "id": "lock",
+            "label": "Apply your lock and tag"
+          },
+          {
+            "id": "release",
+            "label": "Release or block stored energy"
+          },
+          {
+            "id": "verify",
+            "label": "Verify zero energy"
+          }
+        ],
+        "remediate_block_key": "s6-verify"
+      },
+      {
+        "key": "c1-stored",
+        "kind": "callout",
+        "tone": "danger",
+        "title": "A locked machine can still hurt you",
+        "body": "Hydraulic cylinders, springs, flywheels, capacitors, raised forks and hot surfaces keep their energy after the disconnect is off. Release or block it, then verify, every time."
+      },
+      {
+        "key": "s7-group",
+        "kind": "motion_scene",
+        "eyebrow": "Working as a crew",
+        "title": "Group lockout and shift change",
+        "animation": "pan_left",
+        "image": {
+          "path": "scene-07-group.jpg",
+          "alt": "A group lockout box covered in several workers' padlocks hanging on a plant wall.",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        },
+        "script": "When a crew works on the same machine, use group lockout. One authorized employee locks out the machine, verifies zero energy, and puts the keys in a group lockbox. Then every worker adds their own personal lock to the box. No one is protected by someone else's lock. At shift change, the incoming worker applies their lock before the outgoing worker removes theirs, so the machine is never left unprotected.",
+        "beats": [
+          {
+            "at_ms": 0,
+            "text": "Group lockbox"
+          },
+          {
+            "at_ms": 8464,
+            "text": "Every worker adds their own lock"
+          },
+          {
+            "at_ms": 14106,
+            "text": "Never rely on someone else's lock"
+          },
+          {
+            "at_ms": 18808,
+            "text": "Shift change: lock on before lock off"
+          }
+        ],
+        "narration": {
+          "audio_path": "s7-group.mp3",
+          "captions_path": "s7-group.vtt",
+          "transcript": "When a crew works on the same machine, use group lockout. One authorized employee locks out the machine, verifies zero energy, and puts the keys in a group lockbox. Then every worker adds their own personal lock to the box. No one is protected by someone else's lock. At shift change, the incoming worker applies their lock before the outgoing worker removes theirs, so the machine is never left unprotected.",
+          "duration_ms": 26331,
+          "voice": "Cole - Corporate Narrator",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        }
+      },
+      {
+        "key": "i4-scenario",
+        "kind": "scenario",
+        "stem": "You arrive to help a coworker clear a jam. Their lock is already on the disconnect and they say, \"You're covered, I locked it out.\" What do you do?",
+        "image": null,
+        "choices": [
+          {
+            "id": "own-lock",
+            "label": "Apply my own lock and tag, and verify zero energy, before I reach in.",
+            "correct": true,
+            "feedback": "Right. Your lock is the only lock that protects you. They could finish, remove theirs, and restart while you're still inside."
+          },
+          {
+            "id": "trust",
+            "label": "Start working. Their lock is on, so the machine can't start.",
+            "correct": false,
+            "feedback": "Their lock protects them, not you. If they remove it while you're inside, nothing stops a restart."
+          },
+          {
+            "id": "tag-only",
+            "label": "Hang my own danger tag next to their lock.",
+            "correct": false,
+            "feedback": "A tag is a warning, not a physical barrier. Where a lock can be applied, apply your lock."
+          }
+        ],
+        "remediate_block_key": "s7-group"
+      },
+      {
+        "key": "s8-restart",
+        "kind": "motion_scene",
+        "eyebrow": "Finishing safely",
+        "title": "Removal, restart, and the rules that never bend",
+        "animation": "ken_burns_in",
+        "image": {
+          "path": "scene-08-restart.jpg",
+          "alt": "A technician removing their own padlock from a disconnect after the work area has been cleared, with the guard reinstalled.",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        },
+        "script": "When the work is done, remove tools and put the guards back. Make sure everyone is clear. Then each person removes only their own lock. If a lock is left behind, only a supervisor may remove it, following plant rules. Before restart, tell the affected employees the locks are off. Never work on a machine that isn't locked out, even for a quick job. If unsure, stop and ask. Now let's check what you know.",
+        "beats": [
+          {
+            "at_ms": 0,
+            "text": "Tools out · guards back on"
+          },
+          {
+            "at_ms": 5637,
+            "text": "Everyone clear"
+          },
+          {
+            "at_ms": 9395,
+            "text": "Remove only YOUR lock"
+          },
+          {
+            "at_ms": 14093,
+            "text": "Locks off → tell affected employees"
+          },
+          {
+            "at_ms": 18791,
+            "text": "No shortcuts · if unsure, stop and ask"
+          }
+        ],
+        "narration": {
+          "audio_path": "s8-restart.mp3",
+          "captions_path": "s8-restart.vtt",
+          "transcript": "When the work is done, remove tools and put the guards back. Make sure everyone is clear. Then each person removes only their own lock. If a lock is left behind, only a supervisor may remove it, following plant rules. Before restart, tell the affected employees the locks are off. Never work on a machine that isn't locked out, even for a quick job. If unsure, stop and ask. Now let's check what you know.",
+          "duration_ms": 28186,
+          "voice": "Cole - Corporate Narrator",
+          "ai_generated": true,
+          "approved_by": null,
+          "approved_at": null
+        }
+      }
+    ]
+  },
+  "questions": [
+    {
+      "prompt": "What is the main purpose of lockout/tagout?",
+      "question_type": "multiple_choice",
+      "explanation": "LOTO prevents the unexpected start-up or release of stored energy while people service equipment.",
+      "answers": [
+        {
+          "text": "To prevent unexpected start-up or release of energy while equipment is serviced",
+          "correct": true
+        },
+        {
+          "text": "To keep production running during maintenance",
+          "correct": false
+        },
+        {
+          "text": "To record who last used a machine",
+          "correct": false
+        },
+        {
+          "text": "To stop unauthorized people from operating machines during breaks",
+          "correct": false
+        }
+      ]
+    },
+    {
+      "prompt": "Who is allowed to apply a lockout device?",
+      "question_type": "multiple_choice",
+      "explanation": "Only trained, authorized employees apply locks. Affected employees recognize lockouts but don't apply them.",
+      "answers": [
+        {
+          "text": "A trained authorized employee",
+          "correct": true
+        },
+        {
+          "text": "Any affected employee who operates the machine",
+          "correct": false
+        },
+        {
+          "text": "Whoever is closest to the disconnect",
+          "correct": false
+        },
+        {
+          "text": "Only the plant manager",
+          "correct": false
+        }
+      ]
+    },
+    {
+      "prompt": "Pressing the machine's emergency stop button is enough to isolate its energy.",
+      "question_type": "true_false",
+      "explanation": "Stop buttons and control circuits are not energy-isolating devices. Isolate at the disconnect, valve, or block.",
+      "answers": [
+        {
+          "text": "True",
+          "correct": false
+        },
+        {
+          "text": "False",
+          "correct": true
+        }
+      ]
+    },
+    {
+      "prompt": "Select every energy source you must control on a machine that has a motor, an air cylinder, and a raised platen.",
+      "question_type": "select_all",
+      "explanation": "The motor is electrical, the air cylinder is pneumatic, and a raised platen stores gravitational energy.",
+      "answers": [
+        {
+          "text": "Electrical",
+          "correct": true
+        },
+        {
+          "text": "Pneumatic",
+          "correct": true
+        },
+        {
+          "text": "Gravity",
+          "correct": true
+        },
+        {
+          "text": "Steam (there is no steam line on this machine)",
+          "correct": false
+        }
+      ]
+    },
+    {
+      "prompt": "What comes immediately after you apply your lock and tag?",
+      "question_type": "multiple_choice",
+      "explanation": "After locking and tagging, release or restrain stored energy, then verify.",
+      "answers": [
+        {
+          "text": "Release or block stored energy",
+          "correct": true
+        },
+        {
+          "text": "Start the repair",
+          "correct": false
+        },
+        {
+          "text": "Notify affected employees",
+          "correct": false
+        },
+        {
+          "text": "Remove the guard",
+          "correct": false
+        }
+      ]
+    },
+    {
+      "prompt": "How do you verify a machine is at zero energy?",
+      "question_type": "multiple_choice",
+      "explanation": "With everyone clear, attempt a start (a qualified person does any voltage test the procedure requires), then return controls to off.",
+      "answers": [
+        {
+          "text": "Clear everyone, try to start it, then return controls to off",
+          "correct": true
+        },
+        {
+          "text": "Look at the lock to confirm it is closed",
+          "correct": false
+        },
+        {
+          "text": "Ask the operator if it is off",
+          "correct": false
+        },
+        {
+          "text": "Wait five minutes",
+          "correct": false
+        }
+      ]
+    },
+    {
+      "prompt": "Your coworker's lock is already on the disconnect. Are you protected?",
+      "question_type": "multiple_choice",
+      "explanation": "Each worker must apply their own lock. Someone else's lock protects them, not you.",
+      "answers": [
+        {
+          "text": "No. I must apply my own lock and tag",
+          "correct": true
+        },
+        {
+          "text": "Yes. One lock is enough for the crew",
+          "correct": false
+        },
+        {
+          "text": "Yes, if I can see them",
+          "correct": false
+        },
+        {
+          "text": "Only if the job takes less than 10 minutes",
+          "correct": false
+        }
+      ]
+    },
+    {
+      "prompt": "During a shift change on a locked-out machine, what is the correct order?",
+      "question_type": "multiple_choice",
+      "explanation": "Protection must be continuous: incoming workers apply their locks before outgoing workers remove theirs, following your plant's shift-change procedure.",
+      "answers": [
+        {
+          "text": "The incoming worker locks on before the outgoing worker removes their lock",
+          "correct": true
+        },
+        {
+          "text": "The outgoing worker removes their lock, then the incoming worker locks on",
+          "correct": false
+        },
+        {
+          "text": "The supervisor removes all locks and re-applies one",
+          "correct": false
+        },
+        {
+          "text": "The machine is restarted and locked out again",
+          "correct": false
+        }
+      ]
+    },
+    {
+      "prompt": "Select every action required before restarting after the work is done.",
+      "question_type": "select_all",
+      "explanation": "Clear tools, reinstall guards, confirm everyone is clear, notify affected employees, and each person removes only their own lock.",
+      "answers": [
+        {
+          "text": "Remove tools and reinstall guards",
+          "correct": true
+        },
+        {
+          "text": "Confirm everyone is clear and notify affected employees",
+          "correct": true
+        },
+        {
+          "text": "Each person removes only their own lock",
+          "correct": true
+        },
+        {
+          "text": "Remove any lock left by a coworker who went home",
+          "correct": false
+        }
+      ]
+    },
+    {
+      "prompt": "A tag may replace a lock whenever a lock is inconvenient.",
+      "question_type": "true_false",
+      "explanation": "A tag alone is used only where the written procedure says a device can't accept a lock, and then with additional protective measures.",
+      "answers": [
+        {
+          "text": "True",
+          "correct": false
+        },
+        {
+          "text": "False",
+          "correct": true
+        }
+      ]
+    }
+  ],
+  "image_prompt_rules": "Every person wears a hairnet (beard net if facial hair), safety glasses, and no jewelry; bump caps, not hard hats. Locks only on disconnects or valves, never on stop buttons or panels. No readable text on tags or signs. Photorealistic, clean modern food-production plant, stainless steel equipment."
+}

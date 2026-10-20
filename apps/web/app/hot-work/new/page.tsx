@@ -19,6 +19,8 @@ import {
 } from '@soteria/core/types'
 import { FIRE_EXTINGUISHER_TYPES } from '@soteria/core/hotWorkChecklist'
 import { useNow } from '@/hooks/useNow'
+import { RosterPicker } from '@/components/permits/RosterPicker'
+import { crewNames, savePermitCrew, type CrewMember } from '@/lib/permits/permitCrew'
 
 // New Hot Work Permit form. Creates a row in pending_signature state —
 // the actual sign happens on the detail page once the PAI has reviewed
@@ -65,9 +67,8 @@ export default function NewHotWorkPermitPage() {
   const [workTypes, setWorkTypes]             = useState<Set<HotWorkType>>(new Set())
   const [expiresAt, setExpiresAt]             = useState<string>(() => defaultExpiresAt())
 
-  // Personnel rosters (newline-separated text fields; same shape as CS)
-  const [operators, setOperators]   = useState('')
-  const [watchers, setWatchers]     = useState('')
+  // Personnel come from the roster so the training gate can verify them.
+  const [crew, setCrew]             = useState<CrewMember[]>([])
 
   // Cross-references
   const [associatedCsPermitId, setAssociatedCsPermitId] = useState<string>('')
@@ -187,8 +188,8 @@ export default function NewHotWorkPermitPage() {
       work_types:              [...workTypes],
       expires_at:              new Date(expiresAt).toISOString(),
       pai_id:                  profile.id,
-      hot_work_operators:      splitLines(operators),
-      fire_watch_personnel:    splitLines(watchers),
+      hot_work_operators:      crewNames(crew, 'operator'),
+      fire_watch_personnel:    crewNames(crew, 'fire_watch'),
       pre_work_checks:         checks,
       associated_cs_permit_id: associatedCsPermitId || null,
       equipment_id:            equipmentId.trim() || null,
@@ -205,6 +206,12 @@ export default function NewHotWorkPermitPage() {
       setServerError(formatSupabaseError(error, 'create permit'))
       setSubmitting(false)
       return
+    }
+    // The permit page shows the crew and lets the PAI fix it if this failed.
+    try {
+      await savePermitCrew(tenantId ?? '', 'hot_work', data.id, crew)
+    } catch (crewError) {
+      console.error('[hot-work permit] crew save failed', crewError)
     }
     router.push(`/hot-work/${data.id}`)
   }
@@ -286,24 +293,17 @@ export default function NewHotWorkPermitPage() {
       </Section>
 
       <Section title="Personnel">
-        <Field label="Hot work operators" hint="One per line — welders, cutters, grinders, etc.">
-          <textarea
-            rows={3}
-            value={operators}
-            onChange={e => setOperators(e.target.value)}
-            placeholder={'Maria Lopez\nJose García'}
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+        {tenantId && (
+          <RosterPicker
+            tenantId={tenantId}
+            value={crew}
+            onChange={setCrew}
+            roles={[
+              { role: 'operator', label: 'Hot work operators', hint: 'Welders, cutters, grinders, etc.' },
+              { role: 'fire_watch', label: 'Fire watch personnel', hint: 'Must NOT also be operating per Cal/OSHA §6777' },
+            ]}
           />
-        </Field>
-        <Field label="Fire watch personnel" hint="One per line — must NOT also be operating per Cal/OSHA §6777">
-          <textarea
-            rows={2}
-            value={watchers}
-            onChange={e => setWatchers(e.target.value)}
-            placeholder="Tomás Reyes"
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
-          />
-        </Field>
+        )}
       </Section>
 
       <Section title="Pre-work checklist (FM Global 7-40 / Cal/OSHA §§4848-4853)">
@@ -534,8 +534,4 @@ function ChoiceButton({ active, onClick, label, tone }: {
       {label}
     </button>
   )
-}
-
-function splitLines(s: string): string[] {
-  return s.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
 }

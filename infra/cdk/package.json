@@ -1,0 +1,24 @@
+{
+  "name": "soteria-infra",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AWS CDK app that hosts apps/web on ECS Fargate",
+  "scripts": {
+    "cdk": "cdk",
+    "synth": "cdk synth",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts",
+    "sync-env": "tsx scripts/sync-env-secret.ts"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.273.0",
+    "constructs": "^10.8.1"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.1153.0",
+    "@types/node": "^20.19.43",
+    "aws-cdk": "^2.1145.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.0"
+  }
+}

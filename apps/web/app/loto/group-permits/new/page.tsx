@@ -9,6 +9,9 @@ import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
 import { formatSupabaseError } from '@/lib/supabaseError'
 import type { Equipment } from '@soteria/core/types'
+import { parseTrainingRequiredError, type PermitTrainingSummary } from '@soteria/core/permitTrainingGate'
+import { PermitTrainingPanel } from '@/components/permits/PermitTrainingPanel'
+import { resolveRosterMemberId } from '@/lib/permits/permitCrew'
 
 // /loto/group-permits/new — start a §147(f)(3) group lockout permit.
 //
@@ -33,6 +36,16 @@ export default function NewGroupPermitPage() {
 
   const [workDescription, setWorkDescription] = useState('')
   const [primaryUserId, setPrimaryUserId] = useState('')
+  // Pre-generated: the training gate runs on insert, so the panel and any
+  // audited override must reference the permit before the row exists.
+  const [permitId] = useState(() => crypto.randomUUID())
+  const [primaryMemberId, setPrimaryMemberId] = useState<string | null>(null)
+  const [training, setTraining] = useState<PermitTrainingSummary | null>(null)
+
+  useEffect(() => {
+    if (!tenantId || !primaryUserId) { setPrimaryMemberId(null); return }
+    resolveRosterMemberId(tenantId, { userId: primaryUserId }).then(setPrimaryMemberId).catch(() => setPrimaryMemberId(null))
+  }, [tenantId, primaryUserId])
   const [equipmentSelection, setEquipmentSelection] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -96,11 +109,13 @@ export default function NewGroupPermitPage() {
     setSubmitError(null)
     if (!workDescription.trim()) { setSubmitError('Work description is required.'); return }
     if (!primaryUserId) { setSubmitError('Pick a primary authorized employee.'); return }
+    if (training?.gated && !training.ready) { setSubmitError('The primary authorized employee must pass the required training first. Use Train now below.'); return }
     setSubmitting(true)
     try {
       const { data, error } = await supabase
         .from('loto_group_permits')
         .insert({
+          id:                              permitId,
           tenant_id:                       tenantId,
           primary_authorized_employee_id:  primaryUserId,
           work_description:                workDescription.trim(),
@@ -108,7 +123,7 @@ export default function NewGroupPermitPage() {
         })
         .select('id')
         .single()
-      if (error) throw new Error(formatSupabaseError(error, 'create group permit'))
+      if (error) throw new Error(parseTrainingRequiredError(error.message) ?? formatSupabaseError(error, 'create group permit'))
       router.push(`/loto/group-permits/${data!.id}`)
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Could not create permit.')
@@ -196,6 +211,16 @@ export default function NewGroupPermitPage() {
             )}
           </div>
         </div>
+
+        {tenantId && primaryMemberId && (
+          <PermitTrainingPanel
+            tenantId={tenantId}
+            permitType="loto_group"
+            permitId={permitId}
+            extraMemberIds={[primaryMemberId]}
+            onSummary={setTraining}
+          />
+        )}
 
         {submitError && (
           <div className="rounded-md border border-rose-200 bg-rose-50 dark:bg-rose-950/40 px-3 py-2 text-xs text-rose-900 dark:text-rose-100">
