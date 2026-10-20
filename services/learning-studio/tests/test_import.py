@@ -36,7 +36,8 @@ def test_first_import_creates_global_module_draft_version_and_quiz(fake, seed_di
     assert version["status"] == "draft" and version["version_number"] == 1
     assert version["validity_days"] == 365 and version["locale"] == "en"
     first_image = version["content"]["blocks"][0]["image"]["path"]
-    assert first_image == f"{module['media_prefix']}/scene-01-why.png"
+    seed_image = module["content"]["blocks"][0]["image"]["path"]
+    assert first_image == f"{module['media_prefix']}/{seed_image}"
     assert first_image in fake.uploads
     assert result.created_module and result.created_version
     assert len(fake.tables["strike_quiz_questions"]) == 10
