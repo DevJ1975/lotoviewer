@@ -5,34 +5,12 @@ import {
   summarizeMicrolearning,
   type MicrolearningSummary,
 } from '@soteria/core/strikeScorecard'
+import { fetchAll } from '@/lib/strike/fetchAll'
 
 // Loads the EHS Scorecard's microlearning section for one tenant. Runs on the
 // service-role client with an explicit tenant filter on every query: the
 // scorecard and all three exports must count every worker, kiosk learners
 // included, whatever the caller's own RLS view would show.
-
-/** Rows asked for per request; the API may return fewer (its max_rows cap). */
-const PAGE_SIZE = 1000
-/** PostgREST's answer to a page that starts past the last row. */
-const RANGE_NOT_SATISFIABLE = 'PGRST103'
-
-/**
- * Every row a query matches, a page at a time, so a large tenant is never
- * silently cut off at the API's row cap. A short page doesn't prove the end
- * (the cap may be below PAGE_SIZE), so it reads until a page comes back empty.
- * `build` must return a fresh query with a stable order.
- */
-async function fetchAll<T>(build: () => { range: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }> }): Promise<T[]> {
-  const rows: T[] = []
-  for (;;) {
-    const { data, error } = await build().range(rows.length, rows.length + PAGE_SIZE - 1)
-    if (error?.code === RANGE_NOT_SATISFIABLE) return rows
-    if (error) throw new Error(error.message)
-    const page = (data ?? []) as T[]
-    if (page.length === 0) return rows
-    rows.push(...page)
-  }
-}
 
 /** The tenant's microlearning summary, or null when STRIKE is turned off for it. */
 export async function loadMicrolearningSummary(

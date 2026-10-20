@@ -163,20 +163,41 @@ function drawTracked(page: PDFPage, text: string, s: TextStyle & ({ x: number } 
 
 /** Shrinks long names and titles to fit, down to 60% size, then truncates. */
 function fit(text: string, font: PDFFont, size: number, maxWidthPx: number): { value: string; size: number } {
-  let value = winAnsi(text)
+  const value = winAnsi(text)
   let current = size
   while (font.widthOfTextAtSize(value, pt(current)) > pt(maxWidthPx) && current > size * 0.6) current -= 1
-  while (value.length > 1 && font.widthOfTextAtSize(value, pt(current)) > pt(maxWidthPx)) value = `${value.slice(0, -2)}…`
-  return { value, size: current }
+  const fits = (candidate: string) => font.widthOfTextAtSize(candidate, pt(current)) <= pt(maxWidthPx)
+  if (fits(value)) return { value, size: current }
+  // Binary search for the longest prefix that fits with an ellipsis. Trimming
+  // one character at a time re-measured the whole string on every step, so a
+  // 20,000-character name took half a minute of server CPU to render.
+  const chars = [...value]
+  let lo = 0
+  let hi = chars.length
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2)
+    if (fits(`${chars.slice(0, mid).join('')}…`)) lo = mid
+    else hi = mid - 1
+  }
+  return { value: `${chars.slice(0, lo).join('')}…`, size: current }
 }
 
-// Standard PDF fonts encode WinAnsi only (Latin-1 plus a few typographic
-// marks). Spanish is covered; anything else would make pdf-lib throw.
-const WIN_ANSI_EXTRA = new Set(['–', '—', '‘', '’', '“', '”', '•', '…', '€'])
-function winAnsi(text: string): string {
-  return [...text].filter(ch => {
-    const code = ch.codePointAt(0) ?? 0
-    return (code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff) || WIN_ANSI_EXTRA.has(ch)
+// Standard PDF fonts encode WinAnsi only (Latin-1 plus the cp1252 extras);
+// anything else would make pdf-lib throw. A letter outside it is reduced to
+// its base letter (ễ → e) so "Nguyễn" prints as "Nguyen", not "Nguyn"; the
+// few letters Unicode does not decompose are mapped by hand.
+const WIN_ANSI_EXTRA = new Set([...'€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ'])
+const UNDECOMPOSABLE: Record<string, string> = { Đ: 'D', đ: 'd', Ł: 'L', ł: 'l', Ħ: 'H', ħ: 'h', ı: 'i' }
+function isWinAnsi(ch: string): boolean {
+  const code = ch.codePointAt(0) ?? 0
+  return (code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff) || WIN_ANSI_EXTRA.has(ch)
+}
+export function winAnsi(text: string): string {
+  return [...text.normalize('NFC')].map(ch => {
+    if (isWinAnsi(ch)) return ch
+    if (UNDECOMPOSABLE[ch]) return UNDECOMPOSABLE[ch]
+    const base = ch.normalize('NFD').replace(/\p{M}/gu, '')
+    return [...base].every(isWinAnsi) ? base : ''
   }).join('')
 }
 

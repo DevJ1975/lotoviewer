@@ -26,7 +26,7 @@ const { authGetUser, captured, queues, resetMockState, tableProxy, sentryCapture
   // `await admin.from(t).select(...).eq(...)` (count + list queries) works.
   function tableProxy(table: string) {
     const chain: Record<string, unknown> = {}
-    for (const method of ['select', 'eq', 'in', 'not', 'order', 'limit']) {
+    for (const method of ['select', 'eq', 'neq', 'in', 'not', 'is', 'or', 'order', 'limit', 'update']) {
       chain[method] = () => chain
     }
     chain.insert = (payload: unknown) => {
@@ -261,5 +261,49 @@ describe('POST /api/strike/[moduleId]/submit', () => {
     const res = await submitStrikeQuiz(req(baseBody()), ctx())
     expect(res.status).toBe(403)
     expect(captured.inserts).toHaveLength(0)
+  })
+
+  // A quiz-only (no block content) version still names an attempt to grade;
+  // grading writes that row on the service role, so ownership is checked here
+  // too, not only for block modules.
+  describe('the attempt being graded', () => {
+    const ATTEMPT_ID = '44444444-4444-4444-4444-444444444444'
+    const openAttempt = (overrides: Record<string, unknown> = {}) => ({
+      data: { id: ATTEMPT_ID, tenant_id: TENANT_ID, user_id: 'learner-1', member_id: null, module_version_id: VERSION_ID, submitted_at: null, delivery: 'standard', ...overrides },
+    })
+
+    it("refuses another learner's attempt, and writes nothing", async () => {
+      queueGate()
+      queueModuleAndVersion()
+      queue('strike_attempts', openAttempt({ user_id: 'someone-else' }))
+      const res = await submitStrikeQuiz(req(baseBody({ attempt_id: ATTEMPT_ID })), ctx())
+      expect(res.status).toBe(404)
+      expect(captured.inserts).toHaveLength(0)
+    })
+
+    it("refuses another tenant's attempt", async () => {
+      queueGate()
+      queueModuleAndVersion()
+      queue('strike_attempts', openAttempt({ tenant_id: '99999999-9999-9999-9999-999999999999' }))
+      expect((await submitStrikeQuiz(req(baseBody({ attempt_id: ATTEMPT_ID })), ctx())).status).toBe(404)
+    })
+
+    it('refuses a quiz on a session a supervisor completes (assisted)', async () => {
+      queueGate()
+      queueModuleAndVersion()
+      queue('strike_attempts', openAttempt({ delivery: 'assisted' }))
+      expect((await submitStrikeQuiz(req(baseBody({ attempt_id: ATTEMPT_ID })), ctx())).status).toBe(409)
+      expect(captured.inserts).toHaveLength(0)
+    })
+
+    it('answers the loser of a double-submit with 409, not a server error, and records no completion', async () => {
+      queueGate()
+      queueModuleAndVersion()
+      queue('strike_attempts', openAttempt(), { data: null })
+      queue('strike_tenant_settings', { data: null })
+      const res = await submitStrikeQuiz(req(baseBody({ attempt_id: ATTEMPT_ID })), ctx())
+      expect(res.status).toBe(409)
+      expect(captured.inserts.filter(i => i.table === 'strike_completions')).toHaveLength(0)
+    })
   })
 })

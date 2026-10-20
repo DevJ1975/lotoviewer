@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { requireStrikeMember } from '@/lib/strike/gate'
 import { checkMemoryRateLimit } from '@/lib/rateLimit/memory'
-import { verifyPngDataUrl } from '@/lib/security/magicBytes'
+import { pngDataUrlDimensions } from '@/lib/security/magicBytes'
 import { verifyAssistedAttempt } from '@/lib/strike/assisted'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -10,6 +10,10 @@ export const runtime = 'nodejs'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const SIGNATURE_MAX_BYTES = 200_000
+// The sign-off pad draws at 600×160. A PNG far smaller than that did not
+// come from the pad, so it can't stand as the supervisor's signature.
+const SIGNATURE_MIN_WIDTH = 200
+const SIGNATURE_MIN_HEIGHT = 50
 
 // POST /api/strike/assisted/verify — a supervisor signs off an assisted
 // (ADA) session on the worker's device. The request carries the
@@ -35,7 +39,10 @@ export async function POST(req: Request) {
   const signature = typeof body.signature_png === 'string' ? body.signature_png : ''
   if (!attemptId || !checked) return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
   if (signature.length > SIGNATURE_MAX_BYTES) return NextResponse.json({ error: 'The signature image is too large.' }, { status: 413 })
-  if (verifyPngDataUrl(signature) !== null) return NextResponse.json({ error: 'Draw a signature before signing.' }, { status: 400 })
+  const size = pngDataUrlDimensions(signature)
+  if (!size || size.width < SIGNATURE_MIN_WIDTH || size.height < SIGNATURE_MIN_HEIGHT) {
+    return NextResponse.json({ error: 'Draw a signature before signing.' }, { status: 400 })
+  }
 
   try {
     const admin = supabaseAdmin()

@@ -166,12 +166,17 @@ function sameLabel(a: string | null | undefined, b: string | null | undefined): 
 export function scoreStrikeQuiz(input: StrikeQuizScoreInput): StrikeQuizScoreResult {
   const requiredQuestions = input.questions.filter(q => q.required !== false)
   const questions = requiredQuestions.length > 0 ? requiredQuestions : input.questions
-  const possiblePoints = questions.reduce((sum, q) => sum + Math.max(0, q.points ?? 1), 0)
+  // Points may be 0 (the column allows it). If every question is worth 0 the
+  // quiz would score 100% for a blank submission, so the answers would not
+  // matter; weigh each question equally instead.
+  const allUnweighted = questions.length > 0 && questions.every(q => Math.max(0, q.points ?? 1) === 0)
+  const weight = (q: StrikeQuizAnswerKey) => (allUnweighted ? 1 : Math.max(0, q.points ?? 1))
+  const possiblePoints = questions.reduce((sum, q) => sum + weight(q), 0)
   const missedQuestionIds: string[] = []
   let earnedPoints = 0
 
   for (const question of questions) {
-    const points = Math.max(0, question.points ?? 1)
+    const points = weight(question)
     const expected = new Set(question.correctAnswerIds)
     const actual = normalizeSubmittedAnswer(input.answersByQuestionId[question.questionId])
 

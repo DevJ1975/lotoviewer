@@ -61,7 +61,7 @@ export function CoachDock({ tenantId, moduleId, moduleVersionId, attemptOpen }: 
       const res = await strikeFetch<{ conversationId: string; reply: string; citations: CoachCitation[] }>(
         '/api/strike/coach/chat',
         tenantId,
-        { body: { message, conversation_id: conversationId, module_id: moduleId ?? null, module_version_id: moduleVersionId ?? null, attempt_open: attemptOpen } },
+        { body: { message, conversation_id: conversationId, module_id: moduleId ?? null, module_version_id: moduleVersionId ?? null } },
       )
       setConversationId(res.conversationId)
       setTurns(prev => [...prev, { role: 'assistant', content: res.reply, citations: dedupe(res.citations) }])

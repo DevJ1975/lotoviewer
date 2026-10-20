@@ -79,6 +79,15 @@ function learnerKey(learner: StrikeLearner): ['user_id' | 'member_id', string] {
   return learner.userId ? ['user_id', learner.userId] : ['member_id', learner.memberId as string]
 }
 
+/**
+ * Whether an attempt row is this learner's. A kiosk learner owns only kiosk
+ * rows (no login on them): the same roster entry also appears on attempts the
+ * worker started signed in, and a "Train now" link must not take those over.
+ */
+function ownsAttempt(learner: StrikeLearner, row: { user_id: string | null; member_id: string | null }): boolean {
+  return learner.userId ? row.user_id === learner.userId : row.user_id === null && row.member_id === learner.memberId
+}
+
 // ── Open ────────────────────────────────────────────────────────────────
 
 export interface OpenedAttempt {
@@ -94,7 +103,7 @@ export async function openAttempt(
 ): Promise<OpenedAttempt> {
   const since = new Date(Date.now() - REUSE_OPEN_ATTEMPT_MS).toISOString()
   const [learnerColumn, learnerValue] = learnerKey(learner)
-  const { data: open, error: openErr } = await admin
+  let openQuery = admin
     .from('strike_attempts')
     .select('id')
     .eq('tenant_id', learner.tenantId)
@@ -103,6 +112,9 @@ export async function openAttempt(
     .eq('delivery', opts.delivery)
     .is('submitted_at', null)
     .gte('started_at', since)
+  // See ownsAttempt: a kiosk learner resumes only kiosk attempts.
+  if (!learner.userId) openQuery = openQuery.is('user_id', null)
+  const { data: open, error: openErr } = await openQuery
     .order('started_at', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -127,7 +139,12 @@ export async function openAttempt(
       user_id: learner.userId,
       member_id: learner.memberId,
       delivery: opts.delivery,
-      client_context: { mode: learner.channel === 'kiosk' ? 'kiosk_player' : 'learner_player' },
+      client_context: {
+        mode: learner.channel === 'kiosk' ? 'kiosk_player' : 'learner_player',
+        // An assisted session is signed off later, by someone else, so the
+        // attempt has to remember who opened the kiosk for the record.
+        ...(learner.kioskIssuedBy ? { kiosk_issued_by: learner.kioskIssuedBy } : {}),
+      },
     })
     .select('id')
     .single()
@@ -215,20 +232,20 @@ async function loadOwnedOpenAttempt(
   learner: StrikeLearner,
   attemptId: string,
   versionId: string,
-): Promise<StrikeResult<{ id: string }>> {
+): Promise<StrikeResult<{ id: string; delivery: string }>> {
   const { data, error } = await admin
     .from('strike_attempts')
-    .select('id,tenant_id,user_id,member_id,module_version_id,submitted_at')
+    .select('id,tenant_id,user_id,member_id,module_version_id,submitted_at,delivery')
     .eq('id', attemptId)
     .maybeSingle()
   if (error) throw new Error(error.message)
   const owned = !!data
     && data.tenant_id === learner.tenantId
     && data.module_version_id === versionId
-    && (learner.userId ? data.user_id === learner.userId : data.member_id === learner.memberId)
+    && ownsAttempt(learner, data)
   if (!owned) return { ok: false, status: 404, message: 'Attempt not found.' }
   if (data.submitted_at) return { ok: false, status: 409, message: 'This attempt was already submitted. Start a new one.' }
-  return { ok: true, value: { id: data.id as string } }
+  return { ok: true, value: { id: data.id as string, delivery: data.delivery as string } }
 }
 
 // ── Grade and record ────────────────────────────────────────────────────
@@ -261,12 +278,22 @@ export async function gradeAndRecordAttempt(
   const { version } = opts
 
   if (version.retake_limit != null) {
-    const [learnerColumn, learnerValue] = learnerKey(learner)
+    // Retakes are per version's content, so a translation of it shares the
+    // count, and a learner's signed-in and "Train now" tries are one person's.
+    const { data: siblings, error: siblingErr } = await admin
+      .from('strike_module_versions')
+      .select('id')
+      .eq('module_id', version.module_id)
+      .neq('locale', version.locale)
+    if (siblingErr) throw new Error(siblingErr.message)
+    const versionIds = [version.id, ...(siblings ?? []).map(v => v.id as string)]
+    const owners = [learner.userId && `user_id.eq.${learner.userId}`, learner.memberId && `member_id.eq.${learner.memberId}`].filter(Boolean).join(',')
     const { count, error } = await admin
       .from('strike_attempts')
       .select('id', { count: 'exact', head: true })
-      .eq(learnerColumn, learnerValue)
-      .eq('module_version_id', version.id)
+      .eq('tenant_id', learner.tenantId)
+      .or(owners)
+      .in('module_version_id', versionIds)
       .not('submitted_at', 'is', null)
     if (error) throw new Error(error.message)
     // Count-then-insert race accepted: a pacing limit, not a security boundary.
@@ -276,10 +303,20 @@ export async function gradeAndRecordAttempt(
   }
 
   const content = versionContent(version)
-  if (content) {
-    if (!opts.attemptId) return { ok: false, status: 422, message: 'Start the module before submitting the knowledge check.' }
+  if (content && !opts.attemptId) return { ok: false, status: 422, message: 'Start the module before submitting the knowledge check.' }
+  // Every attempt id is checked, not only on block modules: grading writes to
+  // the row on the service role, so an unchecked id would overwrite another
+  // learner's (or another tenant's) attempt.
+  if (opts.attemptId) {
     const attempt = await loadOwnedOpenAttempt(admin, learner, opts.attemptId, version.id)
     if (!attempt.ok) return attempt
+    // An assisted session ends with a supervisor's sign-off, not a quiz; a
+    // quiz submitted on it would write a second completion for one session.
+    if (attempt.value.delivery === 'assisted') {
+      return { ok: false, status: 409, message: 'This session is completed by a supervisor sign-off, not the knowledge check.' }
+    }
+  }
+  if (content && opts.attemptId) {
     const { data: events, error } = await admin
       .from('strike_block_events')
       .select('block_key,event')
@@ -354,6 +391,7 @@ export async function gradeAndRecordAttempt(
   const attemptId = opts.attemptId
     ? await updateAttempt(admin, opts.attemptId, attemptFields)
     : await insertAttempt(admin, learner, opts.moduleId, version.id, opts.assignmentId, attemptFields)
+  if (!attemptId) return { ok: false, status: 409, message: 'This attempt was already submitted. Start a new one.' }
 
   if (score.passed) {
     const expiresAt = version.validity_days
@@ -490,18 +528,19 @@ async function isAssignedVersionOrTranslation(
   return !!data && data.locale !== version.locale
 }
 
-async function updateAttempt(admin: SupabaseClient, attemptId: string, fields: Record<string, unknown>): Promise<string> {
-  // `is submitted_at null` makes a double-submit of one attempt a no-op
-  // failure rather than two completions.
+/** Submits an open attempt; null when another request submitted it first. */
+async function updateAttempt(admin: SupabaseClient, attemptId: string, fields: Record<string, unknown>): Promise<string | null> {
+  // `is submitted_at null` makes the losing side of a double-submit update no
+  // row, rather than writing a second completion.
   const { data, error } = await admin
     .from('strike_attempts')
     .update(fields)
     .eq('id', attemptId)
     .is('submitted_at', null)
     .select('id')
-    .single()
+    .maybeSingle()
   if (error) throw new Error(error.message)
-  return data.id as string
+  return (data?.id as string | undefined) ?? null
 }
 
 async function insertAttempt(

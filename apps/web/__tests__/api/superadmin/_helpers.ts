@@ -107,12 +107,15 @@ class MockChain {
           upload: vi.fn().mockResolvedValue({ data: { path: 'x' }, error: null }),
           getPublicUrl: vi.fn().mockReturnValue({ data: { publicUrl: 'https://example.com/logo.png' } }),
           remove: vi.fn().mockResolvedValue({ data: [], error: null }),
-          list:   vi.fn().mockResolvedValue({ data: [], error: null }),
+          list:   storageListMock,
         }),
       },
     }
   }
 }
+
+// storage.from(bucket).list(...) — tests that care queue results on it.
+export const storageListMock = vi.fn()
 
 export const authAdminMock = {
   createUser:     vi.fn(),
@@ -142,6 +145,8 @@ vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }))
 // ── reset between tests ───────────────────────────────────────────────────
 export function resetMocks() {
   requireSuperadminMock.mockReset()
+  storageListMock.mockReset()
+  storageListMock.mockResolvedValue({ data: [], error: null })
   authAdminMock.createUser.mockReset()
   authAdminMock.deleteUser.mockReset()
   authAdminMock.getUserById.mockReset()

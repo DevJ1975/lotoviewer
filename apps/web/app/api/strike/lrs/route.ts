@@ -15,7 +15,9 @@ export const runtime = 'nodejs'
 //   POST    { action: 'test', endpoint?, username?, password? }  connection test, nothing written
 //           { action: 'retry' }                                  re-queue statements that gave up
 //
-// The secret is write-only from the browser's side: no response includes it.
+// The secret is write-only from the browser's side: no response includes it,
+// and a saved secret is only ever sent back to the origin it was saved for
+// (see savedSecretFor).
 
 type Gate = Extract<Awaited<ReturnType<typeof requireStrikeAdmin>>, { ok: true }>
 
@@ -43,14 +45,14 @@ export async function PUT(req: Request) {
     if (problem) return NextResponse.json({ error: problem }, { status: 400 })
 
     const admin = supabaseAdmin()
-    const saved = await loadCredentials(gate.tenantId)
-    if (!password && !saved) return NextResponse.json({ error: 'Enter the LRS secret (password).' }, { status: 400 })
+    const secret = password || savedSecretFor(endpoint, await loadCredentials(gate.tenantId))
+    if (!secret) return NextResponse.json({ error: 'Enter the LRS secret (password) for this endpoint.' }, { status: 400 })
 
     const { error } = await admin.from('strike_lrs_endpoints').upsert({
       tenant_id: gate.tenantId,
       endpoint,
       auth_username: username,
-      auth_password: password || saved?.auth_password,
+      auth_password: secret,
       enabled,
       updated_by: gate.userId,
       updated_at: new Date().toISOString(),
@@ -101,7 +103,7 @@ export async function POST(req: Request) {
     const saved = await loadCredentials(gate.tenantId)
     const endpoint = typeof body.endpoint === 'string' && body.endpoint.trim() ? body.endpoint.trim() : saved?.endpoint ?? ''
     const username = typeof body.username === 'string' && body.username.trim() ? body.username.trim() : saved?.auth_username ?? ''
-    const password = typeof body.password === 'string' && body.password ? body.password : saved?.auth_password ?? ''
+    const password = typeof body.password === 'string' && body.password ? body.password : savedSecretFor(endpoint, saved)
     const problem = await lrsEndpointProblem(endpoint)
     if (problem) return NextResponse.json({ ok: false, message: problem })
     if (!username || !password) return NextResponse.json({ ok: false, message: 'Enter the key and secret first.' })
@@ -124,6 +126,20 @@ async function readJson(req: Request): Promise<Record<string, unknown> | null> {
     return body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : null
   } catch {
     return null
+  }
+}
+
+/**
+ * The saved secret, but only for the origin it was saved with. Reusing it for
+ * whatever endpoint the request names would let anyone with admin access
+ * read it out by testing against a server of their own.
+ */
+function savedSecretFor(endpoint: string, saved: { endpoint: string; auth_password: string } | null): string {
+  if (!saved) return ''
+  try {
+    return new URL(endpoint).origin === new URL(saved.endpoint).origin ? saved.auth_password : ''
+  } catch {
+    return ''
   }
 }
 

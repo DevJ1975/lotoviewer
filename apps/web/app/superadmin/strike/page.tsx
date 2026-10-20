@@ -10,6 +10,7 @@ import {
 import { StudioVideoLink } from '@/components/strike/StudioVideoLink'
 import { superadminJson } from '@/lib/superadminFetch'
 import { CertificateSignatoryCard } from '@/components/strike/admin/CertificateSignatoryCard'
+import { StrikePackageDropZone } from '@/components/strike/admin/StrikePackageDropZone'
 import type {
   StrikeStudioModuleRow,
   StrikeStudioRequestRow,
@@ -180,6 +181,8 @@ export default function StrikeStudioPage() {
         <Metric label="Drafts and reviews" value={stats.drafts} icon={<FileVideo className="h-4 w-4" />} />
         <Metric label="Open studio requests" value={stats.openRequests} icon={<Clock className="h-4 w-4" />} />
       </section>
+
+      <StrikePackageDropZone onImported={() => void load()} />
 
       <CertificateSignatoryCard />
 
