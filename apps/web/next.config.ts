@@ -8,7 +8,10 @@ import { getAdminRedirects } from './lib/adminCatalog';
 // automatically with every build, so the footer reflects exactly which
 // build the user is on without anyone editing a counter by hand. Falls
 // back to "0" when git isn't available (shallow CI checkout, tarball).
+// Container builds have no .git in their context, so the AWS deploy workflow
+// computes the count outside Docker and passes it in as BUILD_ITERATION.
 function buildIteration(): string {
+  if (process.env.BUILD_ITERATION) return process.env.BUILD_ITERATION
   try {
     return execSync('git rev-list --count HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
       .toString()
@@ -88,6 +91,11 @@ function reportOnlyCsp(): string {
 }
 
 const nextConfig: NextConfig = {
+  // The AWS container image runs .next/standalone (a self-contained server.js
+  // plus traced deps). Opt-in, because with it on, Vercel's onBuildComplete
+  // step fails with ENOENT on .next/next-server.js.nft.json. The Dockerfile
+  // sets the flag.
+  output: process.env.NEXT_STANDALONE_OUTPUT === '1' ? 'standalone' : undefined,
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
     NEXT_PUBLIC_BUILD_ITERATION: buildIteration(),
