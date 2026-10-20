@@ -33,6 +33,8 @@ WORKDIR /app
 COPY --from=deps /app ./
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+# Switches next.config.ts to `output: 'standalone'`, which the runner stage needs.
+ENV NEXT_STANDALONE_OUTPUT=1
 # The .well-known / eas.json files still carry REPLACE_WITH_… placeholders
 # pending the mobile store rollout (D2.1, D2.2); CI and Vercel set the same flag.
 ENV ALLOW_DEEPLINK_PLACEHOLDERS=1

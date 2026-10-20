@@ -91,10 +91,11 @@ function reportOnlyCsp(): string {
 }
 
 const nextConfig: NextConfig = {
-  // Emits .next/standalone (a self-contained server.js + traced deps) for the
-  // AWS container image. Vercel ignores this setting, so both hosts build
-  // from the same config.
-  output: 'standalone',
+  // The AWS container image runs .next/standalone (a self-contained server.js
+  // plus traced deps). Opt-in, because with it on, Vercel's onBuildComplete
+  // step fails with ENOENT on .next/next-server.js.nft.json. The Dockerfile
+  // sets the flag.
+  output: process.env.NEXT_STANDALONE_OUTPUT === '1' ? 'standalone' : undefined,
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
     NEXT_PUBLIC_BUILD_ITERATION: buildIteration(),
