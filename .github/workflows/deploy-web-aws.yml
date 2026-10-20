@@ -1,0 +1,106 @@
+name: Deploy web (AWS)
+
+# Ships apps/web to ECS Fargate. Runs after "Repo health" passes on a push to
+# main, so a commit that failed lint, tests or the build is never deployed.
+#
+# Dormant until the AWS account is set up (infra/README.md): set repository
+# variables AWS_DEPLOY_ROLE_ARN (an output of SoteriaFoundation) and AWS_REGION.
+on:
+  workflow_run:
+    workflows: [Repo health]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+# One deploy at a time. A newer queued run replaces an older queued one;
+# a deploy already in progress is never interrupted.
+concurrency:
+  group: deploy-web-aws
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # OIDC: exchange the GitHub token for short-lived AWS credentials
+
+jobs:
+  deploy:
+    if: >-
+      vars.AWS_DEPLOY_ROLE_ARN != '' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      # workflow_run executes on the latest main; deploy the commit that was tested.
+      COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.COMMIT_SHA }}
+          fetch-depth: 0 # the footer's build iteration is the commit count
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: infra/cdk/package-lock.json
+
+      - name: Install CDK dependencies
+        working-directory: infra/cdk
+        run: npm ci
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Prepare build configuration
+        id: config
+        working-directory: infra/cdk
+        run: |
+          secret_json="$(aws secretsmanager get-secret-value --secret-id soteria/web/env --query SecretString --output text)"
+          export DEPLOY_ENVIRONMENT="$(jq -r .context.deployEnvironment cdk.json)"
+          printf '%s' "$secret_json" | npx tsx scripts/write-build-env.ts "$RUNNER_TEMP/build.env"
+          {
+            echo "secret_keys=$(jq -c keys <<<"$secret_json")"
+            echo "build_env_hash=$(sha256sum "$RUNNER_TEMP/build.env" | cut -d' ' -f1)"
+            echo "build_iteration=$(git rev-list --count HEAD)"
+            # Tags are immutable in ECR; run id + attempt keep re-runs unique.
+            echo "image_tag=${COMMIT_SHA::12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/soteria/web:${{ steps.config.outputs.image_tag }}
+          secret-files: build_env=${{ runner.temp }}/build.env
+          build-args: |
+            BUILD_ITERATION=${{ steps.config.outputs.build_iteration }}
+            BUILD_ENV_HASH=${{ steps.config.outputs.build_env_hash }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --exclusively: CI updates the web stack only. SoteriaFoundation holds
+      # this workflow's own IAM role and is deployed by a person.
+      - name: Deploy
+        working-directory: infra/cdk
+        env:
+          IMAGE_TAG: ${{ steps.config.outputs.image_tag }}
+          SECRET_KEYS: ${{ steps.config.outputs.secret_keys }}
+        run: >-
+          npx cdk deploy SoteriaWeb --exclusively --require-approval never
+          -c "imageTag=$IMAGE_TAG"
+          -c "commitSha=$COMMIT_SHA"
+          -c "secretKeys=$SECRET_KEYS"
+
+      - name: Remove build configuration
+        if: always()
+        run: rm -f "$RUNNER_TEMP/build.env"
