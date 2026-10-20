@@ -34,6 +34,11 @@ export async function loadPublishedStrikeVersion(
     moduleVersionId: string
     tenantId: string
     role: string
+    /**
+     * Version statuses to accept. An offline attempt recorded while a version was
+     * published is still valid after a newer one supersedes it.
+     */
+    statuses?: readonly string[]
   },
 ): Promise<StrikeVersionLookup> {
   const { data: moduleRow, error: moduleErr } = await admin
@@ -60,7 +65,7 @@ export async function loadPublishedStrikeVersion(
     .eq('module_id', opts.moduleId)
     .maybeSingle()
   if (versionErr) throw new Error(versionErr.message)
-  if (!version || version.status !== 'published') {
+  if (!version || !(opts.statuses ?? ['published']).includes(version.status as string)) {
     return { ok: false, status: 404, message: 'Published version not found' }
   }
 
