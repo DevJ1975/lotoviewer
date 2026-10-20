@@ -10,12 +10,14 @@ export const runtime = 'nodejs'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // Issues a "Train now" link for one roster member and one module. Any
-// member of the tenant may issue one — the supervisor standing at the
-// permit is usually not an admin — and they are recorded as the issuer on
-// the resulting completion.
+// member of the tenant who can edit may issue one — the supervisor standing
+// at the permit is usually not an admin — and they are recorded as the
+// issuer on the resulting completion. A viewer can't: being named on a
+// completion is the same act as signing one off, which viewers can't do.
 export async function POST(req: Request) {
   const gate = await requireStrikeMember(req)
   if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
+  if (gate.role === 'viewer') return NextResponse.json({ error: 'View-only accounts can’t issue training links.' }, { status: 403 })
 
   const limit = checkMemoryRateLimit(`strike-kiosk-token:${gate.tenantId}:${gate.userId}`, 30, 60_000)
   if (!limit.ok) return NextResponse.json({ error: 'Too many requests.' }, { status: 429 })
