@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Captions, CaptionsOff, CheckCircle2, Pause, Play, RotateCcw } from 'lucide-react'
 import { formatDuration, type StrikeMotionSceneBlock } from '@soteria/core/strikeContent'
+import { visibleSceneBeats } from '@soteria/core/strikeCaptions'
 import { STRIKE_LOCALE_LABEL, useStrikeCopy } from './copy'
 
 interface MotionSceneProps {
@@ -31,8 +32,7 @@ export function MotionScene({ block, index, urls, completed, captionsOn, onToggl
   const imageUrl = block.image ? urls[block.image.path] : undefined
   const audioUrl = narration ? urls[narration.audio_path] : undefined
   const captionsUrl = narration ? urls[narration.captions_path] : undefined
-  // Silent scenes show every beat at once; narrated scenes reveal on cue.
-  const visibleBeats = narration ? block.beats.filter(b => b.at_ms <= positionMs) : block.beats
+  const visibleBeats = visibleSceneBeats(block, positionMs)
 
   useEffect(() => {
     const track = audioRef.current?.textTracks?.[0]

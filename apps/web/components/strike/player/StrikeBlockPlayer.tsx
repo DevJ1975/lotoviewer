@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AlertTriangle, Info, Lock, OctagonAlert } from 'lucide-react'
 import {
-  missingRequiredBlocks,
   strikeInteractionHints,
   type StrikeBlock,
   type StrikeBlockEvent,
@@ -12,6 +11,7 @@ import {
   type StrikeContent,
   type StrikeInteractionBlock,
 } from '@soteria/core/strikeContent'
+import { STRIKE_SEEN_DWELL_MS, STRIKE_SEEN_RATIO, isStrikeBlockLocked, strikeBlockGate } from '@soteria/core/strikeGating'
 import { MotionScene } from './MotionScene'
 import { DragSort } from './DragSort'
 import { DragMatch } from './DragMatch'
@@ -33,16 +33,14 @@ interface StrikeBlockPlayerProps {
   assisted?: boolean
 }
 
-const SEEN_RATIO = 0.5
-const SEEN_DWELL_MS = 800
-
 export function StrikeBlockPlayer({ content, urls, seed, initialReached, onEvent, onProgress, assisted = false }: StrikeBlockPlayerProps) {
   const t = useStrikeCopy()
   const [reached, setReached] = useState<StrikeBlockEventRecord[]>(initialReached)
   const [captionsOn, setCaptionsOn] = useState(true)
   const [hintsShown, setHintsShown] = useState<Record<string, number>>({})
   const titleByKey = useMemo(() => new Map(content.blocks.map(b => [b.key, blockTitle(b, t)])), [content, t])
-  const missing = useMemo(() => missingRequiredBlocks(content, reached), [content, reached])
+  const gate = useMemo(() => strikeBlockGate(content, reached), [content, reached])
+  const { missing, firstOpen } = gate
   const completedKeys = useMemo(
     () => new Set(reached.filter(r => r.event === 'completed').map(r => r.block_key)),
     [reached],
@@ -58,10 +56,6 @@ export function StrikeBlockPlayer({ content, urls, seed, initialReached, onEvent
   }, [onEvent])
 
   const done = content.blocks.length - missing.length
-  // Strictly in order: everything after the first unfinished block stays
-  // locked, so the next scene cannot play until the check before it is solved.
-  const firstOpenIndex = content.blocks.findIndex(b => missing.includes(b.key))
-  const firstOpen = firstOpenIndex === -1 ? null : content.blocks[firstOpenIndex]
   const lockNotice = firstOpen ? { blockKey: firstOpen.key, title: lockedBehindLabel(firstOpen, t) } : null
 
   const hintFor = (block: StrikeInteractionBlock): HintControl => {
@@ -98,7 +92,7 @@ export function StrikeBlockPlayer({ content, urls, seed, initialReached, onEvent
         const remediationKey = 'remediate_block_key' in block ? block.remediate_block_key : null
         const remediation = remediationKey ? { blockKey: remediationKey, title: titleByKey.get(remediationKey) ?? t.relatedScene } : null
         const completed = completedKeys.has(block.key)
-        const locked = firstOpen !== null && index > firstOpenIndex
+        const locked = isStrikeBlockLocked(gate, index)
         const onResult = (correct: boolean, detail: Record<string, unknown>) => {
           mark(block.key, 'interaction', { detail: { ...detail, correct, hints_used: hintsShown[block.key] ?? 0 } })
           if (correct) mark(block.key, 'completed')
@@ -185,18 +179,18 @@ function SeenTracker({ blockKey, active, lockedBehind, lockedText, onSeen, child
     let reported = false
     const observer = new IntersectionObserver(([entry]) => {
       if (reported) return
-      if (entry.intersectionRatio >= SEEN_RATIO) {
+      if (entry.intersectionRatio >= STRIKE_SEEN_RATIO) {
         visibleSince = performance.now()
         timer = setTimeout(() => {
           reported = true
           onSeenRef.current(Math.round(performance.now() - (visibleSince ?? performance.now())))
           observer.disconnect()
-        }, SEEN_DWELL_MS)
+        }, STRIKE_SEEN_DWELL_MS)
       } else if (timer) {
         clearTimeout(timer)
         timer = null
       }
-    }, { threshold: [0, SEEN_RATIO, 1] })
+    }, { threshold: [0, STRIKE_SEEN_RATIO, 1] })
     observer.observe(node)
     return () => {
       observer.disconnect()
