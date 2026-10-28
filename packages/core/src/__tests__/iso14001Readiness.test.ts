@@ -15,20 +15,33 @@ function healthy(): ReadinessSignals {
   return {
     disabledModules: [],
 
-    risks:                 { count: 12, ageDays: 30 },
-    documentsRegisterLive: true,
+    contextIssuesActive:        8,
+    contextIssuesReviewOverdue: 0,
+    climateIssueRecorded:       true,
+    interestedPartiesActive:        5,
+    interestedPartiesReviewOverdue: 0,
+    scopeOnFile:           true,
+    scopeReviewOverdue:    false,
     policyApproved:        true,
     policyReviewOverdue:   false,
+    policySignatoryStale:  false,
+    risks:                 { count: 12, ageDays: 30 },
+    documentsRegisterLive: true,
     requiredDocsMissing:   0,
     docsReviewOverdue:     0,
     risksWithoutControls:  0,
     aspectsTotal:          14,
     aspectsSignificant:    5,
     significantUncontrolled: 0,
-    aspectsRegisterAgeDays: 20,
+    aspectsUnscored:       0,
+    aspectsReviewOverdue:  0,
     obligationsTotal:      6,
     obligationsOverdue:    0,
+    obligationsReviewOverdue: 0,
     complianceEvalAgeDays: 60,
+    evaluationsOverdue:    0,
+    obligationsUnscheduled:  0,
+    evaluationsUndetermined: 0,
     significantUnaddressed: 0,
     objectivesActive:      6,
     objectivesLinked:      6,
@@ -93,16 +106,24 @@ describe('assessIso14001 — a fully evidenced EMS', () => {
 // should result. Table-driven so adding a clause means adding a row.
 describe('assessIso14001 — per-clause verdicts', () => {
   const cases: Array<[string, ClauseVerdict, Partial<ReadinessSignals>, string]> = [
-    ['4.1',   'gap',       { risks: { count: 0, ageDays: null } },        'no risk entries'],
-    ['4.1',   'attention', { risks: { count: 5, ageDays: 400 } },         'register over a year stale'],
-    ['5.2',   'gap',       { policyApproved: false },                     'no approved policy'],
+    ['4.1',   'gap',       { contextIssuesActive: 0 },                    'no context issues'],
+    ['4.1',   'attention', { climateIssueRecorded: false },               'no climate-change determination'],
+    ['4.1',   'attention', { contextIssuesReviewOverdue: 2 },             'context issues past review'],
+    ['4.2',   'gap',       { interestedPartiesActive: 0 },                'no interested parties'],
+    ['4.2',   'attention', { interestedPartiesReviewOverdue: 1 },         'interested party past review'],
+    ['4.3',   'gap',       { scopeOnFile: false },                        'no documented scope'],
+    ['4.3',   'attention', { scopeReviewOverdue: true },                  'scope past review'],
+    ['5.2',   'gap',       { policyApproved: false },                     'no signed, complete policy'],
+    ['5.2',   'attention', { policySignatoryStale: true },                'policy signed by a prior owner'],
     ['5.2',   'attention', { policyReviewOverdue: true },                 'policy past review'],
     ['6.1.1', 'attention', { risksWithoutControls: 3 },                   'uncontrolled risks'],
     ['6.1.2', 'gap',       { aspectsTotal: 0, aspectsSignificant: 0 },    'empty aspects register'],
     ['6.1.2', 'attention', { significantUncontrolled: 2 },                'uncontrolled significant aspects'],
-    ['6.1.2', 'attention', { aspectsRegisterAgeDays: 400 },               'stale aspects register'],
+    ['6.1.2', 'attention', { aspectsUnscored: 1 },                        'an unscored aspect'],
+    ['6.1.2', 'attention', { aspectsReviewOverdue: 3 },                   'aspects past review'],
     ['6.1.3', 'gap',       { obligationsTotal: 0 },                       'no obligations'],
     ['6.1.3', 'attention', { obligationsOverdue: 1 },                     'overdue obligation'],
+    ['6.1.3', 'attention', { obligationsReviewOverdue: 1 },               'obligation past register review'],
     ['6.1.4', 'attention', { significantUnaddressed: 1 },                 'unaddressed significant aspect'],
     ['6.2.1', 'gap',       { objectivesActive: 0 },                       'no objectives'],
     ['6.2.1', 'attention', { objectivesWithTargets: 4 },                  'objectives without targets'],
@@ -116,6 +137,10 @@ describe('assessIso14001 — per-clause verdicts', () => {
     ['8.2',   'attention', { emergencyDrillAgeDays: 400 },                'stale emergency drill'],
     ['9.1.1', 'attention', { objectivesStaleReadings: 1 },                'stale objective reading'],
     ['9.1.2', 'gap',       { complianceEvalAgeDays: null },               'never evaluated compliance'],
+    ['9.1.2', 'attention', { evaluationsOverdue: 2 },                     'evaluations past due'],
+    ['9.1.2', 'attention', { complianceEvalAgeDays: 400 },                'no evaluation in over a year'],
+    ['9.1.2', 'attention', { evaluationsUndetermined: 1 },                'a compliance status left undetermined'],
+    ['9.1.2', 'attention', { obligationsUnscheduled: 1 },                 'an obligation with no evaluation frequency'],
     ['9.2',   'gap',       { lastAuditAgeDays: null },                    'no internal audit'],
     ['9.2',   'attention', { auditClausesUncovered: 3 },                  'incomplete clause coverage'],
     ['9.3',   'gap',       { lastReviewAgeDays: null },                   'no management review'],
@@ -234,7 +259,7 @@ describe('assessIso14001 — phase-3/4 tables absent', () => {
     const card = assessIso14001(preRelease)
     const broken = card.clauses
       .filter(c => c.verdict !== 'conforming' && c.verdict !== 'not_applicable')
-      .filter(c => !['7.5', '9.2', '5.2'].includes(c.code))
+      .filter(c => !['7.5', '9.2'].includes(c.code))
       .filter(c => c.fixHref === null)
     expect(broken.map(c => c.code)).toEqual([])
   })
@@ -251,6 +276,14 @@ describe('assessIso14001 — the WLS demo seed story', () => {
     // Phases 3 and 4 have not shipped, so the demo cannot seed them.
     documentsRegisterLive: false,
     auditProgrammeLive:    false,
+    // The WLS seed predates the context, scope and policy registers and
+    // the evaluation record (Phase 1), and seeds none of them.
+    contextIssuesActive:     0,
+    climateIssueRecorded:    false,
+    interestedPartiesActive: 0,
+    scopeOnFile:             false,
+    policyApproved:          false,
+    complianceEvalAgeDays:   null,
     // 14 aspects, 5 significant, 1 of those (bulk diesel) uncontrolled
     // and with no objective.
     aspectsTotal:            14,
@@ -297,7 +330,11 @@ describe('assessIso14001 — the WLS demo seed story', () => {
       '9.3':   'conforming',   // review within a year, outputs recorded
       '10.2':  'attention',    // open major + overdue actions
       '10.3':  'conforming',   // verified actions this period
-      '5.2':   'gap',          // no documents register yet (phase 3)
+      '4.1':   'gap',          // the WLS seed records no context issues
+      '4.2':   'gap',          // ... no interested parties
+      '4.3':   'gap',          // ... no scope
+      '5.2':   'gap',          // ... and no policy
+      '9.1.2': 'gap',          // no compliance evaluation on record
       '7.5':   'gap',          // no documents register yet (phase 3)
       '9.2':   'gap',          // no audit programme yet (phase 4)
     })

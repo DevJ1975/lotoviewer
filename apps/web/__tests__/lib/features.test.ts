@@ -254,6 +254,14 @@ describe('FEATURES registry invariants', () => {
     }
   })
 
+  it('defaultEnabled is only set on top-level modules (children always inherit, so it would be ignored)', () => {
+    for (const f of FEATURES) {
+      if (f.parent) {
+        expect(f.defaultEnabled, `${f.id} is a child but sets defaultEnabled`).toBeUndefined()
+      }
+    }
+  })
+
   it('every feature has non-empty name and description', () => {
     for (const f of FEATURES) {
       expect(f.name.trim().length, `${f.id}.name is empty`).toBeGreaterThan(0)

@@ -46,6 +46,10 @@
       "schedule": "30 13 * * *"
     },
     {
+      "path": "/api/cron/compliance-evaluations",
+      "schedule": "45 13 * * *"
+    },
+    {
       "path": "/api/cron/incident-trends-weekly",
       "schedule": "0 14 * * 1"
     },
