@@ -10,6 +10,7 @@ import {
 
 import { Text, View } from '@/components/Themed'
 import { useTenant } from '@/components/TenantProvider'
+import HazardousWasteSync from '@/components/HazardousWasteSync'
 import {
   createEmptyHazardousWasteFieldDraft,
   getChecksForArea,
@@ -172,6 +173,16 @@ export default function HazardousWasteFieldScreen() {
     }
   }
 
+  function clearDraftAfterSubmit() {
+    setDraft(createEmptyHazardousWasteFieldDraft(draft.areaType))
+    setSavedAt(null)
+    setSaveError(null)
+    setDirty(false)
+    if (tenant?.id) void AsyncStorage.removeItem(storageKey(tenant.id))
+    // The sync panel unmounts with the cleared draft, so confirm here.
+    Alert.alert('Inspection submitted', 'It was uploaded and the local draft was cleared.')
+  }
+
   function confirmClear() {
     Alert.alert('Clear field draft?', 'This removes the local offline draft from this device.', [
       { text: 'Cancel', style: 'cancel' },
@@ -330,6 +341,10 @@ export default function HazardousWasteFieldScreen() {
       </View>
       {saveError && <Text style={styles.errorText}>{saveError}</Text>}
       {savedAt && <Text style={styles.savedText}>Saved on this device {new Date(savedAt).toLocaleString()}</Text>}
+
+      {tenant?.id && summary.checked > 0 ? (
+        <HazardousWasteSync tenantId={tenant.id} draft={draft} onSubmitted={clearDraftAfterSubmit} />
+      ) : null}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Key calendar</Text>
