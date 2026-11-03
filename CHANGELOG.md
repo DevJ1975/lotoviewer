@@ -10,6 +10,21 @@ app at `/superadmin/release-notes`.
 
 ## [Unreleased]
 
+### Security
+- **Any logged-in user could read the platform's push/cron secret and each
+  tenant's own Anthropic API key.** Both now live in tables only the server can
+  read. The platform configuration page can still set or remove the push
+  secret, and the superadmin tenant page can still set or remove a tenant's key,
+  but neither shows the stored value any more. After upgrading, rotate
+  `INTERNAL_PUSH_SECRET` and the tenant keys, because the old values were
+  readable.
+- **Role and tenant protections moved into the database.** A tenant admin can
+  no longer promote themselves to owner or remove an owner, a tenant owner can
+  no longer change their own tenant's modules, status or demo flag, and only a
+  tenant admin can read or change CMMS integration settings.
+- **Closed two public-facing gaps:** the manual-editing function was callable
+  with only the public API key, and one numbering table had no access control.
+
 ### Added
 - **Soteria FIELD (mobile) is ready for App Store review.** New field
   modules: incident reporting, behavior-based-safety observations, inspections

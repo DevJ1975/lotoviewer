@@ -3,9 +3,11 @@ import * as Sentry from '@sentry/nextjs'
 
 // Per-tenant Anthropic API key override.
 //
-// A tenant may store their own ANTHROPIC_API_KEY in
-// tenants.settings.anthropic_api_key (edited from the dedicated
-// "Anthropic API key" input on /superadmin/tenants/<n>). When set, the
+// A tenant may store their own ANTHROPIC_API_KEY in tenant_secrets
+// (edited from the dedicated "Anthropic API key" input on
+// /superadmin/tenants/<n>). tenant_secrets has no client grants, so the
+// key never reaches a browser; it used to live in tenants.settings, which
+// every member of the tenant could read (migration 306). When set, the
 // AI routes use that key instead of the deployment's env-var default —
 // so the spend lands on the tenant's Anthropic account, not the
 // platform's.
@@ -28,6 +30,28 @@ import * as Sentry from '@sentry/nextjs'
 //   }
 
 const KEY_NAME = 'anthropic_api_key'
+
+// Read the override from tenant_secrets, falling back to the legacy
+// tenants.settings location. The fallback keeps AI working for override
+// tenants if the code deploys before migration 306 (the table is missing, so
+// the first read errors) and is a no-op afterwards (306 strips the key from
+// settings). Remove it once 306 is applied everywhere.
+async function readStoredOverride(tenantId: string): Promise<unknown> {
+  const admin = supabaseAdmin()
+  const { data: secret, error } = await admin
+    .from('tenant_secrets')
+    .select('anthropic_api_key')
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+  if (!error && secret) return secret.anthropic_api_key
+
+  const { data: tenant } = await admin
+    .from('tenants')
+    .select('settings')
+    .eq('id', tenantId)
+    .maybeSingle()
+  return ((tenant?.settings ?? {}) as Record<string, unknown>)[KEY_NAME]
+}
 
 // Anthropic API keys all start with the same prefix and have a
 // generous lower bound on length. We validate shape so a truncated
@@ -64,14 +88,7 @@ export async function getTenantApiKey(tenantId: string | null): Promise<string> 
 
   let raw: unknown
   try {
-    const admin = supabaseAdmin()
-    const { data } = await admin
-      .from('tenants')
-      .select('settings')
-      .eq('id', tenantId)
-      .maybeSingle()
-    const settings = (data?.settings ?? {}) as Record<string, unknown>
-    raw = settings[KEY_NAME]
+    raw = await readStoredOverride(tenantId)
   } catch (e) {
     // Don't forward the raw exception to Sentry — Postgres errors
     // can include row data, parameter values, or schema fragments.
@@ -101,7 +118,7 @@ export async function getTenantApiKey(tenantId: string | null): Promise<string> 
   const reason: 'too-short' | 'wrong-prefix' =
     trimmed.startsWith(ANTHROPIC_KEY_PREFIX) ? 'too-short' : 'wrong-prefix'
   Sentry.captureMessage(
-    'Tenant settings.anthropic_api_key is malformed — refusing to use it',
+    'Tenant Anthropic API key override is malformed — refusing to use it',
     {
       level: 'warning',
       tags:  { source: 'getTenantApiKey', tenant_id: tenantId, reason },

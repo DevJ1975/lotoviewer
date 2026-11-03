@@ -1,10 +1,18 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.1.0'
-const LAST_UPDATED    = '2026-05-15'
+const CURRENT_VERSION = '1.2.0'
+const LAST_UPDATED    = '2026-11-03'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.2.0',
+    date:    '2026-11-03',
+    changes: [
+      'The push-dispatch secret is now write-only. The page shows whether one is set, ' +
+      'and you can replace or remove it, but the stored value is never displayed.',
+    ],
+  },
   {
     version: '1.1.0',
     date:    '2026-05-15',
@@ -80,10 +88,13 @@ export default function WikiConfigurationPage() {
           },
           {
             q: 'How do I rotate the push-dispatch secret?',
-            a: <>Replace the value in the field and save. Outstanding
-              integrations that use the old secret will start failing
-              immediately, so coordinate with whoever owns the upstream
-              system before clicking save.</>,
+            a: <>The current secret is never shown. Type the new value into
+              the field (or choose <em>Remove the secret</em>) and save.
+              Outstanding integrations that use the old secret will start
+              failing immediately, so coordinate with whoever owns the
+              upstream system before clicking save. The new value must also
+              be set as <span className="font-mono">INTERNAL_PUSH_SECRET</span>{' '}
+              on the API.</>,
           },
           {
             q: 'Can I see what came in via push-dispatch?',

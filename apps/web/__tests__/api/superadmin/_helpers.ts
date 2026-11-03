@@ -51,6 +51,7 @@ class MockChain {
   // Inserts/updates are captured for later assertions.
   public inserts: Array<{ table: string; payload: unknown }>  = []
   public updates: Array<{ table: string; payload: unknown }>  = []
+  public upserts: Array<{ table: string; payload: unknown; options: unknown }> = []
   public deletes: Array<{ table: string }>                    = []
   public rpcCalls: Array<{ name: string; args?: unknown }>    = []
   // Unified, ordered log of write ops across every table, so a test can assert
@@ -87,6 +88,7 @@ class MockChain {
         insert: (payload: unknown) => { this.inserts.push({ table, payload }); this.calls.push({ op: 'insert', table }); return chain },
         update: (payload: unknown) => { this.updates.push({ table, payload }); this.calls.push({ op: 'update', table }); return chain },
         delete: () => { this.deletes.push({ table }); this.calls.push({ op: 'delete', table }); return chain },
+        upsert: (payload: unknown, options?: unknown) => { this.upserts.push({ table, payload, options }); return chain },
         // Terminal awaits also work directly via .then on the chain:
         then: (onFulfilled: (v: ChainResult) => unknown) =>
           Promise.resolve(this.next(table)).then(onFulfilled),
@@ -156,6 +158,7 @@ export function resetMocks() {
   sendInviteEmailMock.mockResolvedValue(true)
   mockState.inserts.length = 0
   mockState.updates.length = 0
+  mockState.upserts.length = 0
   mockState.deletes.length = 0
   mockState.rpcCalls.length = 0
   mockState.calls.length = 0
