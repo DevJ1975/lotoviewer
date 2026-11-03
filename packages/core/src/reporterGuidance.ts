@@ -34,6 +34,11 @@ export const REPORTER_EMERGENCY_NOTICE: Record<GuidanceLocale, ReporterEmergency
   },
 }
 
+// The three injuries that start a federal reporting clock (29 CFR 1904.39) are
+// not something a reporter can be expected to know. They can be expected to
+// notice them, so the intake form says what to do when they do.
+export const SERIOUS_INJURY_HINT = 'Hospital stay, amputation or lost an eye? Tell your supervisor now.'
+
 // Anchors for "what's the worst that could have happened?". The same four
 // bands the incident and near-miss forms share, described by outcome rather
 // than by recordkeeping category: a reporter can say "it could have put

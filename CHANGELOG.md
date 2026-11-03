@@ -34,18 +34,18 @@ app at `/superadmin/release-notes`.
   placeholder art.
 - **Incident reporting: tells people to get help first.** Every reporting
   surface (anonymous QR form, web incident and near-miss forms, mobile
-  near-miss, the printed QR poster) now opens with a bilingual "someone hurt
+  incident and near-miss screens, the printed QR poster) now opens with a bilingual "someone hurt
   or in danger right now? Stop and get help first" notice.
 - **Anonymous QR form.** The severity buttons are labelled by the hazard
   ("Could seriously hurt someone") rather than a promise of response
   ("Urgent"); the tracking code is on by default; voice and photo warnings
   explain that they can identify a reporter; the rate-limit message points to
   the supervisor; the "reload to add details" promise is corrected.
-- **Injury reports no longer default to "No injury".** The reporter picks what
-  happened to the person; the "Medical treatment" option now flags hospital
+- **Injury reports no longer default to "No injury", on web or in the phone
+  app.** The reporter picks what happened to the person; the "Medical treatment" option now flags hospital
   stay, amputation and eye loss as things to tell a supervisor about now.
-- **Severity potential has plain-language anchors** on the incident form, the
-  web and mobile near-miss forms, and in the alert email.
+- **Severity potential has plain-language anchors** on the web and mobile
+  incident forms, the near-miss forms, and in the alert email.
 - **Alert email** shows the worst-case potential and describes escalation as
   what it is (one reminder to the same recipients) instead of "page leadership".
 

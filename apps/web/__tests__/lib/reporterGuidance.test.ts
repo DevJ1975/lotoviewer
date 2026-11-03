@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { REPORTER_EMERGENCY_NOTICE, SEVERITY_POTENTIAL_HELP } from '@soteria/core/reporterGuidance'
+import { REPORTER_EMERGENCY_NOTICE, SERIOUS_INJURY_HINT, SEVERITY_POTENTIAL_HELP } from '@soteria/core/reporterGuidance'
 import { INCIDENT_SEVERITY_POTENTIAL } from '@soteria/core/incident'
 import { t, SUPPORTED_LOCALES } from '@/lib/anonReport/i18n'
 
@@ -35,6 +35,18 @@ describe('REPORTER_EMERGENCY_NOTICE', () => {
 
   it('says to leave equipment alone, so the first reaction is not to restart it', () => {
     expect(REPORTER_EMERGENCY_NOTICE.en.body).toMatch(/don’t restart equipment/i)
+  })
+})
+
+describe('SERIOUS_INJURY_HINT', () => {
+  it('names the three injuries that start a federal reporting clock besides a fatality', () => {
+    expect(SERIOUS_INJURY_HINT).toMatch(/hospital/i)
+    expect(SERIOUS_INJURY_HINT).toMatch(/amputation/i)
+    expect(SERIOUS_INJURY_HINT).toMatch(/eye/i)
+  })
+
+  it('tells the reader to act, not merely to know', () => {
+    expect(SERIOUS_INJURY_HINT).toMatch(/tell your supervisor now/i)
   })
 })
 

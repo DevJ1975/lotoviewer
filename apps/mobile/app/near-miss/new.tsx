@@ -14,7 +14,8 @@ import {
   type NearMissSeverity,
 } from '@soteria/core/nearMiss'
 import { SEVERITY_HEX } from '@soteria/core/severityColors'
-import { REPORTER_EMERGENCY_NOTICE, SEVERITY_POTENTIAL_HELP } from '@soteria/core/reporterGuidance'
+import { SEVERITY_POTENTIAL_HELP } from '@soteria/core/reporterGuidance'
+import ReporterEmergencyNotice from '@/components/ReporterEmergencyNotice'
 
 // Mobile-first capture form. Field workers tap "Report" on the
 // list, fill description + severity + category in 30 seconds, hit
@@ -75,10 +76,7 @@ export default function NewNearMissScreen() {
           An event that <Text style={styles.italic}>almost</Text> caused harm. The more detail, the better we prevent the next one.
         </Text>
 
-        <View style={styles.emergency}>
-          <Text style={styles.emergencyHeading}>{REPORTER_EMERGENCY_NOTICE.en.heading}</Text>
-          <Text style={styles.emergencyBody}>{REPORTER_EMERGENCY_NOTICE.en.body}</Text>
-        </View>
+        <ReporterEmergencyNotice />
 
         {error && (
           <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View>
@@ -176,10 +174,6 @@ const styles = StyleSheet.create({
   content:        { padding: 16, gap: 16, paddingBottom: 32 },
   subtitle:       { fontSize: 13, opacity: 0.7 },
   italic:         { fontStyle: 'italic' },
-
-  emergency:        { padding: 12, borderRadius: 10, borderWidth: 2, borderColor: '#FCA5A5', backgroundColor: '#FEE2E2' },
-  emergencyHeading: { color: '#7F1D1D', fontSize: 14, fontWeight: '700' },
-  emergencyBody:    { color: '#7F1D1D', fontSize: 13, marginTop: 2 },
 
   errorBox:       { padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#FCA5A5', backgroundColor: '#FEE2E2' },
   errorText:      { color: '#7F1D1D', fontSize: 13 },

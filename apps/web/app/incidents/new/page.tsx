@@ -26,7 +26,7 @@ import {
   type IncidentShift,
   type IncidentSpillUnit,
 } from '@soteria/core/incident'
-import { SEVERITY_POTENTIAL_HELP } from '@soteria/core/reporterGuidance'
+import { SERIOUS_INJURY_HINT, SEVERITY_POTENTIAL_HELP } from '@soteria/core/reporterGuidance'
 
 // /incidents/new — Mobile-first intake form. Reporting is intentionally
 // low-friction: any tenant member can file. Heavy lifting (classify,
@@ -46,7 +46,7 @@ const TYPE_HELP: Record<IncidentType, string> = {
 const SEVERITY_HELP: Record<IncidentSeverityActual, string> = {
   none:         'No injury or illness',
   first_aid:    'First-aid only (band-aid, ice pack, no medical visit)',
-  medical:      'Medical treatment beyond first aid. Hospital stay, amputation or lost an eye? Tell your supervisor now.',
+  medical:      `Medical treatment beyond first aid. ${SERIOUS_INJURY_HINT}`,
   lost_time:    'Worker missed days of work',
   fatality:     'A worker died from the event',
   catastrophic: 'Multiple severe injuries or facility-scale damage',
