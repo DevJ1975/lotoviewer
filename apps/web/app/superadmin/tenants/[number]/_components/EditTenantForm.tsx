@@ -73,18 +73,29 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
     normalizeToolboxTalkIndustry((tenant.settings as Record<string, unknown> | null | undefined)?.toolbox_industry),
   )
 
-  // Dedicated Anthropic API key input. Mirrors a single key inside
-  // tenants.settings.anthropic_api_key. Pulled out of the free-form
-  // JSON textarea above so an operator pasting a key from the
-  // Anthropic Console (a) doesn't have to wrap it in JSON syntax,
-  // and (b) gets fail-fast validation client-side instead of finding
-  // out the AI is silently 401-ing for that tenant.
-  const initialKey = (() => {
-    const v = (tenant.settings as Record<string, unknown> | null | undefined)?.['anthropic_api_key']
-    return typeof v === 'string' ? v : ''
-  })()
-  const [anthropicKey, setAnthropicKey] = useState<string>(initialKey)
+  // Dedicated Anthropic API key input. The key is a secret kept in
+  // tenant_secrets (migration 306), which no browser can read, so this field
+  // is write-only: it shows whether a key is set and its last four characters,
+  // and a value typed here replaces the stored one. Pulled out of the free-form
+  // JSON textarea above so an operator pasting a key from the Anthropic
+  // Console (a) doesn't have to wrap it in JSON syntax, and (b) gets fail-fast
+  // validation client-side instead of finding out the AI is silently 401-ing
+  // for that tenant.
+  const [anthropicKey, setAnthropicKey] = useState<string>('')
+  const [clearKey,     setClearKey]     = useState(false)
+  const [keyHint,      setKeyHint]      = useState<{ configured: boolean; last4: string | null } | null>(null)
   const [keyError,     setKeyError]     = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void superadminJson<{ anthropic_key: { configured: boolean; last4: string | null } }>(
+      `/api/superadmin/tenants/${tenantNumber}`,
+      { method: 'GET' },
+    ).then(result => {
+      if (!cancelled && result.ok && result.body) setKeyHint(result.body.anthropic_key)
+    })
+    return () => { cancelled = true }
+  }, [tenantNumber])
 
   // Re-seed when the parent re-fetches the tenant (e.g. after logo
   // upload). Keep the user's in-flight checkbox edits if they've
@@ -99,8 +110,8 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
     setSettingsJson(JSON.stringify(rest, null, 2))
     setSettingsError(null)
     setToolboxIndustry(normalizeToolboxTalkIndustry((tenant.settings as Record<string, unknown> | null | undefined)?.toolbox_industry))
-    const v = (tenant.settings as Record<string, unknown> | null | undefined)?.['anthropic_api_key']
-    setAnthropicKey(typeof v === 'string' ? v : '')
+    setAnthropicKey('')
+    setClearKey(false)
     setKeyError(null)
   }, [tenant])
 
@@ -160,14 +171,12 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
         setSaving(false)
         return
       }
-      parsedSettings = { ...parsedSettings, anthropic_api_key: trimmedKey }
-    } else if ('anthropic_api_key' in parsedSettings) {
-      // Operator cleared the field — remove the override so the
-      // platform env key is used.
-      const { anthropic_api_key: _drop, ...rest } = parsedSettings
-      void _drop
-      parsedSettings = rest
     }
+    // string = replace, null = remove (platform env key is used), omitted = keep.
+    const keyField: { anthropic_api_key?: string | null } =
+      trimmedKey.length > 0 ? { anthropic_api_key: trimmedKey }
+      : clearKey            ? { anthropic_api_key: null }
+      :                       {}
 
     const result = await superadminJson<{ tenant: Tenant }>(
       `/api/superadmin/tenants/${tenantNumber}`,
@@ -179,12 +188,18 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
           is_demo:  isDemo,
           modules,
           settings: parsedSettings,
+          ...keyField,
         }),
       },
     )
     if (!result.ok || !result.body) {
       setSaveError(result.error ?? 'Save failed')
     } else {
+      if (keyField.anthropic_api_key !== undefined) {
+        setKeyHint(keyField.anthropic_api_key === null
+          ? { configured: false, last4: null }
+          : { configured: true, last4: keyField.anthropic_api_key.slice(-4) })
+      }
       onSaved(result.body.tenant)
       setSaveSuccess(true)
     }
@@ -266,8 +281,11 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
           Per-tenant override for the platform&apos;s default <code className="font-mono text-[11px]">ANTHROPIC_API_KEY</code>.
           When set, this tenant&apos;s AI features bill to its own Anthropic account.
-          Leave blank to use the platform default. <strong>A malformed key here causes
-          AI features to fail fast with a 502 (no silent fallback).</strong>
+          Leave blank to keep the current setting. <strong>A malformed key here causes
+          AI features to fail fast with a 502 (no silent fallback).</strong>{' '}
+          {keyHint === null ? '' : keyHint.configured
+            ? <>Currently set (ends in <code className="font-mono">{keyHint.last4}</code>); the key itself is never shown.</>
+            : 'Not set: the platform default is used.'}
         </p>
         <input
           type="password"
@@ -275,16 +293,24 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
           spellCheck={false}
           placeholder="sk-ant-…"
           value={anthropicKey}
-          onChange={e => { setAnthropicKey(e.target.value); setKeyError(null); setSaveSuccess(false) }}
+          disabled={clearKey}
+          onChange={e => { setAnthropicKey(e.target.value); setClearKey(false); setKeyError(null); setSaveSuccess(false) }}
           className="w-full px-3 py-2 text-xs font-mono rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-navy"
         />
         {keyError && (
           <p className="mt-2 text-xs text-rose-700 dark:text-rose-300">{keyError}</p>
         )}
-        {!keyError && anthropicKey.trim().length > 0 && (
-          <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-            Stored under <code className="font-mono">settings.anthropic_api_key</code>. Clear the field and Save to remove the override.
-          </p>
+        {keyHint?.configured && (
+          <button
+            type="button"
+            onClick={() => { setClearKey(c => !c); setAnthropicKey(''); setKeyError(null); setSaveSuccess(false) }}
+            className="mt-2 text-[11px] font-semibold text-rose-700 dark:text-rose-300 hover:underline"
+          >
+            {clearKey ? 'Keep the current key' : 'Remove this tenant’s key (use the platform default)'}
+          </button>
+        )}
+        {clearKey && (
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">The key will be removed when you Save.</p>
         )}
       </Section>
 
@@ -321,7 +347,7 @@ export function EditTenantForm({ tenantNumber, tenant, onSaved }: Props) {
           Free-form JSON. Common keys: <code className="font-mono text-[11px]">default_landing_path</code>,
           {' '}<code className="font-mono text-[11px]">risk_band_scheme</code>,
           {' '}<code className="font-mono text-[11px]">risk_acceptance_threshold</code>.
-          The <code className="font-mono text-[11px]">anthropic_api_key</code> and <code className="font-mono text-[11px]">toolbox_industry</code> keys are edited above and hidden here on purpose.
+          The <code className="font-mono text-[11px]">toolbox_industry</code> key is edited above and hidden here on purpose. The Anthropic API key is stored separately and never appears in settings.
           See <code className="font-mono text-[11px]">tenants.settings</code> in the schema.
         </p>
         <textarea

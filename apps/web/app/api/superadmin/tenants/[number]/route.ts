@@ -5,6 +5,11 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getModules } from '@soteria/core/features'
 import { isValidStatus, isValidTenantNumber, normalizeName } from '@/lib/validation/tenants'
 import { isToolboxTalkIndustry } from '@/lib/toolboxTalkPacks'
+import {
+  applyTenantApiKeyChange,
+  parseKeyChange,
+  readTenantApiKeyHint,
+} from '@/lib/ai/tenantApiKeyAdmin'
 import type { TenantStatus } from '@soteria/core/types'
 
 // PATCH /api/superadmin/tenants/[number]
@@ -18,7 +23,12 @@ import type { TenantStatus } from '@soteria/core/types'
 //     status?:  'active' | 'trial' | 'disabled' | 'archived',
 //     is_demo?: boolean,
 //     modules?: Record<string, boolean>,
-//     settings?:Record<string, unknown> }
+//     settings?:Record<string, unknown>,
+//     anthropic_api_key?: string | null }   // string sets, null removes, omitted keeps
+//
+// The tenant's own Anthropic key is a secret, so it is stored in tenant_secrets
+// (service role only) and has its own field. It is rejected inside `settings`,
+// which every member of the tenant can read.
 //
 // Disabling a tenant via status='disabled' or setting disabled_at is
 // handled by the same path: pass status='disabled' and the tenant is
@@ -31,6 +41,36 @@ function validModuleKeys(): Set<string> {
       getModules(cat).filter(m => !m.comingSoon).map(m => m.id),
     ),
   )
+}
+
+// GET /api/superadmin/tenants/[number]
+//
+// Returns whether the tenant has its own Anthropic key and its last four
+// characters, never the key. The edit form shows this in place of the value.
+export async function GET(req: Request, ctx: { params: Promise<{ number: string }> }) {
+  const gate = await requireSuperadmin(req.headers.get('authorization'))
+  if (!gate.ok) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
+  const { number } = await ctx.params
+  if (!isValidTenantNumber(number)) {
+    return NextResponse.json({ error: 'Invalid tenant number' }, { status: 400 })
+  }
+
+  const admin = supabaseAdmin()
+  const { data: tenant, error } = await admin
+    .from('tenants').select('id').eq('tenant_number', number).maybeSingle()
+  if (error) {
+    Sentry.captureException(error, { tags: { route: '/api/superadmin/tenants/[number]', stage: 'lookup' } })
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+  if (!tenant) return NextResponse.json({ error: `No tenant with number ${number}` }, { status: 404 })
+
+  try {
+    return NextResponse.json({ anthropic_key: await readTenantApiKeyHint(tenant.id as string) })
+  } catch (e) {
+    Sentry.captureException(e, { tags: { route: '/api/superadmin/tenants/[number]', stage: 'key-hint' } })
+    return NextResponse.json({ error: 'Could not read the API key status' }, { status: 500 })
+  }
 }
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ number: string }> }) {
@@ -91,23 +131,34 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ number: strin
       return NextResponse.json({ error: 'settings must be an object' }, { status: 400 })
     }
     const settings = body.settings as Record<string, unknown>
+    if ('anthropic_api_key' in settings) {
+      return NextResponse.json(
+        { error: 'Send anthropic_api_key as its own field, not inside settings' },
+        { status: 400 },
+      )
+    }
     if ('toolbox_industry' in settings && !isToolboxTalkIndustry(settings.toolbox_industry)) {
       return NextResponse.json({ error: 'toolbox_industry must be "general" or "construction"' }, { status: 400 })
     }
     patch.settings = body.settings
   }
 
-  if (Object.keys(patch).length === 0) {
+  let keyChange: Extract<ReturnType<typeof parseKeyChange>, { ok: true }>['change'] | null = null
+  if ('anthropic_api_key' in body) {
+    const parsed = parseKeyChange(body.anthropic_api_key)
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
+    keyChange = parsed.change
+  }
+
+  if (Object.keys(patch).length === 0 && !keyChange) {
     return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
   }
 
   const admin = supabaseAdmin()
-  const { data, error } = await admin
-    .from('tenants')
-    .update(patch)
-    .eq('tenant_number', number)
-    .select('*')
-    .maybeSingle()
+  // A key-only change has no tenants columns to update, so just look the row up.
+  const { data, error } = Object.keys(patch).length > 0
+    ? await admin.from('tenants').update(patch).eq('tenant_number', number).select('*').maybeSingle()
+    : await admin.from('tenants').select('*').eq('tenant_number', number).maybeSingle()
 
   if (error) {
     Sentry.captureException(error,
@@ -116,6 +167,15 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ number: strin
   }
   if (!data) {
     return NextResponse.json({ error: `No tenant with number ${number}` }, { status: 404 })
+  }
+
+  if (keyChange) {
+    try {
+      await applyTenantApiKeyChange(data.id as string, keyChange, gate.userId)
+    } catch (e) {
+      Sentry.captureException(e, { tags: { route: '/api/superadmin/tenants/[number]', stage: 'key-write' } })
+      return NextResponse.json({ error: 'The tenant was updated but its API key could not be saved' }, { status: 500 })
+    }
   }
 
   return NextResponse.json({ tenant: data })

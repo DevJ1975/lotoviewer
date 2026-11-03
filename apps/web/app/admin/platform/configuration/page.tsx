@@ -22,7 +22,9 @@ import type { OrgConfig } from '@soteria/core/types'
 //   - Push auto-dispatch (migration 018) — URL + secret matching the
 //     INTERNAL_PUSH_SECRET env var on the API. Both must be set for
 //     the Postgres trigger to actually fire pushes; either null and
-//     the trigger silently no-ops.
+//     the trigger silently no-ops. The secret is write-only here
+//     (migration 306): it lives in a table no client can read, so the
+//     page can replace or remove it but never display it.
 
 export default function ConfigurationPage() {
   const { profile, loading: authLoading } = useAuth()
@@ -32,6 +34,8 @@ export default function ConfigurationPage() {
   const [pushUrl, setPushUrl]       = useState('')
   const [pushSecret, setPushSecret] = useState('')
   const [showSecret, setShowSecret] = useState(false)
+  const [secretConfigured, setSecretConfigured] = useState<boolean | null>(null)
+  const [clearSecret, setClearSecret] = useState(false)
   const [loading, setLoading]       = useState(true)
   const [saving, setSaving]         = useState(false)
   const [loadError, setLoadError]   = useState<string | null>(null)
@@ -57,10 +61,12 @@ export default function ConfigurationPage() {
           setConfig(cfg)
           setTemplate(cfg.work_order_url_template ?? '')
           setPushUrl(cfg.push_dispatch_url ?? '')
-          setPushSecret(cfg.push_dispatch_secret ?? '')
         }
         setLoading(false)
       })
+    supabase.rpc('push_dispatch_secret_configured').then(({ data }) => {
+      if (!cancelled) setSecretConfigured(data === true)
+    })
     return () => { cancelled = true }
   }, [authLoading, profile])
 
@@ -114,7 +120,8 @@ export default function ConfigurationPage() {
   const dirty =
     template.trim()    !== (config?.work_order_url_template ?? '')
     || pushUrl.trim()  !== (config?.push_dispatch_url       ?? '')
-    || pushSecret      !== (config?.push_dispatch_secret    ?? '')
+    || pushSecret.trim() !== ''
+    || clearSecret
 
   async function save() {
     setSaving(true)
@@ -124,16 +131,34 @@ export default function ConfigurationPage() {
       .update({
         work_order_url_template: template.trim()     || null,
         push_dispatch_url:       pushUrl.trim()      || null,
-        push_dispatch_secret:    pushSecret.trim()   || null,
         updated_at:              new Date().toISOString(),
         updated_by:              profile?.id ?? null,
       })
       .eq('id', 1)
       .select('*')
       .single()
-    setSaving(false)
-    if (error || !data) { setSaveError(formatSupabaseError(error, 'save')); return }
+    if (error || !data) {
+      setSaving(false)
+      setSaveError(formatSupabaseError(error, 'save'))
+      return
+    }
     setConfig(data as OrgConfig)
+
+    const newSecret = pushSecret.trim()
+    if (clearSecret || newSecret) {
+      const { error: secretError } = await supabase.rpc('set_push_dispatch_secret', {
+        p_secret: clearSecret ? '' : newSecret,
+      })
+      if (secretError) {
+        setSaving(false)
+        setSaveError(formatSupabaseError(secretError, 'save the secret'))
+        return
+      }
+      setSecretConfigured(!clearSecret)
+      setPushSecret('')
+      setClearSecret(false)
+    }
+    setSaving(false)
     setSavedAt(Date.now())
   }
 
@@ -242,7 +267,12 @@ export default function ConfigurationPage() {
             </label>
             <label className="block space-y-1.5">
               <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center justify-between">
-                Internal secret
+                <span>
+                  Internal secret
+                  <span className="ml-2 font-normal text-slate-500 dark:text-slate-400">
+                    {secretConfigured === null ? '' : clearSecret ? 'will be removed on save' : secretConfigured ? '· set (hidden)' : '· not set'}
+                  </span>
+                </span>
                 <button
                   type="button"
                   onClick={() => setShowSecret(s => !s)}
@@ -254,11 +284,23 @@ export default function ConfigurationPage() {
               <input
                 type={showSecret ? 'text' : 'password'}
                 value={pushSecret}
-                onChange={e => setPushSecret(e.target.value)}
-                placeholder="generate a random string and paste it here AND into INTERNAL_PUSH_SECRET"
+                onChange={e => { setPushSecret(e.target.value); setClearSecret(false) }}
+                disabled={clearSecret}
+                placeholder={secretConfigured
+                  ? 'type a new secret to replace the current one'
+                  : 'generate a random string and paste it here AND into INTERNAL_PUSH_SECRET'}
                 autoComplete="new-password"
-                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy disabled:opacity-50"
               />
+              {secretConfigured && (
+                <button
+                  type="button"
+                  onClick={() => { setClearSecret(c => !c); setPushSecret('') }}
+                  className="text-[11px] font-semibold text-rose-700 dark:text-rose-300 hover:underline"
+                >
+                  {clearSecret ? 'Keep the current secret' : 'Remove the secret'}
+                </button>
+              )}
             </label>
           </section>
 

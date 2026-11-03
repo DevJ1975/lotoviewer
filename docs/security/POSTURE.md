@@ -1,6 +1,6 @@
 # SoteriaField Security Posture
 
-_Last reviewed: 2026-07-28. Owner: platform team._
+_Last reviewed: 2026-11-03. Owner: platform team._
 
 This document is the customer-facing summary of how SoteriaField protects sensitive data. It is intended for due-diligence reviews. Each section names the control, the implementation file(s), and the verifiable test or check.
 
@@ -45,9 +45,9 @@ Migration 037 (Risk Assessment schema) created the `risks` and `risk_audit_log` 
 |---|---|---|
 | Supabase service-role key | Vercel env (`SUPABASE_SERVICE_ROLE_KEY`); never exposed to client | Manual; rotate via Supabase dashboard. |
 | Anthropic platform API key | Vercel env (`ANTHROPIC_API_KEY`); used when no per-tenant override is configured | Manual via Anthropic console. |
-| Per-tenant Anthropic API key | Currently `tenants.settings.anthropic_api_key` (jsonb). **Scheduled for envelope encryption** — see Open Items §10. | Tenant admin updates via `/superadmin/tenants/[id]`. |
+| Per-tenant Anthropic API key | `tenant_secrets.anthropic_api_key` (migration 306): RLS on, no policies, no client grants, so only the service role can read it. Until 306 it sat in `tenants.settings`, which every member of the tenant could read. Plaintext at rest; **envelope encryption still scheduled** — see Open Items §10. | Superadmin sets or removes it via `/superadmin/tenants/[number]`; the page shows only whether one is set and its last four characters. |
 | Voyage embeddings API key | Vercel env (`VOYAGE_API_KEY`); platform-wide | Manual via Voyage console. |
-| Cron secrets | Vercel env (`CRON_SECRET`, `INTERNAL_PUSH_SECRET`); compared with constant-time `safeEqual` | Rotate quarterly. |
+| Cron secrets | Vercel env (`CRON_SECRET`, `INTERNAL_PUSH_SECRET`); compared with constant-time `safeEqual`. The copy the `emit_push()` database trigger sends lives in `loto_org_secrets` (migration 306; service role and SECURITY DEFINER functions only). Until 306 it was a column on `loto_org_config`, readable by every logged-in user. | Rotate quarterly, and immediately after applying 306. |
 | Anonymous-intake IP-throttle salt | Vercel env (`ANON_IP_SALT`); rotated daily by mixing with UTC date | Daily (automatic) + base secret rotated quarterly. |
 | Webhook signing secrets | `loto_webhook_subscriptions.secret` (per-tenant). Used to HMAC outbound payloads. **Scheduled for envelope encryption** — see Open Items §10. | Tenant rotates manually. |
 | Stripe webhook secret | Vercel env (`STRIPE_WEBHOOK_SECRET`). Verified per request via `stripe.webhooks.constructEvent`. | Manual via Stripe dashboard. |
@@ -105,7 +105,7 @@ The hardening pass landing alongside this document closes the customer-visible C
 
 | Item | Severity | Why deferred | Target |
 |---|---|---|---|
-| Tenant API key envelope encryption (`tenants.settings.anthropic_api_key` → `tenant_secrets` table with `pgp_sym_encrypt`) | Critical | Requires KEK provisioning + customer coordination. Not yet drafted. (An earlier revision cited `migrations/114_*.sql`; that slot holds `114_strike_core.sql`, unrelated.) | Within 2 weeks. |
+| Tenant API key envelope encryption (`tenant_secrets.anthropic_api_key` with `pgp_sym_encrypt`) | Medium (was Critical) | The exposure to members was closed by migration 306, which moved the key to a service-role-only table. What remains is encrypting it at rest, which needs KEK provisioning. | Within 4 weeks. |
 | `loto-photos` storage SELECT — restrict to tenant scope | Critical | Requires verification that no client component fetches via public URL. Not yet drafted. (An earlier revision cited `migrations/115_*.sql`; that slot holds `115_command_center_safety_alerts.sql`, unrelated.) | Within 1 week. |
 | `fire_webhooks()` URL safety (private-IP rejection, scheme allowlist) | High | Requires audit of live tenant webhook configs to avoid breaking legit deliveries. Not yet drafted. (An earlier revision cited `migrations/116_*.sql`; that slot holds `116_strike_studio_superadmin_only.sql`, unrelated. `is_safe_webhook_url(text)` does exist, added in `165_advisor_sweep.sql`.) | Within 2 weeks. |
 | Server-side page protection for `/admin` and `/superadmin` | Medium | Page gating is client-side (`components/AuthGate.tsx`); the API layer is gated server-side, so this is defence-in-depth. A server-side fix needs `@supabase/ssr` and a session-handling change across the app. | Roadmap. |
@@ -165,3 +165,33 @@ Business Associate.
 See `docs/injury-case-management-plan.md`. Open items that touch this section:
 column-level encryption for the free-text `diagnosis` field (beyond at-rest disk
 encryption) and a tenant-facing BAA workflow are tracked there, not yet shipped.
+
+## 13. November 2026 audit: remediations and what is still open
+
+A code-level audit on 2026-11-03 covered the API routes, the database policies and grants, and the injection, upload and AI surfaces. It was a static review with no live database, so grant findings assume Supabase's default privileges (migration 124 documents them). Confirm against production before relying on a "closed" below.
+
+**Closed by migration 305** (`305_security_privilege_guards.sql`, with `305_rollback.sql`):
+
+| Finding | Fix |
+|---|---|
+| `update_manual()` was `SECURITY DEFINER` with no caller check and revoked only from `PUBLIC`, so anyone with the anon key could rewrite every tenant's safety manual | Execute revoked from `public`, `anon`, `authenticated`; granted to `service_role` |
+| `hazard_hunt_finding_sequences` had no RLS | RLS enabled, client grants revoked; the definer trigger that writes it is unaffected |
+| A tenant admin could promote themselves to owner, insert owners, or delete owners | `trg_tenant_memberships_guard_owner_role`: every grant, change or removal of the owner role needs an owner or superadmin; a membership cannot be re-pointed at another user or tenant |
+| A tenant owner could edit `modules`, `status`, `is_demo`, `disabled_at`, `slug`, `tenant_number`, `custom_domain` on their own tenant | `trg_tenants_guard_privileged_columns`: superadmin only. Name, logo, language and settings stay owner-editable |
+| Any member could read and write `cmms_integrations`, including `webhook_secret` | Tenant-admin-only policy |
+
+**Closed by migration 306** (`306_move_secrets_out_of_client_readable_tables.sql`, no rollback by design; deploy with the matching app release): the push/cron secret and each tenant's Anthropic key moved to tables no client can read. Treat both as compromised and rotate them after applying.
+
+**Still open**, in rough priority order:
+
+| Item | Severity | Notes |
+|---|---|---|
+| `osha_establishments.ita_api_token` readable by any member | High | A database function (076), the `osha_establishments_admin` view and the ITA submission library all depend on the column, so it needs its own change. A column revoke does not work while table-wide SELECT is granted |
+| Push dispatch is tenant-blind (`/api/push/dispatch`, `emit_push` triggers, and the Expo fan-out added in 2026-10) | Medium | A permit event in one tenant is pushed to every subscriber of every tenant; `dispatch` also accepts any legacy global `is_admin` |
+| Chat DMs and private channels are readable by every member of the tenant at the database level | Medium | Policies check tenant membership, not channel membership |
+| The `viewer` role can write: about 70 API routes use `requireTenantMember` and write with the service role, and most domain-table policies are `for all` | Medium | Add a writer-level gate and admin-only policies for regulatory configuration |
+| AI `send_alert` / `schedule_followup` run with no human approval, and tool output is fed back to the model without an untrusted-data instruction | Medium | A poisoned incident or anonymous report could steer an admin's assistant into an all-tenant alert |
+| SSRF: `services/sds-parser` fails open without its API key; the Teams webhook guard is a hostname regex; equipment photo URLs are fetched without validation by the placard and audit pipelines | Medium | `lib/security/publicHost.ts` already has the right guard |
+| CSV formula injection in six exports (OSHA ITA, Tier II, members, evidence audit, hygiene log, superadmin queries) | Medium | Only `lib/export.ts` and the scorecard workbook neutralise a leading `=`, `+`, `-`, `@` |
+| Dependencies: `next` 16.3.3 (cache poisoning on self-hosted ECS; the `next/og` RCE advisory is not reachable because no attacker input reaches `ImageResponse`), `zod` below 4.6.6, and `shadcn` listed as a production dependency | Medium | The Dockerfile copies the whole install tree, dev dependencies included, into the runtime image |
+| Lower: contractor pre-qualification link never expires; permit sign-on has no rate limit and returns raw errors; unsubscribe signing key falls back to the cron secret; anonymous attach accepts `..`; many routes return raw database errors; storage buckets have no size or MIME limits | Low | |

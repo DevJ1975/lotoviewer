@@ -10614,7 +10614,6 @@ export type Database = {
       loto_org_config: {
         Row: {
           id: number
-          push_dispatch_secret: string | null
           push_dispatch_url: string | null
           updated_at: string
           updated_by: string | null
@@ -10622,7 +10621,6 @@ export type Database = {
         }
         Insert: {
           id: number
-          push_dispatch_secret?: string | null
           push_dispatch_url?: string | null
           updated_at?: string
           updated_by?: string | null
@@ -10630,7 +10628,6 @@ export type Database = {
         }
         Update: {
           id?: number
-          push_dispatch_secret?: string | null
           push_dispatch_url?: string | null
           updated_at?: string
           updated_by?: string | null
