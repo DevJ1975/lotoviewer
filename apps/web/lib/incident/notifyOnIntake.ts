@@ -104,6 +104,7 @@ export async function dispatchIntakeNotifications(
         reportNumber:   incident.report_number,
         incidentType:   incident.incident_type,
         severityActual: incident.severity_actual,
+        severityPotential: incident.severity_potential,
         occurredAt:     incident.occurred_at,
         locationText:   incident.location_text,
         description:    incident.description,
