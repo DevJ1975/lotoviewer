@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, AlertTriangle, MapPin } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
+import ReporterEmergencyNotice from '@/components/ReporterEmergencyNotice'
 import { supabase } from '@/lib/supabase'
 import {
   INCIDENT_TYPES,
@@ -25,6 +26,7 @@ import {
   type IncidentShift,
   type IncidentSpillUnit,
 } from '@soteria/core/incident'
+import { SERIOUS_INJURY_HINT, SEVERITY_POTENTIAL_HELP } from '@soteria/core/reporterGuidance'
 
 // /incidents/new — Mobile-first intake form. Reporting is intentionally
 // low-friction: any tenant member can file. Heavy lifting (classify,
@@ -44,7 +46,7 @@ const TYPE_HELP: Record<IncidentType, string> = {
 const SEVERITY_HELP: Record<IncidentSeverityActual, string> = {
   none:         'No injury or illness',
   first_aid:    'First-aid only (band-aid, ice pack, no medical visit)',
-  medical:      'Medical treatment beyond first aid',
+  medical:      `Medical treatment beyond first aid. ${SERIOUS_INJURY_HINT}`,
   lost_time:    'Worker missed days of work',
   fatality:     'A worker died from the event',
   catastrophic: 'Multiple severe injuries or facility-scale damage',
@@ -70,7 +72,9 @@ export default function NewIncidentPage() {
   const [description,  setDescription]  = useState<string>('')
   const [immediate,    setImmediate]    = useState<string>('')
 
-  const [severityActual,    setSeverityActual]    = useState<IncidentSeverityActual>('none')
+  // Starts unset on purpose. Pre-selecting "No injury" meant an injury report
+  // filed in a hurry went in as no injury and matched no alert rule.
+  const [severityActual,    setSeverityActual]    = useState<IncidentSeverityActual | ''>('')
   const [severityPotential, setSeverityPotential] = useState<IncidentSeverityPotential | ''>('')
   const [probability,       setProbability]       = useState<IncidentProbability | ''>('')
 
@@ -117,6 +121,10 @@ export default function NewIncidentPage() {
     e.preventDefault()
     if (!tenant?.id) { setError('No active tenant — refresh and try again.'); return }
     if (!incidentType) { setError('Please pick an incident type.'); return }
+    if (isInjury && !severityActual) {
+      setError('Pick what happened to the person. Choose “No injury” if nobody was hurt.')
+      return
+    }
 
     // A cleared or half-typed datetime-local reads as an unparseable
     // Date, and .toISOString() throws — outside the try below, so the
@@ -135,7 +143,7 @@ export default function NewIncidentPage() {
       location_text:           location.trim() || null,
       shift:                   shift || null,
       immediate_action_taken:  immediate.trim() || null,
-      severity_actual:         isNearMiss ? 'none' : severityActual,
+      severity_actual:         isNearMiss ? 'none' : (severityActual || 'none'),
       severity_potential:      severityPotential || null,
       probability:             probability || null,
       location_geo:            locationGeo,
@@ -186,6 +194,8 @@ export default function NewIncidentPage() {
           File quickly — corrections, classification, and investigation happen on the next screen.
         </p>
       </header>
+
+      <ReporterEmergencyNotice />
 
       {error && (
         <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:bg-rose-950/30 dark:text-rose-200">
@@ -286,7 +296,7 @@ export default function NewIncidentPage() {
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
-            placeholder="Describe the event in plain language. What was the worker doing? What went wrong?"
+            placeholder="Describe what happened and what was going on around it. Stick to what you saw."
             rows={5}
             required
             className="w-full rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm"
@@ -297,7 +307,7 @@ export default function NewIncidentPage() {
           <textarea
             value={immediate}
             onChange={e => setImmediate(e.target.value)}
-            placeholder="e.g. Equipment de-energized, area cordoned off, EMS called…"
+            placeholder="e.g. Machine stopped and locked out, area taped off, first aid given, EMS called…"
             rows={2}
             className="w-full rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm"
           />
@@ -305,7 +315,13 @@ export default function NewIncidentPage() {
 
         {/* ── Severity (skip for near-miss) ─────────────────────────── */}
         {!isNearMiss && incidentType !== '' && (
-          <Field label="Severity (actual)" required={isInjury} hint="Best guess at intake — refine on the classify tab">
+          <Field
+            label={isInjury ? 'What happened to the person?' : 'Severity (actual)'}
+            required={isInjury}
+            hint={isInjury
+              ? 'Best guess. You don’t need to decide if it’s recordable; the safety team will.'
+              : 'Best guess at intake — refine on the classify tab'}
+          >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {INCIDENT_SEVERITY_ACTUAL.map(s => (
                 <label
@@ -342,11 +358,13 @@ export default function NewIncidentPage() {
               <select
                 value={severityPotential}
                 onChange={e => setSeverityPotential(e.target.value as IncidentSeverityPotential)}
-                className="w-full rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm capitalize"
+                className="w-full rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm"
               >
                 <option value="">—</option>
                 {INCIDENT_SEVERITY_POTENTIAL.map(s => (
-                  <option key={s} value={s} className="capitalize">{s}</option>
+                  <option key={s} value={s}>
+                    {s.charAt(0).toUpperCase() + s.slice(1)}: {SEVERITY_POTENTIAL_HELP[s]}
+                  </option>
                 ))}
               </select>
             </Field>
@@ -406,7 +424,8 @@ export default function NewIncidentPage() {
               </Field>
             </div>
             <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
-              EPA reportable-quantity check runs in Phase 6.
+              Has it reached a drain, soil or water, or do you not know what it is? Stop, keep people
+              away, and tell your supervisor or environmental contact now. Don’t wait for this form.
             </p>
           </fieldset>
         )}

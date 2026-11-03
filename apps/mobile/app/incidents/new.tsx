@@ -5,6 +5,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, TextInput } from 'react-nat
 import { ChipSelect, ErrorBanner, Field, PrimaryButton, formStyles } from '@/components/form'
 import ModuleGate from '@/components/ModuleGate'
 import { Text, View } from '@/components/Themed'
+import ReporterEmergencyNotice from '@/components/ReporterEmergencyNotice'
 import { useTenant } from '@/components/TenantProvider'
 import { createIncident } from '@/lib/incidents'
 import {
@@ -21,6 +22,7 @@ import {
   type IncidentShift,
   type IncidentType,
 } from '@soteria/core/incident'
+import { SERIOUS_INJURY_HINT, SEVERITY_POTENTIAL_HELP } from '@soteria/core/reporterGuidance'
 
 // Fast incident intake. The occurrence time defaults to "now" because a field
 // report is almost always filed right after the event; the validator and the
@@ -49,6 +51,12 @@ function IncidentForm() {
   async function onSubmit() {
     if (!tenant?.id) { setError('Select a workspace first.'); return }
     if (!type) { setError('Pick an incident type.'); return }
+    // The server files a missing outcome as "No injury"; a rushed injury report
+    // must not end up recorded that way by omission.
+    if (type === 'injury_illness' && !actual) {
+      setError('Pick what happened to the person. Choose “No injury” if nobody was hurt.')
+      return
+    }
 
     const input: IncidentCreateInput = {
       incident_type:          type,
@@ -78,9 +86,7 @@ function IncidentForm() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={formStyles.content} keyboardShouldPersistTaps="handled">
-        <Text style={formStyles.subtitle}>
-          If anyone needs medical help, call emergency services first. This report notifies your safety team.
-        </Text>
+        <ReporterEmergencyNotice />
         <ErrorBanner message={error} />
 
         <Field label="Type" required>
@@ -112,12 +118,23 @@ function IncidentForm() {
           <ChipSelect options={INCIDENT_SHIFTS} value={shift} onChange={setShift} />
         </Field>
 
-        <Field label="Actual outcome" hint="Most severe result that happened">
-          <ChipSelect options={INCIDENT_SEVERITY_ACTUAL} value={actual} onChange={setActual} labelFor={s => SEVERITY_ACTUAL_LABEL[s]} />
+        <Field label={type === 'injury_illness' ? 'What happened to the person?' : 'Actual outcome'} required={type === 'injury_illness'} hint="Most severe result that happened">
+          <>
+            <ChipSelect options={INCIDENT_SEVERITY_ACTUAL} value={actual} onChange={setActual} labelFor={s => SEVERITY_ACTUAL_LABEL[s]} />
+            {actual === 'medical' ? <Text style={formStyles.subtitle}>{SERIOUS_INJURY_HINT}</Text> : null}
+          </>
         </Field>
 
         <Field label="Potential severity" hint="Worst case if it had played out">
-          <ChipSelect options={INCIDENT_SEVERITY_POTENTIAL} value={potential} onChange={setPotential} />
+          <>
+            <ChipSelect
+              options={INCIDENT_SEVERITY_POTENTIAL}
+              value={potential}
+              onChange={setPotential}
+              labelFor={s => s.charAt(0).toUpperCase() + s.slice(1)}
+            />
+            {potential ? <Text style={formStyles.subtitle}>{SEVERITY_POTENTIAL_HELP[potential]}</Text> : null}
+          </>
         </Field>
 
         <Field label="Immediate action taken">

@@ -136,6 +136,11 @@ export default function WitnessTokenPage() {
                   required
                   className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm"
                 />
+                <span className="mt-1 block text-[11px] text-slate-500 dark:text-slate-400">
+                  Write what you saw and heard yourself. Say where you were standing. If you’re not sure
+                  about something, say so. Please don’t guess why it happened or who is at fault; that’s
+                  for the investigation.
+                </span>
               </label>
 
               <label className="block">

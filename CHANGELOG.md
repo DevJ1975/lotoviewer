@@ -32,6 +32,30 @@ app at `/superadmin/release-notes`.
   switched off.
 - The mobile app icon and splash screen use the SoteriaField mark instead of
   placeholder art.
+- **Incident reporting: tells people to get help first.** Every reporting
+  surface (anonymous QR form, web incident and near-miss forms, mobile
+  incident and near-miss screens, the printed QR poster) now opens with a bilingual "someone hurt
+  or in danger right now? Stop and get help first" notice.
+- **Anonymous QR form.** The severity buttons are labelled by the hazard
+  ("Could seriously hurt someone") rather than a promise of response
+  ("Urgent"); the tracking code is on by default; voice and photo warnings
+  explain that they can identify a reporter; the rate-limit message points to
+  the supervisor; the "reload to add details" promise is corrected.
+- **Injury reports no longer default to "No injury", on web or in the phone
+  app.** The reporter picks what happened to the person; the "Medical treatment" option now flags hospital
+  stay, amputation and eye loss as things to tell a supervisor about now.
+- **Severity potential has plain-language anchors** on the web and mobile
+  incident forms, the near-miss forms, and in the alert email.
+- **Alert email** shows the worst-case potential and describes escalation as
+  what it is (one reminder to the same recipients) instead of "page leadership".
+
+### Fixed
+- Removed an incorrect OSHA citation (1904.35(b)(1)(iv)) from the QR poster, the
+  anonymous form and the QR admin screen, and the wiki claim that anonymous
+  reporting "exists to satisfy OSHA's anti-retaliation rule". The retaliation
+  line is now a plain policy statement; wording to be confirmed by counsel.
+- The spill form no longer shows an internal roadmap note ("Phase 6"); it now
+  says what to do if a spill reaches a drain, soil or water.
 
 ## [1.19.0] — 2026-08-29
 

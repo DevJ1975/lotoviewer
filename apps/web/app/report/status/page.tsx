@@ -56,7 +56,7 @@ export default function ReportStatusPage() {
           </h1>
           <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
             <ShieldCheck className="h-3.5 w-3.5" />
-            We never reveal who filed the report.
+            This page can’t show who filed a report.
           </p>
         </header>
 

@@ -1,10 +1,20 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.0.0'
-const LAST_UPDATED    = '2026-07-17'
+const CURRENT_VERSION = '1.0.1'
+const LAST_UPDATED    = '2026-11-03'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.0.1',
+    date:    '2026-11-03',
+    changes: [
+      'Every reporting form now opens with a "get help first" notice for anyone hurt or in danger right now.',
+      'Removed the claim that anonymous reporting "exists to satisfy OSHA\'s anti-retaliation rule"; that is not what the rule says.',
+      'Injury reports no longer default to "No injury": the reporter must choose what happened to the person.',
+      'Documented that voice notes and photos can identify an anonymous reporter, and that the tracking code is now on by default.',
+    ],
+  },
   { version: '1.0.0', date: '2026-07-17', changes: ['Initial incident-reporting wiki page.'] },
 ]
 
@@ -48,6 +58,12 @@ export default function WikiIncidentReportingPage() {
 
       <Section id="report" title="Filing a report">
         <p>
+          <strong>Someone hurt or in danger right now? Get help first.</strong>{' '}
+          Stop the job, call your site emergency number or tell your supervisor,
+          and keep people out of the area if you can do that safely. The form can
+          wait; the report is for after. Every reporting form says this at the top.
+        </p>
+        <p>
           Any signed-in member can file — press <strong>Report incident</strong>{' '}
           on the list, fill the form, then <strong>File incident</strong>. Three
           fields are required: the <strong>incident type</strong>, <strong>when
@@ -61,12 +77,19 @@ export default function WikiIncidentReportingPage() {
             unit fieldset.</li>
           <li><strong>Severity (actual)</strong> — from No injury up to
             Catastrophic. It&apos;s your best guess at intake; admins refine it
-            later (injuries: on the Classify tab). A near-miss must stay at
-            &quot;No injury&quot; — if anyone was hurt, it&apos;s an
-            injury/illness report.</li>
+            later (injuries: on the Classify tab). For an injury there is no
+            default: pick what happened to the person, and choose &quot;No
+            injury&quot; only if nobody was hurt. If the person was admitted to
+            hospital, lost a limb or finger, or lost an eye, tell your
+            supervisor now. A near-miss must stay at &quot;No injury&quot; — if
+            anyone was hurt, it&apos;s an injury/illness report.</li>
           <li><strong>Severity potential &amp; probability</strong> — the
             worst credible outcome and how likely a repeat is. These drive
-            triage order.</li>
+            triage order. Potential runs from &quot;wouldn&apos;t have hurt
+            anyone&quot; through &quot;could have put someone in the hospital
+            or off work&quot; to &quot;could have killed someone or changed
+            their life&quot; (amputation, crushing, fall from height,
+            electrocution, serious burn, caught in a machine).</li>
           <li><strong>Location + Tag GPS</strong> — free text plus a one-tap
             coordinate capture from your phone.</li>
           <li><strong>Immediate action taken</strong> — what you did on the
@@ -129,8 +152,17 @@ export default function WikiIncidentReportingPage() {
           Spanish text. Reporters can take a receipt PIN to check the status of
           their report later. Per-poster settings cover rate limits, captcha,
           geofencing, and auto-routing to an investigator. Anonymous reporting
-          exists to satisfy OSHA&apos;s anti-retaliation rule — treat every
-          submission as a gift, not a nuisance.
+          lowers the barrier to speaking up for anyone worried about being
+          singled out. Treat every submission as useful information, not a
+          nuisance.
+        </p>
+        <p>
+          Two things to know. First, the tracking code is on by default, and
+          the status note you publish is the only way to answer an anonymous
+          reporter, so use it. Second, anonymity has limits: a voice note can
+          identify the speaker and a photo can show faces or name badges, and
+          the form tells reporters so. A report cannot get an injured person
+          care, so for anyone hurt the form tells them to get help first.
         </p>
       </Section>
 
@@ -188,9 +220,9 @@ export default function WikiIncidentReportingPage() {
               <Link href="/near-miss">Near-Miss module</Link> is the
               lightweight channel for &quot;almost happened&quot; observations:
               quick triage, AI theme tagging, and one-click escalation to the
-              risk register. Rule of thumb: if it warrants an investigation,
-              file it here; if it&apos;s a frontline observation, use
-              Near-Miss.</>,
+              risk register. Rule of thumb: if anyone was hurt, or it could
+              have seriously hurt someone, file it here. If it&apos;s a
+              lower-risk frontline observation, use Near-Miss.</>,
           },
           {
             q: 'I picked the wrong severity — can I fix it?',

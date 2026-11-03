@@ -14,18 +14,14 @@ import {
   type NearMissSeverity,
 } from '@soteria/core/nearMiss'
 import { SEVERITY_HEX } from '@soteria/core/severityColors'
+import { SEVERITY_POTENTIAL_HELP } from '@soteria/core/reporterGuidance'
+import ReporterEmergencyNotice from '@/components/ReporterEmergencyNotice'
 
 // Mobile-first capture form. Field workers tap "Report" on the
 // list, fill description + severity + category in 30 seconds, hit
 // Submit. Goes through the same validateCreateInput path as the
 // web build so client-side errors match server-side rejections.
 
-const SEVERITY_HELP: Record<NearMissSeverity, string> = {
-  low:      'No injury possible',
-  moderate: 'First-aid level injury possible',
-  high:     'Lost-time injury possible',
-  extreme:  'Life-threatening or fatal outcome possible',
-}
 export default function NewNearMissScreen() {
   const { tenant } = useTenant()
   const { userId } = useAuth()
@@ -80,6 +76,8 @@ export default function NewNearMissScreen() {
           An event that <Text style={styles.italic}>almost</Text> caused harm. The more detail, the better we prevent the next one.
         </Text>
 
+        <ReporterEmergencyNotice />
+
         {error && (
           <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View>
         )}
@@ -128,7 +126,7 @@ export default function NewNearMissScreen() {
                     <View style={[styles.sevDot, { backgroundColor: SEVERITY_HEX[s] }]} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.sevLabel}>{s}</Text>
-                      <Text style={styles.sevHelp}>{SEVERITY_HELP[s]}</Text>
+                      <Text style={styles.sevHelp}>{SEVERITY_POTENTIAL_HELP[s]}</Text>
                     </View>
                   </View>
                 )}

@@ -17,7 +17,9 @@ import {
   SEVERITY_ACTUAL_LABEL,
   type IncidentType,
   type IncidentSeverityActual,
+  type IncidentSeverityPotential,
 } from '@soteria/core/incident'
+import { SEVERITY_POTENTIAL_HELP } from '@soteria/core/reporterGuidance'
 
 export interface IncidentAlertArgs {
   to:                string
@@ -26,6 +28,10 @@ export interface IncidentAlertArgs {
   reportNumber:      string
   incidentType:      IncidentType
   severityActual:    IncidentSeverityActual
+  /** Worst credible outcome. A near miss has severityActual 'none', so
+   *  without this the email for a near miss that could have killed
+   *  someone reads exactly like one that could not. */
+  severityPotential?: IncidentSeverityPotential | null
   occurredAt:        string                  // ISO timestamp
   locationText:      string | null
   description:       string
@@ -99,8 +105,25 @@ function buildSubject(a: IncidentAlertArgs): string {
   const sev = a.severityActual === 'none'
     ? INCIDENT_TYPE_LABEL[a.incidentType]
     : SEVERITY_ACTUAL_LABEL[a.severityActual]
-  return `[${a.reportNumber}] ${sev} reported${tenantSuffix}`
+  const potential = a.severityPotential === 'high' || a.severityPotential === 'extreme'
+    ? ` (${a.severityPotential} potential)`
+    : ''
+  return `[${a.reportNumber}] ${sev} reported${potential}${tenantSuffix}`
 }
+
+function potentialLabel(p: IncidentSeverityPotential): string {
+  return `${p.charAt(0).toUpperCase()}${p.slice(1)} — ${SEVERITY_POTENTIAL_HELP[p]}`
+}
+
+// One sentence for both the text and HTML bodies. It says only what the
+// system does: a single reminder to the same recipients, and only while the
+// incident is still Reported or Triaged (see the incident-investigation-sla
+// cron). It used to promise to "page leadership"; push and SMS are not
+// delivered today, so the promise was larger than the behavior.
+const ACKNOWLEDGE_LINE =
+  'For high-severity events, please open the incident and move it to Investigating once someone has reached the scene '
+  + 'or the people involved. If it is still Reported or Triaged when the escalation window in your notification rules '
+  + 'runs out, a reminder is sent to the same recipients.'
 
 function deepLink(a: IncidentAlertArgs): string {
   return `${a.appUrl.replace(/\/$/, '')}/incidents/${a.incidentId}`
@@ -113,6 +136,7 @@ function renderText(a: IncidentAlertArgs): string {
   const tenantLine = a.tenantName ? `\n  Tenant:    ${a.tenantName}` : ''
   const ruleLine = a.ruleName ? `\n\n(Notified per rule: ${a.ruleName})` : ''
   const location = a.locationText ? `\n  Location:  ${a.locationText}` : ''
+  const potential = a.severityPotential ? `\n  Potential: ${potentialLabel(a.severityPotential)}` : ''
   const description = a.description.length > 600
     ? a.description.slice(0, 600) + '…'
     : a.description
@@ -122,7 +146,7 @@ A new incident has been reported on SoteriaField.
 
   Report #:  ${a.reportNumber}
   Type:      ${type}
-  Severity:  ${sev}
+  Severity:  ${sev}${potential}
   Occurred:  ${a.occurredAt}${location}${tenantLine}
 
 Description:
@@ -131,9 +155,7 @@ ${description}
 Open the incident:
   ${deepLink(a)}
 
-For high-severity events, please acknowledge by transitioning the
-incident to "Investigating" in the app — this stops the escalation
-timer that would otherwise page leadership.${ruleLine}
+${ACKNOWLEDGE_LINE}${ruleLine}
 
 — SoteriaField
 `
@@ -162,6 +184,10 @@ function renderHtml(a: IncidentAlertArgs): string {
     ? `<div style="color:#5b6675;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-top:10px;">Tenant</div>
        <div style="margin-top:2px;">${safe(a.tenantName)}</div>`
     : ''
+  const potentialBlock = a.severityPotential
+    ? `<div style="color:#5b6675;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-top:10px;">Worst case if it had played out</div>
+       <div style="margin-top:2px;">${safe(potentialLabel(a.severityPotential))}</div>`
+    : ''
   const locationBlock = a.locationText
     ? `<div style="color:#5b6675;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-top:10px;">Location</div>
        <div style="margin-top:2px;">${safe(a.locationText)}</div>`
@@ -188,6 +214,7 @@ function renderHtml(a: IncidentAlertArgs): string {
           <div style="margin-top:2px;">${safe(type)}</div>
           <div style="color:#5b6675;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-top:10px;">Occurred</div>
           <div style="margin-top:2px;">${safe(a.occurredAt)}</div>
+          ${potentialBlock}
           ${locationBlock}
           ${tenantBlock}
         </td></tr>
@@ -198,7 +225,7 @@ function renderHtml(a: IncidentAlertArgs): string {
         <a href="${safe(link)}" style="display:inline-block;background:${headerBg};color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 24px;border-radius:10px;">Open incident →</a>
       </p>
       <p style="margin:18px 0 0 0;font-size:12px;line-height:1.55;color:#5b6675;">
-        For high-severity events, please acknowledge by transitioning the incident to <strong>Investigating</strong> in the app — this stops the escalation timer that would otherwise page leadership.
+        ${safe(ACKNOWLEDGE_LINE)}
       </p>
       ${ruleBlock}
     </td></tr>
