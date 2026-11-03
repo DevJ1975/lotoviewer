@@ -1,24 +1,27 @@
 #!/usr/bin/env node
 // Renders the SoteriaField reticle mark (the same geometry as
-// apps/web/app/icon.svg) into the Expo app's icon, adaptive icon, splash and
-// favicon PNGs under apps/mobile/assets/images.
+// apps/web/app/icon.svg) into every raster brand asset:
+//   - the Expo app's icon, adaptive icon, splash and favicon PNGs
+//     (apps/mobile/assets/images)
+//   - the web app's multi-size favicon (apps/web/app/favicon.ico)
 //
-// Run after changing the brand mark:  npm run build:mobile-icons
+// Run after changing the brand mark:  npm run build:brand-icons
 //
-// Why generated: the Expo template shipped placeholder art, and Apple rejects
-// builds that use it. Keeping the geometry in one script means the store icon
-// can't drift from the web favicon.
+// Why generated: the Expo template shipped placeholder art (Apple rejects
+// builds that use it) and the web favicon.ico predated the reticle. Keeping
+// the geometry in one script means no raster asset can drift from the SVGs.
 //
 // Apple requirements baked in below: the 1024px store icon is a full-bleed
 // square with NO alpha channel and no pre-rounded corners (iOS rounds it).
 
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const outDir = resolve(here, '../apps/mobile/assets/images')
+const webFavicon = resolve(here, '../apps/web/app/favicon.ico')
 
 const NAVY = '#1B3A6B'
 const TEAL = '#14B8A6'
@@ -78,5 +81,36 @@ for (const { file, size, opaque, body } of assets) {
   let image = sharp(svg(body), { density: 72 * (size / 64) }).resize(size, size)
   if (opaque) image = image.flatten({ background: NAVY }).removeAlpha()
   await image.png().toFile(resolve(outDir, file))
-  console.log(`[mobile-icons] ${file} (${size}px${opaque ? ', opaque' : ''})`)
+  console.log(`[brand-icons] ${file} (${size}px${opaque ? ', opaque' : ''})`)
 }
+
+// favicon.ico: PNG-compressed entries inside an ICO container (supported by
+// every browser since IE9). Sizes cover tab, taskbar and high-DPI use.
+const FAVICON_SIZES = [16, 32, 48, 256]
+const faviconBody = `<rect width="64" height="64" rx="10" fill="${NAVY}"/>${reticle(1)}`
+
+const pngs = await Promise.all(FAVICON_SIZES.map(size =>
+  sharp(svg(faviconBody), { density: 72 * (size / 64) }).resize(size, size).png().toBuffer()))
+
+const HEADER_BYTES = 6
+const ENTRY_BYTES = 16
+const header = Buffer.alloc(HEADER_BYTES)
+header.writeUInt16LE(1, 2) // type: icon
+header.writeUInt16LE(pngs.length, 4)
+
+let offset = HEADER_BYTES + ENTRY_BYTES * pngs.length
+const entries = pngs.map((png, i) => {
+  const size = FAVICON_SIZES[i]
+  const entry = Buffer.alloc(ENTRY_BYTES)
+  entry.writeUInt8(size === 256 ? 0 : size, 0) // 0 means 256
+  entry.writeUInt8(size === 256 ? 0 : size, 1)
+  entry.writeUInt16LE(1, 4)  // colour planes
+  entry.writeUInt16LE(32, 6) // bits per pixel
+  entry.writeUInt32LE(png.length, 8)
+  entry.writeUInt32LE(offset, 12)
+  offset += png.length
+  return entry
+})
+
+writeFileSync(webFavicon, Buffer.concat([header, ...entries, ...pngs]))
+console.log(`[brand-icons] apps/web/app/favicon.ico (${FAVICON_SIZES.join(', ')}px)`)

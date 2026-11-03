@@ -32,6 +32,10 @@ app at `/superadmin/release-notes`.
   switched off.
 - The mobile app icon and splash screen use the SoteriaField mark instead of
   placeholder art.
+- **The SoteriaField reticle mark is now the logo everywhere a browser or
+  phone shows an icon.** The browser-tab favicon was an older black circle, and
+  the iPhone home-screen icon and both install prompts showed a placeholder "SL"
+  badge. They now match the app and the mobile store icon.
 
 ## [1.19.0] — 2026-08-29
 

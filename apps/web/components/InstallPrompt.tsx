@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { Download, Share, X } from 'lucide-react'
 
 const DISMISS_KEY = 'loto.install-dismissed-at'
@@ -96,7 +97,7 @@ export default function InstallPrompt() {
         className="fixed left-4 right-4 bottom-4 sm:left-auto sm:right-6 sm:max-w-sm z-40 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl ring-1 ring-slate-200 dark:ring-slate-700 p-4 flex items-center gap-3"
         style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
       >
-        <div className="w-10 h-10 rounded-xl bg-brand-navy text-brand-yellow font-bold text-sm flex items-center justify-center shrink-0">SL</div>
+        <Image src="/icons/icon-192.svg" alt="" width={40} height={40} unoptimized className="w-10 h-10 shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold text-slate-900 dark:text-slate-100">Install LOTO</p>
           <p className="text-xs text-slate-500 dark:text-slate-400">Faster launch and offline access.</p>
@@ -129,7 +130,7 @@ export default function InstallPrompt() {
         style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl bg-brand-navy text-brand-yellow font-bold text-sm flex items-center justify-center shrink-0">SL</div>
+          <Image src="/icons/icon-192.svg" alt="" width={40} height={40} unoptimized className="w-10 h-10 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-slate-900 dark:text-slate-100">Add LOTO to your Home Screen</p>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1 flex-wrap">
