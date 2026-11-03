@@ -8,6 +8,8 @@ import {
 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
 import { supabase } from '@/lib/supabase'
+import { t as catalog } from '@/lib/anonReport/i18n'
+import { REPORTER_EMERGENCY_NOTICE } from '@soteria/core/reporterGuidance'
 
 // /incidents/qr — Admin QR-code management.
 //
@@ -404,8 +406,8 @@ function EmptyState({ onNew }: { onNew: () => void }) {
       </h2>
       <p className="text-sm text-slate-600 dark:text-slate-300 max-w-md mx-auto">
         Post a QR code at high-traffic locations — loading docks, break rooms, near hazards.
-        Workers scan, file a report in 30 seconds, no login. OSHA 1904.35(b)(1)(iv) protects them
-        from retaliation; the printed poster says so plainly.
+        Workers scan and file a report without logging in. The printed poster tells them to get
+        help first for anything happening right now.
       </p>
       <button
         type="button"
@@ -465,23 +467,36 @@ function TokenRow({
 <style>
   body { font-family: -apple-system, system-ui, sans-serif; padding: 48px; text-align: center; color: #1a2230; }
   .label { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: #5b6675; font-weight: 700; }
-  h1 { font-size: 36px; margin: 8px 0; }
-  .location { font-size: 24px; color: #214488; margin: 0 0 24px 0; }
-  .qr { display: inline-block; padding: 16px; border: 4px solid #214488; border-radius: 16px; position: relative; }
-  .qr svg { width: 360px; height: 360px; display: block; }
+  h1 { font-size: 32px; margin: 6px 0; }
+  .location { font-size: 22px; color: #214488; margin: 0 0 16px 0; }
+  .qr { display: inline-block; padding: 12px; border: 4px solid #214488; border-radius: 16px; position: relative; }
+  .qr svg { width: 320px; height: 320px; display: block; }
   .qr .logo {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    width: 76px; height: 76px; border-radius: 50%;
+    width: 68px; height: 68px; border-radius: 50%;
     background: #FFD900; box-shadow: 0 0 0 6px #ffffff;
     display: flex; align-items: center; justify-content: center;
   }
-  .qr .logo img { width: 56px; height: 56px; display: block; }
-  .url { font-family: ui-monospace, Menlo, monospace; font-size: 14px; margin-top: 16px; color: #5b6675; word-break: break-all; }
-  .protect { margin-top: 32px; font-size: 12px; color: #5b6675; max-width: 480px; margin-left: auto; margin-right: auto; line-height: 1.55; }
+  .qr .logo img { width: 50px; height: 50px; display: block; }
+  .url { font-family: ui-monospace, Menlo, monospace; font-size: 11px; margin-top: 12px; color: #5b6675; word-break: break-all; }
+  .protect { margin-top: 20px; font-size: 11px; color: #5b6675; max-width: 560px; margin-left: auto; margin-right: auto; line-height: 1.55; }
+  .emergency { border: 5px solid #b91c1c; border-radius: 14px; padding: 12px 20px; margin: 0 auto 18px; max-width: 640px; text-align: left; }
+  .emergency h2 { font-size: 26px; line-height: 1.15; margin: 0 0 4px; color: #b91c1c; }
+  .emergency p { font-size: 14px; line-height: 1.4; margin: 0 0 10px; }
+  .emergency p:last-child { margin-bottom: 0; }
+  .es { font-size: 18px; color: #5b6675; margin: 0 0 14px 0; }
+  @page { size: letter; margin: 0.5in; }
   @media print { body { padding: 0; } }
 </style></head><body>
+  <div class="emergency">
+    <h2>${escapeHtml(REPORTER_EMERGENCY_NOTICE.en.heading)}</h2>
+    <p>${escapeHtml(REPORTER_EMERGENCY_NOTICE.en.body)}</p>
+    <h2>${escapeHtml(REPORTER_EMERGENCY_NOTICE.es.heading)}</h2>
+    <p>${escapeHtml(REPORTER_EMERGENCY_NOTICE.es.body)}</p>
+  </div>
   <p class="label">SoteriaField · Anonymous report</p>
   <h1>Scan to report a safety concern</h1>
+  <p class="es">Escanee para reportar una inquietud de seguridad</p>
   <p class="location">${escapeHtml(token.label)}</p>
   <div class="qr">
     ${qrSvg ?? ''}
@@ -489,8 +504,8 @@ function TokenRow({
   </div>
   <p class="url">${escapeHtml(reportUrl)}</p>
   <p class="protect">
-    Anonymous reports are protected from retaliation under OSHA 1904.35(b)(1)(iv).
-    No login required — your name is never collected.
+    ${escapeHtml(catalog('en').shieldNote)} ${escapeHtml(catalog('en').retaliationDefault)}<br />
+    ${escapeHtml(catalog('es').shieldNote)} ${escapeHtml(catalog('es').retaliationDefault)}
   </p>
   <script>setTimeout(() => window.print(), 300)</script>
 </body></html>`)

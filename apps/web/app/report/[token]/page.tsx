@@ -15,6 +15,7 @@ import {
 } from '@soteria/core/incident'
 import { supabase } from '@/lib/supabase'
 import { pickLocale, t as catalog, type Locale } from '@/lib/anonReport/i18n'
+import ReporterEmergencyNotice from '@/components/ReporterEmergencyNotice'
 
 // /report/[token] — Public anonymous incident-reporting form.
 //
@@ -91,7 +92,10 @@ export default function AnonymousReportPage() {
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef   = useRef<Blob[]>([])
 
-  const [requestPin, setRequestPin] = useState(false)
+  // On by default: an anonymous reporter has no other way to learn what
+  // happened, and a worker who never hears back stops reporting. The code
+  // costs them nothing; they can untick it.
+  const [requestPin, setRequestPin] = useState(true)
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const turnstileEl = useRef<HTMLDivElement>(null)
 
@@ -320,6 +324,8 @@ export default function AnonymousReportPage() {
 
           {verify && !submitted && (
             <form onSubmit={onSubmit} className="space-y-4">
+              <ReporterEmergencyNotice locale={locale} />
+
               <div className="rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 text-sm">
                 <p className="text-slate-700 dark:text-slate-200">
                   {T.reportingFrom}: <strong>{verify.label}</strong>
@@ -681,7 +687,7 @@ function SubmittedView({
         <div className="mt-4 rounded-lg bg-brand-yellow/30 border border-brand-yellow p-3 text-sm">
           <p className="text-[11px] uppercase font-bold tracking-wide text-slate-700">{T.receiptShown}</p>
           <p className="mt-1 font-mono text-2xl tracking-wider text-slate-900">{submitted.receipt_pin}</p>
-          <p className="mt-1 text-[11px] text-slate-600">{T.receiptHint}</p>
+          <p className="mt-1 text-[11px] text-slate-600">{T.receiptSaved}</p>
         </div>
       )}
       <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">{T.thankYouTeam}</p>

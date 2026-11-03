@@ -26,9 +26,14 @@ import {
   seedTenantWithEmailRule,
 } from './_incidentReporterHarness'
 
+// Next memoizes useSearchParams, and the page keys an effect on it. A mock that
+// returned a fresh object each render re-ran that effect after every click and
+// snapped the worker's chosen language back to the browser default.
+const { stableSearchParams } = vi.hoisted(() => ({ stableSearchParams: new URLSearchParams('') }))
+
 vi.mock('next/navigation', () => ({
   useParams:       () => ({ token: ANON_TOKEN }),
-  useSearchParams: () => new URLSearchParams(''),
+  useSearchParams: () => stableSearchParams,
 }))
 
 // next/script would inject a real <script> tag; the captcha path is
@@ -89,7 +94,7 @@ describe('E2E — severity-only quick tap on the QR form', () => {
     // The sign resolves first — the worker sees where they are reporting from.
     expect(await screen.findByText('Dock B entrance')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Urgent' }))
+    await user.click(screen.getByRole('button', { name: 'Could seriously hurt someone' }))
     await user.click(screen.getByRole('button', { name: 'Submit anonymously' }))
 
     expect(await screen.findByText('Thank you')).toBeInTheDocument()
@@ -101,7 +106,7 @@ describe('E2E — severity-only quick tap on the QR form', () => {
     render(<AnonymousReportPage />)
     await screen.findByText('Dock B entrance')
 
-    await user.click(screen.getByRole('button', { name: 'Urgent' }))
+    await user.click(screen.getByRole('button', { name: 'Could seriously hurt someone' }))
     await user.click(screen.getByRole('button', { name: 'Submit anonymously' }))
 
     await waitFor(() => expect(rowsIn('incidents')).toHaveLength(1))
@@ -117,7 +122,7 @@ describe('E2E — severity-only quick tap on the QR form', () => {
     render(<AnonymousReportPage />)
     await screen.findByText('Dock B entrance')
 
-    await user.click(screen.getByRole('button', { name: 'Minor' }))
+    await user.click(screen.getByRole('button', { name: 'Minor: unlikely to hurt anyone' }))
     await user.click(screen.getByRole('button', { name: 'Submit anonymously' }))
 
     await waitFor(() => expect(rowsIn('incidents')).toHaveLength(1))
@@ -136,7 +141,7 @@ describe('E2E — typed report on the QR form', () => {
     // With no severity chosen, the detail fields are open by default.
     await user.click(screen.getByRole('radio', { name: 'Environmental spill' }))
     await user.type(
-      screen.getByPlaceholderText(/Describe in your own words/i),
+      screen.getByPlaceholderText(/In your own words/i),
       'Coolant leaking from the press onto the walkway.',
     )
     await user.click(screen.getByRole('button', { name: 'Submit anonymously' }))
@@ -153,7 +158,7 @@ describe('E2E — typed report on the QR form', () => {
     await screen.findByText('Dock B entrance')
 
     await user.type(
-      screen.getByPlaceholderText(/Describe in your own words/i),
+      screen.getByPlaceholderText(/In your own words/i),
       'Something happened but I did not say what kind.',
     )
     await user.click(screen.getByRole('button', { name: 'Submit anonymously' }))
@@ -165,17 +170,69 @@ describe('E2E — typed report on the QR form', () => {
 
 // ─── The worker who wants to check back later ───────────────────────────
 
-describe('E2E — receipt opt-in on the QR form', () => {
-  it('shows the tracking code once when the worker asks for one', async () => {
+describe('E2E — tracking code on the QR form', () => {
+  it('shows the tracking code once, without the worker having to ask', async () => {
     const user = userEvent.setup()
     render(<AnonymousReportPage />)
     await screen.findByText('Dock B entrance')
 
-    await user.click(screen.getByRole('button', { name: 'Concerning' }))
-    await user.click(screen.getByRole('checkbox'))
+    // An anonymous reporter has no other way to hear back, so the code is
+    // on unless they turn it off.
+    expect(screen.getByRole('checkbox')).toBeChecked()
+
+    await user.click(screen.getByRole('button', { name: 'Could hurt someone' }))
     await user.click(screen.getByRole('button', { name: 'Submit anonymously' }))
 
     expect(await screen.findByText('Your tracking code')).toBeInTheDocument()
     await waitFor(() => expect(rowsIn('incidents')[0].anon_receipt_hash).toEqual(expect.any(String)))
+  })
+
+  it('files with no code when the worker unticks it', async () => {
+    const user = userEvent.setup()
+    render(<AnonymousReportPage />)
+    await screen.findByText('Dock B entrance')
+
+    await user.click(screen.getByRole('button', { name: 'Could hurt someone' }))
+    await user.click(screen.getByRole('checkbox'))
+    await user.click(screen.getByRole('button', { name: 'Submit anonymously' }))
+
+    expect(await screen.findByText('Thank you')).toBeInTheDocument()
+    expect(screen.queryByText('Your tracking code')).not.toBeInTheDocument()
+    expect(rowsIn('incidents')[0].anon_receipt_hash).toBeUndefined()
+  })
+})
+
+// ─── The worker standing next to someone who is hurt ───────────────────
+
+describe('E2E — "get help first" notice on the QR form', () => {
+  it('is on screen before the worker fills in anything', async () => {
+    render(<AnonymousReportPage />)
+    await screen.findByText('Dock B entrance')
+
+    const notice = screen.getByRole('note')
+    expect(notice).toHaveTextContent('Someone hurt or in danger right now?')
+    expect(notice).toHaveTextContent('call your site emergency number or tell your supervisor')
+  })
+
+  it('follows the language the worker switches to', async () => {
+    const user = userEvent.setup()
+    render(<AnonymousReportPage />)
+    await screen.findByText('Dock B entrance')
+
+    await user.click(screen.getByRole('button', { name: 'ES' }))
+
+    expect(screen.getByRole('note')).toHaveTextContent('¿Alguien herido o en peligro ahora mismo?')
+  })
+
+  it('does not tell a worker who just reported an emergency to close the page', async () => {
+    const user = userEvent.setup()
+    render(<AnonymousReportPage />)
+    await screen.findByText('Dock B entrance')
+
+    await user.click(screen.getByRole('button', { name: 'Could seriously hurt someone' }))
+    await user.click(screen.getByRole('button', { name: 'Submit anonymously' }))
+
+    expect(await screen.findByText(/If this can’t wait, tell your supervisor now/)).toBeInTheDocument()
+    expect(screen.queryByText(/close this page/i)).not.toBeInTheDocument()
   })
 })

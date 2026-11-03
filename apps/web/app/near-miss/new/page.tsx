@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, AlertTriangle, Loader2 } from 'lucide-react'
 import { useTenant } from '@/components/TenantProvider'
+import ReporterEmergencyNotice from '@/components/ReporterEmergencyNotice'
 import { supabase } from '@/lib/supabase'
 import {
   NEAR_MISS_HAZARD_CATEGORIES,
@@ -13,6 +14,7 @@ import {
   type NearMissHazardCategory,
   type NearMissSeverity,
 } from '@soteria/core/nearMiss'
+import { SEVERITY_POTENTIAL_HELP } from '@soteria/core/reporterGuidance'
 
 // /near-miss/new — Mobile-first capture form. Reporting is
 // intentionally low-friction: any tenant member can file.
@@ -20,13 +22,6 @@ import {
 // Form state lives in component state. Two-column on desktop;
 // stacks on mobile. Submit posts to /api/near-miss and redirects
 // to the resulting detail page.
-
-const SEVERITY_HELP: Record<NearMissSeverity, string> = {
-  low:      'No injury possible',
-  moderate: 'First-aid level injury possible',
-  high:     'Lost-time injury possible',
-  extreme:  'Life-threatening or fatal outcome possible',
-}
 
 function isoLocalNow() {
   // <input type="datetime-local"> wants 'YYYY-MM-DDTHH:mm' in *local*
@@ -116,6 +111,8 @@ export default function NewNearMissPage() {
         </p>
       </header>
 
+      <ReporterEmergencyNotice />
+
       {error && (
         <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:bg-rose-950/30 dark:text-rose-200">
           <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -151,7 +148,7 @@ export default function NewNearMissPage() {
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
-            placeholder="Describe the event in plain language. What was the worker doing? What almost went wrong?"
+            placeholder="Describe what happened and what was going on around it. Stick to what you saw."
             rows={4}
             required
             className="w-full rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm"
@@ -194,7 +191,7 @@ export default function NewNearMissPage() {
                 />
                 <div>
                   <p className="text-sm font-semibold capitalize text-slate-800 dark:text-slate-200">{s}</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">{SEVERITY_HELP[s]}</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">{SEVERITY_POTENTIAL_HELP[s]}</p>
                 </div>
               </label>
             ))}
