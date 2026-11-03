@@ -57,6 +57,22 @@ describe('normalizeCandidates', () => {
     expect(candidates[1].confidence).toBe('low') // 'weird' coerced
   })
 
+  it('drops a duplicate URL the model listed twice, keeping the first', async () => {
+    const payload = {
+      candidates: [
+        { url: 'https://ok.com/sds.pdf', title: 'first',  manufacturer: 'Fisher', product_name: 'Acetone', revision_date: null, confidence: 'high', reasons: 'best' },
+        { url: 'https://ok.com/sds.pdf', title: 'second', manufacturer: '',       product_name: '',        revision_date: null, confidence: 'low',  reasons: '' },
+        { url: 'https://other.com/b.pdf', title: 'other', manufacturer: '',       product_name: '',        revision_date: null, confidence: 'low',  reasons: '' },
+      ],
+    }
+    const create = vi.fn().mockResolvedValue(textMsg(JSON.stringify(payload), 'end_turn'))
+    const { candidates } = await normalizeCandidates(clientWith(create), 'prose')
+
+    // Duplicate URLs would collide on the picker's React key (keyed by url).
+    expect(candidates.map(c => c.url)).toEqual(['https://ok.com/sds.pdf', 'https://other.com/b.pdf'])
+    expect(candidates[0].title).toBe('first')
+  })
+
   it('returns [] without calling the model when there is no prose', async () => {
     const create = vi.fn()
     const { candidates } = await normalizeCandidates(clientWith(create), '   ')
