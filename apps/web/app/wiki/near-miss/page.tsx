@@ -1,10 +1,17 @@
 import Link from 'next/link'
 import WikiPage, { Section, Faq, DoDont, Related, type ChangelogEntry } from '../_components/WikiPage'
 
-const CURRENT_VERSION = '1.1.0'
-const LAST_UPDATED    = '2026-05-15'
+const CURRENT_VERSION = '1.1.1'
+const LAST_UPDATED    = '2026-11-03'
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.1',
+    date:    '2026-11-03',
+    changes: [
+      'The report form now opens with a "get help first" notice, and the severity-potential choices describe the worst outcome in plain words.',
+    ],
+  },
   {
     version: '1.1.0',
     date:    '2026-05-15',
@@ -42,6 +49,11 @@ export default function WikiNearMissPage() {
           rise to a recordable injury but absolutely should be reviewed.
           Reports are filterable by severity and routable to the risk
           register when they uncover a systemic hazard.
+        </p>
+        <p>
+          If someone is hurt or in danger right now, get help first and
+          report afterwards; the form says so at the top. If anyone was hurt,
+          file an injury/illness incident instead of a near-miss.
         </p>
       </Section>
 
