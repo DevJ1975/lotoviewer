@@ -69,7 +69,7 @@ export default function NewNearMissScreen() {
       setSubmitting(false)
       return
     }
-    router.replace('/(tabs)/near-miss')
+    router.replace('/near-miss')
   }
 
   return (

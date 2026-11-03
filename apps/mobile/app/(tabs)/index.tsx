@@ -1,119 +1,108 @@
-import { Link } from 'expo-router'
-import { useEffect, useState } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, TouchableOpacity } from 'react-native'
+import FontAwesome from '@expo/vector-icons/FontAwesome'
+import { Link, type Href } from 'expo-router'
+import { Pressable, ScrollView, StyleSheet } from 'react-native'
 
 import { Text, View } from '@/components/Themed'
-import { useAuth } from '@/components/AuthProvider'
 import { useTenant } from '@/components/TenantProvider'
-import { supabase } from '@/lib/supabase'
+import { isModuleVisible } from '@soteria/core/moduleVisibility'
 
-// Phase 3 dashboard. Read-only summary:
-//   - Greeting (signed-in user's email).
-//   - Active tenant pill (taps open the switcher modal).
-//   - Equipment count for the active tenant.
-//   - Sign out.
-//
-// Counts come from a HEAD-only count() query so we don't pull rows
-// just to render a number.
+// Home hub: the active workspace, one-tap "report" actions for the things a
+// worker files most, and a tile for every module the workspace has enabled.
+// Modules a tenant has switched off are hidden here, matching the web drawer.
 
-export default function DashboardScreen() {
-  const { session, signOut } = useAuth()
-  const { tenant, available, loading: tenantLoading } = useTenant()
-  const [equipmentCount, setEquipmentCount] = useState<number | null>(null)
-  const [countError,     setCountError]     = useState<string | null>(null)
+interface Destination {
+  featureId: string
+  title:     string
+  href:      Href
+  icon:      React.ComponentProps<typeof FontAwesome>['name']
+}
 
-  const email = session?.user?.email ?? '—'
+const QUICK_REPORTS: readonly Destination[] = [
+  { featureId: 'incidents',  title: 'Report incident', href: '/incidents/new',  icon: 'ambulance' },
+  { featureId: 'near-miss',  title: 'Near-miss',       href: '/near-miss/new',  icon: 'exclamation-triangle' },
+  { featureId: 'bbs',        title: 'Observe',         href: '/bbs/new',        icon: 'eye' },
+]
 
-  useEffect(() => {
-    let cancelled = false
-    if (!tenant?.id) {
-      setEquipmentCount(null)
-      return
-    }
-    async function loadCount() {
-      setCountError(null)
-      const { count, error } = await supabase
-        .from('loto_equipment')
-        .select('*', { count: 'exact', head: true })
-        .eq('tenant_id', tenant!.id)
-      if (cancelled) return
-      if (error) {
-        setCountError(error.message)
-        setEquipmentCount(null)
-        return
-      }
-      setEquipmentCount(count ?? 0)
-    }
-    void loadCount()
-    return () => { cancelled = true }
-  }, [tenant?.id])
+const MODULES: readonly Destination[] = [
+  { featureId: 'incidents',       title: 'Incidents',        href: '/incidents',        icon: 'ambulance' },
+  { featureId: 'near-miss',       title: 'Near-miss',        href: '/near-miss',        icon: 'exclamation-triangle' },
+  { featureId: 'bbs',             title: 'Observations',     href: '/bbs',              icon: 'eye' },
+  { featureId: 'inspections',     title: 'Inspections',      href: '/inspections',      icon: 'check-square-o' },
+  { featureId: 'jha',             title: 'JHA',              href: '/jha',              icon: 'list-alt' },
+  { featureId: 'risk-assessment', title: 'Risk',             href: '/risk',             icon: 'shield' },
+  { featureId: 'loto',            title: 'Equipment',        href: '/equipment',        icon: 'cogs' },
+  { featureId: 'loto',            title: 'LOTO devices',     href: '/loto-devices',     icon: 'key' },
+  { featureId: 'hazardous-waste', title: 'Hazardous waste',  href: '/hazardous-waste',  icon: 'recycle' },
+]
+
+export default function HomeScreen() {
+  const { tenant, available, loading } = useTenant()
+  const visible = (d: Destination) => isModuleVisible(d.featureId, tenant?.modules)
+  const quick = QUICK_REPORTS.filter(visible)
+  const modules = MODULES.filter(visible)
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.greetingSmall}>Signed in as</Text>
-        <Text style={styles.greetingLarge}>{email}</Text>
-      </View>
-
+    <ScrollView contentContainerStyle={styles.content}>
       <Link href="/tenant-switcher" asChild>
-        <Pressable>
+        <Pressable accessibilityRole="button">
           {({ pressed }) => (
-            <View style={[styles.tenantPill, pressed && styles.tenantPillPressed]}>
-              <Text style={styles.tenantPillNumber}>
-                {tenant?.tenant_number ?? '----'}
-              </Text>
-              <View style={styles.tenantPillBody}>
-                <Text style={styles.tenantPillName}>
-                  {tenantLoading ? 'Loading…' : (tenant?.name ?? 'No tenant selected')}
-                </Text>
-                <Text style={styles.tenantPillHint}>
-                  {available.length > 1 ? 'Tap to switch' : 'Active tenant'}
-                </Text>
+            <View style={[styles.tenantPill, pressed && { opacity: 0.6 }]}>
+              <Text style={styles.tenantNumber}>{tenant?.tenant_number ?? '----'}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.tenantName}>{loading ? 'Loading…' : (tenant?.name ?? 'No workspace selected')}</Text>
+                <Text style={styles.tenantHint}>{available.length > 1 ? 'Tap to switch' : 'Active workspace'}</Text>
               </View>
             </View>
           )}
         </Pressable>
       </Link>
 
-      <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Equipment</Text>
-          {countError ? (
-            <Text style={styles.statError}>error</Text>
-          ) : equipmentCount === null ? (
-            <ActivityIndicator />
-          ) : (
-            <Text style={styles.statValue}>{equipmentCount}</Text>
-          )}
+      {quick.length > 0 ? (
+        <View style={styles.quickRow}>
+          {quick.map(d => (
+            <Link key={d.title} href={d.href} asChild>
+              <Pressable accessibilityRole="button" style={{ flex: 1 }}>
+                {({ pressed }) => (
+                  <View style={[styles.quick, pressed && { opacity: 0.8 }]}>
+                    <FontAwesome name={d.icon} size={22} color="#fff" />
+                    <Text style={styles.quickText}>{d.title}</Text>
+                  </View>
+                )}
+              </Pressable>
+            </Link>
+          ))}
         </View>
+      ) : null}
+
+      <View style={styles.grid}>
+        {modules.map(d => (
+          <Link key={d.title} href={d.href} asChild>
+            <Pressable accessibilityRole="button" style={styles.tileWrap}>
+              {({ pressed }) => (
+                <View style={[styles.tile, pressed && { opacity: 0.7 }]}>
+                  <FontAwesome name={d.icon} size={24} color="#1e3a8a" />
+                  <Text style={styles.tileText}>{d.title}</Text>
+                </View>
+              )}
+            </Pressable>
+          </Link>
+        ))}
       </View>
-
-      <View style={styles.spacer} />
-
-      <TouchableOpacity style={styles.signOutBtn} onPress={() => { void signOut() }}>
-        <Text style={styles.signOutText}>Sign out</Text>
-      </TouchableOpacity>
-    </View>
+    </ScrollView>
   )
 }
 
 const styles = StyleSheet.create({
-  container:          { flex: 1, padding: 16, gap: 16 },
-  header:             { gap: 4, paddingTop: 8 },
-  greetingSmall:      { fontSize: 12, opacity: 0.6 },
-  greetingLarge:      { fontSize: 18, fontWeight: '600' },
-  tenantPill:         { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#cbd5e1' },
-  tenantPillPressed:  { opacity: 0.6 },
-  tenantPillNumber:   { fontFamily: 'SpaceMono', fontSize: 14, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#1e3a8a', color: '#fff', borderRadius: 6 },
-  tenantPillBody:     { flex: 1 },
-  tenantPillName:     { fontSize: 14, fontWeight: '600' },
-  tenantPillHint:     { fontSize: 11, opacity: 0.6, marginTop: 2 },
-  statsRow:           { flexDirection: 'row', gap: 12 },
-  statCard:           { flex: 1, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#cbd5e1', alignItems: 'flex-start', gap: 4 },
-  statLabel:          { fontSize: 11, fontWeight: '600', opacity: 0.6, textTransform: 'uppercase', letterSpacing: 0.5 },
-  statValue:          { fontSize: 28, fontWeight: '700' },
-  statError:          { fontSize: 12, color: '#b91c1c' },
-  spacer:             { flex: 1 },
-  signOutBtn:         { alignSelf: 'center', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: '#94a3b8' },
-  signOutText:        { fontSize: 14, fontWeight: '600' },
+  content: { padding: 16, gap: 16, paddingBottom: 32 },
+  tenantPill: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#cbd5e1' },
+  tenantNumber: { fontFamily: 'SpaceMono', fontSize: 14, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#1e3a8a', color: '#fff', borderRadius: 6 },
+  tenantName: { fontSize: 14, fontWeight: '600' },
+  tenantHint: { fontSize: 11, opacity: 0.6, marginTop: 2 },
+  quickRow: { flexDirection: 'row', gap: 10 },
+  quick: { alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 16, borderRadius: 14, backgroundColor: '#1e3a8a' },
+  quickText: { color: '#fff', fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  tileWrap: { width: '48%' },
+  tile: { alignItems: 'flex-start', gap: 10, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#cbd5e1', minHeight: 88 },
+  tileText: { fontSize: 14, fontWeight: '600' },
 })

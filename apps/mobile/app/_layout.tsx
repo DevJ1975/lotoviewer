@@ -10,6 +10,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider } from '@/components/AuthProvider';
 import { TenantProvider } from '@/components/TenantProvider';
 import AuthGate from '@/components/AuthGate';
+import PushBootstrap from '@/components/PushBootstrap';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -57,21 +58,36 @@ function RootLayoutNav() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AuthGate>
+        <PushBootstrap />
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="forgot-password" options={{ title: 'Reset password' }} />
+          <Stack.Screen name="equipment/index" options={{ title: 'Equipment' }} />
           <Stack.Screen name="equipment/[id]" options={{ title: 'Equipment' }} />
+          <Stack.Screen name="loto-devices" options={{ title: 'LOTO devices' }} />
+          <Stack.Screen name="hazardous-waste" options={{ title: 'Hazardous waste' }} />
+          <Stack.Screen name="incidents/index" options={{ title: 'Incidents' }} />
+          <Stack.Screen name="incidents/new" options={{ title: 'Report incident', presentation: 'modal' }} />
+          <Stack.Screen name="incidents/[id]" options={{ title: 'Incident' }} />
+          <Stack.Screen name="bbs/index" options={{ title: 'Observations' }} />
+          <Stack.Screen name="bbs/new" options={{ title: 'New observation', presentation: 'modal' }} />
+          <Stack.Screen name="inspections/index" options={{ title: 'Inspections' }} />
+          <Stack.Screen name="inspections/[id]" options={{ title: 'Inspection' }} />
+          <Stack.Screen name="confined-spaces/[permitId]" options={{ title: 'Confined space permit' }} />
+          <Stack.Screen name="hot-work/[permitId]" options={{ title: 'Hot work permit' }} />
+          <Stack.Screen name="near-miss/index" options={{ title: 'Near-miss' }} />
           <Stack.Screen name="near-miss/new" options={{ title: 'Report Near-Miss', presentation: 'modal' }} />
           <Stack.Screen name="near-miss/[id]" options={{ title: 'Near-Miss' }} />
+          <Stack.Screen name="jha/index" options={{ title: 'JHA' }} />
           <Stack.Screen name="jha/new" options={{ title: 'New JHA', presentation: 'modal' }} />
           <Stack.Screen name="jha/[id]" options={{ title: 'JHA' }} />
           <Stack.Screen name="jha/[id]/edit" options={{ title: 'Edit breakdown' }} />
+          <Stack.Screen name="risk/index" options={{ title: 'Risk' }} />
           <Stack.Screen name="risk/[id]" options={{ title: 'Risk' }} />
           <Stack.Screen name="risk/heatmap" options={{ title: 'Heat map' }} />
           <Stack.Screen name="risk/new" options={{ title: 'New Risk', presentation: 'modal' }} />
           <Stack.Screen name="tenant-switcher" options={{ presentation: 'modal', title: 'Switch tenant' }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
         </Stack>
       </AuthGate>
     </ThemeProvider>

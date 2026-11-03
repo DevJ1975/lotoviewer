@@ -77,6 +77,21 @@ gitignored `apps/mobile/.env.local`.
 
 ---
 
+### Push notifications
+
+Push needs two one-time steps that the build cannot do for you:
+
+```bash
+cd apps/mobile
+eas init                 # writes extra.eas.projectId into app.json
+eas credentials          # iOS → Push Notifications → upload / generate an APNs key
+```
+
+Without the project id the app still runs, but it cannot obtain a push token.
+Apply migration `304_mobile_push_tokens_and_deletion_requests.sql` first.
+
+---
+
 ## 3. Log in to EAS
 
 ```bash

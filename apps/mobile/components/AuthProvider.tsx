@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session, AuthChangeEvent } from '@supabase/supabase-js'
 import { hydrateActiveTenant, supabase } from '@/lib/supabase'
+import { unregisterPushToken } from '@/lib/push'
 
 // Mobile mirror of apps/web/components/AuthProvider.tsx. Same shape,
 // platform-specific token + tenant-id storage swapped in via the
@@ -86,6 +87,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
+    // Before the session ends, so the unregister request can still authenticate.
+    await unregisterPushToken()
     await supabase.auth.signOut()
   }, [])
 

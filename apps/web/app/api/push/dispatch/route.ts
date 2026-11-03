@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import webpush from 'web-push'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import type { PushPayload } from '@/lib/push'
+import { sendExpoPush } from '@/lib/notifications/expoPush'
 
 // POST /api/push/dispatch — fans out a payload to every subscriber in
 // loto_push_subscriptions. Body shape:
@@ -79,11 +80,6 @@ export async function POST(req: Request) {
     }
   }
 
-  const vapid = configureVapid()
-  if (!vapid.ok) {
-    return NextResponse.json({ error: vapid.reason }, { status: 500 })
-  }
-
   let body: Body
   try {
     body = await req.json()
@@ -92,6 +88,21 @@ export async function POST(req: Request) {
   }
   if (!body.title || !body.body) {
     return NextResponse.json({ error: 'Missing title or body' }, { status: 400 })
+  }
+
+  // Phones are reached through Expo regardless of VAPID configuration.
+  const expoResult = await sendExpoPush({
+    payload:    { title: body.title, body: body.body, url: body.url, tag: body.tag },
+    profileIds: body.profile_ids && body.profile_ids.length > 0 ? body.profile_ids : undefined,
+    source:     'push-dispatch',
+  })
+
+  const vapid = configureVapid()
+  if (!vapid.ok) {
+    if (expoResult.sent > 0) {
+      return NextResponse.json({ sent: expoResult.sent, failed: expoResult.failed, pruned: expoResult.pruned }, { status: 200 })
+    }
+    return NextResponse.json({ error: vapid.reason }, { status: 500 })
   }
 
   const admin = supabaseAdmin()
@@ -106,7 +117,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
   if (!subs || subs.length === 0) {
-    return NextResponse.json({ sent: 0, failed: 0, message: 'No subscriptions found.' }, { status: 200 })
+    return NextResponse.json({
+      sent: expoResult.sent, failed: expoResult.failed, pruned: expoResult.pruned,
+      ...(expoResult.sent === 0 ? { message: 'No subscriptions found.' } : {}),
+    }, { status: 200 })
   }
 
   // Compose the JSON payload the SW will read. Trim to known fields so a
@@ -136,8 +150,9 @@ export async function POST(req: Request) {
     })),
   )
 
-  const sent   = results.filter(r => r.status === 'fulfilled').length
-  const failed = results.length - sent
+  const webSent = results.filter(r => r.status === 'fulfilled').length
+  const sent    = webSent + expoResult.sent
+  const failed  = (results.length - webSent) + expoResult.failed
 
   if (stale.length > 0) {
     // Best-effort prune of dead subscriptions. Failure here doesn't
@@ -146,5 +161,5 @@ export async function POST(req: Request) {
     await admin.from('loto_push_subscriptions').delete().in('endpoint', stale)
   }
 
-  return NextResponse.json({ sent, failed, pruned: stale.length }, { status: 200 })
+  return NextResponse.json({ sent, failed, pruned: stale.length + expoResult.pruned }, { status: 200 })
 }
