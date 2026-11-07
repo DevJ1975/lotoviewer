@@ -25,6 +25,11 @@ const PUBLIC_PREFIXES = [
   '/r/bbs',     // Behavior-Based Safety anonymous QR submission
   '/review',    // LOTO placard reviewer portal — the URL token is the auth
   '/qr',        // Public LOTO placard view from a scanned placard QR
+  '/report',    // Anonymous incident report QR intake + PIN status — the URL token is the auth
+  '/witness',            // Incident witness-statement form — single-use emailed token
+  '/permit-signon',      // Confined-space worker QR sign-on — permit token
+  '/contractor-prequal', // Contractor prequalification portal — portal_token
+  '/inspector',          // Regulator read-only view — HMAC-signed ?sig= link
   '/train',     // STRIKE "Train now" kiosk — the signed short-lived token is the auth
 ] as const
 
